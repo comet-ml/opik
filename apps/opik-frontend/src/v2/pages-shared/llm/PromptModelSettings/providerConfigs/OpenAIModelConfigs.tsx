@@ -12,11 +12,14 @@ import {
   OpenAiPipelineMode,
   OpenAIReasoningEffort,
   PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
 } from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 import {
+  getMaxCompletionTokensRange,
   getOpenAIReasoningEffortOptions,
   resolveEffort,
+  resolveMaxCompletionTokens,
   resolveSamplingParams,
 } from "@/lib/modelUtils";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
@@ -57,6 +60,11 @@ const OpenAIModelConfigs = ({
     supports: createSupports(unsupportedParams),
     openAiPipelineMode,
   });
+  const maxCompletionTokensRange = getMaxCompletionTokensRange(
+    PROVIDER_TYPE.OPEN_AI,
+    model ?? "",
+    openAiPipelineMode,
+  );
 
   if (!isAnyControlVisible(visible)) return null;
 
@@ -68,7 +76,7 @@ const OpenAIModelConfigs = ({
           onChange={(v) => onChange({ temperature: v })}
           id="temperature"
           min={0}
-          max={1}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE}
           label="Temperature"
@@ -80,16 +88,21 @@ const OpenAIModelConfigs = ({
 
       {visible.maxCompletionTokens && (
         <SliderInputControl
-          value={configs.maxCompletionTokens}
+          value={resolveMaxCompletionTokens(
+            PROVIDER_TYPE.OPEN_AI,
+            model ?? "",
+            configs.maxCompletionTokens,
+            openAiPipelineMode,
+          )}
           onChange={(v) => onChange({ maxCompletionTokens: v })}
           id="maxCompletionTokens"
-          min={0}
-          max={128000}
+          min={maxCompletionTokensRange.min}
+          max={maxCompletionTokensRange.max}
           step={1}
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS}
           label="Max output tokens"
           tooltip={
-            <PromptModelSettingsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
+            <PromptModelSettingsTooltipContent text="The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On reasoning models, reasoning tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
           }
         />
       )}
@@ -115,8 +128,8 @@ const OpenAIModelConfigs = ({
           value={configs.frequencyPenalty}
           onChange={(v) => onChange({ frequencyPenalty: v })}
           id="frequencyPenalty"
-          min={0}
-          max={1}
+          min={-2}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.FREQUENCY_PENALTY}
           label="Frequency penalty"
@@ -131,8 +144,8 @@ const OpenAIModelConfigs = ({
           value={configs.presencePenalty}
           onChange={(v) => onChange({ presencePenalty: v })}
           id="presencePenalty"
-          min={0}
-          max={1}
+          min={-2}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.PRESENCE_PENALTY}
           label="Presence penalty"

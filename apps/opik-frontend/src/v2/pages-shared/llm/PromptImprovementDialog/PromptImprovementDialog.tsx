@@ -5,9 +5,17 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { Wand2, Loader2, Play, ChevronRight, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  Wand2,
+  Loader2,
+  Play,
+  ChevronRight,
+  Sparkles,
+} from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
+import isEqual from "lodash/isEqual";
 
 import {
   Dialog,
@@ -26,10 +34,7 @@ import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptMod
 import usePromptImprovement from "@/hooks/usePromptImprovement";
 import useProgressSimulation from "@/hooks/useProgressSimulation";
 import useModelSelection from "@/hooks/useModelSelection";
-import {
-  COMPOSED_PROVIDER_TYPE,
-  LLMPromptConfigsType,
-} from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { PROVIDERS } from "@/constants/providers";
 import { MessageContent } from "@/types/llm";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
@@ -41,6 +46,7 @@ import {
 import { cn } from "@/lib/utils";
 import { parseComposedProviderType } from "@/lib/provider";
 import { parseLLMMessageContent } from "@/lib/llm";
+import { withLowReasoning } from "./promptImprovementConfigs";
 
 const PROMPT_IMPROVEMENT_PROGRESS_MESSAGES = [
   "Analyzing your instructions...",
@@ -53,6 +59,9 @@ const PROMPT_IMPROVEMENT_PROGRESS_MESSAGES = [
 
 const PROMPT_IMPROVEMENT_LAST_PICKED_MODEL = "opik-prompt-improvement-model";
 
+const OUTPUT_LIMIT_MESSAGE =
+  "The model reached its output limit before finishing the prompt. Try a shorter instruction, or pick another model.";
+
 interface PromptImprovementDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -60,7 +69,6 @@ interface PromptImprovementDialogProps {
   originalPrompt?: MessageContent;
   model: string;
   provider: COMPOSED_PROVIDER_TYPE;
-  configs: LLMPromptConfigsType;
   workspaceName: string;
   onAccept: (messageId: string, improvedPrompt: MessageContent) => void;
 }
@@ -72,7 +80,6 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
   originalPrompt = "",
   model: defaultModel,
   provider: defaultProvider,
-  configs: defaultConfigs,
   workspaceName,
   onAccept,
 }) => {
@@ -80,16 +87,29 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
   const [generatedPrompt, setGeneratedPrompt] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   const editorViewRef = useRef<EditorView | null>(null);
+  const runControllerRef = useRef<AbortController | null>(null);
 
-  // Model selection with persistence using the reusable hook
-  const { model, provider, configs, modelSelectProps } = useModelSelection({
+  // The dialog has no settings panel, so it runs the model at its defaults, with reasoning lowered
+  // by withLowReasoning. The prompt's own settings are sized for its task: a small max tokens
+  // there would cut off every rewrite.
+  const {
+    model,
+    provider,
+    configs: modelDefaults,
+    modelSelectProps,
+  } = useModelSelection({
     persistenceKey: PROMPT_IMPROVEMENT_LAST_PICKED_MODEL,
     defaultModel,
     defaultProvider,
-    defaultConfigs,
   });
+  const configs = useMemo(
+    () => withLowReasoning(model, modelDefaults),
+    [model, modelDefaults],
+  );
+  const isReasoningLowered = !isEqual(configs, modelDefaults);
 
   const { improvePrompt, generatePrompt } = usePromptImprovement({
     workspaceName,
@@ -116,10 +136,21 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
       setUserInstructions("");
       setGeneratedPrompt("");
       setError(null);
+      setWarning(null);
       setIsLoading(false);
       setIsEditorFocused(false);
     }
   }, [open, originalImages, originalVideos]);
+
+  // The dialog stays mounted while closed, so a run still streaming at close would write into the
+  // next session.
+  useEffect(() => {
+    if (!open) return;
+    return () => {
+      runControllerRef.current?.abort();
+      runControllerRef.current = null;
+    };
+  }, [open]);
 
   // Smart auto-scroll: only auto-scroll when user is near the bottom
   // This allows users to scroll up to review content without being forced down
@@ -148,11 +179,15 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
 
     setIsLoading(true);
     setError(null);
+    setWarning(null);
     setGeneratedPrompt("");
 
-    try {
-      const controller = new AbortController();
+    runControllerRef.current?.abort();
+    const controller = new AbortController();
+    runControllerRef.current = controller;
+    const isCurrentRun = () => runControllerRef.current === controller;
 
+    try {
       let result;
       if (isGenerateMode) {
         result = await generatePrompt(
@@ -160,7 +195,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
           model,
           configs,
           (chunk) => {
-            setGeneratedPrompt(chunk);
+            if (isCurrentRun()) setGeneratedPrompt(chunk);
           },
           controller.signal,
         );
@@ -171,11 +206,13 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
           model,
           configs,
           (chunk) => {
-            setGeneratedPrompt(chunk);
+            if (isCurrentRun()) setGeneratedPrompt(chunk);
           },
           controller.signal,
         );
       }
+
+      if (!isCurrentRun()) return;
 
       if (
         result?.opikError ||
@@ -185,19 +222,21 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
         const errorMsg =
           result.opikError || result.providerError || result.pythonProxyError;
         setError(errorMsg || "An error occurred during generation");
-      } else if (
-        result?.choices?.[0]?.finish_reason === "length" ||
-        result?.choices?.some((choice) => choice.finish_reason === "length")
-      ) {
-        setError(
-          "The generated prompt was cut off due to token limits. Please try increasing the max_tokens setting in the model configuration or use a shorter instruction.",
-        );
+      } else if (result?.finishReason === "length") {
+        // A cut-off prompt is still something the user can finish by hand, so
+        // it stays usable; only a cut-off with no text at all is an error.
+        if (result.result?.trim()) {
+          setWarning(OUTPUT_LIMIT_MESSAGE);
+        } else {
+          setError(OUTPUT_LIMIT_MESSAGE);
+        }
       } else if (!result?.result || !result.result.trim()) {
         setError(
           "The model did not return any content. Please try again or adjust your instructions.",
         );
       }
     } catch (err) {
+      if (!isCurrentRun()) return;
       const errorMessage =
         err instanceof Error
           ? err.message
@@ -206,7 +245,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
             : "Failed to improve prompt";
       setError(errorMessage);
     } finally {
-      setIsLoading(false);
+      if (isCurrentRun()) setIsLoading(false);
     }
   }, [
     hasInstructions,
@@ -288,7 +327,9 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
       <div className="comet-body-accented">{label}</div>
       <Description>
         This is your generated prompt, created with the selected model (
-        {modelDisplayName}) and parameters. It&apos;s editable.
+        {modelDisplayName}) at its default settings
+        {isReasoningLowered && ", with low reasoning effort"}. It&apos;s
+        editable.
       </Description>
     </div>
   );
@@ -468,6 +509,12 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
           {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertTitle>{error}</AlertTitle>
+            </Alert>
+          )}
+          {warning && (
+            <Alert variant="callout" className="mb-4">
+              <AlertTriangle />
+              <AlertTitle>{warning}</AlertTitle>
             </Alert>
           )}
           {isGenerateMode ? renderGenerateContent() : renderImproveContent()}

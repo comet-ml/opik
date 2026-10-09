@@ -257,6 +257,15 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
       if (currentProvider === provider) {
         handleModelTransition(model, "");
         form.setValue("llmJudgeDetails.model", "");
+        // With no model left, the next pick or added provider has no previous provider to compare
+        // against, so updateConfigForModelChange could not tell the extra body belonged to this one.
+        const config = form.getValues("llmJudgeDetails.config");
+        if (config.custom_parameters != null) {
+          form.setValue("llmJudgeDetails.config", {
+            ...config,
+            custom_parameters: null,
+          });
+        }
       }
     },
     [calculateModelProvider, form, handleModelTransition],
@@ -347,10 +356,18 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                         const currentConfig = form.getValues(
                           "llmJudgeDetails.config",
                         );
+                        // The picker reports the bare provider type ("custom-llm"), while `provider` is the
+                        // row's key ("custom-llm:mock"). Compared as is, two models of one Custom LLM row
+                        // would look like a provider change and lose the extra body.
                         const adjustedConfig = updateConfigForModelChange(
                           currentConfig,
                           { model: previousModel, provider },
-                          { model: m, provider: selectedProvider },
+                          {
+                            model: m,
+                            provider:
+                              calculateModelProvider(m, selectedProvider) ||
+                              selectedProvider,
+                          },
                         );
                         if (adjustedConfig !== currentConfig) {
                           form.setValue(

@@ -127,6 +127,7 @@ const PlaygroundPage = () => {
   const {
     calculateModelProvider,
     calculateDefaultModel,
+    isDropdownModel,
     isFetched: isFetchedModels,
   } = useLLMProviderModelsData();
 
@@ -147,6 +148,7 @@ const PlaygroundPage = () => {
       lastPickedModel,
       providerResolver: calculateModelProvider,
       modelResolver: calculateDefaultModel,
+      isDropdownModel,
     });
     setPromptMap([prompt.id], { [prompt.id]: prompt });
   }, [
@@ -155,6 +157,7 @@ const PlaygroundPage = () => {
     lastPickedModel,
     calculateModelProvider,
     calculateDefaultModel,
+    isDropdownModel,
     setPromptMap,
   ]);
 

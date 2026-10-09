@@ -11,6 +11,7 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.google.common.collect.Sets;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -106,14 +107,48 @@ class OpenRouterLlmServiceProviderTest {
         assertPanelParametersSent(sentBody());
     }
 
+    @Test
+    void generateSendsACustomParameterThatRepeatsATypedFieldOnceWithTheCustomValue() {
+        var request = JsonUtils.readValue("""
+                {"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "hello"}], "stream": false,
+                 "temperature": 0.7, "custom_parameters": {"temperature": 0.2, "top_k": 40}}
+                """, ChatCompletionRequest.class);
+
+        provider.generate(request, "workspace-id");
+
+        var rawBody = sentRawBody();
+        var body = JsonUtils.getJsonNodeFromString(rawBody);
+        assertThat(StringUtils.countMatches(rawBody, "\"temperature\"")).isEqualTo(1);
+        assertThat(body.get("temperature").asDouble()).isEqualTo(0.2);
+        assertThat(body.get("top_k").asInt()).isEqualTo(40);
+    }
+
+    @Test
+    void generateSendsACustomTokenLimitUnderTheOtherNameInPlaceOfTheTypedLimit() {
+        var request = JsonUtils.readValue("""
+                {"model": "openai/gpt-4o", "messages": [{"role": "user", "content": "hello"}], "stream": false,
+                 "max_tokens": 30, "custom_parameters": {"max_completion_tokens": 12}}
+                """, ChatCompletionRequest.class);
+
+        provider.generate(request, "workspace-id");
+
+        var body = sentBody();
+        assertThat(body.has("max_tokens")).isFalse();
+        assertThat(body.get("max_completion_tokens").asInt()).isEqualTo(12);
+    }
+
     private ChatCompletionRequest playgroundRequest(boolean stream) {
         return JsonUtils.readValue(PLAYGROUND_BODY.formatted(stream), ChatCompletionRequest.class);
     }
 
     private JsonNode sentBody() {
+        return JsonUtils.getJsonNodeFromString(sentRawBody());
+    }
+
+    private String sentRawBody() {
         var requests = wireMock.findAll(postRequestedFor(urlEqualTo(COMPLETIONS_PATH)));
         assertThat(requests).hasSize(1);
-        return JsonUtils.getJsonNodeFromString(requests.getFirst().getBodyAsString());
+        return requests.getFirst().getBodyAsString();
     }
 
     private void assertPanelParametersSent(JsonNode body) {

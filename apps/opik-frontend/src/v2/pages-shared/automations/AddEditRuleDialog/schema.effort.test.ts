@@ -268,6 +268,27 @@ describe("LLM judge Anthropic effort on a model switch", () => {
     expect(saved).toEqual(expected);
   });
 
+  it.each<[string, Record<string, unknown>, Record<string, unknown>]>([
+    [
+      "replaces Sonnet 4.6's default high with Opus 5.5's own medium",
+      { output_config: { effort: "high" } },
+      { output_config: { effort: "medium" } },
+    ],
+    [
+      "keeps a level the user picked",
+      { output_config: { effort: "low" } },
+      { output_config: { effort: "low" } },
+    ],
+  ])("switching from Sonnet 4.6 to Opus 5.5 %s", (_, stored, expected) => {
+    const { saved } = openThenSwitch(
+      { model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, provider: ANTHROPIC },
+      { model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, provider: ANTHROPIC },
+      stored,
+    );
+
+    expect(saved).toEqual(expected);
+  });
+
   it("keeps the stored effort when the same model with no row is picked again", () => {
     registerAnthropicModels(NO_ROW_MODEL);
     const stored = { output_config: { effort: "xhigh", format: "x" } };
@@ -327,5 +348,51 @@ describe("LLM judge Anthropic effort on a model switch", () => {
     );
 
     expect(saved).toEqual(stored);
+  });
+});
+
+describe("LLM judge extra body on a model switch", () => {
+  const MOCK = "custom-llm:mock" as COMPOSED_PROVIDER_TYPE;
+  const MOCK_MODEL = "custom-llm/mock/mock-model" as PROVIDER_MODEL_TYPE;
+  const extraBody = { r2c52: 1, temperature: 0.9 };
+
+  const switchAndSave = (to: {
+    model: PROVIDER_MODEL_TYPE;
+    provider: COMPOSED_PROVIDER_TYPE;
+  }) => {
+    const opened = convertLLMJudgeObjectToLLMJudgeData(
+      persisted(MOCK_MODEL, extraBody),
+    ).config;
+    const switched = updateConfigForModelChange(
+      opened,
+      { model: MOCK_MODEL, provider: MOCK },
+      to,
+    );
+    return convertLLMJudgeDataToLLMJudgeObject(asFormData(to.model, switched))
+      .model.custom_parameters;
+  };
+
+  it.each<[string, PROVIDER_MODEL_TYPE, COMPOSED_PROVIDER_TYPE]>([
+    [
+      "OpenRouter",
+      "openai/gpt-4o-mini" as PROVIDER_MODEL_TYPE,
+      PROVIDER_TYPE.OPEN_ROUTER as COMPOSED_PROVIDER_TYPE,
+    ],
+    [
+      "another Custom LLM",
+      "custom-llm/gw/gw-model" as PROVIDER_MODEL_TYPE,
+      "custom-llm:gw" as COMPOSED_PROVIDER_TYPE,
+    ],
+  ])("drops it on a switch to %s", (_, model, provider) => {
+    expect(switchAndSave({ model, provider })).toBeUndefined();
+  });
+
+  it("keeps it on a switch between the same Custom LLM's models", () => {
+    expect(
+      switchAndSave({
+        model: "custom-llm/mock/other-model" as PROVIDER_MODEL_TYPE,
+        provider: MOCK,
+      }),
+    ).toEqual(extraBody);
   });
 });

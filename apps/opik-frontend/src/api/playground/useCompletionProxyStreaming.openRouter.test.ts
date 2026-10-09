@@ -4,10 +4,13 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import useCompletionProxyStreaming from "./useCompletionProxyStreaming";
 import {
+  COMPOSED_PROVIDER_TYPE,
   LLMOpenRouterConfigsType,
   PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
 } from "@/types/providers";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
+import { getDefaultConfigByProvider } from "@/lib/playground";
 
 // The app registers this plugin at startup (lib/date.ts); the hook timestamps every run with it.
 dayjs.extend(utc);
@@ -60,6 +63,17 @@ describe("the body an OpenRouter playground run sends", () => {
     for (const flat of ["top_k", "min_p", "top_a", "repetition_penalty"]) {
       expect(body).not.toHaveProperty(flat);
     }
+  });
+
+  it("sends a new prompt's default temperature of 0", async () => {
+    const body = await sentBody(
+      getDefaultConfigByProvider(
+        PROVIDER_TYPE.OPEN_ROUTER as COMPOSED_PROVIDER_TYPE,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+      ) as LLMOpenRouterConfigsType,
+    );
+
+    expect(body).toHaveProperty("temperature", 0);
   });
 
   it("sends no max_tokens for 0", async () => {

@@ -131,7 +131,7 @@ export const DEFAULT_GEMINI_CONFIGS = {
 
 export const DEFAULT_OPEN_ROUTER_CONFIGS = {
   MAX_TOKENS: 0,
-  TEMPERATURE: 1,
+  TEMPERATURE: 0,
   TOP_P: 1,
   TOP_K: 0,
   FREQUENCY_PENALTY: 0,
@@ -362,6 +362,7 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.GPT_6_1_SOL]: {
     reasoning: true,
     reasoningEffortOptions: ["low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
   },
 };
 

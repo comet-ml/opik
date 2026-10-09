@@ -18,11 +18,22 @@ type OptimizationsNewPageContentProps = {
   availableModels: string[];
   /** True once the provider-keys query has settled (so we don't flash the warning while loading). */
   providerKeysReady: boolean;
+  savedModelReplacement?: {
+    savedModel: string;
+    replacementModel: string;
+    replacementLabel: string;
+  };
 };
 
 const OptimizationsNewPageContent: React.FC<
   OptimizationsNewPageContentProps
-> = ({ onCancel, isPreparingDataset, availableModels, providerKeysReady }) => {
+> = ({
+  onCancel,
+  isPreparingDataset,
+  availableModels,
+  providerKeysReady,
+  savedModelReplacement,
+}) => {
   const {
     form,
     activeProjectId,
@@ -62,7 +73,10 @@ const OptimizationsNewPageContent: React.FC<
   const isMissingProviderKey =
     providerKeysReady && Boolean(model) && !availableModels.includes(model);
 
-  const { isSubmitting } = form.formState;
+  const { isSubmitting, dirtyFields } = form.formState;
+  const replacementSettingsNote = dirtyFields.modelConfig
+    ? ""
+    : " with its default settings";
 
   // The variable-mismatch check lives outside the zod schema, so guard it here
   // even though RHF has already validated the fields.
@@ -114,6 +128,16 @@ const OptimizationsNewPageContent: React.FC<
       </div>
 
       <div className="flex flex-col gap-2 border-t px-5 py-4">
+        {savedModelReplacement &&
+          model === savedModelReplacement.replacementModel && (
+            <span className="comet-body-s text-muted-slate">
+              The saved model {savedModelReplacement.savedModel} isn&apos;t
+              available here
+              {savedModelReplacement.replacementModel
+                ? `, so this run uses ${savedModelReplacement.replacementLabel}${replacementSettingsNote}.`
+                : ". Pick a model to run."}
+            </span>
+          )}
         {isDatasetError && (
           <span className="comet-body-s text-destructive">
             Couldn&apos;t load the selected item source. Pick another or try

@@ -1,3 +1,4 @@
+import isNumber from "lodash/isNumber";
 import modelPricing from "@/data/model_prices_and_context_window.json";
 import { CUSTOM_PROVIDER_MODEL_PREFIX } from "@/constants/providers";
 import { DECISION_MODELS } from "@/constants/decisionModels";
@@ -53,6 +54,22 @@ Object.entries(modelEntries).forEach(([modelName, entry]) => {
   NORMALIZED_VISION_CAPABILITIES.set(
     normalizeModelName(modelName),
     supportsVision,
+  );
+});
+
+const MAX_OUTPUT_TOKENS = new Map<string, number>();
+const NORMALIZED_MAX_OUTPUT_TOKENS = new Map<string, number>();
+
+Object.entries(modelEntries).forEach(([modelName, entry]) => {
+  const maxOutputTokens = entry?.max_output_tokens;
+  if (!modelName || !isNumber(maxOutputTokens)) {
+    return;
+  }
+
+  MAX_OUTPUT_TOKENS.set(modelName, maxOutputTokens);
+  NORMALIZED_MAX_OUTPUT_TOKENS.set(
+    normalizeModelName(modelName),
+    maxOutputTokens,
   );
 });
 
@@ -146,6 +163,28 @@ export const supportsImageInput = (model?: string | null): boolean => {
 
   // Default to false if no match found
   return false;
+};
+
+export const getMaxOutputTokens = (
+  model?: string | null,
+): number | undefined => {
+  if (!model) {
+    return undefined;
+  }
+
+  const exact = MAX_OUTPUT_TOKENS.get(model);
+  if (exact !== undefined) {
+    return exact;
+  }
+
+  for (const key of candidateKeys(model)) {
+    const maxOutputTokens = NORMALIZED_MAX_OUTPUT_TOKENS.get(key);
+    if (maxOutputTokens !== undefined) {
+      return maxOutputTokens;
+    }
+  }
+
+  return undefined;
 };
 
 const SNAPSHOT_DATE_SUFFIX = /-\d{4}-\d{2}-\d{2}$/;

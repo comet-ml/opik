@@ -19,9 +19,12 @@ from llm_constants import (
     GATEWAY_CLAUDE_OPUS,
     GEMINI_3_FLASH,
 )
+from opik_optimizer.core import llm_calls
 
 from opik_backend.jobs import optimizer_runner
+from opik_backend.studio import metrics
 from opik_backend.studio.config import OPTIMIZER_TASK_TEMPERATURE
+from opik_backend.studio.optimizers import LLM_MAX_TOKENS
 from opik_backend.studio.types import OptimizationConfig
 
 
@@ -185,6 +188,103 @@ def test_task_model_request_body_sent_to_the_gateway(
     assert body.get("temperature", "absent") == expected_temperature
 
 
+@pytest.mark.parametrize(
+    "task_model,task_params",
+    [
+        (
+            ANTHROPIC_CLAUDE_HAIKU,
+            {"top_p": 0.55, "max_completion_tokens": 77},
+        ),
+        (
+            "gpt-5-nano",
+            {"reasoning_effort": "low", "max_completion_tokens": 500},
+        ),
+        (
+            "gpt-4o-mini",
+            {
+                "temperature": 0.3,
+                "max_completion_tokens": 123,
+                "top_p": 0.5,
+                "frequency_penalty": 0.1,
+                "presence_penalty": 0.2,
+            },
+        ),
+    ],
+)
+def test_task_model_request_body_carries_the_run_settings(
+    httpserver, task_model, task_params
+):
+    httpserver.expect_request(
+        "/v1/private/chat/completions", method="POST"
+    ).respond_with_json(_GATEWAY_REPLY)
+    config = OptimizationConfig.from_dict(
+        _config(task_model=task_model, task_params=task_params)
+    )
+    _, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    litellm.completion(
+        model=prompt.model,
+        messages=[{"role": "user", "content": "hi"}],
+        api_base=httpserver.url_for("/v1/private"),
+        api_key="test",
+        **prompt.model_kwargs,
+    )
+
+    body = httpserver.log[-1][0].get_json()
+    assert {key: body.get(key) for key in task_params} == task_params
+    assert "max_tokens" not in body
+    if "top_p" in task_params and "temperature" not in task_params:
+        assert "temperature" not in body
+
+
+@pytest.mark.parametrize(
+    "task_model,task_params,expected_limit",
+    [
+        (
+            ANTHROPIC_CLAUDE_HAIKU,
+            {"top_p": 0.55, "max_completion_tokens": 90},
+            {"max_completion_tokens": LLM_MAX_TOKENS},
+        ),
+        (
+            "gemini-2.5-flash-lite",
+            {"temperature": 0.3, "max_completion_tokens": 90},
+            {"max_completion_tokens": LLM_MAX_TOKENS},
+        ),
+        (
+            "gpt-5-nano",
+            {"reasoning_effort": "high", "max_completion_tokens": 32000},
+            {"max_completion_tokens": 32000},
+        ),
+    ],
+)
+def test_algorithm_inheriting_the_prompt_model_sends_its_own_output_limit(
+    httpserver, monkeypatch, task_model, task_params, expected_limit
+):
+    httpserver.expect_request(
+        "/v1/private/chat/completions", method="POST"
+    ).respond_with_json(_GATEWAY_REPLY)
+    monkeypatch.setenv("OPENAI_API_BASE", httpserver.url_for("/v1/private"))
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    config = OptimizationConfig.from_dict(
+        _config(task_model=task_model, task_params=task_params)
+    )
+    optimizer, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    llm_calls.call_model(
+        messages=[{"role": "user", "content": "hi"}],
+        model=optimizer.model,
+        model_parameters=optimizer.model_parameters,
+    )
+
+    body = httpserver.log[-1][0].get_json()
+    inherited = {k: v for k, v in task_params.items() if k not in expected_limit}
+    assert {key: body.get(key) for key in inherited} == inherited
+    limits = {"max_tokens", "max_completion_tokens"}
+    assert {key: body[key] for key in limits & body.keys()} == expected_limit
+    task_limit = task_params["max_completion_tokens"]
+    assert prompt.model_kwargs["max_completion_tokens"] == task_limit
+
+
 def test_task_model_explicit_temperature_survives_the_pin():
     config = OptimizationConfig.from_dict(_config(task_params={"temperature": 0.4}))
 
@@ -211,3 +311,89 @@ def test_optimizer_params_preserved_without_separate_model():
     assert optimizer.model_parameters.get("temperature") == 0.9
     # The prompt keeps its own params, independent of the optimizer's.
     assert prompt.model_kwargs.get("temperature") == 0.3
+
+
+@pytest.mark.parametrize(
+    "stored_model",
+    [
+        pytest.param("gpt-4o-mini", id="openai-native"),
+        pytest.param("gpt-5-nano", id="openai-native-reasoning"),
+        pytest.param("openai/gpt-5-nano", id="openrouter-openai-reasoning"),
+        pytest.param("openai/gpt-4o-mini", id="openrouter-openai"),
+        pytest.param("openai/gpt-oss-20b", id="openrouter-openai-only"),
+        pytest.param("anthropic/claude-sonnet-4.6", id="openrouter-anthropic"),
+        pytest.param("google/gemini-3-flash-preview", id="openrouter-google"),
+        pytest.param(ANTHROPIC_CLAUDE_HAIKU, id="anthropic"),
+        pytest.param("vertex_ai/gemini-2.5-flash", id="vertex-ai"),
+        pytest.param(GEMINI_3_FLASH, id="gemini"),
+        pytest.param("custom-llm/acme/llama-3", id="custom-llm"),
+        pytest.param("opik-free-model", id="free-model"),
+    ],
+)
+def test_gateway_receives_the_stored_model_id(httpserver, stored_model):
+    httpserver.expect_request(
+        "/v1/private/chat/completions", method="POST"
+    ).respond_with_json(_GATEWAY_REPLY)
+    config = OptimizationConfig.from_dict(
+        _config(
+            task_model=stored_model,
+            optimizer_params={"seed": 42, "model": stored_model},
+        )
+    )
+    optimizer, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    for model, params in (
+        (prompt.model, prompt.model_kwargs),
+        (optimizer.model, optimizer.model_parameters),
+    ):
+        litellm.completion(
+            model=model,
+            messages=[{"role": "user", "content": "hi"}],
+            api_base=httpserver.url_for("/v1/private"),
+            api_key="test",
+            **params,
+        )
+
+    sent_models = [request.get_json()["model"] for request, _ in httpserver.log]
+    assert sent_models == [stored_model, stored_model]
+
+
+@pytest.mark.parametrize(
+    "stored_model",
+    [
+        pytest.param("gpt-5-nano", id="openai-native"),
+        pytest.param("openai/gpt-5-nano", id="openrouter-openai"),
+    ],
+)
+def test_judge_metric_sends_the_stored_model_id(httpserver, monkeypatch, stored_model):
+    httpserver.expect_request(
+        "/v1/private/chat/completions", method="POST"
+    ).respond_with_json(
+        {
+            **_GATEWAY_REPLY,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": '{"score": 7, "reason": "ok"}',
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+        }
+    )
+    monkeypatch.setenv("OPENAI_API_BASE", httpserver.url_for("/v1/private"))
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    config = OptimizationConfig.from_dict(_config(task_model=stored_model))
+    _, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+    judge = metrics.MetricFactory.build(
+        "geval",
+        {"task_introduction": "Rate the answer", "evaluation_criteria": "Is it Paris"},
+        prompt.model,
+    )
+
+    judge({}, "Paris")
+
+    sent_models = {request.get_json()["model"] for request, _ in httpserver.log}
+    assert sent_models == {stored_model}

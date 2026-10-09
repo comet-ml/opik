@@ -192,10 +192,11 @@ def route_litellm_calls_through_gateway(workspace_name):
 
 def _gateway_model(model: str) -> str:
     """Prefix with ``openai/`` so LiteLLM uses its OpenAI handler — the only one
-    that honors ``OPENAI_API_BASE`` (the gateway). LiteLLM strips the prefix, so
-    the gateway still receives the provider-qualified model and routes it (e.g.
-    ``vertex_ai/gemini-2.5-flash``)."""
-    return model if model.startswith("openai/") else f"openai/{model}"
+    that honors ``OPENAI_API_BASE`` (the gateway). LiteLLM strips exactly one
+    prefix, so the gateway gets the stored id unchanged. Always prefix, even ids
+    that already start with ``openai/``: those are OpenRouter ids, and skipping
+    the prefix would send ``gpt-5-nano`` to native OpenAI."""
+    return f"openai/{model}"
 
 
 def _with_stream(params):
@@ -220,6 +221,7 @@ def build_optimizer_and_prompt(config):
     """
     from opik_optimizer import ChatPrompt
     from opik_backend.studio.optimizers import (
+        LLM_MAX_TOKENS,
         OptimizerFactory,
         ensure_default_model_params,
     )
@@ -235,10 +237,21 @@ def build_optimizer_and_prompt(config):
         # optimizer model_parameters if the config set them without a model
         # (saved configs / API clients), instead of silently dropping them.
         optimizer_model = task_model
+        # The prompt's output limit is sized for its answers. The algorithm writes
+        # whole prompts and JSON analyses, so it gets at least the factory default,
+        # under the prompt's field name: the same model's gateway route reads that
+        # name, while some routes ignore the factory's max_tokens.
         optimizer_model_params = (
             _with_stream(config.optimizer_model_params)
             if config.optimizer_model_params is not None
-            else task_params
+            else {
+                key: (
+                    max(value or 0, LLM_MAX_TOKENS)
+                    if key in ("max_tokens", "max_completion_tokens")
+                    else value
+                )
+                for key, value in task_params.items()
+            }
         )
 
     # The factory injects defaults (e.g. max_tokens) into the optimizer params.

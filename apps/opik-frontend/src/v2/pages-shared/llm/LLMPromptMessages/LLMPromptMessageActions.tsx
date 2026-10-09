@@ -25,10 +25,7 @@ import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSele
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import PromptImprovementDialog from "@/v2/pages-shared/llm/PromptImprovementDialog/PromptImprovementDialog";
-import {
-  LLMPromptConfigsType,
-  COMPOSED_PROVIDER_TYPE,
-} from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { useToast } from "@/ui/use-toast";
 import {
   getTextFromMessageContent,
@@ -47,7 +44,6 @@ type ConfirmType = "load" | "save";
 export interface ImprovePromptConfig {
   model: string;
   provider: COMPOSED_PROVIDER_TYPE | "";
-  configs: LLMPromptConfigsType;
   workspaceName: string;
   onAccept: (messageId: string, improvedContent: MessageContent) => void;
 }
@@ -439,7 +435,6 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           originalPrompt={content}
           model={improvePromptConfig.model}
           provider={improvePromptConfig.provider}
-          configs={improvePromptConfig.configs}
           workspaceName={improvePromptConfig.workspaceName}
           onAccept={improvePromptConfig.onAccept}
         />
