@@ -46,3 +46,18 @@ export const countAffectedTraces = (issues: AgentInsightsIssue[]): number =>
   issues
     .filter((i) => i.status !== AGENT_INSIGHTS_ISSUE_STATUS.closed)
     .reduce((sum, i) => sum + i.total_occurrences, 0);
+
+// Settings (auto-run, guidance) is there for configurers from the start, even before
+// the first run; Run waits until the job has something to show.
+export const getHeaderControls = ({
+  showClosed,
+  canConfigure,
+  showJobControls,
+}: {
+  showClosed: boolean;
+  canConfigure: boolean;
+  showJobControls: boolean;
+}) => ({
+  settings: !showClosed && canConfigure,
+  run: !showClosed && canConfigure && showJobControls,
+});
