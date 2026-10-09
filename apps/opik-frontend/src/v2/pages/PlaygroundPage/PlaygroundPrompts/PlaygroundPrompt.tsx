@@ -34,6 +34,8 @@ import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptMod
 import { cn, getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
+import { BACKEND_RUN_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import {
   useDatasetVariables,
   useDatasetSampleData,
@@ -91,6 +93,8 @@ const PlaygroundPrompt = ({
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
   const activeProjectId = useActiveProjectId();
+  const { datasetId } = usePlaygroundDataset();
+  const isBackendRun = !!datasetId;
   const queryClient = useQueryClient();
 
   const prompt = usePromptById(promptId);
@@ -300,7 +304,7 @@ const PlaygroundPrompt = ({
           configs: getDefaultConfigByProvider(newProvider, newModel),
         });
 
-        updateOutput(promptId, "", { value: null });
+        updateOutput(promptId, { value: null });
       } else {
         const restored = restoreMissingProviderAndConfigKeys(
           prompt,
@@ -404,6 +408,9 @@ const PlaygroundPrompt = ({
             configs={configs}
             onChange={handleUpdateConfig}
             openAiPipelineMode={openAiPipelineMode}
+            unsupportedParams={
+              isBackendRun ? BACKEND_RUN_UNSUPPORTED_PARAMS : undefined
+            }
             size="icon-xs"
             variant="ghost"
           />

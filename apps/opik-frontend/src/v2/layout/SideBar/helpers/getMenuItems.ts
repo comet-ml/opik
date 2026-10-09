@@ -22,6 +22,7 @@ import {
   MENU_ITEM_TYPE,
   MenuItemGroup,
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
+import PlaygroundNavBadge from "@/v2/layout/SideBar/MenuItem/PlaygroundNavBadge";
 import DiagnosticsNavBadge from "@/v2/layout/SideBar/MenuItem/DiagnosticsNavBadge";
 const getMenuItems = ({
   projectId,
@@ -165,6 +166,7 @@ const getMenuItems = ({
                 icon: Blocks,
                 label: "Prompt playground",
                 disabled: !projectPrefix,
+                badge: PlaygroundNavBadge,
               },
             ]
           : []),

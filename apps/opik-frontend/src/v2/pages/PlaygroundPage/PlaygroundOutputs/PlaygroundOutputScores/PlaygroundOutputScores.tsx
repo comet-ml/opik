@@ -22,6 +22,7 @@ interface PlaygroundOutputScoresProps {
   metricNames: string[]; // Expected metric names from rules
   metricScores: Record<string, ScoreData>; // Actual scores from trace (keyed by name)
   stale?: boolean;
+  notRun?: boolean;
   className?: string;
 }
 
@@ -29,6 +30,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   metricNames,
   metricScores,
   stale = false,
+  notRun = false,
   className,
 }) => {
   const { getColor } = useWorkspaceColorMap();
@@ -64,6 +66,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
           metricName={metricName}
           color={metricColors[metricName]}
           score={metricScores[metricName]}
+          notRun={notRun}
         />
       ))}
       {remainingCount > 0 && (
@@ -88,6 +91,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
                   metricName={metricName}
                   color={metricColors[metricName]}
                   score={metricScores[metricName]}
+                  notRun={notRun}
                 />
               ))}
             </div>

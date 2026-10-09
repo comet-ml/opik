@@ -9,6 +9,7 @@ vi.mock("@/store/PlaygroundStore", () => ({
   usePromptIds: () => promptIds,
   useSetDatasetVariables: () => vi.fn(),
   useSetDatasetSampleData: () => vi.fn(),
+  useSetDatasetItemsTotal: () => vi.fn(),
   useDatasetFilters: () => [],
   useDatasetPage: () => 1,
   useSetDatasetPage: () => vi.fn(),
