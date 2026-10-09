@@ -39,6 +39,8 @@ export interface ChartEditRequest {
   description?: string | null;
   spec: Record<string, unknown>;
   query: { sql: string; projectId?: string | null };
+  // The rows the widget shows now, so the chat can show the chart being edited without re-running it.
+  rows?: Record<string, unknown>[] | null;
 }
 
 export interface BridgeDashboard {

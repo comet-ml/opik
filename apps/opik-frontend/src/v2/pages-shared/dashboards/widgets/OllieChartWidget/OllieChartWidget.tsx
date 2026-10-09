@@ -133,6 +133,7 @@ const OllieChartWidget: React.FunctionComponent<
             description: config.description,
             spec,
             query: { sql: query.sql, projectId: query.projectId },
+            rows: live ? rows : snapshotRows,
           })
       : undefined;
 
