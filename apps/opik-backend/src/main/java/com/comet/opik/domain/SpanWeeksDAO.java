@@ -81,8 +81,8 @@ public class SpanWeeksDAO {
             SETTINGS log_comment = '<log_comment>', max_execution_time = <max_execution_time>
             """;
 
-    // GROUP BY rather than DISTINCT so a large chunk can spill to disk; in-order aggregation over the spans sort key
-    // measured ~200x slower, hence off.
+    // GROUP BY rather than DISTINCT so a large chunk spills to disk, by the server's
+    // max_bytes_ratio_before_external_group_by; in-order aggregation over the spans sort key measured ~200x slower.
     private static final String BACKFILL = """
             INSERT INTO span_weeks (workspace_id, project_id, trace_id, id_week)
             SELECT workspace_id, project_id, trace_id,
@@ -91,7 +91,6 @@ public class SpanWeeksDAO {
             WHERE <if(partitioned)>_partition_id BETWEEN :from_partition AND :to_partition<else>week BETWEEN :from_week AND :to_week<endif>
             GROUP BY workspace_id, project_id, trace_id, week
             SETTINGS log_comment = '<log_comment>', optimize_aggregation_in_order = 0,
-                max_bytes_before_external_group_by = <max_bytes_before_external_group_by>,
                 max_execution_time = <max_execution_time>
             """;
 
@@ -193,7 +192,7 @@ public class SpanWeeksDAO {
      * table reads only those partitions; an unpartitioned one is scanned in full and filtered by each span's week.
      */
     public Mono<Void> backfill(@NonNull String table, boolean partitioned, long fromWeek, long toWeek,
-            long maxBytesBeforeExternalGroupBy, long maxExecutionSeconds) {
+            long maxExecutionSeconds) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     ST template = getSTWithLogComment(BACKFILL, "backfill_span_weeks", null, null,
@@ -201,7 +200,6 @@ public class SpanWeeksDAO {
                             .add("table", table)
                             .add("partitioned", partitioned)
                             .add("id_week", ID_WEEK)
-                            .add("max_bytes_before_external_group_by", maxBytesBeforeExternalGroupBy)
                             .add("max_execution_time", maxExecutionSeconds);
                     Statement statement = connection.createStatement(template.render());
                     if (partitioned) {

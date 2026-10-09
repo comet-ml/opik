@@ -102,7 +102,7 @@ public class SpanWeeksBackfillService {
     private Mono<Void> backfill(String table, boolean partitioned, Chunk chunk) {
         long started = System.currentTimeMillis();
         return spanWeeksDAO.backfill(table, partitioned, chunk.fromWeek(), chunk.toWeek(),
-                config.getMaxBytesBeforeExternalGroupBy(), config.getQueryTimeout().toSeconds())
+                config.getQueryTimeout().toSeconds())
                 .then(Mono.<Void>fromRunnable(() -> template.inTransaction(WRITE, handle -> {
                     handle.attach(SpanWeeksBackfillChunkDAO.class).markBackfilled(chunk.fromWeek());
                     return null;
