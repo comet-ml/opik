@@ -540,6 +540,91 @@ class VertexAIClientGeneratorTest {
     }
 
     @Nested
+    @DisplayName("Temperature and top_p")
+    class SamplingParams {
+
+        private static final String STREAM_GENERATE_CONTENT_PATH = ".*:streamGenerateContent";
+
+        private static Stream<Arguments> samplingCases() {
+            return Stream.of(
+                    Arguments.of("both as set", 0.3, 0.8, "{\"temperature\": 0.3, \"topP\": 0.8}"),
+                    Arguments.of("a temperature of 0 is still sent", 0.0, null, "{\"temperature\": 0.0}"),
+                    Arguments.of("neither set sends neither", null, null, "{}"));
+        }
+
+        @ParameterizedTest(name = "chat: {0}")
+        @MethodSource("samplingCases")
+        void chatSendsThePanelsSamplingParams(String name, Double temperature, Double topP, String expected) {
+            provider().generate(request(temperature, topP), "workspace");
+
+            assertThat(only(sentGenerationConfig(), "temperature", "topP"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString(expected));
+        }
+
+        @ParameterizedTest(name = "streaming: {0}")
+        @MethodSource("samplingCases")
+        void streamingSendsThePanelsSamplingParams(String name, Double temperature, Double topP, String expected)
+                throws Exception {
+            wireMock.server().stubFor(post(urlPathMatching(STREAM_GENERATE_CONTENT_PATH))
+                    .willReturn(aResponse()
+                            .withHeader("Content-Type", "text/event-stream")
+                            .withBody("data: " + GENERATE_CONTENT_RESPONSE.replace("\n", " ") + "\n\n")));
+            var closed = new CompletableFuture<Void>();
+
+            provider().generateStream(request(temperature, topP), "workspace", message -> {
+            }, () -> closed.complete(null), closed::completeExceptionally);
+            closed.get(10, TimeUnit.SECONDS);
+
+            assertThat(only(sentGenerationConfig(STREAM_GENERATE_CONTENT_PATH), "temperature", "topP"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString(expected));
+        }
+
+        @Test
+        @DisplayName("the judge path sends the rule's temperature and seed")
+        void judgeSendsTemperatureAndSeed() {
+            var modelParameters = new LlmAsJudgeModelParameters(MODEL, 0.2, 7, null);
+
+            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig())
+                    .generateChat(apiConfig(), modelParameters)) {
+                client.chat(UserMessage.from("hello"));
+            }
+
+            assertThat(only(sentGenerationConfig(), "temperature", "seed"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"temperature\": 0.2, \"seed\": 7}"));
+        }
+
+        private ChatCompletionRequest request(Double temperature, Double topP) {
+            return ChatCompletionRequest.builder()
+                    .model(MODEL)
+                    .addUserMessage("hello")
+                    .temperature(temperature)
+                    .topP(topP)
+                    .build();
+        }
+
+        private LlmProviderVertexAI provider() {
+            return new LlmProviderVertexAI(new VertexAIClientGenerator(clientConfig()), apiConfig());
+        }
+
+        private LlmProviderClientApiConfig apiConfig() {
+            return LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+        }
+
+        private JsonNode only(JsonNode generationConfig, String... fields) {
+            var subset = JsonUtils.createObjectNode();
+            for (var field : fields) {
+                if (generationConfig.has(field)) {
+                    subset.set(field, generationConfig.get(field));
+                }
+            }
+            return subset;
+        }
+    }
+
+    @Nested
     @DisplayName("Max output tokens")
     class MaxOutputTokens {
 
