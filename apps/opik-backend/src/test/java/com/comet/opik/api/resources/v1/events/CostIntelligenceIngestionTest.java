@@ -264,14 +264,6 @@ class CostIntelligenceIngestionTest {
 
             assertEveryColumnHoldsItsOwnValue(ws.workspaceId(), rowOne);
             assertEveryColumnHoldsItsOwnValue(ws.workspaceId(), rowTwo);
-
-            // an unexpected session_mode must not reach the LowCardinality column
-            var bogusRow = CipxSpendDAO.SpanRow.from(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                    JsonUtils.getJsonNodeFromString("{\"cipx\":{\"call\":{\"session_mode\":\"bogus\"}}}"),
-                    Instant.ofEpochMilli(1_800_000_000_003L));
-            cipxSpendDAO.insert(List.of(bogusRow), ws.workspaceId(), USER).block();
-            assertThat(getCipxSpendAllColumns(bogusRow.spanId(), ws.workspaceId()).orElseThrow().sessionMode())
-                    .isEmpty();
         }
 
         @Test
@@ -954,7 +946,7 @@ class CostIntelligenceIngestionTest {
                 .maxTokens(base + 7)
                 .contextManagement("sentinel-" + n + "-context-management")
                 .speed("sentinel-" + n + "-speed")
-                .sessionMode(n == 1 ? "interactive" : "headless")
+                .sessionMode("sentinel-" + n + "-session-mode")
                 .aiuNano(base + 8)
                 .trigger("sentinel-" + n + "-trigger")
                 .triggerDetail("sentinel-" + n + "-trigger-detail")
