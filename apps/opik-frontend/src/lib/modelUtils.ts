@@ -11,12 +11,14 @@ import {
 import {
   ANTHROPIC_MODEL_CAPABILITIES,
   DEFAULT_ANTHROPIC_CONFIGS,
+  DEFAULT_OPEN_AI_CONFIGS,
   OPENAI_MODEL_CAPABILITIES,
 } from "@/constants/llm";
 import {
   getProviderFromModel,
   parseComposedProviderType,
 } from "@/lib/provider";
+import { getMaxOutputTokens } from "@/lib/modelCapabilities";
 import isPlainObject from "lodash/isPlainObject";
 import omit from "lodash/omit";
 import sortBy from "lodash/sortBy";
@@ -976,6 +978,50 @@ export const resolveEffort = (
   return { ...configs };
 };
 
+// Used for a model the pricing data does not list: the caps the panels had before it was read.
+const MAX_COMPLETION_TOKENS_FALLBACK = {
+  [PROVIDER_TYPE.OPEN_AI]: 128000,
+  [PROVIDER_TYPE.ANTHROPIC]: 64000,
+};
+
+export type MaxCompletionTokensRange = { min: number; max: number };
+
+export const getMaxCompletionTokensRange = (
+  provider: keyof typeof MAX_COMPLETION_TOKENS_FALLBACK,
+  model: string,
+  openAiPipelineMode?: OpenAiPipelineMode,
+): MaxCompletionTokensRange => ({
+  // Below 16, the Responses API rejects max_output_tokens. Elsewhere 0 is rejected too: OpenAI
+  // wants at least 1, and Anthropic refuses 0 on a streamed request, which every playground run is.
+  min:
+    provider === PROVIDER_TYPE.OPEN_AI && openAiPipelineMode === "responses_api"
+      ? 16
+      : 1,
+  max: getMaxOutputTokens(model) ?? MAX_COMPLETION_TOKENS_FALLBACK[provider],
+});
+
+const MAX_COMPLETION_TOKENS_DEFAULT = {
+  [PROVIDER_TYPE.OPEN_AI]: DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS,
+  [PROVIDER_TYPE.ANTHROPIC]: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
+};
+
+export const resolveMaxCompletionTokens = (
+  provider: keyof typeof MAX_COMPLETION_TOKENS_FALLBACK,
+  model: string,
+  value: number | undefined,
+  openAiPipelineMode?: OpenAiPipelineMode,
+): number => {
+  const { min, max } = getMaxCompletionTokensRange(
+    provider,
+    model,
+    openAiPipelineMode,
+  );
+  // A stored 0 was saved while the slider still went down to 0: it meant "not set", never a
+  // one-token answer, so it gets the default rather than the new floor.
+  const requested = value || MAX_COMPLETION_TOKENS_DEFAULT[provider];
+  return Math.min(Math.max(requested, min), max);
+};
+
 // Last-mile request hardening, complementary to updateProviderConfig: this
 // layer doesn't trust upstream and keeps the payload valid for stale state
 // (e.g. older persisted prompts missing maxCompletionTokens).
@@ -1047,6 +1093,24 @@ export const sanitizeConfigForRequest = (
   ) {
     sanitized.maxCompletionTokens =
       DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS;
+  }
+
+  // getProviderFromModel answers OpenAI for any model the registry does not list, a custom gateway's
+  // ids included, so only a listed model is held to OpenAI's or Anthropic's limits.
+  if (
+    (provider === PROVIDER_TYPE.ANTHROPIC ||
+      provider === PROVIDER_TYPE.OPEN_AI) &&
+    (getLatestProviderModelsSnapshot()[provider] ?? []).some(
+      (option) => option.value === model,
+    ) &&
+    typeof sanitized.maxCompletionTokens === "number"
+  ) {
+    sanitized.maxCompletionTokens = resolveMaxCompletionTokens(
+      provider,
+      model,
+      sanitized.maxCompletionTokens,
+      openAiPipelineMode,
+    );
   }
 
   if (
