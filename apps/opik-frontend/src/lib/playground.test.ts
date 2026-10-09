@@ -289,6 +289,27 @@ describe("restoreMissingConfigKeys", () => {
     });
   });
 
+  it.each([
+    { stored: "no temperature", configs: { topP: 1, maxTokens: 0 } },
+    {
+      stored: "a null temperature",
+      configs: { temperature: null, topP: 1, maxTokens: 0 },
+    },
+  ])(
+    "gives an OpenRouter prompt stored with $stored the new default 0",
+    ({ configs }) => {
+      const stored = prompt(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+        configs,
+      );
+
+      expect(restoreMissingConfigKeys(stored).configs).toMatchObject({
+        temperature: 0,
+      });
+    },
+  );
+
   it("leaves a cleared Anthropic temperature cleared when Top P is the live half", () => {
     // Restoring temperature here would silently override the user's Top P: with both set the
     // request drops Top P. Which half is live stays resolveSamplingParams' call.
