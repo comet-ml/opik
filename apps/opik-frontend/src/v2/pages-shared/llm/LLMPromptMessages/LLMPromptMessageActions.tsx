@@ -35,6 +35,7 @@ import {
   convertMessageToMessagesJson,
   parsePromptVersionContent,
   parseChatTemplateToLLMMessages,
+  toContentForRole,
 } from "@/lib/llm";
 import {
   PROMPT_SAVE_TO_LIBRARY_TOOLTIP,
@@ -99,7 +100,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     },
   );
 
-  const { promptId, promptVersionId, content } = message;
+  const { promptId, promptVersionId, content, role } = message;
   const { data: promptData, error: promptError } = usePromptById(
     { promptId: promptId! },
     {
@@ -314,15 +315,29 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       if (onClearOtherPromptLinks) {
         onClearOtherPromptLinks();
       }
+      const { content: loadedContent, mediaDropped } = toContentForRole(
+        parsePromptVersionContent(sourceVersion),
+        role,
+      );
       onChangeMessage({
-        content: parsePromptVersionContent(sourceVersion),
+        content: loadedContent,
         promptVersionId: versionId,
         promptId: promptData.id,
       });
       setIsLoading(false);
+
+      if (mediaDropped) {
+        toast({
+          title: "Media not loaded",
+          description:
+            "Only user messages support images, video and audio, so only the prompt's text was loaded.",
+        });
+      }
     }
   }, [
     onChangeMessage,
+    role,
+    toast,
     promptData,
     promptId,
     loadedVersionData,
