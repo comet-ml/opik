@@ -638,7 +638,8 @@ class SpansLocalV2PartitioningTest {
 
     /**
      * The backfill registers, from either spans table, the partition spans_local_v2 stores each span in: read from
-     * the partition id on the partitioned table, derived from the id on the unpartitioned legacy one.
+     * the partition id on the partitioned table, derived from the id on the unpartitioned legacy one. The expected
+     * week is the partition ClickHouse writes the same id to in spans_local_v2, not a value computed in Java.
      */
     @ParameterizedTest
     @ValueSource(strings = {"spans", "spans_local_v2"})
@@ -647,8 +648,11 @@ class SpansLocalV2PartitioningTest {
         var projectId = ID_GENERATOR.generateId();
         Map<UUID, UUID> traceIdBySpanId = idsAcrossPartitionEdges()
                 .collect(Collectors.toMap(Function.identity(), id -> ID_GENERATOR.generateId()));
-        traceIdBySpanId.forEach((id, traceId) -> insert(table, List.of(id), workspaceId, projectId, traceId,
-                weekInstant(0)));
+        var oracleWorkspaceId = UUID.randomUUID().toString();
+        traceIdBySpanId.forEach((id, traceId) -> {
+            insert(table, List.of(id), workspaceId, projectId, traceId, weekInstant(0));
+            insert(List.of(id), oracleWorkspaceId, projectId, traceId, weekInstant(0));
+        });
 
         boolean partitioned = spanWeeksDAO.isPartitioned(table).block();
         spanWeeksDAO.backfill(table, partitioned, 19691229L, 22991225L, 1L << 30, 600).block();
@@ -658,7 +662,7 @@ class SpansLocalV2PartitioningTest {
                 .map(entry -> SpanWeek.builder()
                         .projectId(projectId)
                         .traceId(entry.getValue())
-                        .idWeek(WeeklyPartitions.storedPartitionOf(entry.getKey()))
+                        .idWeek(Long.parseLong(partitionIdFor(oracleWorkspaceId, projectId, entry.getKey())))
                         .build())
                 .toList();
         assertThat(spanWeeksDAO.findByTraceIds(traceIdBySpanId.values())
