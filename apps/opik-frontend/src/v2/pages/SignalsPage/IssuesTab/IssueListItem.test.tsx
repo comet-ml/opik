@@ -34,6 +34,18 @@ describe("IssueListItem", () => {
     expect(screen.queryByText(/Last seen/)).not.toBeInTheDocument();
   });
 
+  it("says Resolved for resolved issues", () => {
+    render(
+      <IssueListItem
+        issue={{ ...issue, status: AGENT_INSIGHTS_ISSUE_STATUS.resolved }}
+        isActive={false}
+        onClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Resolved Oct 6 by Olesya")).toBeInTheDocument();
+  });
+
   it("falls back to Last seen when the close wasn't recorded", () => {
     render(
       <IssueListItem

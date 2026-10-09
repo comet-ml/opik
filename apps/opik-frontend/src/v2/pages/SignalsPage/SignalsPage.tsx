@@ -48,6 +48,7 @@ import SignalsPageSkeleton from "@/v2/pages/SignalsPage/SignalsPageSkeleton";
 import useColumnsOverflow from "@/v2/pages/SignalsPage/useColumnsOverflow";
 import {
   countAffectedTraces,
+  getHeaderControls,
   isGuidanceOutdated,
 } from "@/v2/pages/SignalsPage/helpers";
 import {
@@ -359,6 +360,11 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
   };
 
   const layout = columnsOverflow ? LAYOUT.scrolling : LAYOUT.fitted;
+  const headerControls = getHeaderControls({
+    showClosed,
+    canConfigure,
+    showJobControls,
+  });
 
   const canRun = !showRunning && !isOutOfCredits && !triggerMutation.isPending;
 
@@ -515,7 +521,7 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
             )}
           </div>
         )}
-        {!showClosed && showJobControls && canConfigure && (
+        {headerControls.settings && (
           <div className="flex items-center gap-2">
             <DiagnosticsSettingsMenu
               projectId={projectId}
@@ -524,21 +530,22 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
                 guidanceEnabled ? () => setGuidanceOpen(true) : undefined
               }
             />
-            {isOutOfCredits && !showRunning ? (
-              <OutOfCreditsButton
-                label="Out of Ollie credits"
-                description="Diagnostics run on your organization's Ollie credits, and there aren't enough left for another run. Issues already found stay available."
-              />
-            ) : (
-              <Button
-                size="2xs"
-                disabled={showRunning || triggerMutation.isPending}
-                onClick={handleRunDiagnostic}
-              >
-                <Play className="mr-1.5 size-3" />
-                Run diagnostic
-              </Button>
-            )}
+            {headerControls.run &&
+              (isOutOfCredits && !showRunning ? (
+                <OutOfCreditsButton
+                  label="Out of Ollie credits"
+                  description="Diagnostics run on your organization's Ollie credits, and there aren't enough left for another run. Issues already found stay available."
+                />
+              ) : (
+                <Button
+                  size="2xs"
+                  disabled={showRunning || triggerMutation.isPending}
+                  onClick={handleRunDiagnostic}
+                >
+                  <Play className="mr-1.5 size-3" />
+                  Run diagnostic
+                </Button>
+              ))}
           </div>
         )}
       </div>

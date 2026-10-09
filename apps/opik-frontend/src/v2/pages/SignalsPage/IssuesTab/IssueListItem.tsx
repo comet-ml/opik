@@ -17,15 +17,14 @@ type IssueListItemProps = {
 };
 
 const ClosedMeta: React.FC<{ issue: AgentInsightsIssue }> = ({ issue }) => {
-  const Icon =
-    issue.status === AGENT_INSIGHTS_ISSUE_STATUS.closed
-      ? ThumbsDown
-      : CircleCheck;
+  const isNotUseful = issue.status === AGENT_INSIGHTS_ISSUE_STATUS.closed;
+  const Icon = isNotUseful ? ThumbsDown : CircleCheck;
   return (
     <span className="flex min-w-0 items-center gap-1">
       <Icon className="size-3 shrink-0" />
       <span className="truncate">
-        Closed {formatDate(issue.status_changed_at!, { format: "MMM D" })}
+        {isNotUseful ? "Closed" : "Resolved"}{" "}
+        {formatDate(issue.status_changed_at!, { format: "MMM D" })}
         {issue.status_changed_by && ` by ${issue.status_changed_by}`}
       </span>
     </span>
