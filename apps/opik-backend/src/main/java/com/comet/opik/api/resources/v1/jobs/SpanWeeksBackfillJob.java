@@ -20,8 +20,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
 /**
- * Runs one step of the span weeks backfill per tick (see {@link SpanWeeksBackfillService}). A distributed lock keeps
- * a single instance at it, so two instances never plan or backfill the same chunk at once.
+ * Runs one step of the span weeks backfill per tick (see {@link SpanWeeksBackfillService}). A distributed lock ensures
+ * only one instance runs it at a time, so two instances never plan or backfill the same chunk at once.
  */
 @Singleton
 @Slf4j
