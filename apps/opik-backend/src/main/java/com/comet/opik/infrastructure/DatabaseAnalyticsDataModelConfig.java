@@ -92,8 +92,8 @@ import lombok.Builder;
  * nothing.</p>
  *
  * <p>{@code spanWeeksBackfillEnabled}: when {@code true}, the span weeks backfill job is scheduled
- * ({@code SpanWeeksBackfillJob}): it fills {@code span_weeks} from the spans already written, then marks every project
- * as backfilled. Turn it on only once {@code spanWeeksWriteEnabled} is live on every instance: the backfill covers the
+ * ({@code SpanWeeksBackfillJob}): it fills {@code span_weeks} from the spans already written, one range of weeks at a
+ * time. Turn it on only once {@code spanWeeksWriteEnabled} is live on every instance: the backfill covers the
  * spans written until its first run, and live registration everything after. Its tuning lives in
  * {@code spanWeeksBackfill}.</p>
  */

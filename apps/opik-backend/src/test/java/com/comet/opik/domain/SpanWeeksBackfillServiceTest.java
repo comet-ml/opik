@@ -37,9 +37,8 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
-import java.util.Collection;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -101,12 +100,11 @@ class SpanWeeksBackfillServiceTest {
     private SpanResourceClient spanResourceClient;
     private ProjectResourceClient projectResourceClient;
     private SpanService spanService;
-    private ProjectService projectService;
     private SpanWeeksBackfillService writesOffBackfillService;
     private SpanWeeksBackfillService backfillService;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, SpanService spanService, ProjectService projectService,
+    void setUpAll(ClientSupport client, SpanService spanService,
             @Jit SpanWeeksBackfillService writesOffBackfillService, TransactionTemplate template,
             @Jit SpanWeeksDAO spanWeeksDAO, OpikConfiguration configuration) {
         var baseURI = TestUtils.getBaseUrl(client);
@@ -114,7 +112,6 @@ class SpanWeeksBackfillServiceTest {
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.spanService = spanService;
-        this.projectService = projectService;
         this.writesOffBackfillService = writesOffBackfillService;
 
         // The backfill as it runs once span writes register their weeks.
@@ -124,16 +121,13 @@ class SpanWeeksBackfillServiceTest {
     }
 
     @Test
-    @DisplayName("backfills the weeks of existing spans, marking each project once every week it has spans in is")
-    void backfillsExistingSpansAndMarksEachProjectOnceItsWeeksAre() {
+    @DisplayName("backfills the weeks of existing spans, one range of weeks at a time, oldest first")
+    void backfillsExistingSpansOneWeekRangeAtATime() {
         var ws = newWorkspace();
         var projectName = "span-weeks-" + UUID.randomUUID();
         var otherProjectName = "span-weeks-" + UUID.randomUUID();
         var projectId = projectResourceClient.createProject(projectName, ws.apiKey(), ws.workspaceName());
         var otherProjectId = projectResourceClient.createProject(otherProjectName, ws.apiKey(), ws.workspaceName());
-        var emptyProjectId = projectResourceClient.createProject("span-weeks-" + UUID.randomUUID(), ws.apiKey(),
-                ws.workspaceName());
-        var projectIds = Set.of(projectId, otherProjectId, emptyProjectId);
         var traceAcrossWeeks = uuidV7(System.currentTimeMillis());
         var traceWithBoundaryIds = uuidV7(System.currentTimeMillis());
         var traceIds = List.of(traceAcrossWeeks, traceWithBoundaryIds);
@@ -151,44 +145,44 @@ class SpanWeeksBackfillServiceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             }
         }));
+        var upToMonday = List.of(
+                SpanWeek.builder().projectId(projectId).traceId(traceWithBoundaryIds).idWeek(EPOCH_WEEK).build(),
+                SpanWeek.builder().projectId(projectId).traceId(traceAcrossWeeks).idWeek(PREVIOUS_WEEK).build(),
+                SpanWeek.builder().projectId(projectId).traceId(traceAcrossWeeks).idWeek(MONDAY_WEEK).build(),
+                SpanWeek.builder().projectId(otherProjectId).traceId(traceAcrossWeeks).idWeek(MONDAY_WEEK).build());
+        var saturated = SpanWeek.builder().projectId(projectId).traceId(traceWithBoundaryIds).idWeek(SATURATED_WEEK)
+                .build();
 
         // While span writes do not register weeks, the backfill must not run: its plan would miss what comes next.
         writesOffBackfillService.runStep().block();
         assertThat(weeks(traceIds, ws)).isEmpty();
-        assertThat(backfilledProjects(projectIds, ws)).isEmpty();
 
-        // The first step plans, one week per chunk here: only the project without spans has nothing left to backfill.
+        // The first step only plans, one week per chunk here.
         backfillService.runStep().block();
-        assertThat(backfilledProjects(projectIds, ws)).containsExactly(emptyProjectId);
+        assertThat(weeks(traceIds, ws)).isEmpty();
 
-        // Chunks go oldest week first: the other project's only week is done while the project's 2300 week is not.
-        runStepsUntilBackfilled(otherProjectId, ws);
-        assertThat(backfilledProjects(projectIds, ws)).containsExactlyInAnyOrder(emptyProjectId, otherProjectId);
+        // Oldest week first: once the 2025-03-03 range is in, the 2300 one is still pending.
+        runStepsUntil(traceIds, ws, upToMonday.size());
+        assertThat(weeks(traceIds, ws)).containsExactlyInAnyOrderElementsOf(upToMonday);
 
-        runStepsUntilBackfilled(projectId, ws);
-        assertThat(backfilledProjects(projectIds, ws)).isEqualTo(projectIds);
-        assertThat(weeks(traceIds, ws)).containsExactlyInAnyOrder(
-                SpanWeek.builder().projectId(projectId).traceId(traceAcrossWeeks).idWeek(MONDAY_WEEK).build(),
-                SpanWeek.builder().projectId(projectId).traceId(traceAcrossWeeks).idWeek(PREVIOUS_WEEK).build(),
-                SpanWeek.builder().projectId(otherProjectId).traceId(traceAcrossWeeks).idWeek(MONDAY_WEEK).build(),
-                SpanWeek.builder().projectId(projectId).traceId(traceWithBoundaryIds).idWeek(EPOCH_WEEK).build(),
-                SpanWeek.builder().projectId(projectId).traceId(traceWithBoundaryIds).idWeek(SATURATED_WEEK).build());
+        runStepsUntil(traceIds, ws, upToMonday.size() + 1);
+        var all = new ArrayList<>(upToMonday);
+        all.add(saturated);
+        assertThat(weeks(traceIds, ws)).containsExactlyInAnyOrderElementsOf(all);
+
+        // Every chunk is done: a further step changes nothing.
+        backfillService.runStep().block();
+        assertThat(weeks(traceIds, ws)).containsExactlyInAnyOrderElementsOf(all);
     }
 
-    private void runStepsUntilBackfilled(UUID projectId, WorkspaceContext ws) {
-        for (int step = 0; step < MAX_STEPS && backfilledProjects(List.of(projectId), ws).isEmpty(); step++) {
+    private void runStepsUntil(List<UUID> traceIds, WorkspaceContext ws, int weeksCount) {
+        for (int step = 0; step < MAX_STEPS && weeks(traceIds, ws).size() < weeksCount; step++) {
             backfillService.runStep().block();
         }
     }
 
     private List<SpanWeek> weeks(List<UUID> traceIds, WorkspaceContext ws) {
         return spanService.getWeeksByTraceIds(traceIds)
-                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, USER, ws.workspaceId()))
-                .block();
-    }
-
-    private Set<UUID> backfilledProjects(Collection<UUID> projectIds, WorkspaceContext ws) {
-        return projectService.findSpanWeeksBackfilled(projectIds)
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, USER, ws.workspaceId()))
                 .block();
     }
