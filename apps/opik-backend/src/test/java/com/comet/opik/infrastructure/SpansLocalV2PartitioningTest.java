@@ -19,6 +19,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -592,6 +593,42 @@ class SpansLocalV2PartitioningTest {
         var expectedIds = projectIds.stream().map(UUID::toString).toList();
         assertThat(rowsWithoutHint).containsExactlyInAnyOrderElementsOf(expectedIds);
         assertThat(rowsWithHint).containsExactlyInAnyOrderElementsOf(expectedIds);
+    }
+
+    /**
+     * Ids whose stored partition is not their honest week, plus the ordinary cases around a week boundary: span_weeks
+     * records {@link WeeklyPartitions#storedPartitionOf}, so it must equal the partition ClickHouse actually writes the
+     * row to, or a read bound to the index skips the row.
+     */
+    private static Stream<UUID> idsAcrossPartitionEdges() {
+        long mondayMillis = ANCHOR_MONDAY.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
+        long ceilingMillis = Instant.parse("2300-01-01T00:00:00Z").toEpochMilli();
+        return Stream.of(
+                uuidV7(mondayMillis),
+                uuidV7(mondayMillis - 1),
+                ID_GENERATOR.generateId(FAR_FUTURE_INSTANT),
+                uuidV7(0L),
+                uuidV7(ceilingMillis - 1),
+                uuidV7(ceilingMillis),
+                uuidV7((1L << 48) - 1),
+                UUID.randomUUID(),
+                new UUID(0L, 0L));
+    }
+
+    @ParameterizedTest
+    @MethodSource("idsAcrossPartitionEdges")
+    void storedPartitionOfMatchesThePartitionTheRowIsWrittenTo(UUID id) {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var traceId = ID_GENERATOR.generateId();
+        insert(List.of(id), workspaceId, projectId, traceId, weekInstant(0));
+
+        assertThat(partitionIdFor(workspaceId, projectId, id))
+                .isEqualTo(String.valueOf(WeeklyPartitions.storedPartitionOf(id)));
+    }
+
+    private static UUID uuidV7(long epochMillis) {
+        return new UUID((epochMillis << 16) | 0x7000L, 0x8000_0000_0000_0000L);
     }
 
     private List<String> idsMatching(String selectSql, String workspaceId, Consumer<Statement> binder) {
