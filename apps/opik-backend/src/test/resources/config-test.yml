@@ -178,6 +178,31 @@ databaseAnalyticsDataModel:
   #   indexed. Off writes nothing.
   spanWeeksWriteEnabled: false
 
+# Span weeks backfill (OPIK-8706): fills the span_weeks index from the spans written before span writes started
+# registering their weeks, then marks every project as backfilled. One chunk of weeks per run; a partitioned spans
+# table is read partition by partition, an unpartitioned one scanned once per chunk. Progress is kept in the
+# span_weeks_backfill_chunks state table, so it resumes across restarts.
+spanWeeksBackfill:
+  #  Default: false
+  #  Description: Turn true only once databaseAnalyticsDataModel.spanWeeksWriteEnabled is live on every instance: the
+  #   backfill covers the spans written until its first run, and live registration everything after.
+  enabled: false
+  #  Default: 1m
+  #  Description: How often a run starts; each run backfills one chunk
+  interval: 1m
+  #  Default: 200000000
+  #  Description: Upper bound on the span rows one chunk reads; consecutive weeks are merged up to it
+  maxSpansPerChunk: 200000000
+  #  Default: 10737418240 (10 GiB)
+  #  Description: Memory a chunk's GROUP BY may use before spilling to disk
+  maxBytesBeforeExternalGroupBy: 10737418240
+  #  Default: 1h
+  #  Description: ClickHouse max_execution_time for one chunk, and how long a run holds the job lock
+  queryTimeout: 1h
+  #  Default: 10000
+  #  Description: Projects marked as backfilled per UPDATE, once every chunk is done
+  projectsBatchSize: 10000
+
 bulkInsert:
   # false: the R2DBC bulk path (one named parameter per column per row). true: rows streamed as
   # JSONEachRow through the ClickHouse Java client v2, with no parameter binding. Both write identical
