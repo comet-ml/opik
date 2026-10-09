@@ -5,6 +5,7 @@ import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.UsageProjectsResponse.WorkspaceProjectName;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -18,6 +19,7 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -59,6 +61,11 @@ interface ProjectDAO {
     @SqlQuery("SELECT workspace_id, id AS project_id, name FROM projects WHERE id IN (<ids>)")
     @RegisterConstructorMapper(WorkspaceProjectName.class)
     List<WorkspaceProjectName> findNamesByIds(@BindList("ids") Collection<UUID> ids);
+
+    // The earliest project is the Default Project seeded by migration 000001, so this is the install time.
+    // Served by projects_created_at_idx. Null when there are no projects.
+    @SqlQuery("SELECT MIN(created_at) FROM projects")
+    @Nullable Instant findInstallationTime();
 
     @SqlQuery("SELECT id FROM projects WHERE workspace_id = :workspaceId")
     Set<UUID> findIdsByWorkspaceId(@Bind("workspaceId") String workspaceId);
