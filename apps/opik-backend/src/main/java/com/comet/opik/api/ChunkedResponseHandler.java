@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.infrastructure.llm.OpenAiCompatFinishReasons;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -10,6 +11,7 @@ import dev.langchain4j.model.openai.internal.chat.Delta;
 import dev.langchain4j.model.openai.internal.chat.Role;
 import dev.langchain4j.model.openai.internal.shared.Usage;
 import dev.langchain4j.model.output.Response;
+import dev.langchain4j.model.output.TokenUsage;
 import lombok.NonNull;
 
 import java.util.HashMap;
@@ -37,6 +39,8 @@ public record ChunkedResponseHandler(
                 .build());
     }
 
+    // The finish reason is what tells the playground a thinking model spent the whole output limit before answering.
+    // Gemini can end a stream without any token usage, so it is optional here.
     @Override
     public void onComplete(@NonNull Response<AiMessage> response) {
         handleMessage.accept(ChatCompletionResponse.builder()
@@ -46,15 +50,23 @@ public record ChunkedResponseHandler(
                                 .content("")
                                 .role(Role.ASSISTANT.name().toLowerCase())
                                 .build())
+                        .finishReason(OpenAiCompatFinishReasons.toWireValue(response.finishReason()))
                         .build()))
-                .usage(Usage.builder()
-                        .promptTokens(response.tokenUsage().inputTokenCount())
-                        .completionTokens(response.tokenUsage().outputTokenCount())
-                        .totalTokens(response.tokenUsage().totalTokenCount())
-                        .build())
+                .usage(toUsage(response.tokenUsage()))
                 .id(Optional.ofNullable(response.metadata().get("id")).map(Object::toString).orElse(null))
                 .build());
         handleClose.run();
+    }
+
+    private static Usage toUsage(TokenUsage tokenUsage) {
+        if (tokenUsage == null) {
+            return null;
+        }
+        return Usage.builder()
+                .promptTokens(tokenUsage.inputTokenCount())
+                .completionTokens(tokenUsage.outputTokenCount())
+                .totalTokens(tokenUsage.totalTokenCount())
+                .build();
     }
 
     @Override
