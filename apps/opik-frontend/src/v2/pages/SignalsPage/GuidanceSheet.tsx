@@ -127,7 +127,7 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
           <ButtonWithDropdown>
             <ButtonWithDropdownTrigger
               size="sm"
-              triggerClassName="w-8 border-l border-[var(--click-blue)] px-0 [&>svg]:size-3.5"
+              triggerClassName="w-8 border-l border-[var(--click-blue)] px-0 disabled:border-muted-disabled [&>svg]:size-3.5"
               disabled={!isDirty || isPending}
               onPrimaryClick={() => save(false)}
             >
