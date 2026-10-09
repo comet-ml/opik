@@ -2632,7 +2632,8 @@ class TraceDAOImpl implements TraceDAO {
      * can return is in one of those weeks, so the bound prunes without assuming where a span sits relative to its
      * trace, and a set rather than a min/max range so one far-future id cannot widen it across every week between.
      */
-    private static final String SELECT_TRACES_SPANS_STATS = """
+    @VisibleForTesting
+    static final String SELECT_TRACES_SPANS_STATS = """
              WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
                 SELECT item_id AS trace_id, groupUniqArray(queue_id) AS annotation_queue_ids
                 FROM annotation_queue_items
@@ -2658,6 +2659,7 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                <if(annotation_queue_narrows)> AND trace_id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
             ),
             <endif>
              spans_data AS (
@@ -3094,7 +3096,8 @@ class TraceDAOImpl implements TraceDAO {
     // value. Emitted only once spans is that partitioned successor (spans_partitioned): the legacy table has no
     // partitions to prune, so there the subquery would be pure cost. Non-v7 ids never reach spans (ingestion rejects
     // them).
-    private static final String SELECT_FEEDBACK_SCORES_STATS = """
+    @VisibleForTesting
+    static final String SELECT_FEEDBACK_SCORES_STATS = """
             <if(filters_present)>
             WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
                 SELECT item_id AS trace_id, groupUniqArray(queue_id) AS annotation_queue_ids
@@ -3121,6 +3124,7 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                <if(annotation_queue_narrows)> AND trace_id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
             ),
             <endif>
             spans_data AS (
@@ -4763,7 +4767,11 @@ class TraceDAOImpl implements TraceDAO {
             addTracesPartitionedFlag(template);
             template.add("log_comment", logComment);
 
-            if (shouldUseTraceIdPrefilter(traceSearchCriteria, template)) {
+            // As in addAggregateKeyingFlags: with a queue that only keeps queued traces, the prefilter is the
+            // queue's traces, so score and span-score filters read the queue's scores instead of the project's.
+            boolean annotationQueuePrefilter = template.getAttribute("annotation_queue_narrows") != null
+                    && template.getAttribute("guardrails_filters") == null;
+            if (shouldUseTraceIdPrefilter(traceSearchCriteria, template) || annotationQueuePrefilter) {
                 template.add("trace_id_prefilter", true);
             }
 
