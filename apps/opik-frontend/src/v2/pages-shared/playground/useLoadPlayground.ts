@@ -10,6 +10,7 @@ import {
   useSetExperimentName,
 } from "@/store/PlaygroundStore";
 import { generateDefaultPrompt } from "@/lib/playground";
+import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 import { DATASET_TYPE } from "@/types/datasets";
 import {
   generateDefaultLLMPromptMessage,
@@ -61,8 +62,11 @@ function useLoadPlayground() {
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
-  const { calculateModelProvider, calculateDefaultModel } =
-    useLLMProviderModelsData();
+  const {
+    calculateModelProvider,
+    calculateDefaultModel,
+    isPending: isPendingModels,
+  } = useLLMProviderModelsData();
 
   const { data: providerKeysData, isPending: isPendingProviderKeys } =
     useProviderKeys({
@@ -111,19 +115,29 @@ function useLoadPlayground() {
         preferredModel,
       } = options;
 
-      const preferredModelProvider = calculateModelProvider(preferredModel);
-      const canUsePreferredModel =
-        Boolean(preferredModelProvider) &&
-        providerKeys.includes(preferredModelProvider);
+      // A bare model id can be listed under more than one provider (Gemini and
+      // Vertex AI), so look for a configured provider that serves it and
+      // resolve the model against that provider.
+      const preferredModelProvider = preferredModel
+        ? providerKeys.find(
+            (key) => calculateModelProvider(preferredModel, key) === key,
+          )
+        : undefined;
 
       const newPrompt = generateDefaultPrompt({
         initPrompt,
         setupProviders: providerKeys,
-        lastPickedModel: canUsePreferredModel
-          ? preferredModel
-          : lastPickedModel,
-        providerResolver: calculateModelProvider,
-        modelResolver: calculateDefaultModel,
+        lastPickedModel:
+          preferredModel && preferredModelProvider
+            ? getRoutableProviderModelValue(
+                preferredModelProvider,
+                preferredModel,
+              )
+            : lastPickedModel,
+        providerResolver: (model) =>
+          calculateModelProvider(model, preferredModelProvider),
+        modelResolver: (model, setupProviders) =>
+          calculateDefaultModel(model, setupProviders, preferredModelProvider),
       });
 
       if (templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
@@ -263,6 +277,7 @@ function useLoadPlayground() {
     loadPlayground,
     isPlaygroundEmpty,
     isPendingProviderKeys,
+    isPendingModels,
   };
 }
 

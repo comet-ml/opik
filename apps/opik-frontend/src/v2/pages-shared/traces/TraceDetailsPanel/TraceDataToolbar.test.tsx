@@ -23,7 +23,7 @@ vi.mock("@/v2/pages-shared/playground/useLoadSpanIntoPlayground", () => ({
   default: () => ({
     loadSpan,
     isPlaygroundEmpty: true,
-    isPendingProviderKeys: false,
+    isPending: false,
   }),
 }));
 
@@ -159,6 +159,18 @@ describe("TraceDataToolbar open in Playground", () => {
   it("is hidden when the span input isn't messages", () => {
     renderToolbar({ dataToView: { ...span, input: { query: "Hi" } } });
 
+    expect(screen.queryByLabelText("Open in Playground")).toBeNull();
+  });
+
+  it("is hidden when the span input can't be mapped", () => {
+    renderToolbar({
+      dataToView: {
+        ...span,
+        input: { messages: [{ role: "user", content: [null] }] },
+      },
+    });
+
+    expect(screen.getByText("chat_completion_create")).toBeTruthy();
     expect(screen.queryByLabelText("Open in Playground")).toBeNull();
   });
 

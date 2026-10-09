@@ -12,8 +12,12 @@ import { Span } from "@/types/traces";
  * wrapper over `useLoadPlayground`, like `useLoadPromptIntoPlayground`.
  */
 function useLoadSpanIntoPlayground() {
-  const { loadPlayground, isPlaygroundEmpty, isPendingProviderKeys } =
-    useLoadPlayground();
+  const {
+    loadPlayground,
+    isPlaygroundEmpty,
+    isPendingProviderKeys,
+    isPendingModels,
+  } = useLoadPlayground();
 
   const loadSpan = useCallback(
     (span: Span) => {
@@ -31,7 +35,13 @@ function useLoadSpanIntoPlayground() {
     [loadPlayground],
   );
 
-  return { loadSpan, isPlaygroundEmpty, isPendingProviderKeys };
+  return {
+    loadSpan,
+    isPlaygroundEmpty,
+    // The span's model can only be matched to a provider once the model
+    // catalog has loaded.
+    isPending: isPendingProviderKeys || isPendingModels,
+  };
 }
 
 export default useLoadSpanIntoPlayground;

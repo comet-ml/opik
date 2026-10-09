@@ -130,22 +130,28 @@ export const convertLLMMessagesToPlaygroundMessages = (
  * Detects the message format of an LLM call input the way the trace viewer's
  * Messages tab does (no format hint) and maps it to Playground chat messages.
  * Takes the raw input rather than the viewer's media-placeholder copy, so
- * image URLs stay usable. Returns an empty array when the input isn't messages.
+ * image URLs stay usable. Returns an empty array when the input isn't messages,
+ * or when a provider mapper can't read it (this runs while the toolbar
+ * renders, so malformed input hides the action instead of throwing).
  */
 export const getPlaygroundMessagesFromInput = (
   input: unknown,
 ): PlaygroundChatMessage[] => {
-  const detection = detectLLMMessages(input, { fieldType: "input" });
-  const format =
-    detection.supported && detection.format
-      ? getFormat(detection.format)
-      : null;
+  try {
+    const detection = detectLLMMessages(input, { fieldType: "input" });
+    const format =
+      detection.supported && detection.format
+        ? getFormat(detection.format)
+        : null;
 
-  if (!format) return [];
+    if (!format) return [];
 
-  return convertLLMMessagesToPlaygroundMessages(
-    format.mapper(input, { fieldType: "input" }).messages,
-  );
+    return convertLLMMessagesToPlaygroundMessages(
+      format.mapper(input, { fieldType: "input" }).messages,
+    );
+  } catch {
+    return [];
+  }
 };
 
 export const getSpanPlaygroundMessages = (

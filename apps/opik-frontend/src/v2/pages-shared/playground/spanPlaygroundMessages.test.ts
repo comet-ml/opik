@@ -357,6 +357,15 @@ describe("getPlaygroundMessagesFromInput", () => {
       ["an empty message list", { messages: [] }],
       ["messages with unknown roles", { messages: [{ role: "x", text: "a" }] }],
       ["only empty messages", { messages: [{ role: "user", content: "  " }] }],
+      // Accepted by format detection, but the OpenAI mapper can't read them.
+      [
+        "a null content part",
+        { messages: [{ role: "user", content: [null] }] },
+      ],
+      [
+        "a null tool call",
+        { messages: [{ role: "assistant", content: "", tool_calls: [null] }] },
+      ],
     ])("returns nothing for %s", (_, input) => {
       expect(getPlaygroundMessagesFromInput(input)).toEqual([]);
     });

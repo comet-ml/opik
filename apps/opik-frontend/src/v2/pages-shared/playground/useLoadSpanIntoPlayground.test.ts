@@ -9,6 +9,11 @@ import useLoadSpanIntoPlayground from "./useLoadSpanIntoPlayground";
 const navigate = vi.fn();
 const setPromptMap = vi.fn();
 
+const mocks = vi.hoisted(() => ({
+  providerKeys: [] as string[],
+  isPendingModels: false,
+}));
+
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
 }));
@@ -31,7 +36,9 @@ vi.mock("@/hooks/useLastPickedModel", () => ({
 
 vi.mock("@/api/provider-keys/useProviderKeys", () => ({
   default: () => ({
-    data: { content: [{ ui_composed_provider: PROVIDER_TYPE.OPEN_AI }] },
+    data: {
+      content: mocks.providerKeys.map((key) => ({ ui_composed_provider: key })),
+    },
     isPending: false,
   }),
 }));
@@ -46,8 +53,19 @@ vi.mock("@/api/llm/useLlmModels", () => ({
       [PROVIDER_TYPE.ANTHROPIC]: [
         { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
       ],
+      // The same bare model id under two providers.
+      [PROVIDER_TYPE.GEMINI]: [
+        { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+      ],
+      [PROVIDER_TYPE.VERTEX_AI]: [
+        {
+          id: "gemini-2.5-pro",
+          qualifiedName: "vertex_ai/gemini-2.5-pro",
+          label: "Gemini 2.5 Pro",
+        },
+      ],
     },
-    isPending: false,
+    isPending: mocks.isPendingModels,
     isError: false,
     error: null,
   }),
@@ -90,6 +108,8 @@ const loadSpan = (span: Span): PlaygroundPromptType => {
 describe("useLoadSpanIntoPlayground", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.providerKeys = [PROVIDER_TYPE.OPEN_AI];
+    mocks.isPendingModels = false;
   });
 
   it("loads the span input messages as an unlinked chat prompt", () => {
@@ -124,6 +144,25 @@ describe("useLoadSpanIntoPlayground", () => {
 
     expect(prompt.model).toBe("gpt-4o-mini");
     expect(prompt.provider).toBe(PROVIDER_TYPE.OPEN_AI);
+  });
+
+  it("selects the configured provider for a model id two providers share", () => {
+    mocks.providerKeys = [PROVIDER_TYPE.VERTEX_AI];
+
+    const prompt = loadSpan(
+      createSpan({ model: "gemini-2.5-pro", provider: "google_vertexai" }),
+    );
+
+    expect(prompt.model).toBe("vertex_ai/gemini-2.5-pro");
+    expect(prompt.provider).toBe(PROVIDER_TYPE.VERTEX_AI);
+  });
+
+  it("is pending until the model catalog has loaded", () => {
+    mocks.isPendingModels = true;
+
+    const { result } = renderHook(() => useLoadSpanIntoPlayground());
+
+    expect(result.current.isPending).toBe(true);
   });
 
   it("does nothing for a span without Playground messages", () => {

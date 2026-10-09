@@ -15,7 +15,7 @@ const OpenSpanInPlaygroundButton: React.FC<OpenSpanInPlaygroundButtonProps> = ({
   span,
 }) => {
   const [showLoadConfirm, setShowLoadConfirm] = useState(false);
-  const { loadSpan, isPlaygroundEmpty, isPendingProviderKeys } =
+  const { loadSpan, isPlaygroundEmpty, isPending } =
     useLoadSpanIntoPlayground();
 
   const doLoadIntoPlayground = useCallback(
@@ -38,7 +38,7 @@ const OpenSpanInPlaygroundButton: React.FC<OpenSpanInPlaygroundButtonProps> = ({
           variant="ghost"
           size="icon-2xs"
           aria-label="Open in Playground"
-          disabled={isPendingProviderKeys}
+          disabled={isPending}
           onClick={handleOpenInPlayground}
         >
           <Play />
