@@ -353,9 +353,14 @@ export const convertOptimizationStudioToFormData = (
   const defaultConfig = model
     ? getDefaultModelConfig(model)
     : ({} as LLMPromptConfigsType);
+  // A replacement model starts from its own defaults, as a manual model switch does: the saved
+  // settings were made for the old model, and some only its provider accepts (OpenRouter's
+  // `reasoning` makes OpenAI answer 400).
   const existingConfig = toFormModelConfig(
     model,
-    optimization?.studio_config?.llm_model?.parameters ?? {},
+    modelName === configuredModel
+      ? optimization?.studio_config?.llm_model?.parameters ?? {}
+      : {},
   );
   // Claude takes temperature or top_p, never both, and temperature wins a config holding the two,
   // so a run saved with top_p must not get the default temperature back.
@@ -364,9 +369,6 @@ export const convertOptimizationStudioToFormData = (
     isClaudeModel(model);
   const savedSampling =
     existingConfig.temperature != null || existingConfig.topP != null;
-  // Keep the run's saved params (temperature/top_p/...) even when its model is
-  // gone and we fall back to another — submit sanitizes what the resolved model
-  // can't accept. They used to be silently dropped on any model change.
   const modelConfig =
     Object.keys(existingConfig).length > 0
       ? {
@@ -386,12 +388,15 @@ export const convertOptimizationStudioToFormData = (
     optimization?.studio_config?.optimizer.parameters ||
     getDefaultOptimizerConfig(optimizerType);
   const savedOptimizerModel = (baseOptimizerParams as { model?: string }).model;
+  const isOptimizerModelGone =
+    !!savedOptimizerModel && !availableModels.includes(savedOptimizerModel);
+  // Its model_parameters go too, as the picker's clear button does: without a model, the runner
+  // applies them to the prompt model.
   const optimizerParams = {
-    ...baseOptimizerParams,
-    model:
-      savedOptimizerModel && availableModels.includes(savedOptimizerModel)
-        ? savedOptimizerModel
-        : undefined,
+    ...(isOptimizerModelGone
+      ? omit(baseOptimizerParams, ["model_parameters"])
+      : baseOptimizerParams),
+    model: isOptimizerModelGone ? undefined : savedOptimizerModel,
   };
 
   return {

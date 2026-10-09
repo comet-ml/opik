@@ -743,3 +743,95 @@ describe("convertOptimizationStudioToFormData — OpenRouter effort on re-run", 
     });
   });
 });
+
+describe("convertOptimizationStudioToFormData — saved model the workspace can't run", () => {
+  const savedRun = (optimizerParameters: Record<string, unknown> = {}) =>
+    ({
+      studio_config: {
+        prompt: { messages: [{ role: "user", content: "hi" }] },
+        llm_model: {
+          model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+          parameters: {
+            max_tokens: 300,
+            temperature: 0.4,
+            custom_parameters: { reasoning: { effort: "low" }, top_k: 3 },
+          },
+        },
+        optimizer: {
+          type: OPTIMIZER_TYPE.GEPA,
+          parameters: optimizerParameters,
+        },
+        evaluation: { metrics: [{ type: METRIC_TYPE.EQUALS }] },
+      },
+    }) as never;
+
+  it("keeps the saved model and its settings when the workspace can run it", () => {
+    const form = convertOptimizationStudioToFormData(savedRun(), [
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+    ]);
+
+    expect(form.modelName).toBe(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI);
+    expect(
+      convertFormDataToStudioConfig(form, "ds").llm_model.parameters,
+    ).toMatchObject({
+      max_tokens: 300,
+      temperature: 0.4,
+      custom_parameters: { top_k: 3 },
+    });
+  });
+
+  it("starts the replacement model from its own defaults, without the saved settings", () => {
+    const form = convertOptimizationStudioToFormData(savedRun(), [
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+    ]);
+    const sent = convertFormDataToStudioConfig(form, "ds").llm_model.parameters;
+
+    expect(form.modelName).toBe(PROVIDER_MODEL_TYPE.GPT_4O_MINI);
+    expect(form.modelConfig).toEqual(
+      getOptimizationDefaultConfigByProvider(
+        PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE,
+        PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      ),
+    );
+    expect(sent).not.toHaveProperty("custom_parameters");
+    expect(sent).not.toHaveProperty("max_tokens");
+    expect(sent?.temperature).toBe(0);
+  });
+
+  it.each([
+    {
+      availableModels: [
+        PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      ],
+      expected: {
+        model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+        model_parameters: { custom_parameters: { top_k: 3 } },
+      },
+    },
+    {
+      availableModels: [PROVIDER_MODEL_TYPE.GPT_4O_MINI],
+      expected: { model: undefined, model_parameters: undefined },
+    },
+  ])(
+    "keeps an algorithm model's settings only with the model ($expected.model)",
+    ({ availableModels, expected }) => {
+      const form = convertOptimizationStudioToFormData(
+        savedRun({
+          model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+          model_parameters: { custom_parameters: { top_k: 3 } },
+          seed: 42,
+        }),
+        availableModels,
+      );
+      const optimizerParams = form.optimizerParams as Record<string, unknown>;
+
+      expect(optimizerParams.model).toEqual(expected.model);
+      expect(optimizerParams.model_parameters).toEqual(
+        expected.model_parameters,
+      );
+      expect(optimizerParams.seed).toBe(42);
+    },
+  );
+});

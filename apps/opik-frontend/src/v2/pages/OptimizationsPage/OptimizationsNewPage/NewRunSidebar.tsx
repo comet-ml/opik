@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import compact from "lodash/compact";
+import uniq from "lodash/uniq";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -14,6 +16,7 @@ import {
 import { OPTIMIZATION_DEMO_TEMPLATES } from "@/constants/optimizations";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { useModelOptions } from "@/v2/pages-shared/llm/PromptModelSelect/useModelOptions";
 import { X } from "lucide-react";
 import { Button } from "@/ui/button";
@@ -74,10 +77,21 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
     [rerunOptimization],
   );
 
+  // What we seed the form from: a rerun's saved config, else the picked
+  // template, else nothing (a blank run).
+  const seedSource = useMemo(
+    () => rerunData || templateData,
+    [rerunData, templateData],
+  );
+
   // Resolve the models the workspace can actually run, so the default model is
   // picked from real options instead of a hardcoded guess that gets reconciled
   // by an effect afterwards.
-  const { providerModels } = useLLMProviderModelsData();
+  const {
+    providerModels,
+    calculateModelProvider,
+    isFetched: isRegistryFetched,
+  } = useLLMProviderModelsData();
   const { data: providerKeysData } = useProviderKeys(
     { workspaceName },
     { staleTime: 1000 },
@@ -91,28 +105,58 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
     providerModels,
     "",
   );
-  const availableModels = useMemo(
+  const pickerModels = useMemo(
     () => [
-      ...(freeModelOption ? [freeModelOption.value] : []),
-      ...groupOptions.flatMap((group) => group.options.map((o) => o.value)),
+      ...(freeModelOption ? [freeModelOption] : []),
+      ...groupOptions.flatMap((group) => group.options),
     ],
     [freeModelOption, groupOptions],
   );
 
+  // The picker leaves out models a configured provider still serves (dated snapshots, ids taken
+  // out of the picker). A saved run on one keeps its model, as a stored playground prompt does.
+  const savedModels = useMemo(
+    () =>
+      uniq(
+        compact([
+          seedSource?.studio_config?.llm_model?.model,
+          (
+            seedSource?.studio_config?.optimizer?.parameters as {
+              model?: string;
+            }
+          )?.model,
+        ]),
+      ),
+    [seedSource],
+  );
+  const availableModels = useMemo(() => {
+    const models = pickerModels.map((option) => option.value);
+    const servedSavedModels = savedModels.filter(
+      (savedModel) =>
+        !models.includes(savedModel) &&
+        configuredProvidersList.some(
+          (p) =>
+            p.ui_composed_provider ===
+            calculateModelProvider(savedModel as PROVIDER_MODEL_TYPE),
+        ),
+    );
+    return [...models, ...servedSavedModels];
+  }, [
+    pickerModels,
+    savedModels,
+    calculateModelProvider,
+    configuredProvidersList,
+  ]);
+
   // Only resolve the default once providers are genuinely known: the keys query
   // has settled AND (no providers configured OR their models have loaded).
   // Otherwise "configured providers, models still loading" would briefly look
-  // like "no models" and seed an empty model.
+  // like "no models" and seed an empty model. The registry must have answered
+  // too, or a saved model it alone knows would look gone.
   const providersReady =
     Boolean(providerKeysData) &&
+    isRegistryFetched &&
     (configuredProvidersList.length === 0 || availableModels.length > 0);
-
-  // What we seed the form from: a rerun's saved config, else the picked
-  // template, else nothing (a blank run).
-  const seedSource = useMemo(
-    () => rerunData || templateData,
-    [rerunData, templateData],
-  );
 
   // The converter mints fresh message ids on every call. The form below uses
   // `values` (not `defaultValues`), so it re-seeds once the model resolves
@@ -137,6 +181,27 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
     }),
     [seedSource, providersReady, availableModels, stableMessages],
   );
+
+  const rerunModel = rerunData?.studio_config?.llm_model?.model;
+  const savedModelReplacement = useMemo(() => {
+    if (!providersReady || !rerunModel || availableModels.includes(rerunModel))
+      return undefined;
+
+    const replacementModel = defaultValues.modelName;
+    return {
+      savedModel: rerunModel,
+      replacementModel,
+      replacementLabel:
+        pickerModels.find((option) => option.value === replacementModel)
+          ?.label ?? replacementModel,
+    };
+  }, [
+    providersReady,
+    rerunModel,
+    availableModels,
+    defaultValues.modelName,
+    pickerModels,
+  ]);
 
   const form = useForm<OptimizationConfigFormType>({
     resolver: zodResolver(OptimizationConfigSchema),
@@ -201,6 +266,7 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
         isPreparingDataset={isPreparingDataset}
         availableModels={availableModels}
         providerKeysReady={Boolean(providerKeysData)}
+        savedModelReplacement={savedModelReplacement}
       />
     </FormProvider>
   );
