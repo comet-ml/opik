@@ -49,7 +49,6 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.domain.TestIdGeneratorFactory;
-import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -66,7 +65,6 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpStatus;
-import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -130,6 +128,8 @@ import static com.comet.opik.api.filter.Operator.NOT_EQUAL;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
+import static com.comet.opik.api.resources.utils.traces.ThreadTestUtils.buildCostedSpan;
+import static com.comet.opik.api.resources.utils.traces.ThreadTestUtils.buildThreadTrace;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -156,6 +156,7 @@ class ProjectMetricsResourceTest {
     private static final String WORKSPACE_NAME = RandomStringUtils.secure().nextAlphabetic(10);
     private static final Random RANDOM = new Random();
 
+    private static final long THREAD_TRACE_DURATION_MS = 100;
     private static final int TIME_BUCKET_4 = 4;
     private static final int TIME_BUCKET_3 = 3;
     private static final int TIME_BUCKET_1 = 1;
@@ -1968,11 +1969,12 @@ class ProjectMetricsResourceTest {
             Instant windowEnd = subtract(marker, TIME_BUCKET_1, interval);
             Instant ranAt = subtract(marker, TIME_BUCKET_3, interval);
 
-            List<String> threadIds = mintThreadRowIdsNow(projectId, 3);
+            List<String> threadIds = traceResourceClient.mintThreadRowIdsNow(projectId, 3, API_KEY, WORKSPACE_NAME);
             createThreadsWithTraceIdsMintedAt(projectName, ranAt, ranAt, threadIds);
 
             assertThat(threadIds)
-                    .extracting(threadId -> getThreadRowMintedAt(threadId, projectId))
+                    .extracting(threadId -> traceResourceClient.getThreadRowMintedAt(threadId, projectId, API_KEY,
+                            WORKSPACE_NAME))
                     .allSatisfy(rowMintedAt -> assertThat(rowMintedAt).isAfter(windowEnd));
 
             // SUT
@@ -1994,7 +1996,8 @@ class ProjectMetricsResourceTest {
             String threadId = createThreadWhoseTracesAllCarryTheEpochSentinel(projectId, projectName,
                     subtract(marker, TIME_BUCKET_3, interval));
 
-            assertThat(getThreadRowMintedAt(threadId, projectId)).isAfterOrEqualTo(marker);
+            assertThat(traceResourceClient.getThreadRowMintedAt(threadId, projectId, API_KEY, WORKSPACE_NAME))
+                    .isAfterOrEqualTo(marker);
 
             // SUT
             Map<String, Long> minus3 = Map.of(ProjectMetricsDAO.NAME_THREADS, 1L);
@@ -2053,8 +2056,9 @@ class ProjectMetricsResourceTest {
                     .projectName(projectName)
                     .threadId(playgroundThreadId)
                     .build(), API_KEY, WORKSPACE_NAME);
-            traceResourceClient.batchCreateTraces(List.of(buildThreadTrace(projectName,
-                    RandomStringUtils.secure().nextAlphabetic(10), Source.SDK, ranAt.plusMillis(2))), API_KEY,
+            traceResourceClient.batchCreateTraces(List.of(buildThreadTrace(factory, idGenerator, projectName,
+                    RandomStringUtils.secure().nextAlphabetic(10), Source.SDK, ranAt.plusMillis(2),
+                    THREAD_TRACE_DURATION_MS)), API_KEY,
                     WORKSPACE_NAME);
 
             var request = ProjectMetricRequest.builder()
@@ -2063,15 +2067,12 @@ class ProjectMetricsResourceTest {
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build();
-            Awaitility.await()
-                    .atMost(Duration.ofSeconds(10))
-                    .pollInterval(Duration.ofMillis(100))
-                    .untilAsserted(() -> getMetricsAndAssert(projectId, request, marker,
-                            List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
-                            null, Map.of(ProjectMetricsDAO.NAME_THREADS, 2L), null));
+            traceResourceClient.awaitThreadRows(List.of(playgroundThreadId), projectId, null, API_KEY, WORKSPACE_NAME);
+            getMetricsAndAssert(projectId, request, marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                    null, Map.of(ProjectMetricsDAO.NAME_THREADS, 2L), null);
 
-            traceResourceClient.batchCreateTraces(List.of(buildThreadTrace(projectName, playgroundThreadId,
-                    Source.PLAYGROUND, ranAt.plusMillis(1)).toBuilder()
+            traceResourceClient.batchCreateTraces(List.of(buildThreadTrace(factory, idGenerator, projectName,
+                    playgroundThreadId, Source.PLAYGROUND, ranAt.plusMillis(1), THREAD_TRACE_DURATION_MS).toBuilder()
                     .id(playgroundTraceId)
                     .lastUpdatedAt(null)
                     .build()), API_KEY, WORKSPACE_NAME);
@@ -2153,7 +2154,7 @@ class ProjectMetricsResourceTest {
 
             traceResourceClient.batchCreateTraces(allTraces, API_KEY, WORKSPACE_NAME);
 
-            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.awaitThreadRows(threadIds, null, projectName, API_KEY, WORKSPACE_NAME);
 
             // Close threads to ensure they are written to the trace_threads table
             traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
@@ -2258,7 +2259,7 @@ class ProjectMetricsResourceTest {
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
 
-            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.awaitThreadRows(threadIds, null, projectName, API_KEY, WORKSPACE_NAME);
 
             traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
         }
@@ -2339,7 +2340,7 @@ class ProjectMetricsResourceTest {
                     .startTime(startedAt)
                     .totalEstimatedCost(BigDecimal.ONE)
                     .build()), API_KEY, WORKSPACE_NAME);
-            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.awaitThreadRows(List.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
             traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
             traceResourceClient.threadFeedbackScores(List.of(factory.manufacturePojo(FeedbackScoreBatchItemThread.class)
                     .toBuilder()
@@ -2400,7 +2401,7 @@ class ProjectMetricsResourceTest {
                             .totalEstimatedCost(BigDecimal.ONE)
                             .build())
                     .toList(), API_KEY, WORKSPACE_NAME);
-            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.awaitThreadRows(List.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
             traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
 
             var response = projectMetricsResourceClient.getProjectMetrics(projectId, ProjectMetricRequest.builder()
@@ -2627,7 +2628,7 @@ class ProjectMetricsResourceTest {
 
             traceResourceClient.batchCreateTraces(allTraces, API_KEY, WORKSPACE_NAME);
 
-            Mono.delay(Duration.ofMillis(100)).block(); // wait for threads to be indexed
+            traceResourceClient.awaitThreadRows(threadIds, null, projectName, API_KEY, WORKSPACE_NAME);
 
             // Close threads to ensure they are written to the trace_threads table
             traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
@@ -2653,25 +2654,9 @@ class ProjectMetricsResourceTest {
         }
     }
 
-    private List<String> mintThreadRowIdsNow(UUID projectId, int threadCount) {
-        List<String> threadIds = IntStream.range(0, threadCount)
-                .mapToObj(i -> RandomStringUtils.secure().nextAlphabetic(10))
-                .toList();
-
-        threadIds.forEach(threadId -> traceResourceClient.openTraceThread(threadId, projectId, null, API_KEY,
-                WORKSPACE_NAME));
-
-        return threadIds;
-    }
-
-    private Instant getThreadRowMintedAt(String threadId, UUID projectId) {
-        return RetentionUtils.extractInstant(
-                traceResourceClient.getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).threadModelId());
-    }
-
     private String createThreadWhoseTracesAllCarryTheEpochSentinel(UUID projectId, String projectName,
             Instant traceIdsMintedAt) {
-        String threadId = mintThreadRowIdsNow(projectId, 1).getFirst();
+        String threadId = traceResourceClient.mintThreadRowIdsNow(projectId, 1, API_KEY, WORKSPACE_NAME).getFirst();
 
         List<Trace> traces = IntStream.range(0, 2)
                 .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
@@ -2684,7 +2669,7 @@ class ProjectMetricsResourceTest {
                 .toList();
 
         traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
-        Mono.delay(Duration.ofMillis(100)).block();
+        traceResourceClient.awaitThreadRows(List.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
         traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
 
         return threadId;
@@ -3069,51 +3054,33 @@ class ProjectMetricsResourceTest {
         String mixedThreadId = RandomStringUtils.secure().nextAlphabetic(10);
 
         List<Pair<Trace, BigDecimal>> tracesWithCost = List.of(
-                Pair.of(buildThreadTrace(projectName, sdkThreadId, Source.SDK, ranAt.plusMillis(1)),
+                Pair.of(buildThreadTrace(factory, idGenerator, projectName, sdkThreadId, Source.SDK,
+                        ranAt.plusMillis(1), THREAD_TRACE_DURATION_MS),
                         SDK_THREAD_COST),
-                Pair.of(buildThreadTrace(projectName, otherSourceThreadId, otherSource, ranAt.plusMillis(2)),
+                Pair.of(buildThreadTrace(factory, idGenerator, projectName, otherSourceThreadId, otherSource,
+                        ranAt.plusMillis(2), THREAD_TRACE_DURATION_MS),
                         OTHER_SOURCE_THREAD_COST),
-                Pair.of(buildThreadTrace(projectName, mixedThreadId, Source.SDK, ranAt.plusMillis(3)),
+                Pair.of(buildThreadTrace(factory, idGenerator, projectName, mixedThreadId, Source.SDK,
+                        ranAt.plusMillis(3), THREAD_TRACE_DURATION_MS),
                         MIXED_THREAD_SDK_TRACE_COST),
-                Pair.of(buildThreadTrace(projectName, mixedThreadId, otherSource, ranAt.plusMillis(4)),
+                Pair.of(buildThreadTrace(factory, idGenerator, projectName, mixedThreadId, otherSource,
+                        ranAt.plusMillis(4), THREAD_TRACE_DURATION_MS),
                         MIXED_THREAD_OTHER_SOURCE_TRACE_COST));
 
         List<Span> spans = tracesWithCost.stream()
-                .map(traceWithCost -> factory.manufacturePojo(Span.class).toBuilder()
-                        .id(idGenerator.generateId(traceWithCost.getLeft().startTime()))
-                        .projectName(projectName)
-                        .traceId(traceWithCost.getLeft().id())
-                        .startTime(traceWithCost.getLeft().startTime())
-                        .totalEstimatedCost(traceWithCost.getRight())
-                        .build())
+                .map(traceWithCost -> buildCostedSpan(factory, idGenerator, projectName, traceWithCost.getLeft(),
+                        traceWithCost.getRight()))
                 .toList();
 
         traceResourceClient.batchCreateTraces(tracesWithCost.stream().map(Pair::getLeft).toList(), API_KEY,
                 WORKSPACE_NAME);
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
 
-        // Closing a thread whose row is not written yet writes it with an id of about now, not of its first trace.
-        UUID projectId = projectResourceClient.getByName(projectName, API_KEY, WORKSPACE_NAME).id();
-        Awaitility.await()
-                .atMost(Duration.ofSeconds(10))
-                .pollInterval(Duration.ofMillis(100))
-                .untilAsserted(() -> assertThat(List.of(sdkThreadId, otherSourceThreadId, mixedThreadId))
-                        .allSatisfy(threadId -> assertThat(traceResourceClient
-                                .getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).threadModelId())
-                                .isNotNull()));
+        traceResourceClient.awaitThreadRows(List.of(sdkThreadId, otherSourceThreadId, mixedThreadId), null,
+                projectName, API_KEY, WORKSPACE_NAME);
 
         traceResourceClient.closeTraceThreads(Set.of(sdkThreadId, otherSourceThreadId, mixedThreadId), null,
                 projectName, API_KEY, WORKSPACE_NAME);
-    }
-
-    private Trace buildThreadTrace(String projectName, String threadId, Source source, Instant startTime) {
-        return factory.manufacturePojo(Trace.class).toBuilder()
-                .id(idGenerator.generateId(startTime))
-                .projectName(projectName)
-                .threadId(threadId)
-                .source(source)
-                .startTime(startTime)
-                .build();
     }
 
     private UUID createThreadAnnotationQueue(UUID projectId, Set<UUID> threadModelIds) {
@@ -4769,7 +4736,7 @@ class ProjectMetricsResourceTest {
                             .build());
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
-            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.awaitThreadRows(List.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
             traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
 
             var expected = Map.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION,
@@ -4830,7 +4797,7 @@ class ProjectMetricsResourceTest {
             Instant ranInsideWindow = subtract(marker, TIME_BUCKET_3, interval);
             long durationMs = 500;
             String threadId = rowOpenedBeforeTraces
-                    ? mintThreadRowIdsNow(projectId, 1).getFirst()
+                    ? traceResourceClient.mintThreadRowIdsNow(projectId, 1, API_KEY, WORKSPACE_NAME).getFirst()
                     : RandomStringUtils.secure().nextAlphabetic(10);
 
             List<Trace> traces = List.of(
@@ -4850,18 +4817,15 @@ class ProjectMetricsResourceTest {
                             .build());
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
-            // Closing a thread whose row is not written yet writes it with an id of about now, not of its first trace.
-            Awaitility.await()
-                    .atMost(Duration.ofSeconds(10))
-                    .pollInterval(Duration.ofMillis(100))
-                    .untilAsserted(() -> assertThat(traceResourceClient
-                            .getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).threadModelId()).isNotNull());
+            traceResourceClient.awaitThreadRows(List.of(threadId), projectId, null, API_KEY, WORKSPACE_NAME);
             traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
 
             if (rowOpenedBeforeTraces) {
-                assertThat(getThreadRowMintedAt(threadId, projectId)).isAfterOrEqualTo(windowStart);
+                assertThat(traceResourceClient.getThreadRowMintedAt(threadId, projectId, API_KEY, WORKSPACE_NAME))
+                        .isAfterOrEqualTo(windowStart);
             } else {
-                assertThat(getThreadRowMintedAt(threadId, projectId)).isBefore(windowStart);
+                assertThat(traceResourceClient.getThreadRowMintedAt(threadId, projectId, API_KEY, WORKSPACE_NAME))
+                        .isBefore(windowStart);
             }
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
@@ -4995,7 +4959,7 @@ class ProjectMetricsResourceTest {
                 threadDurations.add(threadStartTime.until(actualThreadEnd, ChronoUnit.MICROS) / 1000.0);
             }
 
-            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.awaitThreadRows(threadIds, null, projectName, API_KEY, WORKSPACE_NAME);
             traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
 
             return Pair.of(threadIds, threadDurations);
@@ -5177,7 +5141,7 @@ class ProjectMetricsResourceTest {
 
             traceResourceClient.batchCreateTraces(allTraces, API_KEY, WORKSPACE_NAME);
             spanResourceClient.batchCreateSpans(allSpans, API_KEY, WORKSPACE_NAME);
-            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.awaitThreadRows(threadIds, null, projectName, API_KEY, WORKSPACE_NAME);
             traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
 
             return Pair.of(threadIds, threadCosts);
@@ -5241,7 +5205,7 @@ class ProjectMetricsResourceTest {
 
             traceResourceClient.batchCreateTraces(allTraces, API_KEY, WORKSPACE_NAME);
             spanResourceClient.batchCreateSpans(allSpans, API_KEY, WORKSPACE_NAME);
-            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.awaitThreadRows(threadIds, null, projectName, API_KEY, WORKSPACE_NAME);
             traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
 
             return total;

@@ -27,6 +27,7 @@ import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -38,13 +39,18 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.glassfish.jersey.client.ChunkedInput;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +59,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatchThread;
@@ -440,20 +447,50 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         return getTraceThread(threadId, projectId, false, apiKey, workspaceName);
     }
 
+    // A thread's row is written asynchronously after its first trace. Closing it before then writes the row with an
+    // id of about now instead of its first trace's, and the windowed thread reads skip a thread without a row.
+    public void awaitThreadRows(Collection<String> threadIds, UUID projectId, String projectName, String apiKey,
+            String workspaceName) {
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(100))
+                .untilAsserted(() -> assertThat(threadIds).allSatisfy(threadId -> assertThat(
+                        getTraceThread(TraceThreadIdentifier.builder()
+                                .projectId(projectId)
+                                .projectName(projectName)
+                                .threadId(threadId)
+                                .build(), apiKey, workspaceName).threadModelId())
+                        .isNotNull()));
+    }
+
+    public List<String> mintThreadRowIdsNow(UUID projectId, int count, String apiKey, String workspaceName) {
+        var threadIds = Stream.generate(() -> RandomStringUtils.secure().nextAlphabetic(10)).limit(count).toList();
+        threadIds.forEach(threadId -> openTraceThread(threadId, projectId, null, apiKey, workspaceName));
+        return threadIds;
+    }
+
+    public Instant getThreadRowMintedAt(String threadId, UUID projectId, String apiKey, String workspaceName) {
+        return RetentionUtils
+                .extractInstant(getTraceThread(threadId, projectId, apiKey, workspaceName).threadModelId());
+    }
+
     public TraceThread getTraceThread(String threadId, UUID projectId, boolean truncate, String apiKey,
             String workspaceName) {
+        return getTraceThread(TraceThreadIdentifier.builder()
+                .projectId(projectId)
+                .threadId(threadId)
+                .truncate(truncate)
+                .build(), apiKey, workspaceName);
+    }
 
+    private TraceThread getTraceThread(TraceThreadIdentifier identifier, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .path("retrieve")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(TraceThreadIdentifier.builder()
-                        .projectId(projectId)
-                        .threadId(threadId)
-                        .truncate(truncate)
-                        .build()))) {
+                .post(Entity.json(identifier))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             assertThat(response.hasEntity()).isTrue();

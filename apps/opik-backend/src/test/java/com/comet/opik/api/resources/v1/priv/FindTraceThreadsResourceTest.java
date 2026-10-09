@@ -84,7 +84,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -940,14 +939,7 @@ class FindTraceThreadsResourceTest {
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            // Thread rows are created asynchronously from the trace batch, so the model id is only
-            // available once the row lands; a fixed delay makes this flaky on a loaded runner.
-            Awaitility.await()
-                    .atMost(10, TimeUnit.SECONDS)
-                    .pollInterval(100, TimeUnit.MILLISECONDS)
-                    .untilAsserted(() -> assertThat(traceResourceClient
-                            .getTraceThread(threadId, projectId, apiKey, workspaceName)
-                            .threadModelId()).isNotNull());
+            traceResourceClient.awaitThreadRows(List.of(threadId), projectId, null, apiKey, workspaceName);
 
             var createdThread = traceResourceClient.getTraceThread(threadId, projectId, apiKey, workspaceName);
 
@@ -1388,12 +1380,7 @@ class FindTraceThreadsResourceTest {
 
             // Registered from the placeholder, the thread row keeps a blank environment, so the thread falls back
             // to its traces' environment
-            Awaitility.await()
-                    .pollInterval(500, TimeUnit.MILLISECONDS)
-                    .atMost(30, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertThat(traceResourceClient
-                            .getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).threadModelId())
-                            .isNotNull());
+            traceResourceClient.awaitThreadRows(List.of(threadId), projectId, null, API_KEY, TEST_WORKSPACE);
 
             var realTrace = createTrace().toBuilder()
                     .id(idGenerator.generateId(ranAt.plusMillis(1)))
@@ -2255,7 +2242,7 @@ class FindTraceThreadsResourceTest {
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
             Set<String> threadIds = traces.stream().map(Trace::threadId).collect(Collectors.toSet());
             // The closing stamp is what ties the threads
-            awaitThreadRows(threadIds, projectId);
+            traceResourceClient.awaitThreadRows(threadIds, projectId, null, API_KEY, TEST_WORKSPACE);
             traceResourceClient.closeTraceThreads(threadIds, null, projectName, API_KEY, TEST_WORKSPACE);
             Awaitility.await()
                     .atMost(10, TimeUnit.SECONDS)
@@ -2307,7 +2294,8 @@ class FindTraceThreadsResourceTest {
                     matching));
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-            awaitThreadRows(traces.stream().map(Trace::threadId).distinct().toList(), projectId);
+            traceResourceClient.awaitThreadRows(traces.stream().map(Trace::threadId).distinct().toList(), projectId,
+                    null, API_KEY, TEST_WORKSPACE);
 
             var sdkSource = TraceThreadFilter.builder()
                     .field(TraceThreadField.SOURCE)
@@ -2340,7 +2328,7 @@ class FindTraceThreadsResourceTest {
                 }
             }
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-            awaitThreadRows(threadIds, projectId);
+            traceResourceClient.awaitThreadRows(threadIds, projectId, null, API_KEY, TEST_WORKSPACE);
 
             traceResourceClient.closeTraceThreads(Set.of(threadIds.get(0), threadIds.get(4)), null, projectName,
                     API_KEY, TEST_WORKSPACE);
@@ -2415,7 +2403,8 @@ class FindTraceThreadsResourceTest {
                             now.minus(10L + i, ChronoUnit.SECONDS)))
                     .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-            awaitThreadRows(traces.stream().map(Trace::threadId).toList(), projectId);
+            traceResourceClient.awaitThreadRows(traces.stream().map(Trace::threadId).toList(), projectId, null, API_KEY,
+                    TEST_WORKSPACE);
 
             var oneBatch = traceResourceClient.searchTraceThreadsStream(TraceThreadSearchStreamRequest.builder()
                     .projectName(projectName)
@@ -2452,7 +2441,7 @@ class FindTraceThreadsResourceTest {
             traceResourceClient.batchCreateTraces(List.of(
                     threadTrace(projectName, withRow, now.minus(20, ChronoUnit.SECONDS)),
                     threadTrace(projectName, withoutRow, now.minus(10, ChronoUnit.SECONDS))), API_KEY, TEST_WORKSPACE);
-            awaitThreadRows(List.of(withRow, withoutRow), projectId);
+            traceResourceClient.awaitThreadRows(List.of(withRow, withoutRow), projectId, null, API_KEY, TEST_WORKSPACE);
             deleteThreadRow(projectId, withoutRow);
 
             String fromTime = now.minus(60, ChronoUnit.SECONDS).toString();
@@ -2529,16 +2518,6 @@ class FindTraceThreadsResourceTest {
                     .build();
         }
 
-        // Closing a thread whose row is not written yet writes it with an id of about now, not of its first trace.
-        private void awaitThreadRows(Collection<String> threadIds, UUID projectId) {
-            Awaitility.await()
-                    .atMost(10, TimeUnit.SECONDS)
-                    .pollInterval(100, TimeUnit.MILLISECONDS)
-                    .untilAsserted(() -> assertThat(threadIds).allSatisfy(threadId -> assertThat(traceResourceClient
-                            .getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).threadModelId())
-                            .isNotNull()));
-        }
-
         private Trace threadTrace(String projectName, String threadId, Instant startTime) {
             return createTrace().toBuilder()
                     .id(idGenerator.generateId(startTime))
@@ -2597,7 +2576,7 @@ class FindTraceThreadsResourceTest {
                             .endTime(ranBeforeWindow.plusMillis(500))
                             .build(), insideTrace);
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-            awaitThreadRows(List.of(threadId), projectId);
+            traceResourceClient.awaitThreadRows(List.of(threadId), projectId, null, API_KEY, TEST_WORKSPACE);
             traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY, TEST_WORKSPACE);
 
             Instant rowWrittenAt = RetentionUtils.extractInstant(
