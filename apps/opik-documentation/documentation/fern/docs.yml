@@ -1084,6 +1084,9 @@ navigation:
       - page: ClickHouse cold-tier migration
         path: ./docs-v2/self-host/clickhouse-cold-tier-migration.mdx
         slug: clickhouse-cold-tier-migration
+      - page: ClickHouse tiered-storage TTL and backfill
+        path: ./docs-v2/self-host/clickhouse-tiered-storage-ttl.mdx
+        slug: clickhouse-tiered-storage-ttl
       - page: Platform Architecture
         path: ./docs-v2/self-host/architecture.mdx
         slug: architecture

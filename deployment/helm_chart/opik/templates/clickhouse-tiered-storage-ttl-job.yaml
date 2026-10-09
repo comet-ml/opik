@@ -1,5 +1,6 @@
 {{- $ttl := .Values.clickhouse.tieredStorage.ttl | default dict -}}
 {{- if and .Values.clickhouse.enabled .Values.clickhouse.tieredStorage.enabled $ttl.enabled }}
+{{- $tableSpecs := list }}
 {{- range $ttl.tables }}
 {{- if not (regexMatch "^[A-Za-z_][A-Za-z0-9_]*$" (toString .name)) }}
 {{- fail (printf "clickhouse.tieredStorage.ttl.tables: name %q is not a plain identifier" (toString .name)) }}
@@ -7,9 +8,14 @@
 {{- if not (and (regexMatch "^[0-9]+$" (toString .moveAfterWeeks)) (gt (int .moveAfterWeeks) 0)) }}
 {{- fail (printf "clickhouse.tieredStorage.ttl.tables: moveAfterWeeks for %q must be a positive integer" (toString .name)) }}
 {{- end }}
+{{- $tableSpecs = append $tableSpecs (printf "%s:%d" (toString .name) (int .moveAfterWeeks)) }}
 {{- end }}
 {{- if not (and (regexMatch "^[0-9]+$" (toString $ttl.activeDeadlineSeconds)) (gt (int $ttl.activeDeadlineSeconds) 0)) }}
 {{- fail (printf "clickhouse.tieredStorage.ttl.activeDeadlineSeconds (%v) must be a positive integer" $ttl.activeDeadlineSeconds) }}
+{{- end }}
+{{- $materialize := dig "materialize" "enabled" false $ttl }}
+{{- if not (kindIs "bool" $materialize) }}
+{{- fail (printf "clickhouse.tieredStorage.ttl.materialize.enabled (%v) must be true or false" $materialize) }}
 {{- end }}
 {{- $backend := .Values.component.backend }}
 {{- $vars := list "ANALYTICS_DB_HOST" "ANALYTICS_DB_DATABASE_NAME" "ANALYTICS_DB_MIGRATIONS_USER" "ANALYTICS_DB_MIGRATIONS_PASS" }}
@@ -75,6 +81,7 @@ spec:
           image: {{ .Values.clickhouse.image }}
           # Only the four settings this needs, once per backend source (SRC<i>_<name>, so no name
           # repeats under server-side apply). The script takes the last source that has a value.
+          # The script is files/clickhouse-tiered-storage-ttl.sh; tests/shell runs it directly.
           env:
             {{- range $i, $src := $sources }}
             {{- $prefix := $src.prefix | default "" }}
@@ -90,61 +97,16 @@ spec:
             {{- end }}
             {{- end }}
             {{- end }}
+            - name: SOURCE_COUNT
+              value: {{ len $sources | quote }}
+            - name: TTL_TABLES
+              value: {{ join " " $tableSpecs | quote }}
+            - name: TTL_MATERIALIZE
+              value: {{ $materialize | toString | quote }}
           command: ["/bin/bash", "-c"]
           args:
             - |
-              set -euo pipefail
-              # As with envFrom, a later source with a value wins.
-              for v in {{ join " " $vars }}; do
-                for ((i = 0; i < {{ len $sources }}; i++)); do
-                  n="SRC${i}_${v}"
-                  if [ -n "${!n:-}" ]; then printf -v "$v" '%s' "${!n}"; fi
-                done
-              done
-              for v in ANALYTICS_DB_HOST ANALYTICS_DB_DATABASE_NAME ANALYTICS_DB_MIGRATIONS_USER ANALYTICS_DB_MIGRATIONS_PASS; do
-                [ -n "${!v:-}" ] || { echo "ERROR: $v is not set; it comes from the opik-backend env." >&2; exit 1; }
-              done
-              DB="$ANALYTICS_DB_DATABASE_NAME"
-              [[ "$DB" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { echo "ERROR: ANALYTICS_DB_DATABASE_NAME is not a plain identifier." >&2; exit 1; }
-              # Credentials via the client's env, not argv.
-              export CLICKHOUSE_USER="$ANALYTICS_DB_MIGRATIONS_USER" CLICKHOUSE_PASSWORD="$ANALYTICS_DB_MIGRATIONS_PASS"
-              ch() { clickhouse-client --host "$ANALYTICS_DB_HOST" --query "$1" < /dev/null; }
-
-              replicas=$(ch "SELECT count() FROM system.clusters WHERE cluster = getMacro('cluster')")
-              [ "${replicas:-0}" -gt 0 ] || { echo "ERROR: no replicas found for the cluster macro." >&2; exit 1; }
-              policy_replica_count=$(ch "SELECT count() FROM clusterAllReplicas(getMacro('cluster'), system.storage_policies) WHERE policy_name = 'tiered_replicated' AND volume_name = 'cold'")
-              [ "$policy_replica_count" = "$replicas" ] || { echo "ERROR: tiered_replicated policy with a cold volume is on ${policy_replica_count} of ${replicas} replicas." >&2; exit 1; }
-
-              apply() {  # table weeks
-                local t="$1" w="$2" exists policy same want want_sql matching_replica_count
-                exists=$(ch "EXISTS TABLE ${DB}.${t}")
-                case "$exists" in
-                  1) ;;
-                  0) echo "skip ${DB}.${t}: table does not exist"; return 0 ;;
-                  *) echo "ERROR: could not tell whether ${DB}.${t} exists: '${exists}'" >&2; return 1 ;;
-                esac
-                want="id_at + toIntervalWeek(${w}) TO DISK 'cold'"
-                want_sql="'id_at + toIntervalWeek(${w}) TO DISK \\'cold\\''"
-                policy=$(ch "SELECT storage_policy FROM system.tables WHERE database = '${DB}' AND name = '${t}'")
-                if [ "$policy" != "tiered_replicated" ]; then
-                  echo "${DB}.${t}: storage_policy ${policy} -> tiered_replicated"
-                  ch "ALTER TABLE ${DB}.${t} ON CLUSTER '{cluster}' MODIFY SETTING storage_policy = 'tiered_replicated'"
-                fi
-                # Compared in SQL: the client escapes quotes in its output.
-                same=$(ch "SELECT extract(create_table_query, 'TTL (.+?) SETTINGS ') = ${want_sql} FROM system.tables WHERE database = '${DB}' AND name = '${t}'")
-                if [ "$same" != "1" ]; then
-                  echo "${DB}.${t}: TTL -> ${want}"
-                  # Moving existing data is a separate, paced operator step (MATERIALIZE TTL).
-                  ch "ALTER TABLE ${DB}.${t} ON CLUSTER '{cluster}' MODIFY TTL id_at + INTERVAL ${w} WEEK TO DISK 'cold' SETTINGS materialize_ttl_after_modify = 0"
-                fi
-                # Settings are per replica, so check every one.
-                matching_replica_count=$(ch "SELECT count() FROM clusterAllReplicas(getMacro('cluster'), system.tables) WHERE database = '${DB}' AND name = '${t}' AND storage_policy = 'tiered_replicated' AND extract(create_table_query, 'TTL (.+?) SETTINGS ') = ${want_sql}")
-                [ "$matching_replica_count" = "$replicas" ] || { echo "ERROR: ${DB}.${t} matches on ${matching_replica_count} of ${replicas} replicas." >&2; return 1; }
-                echo "OK: ${DB}.${t} tiered_replicated, TTL ${want}, on all ${replicas} replicas"
-              }
-              {{- range $ttl.tables }}
-              apply {{ .name }} {{ int .moveAfterWeeks }}
-              {{- end }}
+{{ .Files.Get "files/clickhouse-tiered-storage-ttl.sh" | indent 14 }}
           {{- with $ttl.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
