@@ -307,16 +307,16 @@ public class SpanService {
      * (project, trace, week). Spans missing an id, trace or project carry nothing to index and are skipped.
      */
     public Mono<Long> registerWeeks(@NonNull Collection<Span> spans) {
-        List<SpanWeeksDAO.SpanWeek> rows = spans.stream()
+        List<SpanWeek> rows = spans.stream()
                 .filter(span -> span.id() != null && span.traceId() != null && span.projectId() != null)
-                .map(span -> new SpanWeeksDAO.SpanWeek(span.projectId(), span.traceId(),
+                .map(span -> new SpanWeek(span.projectId(), span.traceId(),
                         WeeklyPartitions.storedPartitionOf(span.id())))
                 .distinct()
                 .toList();
         return spanWeeksDAO.insert(rows);
     }
 
-    public Mono<List<SpanWeeksDAO.SpanWeek>> getWeeksByTraceIds(@NonNull Collection<UUID> traceIds) {
+    public Mono<List<SpanWeek>> getWeeksByTraceIds(@NonNull Collection<UUID> traceIds) {
         return spanWeeksDAO.findByTraceIds(traceIds);
     }
 

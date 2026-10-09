@@ -16,7 +16,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.domain.SpanService;
-import com.comet.opik.domain.SpanWeeksDAO.SpanWeek;
+import com.comet.opik.domain.SpanWeek;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -115,7 +115,7 @@ class SpanWeeksListenerTest {
         var projectId = projectResourceClient.createProject(projectName, ws.apiKey(), ws.workspaceName());
         var otherProjectId = projectResourceClient.createProject(otherProjectName, ws.apiKey(), ws.workspaceName());
         var traceAcrossWeeks = uuidV7(System.currentTimeMillis());
-        var traceWithJunkIds = uuidV7(System.currentTimeMillis());
+        var traceWithBoundaryIds = uuidV7(System.currentTimeMillis());
 
         var spans = List.of(
                 span(uuidV7(MONDAY.toEpochMilli()), traceAcrossWeeks, projectName),
@@ -123,18 +123,18 @@ class SpanWeeksListenerTest {
                 span(uuidV7(MONDAY.toEpochMilli() - 1), traceAcrossWeeks, projectName),
                 // A span of the same trace in another project: the trace's project does not decide the span's.
                 span(uuidV7(MONDAY.toEpochMilli()), traceAcrossWeeks, otherProjectName),
-                span(uuidV7(0L), traceWithJunkIds, projectName),
-                span(uuidV7(Instant.parse("2300-01-01T00:00:00Z").toEpochMilli()), traceWithJunkIds, projectName));
+                span(uuidV7(0L), traceWithBoundaryIds, projectName),
+                span(uuidV7(Instant.parse("2300-01-01T00:00:00Z").toEpochMilli()), traceWithBoundaryIds, projectName));
         spanResourceClient.batchCreateSpans(spans, ws.apiKey(), ws.workspaceName());
 
         var expected = List.of(
                 new SpanWeek(projectId, traceAcrossWeeks, MONDAY_WEEK),
                 new SpanWeek(projectId, traceAcrossWeeks, PREVIOUS_WEEK),
                 new SpanWeek(otherProjectId, traceAcrossWeeks, MONDAY_WEEK),
-                new SpanWeek(projectId, traceWithJunkIds, EPOCH_WEEK),
-                new SpanWeek(projectId, traceWithJunkIds, SATURATED_WEEK));
+                new SpanWeek(projectId, traceWithBoundaryIds, EPOCH_WEEK),
+                new SpanWeek(projectId, traceWithBoundaryIds, SATURATED_WEEK));
         await().atMost(30, SECONDS).untilAsserted(() -> assertThat(
-                spanService.getWeeksByTraceIds(List.of(traceAcrossWeeks, traceWithJunkIds))
+                spanService.getWeeksByTraceIds(List.of(traceAcrossWeeks, traceWithBoundaryIds))
                         .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, USER, ws.workspaceId()))
                         .block())
                 .containsExactlyInAnyOrderElementsOf(expected));
