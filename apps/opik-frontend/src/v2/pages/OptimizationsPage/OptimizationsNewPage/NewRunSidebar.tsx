@@ -17,6 +17,7 @@ import { OPTIMIZATION_DEMO_TEMPLATES } from "@/constants/optimizations";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 import { useModelOptions } from "@/v2/pages-shared/llm/PromptModelSelect/useModelOptions";
 import { X } from "lucide-react";
 import { Button } from "@/ui/button";
@@ -146,16 +147,20 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
   );
   const availableModels = useMemo(() => {
     const models = pickerModels.map((option) => option.value);
-    const servedSavedModels = savedModels.filter(
-      (savedModel) =>
-        !models.includes(savedModel) &&
-        (isRegistryUnavailable ||
-          configuredProvidersList.some(
-            (p) =>
-              p.ui_composed_provider ===
-              calculateModelProvider(savedModel as PROVIDER_MODEL_TYPE),
-          )),
-    );
+    const servedSavedModels = savedModels.filter((savedModel) => {
+      if (models.includes(savedModel)) return false;
+      if (isRegistryUnavailable) return true;
+      const provider = calculateModelProvider(
+        savedModel as PROVIDER_MODEL_TYPE,
+      );
+      // A Vertex run saved with the bare id resolves here only by suffix, but the backend and
+      // getProviderFromModel know it only as vertex_ai/<id>, so it could not run under that name.
+      return (
+        provider !== "" &&
+        getRoutableProviderModelValue(provider, savedModel) === savedModel &&
+        configuredProvidersList.some((p) => p.ui_composed_provider === provider)
+      );
+    });
     return [...models, ...servedSavedModels];
   }, [
     pickerModels,

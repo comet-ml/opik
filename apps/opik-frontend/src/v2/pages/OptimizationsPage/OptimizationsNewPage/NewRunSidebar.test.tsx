@@ -380,6 +380,34 @@ describe("NewRunSidebar — re-run with the real model registry hook", () => {
     },
   );
 
+  it("replaces a Vertex model saved under its bare id, which only the suffix match finds", () => {
+    const bareVertexId = "gemini-2.0-flash-001";
+    mocks.providerKeysData = providerKeys([
+      PROVIDER_TYPE.OPEN_AI,
+      PROVIDER_TYPE.VERTEX_AI,
+    ]);
+    mocks.registryQuery = {
+      ...REGISTRY_FETCHED,
+      data: {
+        ...REGISTRY,
+        [PROVIDER_TYPE.VERTEX_AI]: [
+          {
+            ...registryModel(bareVertexId),
+            qualifiedName: `vertex_ai/${bareVertexId}`,
+          },
+        ],
+      },
+    };
+
+    const content = renderRerun(bareVertexId);
+
+    expect(content.modelName).toBe(PROVIDER_MODEL_TYPE.GPT_4O_MINI);
+    expect(content.availableModels).not.toContain(bareVertexId);
+    expect(content.savedModelReplacement).toMatchObject({
+      savedModel: bareVertexId,
+    });
+  });
+
   it("keeps the saved models and their settings when the registry request failed", () => {
     mocks.providerKeysData = providerKeys([
       PROVIDER_TYPE.OPEN_AI,
