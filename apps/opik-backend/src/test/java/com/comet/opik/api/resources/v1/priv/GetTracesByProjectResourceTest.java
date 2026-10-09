@@ -1012,16 +1012,12 @@ class GetTracesByProjectResourceTest {
                     filters, Map.of());
         }
 
-        @ParameterizedTest
-        @MethodSource("getFilterTestArguments")
-        void whenFilterAnnotationQueueIdContains__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
+        /** Queue ids of the fixture: trace 0 is in queue A, trace 1 in queue B, trace 2 in a deleted queue. */
+        private record QueueFixture(String projectName, List<Trace> traces, UUID queueA, UUID queueB,
+                UUID deletedQueue) {
+        }
 
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
+        private QueueFixture createQueueFixture(String apiKey, String workspaceName) {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
@@ -1029,60 +1025,244 @@ class GetTracesByProjectResourceTest {
                     .stream()
                     .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(project.name())
+                            .visibilityMode(VisibilityMode.DEFAULT)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            // Create spans for stats endpoint
-            var spans = traces.stream()
-                    .flatMap(trace -> IntStream.range(0, 1)
-                            .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
-                                    .usage(null)
-                                    .totalEstimatedCost(null)
-                                    .projectName(project.name())
-                                    .traceId(trace.id())
-                                    .type(SpanType.general)
-                                    .build()))
-                    .toList();
-            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            // One span per trace, so the stats and the page-keyed enrichment have something to compute
+            spanResourceClient.batchCreateSpans(traces.stream()
+                    .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
+                            .usage(null)
+                            .totalEstimatedCost(null)
+                            .projectName(project.name())
+                            .traceId(trace.id())
+                            .type(SpanType.general)
+                            .build())
+                    .toList(), apiKey, workspaceName);
 
-            // Update trace objects with span count for stats calculation
-            var updatedTraces = traces.stream()
-                    .map(trace -> trace.toBuilder().spanCount(1).build())
-                    .collect(Collectors.toCollection(ArrayList::new));
-
-            var expectedTraces = List.of(updatedTraces.getFirst());
-            var unexpectedTraces = List.of(createTrace().toBuilder()
-                    .projectId(null)
-                    .projectName(project.name())
-                    .build());
-
-            traceResourceClient.batchCreateTraces(unexpectedTraces, apiKey, workspaceName);
-
-            // Create annotation queue with items
-            var queue1 = prepareAnnotationQueue(projectId);
-            var queue2 = prepareAnnotationQueue(projectId);
+            var queueA = prepareAnnotationQueue(projectId);
+            var queueB = prepareAnnotationQueue(projectId);
+            var deletedQueue = prepareAnnotationQueue(projectId);
             annotationQueuesResourceClient.createAnnotationQueueBatch(
-                    new LinkedHashSet<>(List.of(queue1, queue2)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
-
-            annotationQueuesResourceClient.addItemsToAnnotationQueue(
-                    queue1.id(), Set.of(updatedTraces.getFirst().id()), apiKey, workspaceName,
+                    new LinkedHashSet<>(List.of(queueA, queueB, deletedQueue)), apiKey, workspaceName,
                     HttpStatus.SC_NO_CONTENT);
             annotationQueuesResourceClient.addItemsToAnnotationQueue(
-                    queue2.id(), Set.of(updatedTraces.get(1).id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+                    queueA.id(), Set.of(traces.get(0).id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queueB.id(), Set.of(traces.get(1).id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    deletedQueue.id(), Set.of(traces.get(2).id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            // Deleting a queue leaves its items behind: they must no longer count as queue membership
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(
+                    Set.of(deletedQueue.id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
 
-            var filters = List.of(TraceFilter.builder()
+            var tracesWithSpans = traces.stream()
+                    .map(trace -> trace.toBuilder().spanCount(1).build())
+                    .toList();
+            return new QueueFixture(project.name(), tracesWithSpans, queueA.id(), queueB.id(), deletedQueue.id());
+        }
+
+        private static TraceFilter queueFilter(Operator operator, String value) {
+            return TraceFilter.builder()
                     .field(TraceField.ANNOTATION_QUEUE_IDS)
-                    .operator(Operator.CONTAINS)
-                    .value(queue1.id().toString())
-                    .build());
+                    .operator(operator)
+                    .value(value)
+                    .build();
+        }
 
-            var values = testAssertion.transformTestParams(updatedTraces, expectedTraces, unexpectedTraces);
+        private <T> void assertQueueSelection(TracePageTestAssertion<T, Trace> testAssertion, QueueFixture fixture,
+                Set<Integer> expectedIndexes, List<TraceFilter> filters, Map<String, String> queryParams,
+                String apiKey, String workspaceName) {
+            var expected = IntStream.range(0, fixture.traces().size())
+                    .filter(expectedIndexes::contains)
+                    .mapToObj(fixture.traces()::get)
+                    .toList();
+            var unexpected = IntStream.range(0, fixture.traces().size())
+                    .filter(i -> !expectedIndexes.contains(i))
+                    .mapToObj(fixture.traces()::get)
+                    .toList();
 
-            testAssertion.assertTest(project.name(), null, apiKey, workspaceName, values.expected(),
-                    values.unexpected(),
-                    values.all(),
-                    filters, Map.of());
+            var values = testAssertion.transformTestParams(fixture.traces(), expected.reversed(), unexpected);
+
+            testAssertion.assertTest(fixture.projectName(), null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(), values.all(), filters, queryParams);
+        }
+
+        private Stream<Arguments> annotationQueueIdsFilterArguments() {
+            Function<QueueFixture, Set<Integer>> unqueued = fixture -> IntStream.range(2, fixture.traces().size())
+                    .boxed()
+                    .collect(Collectors.toSet());
+            Function<QueueFixture, Set<Integer>> allButFirst = fixture -> IntStream
+                    .range(1, fixture.traces().size())
+                    .boxed()
+                    .collect(Collectors.toSet());
+            var cases = Stream.of(
+                    arguments("contains queue A",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.CONTAINS, f.queueA().toString())),
+                            (Function<QueueFixture, Set<Integer>>) f -> Set.of(0)),
+                    // Trailing digits: ids generated in the same millisecond share the leading ones
+                    arguments("contains part of queue A's id in another case",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.CONTAINS,
+                                            f.queueA().toString().substring(24).toUpperCase())),
+                            (Function<QueueFixture, Set<Integer>>) f -> Set.of(0)),
+                    arguments("= queue A",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.EQUAL, f.queueA().toString())),
+                            (Function<QueueFixture, Set<Integer>>) f -> Set.of(0)),
+                    arguments("not contains queue A",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.NOT_CONTAINS, f.queueA().toString())),
+                            allButFirst),
+                    arguments("!= queue A",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.NOT_EQUAL, f.queueA().toString())),
+                            allButFirst),
+                    arguments("is not empty, ignoring the deleted queue",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.IS_NOT_EMPTY, "")),
+                            (Function<QueueFixture, Set<Integer>>) f -> Set.of(0, 1)),
+                    arguments("is empty, counting the deleted queue's items as unqueued",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.IS_EMPTY, "")),
+                            unqueued),
+                    arguments("is not empty and != queue B",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.IS_NOT_EMPTY, ""),
+                                    queueFilter(Operator.NOT_EQUAL, f.queueB().toString())),
+                            (Function<QueueFixture, Set<Integer>>) f -> Set.of(0)),
+                    arguments("= the deleted queue",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.EQUAL, f.deletedQueue().toString())),
+                            (Function<QueueFixture, Set<Integer>>) f -> Set.of()))
+                    .toList();
+            return getFilterTestArguments()
+                    .flatMap(endpoint -> cases.stream()
+                            .map(queueCase -> arguments(endpoint.get()[0], queueCase.get()[0], queueCase.get()[1],
+                                    queueCase.get()[2], endpoint.get()[1])));
+        }
+
+        @ParameterizedTest(name = "{0}: {1}")
+        @MethodSource("annotationQueueIdsFilterArguments")
+        void whenFilterAnnotationQueueIds__thenReturnTracesFiltered(String endpoint, String description,
+                Function<QueueFixture, List<TraceFilter>> getFilters,
+                Function<QueueFixture, Set<Integer>> getExpectedIndexes,
+                TracePageTestAssertion<?, Trace> testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var fixture = createQueueFixture(apiKey, workspaceName);
+
+            assertQueueSelection(testAssertion, fixture, getExpectedIndexes.apply(fixture), getFilters.apply(fixture),
+                    Map.of(), apiKey, workspaceName);
+        }
+
+        private Stream<Arguments> annotationQueueIdParamArguments() {
+            var visibility = TraceFilter.builder()
+                    .field(TraceField.VISIBILITY_MODE)
+                    .operator(Operator.EQUAL)
+                    .value(VisibilityMode.DEFAULT.getValue())
+                    .build();
+            var cases = Stream.of(
+                    arguments("queue A",
+                            (Function<QueueFixture, UUID>) QueueFixture::queueA,
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(),
+                            Set.of(0)),
+                    arguments("queue A with the filters the queue page used to send",
+                            (Function<QueueFixture, UUID>) QueueFixture::queueA,
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.CONTAINS, f.queueA().toString()), visibility),
+                            Set.of(0)),
+                    arguments("queue A with a queue filter widening the memberships",
+                            (Function<QueueFixture, UUID>) QueueFixture::queueA,
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.NOT_EQUAL, f.queueB().toString())),
+                            Set.of(0)),
+                    arguments("the deleted queue",
+                            (Function<QueueFixture, UUID>) QueueFixture::deletedQueue,
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(),
+                            Set.<Integer>of()))
+                    .toList();
+            // The stream endpoint takes no queue id
+            return getFilterTestArguments()
+                    .filter(endpoint -> !"/traces/search".equals(endpoint.get()[0]))
+                    .flatMap(endpoint -> cases.stream()
+                            .map(queueCase -> arguments(endpoint.get()[0], queueCase.get()[0], queueCase.get()[1],
+                                    queueCase.get()[2], queueCase.get()[3], endpoint.get()[1])));
+        }
+
+        @ParameterizedTest(name = "{0}: {1}")
+        @MethodSource("annotationQueueIdParamArguments")
+        void whenAnnotationQueueIdParam__thenReturnQueueTraces(String endpoint, String description,
+                Function<QueueFixture, UUID> getQueueId,
+                Function<QueueFixture, List<TraceFilter>> getFilters,
+                Set<Integer> expectedIndexes,
+                TracePageTestAssertion<?, Trace> testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var fixture = createQueueFixture(apiKey, workspaceName);
+
+            assertQueueSelection(testAssertion, fixture, expectedIndexes, getFilters.apply(fixture),
+                    Map.of("annotation_queue_id", getQueueId.apply(fixture).toString()), apiKey, workspaceName);
+        }
+
+        @Test
+        @DisplayName("When sorting a queue's traces by a feedback score, should return only the queue's traces in score order")
+        void whenAnnotationQueueIdParamAndSortByFeedbackScore__thenReturnQueueTracesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(project.name())
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var queue = prepareAnnotationQueue(projectId);
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(queue)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(queue.id(),
+                    Set.of(traces.get(0).id(), traces.get(1).id(), traces.get(2).id()), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // The trace outside the queue gets the highest score: it must not leak into the sorted page
+            var scoreName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var scores = List.of(1, 3, 2, 9);
+            traceResourceClient.feedbackScores(IntStream.range(0, scores.size())
+                    .<FeedbackScoreBatchItem>mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItem.class)
+                            .toBuilder()
+                            .id(traces.get(i).id())
+                            .projectName(project.name())
+                            .name(scoreName)
+                            .value(BigDecimal.valueOf(scores.get(i)))
+                            // Scored from the queue: with the queue id, only the queue's own annotations count
+                            .sourceQueueId(queue.id())
+                            .build())
+                    .toList(), apiKey, workspaceName);
+
+            var actualPage = traceResourceClient.getTraces(project.name(), null, apiKey, workspaceName, List.of(),
+                    List.of(SortingField.builder()
+                            .field(SortableFields.FEEDBACK_SCORES.replace("*", scoreName))
+                            .direction(Direction.DESC)
+                            .build()),
+                    10, Map.of("annotation_queue_id", queue.id().toString()));
+
+            assertThat(actualPage.total()).isEqualTo(3);
+            assertThat(actualPage.content()).extracting(Trace::id)
+                    .containsExactly(traces.get(1).id(), traces.get(2).id(), traces.get(0).id());
         }
 
         private AnnotationQueue prepareAnnotationQueue(UUID projectId) {

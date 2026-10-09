@@ -14,7 +14,6 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { useToast } from "@/ui/use-toast";
-import { generateAnnotationQueueIdFilter } from "@/lib/filters";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadsList from "@/api/traces/useThreadsList";
 import {
@@ -79,18 +78,13 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
     [annotationQueue.feedback_definition_names],
   );
 
-  const annotationQueueFilter = useMemo(
-    () => generateAnnotationQueueIdFilter(annotationQueue?.id),
-    [annotationQueue?.id],
-  );
-
   const { refetch: refetchTraces } = useTracesList(
     {
       projectId: annotationQueue.project_id,
       page: 1,
       size: MAX_EXPORT_ITEMS,
       sorting: [],
-      filters: annotationQueueFilter,
+      annotationQueueId: annotationQueue.id,
       search: "",
       truncate: false,
     },
@@ -105,7 +99,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
       page: 1,
       size: MAX_EXPORT_ITEMS,
       sorting: [],
-      filters: annotationQueueFilter,
+      annotationQueueId: annotationQueue.id,
       search: "",
       truncate: false,
     },
