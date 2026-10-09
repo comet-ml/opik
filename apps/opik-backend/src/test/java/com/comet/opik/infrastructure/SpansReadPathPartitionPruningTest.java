@@ -8,6 +8,7 @@ import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.AlertType;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
+import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
@@ -18,6 +19,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
+import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.Webhook;
@@ -25,6 +27,8 @@ import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardResponse;
+import com.comet.opik.api.metrics.MetricType;
+import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -38,6 +42,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectMetricsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -67,6 +72,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -113,6 +119,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
@@ -244,6 +251,7 @@ class SpansReadPathPartitionPruningTest {
     private SpanResourceClient spanResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private ProjectResourceClient projectResourceClient;
+    private ProjectMetricsResourceClient projectMetricsResourceClient;
     private TraceResourceClient traceResourceClient;
     private TransactionTemplateAsync template;
     private AlertResourceClient alertResourceClient;
@@ -256,6 +264,7 @@ class SpansReadPathPartitionPruningTest {
         this.spanResourceClient = new SpanResourceClient(clientSupport, baseUrl);
         this.datasetResourceClient = new DatasetResourceClient(clientSupport, baseUrl);
         this.projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
+        this.projectMetricsResourceClient = new ProjectMetricsResourceClient(clientSupport, baseUrl);
         this.traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         this.template = template;
         this.alertResourceClient = new AlertResourceClient(clientSupport);
@@ -493,6 +502,115 @@ class SpansReadPathPartitionPruningTest {
                 .ignoringCollectionOrder()
                 .withComparatorForType((a, b) -> Math.abs(a - b) <= 1e-6 ? 0 : Double.compare(a, b), Double.class)
                 .isEqualTo(expected);
+    }
+
+    @ParameterizedTest(name = "open-ended: {0}")
+    @ValueSource(booleans = {false, true})
+    void threadCostChartReadsOnlyTheSpanWeeksOfItsWindow(boolean openEnded) {
+        var seeded = seedThreadWithSpansInManyWeeks();
+        var intervalStart = seeded.now().minus(Duration.ofHours(1));
+        var intervalEnd = openEnded ? null : Instant.now();
+
+        var response = projectMetricsResourceClient.getProjectMetrics(seeded.projectId(), ProjectMetricRequest.builder()
+                .metricType(MetricType.THREAD_COST)
+                .interval(TimeInterval.HOURLY)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), BigDecimal.class, API_KEY, WORKSPACE_NAME);
+
+        var cost = response.results().stream()
+                .flatMap(result -> result.data().stream())
+                .map(DataPoint::value)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(cost).isEqualByComparingTo(openEnded ? "3.75" : "1.25");
+        assertThat(spansPartitionsRead("ProjectMetrics_threadCost", seeded.projectId()))
+                .containsExactlyInAnyOrderElementsOf(seeded.weeksRead(intervalStart, intervalEnd));
+    }
+
+    @ParameterizedTest(name = "open-ended: {0}")
+    @ValueSource(booleans = {false, true})
+    void threadKpiCostReadsOnlyTheSpanWeeksOfItsWindow(boolean openEnded) {
+        var seeded = seedThreadWithSpansInManyWeeks();
+        var intervalStart = seeded.now().minus(Duration.ofHours(1));
+        var intervalEnd = openEnded ? null : Instant.now();
+
+        var requestedAt = Instant.now();
+        var response = projectResourceClient.getKpiCards(seeded.projectId(), KpiCardRequest.builder()
+                .entityType(KpiCardRequest.EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), API_KEY, WORKSPACE_NAME);
+        var respondedAt = Instant.now();
+        // The card also reads the period before the window, as long as the window. When open, the server sizes it
+        // with its own now, somewhere between these two instants, so a Monday boundary between them makes either
+        // week set right.
+        var expectedWeekSets = Stream.of(requestedAt, respondedAt)
+                .map(now -> seeded.weeksRead(
+                        intervalStart
+                                .minus(Duration.between(intervalStart, Objects.requireNonNullElse(intervalEnd, now))),
+                        intervalEnd))
+                .collect(Collectors.toSet());
+
+        assertThat(response.stats())
+                .filteredOn(stat -> stat.type() == KpiCardResponse.KpiMetricType.TOTAL_COST)
+                .singleElement()
+                .satisfies(stat -> assertThat(stat.currentValue()).isCloseTo(openEnded ? 3.75 : 1.25,
+                        within(1e-6)));
+        assertThat(spansPartitionsRead("KpiCards_getThreadKpiCards", seeded.projectId()))
+                .isIn(expectedWeekSets);
+    }
+
+    private record SeededThread(UUID projectId, Instant now, Set<String> spanWeeks) {
+        Set<String> weeksRead(Instant from, Instant to) {
+            return spanWeeks.stream()
+                    .filter(week -> week.compareTo(yyyymmdd(mondayOf(from))) >= 0)
+                    .filter(week -> to == null || week.compareTo(yyyymmdd(mondayOf(to))) <= 0)
+                    .collect(Collectors.toSet());
+        }
+    }
+
+    /**
+     * The filler spans are two per week on different traces of the same project, so only partition pruning, not the
+     * primary key, can keep a read out of those weeks.
+     */
+    private SeededThread seedThreadWithSpansInManyWeeks() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var now = Instant.now();
+        var farFuture = Instant.parse("2201-08-30T03:18:08Z");
+        var threadId = "thread-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
+                .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
+                .projectName(projectName)
+                .threadId(threadId)
+                .startTime(now)
+                .endTime(now.plusMillis(100))
+                .errorInfo(null)
+                .feedbackScores(null)
+                .usage(null)
+                .build(), API_KEY, WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(List.of(
+                newSpan(now, traceId).toBuilder().projectName(projectName)
+                        .totalEstimatedCost(new BigDecimal("1.25")).build(),
+                newSpan(farFuture, traceId).toBuilder().projectName(projectName)
+                        .totalEstimatedCost(new BigDecimal("2.5")).build()),
+                API_KEY, WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(FILLER_MONDAYS.stream()
+                .flatMap(monday -> Stream.of(0, 1).map(_ -> newSpan(
+                        monday.atTime(12, 0).toInstant(ZoneOffset.UTC), ID_GENERATOR.generateId())
+                        .toBuilder().projectName(projectName).build()))
+                .toList(), API_KEY, WORKSPACE_NAME);
+        // Thread rows are written asynchronously after ingestion, and thread charts and KPI cards skip a thread without one.
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(100))
+                .untilAsserted(() -> assertThat(traceResourceClient
+                        .getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).threadModelId()).isNotNull());
+        var spanWeeks = Stream.concat(FILLER_WEEKS.stream(),
+                Stream.of(yyyymmdd(mondayOf(now)), yyyymmdd(mondayOf(farFuture))))
+                .collect(Collectors.toSet());
+        return new SeededThread(projectId, now, spanWeeks);
     }
 
     @Test
