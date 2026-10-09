@@ -83,6 +83,9 @@ class SpanServiceImplTest {
     @Mock
     private DeletionEventDAO deletionEventDAO;
 
+    @Mock
+    private SpanWeeksDAO spanWeeksDAO;
+
     private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     private SpanService newSpanService(DatabaseAnalyticsDataModelConfig databaseAnalyticsDataModelConfig) {
@@ -105,6 +108,7 @@ class SpanServiceImplTest {
                 attachmentReinjectorService,
                 eventBus,
                 deletionEventDAO,
+                spanWeeksDAO,
                 opikConfiguration);
     }
 

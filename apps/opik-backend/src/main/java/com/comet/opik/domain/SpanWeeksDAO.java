@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
+import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 /**
@@ -56,14 +57,14 @@ public class SpanWeeksDAO {
 
     private final @NonNull ConnectionFactory connectionFactory;
 
-    public Mono<Long> insert(@NonNull List<SpanWeek> rows, @NonNull String workspaceId, @NonNull String userName) {
+    public Mono<Long> insert(@NonNull List<SpanWeek> rows) {
         if (rows.isEmpty()) {
             return Mono.just(0L);
         }
-        return Mono.from(connectionFactory.create())
+        return makeMonoContextAware((userName, workspaceId) -> Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> insert(rows, workspaceId, userName, connection))
                 .flatMap(Result::getRowsUpdated)
-                .reduce(0L, Long::sum);
+                .reduce(0L, Long::sum));
     }
 
     private Publisher<? extends Result> insert(List<SpanWeek> rows, String workspaceId, String userName,
@@ -84,12 +85,11 @@ public class SpanWeeksDAO {
         return statement.execute();
     }
 
-    public Mono<List<SpanWeek>> findByTraceIds(@NonNull Collection<UUID> traceIds, @NonNull String workspaceId,
-            @NonNull String userName) {
+    public Mono<List<SpanWeek>> findByTraceIds(@NonNull Collection<UUID> traceIds) {
         if (traceIds.isEmpty()) {
             return Mono.just(List.of());
         }
-        return Mono.from(connectionFactory.create())
+        return makeMonoContextAware((userName, workspaceId) -> Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     ST template = getSTWithLogComment(FIND_BY_TRACE_IDS, "find_span_weeks_by_trace_ids", workspaceId,
                             userName, traceIds.size());
@@ -103,6 +103,6 @@ public class SpanWeeksDAO {
                         .traceId(row.get("trace_id", UUID.class))
                         .idWeek(row.get("id_week", Long.class))
                         .build()))
-                .collectList();
+                .collectList());
     }
 }

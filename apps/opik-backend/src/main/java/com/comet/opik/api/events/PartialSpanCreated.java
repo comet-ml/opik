@@ -14,12 +14,12 @@ import java.util.UUID;
  */
 @Getter
 @Accessors(fluent = true)
-public class SpanInsertedByUpdate extends BaseEvent {
+public class PartialSpanCreated extends BaseEvent {
     private final @NonNull UUID spanId;
     private final @NonNull UUID spanTraceId;
     private final @NonNull UUID projectId;
 
-    public SpanInsertedByUpdate(@NonNull UUID spanId, @NonNull UUID spanTraceId, @NonNull UUID projectId,
+    public PartialSpanCreated(@NonNull UUID spanId, @NonNull UUID spanTraceId, @NonNull UUID projectId,
             @NonNull String workspaceId, @NonNull String userName) {
         super(workspaceId, userName);
         this.spanId = spanId;

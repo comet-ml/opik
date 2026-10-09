@@ -15,11 +15,12 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
-import com.comet.opik.domain.SpanWeeksDAO;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanWeeksDAO.SpanWeek;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.AsyncUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -94,15 +95,15 @@ class SpanWeeksListenerTest {
 
     private SpanResourceClient spanResourceClient;
     private ProjectResourceClient projectResourceClient;
-    private SpanWeeksDAO spanWeeksDAO;
+    private SpanService spanService;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, SpanWeeksDAO spanWeeksDAO) {
+    void setUpAll(ClientSupport client, SpanService spanService) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
-        this.spanWeeksDAO = spanWeeksDAO;
+        this.spanService = spanService;
     }
 
     @Test
@@ -133,7 +134,8 @@ class SpanWeeksListenerTest {
                 new SpanWeek(projectId, traceWithJunkIds, EPOCH_WEEK),
                 new SpanWeek(projectId, traceWithJunkIds, SATURATED_WEEK));
         await().atMost(30, SECONDS).untilAsserted(() -> assertThat(
-                spanWeeksDAO.findByTraceIds(List.of(traceAcrossWeeks, traceWithJunkIds), ws.workspaceId(), USER)
+                spanService.getWeeksByTraceIds(List.of(traceAcrossWeeks, traceWithJunkIds))
+                        .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, USER, ws.workspaceId()))
                         .block())
                 .containsExactlyInAnyOrderElementsOf(expected));
     }
@@ -153,7 +155,9 @@ class SpanWeeksListenerTest {
                 .build(), ws.apiKey(), ws.workspaceName());
 
         await().atMost(30, SECONDS).untilAsserted(() -> assertThat(
-                spanWeeksDAO.findByTraceIds(List.of(traceId), ws.workspaceId(), USER).block())
+                spanService.getWeeksByTraceIds(List.of(traceId))
+                        .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, USER, ws.workspaceId()))
+                        .block())
                 .containsExactly(new SpanWeek(projectId, traceId, MONDAY_WEEK)));
     }
 
