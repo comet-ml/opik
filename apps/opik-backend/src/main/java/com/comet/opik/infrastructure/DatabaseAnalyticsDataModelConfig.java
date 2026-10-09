@@ -88,8 +88,8 @@ import lombok.Builder;
  *
  * <p>{@code spanWeeksWriteEnabled}: when {@code true}, span writes register their weekly partitions in the
  * {@code span_weeks} index ({@code SpanService.registerWeeks}). Left {@code false} at deploy time; turn it on before
- * the span weeks backfill starts, so every span written after the backfill's snapshot is indexed. Off writes nothing,
- * and reads stay unbounded until a project is marked backfilled.</p>
+ * the span weeks backfill starts, so every span written after the backfill's snapshot is indexed. Off writes
+ * nothing.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
