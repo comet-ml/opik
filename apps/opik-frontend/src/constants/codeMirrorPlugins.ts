@@ -5,32 +5,9 @@ import {
   EditorView,
   WidgetType,
 } from "@codemirror/view";
-import {
-  Compartment,
-  EditorSelection,
-  EditorState,
-  Facet,
-} from "@codemirror/state";
+import { Compartment, Facet } from "@codemirror/state";
 
-// Backspace leaves the cursor facing the text before it. In an empty editor
-// that is the 1em-tall widget buffer in front of the placeholder, and
-// @codemirror/view 6.28 sizes the cursor from it, so the cursor shrinks
-// below the text height. Facing forward sizes it from the placeholder text.
-const keepEmptyEditorCursorFullHeight = EditorState.transactionFilter.of(
-  (tr) => {
-    const { main } = tr.newSelection;
-    if (tr.newDoc.length > 0 || !main.empty || main.assoc >= 0) return tr;
-    return [
-      tr,
-      {
-        selection: EditorSelection.create([EditorSelection.cursor(0, 1)]),
-        sequential: true,
-      },
-    ];
-  },
-);
-
-const promptEditorStyles = EditorView.theme({
+export const codeMirrorPromptTheme = EditorView.theme({
   "&": {
     fontSize: "0.875rem",
     cursor: "text",
@@ -46,6 +23,13 @@ const promptEditorStyles = EditorView.theme({
   // shows no cursor at all.
   ".cm-cursor": {
     marginLeft: 0,
+  },
+  // CodeMirror puts this invisible 1em-tall image in front of the placeholder.
+  // After Backspace empties the editor, @codemirror/view 6.28 sizes the cursor
+  // from it, so the cursor came out shorter than the text (fixed upstream in
+  // 6.39.8). 1.2em is about the height of a line of text.
+  ".cm-widgetBuffer": {
+    height: "1.2em",
   },
   ".cm-scroller": {
     fontFamily: "inherit",
@@ -69,11 +53,6 @@ const promptEditorStyles = EditorView.theme({
     padding: "1px 2px 1px 5px",
   },
 });
-
-export const codeMirrorPromptTheme = [
-  promptEditorStyles,
-  keepEmptyEditorCursorFullHeight,
-];
 
 export const mustachePlugin = ViewPlugin.fromClass(
   class {

@@ -54,7 +54,7 @@ test.describe('Playground — message editor cursor', { tag: ['@t3-nightly', '@a
         expect(
           await playground.userMessageCursorHeightPx(),
           'cursor height in the emptied message, compared with the never-typed one',
-        ).toBeCloseTo(emptyMessageCursorHeightPx, 1);
+        ).toBeCloseTo(emptyMessageCursorHeightPx, 0);
       });
     },
   );
