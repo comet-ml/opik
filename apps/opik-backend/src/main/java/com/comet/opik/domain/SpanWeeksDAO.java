@@ -23,8 +23,8 @@ import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 /**
- * Writes and reads span_weeks, the index of the weekly spans partitions each trace's spans occupy. Plain
- * {@code FORMAT Values} inserts, so they take the async-insert path like every other listener DAO; repeated
+ * Writes and reads span_weeks, the index of which weekly partitions of the spans table each trace's spans occupy.
+ * Plain {@code FORMAT Values} inserts, so they take the async-insert path like every other listener DAO; repeated
  * registrations of the same (trace, week) are collapsed by the ReplacingMergeTree.
  */
 @Singleton
