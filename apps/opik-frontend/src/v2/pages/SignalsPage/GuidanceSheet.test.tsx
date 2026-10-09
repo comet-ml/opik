@@ -89,25 +89,32 @@ describe("GuidanceSheet", () => {
     expect(onRun).toHaveBeenCalledTimes(1);
   });
 
-  it("doesn't re-save unchanged guidance", () => {
-    const setOpen = vi.fn();
-    renderSheet({ setOpen });
+  it("disables saving until the guidance changes", () => {
+    renderSheet({});
 
-    fireEvent.click(screen.getByRole("button", { name: "Save guidance" }));
+    expect(
+      screen.getByRole("button", { name: "Save guidance" }),
+    ).toBeDisabled();
 
-    expect(mutate).not.toHaveBeenCalled();
-    expect(setOpen).toHaveBeenCalledWith(false);
+    fireEvent.change(screen.getByLabelText("About this project"), {
+      target: { value: "Draft" },
+    });
+
+    expect(screen.getByRole("button", { name: "Save guidance" })).toBeEnabled();
   });
 
-  it("keeps unsaved edits on Esc", () => {
+  it("closes on Esc", () => {
     const setOpen = vi.fn();
     renderSheet({ setOpen });
 
-    const textarea = screen.getByLabelText("About this project");
-    fireEvent.change(textarea, { target: { value: "Draft" } });
-    fireEvent.keyDown(textarea, { key: "Escape" });
+    fireEvent.change(screen.getByLabelText("About this project"), {
+      target: { value: "Draft" },
+    });
+    fireEvent.keyDown(screen.getByLabelText("About this project"), {
+      key: "Escape",
+    });
 
-    expect(setOpen).not.toHaveBeenCalled();
+    expect(setOpen).toHaveBeenCalledWith(false);
   });
 
   it("doesn't wipe typing when the saved guidance refetches while open", () => {
@@ -132,6 +139,9 @@ describe("GuidanceSheet", () => {
   it("disables Save and run when a run can't start", () => {
     renderSheet({ onRun: undefined });
 
+    fireEvent.change(screen.getByLabelText("About this project"), {
+      target: { value: "Draft" },
+    });
     openSaveMenu();
 
     expect(
