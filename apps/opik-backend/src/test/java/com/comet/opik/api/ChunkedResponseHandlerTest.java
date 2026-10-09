@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.llm.StreamingResponseLogger;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
+import dev.langchain4j.model.openai.internal.shared.Usage;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
 import org.junit.jupiter.api.DisplayName;
@@ -55,11 +56,13 @@ class ChunkedResponseHandlerTest {
     @MethodSource("finishReasons")
     @DisplayName("puts the provider's finish reason on the final chunk")
     void finalChunkCarriesTheFinishReason(FinishReason finishReason, String expected) {
-        handler().onCompleteResponse(response(finishReason, new TokenUsage(38, 0, 55)));
+        handler().onCompleteResponse(response(finishReason, new TokenUsage(38, 17, 55)));
 
         assertThat(messages).hasSize(1);
         assertThat(messages.getFirst().choices().getFirst().finishReason()).isEqualTo(expected);
-        assertThat(messages.getFirst().usage().promptTokens()).isEqualTo(38);
+        assertThat(messages.getFirst().usage())
+                .extracting(Usage::promptTokens, Usage::completionTokens, Usage::totalTokens)
+                .containsExactly(38, 17, 55);
         assertThat(closes).hasValue(1);
     }
 

@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.infrastructure.llm.OpenAiCompatFinishReasons;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -9,7 +10,6 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import dev.langchain4j.model.openai.internal.chat.Delta;
 import dev.langchain4j.model.openai.internal.chat.Role;
 import dev.langchain4j.model.openai.internal.shared.Usage;
-import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.Response;
 import dev.langchain4j.model.output.TokenUsage;
 import lombok.NonNull;
@@ -50,7 +50,7 @@ public record ChunkedResponseHandler(
                                 .content("")
                                 .role(Role.ASSISTANT.name().toLowerCase())
                                 .build())
-                        .finishReason(toFinishReason(response.finishReason()))
+                        .finishReason(OpenAiCompatFinishReasons.toWireValue(response.finishReason()))
                         .build()))
                 .usage(toUsage(response.tokenUsage()))
                 .id(Optional.ofNullable(response.metadata().get("id")).map(Object::toString).orElse(null))
@@ -67,19 +67,6 @@ public record ChunkedResponseHandler(
                 .completionTokens(tokenUsage.outputTokenCount())
                 .totalTokens(tokenUsage.totalTokenCount())
                 .build();
-    }
-
-    private static String toFinishReason(FinishReason finishReason) {
-        if (finishReason == null) {
-            return null;
-        }
-        return switch (finishReason) {
-            case STOP -> "stop";
-            case LENGTH -> "length";
-            case TOOL_EXECUTION -> "tool_calls";
-            case CONTENT_FILTER -> "content_filter";
-            default -> "other";
-        };
     }
 
     @Override
