@@ -37,10 +37,14 @@ const HIDDEN_REGISTRY_MODELS: Record<string, PROVIDER_TYPE> = {
   [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5]: PROVIDER_TYPE.ANTHROPIC,
 };
 
+const CUSTOM_PROVIDER = "custom-llm:mock" as COMPOSED_PROVIDER_TYPE;
+
 const providerKeys = (providers: COMPOSED_PROVIDER_TYPE[]) => ({
   content: providers.map((provider) => ({
     id: provider,
-    provider,
+    provider: provider.startsWith(PROVIDER_TYPE.CUSTOM)
+      ? PROVIDER_TYPE.CUSTOM
+      : provider,
     ui_composed_provider: provider,
     configuration: {},
   })),
@@ -315,6 +319,14 @@ const REGISTRY_FETCHED = {
   error: null,
 };
 
+const REGISTRY_FAILED = {
+  data: undefined,
+  isPending: false,
+  isFetched: true,
+  isError: true,
+  error: new Error("registry down"),
+};
+
 describe("NewRunSidebar — re-run with the real model registry hook", () => {
   beforeEach(() => {
     mocks.realRegistryHook = true;
@@ -367,4 +379,34 @@ describe("NewRunSidebar — re-run with the real model registry hook", () => {
       expect(seeds[0]).toEqual(seeds[1]);
     },
   );
+
+  it("keeps the saved models and their settings when the registry request failed", () => {
+    mocks.providerKeysData = providerKeys([
+      PROVIDER_TYPE.OPEN_AI,
+      PROVIDER_TYPE.OPEN_ROUTER,
+      CUSTOM_PROVIDER,
+    ]);
+    mocks.openAICompatibleModels = {
+      [CUSTOM_PROVIDER]: [{ value: "mock-model", label: "mock-model" }],
+    };
+    mocks.registryQuery = REGISTRY_FAILED;
+    mocks.savedRun = savedRun(
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH,
+      { temperature: 0.3, max_tokens: 300 },
+    );
+
+    render(<NewRunSidebar open onClose={vi.fn()} rerunId={RERUN_ID} />);
+    const content = readContent();
+
+    expect(content.modelName).toBe(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI);
+    expect(content.savedModelReplacement).toBeNull();
+    expect(content.modelConfig).toMatchObject({
+      temperature: 0.3,
+      maxTokens: 300,
+    });
+    expect(content.optimizerModel).toBe(
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH,
+    );
+  });
 });

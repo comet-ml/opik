@@ -91,6 +91,7 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
     providerModels,
     calculateModelProvider,
     isFetched: isRegistryFetched,
+    hasRegistryModels,
   } = useLLMProviderModelsData();
 
   // Seeding resolves providers through getProviderFromModel, which reads the store the hook above
@@ -101,6 +102,11 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
   useEffect(() => {
     if (isRegistryFetched) setIsRegistryInStore(true);
   }, [isRegistryFetched]);
+
+  // A failed registry request is not an empty answer: every saved model would look unknown and be
+  // swapped for one the user never picked. As in the playground, a saved model then stays as it is.
+  const isRegistryUnavailable = isRegistryFetched && !hasRegistryModels;
+
   const { data: providerKeysData } = useProviderKeys(
     { workspaceName },
     { staleTime: 1000 },
@@ -143,16 +149,18 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
     const servedSavedModels = savedModels.filter(
       (savedModel) =>
         !models.includes(savedModel) &&
-        configuredProvidersList.some(
-          (p) =>
-            p.ui_composed_provider ===
-            calculateModelProvider(savedModel as PROVIDER_MODEL_TYPE),
-        ),
+        (isRegistryUnavailable ||
+          configuredProvidersList.some(
+            (p) =>
+              p.ui_composed_provider ===
+              calculateModelProvider(savedModel as PROVIDER_MODEL_TYPE),
+          )),
     );
     return [...models, ...servedSavedModels];
   }, [
     pickerModels,
     savedModels,
+    isRegistryUnavailable,
     calculateModelProvider,
     configuredProvidersList,
   ]);
