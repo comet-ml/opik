@@ -58,6 +58,7 @@ import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
 import { useLogsQuickAttributeFilter } from "@/v2/pages/LogsPage/TracesSpansTab/useLogsQuickAttributeFilter";
 import { useLogsEnvironment } from "@/v2/pages/LogsPage/TracesSpansTab/useLogsEnvironment";
+import { createStartTimeRangeFilters } from "@/v2/pages/LogsPage/TracesSpansTab/timeRangeFilters";
 import {
   LOGS_DEFAULT_PINNED_CHIPS,
   LOGS_TABLE_ID,
@@ -779,9 +780,14 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   });
 
   const effectiveFilters = useMemo(() => {
-    if (!environment || envIsValid === false) return chipFilters;
-    return [...chipFilters, ...generateEnvironmentFilter(environment)];
-  }, [chipFilters, environment, envIsValid]);
+    return [
+      ...chipFilters,
+      ...createStartTimeRangeFilters(intervalStart, intervalEnd),
+      ...(environment && envIsValid !== false
+        ? generateEnvironmentFilter(environment)
+        : []),
+    ];
+  }, [chipFilters, environment, envIsValid, intervalStart, intervalEnd]);
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
@@ -851,8 +857,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         search: trimmedSearch,
         truncate: truncationEnabled,
         stripAttachments: true,
-        fromTime: intervalStart,
-        toTime: intervalEnd,
         exclude: excludeFields,
         logsSource: LOGS_SOURCE.sdk,
       },
@@ -873,8 +877,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       size: size as number,
       search: trimmedSearch,
       truncate: false,
-      fromTime: intervalStart,
-      toTime: intervalEnd,
       exclude: excludeFields,
       logsSource: LOGS_SOURCE.sdk,
     },
@@ -891,8 +893,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         type: type as TRACE_DATA_TYPE,
         filters: effectiveFilters,
         search: trimmedSearch,
-        fromTime: intervalStart,
-        toTime: intervalEnd,
         logsSource: LOGS_SOURCE.sdk,
       },
       {
