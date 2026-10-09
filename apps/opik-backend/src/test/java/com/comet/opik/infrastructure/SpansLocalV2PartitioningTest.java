@@ -661,9 +661,9 @@ class SpansLocalV2PartitioningTest {
                         .idWeek(Long.parseLong(partitionIdFor(oracleWorkspaceId, projectId, entry.getKey())))
                         .build())
                 .toList();
-        spanWeeksDAO.backfill(0, 20250303L, 600).block();
-        spanWeeksDAO.backfill(20250303L, 20250310L, 600).block();
-        spanWeeksDAO.backfill(20250310L, null, 600).block();
+        spanWeeksDAO.backfill(0, 20250303L, 4, 600).block();
+        spanWeeksDAO.backfill(20250303L, 20250310L, 4, 600).block();
+        spanWeeksDAO.backfill(20250310L, null, 4, 600).block();
 
         assertThat(spanWeeksDAO.findByTraceIds(traceIdBySpanId.values())
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, "user", workspaceId))

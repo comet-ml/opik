@@ -70,8 +70,9 @@ public class SpanWeeksDAO {
             """;
 
     // The id range only selects which spans a chunk reads, pruning granules through the idx_spans_id minmax index;
-    // each span's week still comes from its id. GROUP BY rather than DISTINCT so a large chunk spills to disk, by the
-    // server's max_bytes_ratio_before_external_group_by; in-order aggregation over the sort key measured ~200x slower.
+    // each span's week still comes from its id. Threads are capped so the backfill stays a small share of the server;
+    // memory is left to the profile's max_bytes_ratio_before_external_group_by spill. In-order aggregation over the sort key measured ~200x
+    // slower, hence off.
     private static final String BACKFILL = """
             INSERT INTO span_weeks (workspace_id, project_id, trace_id, id_week)
             SELECT workspace_id, project_id, trace_id, <id_week> AS week
@@ -81,6 +82,7 @@ public class SpanWeeksDAO {
             <if(to_id)>AND id \\< :to_id<endif>
             GROUP BY workspace_id, project_id, trace_id, week
             SETTINGS log_comment = '<log_comment>', optimize_aggregation_in_order = 0,
+                max_threads = <max_threads>, max_insert_threads = <max_threads>,
                 max_execution_time = <max_execution_time>
             """;
 
@@ -153,8 +155,9 @@ public class SpanWeeksDAO {
      * Registers the week of every span whose id is from Monday {@code fromWeek}'s UUIDv7 up to Monday
      * {@code toWeek}'s; {@code fromWeek} 0 and a null {@code toWeek} leave that end open. A span's week comes from
      * its id, so one whose id sorts outside its own week (a non-v7 id) is still registered, in whichever range holds it.
+     * The statement uses at most {@code maxThreads} threads.
      */
-    public Mono<Void> backfill(long fromWeek, Long toWeek, long maxExecutionSeconds) {
+    public Mono<Void> backfill(long fromWeek, Long toWeek, int maxThreads, long maxExecutionSeconds) {
         UUID fromId = fromWeek > 0 ? uuidMapper.toLowerBound(monday(fromWeek)) : null;
         UUID toId = toWeek != null ? uuidMapper.toLowerBound(monday(toWeek)) : null;
         return Mono.from(connectionFactory.create())
@@ -164,6 +167,7 @@ public class SpanWeeksDAO {
                             .add("id_week", ID_WEEK)
                             .add("from_id", fromId != null)
                             .add("to_id", toId != null)
+                            .add("max_threads", maxThreads)
                             .add("max_execution_time", maxExecutionSeconds);
                     Statement statement = connection.createStatement(template.render());
                     if (fromId != null) {

@@ -25,6 +25,10 @@ public class SpanWeeksBackfillConfig {
     @JsonProperty
     @Min(1) private int weeksPerChunk;
 
+    /** ClickHouse threads one chunk may use, so the backfill stays a small share of the server. */
+    @JsonProperty
+    @Min(1) private int maxThreads;
+
     /** ClickHouse max_execution_time for one chunk, and how long a run holds the job lock. */
     @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.MINUTES)
