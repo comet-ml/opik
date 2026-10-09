@@ -100,6 +100,25 @@ public class DatasetVersionsResource {
         return Response.ok(version).build();
     }
 
+    @GET
+    @Path("/hash/{versionHash}")
+    @Operation(operationId = "getDatasetVersionByHash", summary = "Get dataset version by hash", description = "Get a specific version by its version hash", responses = {
+            @ApiResponse(responseCode = "200", description = "Dataset version", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
+            @ApiResponse(responseCode = "404", description = "Version not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+    })
+    @JsonView(DatasetVersion.View.Public.class)
+    public Response getVersionByHash(@PathParam("versionHash") String versionHash) {
+        featureFlags.checkDatasetVersioningEnabled();
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting version '{}' for dataset '{}' on workspace '{}'", versionHash, datasetId, workspaceId);
+        DatasetVersion version = versionService.getVersionByHash(datasetId, versionHash);
+        log.info("Found version '{}' for dataset '{}' on workspace '{}'", versionHash, datasetId, workspaceId);
+
+        return Response.ok(version).build();
+    }
+
     @PATCH
     @Path("/hash/{versionHash}")
     @Operation(operationId = "updateDatasetVersion", summary = "Update dataset version", description = "Update a dataset version's change_description and/or add new tags", responses = {
