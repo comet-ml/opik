@@ -11,7 +11,7 @@
 --   * The projection serves the per-project weeks for project-scoped reads, which have no trace ids.
 --   * ReplacingMergeTree collapses repeated registrations of the same (trace, week); merges rebuild the projection.
 --   * No TTL and no partitioning: the table is small (~15 bytes per row) and must never forget a week.
--- Whether a project's weeks are complete lives in projects.span_weeks_covered_at (state DB); until it is set, reads
+-- Whether a project's weeks are complete lives in projects.span_weeks_backfilled (state DB); until it is set, reads
 -- for that project stay unbounded.
 -- Codecs: ZSTD(3) for the short repetitive workspace_id, ZSTD(1) for the UUID ids, as in spans_local_v2.
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.span_weeks ON CLUSTER '{cluster}'
