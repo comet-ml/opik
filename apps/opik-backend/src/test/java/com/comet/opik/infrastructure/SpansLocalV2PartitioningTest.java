@@ -167,7 +167,7 @@ class SpansLocalV2PartitioningTest {
         var connectionFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouseContainer, DATABASE_NAME)
                 .build();
         transactionTemplateAsync = TransactionTemplateAsync.create(connectionFactory);
-        spanWeeksDAO = new SpanWeeksDAO(connectionFactory);
+        spanWeeksDAO = new SpanWeeksDAO(connectionFactory, new InstantToUUIDMapper());
     }
 
     /**
@@ -637,27 +637,23 @@ class SpansLocalV2PartitioningTest {
     }
 
     /**
-     * The backfill registers, from either spans table, the partition spans_local_v2 stores each span in: read from
-     * the partition id on the partitioned table, derived from the id on the unpartitioned legacy one. The expected
-     * week is the partition ClickHouse writes the same id to in spans_local_v2, not a value computed in Java.
+     * The backfill, reading the unpartitioned legacy spans table, registers the partition spans_local_v2 stores each
+     * span in. Each week is backfilled as its own range, so every id bound is exercised, the open ones of the epoch and
+     * 2300 weeks included. The expected week is the partition ClickHouse writes the same id to in spans_local_v2, not
+     * a value computed in Java.
      */
-    @ParameterizedTest
-    @ValueSource(strings = {"spans", "spans_local_v2"})
-    void backfillRegistersThePartitionEachSpanIsStoredIn(String table) {
+    @Test
+    void backfillRegistersThePartitionEachSpanIsStoredIn() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
         Map<UUID, UUID> traceIdBySpanId = idsAcrossPartitionEdges()
                 .collect(Collectors.toMap(Function.identity(), id -> ID_GENERATOR.generateId()));
         var oracleWorkspaceId = UUID.randomUUID().toString();
         traceIdBySpanId.forEach((id, traceId) -> {
-            insert(table, List.of(id), workspaceId, projectId, traceId, weekInstant(0));
+            insert("spans", List.of(id), workspaceId, projectId, traceId, weekInstant(0));
             insert(List.of(id), oracleWorkspaceId, projectId, traceId, weekInstant(0));
         });
 
-        boolean partitioned = spanWeeksDAO.isPartitioned(table).block();
-        spanWeeksDAO.backfill(table, partitioned, 19691229L, 22991225L, 600).block();
-
-        assertThat(partitioned).isEqualTo(table.equals("spans_local_v2"));
         var expected = traceIdBySpanId.entrySet().stream()
                 .map(entry -> SpanWeek.builder()
                         .projectId(projectId)
@@ -665,6 +661,9 @@ class SpansLocalV2PartitioningTest {
                         .idWeek(Long.parseLong(partitionIdFor(oracleWorkspaceId, projectId, entry.getKey())))
                         .build())
                 .toList();
+        expected.stream().map(SpanWeek::idWeek).distinct()
+                .forEach(week -> spanWeeksDAO.backfill(week, week, 600).block());
+
         assertThat(spanWeeksDAO.findByTraceIds(traceIdBySpanId.values())
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, "user", workspaceId))
                 .block())
