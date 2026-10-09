@@ -32,20 +32,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TestSuiteEvaluatorMapperTest {
 
     @Nested
-    @DisplayName("resolveModel")
-    class ResolveModel {
+    @DisplayName("resolveModels")
+    class ResolveModels {
 
         @Test
         @DisplayName("returns empty when no supported provider is connected")
         void returnsEmptyWhenNoSupportedProvider() {
-            var result = SupportedJudgeProvider.resolveModel(Set.of());
+            var result = SupportedJudgeProvider.resolveModels(Set.of());
             assertThat(result).isEmpty();
         }
 
         @Test
         @DisplayName("returns empty when only unsupported providers are connected")
         void returnsEmptyWhenOnlyUnsupportedProviders() {
-            var result = SupportedJudgeProvider.resolveModel(
+            var result = SupportedJudgeProvider.resolveModels(
                     Set.of(LlmProvider.OLLAMA, LlmProvider.BEDROCK, LlmProvider.OPEN_ROUTER));
             assertThat(result).isEmpty();
         }
@@ -54,8 +54,8 @@ class TestSuiteEvaluatorMapperTest {
         @MethodSource("singleProviderCases")
         @DisplayName("resolves correct model for single supported provider")
         void resolvesModelForSingleProvider(LlmProvider provider, String expectedModel) {
-            var result = SupportedJudgeProvider.resolveModel(Set.of(provider));
-            assertThat(result).hasValue(expectedModel);
+            var result = SupportedJudgeProvider.resolveModels(Set.of(provider));
+            assertThat(result).containsExactly(expectedModel);
         }
 
         static Stream<Arguments> singleProviderCases() {
@@ -67,27 +67,32 @@ class TestSuiteEvaluatorMapperTest {
         }
 
         @Test
-        @DisplayName("picks Anthropic over OpenAI and Gemini when all are connected")
-        void picksHighestPriorityProvider() {
-            var result = SupportedJudgeProvider.resolveModel(
+        @DisplayName("puts Anthropic first, then OpenAI and Gemini as fallbacks, when all are connected")
+        void ordersConnectedProvidersByPriority() {
+            var result = SupportedJudgeProvider.resolveModels(
                     Set.of(LlmProvider.GEMINI, LlmProvider.ANTHROPIC, LlmProvider.OPEN_AI));
-            assertThat(result).hasValue(AnthropicModelName.CLAUDE_HAIKU_4_5.toString());
+            assertThat(result).containsExactly(
+                    AnthropicModelName.CLAUDE_HAIKU_4_5.toString(),
+                    OpenaiModelName.GPT_4O_MINI.toString(),
+                    GeminiModelName.GEMINI_2_0_FLASH.toString());
         }
 
         @Test
-        @DisplayName("picks Anthropic over Gemini when OpenAI is not connected")
+        @DisplayName("puts Anthropic before Gemini when OpenAI is not connected")
         void picksAnthropicOverGemini() {
-            var result = SupportedJudgeProvider.resolveModel(
+            var result = SupportedJudgeProvider.resolveModels(
                     Set.of(LlmProvider.GEMINI, LlmProvider.ANTHROPIC));
-            assertThat(result).hasValue(AnthropicModelName.CLAUDE_HAIKU_4_5.toString());
+            assertThat(result).containsExactly(
+                    AnthropicModelName.CLAUDE_HAIKU_4_5.toString(),
+                    GeminiModelName.GEMINI_2_0_FLASH.toString());
         }
 
         @Test
         @DisplayName("ignores unsupported providers in mixed set")
         void ignoresUnsupportedProvidersInMixedSet() {
-            var result = SupportedJudgeProvider.resolveModel(
+            var result = SupportedJudgeProvider.resolveModels(
                     Set.of(LlmProvider.OLLAMA, LlmProvider.BEDROCK, LlmProvider.GEMINI));
-            assertThat(result).hasValue(GeminiModelName.GEMINI_2_0_FLASH.toString());
+            assertThat(result).containsExactly(GeminiModelName.GEMINI_2_0_FLASH.toString());
         }
     }
 

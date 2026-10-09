@@ -393,6 +393,25 @@ class BaseRedisSubscriberTest {
             // Non-retryable errors should be removed from the stream
             waitForMessagesAckedAndRemoved();
             assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+            assertThat(subscriber.getRetiredMessages()).containsExactlyInAnyOrderElementsOf(messages);
+        }
+
+        @Test
+        void shouldRemoveRetiredMessagesEvenWhenTheRetireHookFails() {
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(new TestRedisSubscriber(config, redissonClient,
+                    message -> Mono.error(new NullPointerException("Non-retryable"))) {
+                @Override
+                protected Mono<Void> onRetired(String message, Throwable error) {
+                    return Mono.error(new IllegalStateException("retire hook failed"));
+                }
+            });
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            waitForMessagesAckedAndRemoved();
+            assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(messages.size());
         }
 
         /**
@@ -430,6 +449,7 @@ class BaseRedisSubscriberTest {
                                 .isEqualTo((long) messages.size());
                     });
             assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+            assertThat(subscriber.getRetiredMessages()).isEmpty();
         }
 
         static Stream<Arguments> transientClientErrors() {
@@ -654,6 +674,7 @@ class BaseRedisSubscriberTest {
             // Messages should be eventually removed after max retries
             waitForMessagesAckedAndRemoved();
             assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+            assertThat(subscriber.getRetiredMessages()).containsExactlyInAnyOrderElementsOf(messages);
         }
 
         @Test
@@ -702,6 +723,7 @@ class BaseRedisSubscriberTest {
             retryableMessages.forEach(msg -> assertThat(attemptCount.get(msg).get()).isEqualTo(2));
             // Verify success messages were attempted only once
             successMessages.forEach(msg -> assertThat(attemptCount.get(msg).get()).isEqualTo(1));
+            assertThat(subscriber.getRetiredMessages()).containsExactlyInAnyOrderElementsOf(nonRetryableMessages);
         }
     }
 
