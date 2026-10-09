@@ -12,12 +12,9 @@ import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
-import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.UUID;
-
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
  * Publishes Agent Insights report-trigger requests onto a Redis stream so the report subscriber can
@@ -33,19 +30,19 @@ public class AgentInsightsReportPublisher {
     private final @NonNull AgentInsightsReportConfig config;
     private final @NonNull ServiceTogglesConfig serviceToggles;
     private final @NonNull IdGenerator idGenerator;
-    private final @NonNull TransactionTemplate transactionTemplate;
+    private final @NonNull AgentInsightsRunGuidanceService runGuidanceService;
 
     @Inject
     public AgentInsightsReportPublisher(@NonNull RedissonReactiveClient redisson,
             @NonNull @Config("agentInsightsReport") AgentInsightsReportConfig config,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
             @NonNull IdGenerator idGenerator,
-            @NonNull TransactionTemplate transactionTemplate) {
+            @NonNull AgentInsightsRunGuidanceService runGuidanceService) {
         this.redisson = redisson;
         this.config = config;
         this.serviceToggles = serviceToggles;
         this.idGenerator = idGenerator;
-        this.transactionTemplate = transactionTemplate;
+        this.runGuidanceService = runGuidanceService;
     }
 
     /**
@@ -63,9 +60,10 @@ public class AgentInsightsReportPublisher {
         String reportId = idGenerator.generateId().toString();
 
         return Mono.defer(() -> {
-            // Read here so every run source (manual, scheduled, auto-first-run) carries the guidance current at
-            // enqueue. Blocking JDBC, hence inside defer on the bounded-elastic scheduler.
-            var runGuidance = readRunGuidance(workspaceId, projectId);
+            // Read at enqueue so every run source (manual, scheduled, auto-first-run) carries the current guidance.
+            // Blocking JDBC, hence inside defer on the bounded-elastic scheduler.
+            var runGuidance = runGuidanceService.find(workspaceId, projectId);
+            Integer guidanceVersion = runGuidance.map(AgentInsightsJobDAO.RunGuidance::guidanceVersion).orElse(null);
             var message = AgentInsightsReportMessage.builder()
                     .reportId(reportId)
                     .projectId(projectId)
@@ -73,8 +71,8 @@ public class AgentInsightsReportPublisher {
                     .periodStart(periodStart)
                     .periodEnd(periodEnd)
                     .triggerSource(triggerSource)
-                    .guidance(runGuidance == null ? null : runGuidance.guidance())
-                    .guidanceVersion(runGuidance == null ? null : runGuidance.guidanceVersion())
+                    .guidance(runGuidance.map(AgentInsightsJobDAO.RunGuidance::guidance).orElse(null))
+                    .guidanceVersion(guidanceVersion)
                     .build();
 
             // DEBUG: the daily sweep enqueues one per enabled project, so keep INFO for lifecycle events only.
@@ -86,27 +84,27 @@ public class AgentInsightsReportPublisher {
 
             return stream.add(RedisStreamUtils.buildAddArgs(
                     AgentInsightsReportConfig.PAYLOAD_FIELD, message, config))
-                    .map(streamMessageId -> reportId)
+                    .publishOn(Schedulers.boundedElastic())
+                    .map(streamMessageId -> {
+                        markEnqueued(workspaceId, projectId, guidanceVersion, reportId);
+                        return reportId;
+                    })
                     .doOnError(throwable -> log.error(
                             "Failed to publish Agent Insights report trigger: reportId='{}', project='{}'",
                             reportId, projectId, throwable));
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    // Reads the project guidance for this run and stamps its version as the run's, so the report landing later can
-    // record which guidance its results were produced with. Null while the guidance toggle is off: nothing is read,
-    // stamped or sent.
-    private AgentInsightsJobDAO.RunGuidance readRunGuidance(String workspaceId, UUID projectId) {
-        if (!serviceToggles.isAgentInsightsGuidanceEnabled()) {
-            return null;
+    /**
+     * Best-effort: the run is already queued, so failing here would report a run that did start as one that did
+     * not. A missed stamp only leaves the "guidance changed" callout less precise.
+     */
+    private void markEnqueued(String workspaceId, UUID projectId, Integer guidanceVersion, String reportId) {
+        try {
+            runGuidanceService.markEnqueued(workspaceId, projectId, guidanceVersion);
+        } catch (RuntimeException e) {
+            log.warn("Failed to record the guidance version of a queued Agent Insights run, reportId '{}', "
+                    + "project '{}'", reportId, projectId, e);
         }
-        return transactionTemplate.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(AgentInsightsJobDAO.class);
-            var runGuidance = dao.findRunGuidance(workspaceId, projectId).orElse(null);
-            if (runGuidance != null) {
-                dao.markRunGuidanceVersion(workspaceId, projectId, runGuidance.guidanceVersion());
-            }
-            return runGuidance;
-        });
     }
 }

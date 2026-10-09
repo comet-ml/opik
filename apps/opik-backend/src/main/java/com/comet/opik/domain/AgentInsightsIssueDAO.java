@@ -54,8 +54,7 @@ interface AgentInsightsIssueDAO {
             @Bind("project_id") UUID projectId,
             @BindList("ids") List<UUID> ids);
 
-    // The guards are the security boundary (POST /issues is ungated): the service's findIdsOutsideScope pre-check
-    // takes no lock, so it only drops the details rows; a foreign row appearing after it must still be left alone.
+    // The guards are the boundary for the ungated POST /issues; the service's unlocked pre-check only drops details.
     @SqlBatch("""
             INSERT INTO agent_insights_issues
                 (id, workspace_id, project_id, name, description, cause, suggested_fix, traces_query, severity, created_by, last_updated_by)

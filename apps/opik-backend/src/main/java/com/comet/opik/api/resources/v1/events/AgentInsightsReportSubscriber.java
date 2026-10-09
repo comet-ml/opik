@@ -79,9 +79,19 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
                 ? message.triggerSource()
                 : AgentInsightsMetrics.SCHEDULED;
 
-        return Mono.fromRunnable(() -> reportClient.triggerAgentInsights(message.reportId(), message.projectId(),
-                message.workspaceId(), message.periodStart(), message.periodEnd(), triggerSource,
-                message.guidance()))
+        // Re-checked here so turning guidance off also drops it from runs already queued.
+        String guidance = serviceToggles.isAgentInsightsGuidanceActive() ? message.guidance() : null;
+        var trigger = AgentInsightsReportClient.Trigger.builder()
+                .reportId(message.reportId())
+                .projectId(message.projectId())
+                .workspaceId(message.workspaceId())
+                .periodStart(message.periodStart())
+                .periodEnd(message.periodEnd())
+                .triggerSource(triggerSource)
+                .guidance(guidance)
+                .build();
+
+        return Mono.fromRunnable(() -> reportClient.triggerAgentInsights(trigger))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then()
                 .doOnSuccess(unused -> {

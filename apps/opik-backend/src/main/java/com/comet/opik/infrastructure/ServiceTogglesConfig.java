@@ -77,4 +77,9 @@ public class ServiceTogglesConfig {
     public boolean isAgentInsightsActive() {
         return ollieEnabled && agentInsightsEnabled;
     }
+
+    @JsonIgnore
+    public boolean isAgentInsightsGuidanceActive() {
+        return isAgentInsightsActive() && agentInsightsGuidanceEnabled;
+    }
 }

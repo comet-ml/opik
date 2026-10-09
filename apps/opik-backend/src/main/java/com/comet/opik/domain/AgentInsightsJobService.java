@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AgentInsightsEnrollment;
-import com.comet.opik.api.AgentInsightsGuidanceUpdate;
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.AgentInsightsJob.EnabledJob;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -11,7 +10,6 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -93,19 +91,15 @@ public class AgentInsightsJobService {
     // Saves the project guidance, creating the job (disabled) when the project has none yet. Blank clears it. The
     // version is bumped only when the text changes, so re-saving the same guidance does not mark results stale.
     public AgentInsightsJob updateGuidance(@NonNull UUID projectId, String guidance) {
-        if (!serviceToggles.isAgentInsightsGuidanceEnabled()) {
+        if (!serviceToggles.isAgentInsightsGuidanceActive()) {
             throw new NotFoundException("Agent insights guidance is not enabled");
-        }
-        if (guidance != null && guidance.length() > AgentInsightsGuidanceUpdate.MAX_LENGTH) {
-            throw new BadRequestException("Guidance must be at most %d characters"
-                    .formatted(AgentInsightsGuidanceUpdate.MAX_LENGTH));
         }
         var ctx = requestContext.get();
         String workspaceId = ctx.getWorkspaceId();
         String userName = ctx.getUserName();
 
         projectService.validateProjectIdExists(projectId, workspaceId);
-        String normalized = StringUtils.isBlank(guidance) ? null : guidance;
+        String normalized = StringUtils.trimToNull(guidance);
 
         log.info("Updating Agent Insights guidance, project '{}', workspace '{}', cleared '{}'",
                 projectId, workspaceId, normalized == null);
@@ -120,7 +114,7 @@ public class AgentInsightsJobService {
     }
 
     private AgentInsightsJob withGuidanceGated(AgentInsightsJob job) {
-        if (serviceToggles.isAgentInsightsGuidanceEnabled()) {
+        if (serviceToggles.isAgentInsightsGuidanceActive()) {
             return job;
         }
         return job.toBuilder()

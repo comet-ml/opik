@@ -69,8 +69,15 @@ class PlatformAgentInsightsReportClientTest {
     }
 
     private void trigger(String reportId, String guidance) {
-        client.triggerAgentInsights(reportId, UUID.randomUUID(), "workspace-id",
-                Instant.now().minusSeconds(86_400), Instant.now(), "manual", guidance);
+        client.triggerAgentInsights(AgentInsightsReportClient.Trigger.builder()
+                .reportId(reportId)
+                .projectId(UUID.randomUUID())
+                .workspaceId("workspace-id")
+                .periodStart(Instant.now().minusSeconds(86_400))
+                .periodEnd(Instant.now())
+                .triggerSource("manual")
+                .guidance(guidance)
+                .build());
     }
 
     @Test

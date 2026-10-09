@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.IntStream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -76,59 +75,50 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
         projectService.get(report.projectId(), workspaceId);
 
-        int issueCount = report.issues().size();
-        boolean allClear = issueCount == 0;
-
         log.info("Reporting agent insights issues for project '{}' on report day '{}' in workspace '{}': {}",
-                report.projectId(), report.reportDay(), workspaceId, allClear ? "all clear" : issueCount);
+                report.projectId(), report.reportDay(), workspaceId,
+                report.issues().isEmpty() ? "all clear" : report.issues().size());
 
-        List<UUID> issueIds = report.issues().stream()
-                .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
-                .toList();
-        List<UUID> detailIds = report.issues().stream()
-                .map(issue -> idGenerator.generateId())
-                .toList();
-        List<String> metadata = report.issues().stream()
-                .map(issue -> issue.metadata() == null ? null : JsonUtils.writeValueAsString(issue.metadata()))
-                .toList();
-
-        transactionTemplate.inTransaction(WRITE, handle -> {
+        int stored = transactionTemplate.inTransaction(WRITE, handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
-            if (!allClear) {
-                // The primary key is id alone, so an explicit id that belongs to another workspace or project would
-                // otherwise overwrite that issue. Such issues are dropped from the report, issue and details alike.
-                Set<UUID> foreignIds = explicitIds.isEmpty()
-                        ? Set.of()
-                        : dao.findIdsOutsideScope(workspaceId, report.projectId(), explicitIds);
-                if (!foreignIds.isEmpty()) {
-                    log.warn("Skipping reported agent insights issues whose ids belong to another workspace or "
-                            + "project, project '{}', workspace '{}', ids '{}'", report.projectId(), workspaceId,
-                            foreignIds);
-                }
-                List<Integer> kept = IntStream.range(0, issueCount)
-                        .filter(i -> !foreignIds.contains(issueIds.get(i)))
-                        .boxed()
+            // The id is the whole primary key: an id owned by another workspace or project is dropped, details too.
+            Set<UUID> foreignIds = explicitIds.isEmpty()
+                    ? Set.of()
+                    : dao.findIdsOutsideScope(workspaceId, report.projectId(), explicitIds);
+            if (!foreignIds.isEmpty()) {
+                log.warn("Skipping reported agent insights issues owned by another workspace or project, "
+                        + "project '{}', workspace '{}', ids '{}'", report.projectId(), workspaceId, foreignIds);
+            }
+            List<AgentInsightsReport.ReportedIssue> issues = report.issues().stream()
+                    .filter(issue -> issue.id() == null || !foreignIds.contains(issue.id()))
+                    .toList();
+
+            if (!issues.isEmpty()) {
+                List<UUID> issueIds = issues.stream()
+                        .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
                         .toList();
-                if (!kept.isEmpty()) {
-                    List<UUID> keptIssueIds = kept.stream().map(issueIds::get).toList();
-                    List<AgentInsightsReport.ReportedIssue> keptIssues = kept.stream()
-                            .map(report.issues()::get).toList();
-                    dao.upsertIssues(workspaceId, report.projectId(), userName, keptIssueIds, keptIssues);
-                    dao.upsertDetails(workspaceId, report.projectId(), report.reportDay(), userName,
-                            kept.stream().map(detailIds::get).toList(), keptIssueIds, keptIssues,
-                            kept.stream().map(metadata::get).toList());
-                }
+                List<UUID> detailIds = issues.stream()
+                        .map(issue -> idGenerator.generateId())
+                        .toList();
+                List<String> metadata = issues.stream()
+                        .map(issue -> issue.metadata() == null
+                                ? null
+                                : JsonUtils.writeValueAsString(issue.metadata()))
+                        .toList();
+                dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, issues);
+                dao.upsertDetails(workspaceId, report.projectId(), report.reportDay(), userName,
+                        detailIds, issueIds, issues, metadata);
             }
 
             handle.attach(AgentInsightsJobDAO.class)
                     .markScanned(workspaceId, report.projectId(), userName);
 
-            return null;
+            return issues.size();
         });
 
         AgentInsightsMetrics.REPORTS_RECEIVED.add(1);
-        AgentInsightsMetrics.ISSUES_REPORTED.add(report.issues().size());
+        AgentInsightsMetrics.ISSUES_REPORTED.add(stored);
     }
 
     @Override
@@ -192,11 +182,6 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        if (update.closeNote() != null
-                && update.closeNote().length() > AgentInsightsIssueUpdate.CLOSE_NOTE_MAX_LENGTH) {
-            throw new BadRequestException("Close note must be at most %d characters"
-                    .formatted(AgentInsightsIssueUpdate.CLOSE_NOTE_MAX_LENGTH));
-        }
         // The note explains a "not useful" close, so it is kept only with that status; any other status clears it.
         String closeNote = update.status() == AgentInsightsIssueStatus.CLOSED
                 ? StringUtils.trimToNull(update.closeNote())
