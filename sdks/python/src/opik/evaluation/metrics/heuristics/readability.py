@@ -25,15 +25,19 @@ except ImportError:  # pragma: no cover - optional dependency
 # interleave and score with each other's locale.
 _TEXTSTAT_LOCK = threading.Lock()
 
+# Returned by `_current_textstat_lang` when the locale cannot be read, so it is not
+# confused with a locale that is set to ``None``.
+_UNKNOWN_LANG = object()
 
-def _current_textstat_lang(set_lang: Any) -> Optional[str]:
-    """Return the locale textstat is set to, or ``None`` when it cannot be read.
+
+def _current_textstat_lang(set_lang: Any) -> Any:
+    """Return the locale textstat is set to, or ``_UNKNOWN_LANG`` when it cannot be read.
 
     textstat has no public getter; in 0.7.x the locale is a name-mangled attribute
     of the shared instance that ``set_lang`` is bound to.
     """
     instance = getattr(set_lang, "__self__", None)
-    return getattr(instance, "_textstatistics__lang", None)
+    return getattr(instance, "_textstatistics__lang", _UNKNOWN_LANG)
 
 
 def _is_unknown_locale(language: str) -> bool:
@@ -110,12 +114,16 @@ class Readability(BaseMetric):
         # locale stable for the whole computation when metrics run concurrently.
         with _TEXTSTAT_LOCK:
             set_lang = getattr(self._textstat, "set_lang", None)
-            previous_lang = None
-            if set_lang is not None:
-                previous_lang = _current_textstat_lang(set_lang)
-                set_lang(self._language)
+            previous_lang = (
+                _current_textstat_lang(set_lang)
+                if set_lang is not None
+                else _UNKNOWN_LANG
+            )
 
             try:
+                if set_lang is not None:
+                    set_lang(self._language)
+
                 sentence_count = self._textstat.sentence_count(cleaned)
                 word_count = self._textstat.lexicon_count(cleaned, removepunct=True)
                 if sentence_count <= 0 or word_count <= 0:
@@ -141,7 +149,7 @@ class Readability(BaseMetric):
                     ) from exc
             finally:
                 # Leave textstat on the locale it had, for code that uses it directly.
-                if set_lang is not None and previous_lang is not None:
+                if set_lang is not None and previous_lang is not _UNKNOWN_LANG:
                     set_lang(previous_lang)
 
         words_per_sentence = word_count / sentence_count

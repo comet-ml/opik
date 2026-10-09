@@ -1555,6 +1555,7 @@ def test_readability__unsupported_language__raises_named_metric_error():
 
 def test_readability__restores_previous_textstat_language():
     textstat = pytest.importorskip("textstat")
+    original_lang = textstat.textstat._textstatistics__lang
     textstat.set_lang("fr_FR")
     try:
         Readability(language="de_DE", track=False).score(
@@ -1566,7 +1567,7 @@ def test_readability__restores_previous_textstat_language():
             Readability(language="xx", track=False).score("This is a sentence.")
         assert textstat.textstat._textstatistics__lang == "fr_FR"
     finally:
-        textstat.set_lang("en_US")
+        textstat.set_lang(original_lang)
 
 
 def test_readability__unrelated_key_error_with_known_language__propagates():
