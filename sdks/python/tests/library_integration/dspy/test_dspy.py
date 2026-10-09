@@ -455,6 +455,12 @@ def test_dspy_log_graph__nested_modules__spans_carry_their_graph_node_ids(
         reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         temperature=1.0,
     )
+    draft_lm = dspy.LM(
+        cache=False,
+        model=llm_constants.LITELLM_OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        temperature=1.0,
+    )
     dspy.configure(lm=lm)
 
     opik_callback = OpikCallback(project_name="dspy-graph-node-ids", log_graph=True)
@@ -464,6 +470,7 @@ def test_dspy_log_graph__nested_modules__spans_carry_their_graph_node_ids(
         def __init__(self):
             super().__init__()
             self.draft = dspy.Predict("question -> draft")
+            self.draft.lm = draft_lm
             self.refine = dspy.ChainOfThought("question, draft -> answer")
 
         def forward(self, question):
@@ -482,17 +489,22 @@ def test_dspy_log_graph__nested_modules__spans_carry_their_graph_node_ids(
             yield span_model
             yield from collect(span_model.spans)
 
-    node_ids = {
-        span_model.name: span_model.metadata["_opik"]["graph_node_id"]
-        for span_model in collect(trace_tree.spans)
+    spans = list(collect(trace_tree.spans))
+    module_node_ids = {
+        span_model.metadata["_opik"]["graph_node_id"]
+        for span_model in spans
         if span_model.name in ("Predict", "ChainOfThought")
-        or span_model.name.startswith("LM")
+    }
+    lm_node_ids = {
+        span_model.metadata["_opik"]["graph_node_id"]
+        for span_model in spans
+        if span_model.name.startswith("LM")
     }
     trace_node_id = trace_tree.metadata["_opik"]["graph_node_id"]
 
-    assert {"Predict", "ChainOfThought"} <= node_ids.keys()
-    assert any(name.startswith("LM") for name in node_ids)
-    for node_id in [trace_node_id, *node_ids.values()]:
+    assert len(module_node_ids) == 3
+    assert lm_node_ids == {f"lm_{id(lm)}", f"lm_{id(draft_lm)}"}
+    for node_id in [trace_node_id, *module_node_ids, *lm_node_ids]:
         assert f"{node_id}(" in graph
 
 
