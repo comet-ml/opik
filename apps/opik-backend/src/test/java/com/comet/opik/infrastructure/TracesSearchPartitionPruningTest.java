@@ -299,7 +299,7 @@ class TracesSearchPartitionPruningTest {
         var page = Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
                 .until(() -> traceResourceClient.getTraceThreads(null, seeded.projectName(), API_KEY, WORKSPACE_NAME,
                         List.of(), List.of(), params), threads -> threads.total() == expected.size());
-        // Without a time range the page is resolved by the page-pushdown scan rather than the prefilter.
+        // Without a time range nothing but the week hint bounds the weeks the page lookup reads.
         var searchOnlyPage = traceResourceClient.getTraceThreads(null, seeded.projectName(), API_KEY,
                 WORKSPACE_NAME, List.of(), List.of(), Map.of("search", seeded.token()));
         var stats = traceResourceClient.getTraceThreadStats(seeded.projectName(), null, API_KEY, WORKSPACE_NAME,
@@ -369,7 +369,8 @@ class TracesSearchPartitionPruningTest {
     /** One thread search shared by the statement cases, each checking a different statement of it. */
     private Stream<Arguments> threadSearchStatements() {
         var search = threadSearch();
-        return Stream.of("find_threads_by_project", "count_threads_by_project", "thread_stats")
+        return Stream.of("find_thread_page_ids", "find_threads_by_project", "count_threads_by_project",
+                "thread_stats")
                 .map(queryName -> Arguments.of(queryName, search));
     }
 

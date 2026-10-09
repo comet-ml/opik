@@ -35,6 +35,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -52,6 +53,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -63,7 +65,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Charts and KPI cards without a requested end count far-future ids (UUIDv7s minted with a bad client clock), as the
- * traces/spans list does. Ingestion rejects such ids by default, so this class disables that validation and seeds
+ * traces/spans/threads lists do. Ingestion rejects such ids by default, so this class disables that validation and seeds
  * them through the public endpoints.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -193,9 +195,90 @@ class FarFutureIdsMetricsResourceTest {
         assertThat(actual).usingRecursiveComparison().isEqualTo(expected);
     }
 
+    @Test
+    @DisplayName("thread KPI cards count a far-future thread and its far-future span's cost in the current period when intervalEnd is null")
+    void threadKpiCardsCountFarFutureIdsWithoutIntervalEnd() {
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var now = Instant.now();
+        createThreads(projectId, projectName, List.of(now, FAR_FUTURE), List.of(100L, 300L), List.of(1.0, 3.0));
+
+        var actual = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(now.minus(1, ChronoUnit.MINUTES))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        var expected = KpiCardResponse.builder()
+                .stats(List.of(
+                        metric(KpiMetricType.COUNT, 2.0, 0.0),
+                        metric(KpiMetricType.AVG_DURATION, 200.0, null),
+                        metric(KpiMetricType.TOTAL_COST, 4.0, 0.0)))
+                .build();
+        assertThat(actual)
+                .usingRecursiveComparison()
+                .ignoringCollectionOrder()
+                .withComparatorForType((a, b) -> Math.abs(a - b) <= TOLERANCE ? 0 : Double.compare(a, b), Double.class)
+                .isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("the thread cost chart counts a far-future thread's cost in the latest bucket when intervalEnd is null")
+    void threadCostChartCountsFarFutureIdInLatestBucketWithoutIntervalEnd() {
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var now = Instant.now();
+        var today = now.truncatedTo(ChronoUnit.DAYS);
+        createThreads(projectId, projectName, List.of(now, FAR_FUTURE), List.of(100L, 300L), List.of(1.0, 3.0));
+        var request = ProjectMetricRequest.builder()
+                .metricType(MetricType.THREAD_COST)
+                .interval(TimeInterval.DAILY)
+                .intervalStart(today.minus(2, ChronoUnit.DAYS))
+                .build();
+
+        var actual = projectMetricsResourceClient.getProjectMetrics(projectId, request, BigDecimal.class, API_KEY,
+                WORKSPACE_NAME);
+
+        var expected = ProjectMetricResponse.<BigDecimal>builder()
+                .projectId(projectId)
+                .metricType(MetricType.THREAD_COST)
+                .interval(TimeInterval.DAILY)
+                .results(List.of(ProjectMetricResponse.Results.<BigDecimal>builder()
+                        .name(ProjectMetricsDAO.NAME_THREAD_COST)
+                        .data(List.of(
+                                DataPoint.<BigDecimal>builder().time(today.minus(2, ChronoUnit.DAYS))
+                                        .value(BigDecimal.ZERO).build(),
+                                DataPoint.<BigDecimal>builder().time(today.minus(1, ChronoUnit.DAYS))
+                                        .value(BigDecimal.ZERO).build(),
+                                DataPoint.<BigDecimal>builder().time(today).value(BigDecimal.valueOf(4)).build()))
+                        .build()))
+                .build();
+        assertThat(actual)
+                .usingRecursiveComparison()
+                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                .isEqualTo(expected);
+    }
+
     /** One trace per entry, each with one span; the trace and its span take their id from the entry's instant. */
     private void createEntities(EntityType entityType, String projectName, List<Instant> idTimes,
             List<Long> durationsMs, List<Boolean> hasErrors, List<Double> costs) {
+        createEntities(entityType, projectName, idTimes, durationsMs, hasErrors, costs, List.of());
+    }
+
+    private void createThreads(UUID projectId, String projectName, List<Instant> idTimes, List<Long> durationsMs,
+            List<Double> costs) {
+        var threadIds = idTimes.stream().map(_ -> RandomStringUtils.secure().nextAlphabetic(10)).toList();
+        createEntities(EntityType.THREADS, projectName, idTimes, durationsMs,
+                idTimes.stream().map(_ -> false).toList(), costs, threadIds);
+        // Thread rows are written asynchronously after ingestion, and thread charts and KPI cards skip a thread without one.
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(100))
+                .untilAsserted(() -> assertThat(threadIds).allSatisfy(threadId -> assertThat(traceResourceClient
+                        .getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).threadModelId()).isNotNull()));
+    }
+
+    private void createEntities(EntityType entityType, String projectName, List<Instant> idTimes,
+            List<Long> durationsMs, List<Boolean> hasErrors, List<Double> costs, List<String> threadIds) {
         var traces = new ArrayList<Trace>();
         var spans = new ArrayList<Span>();
         for (int i = 0; i < idTimes.size(); i++) {
@@ -206,7 +289,7 @@ class FarFutureIdsMetricsResourceTest {
                     .startTime(start)
                     .endTime(start.plus(durationsMs.get(i), ChronoUnit.MILLIS))
                     .errorInfo(entityType == EntityType.TRACES && hasErrors.get(i) ? errorInfo() : null)
-                    .threadId(null)
+                    .threadId(threadIds.isEmpty() ? null : threadIds.get(i))
                     .build();
             traces.add(trace);
             spans.add(factory.manufacturePojo(Span.class).toBuilder()
