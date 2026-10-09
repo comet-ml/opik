@@ -110,6 +110,12 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
         registerPartitionGauge(meter, "opik.clickhouse.partition.last_activity_seconds",
                 "Unix timestamp of the most recent part modification per partition",
                 PartitionStat::lastActivityEpochSeconds);
+        registerPartitionGauge(meter, "opik.clickhouse.partition.cold_bytes",
+                "Size on disk of active parts on object-storage (cold tier) disks per partition",
+                PartitionStat::coldBytes);
+        registerPartitionGauge(meter, "opik.clickhouse.partition.ttl_move_due_parts",
+                "Active parts on local disks whose move TTL has expired per partition",
+                PartitionStat::ttlMoveDueParts);
 
         // Per-(table, partition) series sourced from the LWD mask scan.
         registerLwdGauge(meter, "opik.clickhouse.partition.lwd_rows",
