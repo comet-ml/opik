@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
+import isEqual from "lodash/isEqual";
 
 import {
   Dialog,
@@ -89,6 +90,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
   const [warning, setWarning] = useState<string | null>(null);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   const editorViewRef = useRef<EditorView | null>(null);
+  const runControllerRef = useRef<AbortController | null>(null);
 
   // The dialog has no settings panel, so it runs the model at its defaults, with reasoning lowered
   // by withLowReasoning. The prompt's own settings are sized for its task: a small max tokens
@@ -107,6 +109,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
     () => withLowReasoning(model, modelDefaults),
     [model, modelDefaults],
   );
+  const isReasoningLowered = !isEqual(configs, modelDefaults);
 
   const { improvePrompt, generatePrompt } = usePromptImprovement({
     workspaceName,
@@ -139,6 +142,16 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
     }
   }, [open, originalImages, originalVideos]);
 
+  // The dialog stays mounted while closed, so a run still streaming at close would write into the
+  // next session.
+  useEffect(() => {
+    if (!open) return;
+    return () => {
+      runControllerRef.current?.abort();
+      runControllerRef.current = null;
+    };
+  }, [open]);
+
   // Smart auto-scroll: only auto-scroll when user is near the bottom
   // This allows users to scroll up to review content without being forced down
   useEffect(() => {
@@ -169,9 +182,12 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
     setWarning(null);
     setGeneratedPrompt("");
 
-    try {
-      const controller = new AbortController();
+    runControllerRef.current?.abort();
+    const controller = new AbortController();
+    runControllerRef.current = controller;
+    const isCurrentRun = () => runControllerRef.current === controller;
 
+    try {
       let result;
       if (isGenerateMode) {
         result = await generatePrompt(
@@ -179,7 +195,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
           model,
           configs,
           (chunk) => {
-            setGeneratedPrompt(chunk);
+            if (isCurrentRun()) setGeneratedPrompt(chunk);
           },
           controller.signal,
         );
@@ -190,11 +206,13 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
           model,
           configs,
           (chunk) => {
-            setGeneratedPrompt(chunk);
+            if (isCurrentRun()) setGeneratedPrompt(chunk);
           },
           controller.signal,
         );
       }
+
+      if (!isCurrentRun()) return;
 
       if (
         result?.opikError ||
@@ -218,6 +236,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
         );
       }
     } catch (err) {
+      if (!isCurrentRun()) return;
       const errorMessage =
         err instanceof Error
           ? err.message
@@ -226,7 +245,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
             : "Failed to improve prompt";
       setError(errorMessage);
     } finally {
-      setIsLoading(false);
+      if (isCurrentRun()) setIsLoading(false);
     }
   }, [
     hasInstructions,
@@ -308,7 +327,9 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
       <div className="comet-body-accented">{label}</div>
       <Description>
         This is your generated prompt, created with the selected model (
-        {modelDisplayName}) at its default settings. It&apos;s editable.
+        {modelDisplayName}) at its default settings
+        {isReasoningLowered && ", with low reasoning effort"}. It&apos;s
+        editable.
       </Description>
     </div>
   );

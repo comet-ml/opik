@@ -1,8 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 
 import PromptImprovementDialog from "./PromptImprovementDialog";
-import { PROVIDER_TYPE } from "@/types/providers";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 import { TooltipProvider } from "@/ui/tooltip";
 
 const OUTPUT_LIMIT_MESSAGE =
@@ -11,7 +21,10 @@ const PARTIAL = "You are a poet. Write a haiku about";
 
 const improvement = vi.hoisted(() => ({
   improvePrompt: vi.fn(),
+  generatePrompt: vi.fn(),
 }));
+
+const selection = vi.hoisted(() => ({ lastPicked: "" }));
 
 vi.mock("@uiw/react-codemirror", async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -26,18 +39,29 @@ vi.mock("@uiw/react-codemirror", async (importOriginal) => ({
 }));
 
 vi.mock("@/hooks/usePromptImprovement", () => ({
+  default: () => improvement,
+}));
+
+vi.mock("@/hooks/useLastPickedModel", () => ({
+  default: () => [selection.lastPicked, vi.fn()],
+}));
+
+vi.mock("@/api/provider-keys/useProviderKeys", () => ({
   default: () => ({
-    improvePrompt: improvement.improvePrompt,
-    generatePrompt: vi.fn(),
+    data: { content: [{ ui_composed_provider: PROVIDER_TYPE.OPEN_AI }] },
   }),
 }));
 
-vi.mock("@/hooks/useModelSelection", () => ({
+vi.mock("@/hooks/useLLMProviderModelsData", () => ({
   default: () => ({
-    model: "gpt-4o-mini",
-    provider: "openai",
-    configs: {},
-    modelSelectProps: {},
+    calculateModelProvider: (model: string) =>
+      model.startsWith("claude")
+        ? PROVIDER_TYPE.ANTHROPIC
+        : model
+          ? PROVIDER_TYPE.OPEN_AI
+          : "",
+    calculateDefaultModel: () => PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+    isDropdownModel: () => true,
   }),
 }));
 
@@ -86,11 +110,13 @@ const renderDialog = (streamed: StreamResult) => {
   return { onAccept };
 };
 
-describe("PromptImprovementDialog when the model hits its output limit", () => {
-  beforeEach(() => {
-    improvement.improvePrompt.mockReset();
-  });
+beforeEach(() => {
+  improvement.improvePrompt.mockReset();
+  improvement.generatePrompt.mockReset();
+  selection.lastPicked = "";
+});
 
+describe("PromptImprovementDialog — how a run's result is shown", () => {
   it("keeps the cut-off prompt editable and usable, with the message as a warning", async () => {
     const { onAccept } = renderDialog({
       result: PARTIAL,
@@ -136,5 +162,151 @@ describe("PromptImprovementDialog when the model hits its output limit", () => {
     expect(
       screen.getByRole("button", { name: "Use this prompt" }),
     ).toBeDisabled();
+  });
+});
+
+const dialogProps = {
+  setOpen: vi.fn(),
+  id: "message-1",
+  provider: PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE,
+  workspaceName: "default",
+  onAccept: vi.fn(),
+};
+
+const renderOpen = (model: string, originalPrompt = "write a haiku") =>
+  render(
+    <TooltipProvider>
+      <PromptImprovementDialog
+        {...dialogProps}
+        open
+        model={model}
+        originalPrompt={originalPrompt}
+      />
+    </TooltipProvider>,
+  );
+
+describe("PromptImprovementDialog — the model and settings a run sends", () => {
+  it.each([
+    {
+      name: "the prompt's reasoning model, with its effort lowered",
+      lastPicked: "",
+      expectedModel: PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      expectedEffort: "low",
+    },
+    {
+      name: "the prompt's model when the saved pick has no provider key",
+      lastPicked: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
+      expectedModel: PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      expectedEffort: "low",
+    },
+    {
+      name: "the saved pick, at its defaults",
+      lastPicked: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      expectedModel: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      expectedEffort: undefined,
+    },
+  ])(
+    "improves with $name",
+    async ({ lastPicked, expectedModel, expectedEffort }) => {
+      selection.lastPicked = lastPicked;
+      improvement.improvePrompt.mockResolvedValue({ result: PARTIAL });
+      renderOpen(PROVIDER_MODEL_TYPE.GPT_5_NANO);
+
+      fireEvent.click(screen.getByRole("button", { name: /Improve prompt/ }));
+
+      await waitFor(() => expect(improvement.improvePrompt).toHaveBeenCalled());
+      const [, , model, configs] = improvement.improvePrompt.mock.calls[0];
+      expect(model).toBe(expectedModel);
+      expect(configs).toMatchObject({
+        temperature: 0,
+        maxCompletionTokens: 4000,
+      });
+      expect(configs.reasoningEffort).toBe(expectedEffort);
+    },
+  );
+
+  it("generates with the same lowered settings", async () => {
+    improvement.generatePrompt.mockResolvedValue({ result: PARTIAL });
+    renderOpen(PROVIDER_MODEL_TYPE.GPT_5_NANO, "");
+
+    fireEvent.change(
+      screen.getByPlaceholderText("What do you want your AI to do?"),
+      { target: { value: "a haiku writer" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Generate prompt/ }));
+
+    await waitFor(() => expect(improvement.generatePrompt).toHaveBeenCalled());
+    const [instructions, model, configs] =
+      improvement.generatePrompt.mock.calls[0];
+    expect(instructions).toBe("a haiku writer");
+    expect(model).toBe(PROVIDER_MODEL_TYPE.GPT_5_NANO);
+    expect(configs).toMatchObject({ reasoningEffort: "low" });
+  });
+
+  it.each([
+    [PROVIDER_MODEL_TYPE.GPT_5_NANO, true],
+    [PROVIDER_MODEL_TYPE.GPT_4O_MINI, false],
+  ])("says when %s runs at low reasoning effort", (model, lowered) => {
+    renderOpen(model);
+
+    expect(screen.queryByText(/with low reasoning effort/) !== null).toBe(
+      lowered,
+    );
+  });
+});
+
+describe("PromptImprovementDialog — closing during a run", () => {
+  it("drops the old run's output after the dialog is closed and reopened", async () => {
+    let streamOldChunk: (chunk: string) => void = () => {};
+    let finishOldRun: (result: object) => void = () => {};
+    let oldSignal: AbortSignal | undefined;
+    improvement.improvePrompt.mockImplementation(
+      (
+        _prompt: string,
+        _instructions: string,
+        _model: string,
+        _configs: unknown,
+        onChunk: (chunk: string) => void,
+        signal: AbortSignal,
+      ) => {
+        streamOldChunk = onChunk;
+        oldSignal = signal;
+        return new Promise((resolve) => {
+          finishOldRun = resolve;
+        });
+      },
+    );
+    const dialogFor = (open: boolean) => (
+      <TooltipProvider>
+        <PromptImprovementDialog
+          {...dialogProps}
+          open={open}
+          model={PROVIDER_MODEL_TYPE.GPT_4O_MINI}
+          originalPrompt="write a haiku"
+        />
+      </TooltipProvider>
+    );
+    const { rerender } = render(dialogFor(true));
+    fireEvent.click(screen.getByRole("button", { name: /Improve prompt/ }));
+    await waitFor(() => expect(improvement.improvePrompt).toHaveBeenCalled());
+
+    rerender(dialogFor(false));
+    rerender(dialogFor(true));
+    await act(async () => {
+      streamOldChunk("Old prompt");
+      finishOldRun({ result: "Old prompt", finishReason: "length" });
+    });
+
+    expect(oldSignal?.aborted).toBe(true);
+    expect(
+      screen.queryByRole("textbox", { name: "Generated prompt" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(OUTPUT_LIMIT_MESSAGE)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Use this prompt" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /Improve prompt/ }),
+    ).toBeEnabled();
   });
 });
