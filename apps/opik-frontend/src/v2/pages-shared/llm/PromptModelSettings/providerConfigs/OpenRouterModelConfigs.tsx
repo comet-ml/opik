@@ -222,7 +222,7 @@ const OpenRouterModelConfigs = ({
               })
             }
           >
-            <SelectTrigger>
+            <SelectTrigger id="reasoningEffort">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

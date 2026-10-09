@@ -424,6 +424,12 @@ def matches_any(s: str, patterns: list[str]) -> bool:
 # Source fetching
 # ─────────────────────────────────────────────────────────────────────────────
 
+# The YAML is uploaded to the CDN without review, so a malformed list counts as no list (every control stays)
+# instead of a string turning into single letters that hide them all.
+def _string_list(value) -> list[str]:
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+
 def fetch_openrouter_models() -> dict[str, OpenRouterCapabilities]:
     """Fetch chat-capable models from OpenRouter API, keyed by id."""
     resp = requests.get(OPENROUTER_API_URL, timeout=30)
@@ -433,10 +439,10 @@ def fetch_openrouter_models() -> dict[str, OpenRouterCapabilities]:
     for m in models:
         modality = (m.get("architecture") or {}).get("modality", "")
         if "text" in modality:
-            supported = m.get("supported_parameters") or []
+            supported = _string_list(m.get("supported_parameters"))
             chat_models[m["id"]] = OpenRouterCapabilities(
                 supported_parameters=sorted(set(supported) & OPENROUTER_PANEL_PARAMETERS) if supported else None,
-                reasoning_efforts=list((m.get("reasoning") or {}).get("supported_efforts") or []),
+                reasoning_efforts=_string_list((m.get("reasoning") or {}).get("supported_efforts")),
             )
     return dict(sorted(chat_models.items()))
 
