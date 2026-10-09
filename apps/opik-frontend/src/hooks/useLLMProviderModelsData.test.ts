@@ -134,7 +134,7 @@ describe("useLLMProviderModelsData isDropdownModel", () => {
     registry.data = PICKER_REGISTRY;
   });
 
-  it.each<[PROVIDER_MODEL_TYPE, PROVIDER_TYPE, boolean]>([
+  it.each<[PROVIDER_MODEL_TYPE | "", PROVIDER_TYPE | "", boolean]>([
     [PROVIDER_MODEL_TYPE.GPT_4O_MINI, PROVIDER_TYPE.OPEN_AI, true],
     [PROVIDER_MODEL_TYPE.GPT_LIVE_1, PROVIDER_TYPE.OPEN_AI, false],
     [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, PROVIDER_TYPE.GEMINI, true],
@@ -152,7 +152,9 @@ describe("useLLMProviderModelsData isDropdownModel", () => {
       false,
     ],
     [PROVIDER_MODEL_TYPE.GPT_4O_MINI, PROVIDER_TYPE.GEMINI, false],
-  ])("%s under %s is in the picker: %s", (modelName, provider, expected) => {
+    ["", PROVIDER_TYPE.OPEN_AI, false],
+    [PROVIDER_MODEL_TYPE.GPT_4O_MINI, "", false],
+  ])("%j under %j is in the picker: %s", (modelName, provider, expected) => {
     const { result } = renderHook(() => useLLMProviderModelsData());
 
     expect(result.current.isDropdownModel(modelName, provider)).toBe(expected);
