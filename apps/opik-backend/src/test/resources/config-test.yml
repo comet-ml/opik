@@ -177,16 +177,16 @@ databaseAnalyticsDataModel:
   #   deploy time; turn true before the span weeks backfill starts, so every span written after its snapshot is
   #   indexed. Off writes nothing.
   spanWeeksWriteEnabled: false
-
-# Span weeks backfill (OPIK-8706): fills the span_weeks index from the spans written before span writes started
-# registering their weeks, then marks every project as backfilled. One chunk of weeks per run; a partitioned spans
-# table is read partition by partition, an unpartitioned one scanned once per chunk. Progress is kept in the
-# span_weeks_backfill_chunks state table, so it resumes across restarts.
-spanWeeksBackfill:
   #  Default: false
-  #  Description: Turn true only once databaseAnalyticsDataModel.spanWeeksWriteEnabled is live on every instance: the
-  #   backfill covers the spans written until its first run, and live registration everything after.
-  enabled: false
+  #  Description: Schedule the span weeks backfill job (tuned under spanWeeksBackfill), which fills span_weeks from the
+  #   spans already written and then marks every project as backfilled. Turn true only once spanWeeksWriteEnabled is
+  #   live on every instance: the backfill covers the spans written until its first run, live registration the rest.
+  spanWeeksBackfillEnabled: false
+
+# Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
+# One chunk of weeks per run; a partitioned spans table is read partition by partition, an unpartitioned one scanned
+# once per chunk. Progress is kept in the span_weeks_backfill_chunks state table, so it resumes across restarts.
+spanWeeksBackfill:
   #  Default: 1m
   #  Description: How often a run starts; each run backfills one chunk
   interval: 1m

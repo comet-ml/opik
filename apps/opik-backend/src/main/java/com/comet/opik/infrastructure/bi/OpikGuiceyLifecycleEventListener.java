@@ -247,14 +247,15 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     }
 
     private void setSpanWeeksBackfillJob() {
-        var backfillConfig = injector.get().getInstance(OpikConfiguration.class).getSpanWeeksBackfill();
+        var configuration = injector.get().getInstance(OpikConfiguration.class);
 
-        if (!backfillConfig.isEnabled()) {
+        if (!configuration.getDatabaseAnalyticsDataModel().spanWeeksBackfillEnabled()) {
             log.info("Span weeks backfill job is disabled, skipping job setup");
             return;
         }
 
-        scheduleRepeatingJob(SpanWeeksBackfillJob.class, backfillConfig.getInterval().toJavaDuration(), null);
+        scheduleRepeatingJob(SpanWeeksBackfillJob.class,
+                configuration.getSpanWeeksBackfill().getInterval().toJavaDuration(), null);
     }
 
     private void setAgentInsightsJobs() {
