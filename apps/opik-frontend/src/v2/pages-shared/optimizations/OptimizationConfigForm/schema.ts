@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { pythonLanguage } from "@codemirror/lang-python";
+import camelCase from "lodash/camelCase";
+import get from "lodash/get";
+import isPlainObject from "lodash/isPlainObject";
+import isUndefined from "lodash/isUndefined";
+import mapKeys from "lodash/mapKeys";
 import omit from "lodash/omit";
+import omitBy from "lodash/omitBy";
+import pick from "lodash/pick";
 import {
   OPTIMIZER_TYPE,
   METRIC_TYPE,
@@ -12,12 +19,24 @@ import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import {
   getDefaultOptimizerConfig,
   getDefaultMetricConfig,
-  getOptimizationDefaultConfigByProvider,
 } from "@/lib/optimizations";
+import { getDefaultConfigByProvider } from "@/lib/playground";
 import { getProviderFromModel } from "@/lib/provider";
-import { sanitizeConfigForRequest } from "@/lib/modelUtils";
+import {
+  getNestedThinkingEffort,
+  getThinkingLevelOptions,
+  isClaudeModel,
+  sanitizeConfigForRequest,
+  supportsAnthropicThinkingEffort,
+} from "@/lib/modelUtils";
+import { snakeCaseObj } from "@/lib/utils";
 import { OPTIMIZATION_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
-import { PROVIDER_MODEL_TYPE, LLMPromptConfigsType } from "@/types/providers";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+  LLMPromptConfigsType,
+} from "@/types/providers";
 
 export const GepaOptimizerParamsSchema = z.object({
   model: z.string().optional(),
@@ -211,9 +230,77 @@ export type OptimizationConfigFormType = z.infer<
   typeof OptimizationConfigSchema
 >;
 
+// The runner pins the task model to this temperature when a run sends none, so a prompt scores the
+// same on every trial. Seeding the playground's OpenRouter default of 1 would undo that.
+const OPTIMIZATION_TASK_TEMPERATURE = 0;
+
+export const getOptimizationDefaultConfigByProvider = (
+  provider: COMPOSED_PROVIDER_TYPE,
+  model?: PROVIDER_MODEL_TYPE | "",
+): LLMPromptConfigsType => {
+  const config: Record<string, unknown> = omit(
+    getDefaultConfigByProvider(provider, model),
+    [...OPTIMIZATION_UNSUPPORTED_PARAMS],
+  );
+  if (config.temperature !== undefined) {
+    config.temperature = OPTIMIZATION_TASK_TEMPERATURE;
+  }
+  return config as LLMPromptConfigsType;
+};
+
 const getDefaultModelConfig = (model: PROVIDER_MODEL_TYPE) => {
   const provider = getProviderFromModel(model);
   return getOptimizationDefaultConfigByProvider(provider, model);
+};
+
+const OPEN_ROUTER_CUSTOM_PARAMETER_KEYS = [
+  "top_k",
+  "min_p",
+  "top_a",
+  "repetition_penalty",
+];
+
+// A saved run holds the request shape convertFormDataToStudioConfig sends; runs saved before that
+// hold the form's own keys. Both are turned back into the form's keys, including the values the
+// request nests under custom_parameters, or the defaults merged under them would win on re-run.
+const toFormModelConfig = (
+  model: PROVIDER_MODEL_TYPE | "",
+  parameters: Record<string, unknown>,
+  formKeys: string[],
+): Record<string, unknown> => {
+  const saved = mapKeys(parameters, (_, key) =>
+    key === "custom_parameters" ? key : camelCase(key),
+  );
+  const customParameters = isPlainObject(saved.custom_parameters)
+    ? (saved.custom_parameters as Record<string, unknown>)
+    : {};
+  const provider = model ? getProviderFromModel(model) : undefined;
+
+  const [tokenKey, otherTokenKey] =
+    provider === PROVIDER_TYPE.OPEN_ROUTER
+      ? ["maxTokens", "maxCompletionTokens"]
+      : ["maxCompletionTokens", "maxTokens"];
+  saved[tokenKey] ??= saved[otherTokenKey];
+  // A run created through the API can hold any parameter, and one the form has no control for
+  // would still be sent on re-run without the user ever seeing it.
+  const config = pick(saved, [...formKeys, "custom_parameters"]);
+
+  if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+    for (const key of OPEN_ROUTER_CUSTOM_PARAMETER_KEYS) {
+      config[camelCase(key)] ??= customParameters[key];
+    }
+  }
+
+  if (supportsAnthropicThinkingEffort(model)) {
+    config.thinkingEffort ??= getNestedThinkingEffort(customParameters);
+  }
+
+  const thinkingLevel = get(customParameters, ["thinking", "level"]);
+  if (getThinkingLevelOptions(model).some((o) => o.value === thinkingLevel)) {
+    config.thinkingLevel ??= thinkingLevel;
+  }
+
+  return omitBy(config, isUndefined);
 };
 
 export const convertOptimizationStudioToFormData = (
@@ -223,13 +310,6 @@ export const convertOptimizationStudioToFormData = (
   // gateway can't resolve; pass `[]` while provider data is still loading.
   availableModels: string[] = [],
 ): OptimizationConfigFormType => {
-  const existingConfig = optimization?.studio_config?.llm_model?.parameters as
-    | LLMPromptConfigsType
-    | undefined;
-
-  const hasExistingConfig =
-    existingConfig && Object.keys(existingConfig).length > 0;
-
   const messages: LLMMessage[] =
     optimization?.studio_config?.prompt?.messages?.map((m) => ({
       id: crypto.randomUUID(),
@@ -269,15 +349,34 @@ export const convertOptimizationStudioToFormData = (
       ? configuredModel
       : availableModels[0] ?? "";
 
-  const defaultConfig = modelName
-    ? getDefaultModelConfig(modelName as PROVIDER_MODEL_TYPE)
+  const model = modelName as PROVIDER_MODEL_TYPE | "";
+  const defaultConfig = model
+    ? getDefaultModelConfig(model)
     : ({} as LLMPromptConfigsType);
+  const existingConfig = toFormModelConfig(
+    model,
+    optimization?.studio_config?.llm_model?.parameters ?? {},
+    Object.keys(defaultConfig),
+  );
+  // Claude takes temperature or top_p, never both, and temperature wins a config holding the two,
+  // so a run saved with top_p must not get the default temperature back.
+  const exclusiveSamplingPair =
+    (model && getProviderFromModel(model) === PROVIDER_TYPE.ANTHROPIC) ||
+    isClaudeModel(model);
+  const savedSampling =
+    existingConfig.temperature != null || existingConfig.topP != null;
   // Keep the run's saved params (temperature/top_p/...) even when its model is
   // gone and we fall back to another — submit sanitizes what the resolved model
   // can't accept. They used to be silently dropped on any model change.
-  const modelConfig = hasExistingConfig
-    ? { ...defaultConfig, ...existingConfig }
-    : defaultConfig;
+  const modelConfig =
+    Object.keys(existingConfig).length > 0
+      ? {
+          ...(exclusiveSamplingPair && savedSampling
+            ? omit(defaultConfig, ["temperature", "topP"])
+            : defaultConfig),
+          ...existingConfig,
+        }
+      : defaultConfig;
 
   // Leave the algorithm model unset unless the saved run explicitly used a model
   // the workspace can still run. An unset model inherits the prompt model at
@@ -339,9 +438,13 @@ export const convertFormDataToStudioConfig = (
       // Also drop the ones this surface never offered a control for: a run saved before they
       // were hidden still carries them in the form, and forwarding a value nobody can see is
       // the same defect as showing one that never gets sent.
-      parameters: sanitizeConfigForRequest(
-        formData.modelName as PROVIDER_MODEL_TYPE,
-        omit(formData.modelConfig, [...OPTIMIZATION_UNSUPPORTED_PARAMS]),
+      // The runner hands these to LiteLLM as they are, so they take the API's own names, as the
+      // playground's request does: LiteLLM and the gateway drop a name they don't know silently.
+      parameters: snakeCaseObj(
+        sanitizeConfigForRequest(
+          formData.modelName as PROVIDER_MODEL_TYPE,
+          omit(formData.modelConfig, [...OPTIMIZATION_UNSUPPORTED_PARAMS]),
+        ),
       ),
     },
     evaluation: {
