@@ -419,6 +419,58 @@ class DatasetVersionResourceTest {
     }
 
     @Nested
+    @DisplayName("Get Version by Hash:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetVersionByHash {
+
+        @Test
+        @DisplayName("Success: Get an older version by its hash")
+        void getVersionByHash__whenOlderVersionHash__thenReturnThatVersion() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            for (int i = 1; i <= 3; i++) {
+                createDatasetItems(datasetId, 1);
+            }
+            var expected = datasetResourceClient.retrieveVersion(datasetId, "v2", API_KEY, TEST_WORKSPACE);
+
+            var version = datasetResourceClient.getVersionByHash(datasetId, expected.versionHash(), API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(version.id()).isEqualTo(expected.id());
+            assertThat(version.versionName()).isEqualTo("v2");
+            assertThat(version.versionHash()).isEqualTo(expected.versionHash());
+            assertThat(version.itemsTotal()).isEqualTo(expected.itemsTotal());
+            assertThat(version.isLatest()).isFalse();
+        }
+
+        @Test
+        @DisplayName("Error: Unknown hash returns not found")
+        void getVersionByHash__whenUnknownHash__thenReturnNotFound() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+
+            try (var response = datasetResourceClient.callGetVersionByHash(datasetId, "deadbeef", API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: Hash from another dataset returns not found")
+        void getVersionByHash__whenHashBelongsToAnotherDataset__thenReturnNotFound() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            var otherDatasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(otherDatasetId, 1);
+            var otherHash = getLatestVersion(otherDatasetId).versionHash();
+
+            try (var response = datasetResourceClient.callGetVersionByHash(datasetId, otherHash, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("Tag Management:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class TagManagement {
