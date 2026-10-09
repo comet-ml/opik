@@ -64,14 +64,16 @@ The hook only starts the operation; the data moves in the background afterwards.
 Leave `materialize.enabled: false` and, at a quiet time, run:
 
 ```sql
-ALTER TABLE <db>.traces_local ON CLUSTER '{cluster}' MATERIALIZE TTL
+ALTER TABLE <db>.<table> ON CLUSTER '{cluster}' MATERIALIZE TTL
 ```
 
-`<db>` is the Opik ClickHouse database (`ANALYTICS_DB_DATABASE_NAME` in the backend's environment).
+Run it once for each table in `ttl.tables`, as the chart does. `<db>` is the Opik ClickHouse database (`ANALYTICS_DB_DATABASE_NAME` in the backend's environment).
+
+In the queries below, `<table>` is a table from `ttl.tables` (for example `traces_local`) and `<moveAfterWeeks>` its number of weeks.
 
 ## What to expect
 
-- The `MATERIALIZE TTL` itself is quick: it records the TTL on every part, without rewriting the data.
+- The `MATERIALIZE TTL` itself is fairly quick. It reads the column the TTL uses (`id_at`) from every part, computes each part's TTL time and records it. The chart only sets TTLs that move data, so no rows are deleted or rewritten, and only a small part of the table is read.
 - The moves come after it. ClickHouse's background mover copies each part whose data is old enough to S3, one part at a time per mover thread, and then frees it from the hot disk.
 - How long this takes depends on the amount of old data and on S3 throughput. Run it on a smaller environment first and measure, before you run it on a large one.
 - Queries keep working throughout. Data on cold is read through the local cache.
@@ -82,9 +84,9 @@ Progress (parts still without the TTL, and size per disk):
 
 ```sql
 SELECT disk_name, count() AS parts, formatReadableSize(sum(bytes_on_disk)) AS size,
-       countIf(NOT has(move_ttl_info.expression, 'id_at + toIntervalWeek(13)')) AS without_ttl
+       countIf(NOT has(move_ttl_info.expression, 'id_at + toIntervalWeek(<moveAfterWeeks>)')) AS without_ttl
 FROM system.parts
-WHERE database = '<db>' AND table = 'traces_local' AND active
+WHERE database = '<db>' AND table = '<table>' AND active
 GROUP BY disk_name
 ```
 
@@ -93,7 +95,7 @@ The `MATERIALIZE TTL` run:
 ```sql
 SELECT mutation_id, command, create_time, is_done, parts_to_do, latest_fail_reason
 FROM system.mutations
-WHERE database = '<db>' AND table = 'traces_local' AND command LIKE '%MATERIALIZE TTL%'
+WHERE database = '<db>' AND table = '<table>' AND command LIKE '%MATERIALIZE TTL%'
 ORDER BY create_time DESC LIMIT 5
 ```
 
@@ -104,7 +106,7 @@ SELECT table, part_name, target_disk_name, elapsed FROM system.moves WHERE datab
 
 SELECT count() AS moves, formatReadableSize(sum(size_in_bytes)) AS moved, countIf(error != 0) AS failed
 FROM system.part_log
-WHERE database = '<db>' AND table = 'traces_local' AND event_type = 'MovePart'
+WHERE database = '<db>' AND table = '<table>' AND event_type = 'MovePart'
   AND event_time > now() - INTERVAL 1 DAY
 ```
 
@@ -123,10 +125,10 @@ The backend can also export per-partition gauges, including `opik.clickhouse.par
 
 | Risk | What to do |
 | --- | --- |
-| Moves load the disk, S3 or the network while users are active | Pause moves on the table with `SYSTEM STOP MOVES <db>.traces_local`, and resume later with `SYSTEM START MOVES <db>.traces_local`. Run the backfill by hand at a quiet time. |
-| A `MATERIALIZE TTL` is stuck, or you need to stop it | Find it in `system.mutations` (above) and run `KILL MUTATION WHERE database = '<db>' AND table = 'traces_local' AND mutation_id = '<id>'`. Parts already done keep their TTL. |
+| Moves load the disk, S3 or the network while users are active | Pause moves on the table with `SYSTEM STOP MOVES <db>.<table>`, and resume later with `SYSTEM START MOVES <db>.<table>`. Run the backfill by hand at a quiet time. |
+| A `MATERIALIZE TTL` is stuck, or you need to stop it | Find it in `system.mutations` (above) and run `KILL MUTATION WHERE database = '<db>' AND table = '<table>' AND mutation_id = '<id>'`. Parts already done keep their TTL. |
 | Moves fail (S3 permissions, network) | `system.part_log` shows the error. Failed moves are retried; data stays on the hot disk until a move succeeds. Fix the cause, for example the cold bucket's IAM access. |
-| Data has to come back to the hot disk | `ALTER TABLE <db>.traces_local MOVE PARTITION '<partition_id>' TO VOLUME 'default'`, on each replica. It needs free hot-disk space for the data. While the TTL is set, ClickHouse will move it to cold again, so remove the TTL first (`ALTER TABLE <db>.traces_local ON CLUSTER '{cluster}' REMOVE TTL`) and set `ttl.enabled: false`. |
+| Data has to come back to the hot disk | `ALTER TABLE <db>.<table> MOVE PARTITION '<partition_id>' TO VOLUME 'default'`, on each replica. It needs free hot-disk space for the data. While the TTL is set, ClickHouse will move it to cold again, so remove the TTL first (`ALTER TABLE <db>.<table> ON CLUSTER '{cluster}' REMOVE TTL`) and set `ttl.enabled: false`. |
 
 ## Configuration reference
 
