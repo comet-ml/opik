@@ -304,7 +304,7 @@ areas:
       # table's listing, ordering and count — not the cards above it, and not
       # their agreement with the footer, which is the regression here. Folding
       # this under either would retire the question permanently.
-      logs-open-ended-window: { covered: false, note: "A date-range preset ending today sends no interval_end, on the kpi-cards read and on the chart's metrics read alike: the KPI cards, their period-over-period deltas and the table footer then report one population including a row whose UUIDv7 id instant is mid-2200, on the Traces, Spans and Threads tabs. Pinned against the same seed read with interval_end = now, where every current-period number differs and the prior period is identical" }
+      logs-open-ended-window: { covered: true,  tier: t2-cuj, note: "A date-range preset ending today sends no interval_end, on the kpi-cards read and on the chart's metrics read alike: the KPI cards }
       filter-traces:          { covered: true,  tier: t2-cuj }
       filter-persistence:     { covered: true,  tier: t2-cuj, note: "Logs filter chips are remembered per project in localStorage and restored when the Logs URL has no filter param. E2E proves only the Traces tag-chip restore on a bare landing: after leaving and returning via the sidebar, after re-clicking Logs while on Logs (bare navigation proven), and in a new tab; the environment picker and the Threads/Spans tables are covered by unit tests only, not e2e" }
       mcp-hint-on-trace-error: { covered: true,  tier: t2-cuj, note: "the MCP hint on an expanded trace error: absent while the error is collapsed, shown once it is opened, kept through a collapse, and the card that explains Opik MCP and links to its docs. NOTE: written but never run green anywhere yet. The SDK bridge could not seed traces on the machine it was written on, where an existing spec (trace-delete) fails the same way, and both CI suites default to tier t1, so a t2 spec only runs on a manual dispatch." }
@@ -321,7 +321,7 @@ areas:
       # result set that still looks like an ordinary list — which is why it is
       # asserted as set equality against a direct REST enumeration rather than
       # as a count.
-      sdk-multipage-stream-reads: { covered: false }
+      sdk-multipage-stream-reads: { covered: true,  tier: t2-cuj }
       add-trace-to-dataset:   { covered: true,  tier: t2-cuj, note: "AddToDatasetDialog, and the create-dataset-items-from-{traces,spans} endpoints behind it: field_mappings resolving a path, taking precedence over enrichment_options on a collision, being dropped when the path resolves to nothing, and being ignored for a TEST_SUITE dataset; plus the four validation rejections (blank name, blank path, uncompilable path, over the 100-entry cap) and that none of them writes. Driven through the dialog's Advanced mapping section for one trace — defaults, Preview, re-pointing a row through the JSON tree — and read back through the API" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
       messages-tab:           { covered: false, note: "MessagesTab — conditional on detectLLMMessages(input/output); when present it is the panel's default tab, else Details. Not covered from the traces side; the playground-written shape is covered under playground.trace-messages-tab, which does not generalise to SDK-logged traces." }
@@ -353,7 +353,7 @@ areas:
       # uncovered: the 409 parent_span_id conflict guard, and the post-cutover
       # sentinel that keeps a root span parentless across an update that says
       # nothing about the parent.
-      update-span-api:        { covered: false }
+      update-span-api:        { covered: true,  tier: t2-cuj }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
 
     # ---- visual dimension (opt-in; page/state-shaped) ----
@@ -404,6 +404,8 @@ areas:
       - trace-explore/thread-evaluation.spec.ts
       - trace-explore/thread-id-prefilter.spec.ts
       - trace-explore/thread-logging-smoke.spec.ts
+      - trace-explore/thread-moved-trace-aggregate.spec.ts
+      - trace-explore/thread-registered-by-trace-update.spec.ts
       - trace-explore/thread-time-window-boundary.spec.ts
     capabilities:
       list-threads:            { covered: true,  tier: t1-smoke }
@@ -453,6 +455,7 @@ areas:
     spec_dir: dashboards
     specs:
       - dashboards/dashboards-list-filters.spec.ts
+      - dashboards/open-ended-metric-buckets.spec.ts
       - dashboards/project-dashboard-scoping.spec.ts
       - dashboards/project-metrics-weekly-interval.spec.ts
       - dashboards/project-span-metrics.spec.ts
@@ -512,9 +515,11 @@ areas:
       - playground/playground-failed-run-output.spec.ts
       - playground/playground-metric-selection.spec.ts
       - playground/playground-model-parameters.spec.ts
+      - playground/playground-openai-effort-pipeline-mode.spec.ts
       - playground/playground-openrouter-model-parameters.spec.ts
       - playground/playground-per-column-run.spec.ts
       - playground/playground-providers.spec.ts
+      - playground/playground-reasoning-model-parameters.spec.ts
       - playground/playground-reset.spec.ts
       - playground/playground-run-error.spec.ts
       - playground/playground-smoke.spec.ts
@@ -641,6 +646,7 @@ areas:
       - datasets/dataset-list-version-count.spec.ts
       - datasets/dataset-parallel-item-read.spec.ts
       - datasets/dataset-read-version-pinning.spec.ts
+      - datasets/dataset-recency-after-experiment-delete.spec.ts
       - datasets/dataset-typed-content-round-trip.spec.ts
       - datasets/dataset-version-concurrent-writes.spec.ts
       - datasets/dataset-version-counters.spec.ts
@@ -670,7 +676,7 @@ areas:
       # gap between them is the whole of opik#8607 — onExperimentsDeleted threw
       # after the delete had already committed, so the column was left stale
       # forever with no error anywhere a user could see.
-      experiment-recency-after-delete: { covered: false }
+      experiment-recency-after-delete: { covered: true,  tier: t2-cuj }
 
     visual:
       datasets-page:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 04" }
@@ -757,14 +763,24 @@ areas:
     routes: ["/projects/$projectId/experiments", "/experiments/$datasetId/compare"]
     spec_dir: experiments
     specs:
+      - experiments/compare-button-selection.spec.ts
+      - experiments/compare-config-playground-template.spec.ts
+      - experiments/compare-deep-paging.spec.ts
       - experiments/compare-export-all-rows.spec.ts
+      - experiments/compare-item-project-mismatch.spec.ts
       - experiments/compare-json-key-sorting.spec.ts
+      - experiments/compare-message-panel.spec.ts
+      - experiments/compare-pinned-name-column.spec.ts
+      - experiments/compare-prompt-versions.spec.ts
+      - experiments/compare-raw-sorted-paging.spec.ts
       - experiments/experiment-compare-image-output.spec.ts
+      - experiments/experiment-compare-output-attachment.spec.ts
       - experiments/experiment-delete.spec.ts
       - experiments/experiment-items-sdk-read.spec.ts
       - experiments/experiment-logs-date-window.spec.ts
       - experiments/experiments-compare.spec.ts
       - experiments/experiments-smoke.spec.ts
+      - experiments/suite-item-sidebar-run-media.spec.ts
     capabilities:
       list-experiments:        { covered: true,  tier: t1-smoke }
       per-item-scores:         { covered: true,  tier: t1-smoke }
@@ -787,9 +803,9 @@ areas:
       # paired with its own picture, asserted per run so that a tab rendering
       # the other run's media is caught rather than read as a normal-looking
       # panel.
-      suite-item-sidebar:      { covered: false }
+      suite-item-sidebar:      { covered: true,  tier: t2-cuj }
       insights-tab:            { covered: false }
-      configuration-tab:       { covered: false }
+      configuration-tab:       { covered: true,  tier: t2-cuj }
       # Whether a scoring metric in an evaluate() run computes with the LOCALE
       # it was configured with, and rejects one it cannot honour. Its own
       # capability rather than part of per-item-scores, which is about scores
@@ -824,7 +840,7 @@ areas:
       # OFFSET — the un-aggregated (push_top_limit_raw) branch opik#8575/#8578
       # rewrote, where a row silently dropped at a page boundary renders as
       # plausible data on the view people read to pick an experiment.
-      compare-deep-paging:     { covered: false }
+      compare-deep-paging:     { covered: true,  tier: t2-cuj }
       # The compare grid's LAYOUT, as opposed to the data in it — added for
       # opik#8510, which pins the experiment-name column beside the select
       # column. Not part of compare-side-by-side, which is about two experiments
@@ -836,7 +852,7 @@ areas:
       # AND by each sub-row band inside it (main.scss extends the rule to
       # `.comet-pinned-last-left [data-virtual-row-id]` because an inset shadow
       # paints beneath its element's children).
-      compare-name-pinning:    { covered: false }
+      compare-name-pinning:    { covered: true,  tier: t2-cuj }
       # Hovering one experiment's sub-row in the compare grid highlights that
       # sub-row and not its sibling — the other half of opik#8510, and a
       # different code path from the pinning above
@@ -846,7 +862,7 @@ areas:
       # one of the two is about scrolling. Asserted as "the hovered band is
       # painted and the sibling is not", in both directions, rather than against
       # a literal design token.
-      compare-sub-row-hover:   { covered: false }
+      compare-sub-row-hover:   { covered: true,  tier: t2-cuj }
       logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
       export-comparison:       { covered: true,  tier: t2-cuj, note: "browser export off the compare Results tab, asserted on the downloaded file: an unscoped export covers the whole result set untruncated and carries both compared experiments' outputs, filter/search/sort scope and order it, a row selection narrows it and clearing restores it. NOT covered: the over-the-cap disabled state (EXPORT_ROW_LIMIT is 2,000, and seeding past it costs far more than the assertion is worth), and the CSV format — only JSON is read back" }
       delete-experiment:       { covered: true,  tier: t2-cuj }
@@ -876,7 +892,10 @@ areas:
     # 7-day window spanning the merge reports a false gap.
     tag_aliases: [annotation-queue]
     specs:
+      - annotation-queues/annotation-queue-automated-fill.spec.ts
+      - annotation-queues/annotation-queue-automation-claims.spec.ts
       - annotation-queues/annotation-queue-automation-config.spec.ts
+      - annotation-queues/annotation-queue-automation-max-items.spec.ts
       - annotation-queues/annotation-queue-delete.spec.ts
       - annotation-queues/annotation-queue-item-search.spec.ts
       - annotation-queues/annotation-queue-scoring.spec.ts
@@ -901,8 +920,8 @@ areas:
       # the manual-add and config round-trip specs, and neither says anything
       # about automation: a queue that stopped filling itself would leave both
       # green. Folding these under them would retire the question permanently.
-      automated-queue-fill:    { covered: false, note: "A feedback score matching the queue's condition routes its trace in with source 'automated', and a non-matching score keeps its trace out" }
-      automation-max-items:    { covered: false, note: "max_items_in_queue caps automated adds (deterministically, lowest ids first) while a manual add still bypasses the ceiling; the list's Automation cell reads 'Cap reached'" }
+      automated-queue-fill:    { covered: true,  tier: t2-cuj, note: "A feedback score matching the queue's condition routes its trace in with source 'automated' }
+      automation-max-items:    { covered: true,  tier: t2-cuj, note: "max_items_in_queue caps automated adds (deterministically, lowest ids first) while a manual add still bypasses the ceiling; the list's Automation cell reads 'Cap reached'" }
       sme-flow:                { covered: false, note: "/sme route, dedicated layout" }
       export-annotated-data:   { covered: false }
 
@@ -920,17 +939,24 @@ areas:
     spec_dir: online-evaluation
     specs:
       - online-evaluation/online-evaluation-delete-rule.spec.ts
+      - online-evaluation/online-evaluation-duration-filter-selects.spec.ts
+      - online-evaluation/online-evaluation-duration-filter-units.spec.ts
       - online-evaluation/online-evaluation-edit-rule-preserves-model-parameters.spec.ts
       - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
+      - online-evaluation/online-evaluation-error-row-names-cause.spec.ts
       - online-evaluation/online-evaluation-experiment-scope-hidden-filters.spec.ts
+      - online-evaluation/online-evaluation-jev-decision-model.spec.ts
       - online-evaluation/online-evaluation-json-looking-judge-prompts.spec.ts
       - online-evaluation/online-evaluation-judge-prompt-round-trip.spec.ts
+      - online-evaluation/online-evaluation-llm-judge-model-parameters.spec.ts
       - online-evaluation/online-evaluation-llm-judge-provider-failure.spec.ts
       - online-evaluation/online-evaluation-non-object-sections.spec.ts
+      - online-evaluation/online-evaluation-orphaned-judge-model.spec.ts
       - online-evaluation/online-evaluation-oversized-payload.spec.ts
       - online-evaluation/online-evaluation-provider-error-classification.spec.ts
       - online-evaluation/online-evaluation-python-metric-errors.spec.ts
       - online-evaluation/online-evaluation-python-score-usability.spec.ts
+      - online-evaluation/online-evaluation-required-param-binding.spec.ts
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
       - online-evaluation/online-evaluation-smoke.spec.ts
       - online-evaluation/online-evaluation-thread-judge-provider-failure.spec.ts
@@ -1052,6 +1078,7 @@ areas:
     spec_dir: alerts
     specs:
       - alerts/alert-enable-toggle.spec.ts
+      - alerts/alert-feedback-score-conditions.spec.ts
       - alerts/alert-name-suggestion.spec.ts
       - alerts/alert-threshold-config-validation.spec.ts
       - alerts/alert-webhook-test-connection.spec.ts
