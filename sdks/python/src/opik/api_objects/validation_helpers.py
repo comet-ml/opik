@@ -86,6 +86,23 @@ def validate_feedback_score(
         )
         return None
 
+    # `bool` is a subclass of `int`, so the validator above accepts it and the
+    # caller's dict is returned unchanged: a flag passed where a score belongs
+    # reaches the wire as JSON `true`/`false`, where `FeedbackScoreDict` declares
+    # `value: Required[float]`. The other two readers of this field
+    # (`experiment.bulk_converters` and `experiment.experiment_item`) both
+    # exclude bool explicitly, so a score logged through here can be refused
+    # when it is read back.
+    if isinstance(feedback_score, dict) and isinstance(
+        feedback_score.get("value"), bool
+    ):
+        logger.warning(
+            logging_messages.INVALID_FEEDBACK_SCORE_WILL_NOT_BE_LOGGED,
+            feedback_score,
+            "a feedback score value must be a number, not a bool",
+        )
+        return None
+
     return cast(BatchFeedbackScoreDict, feedback_score)
 
 
