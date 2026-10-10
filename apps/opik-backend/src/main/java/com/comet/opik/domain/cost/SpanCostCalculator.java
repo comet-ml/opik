@@ -4,6 +4,7 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.Map;
 
 @UtilityClass
@@ -69,10 +70,8 @@ class SpanCostCalculator {
         // In OpenAI usage format, input tokens includes the cached input tokens, so we need to substract them to compute the correct input token count
         // Don't generalize yet as other providers seems to separate the cached tokens from non-cached tokens
 
-        // Get the input tokens (SDK version below 1.6.0 logged prompt_tokens, while 1.6.0+ logged original_usage.prompt_tokens).
-        // A raw Responses API payload with no prompt_tokens alias only has original_usage.input_tokens.
-        int inputTokens = usage.getOrDefault("original_usage.prompt_tokens",
-                usage.getOrDefault("prompt_tokens", usage.getOrDefault("original_usage.input_tokens", 0)));
+        // Get the input tokens (SDK version below 1.6.0 logged prompt_tokens, while 1.6.0+ logged original_usage.prompt_tokens)
+        int inputTokens = usage.getOrDefault("original_usage.prompt_tokens", usage.getOrDefault("prompt_tokens", 0));
         // Keep the total prompt-token count for tier evaluation: which above_NNNk rate applies is
         // decided on the whole prompt, not on the post-cache-subtraction remainder.
         int totalPromptTokens = inputTokens;
@@ -109,10 +108,9 @@ class SpanCostCalculator {
             }
         }
 
-        // Get the output tokens (SDK version below 1.6.0 logged completion_tokens, while 1.6.0+ logged original_usage.completion_tokens).
-        // Same Responses API fallback as the input side.
+        // Get the output tokens (SDK version below 1.6.0 logged completion_tokens, while 1.6.0+ logged original_usage.completion_tokens)
         int outputTokens = usage.getOrDefault("original_usage.completion_tokens",
-                usage.getOrDefault("completion_tokens", usage.getOrDefault("original_usage.output_tokens", 0)));
+                usage.getOrDefault("completion_tokens", 0));
 
         // Audio output tokens carry their own rate via output_cost_per_audio_token; same fallback shape.
         int audioOutputTokens = usage.getOrDefault("original_usage.completion_tokens_details.audio_tokens",
@@ -135,6 +133,17 @@ class SpanCostCalculator {
                 .add(outputAudioRate.multiply(BigDecimal.valueOf(audioOutputTokens)))
                 .add(modelPrice.effectiveCacheReadInputTokenPrice(totalPromptTokens)
                         .multiply(BigDecimal.valueOf(cachedReadInputTokens)));
+    }
+
+    public static BigDecimal textGenerationWithCacheCostOpenAIResponses(@NonNull ModelPrice modelPrice,
+            @NonNull Map<String, Integer> usage) {
+        // Only used once the usage is known to be a raw Responses API payload: input_tokens and output_tokens mean
+        // the same as prompt_tokens and completion_tokens (input includes cached tokens), so they stand in for the
+        // aliases when those are missing.
+        Map<String, Integer> usageWithAliases = new HashMap<>(usage);
+        usageWithAliases.putIfAbsent("prompt_tokens", usage.getOrDefault("original_usage.input_tokens", 0));
+        usageWithAliases.putIfAbsent("completion_tokens", usage.getOrDefault("original_usage.output_tokens", 0));
+        return textGenerationWithCacheCostOpenAI(modelPrice, usageWithAliases);
     }
 
     public static BigDecimal textGenerationWithCacheCostAnthropic(@NonNull ModelPrice modelPrice,

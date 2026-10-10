@@ -138,7 +138,7 @@ public class CostService {
             CacheUsageShape.builder()
                     .inputTokensKey("original_usage.input_tokens")
                     .cacheReadTokensKey("original_usage.input_tokens_details.cached_tokens")
-                    .calculator(SpanCostCalculator::textGenerationWithCacheCostOpenAI)
+                    .calculator(SpanCostCalculator::textGenerationWithCacheCostOpenAIResponses)
                     .build(),
             // Anthropic: input_tokens excludes both cache buckets
             CacheUsageShape.builder()
