@@ -5,6 +5,8 @@ import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.UsageUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import lombok.Builder;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -116,6 +118,48 @@ public class CostService {
                     Map.entry("vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle),
                     Map.entry("gemini", SpanCostCalculator::textGenerationWithCacheCostGoogle),
                     Map.entry("vertex_ai-anthropic_models", SpanCostCalculator::textGenerationWithCacheCostAnthropic));
+
+    /**
+     * Raw provider usage shapes that carry cache tokens, used to pick the cache calculator from the usage the span
+     * actually has instead of from the provider name (issue #7773). Only {@code original_usage.*} keys are used:
+     * they are the provider's own payload, so each one has a single meaning. The bare keys
+     * ({@code cache_read_input_tokens}, {@code prompt_tokens}) are written by several emitters with different
+     * meanings (cache tokens included in the input count or not), so they keep going through the provider
+     * calculator.
+     */
+    private static final List<CacheUsageShape> CACHE_USAGE_SHAPES = List.of(
+            // OpenAI chat completions: prompt_tokens includes cached_tokens
+            CacheUsageShape.builder()
+                    .inputTokensKey("original_usage.prompt_tokens")
+                    .cacheReadTokensKey("original_usage.prompt_tokens_details.cached_tokens")
+                    .calculator(SpanCostCalculator::textGenerationWithCacheCostOpenAI)
+                    .build(),
+            // OpenAI responses: input_tokens includes cached_tokens
+            CacheUsageShape.builder()
+                    .inputTokensKey("original_usage.input_tokens")
+                    .cacheReadTokensKey("original_usage.input_tokens_details.cached_tokens")
+                    .calculator(SpanCostCalculator::textGenerationWithCacheCostOpenAIResponses)
+                    .build(),
+            // Anthropic: input_tokens excludes both cache buckets
+            CacheUsageShape.builder()
+                    .inputTokensKey("original_usage.input_tokens")
+                    .cacheReadTokensKey("original_usage.cache_read_input_tokens")
+                    .cacheCreationTokensKey("original_usage.cache_creation_input_tokens")
+                    .calculator(SpanCostCalculator::textGenerationWithCacheCostAnthropic)
+                    .build(),
+            // Bedrock Converse: inputTokens excludes both cache buckets
+            CacheUsageShape.builder()
+                    .inputTokensKey("original_usage.inputTokens")
+                    .cacheReadTokensKey("original_usage.cacheReadInputTokens")
+                    .cacheCreationTokensKey("original_usage.cacheWriteInputTokens")
+                    .calculator(SpanCostCalculator::textGenerationWithCacheCostBedrock)
+                    .build(),
+            // Gemini: prompt_token_count includes cached_content_token_count
+            CacheUsageShape.builder()
+                    .inputTokensKey("original_usage.prompt_token_count")
+                    .cacheReadTokensKey("original_usage.cached_content_token_count")
+                    .calculator(SpanCostCalculator::textGenerationWithCacheCostGoogle)
+                    .build());
 
     static {
         try {
@@ -600,7 +644,12 @@ public class CostService {
         }
 
         if (isPositive(cacheCreationInputTokenPrice) || isPositive(cacheReadInputTokenPrice)) {
-            return PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider, SpanCostCalculator::textGenerationCost);
+            BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> providerCalculator = PROVIDERS_CACHE_COST_CALCULATOR
+                    .getOrDefault(provider, SpanCostCalculator::textGenerationCost);
+            return (modelPrice, usage) -> findCacheUsageShape(modelPrice, usage)
+                    .map(CacheUsageShape::calculator)
+                    .orElse(providerCalculator)
+                    .apply(modelPrice, usage);
         }
 
         if (isPositive(inputPrice) || isPositive(outputPrice)) {
@@ -608,6 +657,52 @@ public class CostService {
         }
 
         return SpanCostCalculator::defaultCost;
+    }
+
+    /**
+     * Returns the usage shape to price with when exactly one shape has non-zero cache tokens, the shape's own input
+     * count is present, and the model has a price for every cache bucket it carries. Anything else (no cache tokens,
+     * more than one shape, an unpriced bucket) returns empty and the provider calculator is used as before.
+     */
+    private static Optional<CacheUsageShape> findCacheUsageShape(ModelPrice modelPrice, Map<String, Integer> usage) {
+        CacheUsageShape match = null;
+        for (CacheUsageShape shape : CACHE_USAGE_SHAPES) {
+            if (shape.hasCacheTokens(usage)) {
+                if (match != null) {
+                    return Optional.empty();
+                }
+                match = shape;
+            }
+        }
+        if (match == null || !usage.containsKey(match.inputTokensKey()) || !match.isPriced(modelPrice, usage)) {
+            return Optional.empty();
+        }
+        return Optional.of(match);
+    }
+
+    @Builder(toBuilder = true)
+    private record CacheUsageShape(
+            @NonNull String inputTokensKey,
+            @NonNull String cacheReadTokensKey,
+            @Nullable String cacheCreationTokensKey,
+            @NonNull BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator) {
+
+        boolean hasCacheTokens(Map<String, Integer> usage) {
+            return cacheReadTokens(usage) > 0 || cacheCreationTokens(usage) > 0;
+        }
+
+        boolean isPriced(ModelPrice modelPrice, Map<String, Integer> usage) {
+            return (cacheReadTokens(usage) <= 0 || isPositive(modelPrice.cacheReadInputTokenPrice()))
+                    && (cacheCreationTokens(usage) <= 0 || isPositive(modelPrice.cacheCreationInputTokenPrice()));
+        }
+
+        private int cacheReadTokens(Map<String, Integer> usage) {
+            return usage.getOrDefault(cacheReadTokensKey, 0);
+        }
+
+        private int cacheCreationTokens(Map<String, Integer> usage) {
+            return cacheCreationTokensKey == null ? 0 : usage.getOrDefault(cacheCreationTokensKey, 0);
+        }
     }
 
     private static boolean isPositive(BigDecimal value) {

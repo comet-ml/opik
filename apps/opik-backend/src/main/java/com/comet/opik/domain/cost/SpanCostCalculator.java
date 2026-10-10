@@ -4,6 +4,7 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.Map;
 
 @UtilityClass
@@ -132,6 +133,17 @@ class SpanCostCalculator {
                 .add(outputAudioRate.multiply(BigDecimal.valueOf(audioOutputTokens)))
                 .add(modelPrice.effectiveCacheReadInputTokenPrice(totalPromptTokens)
                         .multiply(BigDecimal.valueOf(cachedReadInputTokens)));
+    }
+
+    public static BigDecimal textGenerationWithCacheCostOpenAIResponses(@NonNull ModelPrice modelPrice,
+            @NonNull Map<String, Integer> usage) {
+        // Only used once the usage is known to be a raw Responses API payload: input_tokens and output_tokens mean
+        // the same as prompt_tokens and completion_tokens (input includes cached tokens), so they stand in for the
+        // aliases when those are missing.
+        Map<String, Integer> usageWithAliases = new HashMap<>(usage);
+        usageWithAliases.putIfAbsent("prompt_tokens", usage.getOrDefault("original_usage.input_tokens", 0));
+        usageWithAliases.putIfAbsent("completion_tokens", usage.getOrDefault("original_usage.output_tokens", 0));
+        return textGenerationWithCacheCostOpenAI(modelPrice, usageWithAliases);
     }
 
     public static BigDecimal textGenerationWithCacheCostAnthropic(@NonNull ModelPrice modelPrice,
