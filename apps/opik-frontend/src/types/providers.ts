@@ -1096,8 +1096,12 @@ export const ANTHROPIC_THINKING_EFFORT_VALUES = [
   "max",
 ] as const;
 
-export type AnthropicThinkingEffort =
+export type AnthropicEffortLevel =
   (typeof ANTHROPIC_THINKING_EFFORT_VALUES)[number];
+
+// "off" is Opik's own choice for the models that think only when asked: it sends no effort, so the
+// model answers without thinking. It never reaches Anthropic as an effort.
+export type AnthropicThinkingEffort = AnthropicEffortLevel | "off";
 
 export interface LLMAnthropicConfigsType {
   temperature?: number;

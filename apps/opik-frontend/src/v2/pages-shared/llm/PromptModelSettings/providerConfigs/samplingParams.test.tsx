@@ -287,3 +287,79 @@ describe("Anthropic sampling params", () => {
     expect(screen.getByTestId("temperature-input")).toHaveValue("0.4");
   });
 });
+
+describe("Anthropic thinking effort", () => {
+  const BOTH_OFF_NOTE =
+    "Temperature and Top P are not used while Claude thinks. Choose Off to set them.";
+  const TEMPERATURE_OFF_NOTE =
+    "Temperature is not used while Claude thinks. Choose Off to set it.";
+
+  it("hides the sampling choice while Sonnet 4.6 thinks and says how to get it back", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={{ ...ANTHROPIC_CONFIG, thinkingEffort: "low" }}
+        model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("radio", { name: "Temperature" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
+    expect(screen.getByText(BOTH_OFF_NOTE)).toBeInTheDocument();
+  });
+
+  it("names only temperature where the surface cannot store a Top P", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={{ ...ANTHROPIC_CONFIG, thinkingEffort: "max" }}
+        model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6}
+        onChange={vi.fn()}
+        unsupportedParams={RULE_UNSUPPORTED_PARAMS}
+      />,
+    );
+
+    expect(screen.getByText(TEMPERATURE_OFF_NOTE)).toBeInTheDocument();
+  });
+
+  it("brings the stored temperature back at Off", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={{ ...ANTHROPIC_CONFIG, thinkingEffort: "off" }}
+        model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("temperature-input")).toHaveValue("0.4");
+    expect(screen.queryByText(BOTH_OFF_NOTE)).not.toBeInTheDocument();
+  });
+
+  it("adds no note on Opus 4.7, which takes no sampling params at any effort", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={{ maxCompletionTokens: 4000, thinkingEffort: "high" }}
+        model={PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Thinking effort")).toBeInTheDocument();
+    expect(screen.queryByText(BOTH_OFF_NOTE)).not.toBeInTheDocument();
+  });
+
+  it("calls Opus 4.5's control Effort, since it never turns thinking on", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={{ ...ANTHROPIC_CONFIG, thinkingEffort: "low" }}
+        model={PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Effort")).toBeInTheDocument();
+    expect(screen.queryByText("Thinking effort")).not.toBeInTheDocument();
+    expect(screen.getByTestId("temperature-input")).toHaveValue("0.4");
+  });
+});

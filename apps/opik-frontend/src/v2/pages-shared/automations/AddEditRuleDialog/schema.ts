@@ -249,7 +249,9 @@ const LLMJudgeBaseSchema = z.object({
       .optional(),
     // Same arrangement for the Anthropic effort, which the judge reads from
     // custom_parameters.output_config.effort.
-    thinkingEffort: z.enum(ANTHROPIC_THINKING_EFFORT_VALUES).optional(),
+    thinkingEffort: z
+      .enum(["off", ...ANTHROPIC_THINKING_EFFORT_VALUES])
+      .optional(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
   messages: z.array(
@@ -771,9 +773,11 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   // keeps a temperature the user set on another model, and the providers that take none reject it at
   // scoring time. The resolver answers whether this model takes one; the value stays the user's, so
   // a rule that never had a temperature does not gain the resolver's default.
+  // Asked without the effort: the judge leaves the temperature out for as long as Claude thinks, and
+  // keeping it in the rule brings it back when the effort goes back to Off.
   const { temperature: resolvedTemperature } = resolveSamplingParams(
     data.model as PROVIDER_MODEL_TYPE,
-    data.config,
+    { temperature },
   );
 
   if (temperature != null && resolvedTemperature != null) {

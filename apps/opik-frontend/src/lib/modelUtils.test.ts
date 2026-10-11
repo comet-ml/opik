@@ -8,6 +8,7 @@ import {
   getOpenAIReasoningEffortOptions,
   getOpenRouterReasoningEffortOptions,
   getThinkingLevelOptions,
+  isAnthropicThinkingOn,
   isReasoningModel,
   resolveEffort,
   resolveSamplingParams,
@@ -21,6 +22,7 @@ import {
   supportsPenaltyParams,
   supportsSamplingParams,
   supportsVertexAIThinkingLevel,
+  thinksOnlyWhenAsked,
   updateProviderConfig,
   withoutThinkingAmount,
   withShownThinkingLevel,
@@ -2655,25 +2657,30 @@ describe("Anthropic request contract", () => {
     "high",
     "max",
   ];
+  const OFF_TO_MAX: AnthropicThinkingEffort[] = ["off", ...LOW_TO_MAX];
+  const OFF_TO_MAX_WITHOUT_XHIGH: AnthropicThinkingEffort[] = [
+    "off",
+    ...LOW_TO_MAX_WITHOUT_XHIGH,
+  ];
 
   it.each<[PROVIDER_MODEL_TYPE, AnthropicThinkingEffort[]]>([
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5, LOW_TO_MAX],
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8, LOW_TO_MAX],
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, LOW_TO_MAX],
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7_20260416, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8, OFF_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, OFF_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7_20260416, OFF_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_PREVIEW, LOW_TO_MAX_WITHOUT_XHIGH],
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, LOW_TO_MAX_WITHOUT_XHIGH],
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6_20260205, LOW_TO_MAX_WITHOUT_XHIGH],
-    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, LOW_TO_MAX_WITHOUT_XHIGH],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, OFF_TO_MAX_WITHOUT_XHIGH],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6_20260205, OFF_TO_MAX_WITHOUT_XHIGH],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, OFF_TO_MAX_WITHOUT_XHIGH],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5, ["low", "medium", "high"]],
   ])(
-    "offers %s exactly the effort levels Anthropic accepts",
+    "offers %s exactly the effort levels Anthropic accepts, after Off where it thinks only when asked",
     (model, levels) => {
       expect(supportsAnthropicThinkingEffort(model)).toBe(true);
       expect(
@@ -2707,7 +2714,7 @@ describe("Anthropic request contract", () => {
   });
 
   it.each<[PROVIDER_MODEL_TYPE, AnthropicThinkingEffort]>([
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, "medium"],
   ])("defaults %s to Anthropic's own default, %s", (model, effort) => {
@@ -2715,12 +2722,44 @@ describe("Anthropic request contract", () => {
     expect(resolveEffort(model, {})).toEqual({ thinkingEffort: effort });
   });
 
+  it.each([
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6_20260205,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7_20260416,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8,
+  ])("defaults %s, which thinks only when asked, to Off", (model) => {
+    expect(thinksOnlyWhenAsked(model)).toBe(true);
+    expect(getDefaultThinkingEffort(model)).toBe("off");
+  });
+
+  it("shows Off for a Sonnet 4.6 config that stores no effort", () => {
+    expect(resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {})).toEqual({
+      thinkingEffort: "off",
+    });
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+    PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1,
+    PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5,
+  ])("offers no Off on %s, which thinks by default or not at all", (model) => {
+    expect(thinksOnlyWhenAsked(model)).toBe(false);
+    expect(
+      getAnthropicThinkingEffortOptions(model).map((o) => o.value),
+    ).not.toContain("off");
+  });
+
   it("coerces an adaptive effort to the model default when switching to Opus 4.7", () => {
     const result = updateProviderConfig(
       { maxCompletionTokens: 4000, thinkingEffort: ADAPTIVE },
       { model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, provider: ANTHROPIC },
     );
-    expect(result?.thinkingEffort).toBe("high");
+    expect(result?.thinkingEffort).toBe("off");
   });
 
   it("coerces an effort Opus 5.5 does not take to its medium default", () => {
@@ -2749,11 +2788,25 @@ describe("Anthropic request contract", () => {
     ]
   >([
     [
-      "replaces Sonnet 4.6's default high with Opus 5.5's own medium",
+      "replaces Sonnet 4.6's default off with Opus 5.5's own medium",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "off",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      "medium",
+    ],
+    [
+      "replaces Sonnet 5's default high with Sonnet 4.6's own off",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
+      "high",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "off",
+    ],
+    [
+      "keeps a picked high on Sonnet 4.6, now that high is not its default",
       PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
       "high",
       PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
-      "medium",
+      "high",
     ],
     [
       "replaces Opus 5.5's default medium with Opus 5's own high",
@@ -2801,7 +2854,7 @@ describe("Anthropic request contract", () => {
   it("returns the same config when the previous default is also the next one", () => {
     const config: LLMAnthropicConfigsType = {
       maxCompletionTokens: 4000,
-      thinkingEffort: "high",
+      thinkingEffort: "off",
     };
     const result = updateProviderConfig(config, {
       model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
@@ -2811,12 +2864,12 @@ describe("Anthropic request contract", () => {
     expect(result).toBe(config);
   });
 
-  it("coerces xhigh when switching to Sonnet 4.6, which tops out at max", () => {
+  it("coerces a loaded xhigh on Sonnet 4.6, which tops out at max, to its default", () => {
     const result = updateProviderConfig(
       { maxCompletionTokens: 4000, thinkingEffort: "xhigh" },
       { model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, provider: ANTHROPIC },
     );
-    expect(result?.thinkingEffort).toBe("high");
+    expect(result?.thinkingEffort).toBe("off");
   });
 
   it("keeps a stored thinkingEffort the model offers", () => {
@@ -2868,7 +2921,7 @@ describe("Anthropic request contract", () => {
         thinkingEffort: ADAPTIVE,
         custom_parameters: { output_config: { effort: "xhigh" } },
       }),
-    ).toEqual({ thinkingEffort: "high" });
+    ).toEqual({ thinkingEffort: "off" });
   });
 
   describe("on a Claude model this build has no row for", () => {
@@ -2919,18 +2972,62 @@ describe("Anthropic request contract", () => {
     ).toEqual({ output_config: { effort: "low" } });
   });
 
-  it("sends Sonnet 4.6 temperature alone and its effort under custom_parameters", () => {
+  it("sends Sonnet 4.6 at a level its effort under custom_parameters and no sampling params, since it then thinks", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
         ...FULL_CONFIG,
+      }),
+    ).toEqual({
+      maxCompletionTokens: 4000,
+      throttling: 0,
+      maxConcurrentRequests: 5,
+      custom_parameters: { output_config: { effort: "low" } },
+    });
+  });
+
+  it("sends Sonnet 4.6 at Off its temperature alone and no effort", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        ...FULL_CONFIG,
+        thinkingEffort: "off",
+        custom_parameters: { output_config: { effort: "max", format: "x" } },
       }),
     ).toEqual({
       temperature: 0.7,
       maxCompletionTokens: 4000,
       throttling: 0,
       maxConcurrentRequests: 5,
-      custom_parameters: { output_config: { effort: "low" } },
+      custom_parameters: { output_config: { format: "x" } },
     });
+  });
+
+  it.each<[string, AnthropicThinkingEffort | undefined, boolean]>([
+    ["no effort stored, so its Off default", undefined, false],
+    ["Off", "off", false],
+    ["a level", "low", true],
+  ])(
+    "reads Sonnet 4.6 with %s as thinking: %s",
+    (_, thinkingEffort, thinking) => {
+      expect(
+        isAnthropicThinkingOn(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+          thinkingEffort,
+        }),
+      ).toBe(thinking);
+      expect(
+        resolveSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+          temperature: 0.3,
+          thinkingEffort,
+        }),
+      ).toEqual(thinking ? {} : { temperature: 0.3 });
+    },
+  );
+
+  it("never reads a model that thinks by default as thinking only when asked", () => {
+    expect(
+      isAnthropicThinkingOn(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        thinkingEffort: "low",
+      }),
+    ).toBe(false);
   });
 
   it("sends Sonnet 5 no sampling params and its xhigh effort", () => {
@@ -2947,7 +3044,7 @@ describe("Anthropic request contract", () => {
     });
   });
 
-  it("replaces an adaptive effort persisted on Opus 4.6 with the default", () => {
+  it("replaces an adaptive effort persisted on Opus 4.6 with the default, Off", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, {
         maxCompletionTokens: 4000,
@@ -2956,7 +3053,6 @@ describe("Anthropic request contract", () => {
     ).toEqual({
       maxCompletionTokens: 4000,
       temperature: 0,
-      custom_parameters: { output_config: { effort: "high" } },
     });
   });
 
@@ -3030,7 +3126,7 @@ describe("Anthropic request contract", () => {
     }
   });
 
-  it("sends the effort the dropdown displays", () => {
+  it("sends the effort the dropdown displays, and none for Off", () => {
     for (const model of Object.keys(
       ANTHROPIC_MODEL_CAPABILITIES,
     ) as PROVIDER_MODEL_TYPE[]) {
@@ -3039,9 +3135,10 @@ describe("Anthropic request contract", () => {
       }).custom_parameters as
         | { output_config?: { effort?: string } }
         | undefined;
+      const displayed = resolveEffort(model, {}).thinkingEffort;
 
       expect(sent?.output_config?.effort).toBe(
-        resolveEffort(model, {}).thinkingEffort,
+        displayed === "off" ? undefined : displayed,
       );
     }
   });
