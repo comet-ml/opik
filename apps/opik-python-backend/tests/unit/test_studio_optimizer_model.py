@@ -249,6 +249,16 @@ def test_task_model_request_body_carries_the_run_settings(
             {"temperature": 0.3, "max_completion_tokens": 90},
             {"max_completion_tokens": LLM_MAX_TOKENS},
         ),
+        # An effort level makes this Claude think, so a small prompt limit would leave the
+        # algorithm's prompt-writing calls with nothing but thinking.
+        (
+            ANTHROPIC_CLAUDE_OPUS,
+            {
+                "max_completion_tokens": 300,
+                "custom_parameters": {"output_config": {"effort": "medium"}},
+            },
+            {"max_completion_tokens": LLM_MAX_TOKENS},
+        ),
         (
             "gpt-5-nano",
             {"reasoning_effort": "high", "max_completion_tokens": 32000},
