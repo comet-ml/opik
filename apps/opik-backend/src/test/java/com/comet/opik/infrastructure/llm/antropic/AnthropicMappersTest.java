@@ -467,6 +467,24 @@ public class AnthropicMappersTest {
             assertThat(wireBody.has("top_p")).isFalse();
         }
 
+        @Test
+        void keepsTheOptimizationStudioLimitWhenAnEffortTurnsThinkingOn() {
+            // The shape LiteLLM sends from the runner: its max_tokens default, the task model's temperature pin,
+            // and the panel's own limit under a camelCase name the gateway does not read.
+            var request = JsonUtils.readValue("""
+                    {"model": "claude-sonnet-4-6", "messages": [{"role": "user", "content": "hi"}],
+                    "max_tokens": 8192, "temperature": 0.0, "maxCompletionTokens": 4000,
+                    "custom_parameters": {"output_config": {"effort": "high"}}}""", ChatCompletionRequest.class);
+
+            var wireBody = JsonUtils.getJsonNodeFromString(
+                    Json.toJson(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request)));
+
+            assertThat(wireBody.path("max_tokens").asInt()).isEqualTo(8192);
+            assertThat(wireBody.path("thinking"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"type\": \"adaptive\"}"));
+            assertThat(wireBody.has("temperature")).isFalse();
+        }
+
         @ParameterizedTest(name = "{0}: {1}")
         @MethodSource
         void leavesThinkingAlone(String description, String model, Map<String, Object> customParameters,
