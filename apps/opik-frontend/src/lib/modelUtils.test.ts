@@ -3220,8 +3220,18 @@ describe("OpenRouter request contract", () => {
     },
     {
       model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+      maxTokens: 0.5,
+      request: WITHOUT_MAX_TOKENS,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
       maxTokens: 512,
       request: { ...WITHOUT_MAX_TOKENS, maxTokens: 512 },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+      maxTokens: 20.5,
+      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 20 },
     },
     {
       model: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH,

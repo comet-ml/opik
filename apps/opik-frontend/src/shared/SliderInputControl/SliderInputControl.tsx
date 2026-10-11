@@ -23,7 +23,12 @@ interface SliderInputControlProps {
   tooltip?: TooltipWrapperProps["content"];
   resetDisabled?: boolean;
   suffix?: string;
+  integer?: boolean;
+  hint?: string;
 }
+
+const toShownValue = (value: number, integer?: boolean) =>
+  (integer ? Math.floor(value) : value).toString();
 
 const SliderInputControl = ({
   min,
@@ -37,20 +42,22 @@ const SliderInputControl = ({
   tooltip,
   resetDisabled,
   suffix,
+  integer,
+  hint,
 }: SliderInputControlProps) => {
   const sliderId = `${id}-slider`;
   const inputId = `${id}-input`;
 
   const [localValue, setLocalValue] = useState(
-    (value ?? defaultValue).toString(),
+    toShownValue(value ?? defaultValue, integer),
   );
 
   useEffect(() => {
-    setLocalValue((value ?? defaultValue).toString());
-  }, [value, defaultValue]);
+    setLocalValue(toShownValue(value ?? defaultValue, integer));
+  }, [value, defaultValue, integer]);
 
   const validateAndHandleChange = (value: string) => {
-    const numVal = toNumber(value);
+    const numVal = integer ? Math.floor(toNumber(value)) : toNumber(value);
 
     if (value === "") {
       onChange(defaultValue);
@@ -77,7 +84,7 @@ const SliderInputControl = ({
     }
 
     onChange(numVal);
-    setLocalValue(value);
+    setLocalValue(integer ? numVal.toString() : value);
   };
 
   const handleResetValue = () => {
@@ -157,6 +164,7 @@ const SliderInputControl = ({
         max={max}
         step={step}
       />
+      {hint && <p className="comet-body-xs mt-2 text-light-slate">{hint}</p>}
     </div>
   );
 };

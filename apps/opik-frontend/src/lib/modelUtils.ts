@@ -18,7 +18,10 @@ import {
   getProviderFromModel,
   parseComposedProviderType,
 } from "@/lib/provider";
-import { getMaxOutputTokens } from "@/lib/modelCapabilities";
+import {
+  getMaxOutputTokens,
+  isCustomProviderModel,
+} from "@/lib/modelCapabilities";
 import isPlainObject from "lodash/isPlainObject";
 import isEmpty from "lodash/isEmpty";
 import omit from "lodash/omit";
@@ -1154,7 +1157,7 @@ export const resolveMaxCompletionTokens = (
   // A stored 0 was saved while the slider still went down to 0: it meant "not set", never a
   // one-token answer, so it gets the default rather than the new floor.
   const requested = value || MAX_COMPLETION_TOKENS_DEFAULT[provider];
-  return Math.min(Math.max(requested, min), max);
+  return Math.min(Math.max(Math.floor(requested), min), max);
 };
 
 // Last-mile request hardening, complementary to updateProviderConfig: this
@@ -1194,8 +1197,25 @@ export const sanitizeConfigForRequest = (
     }
   }
 
-  if (provider === PROVIDER_TYPE.OPEN_ROUTER && sanitized.maxTokens === 0) {
-    delete sanitized.maxTokens;
+  // On these providers the slider starts at 0, and 0 means no limit, so it is left out rather than
+  // sent. Rounded down first: the backend truncates a fraction, so a 0.5 would reach them as 0.
+  if (
+    provider === PROVIDER_TYPE.OPEN_ROUTER ||
+    provider === PROVIDER_TYPE.GEMINI ||
+    provider === PROVIDER_TYPE.VERTEX_AI ||
+    isCustomProviderModel(model)
+  ) {
+    for (const key of ["maxTokens", "maxCompletionTokens"] as const) {
+      const value = sanitized[key];
+      if (typeof value !== "number") {
+        continue;
+      }
+      if (Math.floor(value) > 0) {
+        sanitized[key] = Math.floor(value);
+      } else {
+        delete sanitized[key];
+      }
+    }
   }
 
   // Prompts stored while the Top K slider stepped by 0.01 can still carry a fraction.
