@@ -290,11 +290,11 @@ describe("Anthropic sampling params", () => {
 
 describe("Anthropic thinking effort", () => {
   const BOTH_OFF_NOTE =
-    "Temperature and Top P are not used while Claude thinks. Choose Off to set them.";
+    "Temperature and Top P are off while Claude can think. Set Thinking effort to Off to use them.";
   const TEMPERATURE_OFF_NOTE =
-    "Temperature is not used while Claude thinks. Choose Off to set it.";
+    "Temperature is off while Claude can think. Set Thinking effort to Off to use it.";
 
-  it("hides the sampling choice while Sonnet 4.6 thinks and says how to get it back", () => {
+  it("puts a note where the sampling choice was while Sonnet 4.6 can think", () => {
     renderPanel(
       <AnthropicModelConfigs
         configs={{ ...ANTHROPIC_CONFIG, thinkingEffort: "low" }}
@@ -307,7 +307,11 @@ describe("Anthropic thinking effort", () => {
       screen.queryByRole("radio", { name: "Temperature" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
-    expect(screen.getByText(BOTH_OFF_NOTE)).toBeInTheDocument();
+    const note = screen.getByText(BOTH_OFF_NOTE);
+    expect(
+      note.compareDocumentPosition(screen.getByText("Max output tokens")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("names only temperature where the surface cannot store a Top P", () => {
