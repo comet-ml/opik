@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { withLowReasoning } from "./promptImprovementConfigs";
 import { getDefaultConfigByProvider } from "@/lib/playground";
@@ -9,6 +9,25 @@ import {
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
+
+const MODEL_WITH_OFF = "claude-thinks-only-when-asked" as PROVIDER_MODEL_TYPE;
+
+// Off belongs to the Claude models that think only when asked, which this build may not list yet,
+// so one model offering it stands in for them.
+vi.mock("@/lib/modelUtils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/modelUtils")>();
+  return {
+    ...actual,
+    getAnthropicThinkingEffortOptions: (model: PROVIDER_MODEL_TYPE | "") =>
+      model === MODEL_WITH_OFF
+        ? [
+            { label: "Off", value: "off" },
+            { label: "Low", value: "low" },
+            { label: "High", value: "high" },
+          ]
+        : actual.getAnthropicThinkingEffortOptions(model),
+  };
+});
 
 const sentForDefaultsWithLowReasoning = (
   provider: PROVIDER_TYPE,
@@ -43,7 +62,7 @@ describe("withLowReasoning", () => {
     },
     {
       provider: PROVIDER_TYPE.ANTHROPIC,
-      model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
       expected: { custom_parameters: { output_config: { effort: "low" } } },
     },
     {
@@ -76,6 +95,15 @@ describe("withLowReasoning", () => {
         PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
       ),
     ).toMatchObject({ custom_parameters: { thinking: { level: "off" } } });
+  });
+
+  it("picks Off rather than Low where a Claude model offers it", () => {
+    expect(
+      withLowReasoning(MODEL_WITH_OFF, {
+        maxCompletionTokens: 4000,
+        thinkingEffort: "high",
+      }),
+    ).toMatchObject({ thinkingEffort: "off" });
   });
 
   it.each([
