@@ -63,7 +63,7 @@ describe("useModelSelection", () => {
       defaultModel: PROVIDER_MODEL_TYPE.GPT_5_NANO,
       defaultProvider: PROVIDER_TYPE.OPEN_AI,
       expectedModel: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
-      expectedConfigs: { maxCompletionTokens: 4000, thinkingEffort: "high" },
+      expectedConfigs: { maxCompletionTokens: 4000, thinkingEffort: "off" },
     },
     {
       name: "the workspace default, with no caller model",
