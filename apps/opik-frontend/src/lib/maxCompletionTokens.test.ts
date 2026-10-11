@@ -79,6 +79,8 @@ describe("resolveMaxCompletionTokens", () => {
   it.each([
     [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI, 0, 4000],
     [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI, undefined, 4000],
+    [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI, 0.5, 1],
+    [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI, 20.5, 20],
     [PROVIDER_TYPE.OPEN_AI, "computer-use-preview", 0, 1024],
     [PROVIDER_TYPE.OPEN_AI, "computer-use-preview", undefined, 1024],
     [PROVIDER_TYPE.OPEN_AI, "computer-use-preview", 2000, 1024],
@@ -131,6 +133,7 @@ describe("sanitizeConfigForRequest max output tokens", () => {
       "chat_completions_api",
       5,
     ],
+    ["with a fraction", PROVIDER_MODEL_TYPE.GPT_4O_MINI, 20.5, undefined, 20],
     ["0 on Claude", PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, 0, undefined, 4000],
     [
       "above Haiku 4.5's limit",
@@ -208,27 +211,41 @@ describe("sanitizeConfigForRequest max output tokens", () => {
     }
   });
 
-  it("leaves Gemini alone", () => {
-    expect(
-      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
-        maxCompletionTokens: 0,
-      }).maxCompletionTokens,
-    ).toBe(0);
+  describe.each([
+    [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH],
+    ["custom-llm/mock/mock-model"],
+    ["custom-llm/b-ollama/qwen3:0.6b"],
+    ["custom-llm/Bedrock us-east-2/openai.gpt-oss-20b-1:0"],
+  ])("on %s, where 0 means no limit", (model) => {
+    it.each([
+      [0, undefined],
+      [0.5, undefined],
+      [1, 1],
+      [20.5, 20],
+      [100000, 100000],
+    ])("sends a stored %s as %s", (maxCompletionTokens, expected) => {
+      expect(
+        sanitizeConfigForRequest(model as PROVIDER_MODEL_TYPE, {
+          maxCompletionTokens,
+        }),
+      ).toEqual(
+        expected === undefined ? {} : { maxCompletionTokens: expected },
+      );
+    });
   });
 
-  it("leaves a custom model alone, even one named like an OpenAI model", () => {
+  it("leaves a custom model named like an OpenAI model to its own limits", () => {
     const customId = "custom-llm/my-gateway/gpt-4o-mini" as PROVIDER_MODEL_TYPE;
     setLatestProviderModelsSnapshot({
       ...getLatestProviderModelsSnapshot(),
       "custom-llm:my-gateway": [{ value: customId, label: "gpt-4o-mini" }],
     });
 
-    for (const maxCompletionTokens of [0, 100000]) {
-      expect(
-        sanitizeConfigForRequest(customId, { maxCompletionTokens })
-          .maxCompletionTokens,
-      ).toBe(maxCompletionTokens);
-    }
+    expect(
+      sanitizeConfigForRequest(customId, { maxCompletionTokens: 100000 })
+        .maxCompletionTokens,
+    ).toBe(100000);
   });
 
   it("does not add a limit OpenAI was not sent", () => {
