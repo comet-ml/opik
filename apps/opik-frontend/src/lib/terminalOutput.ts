@@ -124,7 +124,8 @@ export const restoreOsc8Links = (
       .replace(/>/g, "&gt;");
 
     // Strictly validate protocol to prevent javascript: or data: XSS payloads
-    const isSafeProtocol = /^https?:\/\//i.test(trimmedUrl) || /^mailto:/i.test(trimmedUrl);
+    const isSafeProtocol =
+      /^https?:\/\//i.test(trimmedUrl) || /^mailto:/i.test(trimmedUrl);
     if (!isSafeProtocol) {
       result = result.replace(placeholder, safeText);
       return;

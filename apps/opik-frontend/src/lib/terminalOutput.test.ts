@@ -557,7 +557,8 @@ describe("convertTerminalOutputToHtml", () => {
     });
 
     it("should sanitize unsafe protocols like javascript: in OSC 8 hyperlinks", () => {
-      const input = "Click \x1b]8;;javascript:alert(1)\x07here\x1b]8;;\x07 for details";
+      const input =
+        "Click \x1b]8;;javascript:alert(1)\x07here\x1b]8;;\x07 for details";
       const result = convertTerminalOutputToHtml(input);
 
       // Must not create an anchor tag with javascript: URI
