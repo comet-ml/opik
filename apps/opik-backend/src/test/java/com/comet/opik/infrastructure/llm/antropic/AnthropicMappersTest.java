@@ -68,6 +68,39 @@ public class AnthropicMappersTest {
         }
 
         @Test
+        void toResponseAnswersWithTheTextBesideAThinkingBlock() {
+            var response = Json.fromJson("""
+                    {"id": "msg_1", "type": "message", "role": "assistant", "model": "claude-sonnet-4-6",
+                    "content": [
+                      {"type": "thinking", "thinking": "", "signature": "sig"},
+                      {"type": "redacted_thinking", "data": "opaque"},
+                      {"type": "text", "text": "4"}
+                    ],
+                    "stop_reason": "end_turn", "usage": {"input_tokens": 10, "output_tokens": 20}}""",
+                    AnthropicCreateMessageResponse.class);
+
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toResponse(response);
+
+            assertThat(actual.choices()).extracting(choice -> choice.message().content()).containsExactly("4");
+        }
+
+        @Test
+        void toResponseKeepsOneEmptyChoiceWhenThinkingUsedUpMaxTokens() {
+            var response = Json.fromJson("""
+                    {"id": "msg_1", "type": "message", "role": "assistant", "model": "claude-sonnet-4-6",
+                    "content": [{"type": "thinking", "thinking": "Let me check each candidate", "signature": "sig"}],
+                    "stop_reason": "max_tokens", "usage": {"input_tokens": 10, "output_tokens": 4096}}""",
+                    AnthropicCreateMessageResponse.class);
+
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toResponse(response);
+
+            assertThat(actual.choices()).singleElement().satisfies(choice -> {
+                assertThat(choice.message().content()).isNull();
+                assertThat(choice.finishReason()).isEqualTo("max_tokens");
+            });
+        }
+
+        @Test
         void toCreateMessage() {
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
 
@@ -403,6 +436,71 @@ public class AnthropicMappersTest {
                     Arguments.of("no custom_parameters", null),
                     Arguments.of("custom_parameters without output_config", Map.of("max_tokens", 2048)),
                     Arguments.of("an empty output_config", Map.of("output_config", Map.of())));
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("adaptive thinking from the effort level")
+    class AdaptiveThinkingFromEffort {
+
+        @ParameterizedTest(name = "{0} at {1}")
+        @CsvSource({
+                "claude-sonnet-4-6, low",
+                "claude-opus-4-6, max",
+                "claude-opus-4-6-20260205, medium",
+                "claude-opus-4-7, xhigh",
+                "claude-opus-4-7-20260416, high",
+                "claude-opus-4-8, max"})
+        void turnsOnAdaptiveThinkingOnAModelThatThinksOnlyWhenAsked(String model, String effort) {
+            var request = ChatCompletionRequest.builder()
+                    .model(model)
+                    .addUserMessage("hi")
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .customParameters(Map.of("output_config", Map.of("effort", effort)))
+                    .build();
+
+            var wireBody = JsonUtils.getJsonNodeFromString(
+                    Json.toJson(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request)));
+
+            assertThat(wireBody.path("thinking"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"type\": \"adaptive\"}"));
+            assertThat(wireBody.path("output_config").path("effort").asText()).isEqualTo(effort);
+            assertThat(wireBody.has("temperature")).isFalse();
+            assertThat(wireBody.has("top_p")).isFalse();
+        }
+
+        @ParameterizedTest(name = "{0}: {1}")
+        @MethodSource
+        void leavesThinkingAlone(String description, String model, Map<String, Object> customParameters,
+                Double expectedTemperature) {
+            var request = ChatCompletionRequest.builder()
+                    .model(model)
+                    .addUserMessage("hi")
+                    .temperature(0.7)
+                    .customParameters(customParameters)
+                    .build();
+
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+
+            assertThat(JsonUtils.getJsonNodeFromString(Json.toJson(actual)).has("thinking")).isFalse();
+            assertThat(actual.temperature).isEqualTo(expectedTemperature);
+        }
+
+        Stream<Arguments> leavesThinkingAlone() {
+            return Stream.of(
+                    Arguments.of("no effort on a model that thinks only when asked", "claude-sonnet-4-6",
+                            Map.of("output_config", Map.of("format", JSON_SCHEMA_FORMAT)), 0.7),
+                    Arguments.of("a request that turns thinking off itself", "claude-sonnet-4-6",
+                            Map.of("output_config", Map.of("effort", "low"), "thinking", Map.of("type", "disabled")),
+                            0.7),
+                    Arguments.of("a model that thinks by default", "claude-sonnet-5",
+                            Map.of("output_config", Map.of("effort", "xhigh")), null),
+                    Arguments.of("a model that thinks by default", "claude-opus-5-5",
+                            Map.of("output_config", Map.of("effort", "medium")), null),
+                    Arguments.of("Opus 4.5, which has no adaptive thinking", "claude-opus-4-5-20251101",
+                            Map.of("output_config", Map.of("effort", "high")), 0.7));
         }
     }
 

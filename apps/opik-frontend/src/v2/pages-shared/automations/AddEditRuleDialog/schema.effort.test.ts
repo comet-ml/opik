@@ -125,6 +125,43 @@ describe("LLM judge Anthropic effort round trip", () => {
     expect(object.model.custom_parameters).toEqual(stored);
   });
 
+  it("saves Off as no effort, keeping the rest of output_config", () => {
+    const object = convertLLMJudgeDataToLLMJudgeObject(
+      asFormData(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        thinkingEffort: "off",
+        custom_parameters: { output_config: { effort: "high", format: "x" } },
+      }),
+    );
+
+    expect(object.model.custom_parameters).toEqual({
+      output_config: { format: "x" },
+    });
+  });
+
+  it("keeps the temperature of a rule that thinks, for when it goes back to Off", () => {
+    const object = convertLLMJudgeDataToLLMJudgeObject(
+      asFormData(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        temperature: 0.3,
+        thinkingEffort: "max",
+      }),
+    );
+
+    expect(object.model.temperature).toBe(0.3);
+    expect(object.model.custom_parameters).toEqual({
+      output_config: { effort: "max" },
+    });
+  });
+
+  it("shows a rule stored with no effort on Sonnet 4.6 at Off", () => {
+    const data = convertLLMJudgeObjectToLLMJudgeData(
+      persisted(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, null),
+    );
+
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, data.config),
+    ).toEqual({ thinkingEffort: "off" });
+  });
+
   it("saves nothing when no effort was chosen, so the model runs at its own default", () => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
       asFormData(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, { temperature: 0 }),
@@ -270,9 +307,9 @@ describe("LLM judge Anthropic effort on a model switch", () => {
 
   it.each<[string, Record<string, unknown>, Record<string, unknown>]>([
     [
-      "replaces Sonnet 4.6's default high with Opus 5.5's own medium",
+      "keeps a picked high, which is no longer Sonnet 4.6's default",
       { output_config: { effort: "high" } },
-      { output_config: { effort: "medium" } },
+      { output_config: { effort: "high" } },
     ],
     [
       "keeps a level the user picked",
