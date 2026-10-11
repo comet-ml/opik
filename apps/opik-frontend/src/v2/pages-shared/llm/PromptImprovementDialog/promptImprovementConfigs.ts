@@ -27,8 +27,11 @@ export const withLowReasoning = (
     next.reasoningEffort = "low";
   }
 
-  if (offersLow(getAnthropicThinkingEffortOptions(model))) {
-    next.thinkingEffort = "low";
+  // The options run from least to most reasoning, so the first is the least the model takes. Where
+  // a Claude model offers Off, that is Off rather than Low, which would turn its thinking on.
+  const [leastEffort] = getAnthropicThinkingEffortOptions(model);
+  if (leastEffort) {
+    next.thinkingEffort = leastEffort.value;
   }
 
   const thinkingLevel = next.thinkingLevel as GeminiThinkingLevel | undefined;

@@ -59,10 +59,10 @@ describe("useModelSelection", () => {
     },
     {
       name: "a picked model",
-      lastPicked: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      lastPicked: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
       defaultModel: PROVIDER_MODEL_TYPE.GPT_5_NANO,
       defaultProvider: PROVIDER_TYPE.OPEN_AI,
-      expectedModel: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      expectedModel: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
       expectedConfigs: { maxCompletionTokens: 4000, thinkingEffort: "high" },
     },
     {
