@@ -17,7 +17,7 @@ import {
 import {
   getAnthropicThinkingEffortOptions,
   hasEffortWithoutThinking,
-  isAnthropicThinkingOn,
+  isAnthropicThinkingRequested,
   resolveEffort,
   resolveSamplingParams,
   supportsSamplingParams,
@@ -60,7 +60,7 @@ const AnthropicModelConfigs = ({
   const visible = getAnthropicVisibleControls({ model, configs, supports });
   const samplingOffWhileThinking =
     supportsSamplingParams(model) &&
-    isAnthropicThinkingOn(model ?? "", configs);
+    isAnthropicThinkingRequested(model ?? "", configs);
 
   if (!isAnyControlVisible(visible)) return null;
 

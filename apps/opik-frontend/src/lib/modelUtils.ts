@@ -868,7 +868,7 @@ export const resolveSamplingParams = (
   }
 
   if (provider === PROVIDER_TYPE.ANTHROPIC) {
-    if (isAnthropicThinkingOn(model, configs)) {
+    if (isAnthropicThinkingRequested(model, configs)) {
       return {};
     }
     // Anthropic takes one of the pair, never both: temperature wins a config carrying both, and
@@ -999,7 +999,7 @@ export const resolveEffort = (
 
 // The backend turns on adaptive thinking for any level on these models, and Anthropic then refuses
 // the sampling pair: "temperature may only be set to 1 when thinking is enabled".
-export const isAnthropicThinkingOn = (
+export const isAnthropicThinkingRequested = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: EffortParams,
 ): boolean =>

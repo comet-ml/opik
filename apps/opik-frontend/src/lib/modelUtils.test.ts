@@ -7,7 +7,7 @@ import {
   getRoutableProviderModelValue,
   getOpenAIReasoningEffortOptions,
   getThinkingLevelOptions,
-  isAnthropicThinkingOn,
+  isAnthropicThinkingRequested,
   isReasoningModel,
   resolveEffort,
   resolveSamplingParams,
@@ -2739,10 +2739,10 @@ describe("Anthropic request contract", () => {
     ["Off", "off", false],
     ["a level", "low", true],
   ])(
-    "reads Sonnet 4.6 with %s as thinking: %s",
+    "reads Sonnet 4.6 with %s as asking for thinking: %s",
     (_, thinkingEffort, thinking) => {
       expect(
-        isAnthropicThinkingOn(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        isAnthropicThinkingRequested(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
           thinkingEffort,
         }),
       ).toBe(thinking);
@@ -2755,9 +2755,9 @@ describe("Anthropic request contract", () => {
     },
   );
 
-  it("never reads a model that thinks by default as thinking only when asked", () => {
+  it("never reads a model that thinks by default as asking for thinking", () => {
     expect(
-      isAnthropicThinkingOn(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+      isAnthropicThinkingRequested(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
         thinkingEffort: "low",
       }),
     ).toBe(false);
