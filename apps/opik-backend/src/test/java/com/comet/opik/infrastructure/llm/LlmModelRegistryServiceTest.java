@@ -198,6 +198,49 @@ class LlmModelRegistryServiceTest {
         assertThat(merged.get("anthropic")).hasSize(1);
     }
 
+    @Test
+    void mergeKeepsOpenRouterCapabilitiesOnlyWhenTheOverrideLacksThem() {
+        var defaults = Map.of(
+                "openrouter", List.of(
+                        LlmModelDefinition.builder().id("openai/gpt-5-nano")
+                                .supportedParameters(List.of("max_tokens", "reasoning_effort"))
+                                .reasoningEfforts(List.of("high", "low"))
+                                .build(),
+                        LlmModelDefinition.builder().id("openai/gpt-4o-mini")
+                                .supportedParameters(List.of("temperature"))
+                                .build()));
+
+        var overrides = Map.of(
+                "openrouter", List.of(
+                        LlmModelDefinition.builder().id("openai/gpt-5-nano").label("openai/gpt-5-nano").build(),
+                        LlmModelDefinition.builder().id("openai/gpt-4o-mini")
+                                .supportedParameters(List.of("temperature", "top_p"))
+                                .build()));
+
+        var merged = LlmModelRegistryService.merge(defaults, overrides);
+
+        assertThat(merged.get("openrouter")).containsExactly(
+                LlmModelDefinition.builder().id("openai/gpt-5-nano").label("openai/gpt-5-nano")
+                        .supportedParameters(List.of("max_tokens", "reasoning_effort"))
+                        .reasoningEfforts(List.of("high", "low"))
+                        .build(),
+                LlmModelDefinition.builder().id("openai/gpt-4o-mini")
+                        .supportedParameters(List.of("temperature", "top_p"))
+                        .build());
+    }
+
+    @Test
+    void defaultResourceCarriesOpenRouterCapabilities() {
+        var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
+
+        var result = service.findModel("openai/gpt-5-nano");
+
+        assertThat(result).isPresent();
+        assertThat(result.get().provider()).isEqualTo(LlmProvider.OPEN_ROUTER);
+        assertThat(result.get().model().supportedParameters()).contains("reasoning_effort").doesNotContain("top_k");
+        assertThat(result.get().model().reasoningEfforts()).isNotEmpty();
+    }
+
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
             "o3     | label: O3 from override | true",
