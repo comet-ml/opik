@@ -129,7 +129,7 @@ class AlertEventBridgePublisherTest {
     @ParameterizedTest
     @ValueSource(strings = {"javascript:alert(1)//", "/opik/", "opik.example.com", "ftp://opik.example.com/",
             "https:///no-host", "http://exa mple.com/"})
-    void publishWhenBaseUrlIsNotAbsoluteHttpOmitsUrl(String baseUrl) {
+    void publishWhenBaseUrlIsNotAbsoluteHttpSendsNullUrl(String baseUrl) {
         when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
         var alert = alert(Map.of("base_url", baseUrl));
 
@@ -137,7 +137,8 @@ class AlertEventBridgePublisherTest {
                 TRIGGERED_AT, payload(alert, List.of("event-1"), List.of()))).verifyComplete();
 
         JsonNode detail = JsonUtils.getJsonNodeFromString(captureEntries(1).getFirst().detail());
-        assertThat(detail.has("url")).isFalse();
+        assertThat(detail.has("url")).isTrue();
+        assertThat(detail.get("url").isNull()).isTrue();
     }
 
     @Test
@@ -154,7 +155,7 @@ class AlertEventBridgePublisherTest {
     }
 
     @Test
-    void publishWhenNoBaseUrlOmitsUrl() {
+    void publishWhenNoBaseUrlSendsNullUrl() {
         when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
         var alert = alert(null);
 
@@ -163,11 +164,12 @@ class AlertEventBridgePublisherTest {
                 payload(alert, List.of("event-1"), List.of()))).verifyComplete();
 
         JsonNode detail = JsonUtils.getJsonNodeFromString(captureEntries(1).getFirst().detail());
-        assertThat(detail.has("url")).isFalse();
+        assertThat(detail.has("url")).isTrue();
+        assertThat(detail.get("url").isNull()).isTrue();
     }
 
     @Test
-    void publishWhenWorkspaceNameNullOmitsNameAndUrl() {
+    void publishWhenWorkspaceNameNullSendsNullNameAndUrl() {
         when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
         var alert = alert(Map.of("base_url", "https://opik.example.com/"));
 
@@ -178,8 +180,10 @@ class AlertEventBridgePublisherTest {
 
         JsonNode detail = JsonUtils.getJsonNodeFromString(captureEntries(1).getFirst().detail());
         assertThat(detail.get("workspaceId").asText()).isEqualTo(WORKSPACE_ID);
-        assertThat(detail.has("workspaceName")).isFalse();
-        assertThat(detail.has("url")).isFalse();
+        assertThat(detail.has("workspaceName")).isTrue();
+        assertThat(detail.get("workspaceName").isNull()).isTrue();
+        assertThat(detail.has("url")).isTrue();
+        assertThat(detail.get("url").isNull()).isTrue();
     }
 
     @Test

@@ -6,6 +6,7 @@ import com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter
 import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper;
 import com.comet.opik.infrastructure.AlertsEventBridgeConfig;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -94,7 +95,7 @@ public class AlertEventBridgePublisher {
 
     /**
      * @param eventId stays stable for one triggered alert, so consumers can dedupe on source + detail.eventId
-     * @param workspaceName null when it couldn't be resolved, in which case the envelope omits it
+     * @param workspaceName null when it couldn't be resolved, in which case the envelope sends it as null
      * @param triggeredAt when the trigger fired; used for detail.triggeredAt and the entry Time
      * @param payload the product payload built for the webhook, with its metadata still serialized
      * @return a Mono that completes once the alert is published or the publish has failed; it never errors
@@ -240,13 +241,13 @@ public class AlertEventBridgePublisher {
         try {
             baseUri = new URI(baseUrl.trim());
         } catch (URISyntaxException exception) {
-            log.debug("Omitting EventBridge alert url, base_url is not a valid URI, alertId='{}'", alert.id(),
+            log.debug("No EventBridge alert url, base_url is not a valid URI, alertId='{}'", alert.id(),
                     exception);
             return null;
         }
         if (!baseUri.isAbsolute() || baseUri.getHost() == null
                 || !Set.of("http", "https").contains(baseUri.getScheme().toLowerCase(Locale.ROOT))) {
-            log.debug("Omitting EventBridge alert url, base_url is not an absolute http(s) URL with a host, "
+            log.debug("No EventBridge alert url, base_url is not an absolute http(s) URL with a host, "
                     + "alertId='{}'", alert.id());
             return null;
         }
@@ -268,17 +269,19 @@ public class AlertEventBridgePublisher {
                 RESULT_KEY, result);
     }
 
+    // Envelope fields that apply but have no value are sent as null, not omitted, so every schemaVersion 1 event has
+    // the same keys as the comet-backend (EM/MPM) envelope; JsonUtils otherwise drops nulls.
     @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     record AlertEventBridgeDetail(
             @NonNull String schemaVersion,
             @NonNull String eventId,
             @NonNull String workspaceId,
-            String workspaceName,
+            @JsonInclude(JsonInclude.Include.ALWAYS) String workspaceName,
             @NonNull UUID alertId,
             @NonNull String alertName,
             @NonNull String eventType,
-            String url,
+            @JsonInclude(JsonInclude.Include.ALWAYS) String url,
             @NonNull Instant triggeredAt,
             boolean truncated,
             @NonNull Map<String, Object> opik) {
