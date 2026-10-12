@@ -527,6 +527,26 @@ describe("describeRunFailure — a model the API key can't use", () => {
     });
   });
 
+  it.each([
+    [
+      "a longer model id",
+      "custom-llm/my-gateway/llama-3",
+      "Unexpected error calling LLM provider: no deployment named llama-3-70b",
+    ],
+    [
+      "another word",
+      "custom-llm/my-gateway/a",
+      "Unexpected error calling LLM provider: 404 page not found",
+    ],
+  ])(
+    "gives no hint for a 404 that has the model's name only inside %s",
+    (_label, model, opikError) => {
+      const run = failedRun({ errorStatus: 404, opikError });
+
+      expect(describeRunFailure(run, { model }).hint).toBeUndefined();
+    },
+  );
+
   it.each([500, null])(
     "gives no hint for a %s status, even when the error names the model",
     (errorStatus) => {

@@ -1,5 +1,6 @@
 import first from "lodash/first";
 import isNil from "lodash/isNil";
+import escapeRegExp from "lodash/escapeRegExp";
 import last from "lodash/last";
 import omitBy from "lodash/omitBy";
 import { PlaygroundPromptType } from "@/types/playground";
@@ -358,6 +359,11 @@ type RunFailureContext = {
   model: string;
 };
 
+// Matched as a whole id, so "llama-3" doesn't match "llama-3-70b", and a one-letter name doesn't
+// match inside "page".
+const mentionsModel = (text: string, modelName: string) =>
+  new RegExp(`(^|[^\\w-])${escapeRegExp(modelName)}([^\\w-]|$)`).test(text);
+
 const getRunFailureHint = (
   run: RunStreamingReturn,
   { model }: RunFailureContext,
@@ -370,7 +376,8 @@ const getRunFailureHint = (
   if (
     run.errorStatus === HTTP_NOT_FOUND &&
     modelName &&
-    providerMessage?.includes(modelName)
+    providerMessage &&
+    mentionsModel(providerMessage, modelName)
   ) {
     return {
       action:
