@@ -12,17 +12,22 @@ import dev.langchain4j.model.openai.internal.chat.Function;
 import dev.langchain4j.model.openai.internal.chat.ResponseFormat;
 import dev.langchain4j.model.openai.internal.chat.ResponseFormatType;
 import dev.langchain4j.model.openai.internal.chat.Tool;
+import jakarta.ws.rs.BadRequestException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
-import java.util.ArrayList;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -30,7 +35,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
@@ -48,6 +55,12 @@ class LlmProviderOpenAiResponsesExtraBodyTest {
     private static final JsonMapper STRICT_JSON = JsonMapper.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .build();
+
+    private static final ObjectNode BASE_BODY = parseStrictly("""
+            {"model":"gpt-6-sol",
+             "input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}],
+             "store":false}
+            """);
 
     private WireMockServer openAi;
     private LlmProviderOpenAiResponses provider;
@@ -131,43 +144,135 @@ class LlmProviderOpenAiResponsesExtraBodyTest {
                 arguments("store", request().build(), Map.of("store", true)));
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("chatCompletionsKeys")
+    void blockingAndStreamingSendAChatCompletionsKeyUnderItsResponsesName(
+            String name, ChatCompletionRequest request, Map<String, Object> expectedFields) {
+        assertThat(send(request).bodies()).isEqualTo(expectedBodies(expectedFields));
+    }
+
+    private static Stream<Arguments> chatCompletionsKeys() {
+        Map<String, Object> schema = Map.of(
+                "type", "object",
+                "properties", Map.of("label", Map.of("type", "string")),
+                "required", List.of("label"),
+                "additionalProperties", false);
+        return Stream.of(
+                arguments("max_tokens",
+                        withExtraBody(request().maxCompletionTokens(512).build(), Map.of("max_tokens", 64)),
+                        Map.of("max_output_tokens", 64)),
+                arguments("max_completion_tokens",
+                        withExtraBody(request().maxTokens(512).build(), Map.of("max_completion_tokens", 64)),
+                        Map.of("max_output_tokens", 64)),
+                arguments("max_completion_tokens over a max_tokens it does not read",
+                        withExtraBody(request().build(), Map.of("max_completion_tokens", 64, "max_tokens", "lots")),
+                        Map.of("max_output_tokens", 64)),
+                arguments("reasoning_effort",
+                        withExtraBody(request().reasoningEffort("high").build(), Map.of("reasoning_effort", "low")),
+                        Map.of("reasoning", Map.of("effort", "low"))),
+                arguments("response_format",
+                        withExtraBody(request().build(), Map.of("response_format", Map.of(
+                                "type", "json_schema",
+                                "json_schema", Map.of("name", "answer", "strict", true, "schema", schema)))),
+                        Map.of("text", Map.of("format", Map.of(
+                                "type", "json_schema", "name", "answer", "strict", true, "schema", schema)))),
+                arguments("an explicit null",
+                        withExtraBody(request().maxCompletionTokens(512).build(),
+                                Collections.singletonMap("max_tokens", null)),
+                        Map.of()),
+                arguments("next to other extra body keys",
+                        withExtraBody(request().build(), Map.of("max_tokens", 64, "service_tier", "flex")),
+                        Map.of("max_output_tokens", 64, "service_tier", "flex")));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("bothNames")
+    void blockingAndStreamingSendTheResponsesNameWhenTheExtraBodyHasBothNames(
+            String name, Map<String, Object> extraBody, Map<String, Object> expectedFields) {
+        assertThat(send(withExtraBody(request().build(), extraBody)).bodies())
+                .isEqualTo(expectedBodies(expectedFields));
+    }
+
+    private static Stream<Arguments> bothNames() {
+        return Stream.of(
+                arguments("max_output_tokens",
+                        Map.of("max_tokens", 100, "max_output_tokens", 64),
+                        Map.of("max_output_tokens", 64)),
+                arguments("reasoning",
+                        Map.of("reasoning_effort", "low", "reasoning", Map.of("summary", "auto")),
+                        Map.of("reasoning", Map.of("summary", "auto"))),
+                arguments("text",
+                        Map.of("response_format", Map.of("type", "json_object"), "text", Map.of("verbosity", "low")),
+                        Map.of("text", Map.of("verbosity", "low"))));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"model", "input", "stream"})
+    void rejectsAnExtraBodyKeyOpikSetsFromTheRequest(String key) {
+        var request = withExtraBody(request().build(), Map.of(key, "other"));
+
+        assertRejectedBeforeSending(request,
+                "custom_parameters.%s is set by Opik from the request and cannot be replaced".formatted(key));
+    }
+
     @Test
-    void blockingAndStreamingSendOnlyTheTypedSettingsWithoutAnExtraBody() throws Exception {
+    void rejectsAChatCompletionsKeyWhoseValueItsTypedSettingCannotTake() {
+        assertRejectedBeforeSending(withExtraBody(request().build(), Map.of("max_tokens", "lots")),
+                "Invalid custom_parameters.max_tokens for the OpenAI Responses API");
+    }
+
+    @Test
+    void blockingAndStreamingSendOnlyTheTypedSettingsWithoutAnExtraBody() {
         var typedRequest = request().temperature(0.3).maxCompletionTokens(512).build();
-        var expected = STRICT_JSON.readValue("""
-                {"model":"gpt-6-sol",
-                 "input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}],
-                 "store":false,"temperature":0.3,"max_output_tokens":512}
-                """, ObjectNode.class);
+        var expected = expectedBodies(Map.of("temperature", 0.3, "max_output_tokens", 512));
 
-        var typedOnly = send(typedRequest);
-        var emptyExtraBody = send(withExtraBody(typedRequest, Map.of()));
+        assertThat(send(typedRequest).bodies()).isEqualTo(expected);
+        assertThat(send(withExtraBody(typedRequest, Map.of())).bodies()).isEqualTo(expected);
+    }
 
-        assertThat(typedOnly.bodies()).isEqualTo(List.of(expected, expected.deepCopy().put("stream", true)));
-        assertThat(emptyExtraBody.bodies()).isEqualTo(typedOnly.bodies());
+    private void assertRejectedBeforeSending(ChatCompletionRequest request, String message) {
+        assertThatThrownBy(() -> provider.generate(request, "ws-1"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(message);
+        assertThatThrownBy(() -> provider.generateStream(request, "ws-1", chunk -> {
+        }, () -> {
+        }, error -> {
+        }))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(message);
+        assertThat(openAi.findAll(postRequestedFor(urlPathEqualTo(RESPONSES_PATH)))).isEmpty();
     }
 
     private Sent send(ChatCompletionRequest request) {
         openAi.resetRequests();
-        var errors = new ArrayList<Throwable>();
-
-        errors.add(catchThrowable(() -> provider.generate(request, "ws-1")));
+        var blockingError = catchThrowable(() -> provider.generate(request, "ws-1"));
+        List<Throwable> streamingErrors = new CopyOnWriteArrayList<>();
+        var closed = new AtomicBoolean();
         provider.generateStream(request, "ws-1", chunk -> {
-        }, () -> {
-        }, errors::add);
+        }, () -> closed.set(true), streamingErrors::add);
+        await().atMost(Duration.ofSeconds(10)).until(() -> closed.get() || !streamingErrors.isEmpty());
 
         var requests = openAi.findAll(postRequestedFor(urlPathEqualTo(RESPONSES_PATH)));
         assertThat(requests).hasSize(2).allSatisfy(sent -> {
             assertThat(sent.getHeader("Authorization")).isEqualTo("Bearer test-key");
             assertThat(sent.getHeader(CUSTOM_HEADER)).isEqualTo("custom-value");
         });
-        var bodies = requests.stream()
+        var bodiesByStreaming = requests.stream()
                 .map(LoggedRequest::getBodyAsString)
                 .map(LlmProviderOpenAiResponsesExtraBodyTest::parseStrictly)
-                .toList();
-        assertThat(bodies.get(1).get("stream").asBoolean()).isTrue();
-        assertThat(errors).hasSize(2).doesNotContainNull();
-        return new Sent(bodies, errors.stream().<Class<?>>map(Throwable::getClass).toList());
+                .collect(Collectors.partitioningBy(body -> body.path("stream").asBoolean()));
+        assertThat(bodiesByStreaming.get(false)).hasSize(1);
+        assertThat(bodiesByStreaming.get(true)).hasSize(1);
+        assertThat(blockingError).isNotNull();
+        assertThat(streamingErrors).hasSize(1);
+        return new Sent(
+                List.of(bodiesByStreaming.get(false).getFirst(), bodiesByStreaming.get(true).getFirst()),
+                List.<Class<?>>of(blockingError.getClass(), streamingErrors.getFirst().getClass()));
+    }
+
+    private static List<ObjectNode> expectedBodies(Map<String, Object> fields) {
+        var blocking = (ObjectNode) BASE_BODY.deepCopy().setAll(STRICT_JSON.<ObjectNode>valueToTree(fields));
+        return List.of(blocking, blocking.deepCopy().put("stream", true));
     }
 
     private static List<ObjectNode> withKeysReplaced(List<ObjectNode> bodies, Map<String, Object> extraBody) {

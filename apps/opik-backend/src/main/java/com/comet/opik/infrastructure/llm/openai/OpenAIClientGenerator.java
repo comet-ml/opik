@@ -11,6 +11,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.openai.client.OpenAIClient;
+import com.openai.models.ReasoningEffort;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -20,6 +21,7 @@ import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesChatModel;
 import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesStreamingChatModel;
 import dev.langchain4j.model.openaiofficial.setup.OpenAiOfficialSetup;
 import io.dropwizard.util.Duration;
+import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -184,22 +186,36 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
      * langchain4j has no per-request strict slot.
      */
     ChatModel newResponsesApiChatModel(@NonNull LlmProviderClientApiConfig config, boolean strictJsonSchema,
-            Map<String, Object> extraBody) {
-        return newResponsesApiChatModel(
+            @Nullable Map<String, Object> extraBody) {
+        return newResponsesApiChatModelBuilder(
                 config,
                 LlmAsJudgeModelParameters.builder().name(PROXY_MODEL_NAME_PLACEHOLDER).build(),
                 strictJsonSchema,
-                extraBody);
+                extraBody)
+                .build();
     }
 
     ChatModel newResponsesApiChatModel(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
-        return newResponsesApiChatModel(config, modelParameters, false, Map.of());
+        var judgeRequest = OpenAiResponsesExtraBody.toResponsesRequest(ChatCompletionRequest.builder()
+                .customParameters(
+                        OpenAiResponsesExtraBody.fromJudgeCustomParameters(modelParameters.customParameters()))
+                .build());
+        var builder = newResponsesApiChatModelBuilder(config, modelParameters, false,
+                judgeRequest.customParameters());
+        // A judge sets its own response_format on every request, which wins over a model default, so of the moved
+        // settings only these two can apply.
+        Optional.ofNullable(judgeRequest.maxCompletionTokens()).ifPresent(builder::maxOutputTokens);
+        Optional.ofNullable(judgeRequest.reasoningEffort())
+                .filter(StringUtils::isNotBlank)
+                .map(ReasoningEffort::of)
+                .ifPresent(builder::reasoningEffort);
+        return builder.build();
     }
 
-    ChatModel newResponsesApiChatModel(@NonNull LlmProviderClientApiConfig config,
-            @NonNull LlmAsJudgeModelParameters modelParameters, boolean strictJsonSchema,
-            Map<String, Object> extraBody) {
+    private OpenAiOfficialResponsesChatModel.Builder newResponsesApiChatModelBuilder(
+            LlmProviderClientApiConfig config, LlmAsJudgeModelParameters modelParameters, boolean strictJsonSchema,
+            @Nullable Map<String, Object> extraBody) {
         var builder = OpenAiOfficialResponsesChatModel.builder()
                 .client(newResponsesApiClient(config, modelParameters.name(), extraBody))
                 .modelName(modelParameters.name())
@@ -209,7 +225,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
             Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         }
 
-        return builder.build();
+        return builder;
     }
 
     /**
@@ -220,7 +236,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
      * setting on the langchain4j model — the proxy passes the per-request {@code strict} bit here.
      */
     StreamingChatModel newResponsesApiStreamingChatModel(@NonNull LlmProviderClientApiConfig config,
-            boolean strictJsonSchema, Map<String, Object> extraBody) {
+            boolean strictJsonSchema, @Nullable Map<String, Object> extraBody) {
         return OpenAiOfficialResponsesStreamingChatModel.builder()
                 .client(newResponsesApiClient(config, PROXY_MODEL_NAME_PLACEHOLDER, extraBody))
                 .modelName(PROXY_MODEL_NAME_PLACEHOLDER)
@@ -231,7 +247,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     // Built here, with the settings the langchain4j builder would pass to this same setup call, so that the extra
     // body can wrap the client; a builder given its own client ignores the connection settings.
     private OpenAIClient newResponsesApiClient(LlmProviderClientApiConfig config, String modelName,
-            Map<String, Object> extraBody) {
+            @Nullable Map<String, Object> extraBody) {
         var baseUrl = Optional.ofNullable(config.baseUrl())
                 .filter(StringUtils::isNotEmpty)
                 .or(() -> Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
