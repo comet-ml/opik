@@ -173,7 +173,7 @@ public class DashboardsResource {
     @Operation(operationId = "runDashboardWidgetQuery", summary = "Run a saved widget query", description = "Runs the query saved on an Ollie chart widget of this dashboard over the given date range and returns its rows. The query is read from the saved widget; the request carries no SQL. Returns 501 when Ollie or Custom Charts is not enabled for the workspace.", responses = {
             @ApiResponse(responseCode = "200", description = "Query results", content = @Content(schema = @Schema(implementation = AnalyticsQueryResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "404", description = "Dashboard not found, or the widget has no saved query"),
+            @ApiResponse(responseCode = "404", description = "Dashboard not found, or the widget has no dashboard saved query"),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "429", description = "Too many queries are running; retry after the Retry-After delay", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "501", description = "Ollie or Custom Charts is not enabled for this workspace")

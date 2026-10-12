@@ -28,7 +28,7 @@ public class AuthFilter implements ContainerRequestFilter {
     // Compiled once and reused across requests rather than recompiled on every path check.
     private static final Pattern PRIVATE_PATH_PATTERN = Pattern.compile("/v1/private/.*");
     private static final Pattern AUTHENTICATED_INTERNAL_PATH_PATTERN = Pattern
-            .compile("/v1/internal/(analytics-queries|saved-queries)(/.*)?");
+            .compile("/v1/internal/(analytics-queries|dashboard-saved-queries)(/.*)?");
     private static final Pattern SESSION_PATH_PATTERN = Pattern.compile("/v1/session/.*");
 
     private final AuthService authService;
@@ -47,9 +47,9 @@ public class AuthFilter implements ContainerRequestFilter {
         UriInfo uriInfo = context.getUriInfo();
         String path = uriInfo.getRequestUri().getPath();
 
-        // Unlike other /v1/internal/* endpoints, the Agent Insights query executor and the saved queries Ollie charts
-        // run must be authenticated: they derive the bounding workspace_id from auth (see OPIK-6814 / Agent Insights
-        // technical design), so they go through the same authentication path as /v1/private/*.
+        // Unlike other /v1/internal/* endpoints, the Agent Insights query executor and the dashboard saved queries
+        // Ollie charts run must be authenticated: they derive the bounding workspace_id from auth (see OPIK-6814 /
+        // Agent Insights technical design), so they go through the same authentication path as /v1/private/*.
         if (PRIVATE_PATH_PATTERN.matcher(path).matches()
                 || AUTHENTICATED_INTERNAL_PATH_PATTERN.matcher(path).matches()) {
             ContextInfoHolder contextInfo = ContextInfoHolder.builder()

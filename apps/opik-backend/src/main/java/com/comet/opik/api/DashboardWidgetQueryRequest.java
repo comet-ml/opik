@@ -17,6 +17,6 @@ import java.time.Instant;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DashboardWidgetQueryRequest(
-        @Nullable @Schema(description = "Start of the date range, bound to {{window_start}} in the saved query. Omit for all time.") Instant intervalStart,
-        @Nullable @Schema(description = "End of the date range, bound to {{window_end}} in the saved query. Omit for now.") Instant intervalEnd) {
+        @Nullable @Schema(description = "Start of the date range, bound to {{window_start}} in the dashboard saved query. Omit for all time.") Instant intervalStart,
+        @Nullable @Schema(description = "End of the date range, bound to {{window_end}} in the dashboard saved query. Omit for now.") Instant intervalEnd) {
 }

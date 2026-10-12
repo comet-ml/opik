@@ -1,9 +1,9 @@
 package com.comet.opik.api.resources.v1.internal;
 
 import com.codahale.metrics.annotation.Timed;
-import com.comet.opik.api.SavedQuery;
+import com.comet.opik.api.DashboardSavedQuery;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.domain.SavedQueryService;
+import com.comet.opik.domain.DashboardSavedQueryService;
 import com.comet.opik.infrastructure.CustomChartsConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -42,15 +42,15 @@ import java.util.UUID;
  * Ollie can create one: the browser can place, move and remove a widget, but not set the SQL it runs. Gated like
  * Custom Charts free-form SQL, on {@code ollieEnabled} and {@code customCharts.enabledWorkspaces}.
  */
-@Path("/v1/internal/saved-queries")
+@Path("/v1/internal/dashboard-saved-queries")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Timed
 @Slf4j
-@Tag(name = "Saved queries", description = "Internal endpoints for the queries Ollie chart widgets run")
-public class SavedQueriesResource {
+@Tag(name = "Dashboard saved queries", description = "Internal endpoints for the queries Ollie chart widgets run")
+public class DashboardSavedQueriesResource {
 
-    private final SavedQueryService savedQueryService;
+    private final DashboardSavedQueryService dashboardSavedQueryService;
     private final Provider<RequestContext> requestContext;
     private final ServiceTogglesConfig serviceToggles;
     private final CustomChartsConfig customCharts;
@@ -58,43 +58,44 @@ public class SavedQueriesResource {
     // Hand-written rather than Lombok's: image builds do not read lombok.config, so a generated constructor loses the
     // @Config qualifiers and customCharts is injected as an empty default instance (OPIK-8548).
     @Inject
-    public SavedQueriesResource(
-            @NonNull SavedQueryService savedQueryService,
+    public DashboardSavedQueriesResource(
+            @NonNull DashboardSavedQueryService dashboardSavedQueryService,
             @NonNull Provider<RequestContext> requestContext,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
             @NonNull @Config("customCharts") CustomChartsConfig customCharts) {
-        this.savedQueryService = savedQueryService;
+        this.dashboardSavedQueryService = dashboardSavedQueryService;
         this.requestContext = requestContext;
         this.serviceToggles = serviceToggles;
         this.customCharts = customCharts;
     }
 
     @POST
-    @Operation(operationId = "createSavedQuery", summary = "Save a chart query", description = "Saves the query of an Ollie chart so a dashboard widget can reference it by id.", responses = {
+    @Operation(operationId = "createDashboardSavedQuery", summary = "Save a chart query", description = "Saves the query of an Ollie chart so a dashboard widget can reference it by id.", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
-                    @Header(name = "Location", required = true, example = "${basePath}/v1/internal/saved-queries/{id}", schema = @Schema(implementation = String.class))}, content = @Content(schema = @Schema(implementation = SavedQuery.class))),
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/internal/dashboard-saved-queries/{id}", schema = @Schema(implementation = String.class))}, content = @Content(schema = @Schema(implementation = DashboardSavedQuery.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "501", description = "Ollie or Custom Charts is not enabled for this workspace")})
     @RateLimited
     public Response create(
-            @RequestBody(content = @Content(schema = @Schema(implementation = SavedQuery.class))) @NotNull @Valid SavedQuery query,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DashboardSavedQuery.class))) @NotNull @Valid DashboardSavedQuery query,
             @Context UriInfo uriInfo) {
         requireEnabled();
-        var saved = savedQueryService.create(query);
+        var saved = dashboardSavedQueryService.create(query);
         var uri = uriInfo.getAbsolutePathBuilder().path(saved.id().toString()).build();
         return Response.created(uri).entity(saved).build();
     }
 
     @GET
     @Path("/{id}")
-    @Operation(operationId = "getSavedQuery", summary = "Get a chart query", description = "Gets a saved query by id.", responses = {
-            @ApiResponse(responseCode = "200", description = "Saved query", content = @Content(schema = @Schema(implementation = SavedQuery.class))),
+    @Operation(operationId = "getDashboardSavedQuery", summary = "Get a chart query", description = "Gets a dashboard saved query by id.", responses = {
+            @ApiResponse(responseCode = "200", description = "Dashboard saved query", content = @Content(schema = @Schema(implementation = DashboardSavedQuery.class))),
             @ApiResponse(responseCode = "404", description = "Not found"),
             @ApiResponse(responseCode = "501", description = "Ollie or Custom Charts is not enabled for this workspace")})
-    public SavedQuery get(@PathParam("id") UUID id) {
+    public DashboardSavedQuery get(@PathParam("id") UUID id) {
         requireEnabled();
-        return savedQueryService.findById(id)
-                .orElseThrow(() -> new NotFoundException("Saved query '%s' not found".formatted(id)));
+        return dashboardSavedQueryService.findById(id)
+                .orElseThrow(
+                        () -> new NotFoundException("Dashboard saved query '%s' not found".formatted(id)));
     }
 
     private void requireEnabled() {
