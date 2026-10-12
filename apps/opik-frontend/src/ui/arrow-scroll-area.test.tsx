@@ -189,6 +189,24 @@ describe("ArrowScrollArea", () => {
       expect(viewport.scrollTop).toBe(scrollTopOnLeave);
     });
 
+    it("stops scrolling at the end of the list while still held", () => {
+      vi.useFakeTimers();
+      stubHeights(CONTENT_HEIGHT);
+      const viewport = renderArea();
+
+      fireEvent.pointerDown(downArrow()!);
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      const scrollTopAtEnd = viewport.scrollTop;
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+
+      expect(scrollTopAtEnd).toBeGreaterThanOrEqual(MAX_SCROLL_TOP);
+      expect(viewport.scrollTop).toBe(scrollTopAtEnd);
+    });
+
     it("keeps a held arrow at the end of the list until release", () => {
       stubHeights(CONTENT_HEIGHT);
       const viewport = renderArea();

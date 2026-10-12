@@ -318,9 +318,8 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.whats_these_configuration_things]: {
     id: EXPLAINER_ID.whats_these_configuration_things,
-    title: "Model parameters",
     description:
-      "The model configuration parameters allow you to control output behavior. Tuning these lets you balance between deterministic answers and more diverse, exploratory outputs.",
+      "Settings sent to the model on every run. They shape the answer, for example how long or how varied it is.",
   },
   [EXPLAINER_ID.why_do_i_need_an_ai_provider]: {
     id: EXPLAINER_ID.why_do_i_need_an_ai_provider,

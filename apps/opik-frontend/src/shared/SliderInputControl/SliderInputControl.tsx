@@ -110,6 +110,7 @@ const SliderInputControl = ({
         <div className="flex items-center">
           {!resetDisabled && (
             <Button
+              type="button"
               variant="minimal"
               size="icon-sm"
               onClick={handleResetValue}
