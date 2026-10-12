@@ -37,8 +37,12 @@ const PlaygroundPrompts = ({
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
-  const { calculateModelProvider, calculateDefaultModel, hasRegistryModels } =
-    useLLMProviderModelsData();
+  const {
+    calculateModelProvider,
+    calculateDefaultModel,
+    isDropdownModel,
+    hasRegistryModels,
+  } = useLLMProviderModelsData();
 
   useEffect(() => {
     if (promptCount === 0 && !isPendingProviderKeys) {
@@ -47,6 +51,7 @@ const PlaygroundPrompts = ({
         lastPickedModel,
         providerResolver: calculateModelProvider,
         modelResolver: calculateDefaultModel,
+        isDropdownModel,
       });
       setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
     }
@@ -57,6 +62,7 @@ const PlaygroundPrompts = ({
     lastPickedModel,
     calculateModelProvider,
     calculateDefaultModel,
+    isDropdownModel,
     setPromptMap,
   ]);
 
