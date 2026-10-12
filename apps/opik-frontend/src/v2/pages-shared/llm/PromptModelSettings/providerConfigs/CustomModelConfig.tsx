@@ -19,6 +19,10 @@ import ExclusiveSamplingParams, {
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Info } from "lucide-react";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import {
+  NO_OUTPUT_LIMIT_TOOLTIP,
+  getNoOutputLimitHint,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/noOutputLimit";
 
 interface CustomModelConfigProps {
   configs: Partial<LLMCustomConfigsType>;
@@ -92,10 +96,14 @@ const CustomModelConfig = ({
             min={0}
             max={10000}
             step={1}
+            integer
+            hint={getNoOutputLimitHint(configs.maxCompletionTokens)}
             defaultValue={DEFAULT_CUSTOM_CONFIGS.MAX_COMPLETION_TOKENS}
             label="Max output tokens"
             tooltip={
-              <PromptModelSettingsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
+              <PromptModelSettingsTooltipContent
+                text={`The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On reasoning models, reasoning tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. ${NO_OUTPUT_LIMIT_TOOLTIP} (One token is roughly 4 characters for standard English text).`}
+              />
             }
           />
         )}
