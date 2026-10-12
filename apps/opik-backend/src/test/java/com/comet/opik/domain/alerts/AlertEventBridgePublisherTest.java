@@ -40,6 +40,7 @@ import static org.mockito.Mockito.when;
 class AlertEventBridgePublisherTest {
 
     private static final String EVENT_BUS = "arn:aws:events:us-east-1:123456789012:event-bus/opik-alerts";
+    private static final String EVENT_ID = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = "workspace-id";
     private static final String WORKSPACE_NAME = "workspace-name";
     private static final UUID PROJECT_ID = UUID.randomUUID();
@@ -70,7 +71,7 @@ class AlertEventBridgePublisherTest {
                 .build();
         var payload = payload(alert, List.of("event-1"), List.of(JsonUtils.writeValueAsString(metricsPayload)));
 
-        StepVerifier.create(publisher.publish(alert, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
+        StepVerifier.create(publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
                 payload)).verifyComplete();
 
         var entry = captureEntries(1).getFirst();
@@ -81,6 +82,7 @@ class AlertEventBridgePublisherTest {
 
         JsonNode detail = JsonUtils.getJsonNodeFromString(entry.detail());
         assertThat(detail.get("schemaVersion").asText()).isEqualTo("1");
+        assertThat(detail.get("eventId").asText()).isEqualTo(EVENT_ID);
         assertThat(detail.get("workspaceId").asText()).isEqualTo(WORKSPACE_ID);
         assertThat(detail.get("workspaceName").asText()).isEqualTo(WORKSPACE_NAME);
         assertThat(detail.get("alertId").asText()).isEqualTo(alert.id().toString());
@@ -105,7 +107,7 @@ class AlertEventBridgePublisherTest {
         when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
         var alert = alert(null);
 
-        StepVerifier.create(publisher.publish(alert, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
+        StepVerifier.create(publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
                 payload(alert, List.of("event-1"), List.of()))).verifyComplete();
 
         JsonNode detail = JsonUtils.getJsonNodeFromString(captureEntries(1).getFirst().detail());
@@ -117,7 +119,7 @@ class AlertEventBridgePublisherTest {
         when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
         var alert = alert(Map.of("base_url", "https://opik.example.com/"));
 
-        StepVerifier.create(publisher.publish(alert, WORKSPACE_ID, null, AlertEventType.TRACE_COST,
+        StepVerifier.create(publisher.publish(alert, EVENT_ID, WORKSPACE_ID, null, AlertEventType.TRACE_COST,
                 payload(alert, List.of("event-1"), List.of()))).verifyComplete();
 
         JsonNode detail = JsonUtils.getJsonNodeFromString(captureEntries(1).getFirst().detail());
@@ -136,7 +138,7 @@ class AlertEventBridgePublisherTest {
                 .threshold("x".repeat(300_000))
                 .build());
 
-        StepVerifier.create(publisher.publish(alert, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
+        StepVerifier.create(publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
                 payload(alert, eventIds, List.of(largeMetadata)))).verifyComplete();
 
         var entry = captureEntries(1).getFirst();
@@ -145,6 +147,7 @@ class AlertEventBridgePublisherTest {
 
         JsonNode detail = JsonUtils.getJsonNodeFromString(entry.detail());
         assertThat(detail.get("truncated").asBoolean()).isTrue();
+        assertThat(detail.get("eventId").asText()).isEqualTo(EVENT_ID);
         JsonNode opik = detail.get("opik");
         assertThat(opik.get("metadata")).isEmpty();
         assertThat(opik.get("eventIds")).hasSize(AlertEventBridgePublisher.MAX_TRUNCATED_LIST_SIZE);
@@ -157,7 +160,7 @@ class AlertEventBridgePublisherTest {
                 .thenThrow(new IllegalStateException("boom"));
         var alert = alert(null);
 
-        StepVerifier.create(publisher.publish(alert, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
+        StepVerifier.create(publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
                 payload(alert, List.of("event-1"), List.of()))).verifyComplete();
 
         verify(client, times(1)).putEvents(any(PutEventsRequest.class));
@@ -169,7 +172,7 @@ class AlertEventBridgePublisherTest {
                 .thenThrow(EventBridgeException.builder().statusCode(503).message("unavailable").build());
         var alert = alert(null);
 
-        StepVerifier.withVirtualTime(() -> publisher.publish(alert, WORKSPACE_ID, WORKSPACE_NAME,
+        StepVerifier.withVirtualTime(() -> publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME,
                 AlertEventType.TRACE_COST, payload(alert, List.of("event-1"), List.of())))
                 .thenAwait(RETRY_WINDOW)
                 .verifyComplete();
@@ -187,12 +190,17 @@ class AlertEventBridgePublisherTest {
                 .thenReturn(successResponse());
         var alert = alert(null);
 
-        StepVerifier.withVirtualTime(() -> publisher.publish(alert, WORKSPACE_ID, WORKSPACE_NAME,
+        StepVerifier.withVirtualTime(() -> publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME,
                 AlertEventType.TRACE_COST, payload(alert, List.of("event-1"), List.of())))
                 .thenAwait(RETRY_WINDOW)
                 .verifyComplete();
 
-        verify(client, times(2)).putEvents(any(PutEventsRequest.class));
+        var captor = ArgumentCaptor.forClass(PutEventsRequest.class);
+        verify(client, times(2)).putEvents(captor.capture());
+        assertThat(captor.getAllValues())
+                .extracting(request -> JsonUtils.getJsonNodeFromString(request.entries().getFirst().detail())
+                        .get("eventId").asText())
+                .containsExactly(EVENT_ID, EVENT_ID);
     }
 
     @Test
@@ -204,7 +212,7 @@ class AlertEventBridgePublisherTest {
                         .build());
         var alert = alert(null);
 
-        StepVerifier.create(publisher.publish(alert, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
+        StepVerifier.create(publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
                 payload(alert, List.of("event-1"), List.of()))).verifyComplete();
 
         verify(client, times(1)).putEvents(any(PutEventsRequest.class));
@@ -215,7 +223,7 @@ class AlertEventBridgePublisherTest {
         var disabled = new AlertEventBridgePublisher(Optional.empty(), new AlertsEventBridgeConfig());
         var alert = alert(null);
 
-        StepVerifier.create(disabled.publish(alert, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
+        StepVerifier.create(disabled.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
                 payload(alert, List.of("event-1"), List.of()))).verifyComplete();
 
         assertThat(disabled.isEnabled()).isFalse();

@@ -3,6 +3,7 @@ package com.comet.opik.domain.alerts;
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookPublisher;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import jakarta.inject.Inject;
@@ -32,6 +33,7 @@ public class AlertWebhookSender {
     private final @NonNull WorkspaceNameService workspaceNameService;
     private final @NonNull OpikConfiguration config;
     private final @NonNull AlertEventBridgePublisher eventBridgePublisher;
+    private final @NonNull IdGenerator idGenerator;
 
     /**
      * Creates a consolidated webhook event and sends it via WebhookPublisher.
@@ -82,8 +84,11 @@ public class AlertWebhookSender {
         String eventBridgeWorkspaceName = resolvedWorkspaceName;
         Map<String, Object> payload = buildPayload(alert, eventType, eventIds, payloads, userNames);
 
+        String eventBridgeEventId = idGenerator.generateId().toString();
+
         // Fire-and-forget: EventBridge retries must not hold up, or fail, the webhook delivery
-        Mono.defer(() -> eventBridgePublisher.publish(alert, workspaceId, eventBridgeWorkspaceName, eventType, payload))
+        Mono.defer(() -> eventBridgePublisher.publish(alert, eventBridgeEventId, workspaceId,
+                eventBridgeWorkspaceName, eventType, payload))
                 .onErrorResume(error -> {
                     log.error("Failed to publish alert '{}' to EventBridge", alert.id(), error);
                     return Mono.empty();

@@ -86,11 +86,13 @@ public class AlertEventBridgePublisher {
     }
 
     /**
+     * @param eventId stable for one triggered alert, so consumers can dedupe on source + detail.eventId
      * @param workspaceName null when it couldn't be resolved, in which case the envelope omits it
      * @param payload the product payload built for the webhook, with its metadata still serialized
      * @return a Mono that completes once the alert is published or the publish has failed; it never errors
      */
     public Mono<Void> publish(@NonNull Alert alert,
+            @NonNull String eventId,
             @NonNull String workspaceId,
             @Nullable String workspaceName,
             @NonNull AlertEventType eventType,
@@ -101,7 +103,7 @@ public class AlertEventBridgePublisher {
 
         Instant triggeredAt = Instant.now();
 
-        return Mono.fromCallable(() -> buildEntry(alert, workspaceId, workspaceName, eventType, payload,
+        return Mono.fromCallable(() -> buildEntry(alert, eventId, workspaceId, workspaceName, eventType, payload,
                 triggeredAt))
                 .flatMap(entry -> putEvent(entry, alert))
                 .subscribeOn(Schedulers.boundedElastic())
@@ -144,7 +146,7 @@ public class AlertEventBridgePublisher {
         };
     }
 
-    private PutEventsRequestEntry buildEntry(Alert alert, String workspaceId, String workspaceName,
+    private PutEventsRequestEntry buildEntry(Alert alert, String eventId, String workspaceId, String workspaceName,
             AlertEventType eventType, Map<String, Object> payload, Instant triggeredAt) {
         Map<String, Object> product = new HashMap<>(payload);
         @SuppressWarnings("unchecked")
@@ -153,6 +155,7 @@ public class AlertEventBridgePublisher {
 
         var detail = AlertEventBridgeDetail.builder()
                 .schemaVersion(SCHEMA_VERSION)
+                .eventId(eventId)
                 .workspaceId(workspaceId)
                 .workspaceName(workspaceName)
                 .alertId(alert.id())
@@ -219,6 +222,7 @@ public class AlertEventBridgePublisher {
     @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     record AlertEventBridgeDetail(
             @NonNull String schemaVersion,
+            @NonNull String eventId,
             @NonNull String workspaceId,
             String workspaceName,
             @NonNull UUID alertId,
