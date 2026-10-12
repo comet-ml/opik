@@ -11,6 +11,14 @@ type ScrollDirection = "up" | "down";
 
 const SCROLL_SIGN: Record<ScrollDirection, number> = { up: -1, down: 1 };
 
+// scrollTop can be fractional while scrollHeight and clientHeight are whole
+// pixels, so at the very bottom a raw comparison would still see room left.
+const canScroll = (viewport: HTMLElement, direction: ScrollDirection) =>
+  direction === "up"
+    ? viewport.scrollTop > 0
+    : Math.ceil(viewport.scrollTop) <
+      viewport.scrollHeight - viewport.clientHeight;
+
 interface ScrollArrowProps {
   direction: ScrollDirection;
   onPress: (direction: ScrollDirection) => void;
@@ -62,9 +70,8 @@ const ArrowScrollArea: React.FC<ArrowScrollAreaProps> = ({
     const viewport = viewportRef.current;
     if (!viewport) return;
 
-    const maxScrollTop = viewport.scrollHeight - viewport.clientHeight;
-    setCanScrollUp(viewport.scrollTop > 0);
-    setCanScrollDown(Math.ceil(viewport.scrollTop) < maxScrollTop);
+    setCanScrollUp(canScroll(viewport, "up"));
+    setCanScrollDown(canScroll(viewport, "down"));
   }, []);
 
   React.useLayoutEffect(() => {
@@ -93,7 +100,9 @@ const ArrowScrollArea: React.FC<ArrowScrollAreaProps> = ({
           (time - previousTime);
       }
       previousTime = time;
-      frame = requestAnimationFrame(scrollWhileHeld);
+      if (canScroll(viewport, heldDirection)) {
+        frame = requestAnimationFrame(scrollWhileHeld);
+      }
     };
     const holdTimer = window.setTimeout(() => {
       frame = requestAnimationFrame(scrollWhileHeld);
