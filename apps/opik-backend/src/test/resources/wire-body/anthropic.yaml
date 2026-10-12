@@ -1,0 +1,356 @@
+# What Anthropic receives for each rule, as main sends it on 2026-10-12. See WireBodyTableTest for the format.
+# "chat" rows go through the playground and API path (POST /v1/private/chat/completions); "judge" rows go
+# through online-evaluation scoring with the rule's model block as the request.
+
+models:
+  # Claude 3: takes sampling params, has no effort, and its registry entry has no structuredOutput, so its judges
+  # use the instruction strategy instead of a JSON schema.
+  legacy:
+    - claude-3-7-sonnet-20250219
+  # AnthropicModelName.SAMPLING_CAPABLE_MODEL_IDS, without Claude 3.
+  sampling:
+    - claude-haiku-4-5-20251001
+    - claude-opus-4-1-20250805
+    - claude-opus-4-20250514
+    - claude-opus-4-5-20251101
+    - claude-opus-4-6
+    - claude-opus-4-6-20260205
+    - claude-sonnet-4-20250514
+    - claude-sonnet-4-5
+    - claude-sonnet-4-5-20250929
+    - claude-sonnet-4-6
+  # Every other AnthropicModelName id.
+  no-sampling:
+    - claude-fable-5
+    - claude-fable-5-1
+    - claude-mythos-5
+    - claude-mythos-5-1
+    - claude-mythos-preview
+    - claude-opus-4-7
+    - claude-opus-4-7-20260416
+    - claude-opus-4-8
+    - claude-opus-5
+    - claude-opus-5-5
+    - claude-sonnet-5
+  # In the registry only, not in AnthropicModelName: what a model the sync or the CDN just added looks like.
+  registry-only:
+    - claude-opus-6
+  # AnthropicModelName.EFFORT_LEVELS_BY_MODEL_ID, by the levels each model is listed with.
+  effort-all:
+    - claude-fable-5
+    - claude-fable-5-1
+    - claude-mythos-5
+    - claude-mythos-5-1
+    - claude-opus-4-7
+    - claude-opus-4-7-20260416
+    - claude-opus-4-8
+    - claude-opus-5
+    - claude-opus-5-5
+    - claude-sonnet-5
+  effort-to-max:
+    - claude-mythos-preview
+    - claude-opus-4-6
+    - claude-opus-4-6-20260205
+    - claude-sonnet-4-6
+  effort-to-high:
+    - claude-opus-4-5-20251101
+  effort-none:
+    - claude-haiku-4-5-20251001
+    - claude-opus-4-1-20250805
+    - claude-opus-4-20250514
+    - claude-sonnet-4-20250514
+    - claude-sonnet-4-5
+    - claude-sonnet-4-5-20250929
+
+defaults:
+  chat:
+    request:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content: Say hi.
+      max_completion_tokens: 512
+    body:
+      messages:
+        - role: user
+          content:
+            - type: text
+              text: Say hi.
+      system:
+        - type: text
+          text: Be brief.
+      max_tokens: 512
+      stream: false
+  judge:
+    rule:
+      model: {}
+      messages:
+        - role: USER
+          content: Is Paris the capital of France?
+      variables: {}
+      schema:
+        - name: Correctness
+          type: INTEGER
+          description: 1 if correct
+    body:
+      messages:
+        - role: user
+          content:
+            - type: text
+              text: Is Paris the capital of France?
+      max_tokens: 4096
+      stream: false
+      output_config:
+        format:
+          type: json_schema
+          schema:
+            type: object
+            properties:
+              Correctness:
+                type: object
+                description: 1 if correct
+                properties:
+                  score:
+                    type: integer
+                    description: the score for Correctness
+                  reason:
+                    type: string
+                    description: the reason for the score for Correctness
+                required: [score, reason]
+                additionalProperties: false
+            required: [Correctness]
+            additionalProperties: false
+
+rows:
+  # Sampling params, chat path.
+  - name: temperature is sent to a model that takes sampling params
+    models: [legacy, sampling]
+    request: {temperature: 0.3}
+    body: {temperature: 0.3}
+  - name: temperature is dropped for a model that takes none
+    models: [no-sampling, registry-only]
+    request: {temperature: 0.3}
+  - name: top_p alone is sent to a model that takes sampling params
+    models: [legacy, sampling]
+    request: {top_p: 0.9}
+    body: {top_p: 0.9}
+  - name: top_p is dropped for a model that takes none
+    models: [no-sampling, registry-only]
+    request: {top_p: 0.9}
+  - name: temperature wins when both are set
+    models: [legacy, sampling]
+    request: {temperature: 0.3, top_p: 0.9}
+    body: {temperature: 0.3}
+  - name: enabled thinking drops sampling params
+    model: claude-sonnet-4-6
+    request:
+      temperature: 0.3
+      top_p: 0.9
+      custom_parameters: {thinking: {type: enabled, budget_tokens: 2048}}
+    # The thinking block turns sampling params off but is never sent: the chat path forwards only output_config.
+  - name: disabled thinking keeps sampling params
+    model: claude-sonnet-4-6
+    request:
+      temperature: 0.3
+      custom_parameters: {thinking: {type: disabled}}
+    body: {temperature: 0.3}
+  - name: thinking without a type keeps sampling params
+    model: claude-sonnet-4-6
+    request:
+      temperature: 0.3
+      custom_parameters: {thinking: {budget_tokens: 2048}}
+    body: {temperature: 0.3}
+
+  # Max tokens, chat path.
+  - name: no output cap sends the 4096 default
+    model: claude-sonnet-4-6
+    request: {max_completion_tokens: null}
+    body: {max_tokens: 4096}
+  - name: max_tokens alone is sent
+    model: claude-sonnet-4-6
+    request: {max_completion_tokens: null, max_tokens: 300}
+    body: {max_tokens: 300}
+  - name: max_completion_tokens wins over max_tokens
+    model: claude-sonnet-4-6
+    request: {max_tokens: 300}
+
+  # Effort, chat path. The whole output_config rides custom_parameters.
+  - name: low effort is sent
+    models: [effort-all, effort-to-max, effort-to-high, registry-only]
+    request: {custom_parameters: {output_config: {effort: low}}}
+    body: {output_config: {effort: low}}
+  - name: medium effort is sent
+    models: [effort-all, effort-to-max, effort-to-high, registry-only]
+    request: {custom_parameters: {output_config: {effort: medium}}}
+    body: {output_config: {effort: medium}}
+  - name: high effort is sent
+    models: [effort-all, effort-to-max, effort-to-high, registry-only]
+    request: {custom_parameters: {output_config: {effort: high}}}
+    body: {output_config: {effort: high}}
+  - name: max effort is sent
+    models: [effort-all, effort-to-max, registry-only]
+    request: {custom_parameters: {output_config: {effort: max}}}
+    body: {output_config: {effort: max}}
+  - name: xhigh effort is sent
+    models: [effort-all, registry-only]
+    request: {custom_parameters: {output_config: {effort: xhigh}}}
+    body: {output_config: {effort: xhigh}}
+  - name: xhigh effort is rejected by a model that stops below it
+    models: [effort-to-max, effort-to-high]
+    request: {custom_parameters: {output_config: {effort: xhigh}}}
+    rejected: Unsupported custom_parameters.output_config.effort for the model
+  - name: max effort is rejected by a model that stops at high
+    models: [effort-to-high]
+    request: {custom_parameters: {output_config: {effort: max}}}
+    rejected: Unsupported custom_parameters.output_config.effort for the model
+  - name: effort is rejected by a model without effort
+    models: [legacy, effort-none]
+    request: {custom_parameters: {output_config: {effort: low}}}
+    rejected: The model does not support custom_parameters.output_config.effort
+  - name: an unknown effort name is rejected for a model with no effort row
+    models: [registry-only]
+    request: {custom_parameters: {output_config: {effort: ultra}}}
+    rejected: Unsupported custom_parameters.output_config.effort for the model
+  - name: an output_config that is not an object is rejected
+    model: claude-opus-4-7
+    request: {custom_parameters: {output_config: high}}
+    rejected: custom_parameters.output_config must be an object
+  - name: other output_config fields are sent beside the effort
+    model: claude-opus-4-7
+    request: {custom_parameters: {output_config: {effort: high, format: {type: json_schema, schema: {type: object}}}}}
+    body: {output_config: {effort: high, format: {type: json_schema, schema: {type: object}}}}
+  - name: an output_config without effort is sent to a model without effort
+    model: claude-sonnet-4-5
+    request: {custom_parameters: {output_config: {format: {type: json_schema, schema: {type: object}}}}}
+    body: {output_config: {format: {type: json_schema, schema: {type: object}}}}
+  - name: effort alone turns no thinking on for a model that thinks only when asked
+    models: [claude-sonnet-4-6, claude-opus-4-6, claude-opus-4-6-20260205, claude-opus-4-7, claude-opus-4-7-20260416,
+      claude-opus-4-8]
+    request: {custom_parameters: {output_config: {effort: high}}}
+    # #8841 (with #8880) adds thinking: {type: adaptive} here, so the effort really changes how much the model thinks.
+    body: {output_config: {effort: high}}
+  - name: effort keeps temperature on a model that takes sampling params
+    models: [claude-sonnet-4-6, claude-opus-4-6]
+    request: {temperature: 0.3, custom_parameters: {output_config: {effort: high}}}
+    # #8841 (with #8880) drops the temperature here, since the effort then turns thinking on.
+    body: {temperature: 0.3, output_config: {effort: high}}
+  - name: other custom_parameters keys are not sent
+    model: claude-sonnet-4-6
+    request: {custom_parameters: {top_k: 5, metadata: {user_id: u-1}}}
+
+  # Other request fields, chat path.
+  - name: stop is sent as stop_sequences
+    model: claude-sonnet-4-6
+    request: {stop: [END]}
+    body: {stop_sequences: [END]}
+  - name: a streamed request sends stream true
+    model: claude-sonnet-4-6
+    request: {stream: true, temperature: 0.3}
+    body: {stream: true, temperature: 0.3}
+
+  # Judge path.
+  - name: a judge sends temperature to a model that takes sampling params
+    path: judge
+    models: [sampling]
+    request: {temperature: 0.3}
+    body: {temperature: 0.3}
+  - name: a judge drops temperature for a model that takes none
+    path: judge
+    models: [no-sampling, registry-only]
+    request: {temperature: 0.3}
+    # #8881 raises max_tokens to 5000 for the models here that think by default (all but claude-opus-4-7,
+    # claude-opus-4-7-20260416 and claude-opus-4-8), since a thinking judge can spend all 4096 before it answers.
+  - name: a judge on Claude 3 puts the output format in the prompt
+    path: judge
+    models: [legacy]
+    request: {temperature: 0.3}
+    body:
+      temperature: 0.3
+      output_config: null
+      messages:
+        - role: user
+          content:
+            - type: text
+              text: |-
+                Is Paris the capital of France?
+
+                IMPORTANT:
+                You must respond with ONLY a single valid JSON object that conforms to the structure of the example below.
+                Pay attention to the field names and data types (boolean, integer, double).
+                Do NOT include any other text, explanation, or markdown formatting.
+                The JSON object should look like this:
+                {
+                  "Correctness" : {
+                    "score" : 1,
+                    "reason" : "A brief explanation for the score."
+                  }
+                }
+
+                Here are the descriptions for each field:
+                - Correctness: 1 if correct
+  - name: a judge does not send the seed
+    path: judge
+    model: claude-sonnet-4-6
+    request: {seed: 42}
+  - name: a judge sends enabled thinking, drops temperature and raises max_tokens above the budget
+    path: judge
+    model: claude-sonnet-4-6
+    request:
+      temperature: 0.3
+      custom_parameters: {thinking: {type: enabled, budget_tokens: 8000}}
+    body:
+      thinking: {type: enabled, budget_tokens: 8000}
+      max_tokens: 12096
+  - name: a judge keeps an explicit max_tokens that clears the thinking budget
+    path: judge
+    model: claude-sonnet-4-6
+    request:
+      custom_parameters: {thinking: {type: enabled, budget_tokens: 2048}, max_tokens: 5000}
+    body:
+      thinking: {type: enabled, budget_tokens: 2048}
+      max_tokens: 5000
+  - name: a judge sends disabled thinking without its budget and keeps temperature
+    path: judge
+    model: claude-sonnet-4-6
+    request:
+      temperature: 0.3
+      custom_parameters: {thinking: {type: disabled, budget_tokens: 2048}}
+    body:
+      temperature: 0.3
+      thinking: {type: disabled}
+  - name: a judge sends adaptive thinking
+    path: judge
+    model: claude-opus-4-7
+    request:
+      custom_parameters: {thinking: {type: adaptive}}
+    body:
+      thinking: {type: adaptive}
+    # #8881 raises max_tokens to 5000 here, since the judge will think.
+  - name: a judge sends max_tokens from custom_parameters
+    path: judge
+    model: claude-sonnet-4-6
+    request:
+      custom_parameters: {max_tokens: 1000}
+    body: {max_tokens: 1000}
+  - name: a judge sends the effort and the output schema in one output_config
+    path: judge
+    models: [effort-all, effort-to-max, effort-to-high, registry-only]
+    request:
+      custom_parameters: {output_config: {effort: high}}
+    body:
+      output_config: {effort: high}
+    # #8841 (with #8880) adds thinking: {type: adaptive} for claude-sonnet-4-6, claude-opus-4-6(-20260205),
+    # claude-opus-4-7(-20260416) and claude-opus-4-8; #8881 then raises max_tokens to 5000 wherever the judge thinks.
+  - name: a judge rejects effort on a model without effort
+    path: judge
+    models: [legacy, effort-none]
+    request:
+      custom_parameters: {output_config: {effort: low}}
+    rejected: The model does not support custom_parameters.output_config.effort
+  - name: a judge rejects an effort level the model does not offer
+    path: judge
+    models: [effort-to-max, effort-to-high]
+    request:
+      custom_parameters: {output_config: {effort: xhigh}}
+    rejected: Unsupported custom_parameters.output_config.effort for the model
