@@ -28,8 +28,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletionException;
 
 /**
- * Runs the query saved on an Ollie chart widget, so the browser asks for a widget's rows by reference instead of
- * sending SQL. The free-form SQL endpoint stays cluster-internal, for Ollie.
+ * Runs the saved query an Ollie chart widget references, so the browser asks for a widget's rows by reference and
+ * never supplies SQL: saved queries are created only through {@code /v1/internal}, by Ollie.
  */
 @ImplementedBy(DashboardWidgetQueryServiceImpl.class)
 public interface DashboardWidgetQueryService {
@@ -56,6 +56,7 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
     static final Instant MAX_BOUND_EXCLUSIVE = Instant.parse(InRangeValidator.MAX_ANALYTICS_DB_PRECISION_9);
 
     private final DashboardService dashboardService;
+    private final SavedQueryService savedQueryService;
     private final FreeFormSqlQueryService freeFormSqlQueryService;
     private final Provider<RequestContext> requestContext;
     private final ServiceTogglesConfig serviceToggles;
@@ -66,11 +67,13 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
     @Inject
     DashboardWidgetQueryServiceImpl(
             @NonNull DashboardService dashboardService,
+            @NonNull SavedQueryService savedQueryService,
             @NonNull FreeFormSqlQueryService freeFormSqlQueryService,
             @NonNull Provider<RequestContext> requestContext,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
             @NonNull @Config("customCharts") CustomChartsConfig customCharts) {
         this.dashboardService = dashboardService;
+        this.savedQueryService = savedQueryService;
         this.freeFormSqlQueryService = freeFormSqlQueryService;
         this.requestContext = requestContext;
         this.serviceToggles = serviceToggles;
@@ -97,7 +100,9 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
                     .formatted(MIN_BOUND, MAX_BOUND_EXCLUSIVE));
         }
 
-        var savedQuery = OllieChartWidgets.findQuery(dashboardService.findById(dashboardId, scope).config(), widgetId)
+        var savedQuery = OllieChartWidgets
+                .findQueryId(dashboardService.findById(dashboardId, scope).config(), widgetId)
+                .flatMap(savedQueryService::findById)
                 .orElseThrow(() -> new NotFoundException("No saved query for widget '%s'".formatted(widgetId)));
 
         log.info("Running saved query of widget '{}' on dashboard '{}' in workspace '{}', project '{}'", widgetId,

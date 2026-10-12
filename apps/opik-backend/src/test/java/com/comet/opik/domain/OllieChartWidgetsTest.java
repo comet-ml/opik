@@ -13,42 +13,37 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OllieChartWidgetsTest {
 
     private static final String WIDGET_ID = UUID.randomUUID().toString();
-    private static final UUID PROJECT_ID = UUID.randomUUID();
+    private static final UUID QUERY_ID = UUID.randomUUID();
 
     @Test
-    @DisplayName("finds the saved query and project of an Ollie chart by widget id")
-    void findQuery__whenOllieChart__thenReturnsSavedQuery() {
-        var config = config("ollie_chart", "\"sql\": \"SELECT 1\", \"projectId\": \"%s\"".formatted(PROJECT_ID));
+    @DisplayName("finds the saved query an Ollie chart references by widget id")
+    void findQueryId__whenOllieChart__thenReturnsIt() {
+        var config = config("ollie_chart", "\"id\": \"%s\"".formatted(QUERY_ID));
 
-        assertThat(OllieChartWidgets.findQuery(config, WIDGET_ID))
-                .contains(new OllieChartWidgets.SavedQuery("SELECT 1", PROJECT_ID));
+        assertThat(OllieChartWidgets.findQueryId(config, WIDGET_ID)).contains(QUERY_ID);
+        assertThat(OllieChartWidgets.queryIds(config)).containsExactly(QUERY_ID);
+        assertThat(OllieChartWidgets.validate(config)).isEmpty();
     }
 
     @Test
-    @DisplayName("finds nothing for another widget type, an unknown id or a missing query")
-    void findQuery__whenNotARunnableOllieChart__thenEmpty() {
-        assertThat(OllieChartWidgets.findQuery(config("text_markdown", "\"sql\": \"SELECT 1\""), WIDGET_ID)).isEmpty();
-        assertThat(OllieChartWidgets.findQuery(config("ollie_chart", "\"sql\": \"SELECT 1\""), "other")).isEmpty();
-        assertThat(OllieChartWidgets.findQuery(config("ollie_chart", "\"sql\": \" \""), WIDGET_ID)).isEmpty();
+    @DisplayName("finds nothing for another widget type, an unknown widget or a query id that is not a UUID")
+    void findQueryId__whenNotARunnableOllieChart__thenEmpty() {
+        var query = "\"id\": \"%s\"".formatted(QUERY_ID);
+
+        assertThat(OllieChartWidgets.findQueryId(config("text_markdown", query), WIDGET_ID)).isEmpty();
+        assertThat(OllieChartWidgets.findQueryId(config("ollie_chart", query), "other")).isEmpty();
+        assertThat(OllieChartWidgets.findQueryId(config("ollie_chart", "\"id\": \"not-a-uuid\""), WIDGET_ID))
+                .isEmpty();
     }
 
     @Test
-    @DisplayName("a project id that is present but not a UUID fails closed instead of widening to the workspace")
-    void findQuery__whenProjectIdInvalid__thenEmpty() {
-        var config = config("ollie_chart", "\"sql\": \"SELECT 1\", \"projectId\": \"not-a-uuid\"");
-
-        assertThat(OllieChartWidgets.findQuery(config, WIDGET_ID)).isEmpty();
-        assertThat(OllieChartWidgets.validate(config)).singleElement().asString().contains("projectId");
-    }
-
-    @Test
-    @DisplayName("rejects a saved query longer than the limit")
-    void validate__whenQueryTooLong__thenError() {
-        var sql = "x".repeat(OllieChartWidgets.MAX_QUERY_LENGTH + 1);
-
-        assertThat(OllieChartWidgets.validate(config("ollie_chart", "\"sql\": \"%s\"".formatted(sql))))
-                .singleElement().asString().contains("exceeds");
-        assertThat(OllieChartWidgets.validate(config("ollie_chart", "\"sql\": \"SELECT 1\""))).isEmpty();
+    @DisplayName("refuses SQL in the widget, and a query without a saved query id")
+    void validate__whenQueryCarriesSqlOrNoId__thenErrors() {
+        assertThat(OllieChartWidgets.validate(config("ollie_chart", "\"id\": \"%s\", \"sql\": \"SELECT 1\""
+                .formatted(QUERY_ID)))).singleElement().asString().contains("query.sql");
+        assertThat(OllieChartWidgets.validate(config("ollie_chart", "\"sql\": \"SELECT 1\"")))
+                .hasSize(2).anySatisfy(error -> assertThat(error).contains("query.id"));
+        assertThat(OllieChartWidgets.validate(config("text_markdown", "\"sql\": \"SELECT 1\""))).isEmpty();
     }
 
     @Test
