@@ -10,6 +10,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -122,6 +124,33 @@ class AlertEventBridgePublisherTest {
         assertThat(entries)
                 .extracting(entry -> JsonUtils.getJsonNodeFromString(entry.detail()).get("triggeredAt").asText())
                 .containsExactly(TRIGGERED_AT.toString(), TRIGGERED_AT.toString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"javascript:alert(1)//", "/opik/", "opik.example.com", "ftp://opik.example.com/",
+            "https:///no-host", "http://exa mple.com/"})
+    void publishWhenBaseUrlIsNotAbsoluteHttpOmitsUrl(String baseUrl) {
+        when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
+        var alert = alert(Map.of("base_url", baseUrl));
+
+        StepVerifier.create(publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
+                TRIGGERED_AT, payload(alert, List.of("event-1"), List.of()))).verifyComplete();
+
+        JsonNode detail = JsonUtils.getJsonNodeFromString(captureEntries(1).getFirst().detail());
+        assertThat(detail.has("url")).isFalse();
+    }
+
+    @Test
+    void publishEncodesWorkspaceNameInUrl() {
+        when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
+        var alert = alert(Map.of("base_url", "https://opik.example.com"));
+
+        StepVerifier.create(publisher.publish(alert, EVENT_ID, WORKSPACE_ID, "my team/a?b#c", AlertEventType.TRACE_COST,
+                TRIGGERED_AT, payload(alert, List.of("event-1"), List.of()))).verifyComplete();
+
+        JsonNode detail = JsonUtils.getJsonNodeFromString(captureEntries(1).getFirst().detail());
+        assertThat(detail.get("url").asText()).isEqualTo("https://opik.example.com/my%20team%2Fa%3Fb%23c/projects/"
+                + PROJECT_ID + "/alerts/" + alert.id());
     }
 
     @Test

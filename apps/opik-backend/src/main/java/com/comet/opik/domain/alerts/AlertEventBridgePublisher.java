@@ -32,11 +32,15 @@ import software.amazon.awssdk.services.eventbridge.model.PutEventsRequestEntry;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsResponse;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsResultEntry;
 
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -222,7 +226,8 @@ public class AlertEventBridgePublisher {
         return list.subList(0, Math.min(list.size(), MAX_TRUNCATED_LIST_SIZE));
     }
 
-    // Base URL is the UI origin the alert was saved from, as the Slack payload uses for its links
+    // Base URL is the UI origin the alert was saved from, as the Slack payload uses for its links. It's
+    // client-supplied metadata, so only an absolute http(s) URL with a host is turned into a link.
     private static String buildAlertUrl(Alert alert, String workspaceName) {
         String baseUrl = Optional.ofNullable(alert.metadata())
                 .map(metadata -> metadata.get(SlackWebhookPayloadMapper.BASE_URL_METADATA_KEY))
@@ -231,8 +236,25 @@ public class AlertEventBridgePublisher {
             return null;
         }
 
-        return (baseUrl.endsWith("/") ? baseUrl : baseUrl + "/") + workspaceName + "/projects/" + alert.projectId()
-                + "/alerts/" + alert.id();
+        URI baseUri;
+        try {
+            baseUri = new URI(baseUrl.trim());
+        } catch (URISyntaxException exception) {
+            return null;
+        }
+        if (!baseUri.isAbsolute() || baseUri.getHost() == null
+                || !Set.of("http", "https").contains(baseUri.getScheme().toLowerCase(Locale.ROOT))) {
+            return null;
+        }
+
+        String base = baseUri.toString();
+        // projectId and alertId are UUIDs, already safe as path segments
+        return (base.endsWith("/") ? base : base + "/") + encodePathSegment(workspaceName) + "/projects/"
+                + alert.projectId() + "/alerts/" + alert.id();
+    }
+
+    private static String encodePathSegment(String segment) {
+        return URLEncoder.encode(segment, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private static Attributes metricAttributes(String workspaceId, String workspaceName, String result) {
