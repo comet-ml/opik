@@ -175,7 +175,9 @@ rows:
     model: claude-sonnet-4-6
     request: {max_tokens: 300}
 
-  # Effort, chat path. The whole output_config rides custom_parameters.
+  # Effort, chat path. The whole output_config rides custom_parameters. #8841 (with #8880) adds
+  # thinking: {type: adaptive} to every row here that sends an effort to a model that thinks only when asked:
+  # claude-sonnet-4-6, claude-opus-4-6(-20260205), claude-opus-4-7(-20260416) and claude-opus-4-8.
   - name: low effort is sent
     models: [effort-all, effort-to-max, effort-to-high, registry-only]
     request: {custom_parameters: {output_config: {effort: low}}}
@@ -228,12 +230,12 @@ rows:
     models: [claude-sonnet-4-6, claude-opus-4-6, claude-opus-4-6-20260205, claude-opus-4-7, claude-opus-4-7-20260416,
       claude-opus-4-8]
     request: {custom_parameters: {output_config: {effort: high}}}
-    # #8841 (with #8880) adds thinking: {type: adaptive} here, so the effort really changes how much the model thinks.
+    # Today the effort only shortens or lengthens the answer on these models; #8841 makes it turn thinking on.
     body: {output_config: {effort: high}}
   - name: effort keeps temperature on a model that takes sampling params
     models: [claude-sonnet-4-6, claude-opus-4-6]
     request: {temperature: 0.3, custom_parameters: {output_config: {effort: high}}}
-    # #8841 (with #8880) drops the temperature here, since the effort then turns thinking on.
+    # #8841 also drops the temperature here, since the effort then turns thinking on.
     body: {temperature: 0.3, output_config: {effort: high}}
   - name: other custom_parameters keys are not sent
     model: claude-sonnet-4-6
