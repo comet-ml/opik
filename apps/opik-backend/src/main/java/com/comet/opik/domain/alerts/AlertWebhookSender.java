@@ -76,8 +76,9 @@ public class AlertWebhookSender {
                 resolvedWorkspaceName = workspaceNameService.getWorkspaceName(workspaceId,
                         config.getAuthentication().getReactService().url());
             } catch (RuntimeException exception) {
-                // EventBridge still gets the event without a name; the webhook keeps failing on it as before
-                log.warn("Failed to resolve workspace name for workspaceId='{}', alertId='{}'",
+                // EventBridge still gets the event without a name; the webhook keeps failing on it as before, and
+                // the job logs that failure
+                log.debug("Failed to resolve workspace name for workspaceId='{}', alertId='{}'",
                         workspaceId, alert.id(), exception);
                 resolvedWorkspaceName = null;
                 workspaceNameFailure = exception;
@@ -100,6 +101,11 @@ public class AlertWebhookSender {
 
         if (!hasWebhookUrl) {
             log.warn("Alert '{}' has no webhook configuration, skipping webhook", alert.id());
+            if (workspaceNameFailure != null) {
+                // Nothing is rethrown on this path, so this is the only place the failure gets logged
+                log.warn("Failed to resolve workspace name for workspaceId='{}', alertId='{}'",
+                        workspaceId, alert.id(), workspaceNameFailure);
+            }
             return Mono.empty();
         }
 
