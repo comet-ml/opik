@@ -1,5 +1,6 @@
 import {
   ANTHROPIC_THINKING_EFFORT_VALUES,
+  AnthropicEffortLevel,
   AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
@@ -288,6 +289,7 @@ export const getDefaultThinkingLevel = (
   DEFAULT_THINKING_LEVEL_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ?? "high";
 
 const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
+  off: "Off",
   low: "Low",
   medium: "Medium",
   high: "High",
@@ -486,11 +488,25 @@ export const knowsAnthropicEffortLevels = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean => !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE];
 
+export const thinksOnlyWhenAsked = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean =>
+  !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+    ?.thinksOnlyWhenAsked;
+
+export const hasEffortWithoutThinking = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean =>
+  !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+    ?.effortWithoutThinking;
+
+// Off for a model that thinks only when asked: that is how it runs when the request names no
+// effort, so a new prompt or rule does not start thinking until someone picks a level.
 export const getDefaultThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): AnthropicThinkingEffort =>
   ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-    ?.defaultThinkingEffort ?? "high";
+    ?.defaultThinkingEffort ?? (thinksOnlyWhenAsked(model) ? "off" : "high");
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   isPlainObject(value) ? (value as Record<string, unknown>) : {};
@@ -502,7 +518,7 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  */
 export const getNestedThinkingEffort = (
   customParameters: unknown,
-): AnthropicThinkingEffort | undefined => {
+): AnthropicEffortLevel | undefined => {
   const effort = asRecord(asRecord(customParameters).output_config).effort;
   return ANTHROPIC_THINKING_EFFORT_VALUES.find((level) => level === effort);
 };
@@ -519,7 +535,8 @@ export const withThinkingEffort = (
     return Object.keys(params).length > 0 ? params : undefined;
   }
   const outputConfig = omit(asRecord(params.output_config), "effort");
-  const nextOutputConfig = effort ? { ...outputConfig, effort } : outputConfig;
+  const nextOutputConfig =
+    effort && effort !== "off" ? { ...outputConfig, effort } : outputConfig;
   const next =
     Object.keys(nextOutputConfig).length > 0
       ? { ...omit(params, "output_config"), output_config: nextOutputConfig }
@@ -531,10 +548,11 @@ export const getAnthropicThinkingEffortOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): Array<{ label: string; value: AnthropicThinkingEffort }> =>
   supportsAnthropicThinkingEffort(model)
-    ? (
-        ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-          ?.thinkingEffortOptions ?? []
-      ).map((value) => ({ label: EFFORT_LABELS[value], value }))
+    ? [
+        ...(thinksOnlyWhenAsked(model) ? (["off"] as const) : []),
+        ...(ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+          ?.thinkingEffortOptions ?? []),
+      ].map((value) => ({ label: EFFORT_LABELS[value], value }))
     : [];
 
 const OPENAI_EFFORT_LABELS: Record<OpenAIReasoningEffort, string> = {
@@ -825,7 +843,7 @@ const getNativeModelBehindOpenRouter = (
  */
 export const resolveSamplingParams = (
   model: PROVIDER_MODEL_TYPE | "",
-  configs: { temperature?: number | null; topP?: number | null },
+  configs: { temperature?: number | null; topP?: number | null } & EffortParams,
 ): SamplingParams => {
   const temperature = configs.temperature ?? undefined;
   const topP = configs.topP ?? undefined;
@@ -850,6 +868,9 @@ export const resolveSamplingParams = (
   }
 
   if (provider === PROVIDER_TYPE.ANTHROPIC) {
+    if (isAnthropicThinkingOn(model, configs)) {
+      return {};
+    }
     // Anthropic takes one of the pair, never both: temperature wins a config carrying both, and
     // takes over when neither is set so the panel can't offer two live sliders.
     if (temperature !== undefined) {
@@ -976,6 +997,15 @@ export const resolveEffort = (
   return { ...configs };
 };
 
+// The backend turns on adaptive thinking for any level on these models, and Anthropic then refuses
+// the sampling pair: "temperature may only be set to 1 when thinking is enabled".
+export const isAnthropicThinkingOn = (
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: EffortParams,
+): boolean =>
+  thinksOnlyWhenAsked(model) &&
+  resolveEffort(model, configs).thinkingEffort !== "off";
+
 // Last-mile request hardening, complementary to updateProviderConfig: this
 // layer doesn't trust upstream and keeps the payload valid for stale state
 // (e.g. older persisted prompts missing maxCompletionTokens).
@@ -989,7 +1019,10 @@ export const sanitizeConfigForRequest = (
   const sanitized: Record<string, unknown> = { ...configs };
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
-  const sampling = resolveSamplingParams(model, configs as SamplingParams);
+  const sampling = resolveSamplingParams(
+    model,
+    configs as SamplingParams & EffortParams,
+  );
   for (const key of ["temperature", "topP"] as const) {
     if (sampling[key] === undefined) {
       delete sanitized[key];
