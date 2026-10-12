@@ -23,7 +23,7 @@ export interface DashboardRuntimeConfig {
   projectIds?: string[];
   experimentIds?: string[];
   dashboardType?: DASHBOARD_TYPE;
-  // The saved dashboard on screen; Ollie chart widgets run their saved query through it.
+  // The saved dashboard on screen; Ollie chart widgets run their dashboard saved query through it.
   dashboardId?: string;
   dashboardScope?: DASHBOARD_SCOPE;
 }
@@ -156,7 +156,7 @@ export interface OllieChartWidgetType {
   config: {
     // Vega-Lite spec with no config or size; references its data as {"name": "rows"}.
     spec?: Record<string, unknown>;
-    // The saved query the widget runs, which only Ollie can create; the widget never holds its SQL.
+    // The dashboard saved query the widget runs, which only Ollie can create; the widget never holds its SQL.
     query?: {
       id: string;
     };

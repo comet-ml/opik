@@ -38,7 +38,7 @@ export interface ChartEditRequest {
   title: string;
   description?: string | null;
   spec: Record<string, unknown>;
-  // The saved query the widget runs; Ollie's backend reads its SQL by id.
+  // The dashboard saved query the widget runs; Ollie's backend reads its SQL by id.
   query: { id: string };
   // The rows the widget shows now, so the chat can show the chart being edited without re-running it.
   rows?: Record<string, unknown>[] | null;
