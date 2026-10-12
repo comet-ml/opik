@@ -91,7 +91,7 @@ class LlmProviderGeminiTest {
         assertThat(outcome.lastChoice().finishReason()).isEqualTo("stop");
     }
 
-    private static Stream<Arguments> cutOffCases() {
+    private static Stream<Arguments> finishReasonCases() {
         var empty = response(null, null, null);
         return Stream.of(
                 Arguments.of("empty under a limit", 20, null, empty, FinishReason.LENGTH),
@@ -113,9 +113,9 @@ class LlmProviderGeminiTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("cutOffCases")
-    @DisplayName("only an empty stream under an output limit, with thinking not turned off, reads as the limit running out")
-    void readsOnlyAnEmptyStreamAsTheLimitRunningOut(String name, Integer maxCompletionTokens,
+    @MethodSource("finishReasonCases")
+    @DisplayName("keeps each finish reason, except an empty stream under an output limit with thinking not turned off, which gets length")
+    void addsLengthOnlyToAnEmptyStreamUnderALimit(String name, Integer maxCompletionTokens,
             Map<String, Object> customParameters, ChatResponse response, FinishReason expected) {
         var result = LlmProviderGemini.withCutOffWhileThinking(request(maxCompletionTokens, customParameters),
                 response);
