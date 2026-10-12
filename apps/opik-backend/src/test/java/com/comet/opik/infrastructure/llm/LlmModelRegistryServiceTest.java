@@ -242,6 +242,31 @@ class LlmModelRegistryServiceTest {
     }
 
     @ParameterizedTest
+    @CsvSource({
+            "google/lyria-3-clip-preview",
+            "google/lyria-3-pro-preview",
+            "openai/gpt-audio",
+            "openai/gpt-audio-mini",
+            "openai/gpt-3.5-turbo-instruct",
+            "openai/gpt-5-image",
+            "openai/gpt-5-image-mini",
+            "relace/relace-apply-3",
+            "thinkingmachines/inkling:free",
+            "thinkingmachines/inkling-small:free",
+            "openai/gpt-5.2-chat",
+            "minimax/minimax-m1"
+    })
+    void defaultResourceHidesOpenRouterModelsThatCannotRunButStillResolvesThem(String model) {
+        var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
+
+        var result = service.findModel(model);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().provider()).isEqualTo(LlmProvider.OPEN_ROUTER);
+        assertThat(result.get().model().label()).isNull();
+    }
+
+    @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
             "o3     | label: O3 from override | true",
             "o3     | reasoning: false        | false",
