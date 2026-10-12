@@ -7,8 +7,11 @@ import {
   getDefaultConfigByProvider,
   hasUnsupportedMedia,
   isEmptyMessage,
+  OUTPUT_LIMIT_REACHED_MESSAGE,
+  parseCompletionOutput,
   restoreMissingConfigKeys,
 } from "@/lib/playground";
+import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMAnthropicConfigsType,
@@ -128,6 +131,20 @@ describe("getDefaultConfigByProvider — Anthropic", () => {
   });
 });
 
+describe("getDefaultConfigByProvider — the starting temperature", () => {
+  it.each<[PROVIDER_TYPE, PROVIDER_MODEL_TYPE]>([
+    [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI],
+    [PROVIDER_TYPE.OPEN_ROUTER, PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI],
+    [PROVIDER_TYPE.ANTHROPIC, PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6],
+    [PROVIDER_TYPE.GEMINI, PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH],
+    [PROVIDER_TYPE.VERTEX_AI, PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH],
+  ])("starts a new %s prompt at 0", (provider, model) => {
+    expect(
+      getDefaultConfigByProvider(provider as COMPOSED_PROVIDER_TYPE, model),
+    ).toMatchObject({ temperature: 0 });
+  });
+});
+
 describe("getDefaultConfigByProvider — OpenAI", () => {
   const defaults = (model: PROVIDER_MODEL_TYPE) =>
     getDefaultConfigByProvider(
@@ -176,8 +193,7 @@ describe("getDefaultConfigByProvider — OpenAI", () => {
 
 describe("getDefaultConfigByProvider — Anthropic thinking effort", () => {
   it.each([
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, "high"],
-    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, "medium"],
   ])("seeds %s with Anthropic's default effort, %s", (model, effort) => {
@@ -187,6 +203,19 @@ describe("getDefaultConfigByProvider — Anthropic thinking effort", () => {
     );
 
     expect(config).toMatchObject({ thinkingEffort: effort });
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+  ])("seeds %s, which thinks only when asked, with Off", (model) => {
+    const config = getDefaultConfigByProvider(
+      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+      model,
+    );
+
+    expect(config).toMatchObject({ thinkingEffort: "off" });
   });
 
   it("seeds no thinkingEffort for a model that takes none", () => {
@@ -262,6 +291,39 @@ describe("restoreMissingConfigKeys", () => {
 
     expect(restored.configs).toMatchObject({ minP: 0, topA: 0 });
   });
+
+  it("keeps the temperature an OpenRouter prompt was stored with", () => {
+    const stored = prompt(
+      PROVIDER_TYPE.OPEN_ROUTER,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      { temperature: 1, topP: 1, maxTokens: 0 },
+    );
+
+    expect(restoreMissingConfigKeys(stored).configs).toMatchObject({
+      temperature: 1,
+    });
+  });
+
+  it.each([
+    { stored: "no temperature", configs: { topP: 1, maxTokens: 0 } },
+    {
+      stored: "a null temperature",
+      configs: { temperature: null, topP: 1, maxTokens: 0 },
+    },
+  ])(
+    "gives an OpenRouter prompt stored with $stored the new default 0",
+    ({ configs }) => {
+      const stored = prompt(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+        configs,
+      );
+
+      expect(restoreMissingConfigKeys(stored).configs).toMatchObject({
+        temperature: 0,
+      });
+    },
+  );
 
   it("leaves a cleared Anthropic temperature cleared when Top P is the live half", () => {
     // Restoring temperature here would silently override the user's Top P: with both set the
@@ -485,6 +547,7 @@ describe("generateDefaultPrompt", () => {
       setupProviders: [],
       providerResolver: () => "",
       modelResolver: () => "",
+      isDropdownModel: () => false,
     });
 
   it("starts with an empty system message and an empty user message", () => {
@@ -558,5 +621,55 @@ describe("canRunMessages", () => {
 
   it("blocks a run while a user message has no parts", () => {
     expect(canRunMessages([systemMessage(""), userMessage([])])).toBe(false);
+  });
+});
+
+describe("parseCompletionOutput", () => {
+  const EMPTY_RESPONSE =
+    "The AI provider returned an empty response. Please, try again.";
+
+  const run = (overrides: Partial<RunStreamingReturn>): RunStreamingReturn => ({
+    result: "",
+    startTime: "",
+    endTime: "",
+    usage: null,
+    choices: null,
+    finishReason: null,
+    providerError: null,
+    opikError: null,
+    pythonProxyError: null,
+    actualModel: null,
+    actualProvider: null,
+    ...overrides,
+  });
+
+  it.each<[string, Partial<RunStreamingReturn>, string]>([
+    [
+      "says the limit ran out when nothing was written before it",
+      { finishReason: "length" },
+      OUTPUT_LIMIT_REACHED_MESSAGE,
+    ],
+    [
+      "keeps a cut-off answer the model did write",
+      { result: "1 2 3", finishReason: "length" },
+      "1 2 3",
+    ],
+    [
+      "keeps the provider's error over the limit message",
+      { finishReason: "length", providerError: "Rate limited" },
+      "Rate limited",
+    ],
+    [
+      "keeps the generic message for an empty answer that stopped normally",
+      { finishReason: "stop" },
+      EMPTY_RESPONSE,
+    ],
+    [
+      "keeps the generic message when no finish reason arrived",
+      {},
+      EMPTY_RESPONSE,
+    ],
+  ])("%s", (_, overrides, expected) => {
+    expect(parseCompletionOutput(run(overrides))).toBe(expected);
   });
 });

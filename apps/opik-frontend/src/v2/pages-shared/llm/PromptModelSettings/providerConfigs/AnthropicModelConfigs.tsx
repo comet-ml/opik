@@ -4,6 +4,7 @@ import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import {
   LLMAnthropicConfigsType,
   PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
   AnthropicThinkingEffort,
 } from "@/types/providers";
 import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
@@ -16,13 +17,29 @@ import {
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import {
   getAnthropicThinkingEffortOptions,
+  getMaxCompletionTokensRange,
+  hasEffortWithoutThinking,
+  isAnthropicThinkingOn,
   resolveEffort,
+  resolveMaxCompletionTokens,
   resolveSamplingParams,
+  supportsSamplingParams,
+  thinksOnlyWhenAsked,
 } from "@/lib/modelUtils";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+
+const getEffortDescription = (model?: PROVIDER_MODEL_TYPE | "") => {
+  if (hasEffortWithoutThinking(model)) {
+    return "Changes how long Claude's answers are and how readily it calls tools. It doesn't turn on thinking.";
+  }
+  if (thinksOnlyWhenAsked(model)) {
+    return "Off answers without thinking. At any level Claude can think before it answers and decides how much; at lower levels it often answers straight away. Effort also controls how many tokens Claude spends on the whole response. Lower effort is faster and cheaper; higher effort is more thorough.";
+  }
+  return "Controls how many tokens Claude spends on the whole response, thinking included. Lower effort is faster and cheaper; higher effort is more thorough.";
+};
 
 interface AnthropicModelConfigsProps {
   configs: LLMAnthropicConfigsType;
@@ -44,6 +61,13 @@ const AnthropicModelConfigs = ({
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const { thinkingEffort } = resolveEffort(model ?? "", configs);
   const visible = getAnthropicVisibleControls({ model, configs, supports });
+  const maxCompletionTokensRange = getMaxCompletionTokensRange(
+    PROVIDER_TYPE.ANTHROPIC,
+    model ?? "",
+  );
+  const samplingOffWhileThinking =
+    supportsSamplingParams(model) &&
+    isAnthropicThinkingOn(model ?? "", configs);
 
   if (!isAnyControlVisible(visible)) return null;
 
@@ -60,21 +84,33 @@ const AnthropicModelConfigs = ({
         />
       )}
 
+      {samplingOffWhileThinking && (
+        <p className="comet-body-xs text-muted-slate">
+          {supports("topP")
+            ? "Temperature and Top P are off while Claude can think. Set Thinking effort to Off to use them."
+            : "Temperature is off while Claude can think. Set Thinking effort to Off to use it."}
+        </p>
+      )}
+
       {visible.maxCompletionTokens && (
         <SliderInputControl
-          value={
-            configs.maxCompletionTokens ??
-            DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS
-          }
+          value={resolveMaxCompletionTokens(
+            PROVIDER_TYPE.ANTHROPIC,
+            model ?? "",
+            configs.maxCompletionTokens,
+          )}
           onChange={(v) => onChange({ maxCompletionTokens: v })}
           id="maxCompletionTokens"
-          min={0}
-          max={64000}
+          min={maxCompletionTokensRange.min}
+          max={maxCompletionTokensRange.max}
           step={1}
+          integer
           defaultValue={DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS}
           label="Max output tokens"
           tooltip={
-            <PromptModelConfigsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
+            <PromptModelConfigsTooltipContent
+              text={`The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On thinking models, thinking tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. The minimum is ${maxCompletionTokensRange.min}. (One token is roughly 4 characters for standard English text).`}
+            />
           }
         />
       )}
@@ -118,9 +154,9 @@ const AnthropicModelConfigs = ({
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="thinkingEffort" className="text-sm font-medium">
-              Thinking effort
+              {hasEffortWithoutThinking(model) ? "Effort" : "Thinking effort"}
             </Label>
-            <ExplainerIcon description="Controls how many tokens Claude spends on the whole response, thinking included. Lower effort is faster and cheaper; higher effort is more thorough." />
+            <ExplainerIcon description={getEffortDescription(model)} />
           </div>
           <SelectBox
             id="thinkingEffort"

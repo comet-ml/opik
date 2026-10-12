@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import dayjs from "dayjs";
 import get from "lodash/get";
 import isString from "lodash/isString";
+import omit from "lodash/omit";
 
 import { UsageType } from "@/types/shared";
 import {
@@ -88,6 +89,24 @@ const isProviderError = (
   return "code" in response && isValidJsonObject(response.message);
 };
 
+const RUNNER_SETTINGS = ["throttling", "maxConcurrentRequests"];
+
+export const getRequestParameters = (
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: LLMPromptConfigsType,
+  openAiPipelineMode?: OpenAiPipelineMode,
+): Record<string, unknown> =>
+  snakeCaseObj(
+    omit(
+      sanitizeConfigForRequest(
+        model,
+        configs as unknown as Record<string, unknown>,
+        openAiPipelineMode,
+      ),
+      RUNNER_SETTINGS,
+    ),
+  );
+
 const getCompletionProxyStream = async ({
   model,
   messages,
@@ -96,12 +115,6 @@ const getCompletionProxyStream = async ({
   workspaceName,
   openAiPipelineMode,
 }: GetCompletionProxyStreamParams) => {
-  const configsRecord = sanitizeConfigForRequest(
-    model,
-    configs as unknown as Record<string, unknown>,
-    openAiPipelineMode,
-  );
-
   return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {
     method: "POST",
     headers: {
@@ -113,7 +126,7 @@ const getCompletionProxyStream = async ({
       messages,
       stream: true,
       stream_options: { include_usage: true },
-      ...snakeCaseObj(configsRecord),
+      ...getRequestParameters(model, configs, openAiPipelineMode),
     }),
     credentials: "include",
     signal,
@@ -135,6 +148,7 @@ export interface RunStreamingReturn {
   endTime: string;
   usage: UsageType | null;
   choices: ChatCompletionMessageChoiceType[] | null;
+  finishReason: string | null;
   providerError: null | string;
   opikError: null | string;
   pythonProxyError: null | string;
@@ -164,6 +178,7 @@ const useCompletionProxyStreaming = ({
       let accumulatedValue = "";
       let usage = null;
       let choices: ChatCompletionMessageChoiceType[] = [];
+      let finishReason: string | null = null;
 
       // errors
       let pythonProxyError = null;
@@ -196,6 +211,11 @@ const useCompletionProxyStreaming = ({
         ) => {
           choices = parsed?.choices;
           const deltaContent = choices?.[0]?.delta?.content;
+
+          // OpenAI sends the finish reason one chunk before the usage chunk, whose choices are empty.
+          if (choices?.[0]?.finish_reason) {
+            finishReason = choices[0].finish_reason;
+          }
 
           if (parsed?.usage) {
             usage = parsed.usage as UsageType;
@@ -281,6 +301,7 @@ const useCompletionProxyStreaming = ({
           pythonProxyError,
           usage,
           choices,
+          finishReason,
           actualModel,
           actualProvider,
         };
@@ -301,6 +322,7 @@ const useCompletionProxyStreaming = ({
           pythonProxyError,
           usage: null,
           choices,
+          finishReason,
           actualModel,
           actualProvider,
         };
