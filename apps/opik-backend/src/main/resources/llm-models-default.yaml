@@ -720,12 +720,6 @@ openrouter:
     label: "google/gemma-4-31b-it:free"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
-  - id: "google/lyria-3-clip-preview"
-    label: "google/lyria-3-clip-preview"
-    supportedParameters: [max_tokens, temperature, top_p]
-  - id: "google/lyria-3-pro-preview"
-    label: "google/lyria-3-pro-preview"
-    supportedParameters: [max_tokens, temperature, top_p]
   - id: "gryphe/mythomax-l2-13b"
     label: "gryphe/mythomax-l2-13b"
     structuredOutput: true
@@ -852,9 +846,6 @@ openrouter:
   - id: "minimax/minimax-01"
     label: "minimax/minimax-01"
     supportedParameters: [max_tokens, temperature, top_p]
-  - id: "minimax/minimax-m1"
-    label: "minimax/minimax-m1"
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
   - id: "minimax/minimax-m2"
     label: "minimax/minimax-m2"
     structuredOutput: true
@@ -1063,10 +1054,6 @@ openrouter:
     label: "openai/gpt-3.5-turbo-16k"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, presence_penalty, temperature, top_p]
-  - id: "openai/gpt-3.5-turbo-instruct"
-    label: "openai/gpt-3.5-turbo-instruct"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
   - id: "openai/gpt-4"
     label: "openai/gpt-4"
     structuredOutput: true
@@ -1116,14 +1103,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low, minimal]
-  - id: "openai/gpt-5-image"
-    label: "openai/gpt-5-image"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, temperature, top_p]
-  - id: "openai/gpt-5-image-mini"
-    label: "openai/gpt-5-image-mini"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, temperature, top_p]
   - id: "openai/gpt-5-mini"
     label: "openai/gpt-5-mini"
     structuredOutput: true
@@ -1164,10 +1143,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [xhigh, high, medium, low, none]
-  - id: "openai/gpt-5.2-chat"
-    label: "openai/gpt-5.2-chat"
-    structuredOutput: true
-    supportedParameters: [max_completion_tokens]
   - id: "openai/gpt-5.2-codex"
     label: "openai/gpt-5.2-codex"
     structuredOutput: true
@@ -1282,14 +1257,6 @@ openrouter:
     label: "openai/gpt-6.1-sol-pro"
     supportedParameters: [max_completion_tokens, max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
-  - id: "openai/gpt-audio"
-    label: "openai/gpt-audio"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
-  - id: "openai/gpt-audio-mini"
-    label: "openai/gpt-audio-mini"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
   - id: "openai/gpt-chat-latest"
     label: "openai/gpt-chat-latest"
     structuredOutput: true
@@ -1424,10 +1391,6 @@ openrouter:
     label: "qwen/qwen-plus"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen-plus-2025-07-28"
-    label: "qwen/qwen-plus-2025-07-28"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_k, top_p]
   - id: "qwen/qwen2.5-vl-72b-instruct"
     label: "qwen/qwen2.5-vl-72b-instruct"
     structuredOutput: true
@@ -1436,10 +1399,6 @@ openrouter:
     label: "qwen/qwen3-14b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen3-235b-a22b"
-    label: "qwen/qwen3-235b-a22b"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
   - id: "qwen/qwen3-235b-a22b-2507"
     label: "qwen/qwen3-235b-a22b-2507"
     structuredOutput: true
@@ -1456,18 +1415,10 @@ openrouter:
     label: "qwen/qwen3-30b-a3b-instruct-2507"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen3-30b-a3b-thinking-2507"
-    label: "qwen/qwen3-30b-a3b-thinking-2507"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
   - id: "qwen/qwen3-32b"
     label: "qwen/qwen3-32b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_a, top_k, top_p]
-  - id: "qwen/qwen3-8b"
-    label: "qwen/qwen3-8b"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
   - id: "qwen/qwen3-coder"
     label: "qwen/qwen3-coder"
     structuredOutput: true
@@ -1484,19 +1435,6 @@ openrouter:
     label: "qwen/qwen3-coder-next"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen3-coder-plus"
-    label: "qwen/qwen3-coder-plus"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen3-max"
-    label: "qwen/qwen3-max"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen3-max-thinking"
-    label: "qwen/qwen3-max-thinking"
-    structuredOutput: true
-    reasoning: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
   - id: "qwen/qwen3-next-80b-a3b-instruct"
     label: "qwen/qwen3-next-80b-a3b-instruct"
     structuredOutput: true
@@ -1510,11 +1448,6 @@ openrouter:
     label: "qwen/qwen3-vl-235b-a22b-instruct"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen3-vl-235b-a22b-thinking"
-    label: "qwen/qwen3-vl-235b-a22b-thinking"
-    structuredOutput: true
-    reasoning: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
   - id: "qwen/qwen3-vl-30b-a3b-instruct"
     label: "qwen/qwen3-vl-30b-a3b-instruct"
     structuredOutput: true
@@ -1524,19 +1457,10 @@ openrouter:
     structuredOutput: true
     reasoning: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
-  - id: "qwen/qwen3-vl-32b-instruct"
-    label: "qwen/qwen3-vl-32b-instruct"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_k, top_p]
   - id: "qwen/qwen3-vl-8b-instruct"
     label: "qwen/qwen3-vl-8b-instruct"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "qwen/qwen3-vl-8b-thinking"
-    label: "qwen/qwen3-vl-8b-thinking"
-    structuredOutput: true
-    reasoning: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
   - id: "qwen/qwen3.5-122b-a10b"
     label: "qwen/qwen3.5-122b-a10b"
     structuredOutput: true
@@ -1579,10 +1503,6 @@ openrouter:
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
   - id: "qwen/qwen3.6-flash"
     label: "qwen/qwen3.6-flash"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
-  - id: "qwen/qwen3.6-max-preview"
-    label: "qwen/qwen3.6-max-preview"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
   - id: "qwen/qwen3.6-plus"
@@ -1635,9 +1555,6 @@ openrouter:
     label: "rekaai/reka-flash-3"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
-  - id: "relace/relace-apply-3"
-    label: "relace/relace-apply-3"
-    supportedParameters: [max_tokens]
   - id: "relace/relace-search"
     label: "relace/relace-search"
     structuredOutput: true
@@ -1730,14 +1647,6 @@ openrouter:
   - id: "thinkingmachines/inkling-small"
     label: "thinkingmachines/inkling-small"
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
-    reasoningEfforts: [max, high, medium, low, minimal, none]
-  - id: "thinkingmachines/inkling-small:free"
-    label: "thinkingmachines/inkling-small:free"
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
-    reasoningEfforts: [max, high, medium, low, minimal, none]
-  - id: "thinkingmachines/inkling:free"
-    label: "thinkingmachines/inkling:free"
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [max, high, medium, low, minimal, none]
   - id: "typesafe/jev-router"
     label: "typesafe/jev-router"
@@ -2188,6 +2097,10 @@ openrouter:
   - id: "google/gemma-3n-e4b-it"
   - id: "google/gemma-3n-e4b-it:free"
   - id: "google/gemma-4-31b-it:batch"
+  - id: "google/lyria-3-clip-preview"
+    supportedParameters: [max_tokens, temperature, top_p]
+  - id: "google/lyria-3-pro-preview"
+    supportedParameters: [max_tokens, temperature, top_p]
   - id: "ibm-granite/granite-4.1-8b"
   - id: "inception/mercury"
   - id: "inception/mercury-2.5-preview"
@@ -2246,6 +2159,8 @@ openrouter:
   - id: "microsoft/phi-4-multimodal-instruct"
   - id: "microsoft/phi-4-reasoning-plus"
     reasoning: true
+  - id: "minimax/minimax-m1"
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
   - id: "minimax/minimax-m2.5:free"
   - id: "minimax/minimax-m2.7:free"
     structuredOutput: true
@@ -2343,6 +2258,9 @@ openrouter:
   - id: "nvidia/nemotron-nano-9b-v2:free"
   - id: "openai/chatgpt-4o-latest"
   - id: "openai/codex-mini"
+  - id: "openai/gpt-3.5-turbo-instruct"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
   - id: "openai/gpt-3.5-turbo:batch"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
@@ -2376,6 +2294,12 @@ openrouter:
   - id: "openai/gpt-5-chat"
   - id: "openai/gpt-5-codex"
   - id: "openai/gpt-5-codex:batch"
+  - id: "openai/gpt-5-image"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, temperature, top_p]
+  - id: "openai/gpt-5-image-mini"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, temperature, top_p]
   - id: "openai/gpt-5-mini:batch"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
@@ -2393,6 +2317,9 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low, none]
+  - id: "openai/gpt-5.2-chat"
+    structuredOutput: true
+    supportedParameters: [max_completion_tokens]
   - id: "openai/gpt-5.2-chat-latest"
     structuredOutput: true
   - id: "openai/gpt-5.2-pro:batch"
@@ -2482,6 +2409,12 @@ openrouter:
   - id: "openai/gpt-6.1-sol:batch"
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
+  - id: "openai/gpt-audio"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
+  - id: "openai/gpt-audio-mini"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
   - id: "openai/gpt-oss-120b:batch"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
@@ -2525,6 +2458,9 @@ openrouter:
   - id: "qwen/qwen-2.5-coder-32b-instruct:free"
   - id: "qwen/qwen-2.5-vl-7b-instruct"
   - id: "qwen/qwen-max"
+  - id: "qwen/qwen-plus-2025-07-28"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_k, top_p]
   - id: "qwen/qwen-plus-2025-07-28:thinking"
     reasoning: true
   - id: "qwen/qwen-turbo"
@@ -2534,14 +2470,47 @@ openrouter:
   - id: "qwen/qwen2.5-vl-32b-instruct"
   - id: "qwen/qwen2.5-vl-32b-instruct:free"
   - id: "qwen/qwen3-14b:free"
+  - id: "qwen/qwen3-235b-a22b"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
   - id: "qwen/qwen3-235b-a22b:free"
+  - id: "qwen/qwen3-30b-a3b-thinking-2507"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
   - id: "qwen/qwen3-30b-a3b:free"
   - id: "qwen/qwen3-4b:free"
+  - id: "qwen/qwen3-8b"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
+  - id: "qwen/qwen3-coder-plus"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_k, top_p]
   - id: "qwen/qwen3-coder:exacto"
   - id: "qwen/qwen3-coder:free"
+  - id: "qwen/qwen3-max"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_k, top_p]
+  - id: "qwen/qwen3-max-thinking"
+    structuredOutput: true
+    reasoning: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
   - id: "qwen/qwen3-next-80b-a3b-instruct:free"
+  - id: "qwen/qwen3-vl-235b-a22b-thinking"
+    structuredOutput: true
+    reasoning: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
+  - id: "qwen/qwen3-vl-32b-instruct"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_k, top_p]
+  - id: "qwen/qwen3-vl-8b-thinking"
+    structuredOutput: true
+    reasoning: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
   - id: "qwen/qwen3.5-9b:batch"
     structuredOutput: true
+  - id: "qwen/qwen3.6-max-preview"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
   - id: "qwen/qwen3.6-plus-preview:free"
   - id: "qwen/qwen3.6-plus:free"
   - id: "qwen/qwen3.8-2.4t-a95b:batch"
@@ -2555,6 +2524,8 @@ openrouter:
     reasoning: true
   - id: "raifle/sorcererlm-8x22b"
   - id: "reka/reka-edge"
+  - id: "relace/relace-apply-3"
+    supportedParameters: [max_tokens]
   - id: "sao10k/l3-euryale-70b"
   - id: "sao10k/l3.1-70b-hanami-x1"
   - id: "stealth/ox-alpha"
@@ -2569,7 +2540,13 @@ openrouter:
   - id: "thedrummer/anubis-70b-v1.1"
   - id: "thedrummer/rocinante-12b"
   - id: "thinkingmachines/inkling-small:batch"
+  - id: "thinkingmachines/inkling-small:free"
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [max, high, medium, low, minimal, none]
   - id: "thinkingmachines/inkling:batch"
+  - id: "thinkingmachines/inkling:free"
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [max, high, medium, low, minimal, none]
   - id: "thudm/glm-4.1v-9b-thinking"
     reasoning: true
   - id: "tngtech/deepseek-r1t-chimera"

@@ -523,14 +523,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemma-4-31b-it:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_LYRIA_3_CLIP_PREVIEW,
-      label: "google/lyria-3-clip-preview",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_LYRIA_3_PRO_PREVIEW,
-      label: "google/lyria-3-pro-preview",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.GRYPHE_MYTHOMAX_L2_13B,
       label: "gryphe/mythomax-l2-13b",
     },
@@ -649,10 +641,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_01,
       label: "minimax/minimax-01",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M1,
-      label: "minimax/minimax-m1",
     },
     {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2,
@@ -864,10 +852,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-3.5-turbo-16k",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO_INSTRUCT,
-      label: "openai/gpt-3.5-turbo-instruct",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4,
       label: "openai/gpt-4",
     },
@@ -916,14 +900,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-5",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_IMAGE,
-      label: "openai/gpt-5-image",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_IMAGE_MINI,
-      label: "openai/gpt-5-image-mini",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_MINI,
       label: "openai/gpt-5-mini",
     },
@@ -954,10 +930,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2,
       label: "openai/gpt-5.2",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2_CHAT,
-      label: "openai/gpt-5.2-chat",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2_CODEX,
@@ -1054,14 +1026,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_6_1_SOL_PRO,
       label: "openai/gpt-6.1-sol-pro",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_AUDIO,
-      label: "openai/gpt-audio",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_AUDIO_MINI,
-      label: "openai/gpt-audio-mini",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_CHAT_LATEST,
@@ -1200,20 +1164,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen-plus",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_PLUS_2025_07_28,
-      label: "qwen/qwen-plus-2025-07-28",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN2_5_VL_72B_INSTRUCT,
       label: "qwen/qwen2.5-vl-72b-instruct",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_14B,
       label: "qwen/qwen3-14b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B,
-      label: "qwen/qwen3-235b-a22b",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_2507,
@@ -1232,16 +1188,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3-30b-a3b-instruct-2507",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B_THINKING_2507,
-      label: "qwen/qwen3-30b-a3b-thinking-2507",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_32B,
       label: "qwen/qwen3-32b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8B,
-      label: "qwen/qwen3-8b",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_CODER,
@@ -1260,18 +1208,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3-coder-next",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_CODER_PLUS,
-      label: "qwen/qwen3-coder-plus",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_MAX,
-      label: "qwen/qwen3-max",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_MAX_THINKING,
-      label: "qwen/qwen3-max-thinking",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_NEXT_80B_A3B_INSTRUCT,
       label: "qwen/qwen3-next-80b-a3b-instruct",
     },
@@ -1284,10 +1220,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3-vl-235b-a22b-instruct",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_235B_A22B_THINKING,
-      label: "qwen/qwen3-vl-235b-a22b-thinking",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_30B_A3B_INSTRUCT,
       label: "qwen/qwen3-vl-30b-a3b-instruct",
     },
@@ -1296,16 +1228,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3-vl-30b-a3b-thinking",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_32B_INSTRUCT,
-      label: "qwen/qwen3-vl-32b-instruct",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_8B_INSTRUCT,
       label: "qwen/qwen3-vl-8b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_8B_THINKING,
-      label: "qwen/qwen3-vl-8b-thinking",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_5_122B_A10B,
@@ -1350,10 +1274,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_FLASH,
       label: "qwen/qwen3.6-flash",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_MAX_PREVIEW,
-      label: "qwen/qwen3.6-max-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_PLUS,
@@ -1402,10 +1322,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.REKAAI_REKA_FLASH_3,
       label: "rekaai/reka-flash-3",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.RELACE_RELACE_APPLY_3,
-      label: "relace/relace-apply-3",
     },
     {
       value: PROVIDER_MODEL_TYPE.RELACE_RELACE_SEARCH,
@@ -1494,14 +1410,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING_SMALL,
       label: "thinkingmachines/inkling-small",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING_SMALL_FREE,
-      label: "thinkingmachines/inkling-small:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING_FREE,
-      label: "thinkingmachines/inkling:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.TYPESAFE_JEV_ROUTER,
