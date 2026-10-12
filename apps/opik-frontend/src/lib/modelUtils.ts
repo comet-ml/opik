@@ -21,6 +21,7 @@ import {
 } from "@/lib/provider";
 import {
   getMaxOutputTokens,
+  getOpenRouterMaxOutputTokens,
   isCustomProviderModel,
 } from "@/lib/modelCapabilities";
 import isPlainObject from "lodash/isPlainObject";
@@ -993,11 +994,7 @@ export const resolveMaxCompletionTokens = (
 export const getOpenRouterDefaultMaxTokens = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): number => {
-  // The pricing data lists OpenRouter's own limits under openrouter/<id>. The bare id finds the
-  // direct provider's entry, whose limit can differ.
-  const modelMaxOutputTokens = model
-    ? getMaxOutputTokens(`openrouter/${model}`)
-    : undefined;
+  const modelMaxOutputTokens = getOpenRouterMaxOutputTokens(model);
   return modelMaxOutputTokens
     ? Math.min(DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS, modelMaxOutputTokens)
     : DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS;

@@ -181,6 +181,8 @@ describe("getDefaultConfigByProvider — the starting max output tokens", () => 
     // OpenAI's own entry for gpt-3.5-turbo-instruct allows 4096.
     { model: "openai/gpt-3.5-turbo-instruct", maxTokens: 3685 },
     { model: "openai/gpt-4o-mini", maxTokens: 4000 },
+    // Only OpenAI and Azure list it, at 1024.
+    { model: "openai/computer-use-preview", maxTokens: 4000 },
     { model: "acme/unlisted-model", maxTokens: 4000 },
   ])(
     "starts OpenRouter $model at $maxTokens, within what OpenRouter lists for it",
