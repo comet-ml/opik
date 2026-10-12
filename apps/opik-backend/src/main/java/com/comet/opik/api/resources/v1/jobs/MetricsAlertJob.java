@@ -325,7 +325,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                 : config.threshold();
     }
 
-    private PayloadAndId buildAndSerializePayload(Alert alert, AlertTrigger trigger, TriggerConfigGroup group,
+    private PayloadAndFiringTime buildAndSerializePayload(Alert alert, AlertTrigger trigger, TriggerConfigGroup group,
             List<ConditionResult> results) {
         String eventId = idGenerator.generateId().toString();
         Instant firedAt = Instant.now();
@@ -376,7 +376,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                 .build();
 
         String payloadJson = JsonUtils.writeValueAsString(metricsPayload);
-        return new PayloadAndId(eventId, payloadJson, firedAt);
+        return new PayloadAndFiringTime(eventId, payloadJson, firedAt);
     }
 
     private boolean compareMetric(BigDecimal metricValue, BigDecimal threshold, Operator operator) {
@@ -482,7 +482,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
     private record IndexedTriggerConfig(Integer groupIndex, TriggerConfig config) {
     }
 
-    private record PayloadAndId(String eventId, String json, Instant firedAt) {
+    private record PayloadAndFiringTime(String eventId, String json, Instant firedAt) {
     }
 
     @RequiredArgsConstructor
