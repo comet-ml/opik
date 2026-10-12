@@ -62,7 +62,7 @@ class AnthropicOutputConfigChatModel implements ChatModel {
         return modelFor(ruleOutputConfig).supportedCapabilities();
     }
 
-    // Each Anthropic model opens its own HTTP client, and scoreTrace retries chat() on this same instance, so a
+    // Each AnthropicChatModel opens its own HTTP client, and scoreTrace retries chat() on this same instance, so a
     // model is built only when a request first needs it and is reused after that.
     private ChatModel modelFor(Map<?, ?> outputConfig) {
         return modelsByOutputConfig.computeIfAbsent(outputConfig,

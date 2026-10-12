@@ -37,9 +37,6 @@ public class LlmProviderClientConfig {
     @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
     private Duration writeTimeout;
 
-    @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
-    private Duration judgeCallTimeout = Duration.minutes(3);
-
     private Boolean logRequests;
 
     private Boolean logResponses;

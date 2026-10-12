@@ -1515,14 +1515,11 @@ llmProviderClient:
   # Description: Connect timeout for LLM providers
   connectTimeout: ${LLM_PROVIDER_CLIENT_CONNECT_TIMEOUT:-60s}
   # Default: 60s
-  # Description: Read timeout for LLM providers. For a streamed LLM-as-judge call (Anthropic), the longest wait between two events
+  # Description: Read timeout for LLM providers
   readTimeout: ${LLM_PROVIDER_CLIENT_READ_TIMEOUT:-60s}
   # Default: 60s
   # Description: Write timeout for LLM providers
   writeTimeout: ${LLM_PROVIDER_CLIENT_WRITE_TIMEOUT:-60s}
-  # Default: 3m
-  # Description: Longest one attempt of a streamed LLM-as-judge call (Anthropic) may run. Keep it well under the online scoring pending-message reclaim (REDIS_SCORING_PENDING_MESSAGE_DURATION)
-  judgeCallTimeout: ${LLM_PROVIDER_CLIENT_JUDGE_CALL_TIMEOUT:-3m}
   # Default: false
   # Description: Whether or not to log requests (HTTP-level logging via langchain4j - can be verbose and may contain credentials)
   logRequests: ${LLM_PROVIDER_CLIENT_LOG_REQUESTS:-false}
