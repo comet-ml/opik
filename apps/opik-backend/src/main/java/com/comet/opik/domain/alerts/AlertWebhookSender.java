@@ -3,7 +3,6 @@ package com.comet.opik.domain.alerts;
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookPublisher;
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import jakarta.inject.Inject;
@@ -14,8 +13,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Service responsible for creating and sending webhook notifications for alerts.
@@ -33,7 +34,6 @@ public class AlertWebhookSender {
     private final @NonNull WorkspaceNameService workspaceNameService;
     private final @NonNull OpikConfiguration config;
     private final @NonNull AlertEventBridgePublisher eventBridgePublisher;
-    private final @NonNull IdGenerator idGenerator;
 
     /**
      * Creates a consolidated webhook event and sends it via WebhookPublisher.
@@ -45,6 +45,7 @@ public class AlertWebhookSender {
      * @param eventIds the set of aggregated event IDs
      * @param payloads the set of aggregated event payloads
      * @param userNames the set of user names who triggered events
+     * @param triggerKey identifies this trigger across reprocessing; the EventBridge eventId is derived from it
      * @return Mono that completes when the webhook is sent
      */
     public Mono<Void> createAndSendWebhook(
@@ -54,7 +55,8 @@ public class AlertWebhookSender {
             @NonNull AlertEventType eventType,
             @NonNull List<String> eventIds,
             @NonNull List<String> payloads,
-            @NonNull List<String> userNames) {
+            @NonNull List<String> userNames,
+            @NonNull String triggerKey) {
 
         if (Boolean.FALSE.equals(alert.enabled())) {
             log.warn("Alert '{}' is disabled, skipping webhook", alert.id());
@@ -86,8 +88,8 @@ public class AlertWebhookSender {
 
         if (eventBridgePublisher.isEnabled()) {
             // Fire-and-forget: EventBridge retries must not hold up, or fail, the webhook delivery. The eventId is
-            // fixed here, once per trigger, and every retry inside publish reuses it.
-            Mono.defer(() -> eventBridgePublisher.publish(alert, idGenerator.generateId().toString(), workspaceId,
+            // derived from the trigger, so reprocessing a trigger and every retry inside publish reuse it.
+            Mono.defer(() -> eventBridgePublisher.publish(alert, eventBridgeEventId(triggerKey), workspaceId,
                     eventBridgeWorkspaceName, eventType, payload))
                     .onErrorResume(error -> {
                         log.error("Failed to publish alert '{}' to EventBridge", alert.id(), error);
@@ -140,5 +142,9 @@ public class AlertWebhookSender {
                 "aggregationType", "consolidated",
                 "message", String.format("Alert '%s': %d %s events aggregated",
                         alert.name(), eventIds.size(), eventType.getValue()));
+    }
+
+    static String eventBridgeEventId(String triggerKey) {
+        return UUID.nameUUIDFromBytes(("opik-alert:" + triggerKey).getBytes(StandardCharsets.UTF_8)).toString();
     }
 }

@@ -288,7 +288,9 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                                     trigger.eventType(),
                                     List.of(payload.eventId()),
                                     List.of(payload.json()),
-                                    List.of("system"))); // System user for automated alerts
+                                    List.of("system"), // System user for automated alerts
+                                    // eventId is generated once per firing and the job never reprocesses a firing
+                                    "%s:%s".formatted(alert.id(), payload.eventId())));
                 })
                 .contextWrite(context -> AsyncUtils.setRequestContext(context, "system", alert.workspaceId()))
                 .subscribeOn(Schedulers.boundedElastic());
