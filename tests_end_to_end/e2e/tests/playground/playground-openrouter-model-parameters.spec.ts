@@ -178,7 +178,7 @@ test.describe(
                 body: 'data: [DONE]\n\n',
               }),
           );
-          await playground.fillFirstMessage('Reply with the single word OK.');
+          await playground.fillUserMessage('Reply with the single word OK.');
         });
 
         await test.step('With Max tokens at 0, the body has no max_tokens', async () => {
@@ -215,6 +215,7 @@ test.describe(
 
         await test.step('The body carries the set max_tokens and an integer top_k', async () => {
           const body = await nextCompletionBody(page, () => playground.clickRun());
+          const customParameters = (body.custom_parameters ?? {}) as Record<string, unknown>;
 
           expect(body.max_tokens, 'exactly the Max tokens the panel shows').toBe(
             secondPanel.maxTokens,
@@ -225,10 +226,18 @@ test.describe(
           // The Top K input keeps a typed fraction on screen (QA radar on #8603), so
           // the integer guarantee lives in the request builder. Comparing against the
           // rounded display stays true if the input later snaps to whole numbers.
-          expect(Number.isInteger(body.top_k), `top_k is an integer, got ${body.top_k}`).toBe(
-            true,
-          );
-          expect(body.top_k).toBe(Math.round(secondPanel.topK));
+          expect(
+            Number.isInteger(customParameters.top_k),
+            `top_k is an integer, got ${customParameters.top_k}`,
+          ).toBe(true);
+          expect(
+            customParameters.top_k,
+            'top_k travels in custom_parameters, which the backend forwards to OpenRouter',
+          ).toBe(Math.round(secondPanel.topK));
+          expect(
+            Object.keys(body),
+            'no flat top_k — the backend proxy drops unknown top-level fields',
+          ).not.toContain('top_k');
         });
       },
     );

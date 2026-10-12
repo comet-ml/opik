@@ -16,6 +16,7 @@ interface PlaygroundPromptsProps {
   workspaceName: string;
   providerKeys: COMPOSED_PROVIDER_TYPE[];
   isPendingProviderKeys: boolean;
+  hasLoadedProviderKeys: boolean;
   runSingle?: (promptId: string) => void;
   stopSingle?: (promptId: string) => void;
 }
@@ -24,17 +25,19 @@ const PlaygroundPrompts = ({
   workspaceName,
   providerKeys,
   isPendingProviderKeys,
+  hasLoadedProviderKeys,
   runSingle,
   stopSingle,
 }: PlaygroundPromptsProps) => {
   const promptCount = usePromptCount();
   const promptIds = usePromptIds();
   const setPromptMap = useSetPromptMap();
+  const showPerPromptRunControls = promptCount > 1;
 
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
-  const { calculateModelProvider, calculateDefaultModel } =
+  const { calculateModelProvider, calculateDefaultModel, hasRegistryModels } =
     useLLMProviderModelsData();
 
   useEffect(() => {
@@ -66,11 +69,20 @@ const PlaygroundPrompts = ({
           index={idx}
           key={promptId}
           providerKeys={providerKeys}
-          isPendingProviderKeys={isPendingProviderKeys}
+          hasLoadedProviderKeys={hasLoadedProviderKeys}
+          hasRegistryModels={hasRegistryModels}
           providerResolver={calculateModelProvider}
           modelResolver={calculateDefaultModel}
-          onRun={runSingle ? () => runSingle(promptId) : undefined}
-          onStop={stopSingle ? () => stopSingle(promptId) : undefined}
+          onRun={
+            showPerPromptRunControls && runSingle
+              ? () => runSingle(promptId)
+              : undefined
+          }
+          onStop={
+            showPerPromptRunControls && stopSingle
+              ? () => stopSingle(promptId)
+              : undefined
+          }
         />
       ))}
     </div>

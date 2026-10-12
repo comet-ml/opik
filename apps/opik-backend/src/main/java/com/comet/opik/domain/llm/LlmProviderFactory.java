@@ -27,6 +27,8 @@ public interface LlmProviderFactory {
 
     StructuredOutputStrategy getStructuredOutputStrategy(String model);
 
+    boolean isOpenAiReasoningModel(String model);
+
     /**
      * Returns the resolved model info for the given model name.
      * For the built-in provider, this returns the actual model name and span provider.

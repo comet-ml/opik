@@ -258,7 +258,9 @@ def build_optimizer_and_prompt(config):
         # pin its temperature where the provider honours it. Best-effort, not a
         # guarantee — models that fix their own temperature (the gpt-5 family)
         # stay sampled, so the stop conditions tolerate score noise themselves.
-        model_parameters=ensure_default_model_params(task_params, deterministic=True),
+        model_parameters=ensure_default_model_params(
+            task_params, deterministic=True, model=config.model
+        ),
     )
     return optimizer, prompt
 

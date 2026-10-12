@@ -1,6 +1,14 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.Alert;
+import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.AlertTrigger;
+import com.comet.opik.api.AlertTriggerConfig;
+import com.comet.opik.api.AlertTriggerConfigType;
+import com.comet.opik.api.AlertType;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
+import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
@@ -11,10 +19,16 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
+import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchStreamRequest;
+import com.comet.opik.api.Webhook;
+import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
+import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardResponse;
+import com.comet.opik.api.metrics.MetricType;
+import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -26,24 +40,26 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectMetricsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.IdGenerator;
-import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import lombok.Builder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
@@ -56,12 +72,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.utility.MountableFile;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -85,12 +103,23 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
@@ -148,6 +177,29 @@ class SpansReadPathPartitionPruningTest {
             LIMIT 1
             """;
 
+    /** The statement a search sent under one query name, told apart by the search token the test chose. */
+    private static final String SEARCH_STATEMENT = """
+            SELECT query_id, query
+            FROM system.query_log
+            WHERE log_comment LIKE concat(:query_name, ':%')
+            AND type = 'QueryFinish'
+            AND query LIKE concat('%', :token, '%')
+            ORDER BY event_time_microseconds DESC
+            LIMIT 1
+            """;
+
+    /** The partition-key selection ClickHouse logs for each read of a statement. */
+    private static final String PARTITION_KEY_SELECTIONS = """
+            SELECT message
+            FROM system.text_log
+            WHERE query_id = :query_id
+            AND logger_name LIKE :logger
+            AND message LIKE '%parts by partition key%'
+            """;
+
+    private static final Pattern PARTITION_KEY_SELECTION = Pattern
+            .compile("Selected (\\d+)/(\\d+) parts by partition key");
+
     private static final String PARTITION_PREFIX = "%s.spans.".formatted(DATABASE_NAME);
 
     private static final String FAST_LOG_FLUSH_CONFIG = "clickhouse-fast-log-flush.xml";
@@ -199,22 +251,23 @@ class SpansReadPathPartitionPruningTest {
     private SpanResourceClient spanResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private ProjectResourceClient projectResourceClient;
+    private ProjectMetricsResourceClient projectMetricsResourceClient;
     private TraceResourceClient traceResourceClient;
     private TransactionTemplateAsync template;
-    private ProjectMetricsDAO projectMetricsDAO;
+    private AlertResourceClient alertResourceClient;
 
     @BeforeAll
-    void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template,
-            ProjectMetricsDAO projectMetricsDAO) {
+    void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template) {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         this.spanResourceClient = new SpanResourceClient(clientSupport, baseUrl);
         this.datasetResourceClient = new DatasetResourceClient(clientSupport, baseUrl);
         this.projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
+        this.projectMetricsResourceClient = new ProjectMetricsResourceClient(clientSupport, baseUrl);
         this.traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         this.template = template;
-        this.projectMetricsDAO = projectMetricsDAO;
+        this.alertResourceClient = new AlertResourceClient(clientSupport);
         // One batch, so each filler week is one part holding two traces the primary key cannot exclude by id.
         spanResourceClient.batchCreateSpans(FILLER_MONDAYS.stream()
                 .flatMap(monday -> Stream.of(0, 1).map(_ -> newSpan(
@@ -451,6 +504,115 @@ class SpansReadPathPartitionPruningTest {
                 .isEqualTo(expected);
     }
 
+    @ParameterizedTest(name = "open-ended: {0}")
+    @ValueSource(booleans = {false, true})
+    void threadCostChartReadsOnlyTheSpanWeeksOfItsWindow(boolean openEnded) {
+        var seeded = seedThreadWithSpansInManyWeeks();
+        var intervalStart = seeded.now().minus(Duration.ofHours(1));
+        var intervalEnd = openEnded ? null : Instant.now();
+
+        var response = projectMetricsResourceClient.getProjectMetrics(seeded.projectId(), ProjectMetricRequest.builder()
+                .metricType(MetricType.THREAD_COST)
+                .interval(TimeInterval.HOURLY)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), BigDecimal.class, API_KEY, WORKSPACE_NAME);
+
+        var cost = response.results().stream()
+                .flatMap(result -> result.data().stream())
+                .map(DataPoint::value)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(cost).isEqualByComparingTo(openEnded ? "3.75" : "1.25");
+        assertThat(spansPartitionsRead("ProjectMetrics_threadCost", seeded.projectId()))
+                .containsExactlyInAnyOrderElementsOf(seeded.weeksRead(intervalStart, intervalEnd));
+    }
+
+    @ParameterizedTest(name = "open-ended: {0}")
+    @ValueSource(booleans = {false, true})
+    void threadKpiCostReadsOnlyTheSpanWeeksOfItsWindow(boolean openEnded) {
+        var seeded = seedThreadWithSpansInManyWeeks();
+        var intervalStart = seeded.now().minus(Duration.ofHours(1));
+        var intervalEnd = openEnded ? null : Instant.now();
+
+        var requestedAt = Instant.now();
+        var response = projectResourceClient.getKpiCards(seeded.projectId(), KpiCardRequest.builder()
+                .entityType(KpiCardRequest.EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), API_KEY, WORKSPACE_NAME);
+        var respondedAt = Instant.now();
+        // The card also reads the period before the window, as long as the window. When open, the server sizes it
+        // with its own now, somewhere between these two instants, so a Monday boundary between them makes either
+        // week set right.
+        var expectedWeekSets = Stream.of(requestedAt, respondedAt)
+                .map(now -> seeded.weeksRead(
+                        intervalStart
+                                .minus(Duration.between(intervalStart, Objects.requireNonNullElse(intervalEnd, now))),
+                        intervalEnd))
+                .collect(Collectors.toSet());
+
+        assertThat(response.stats())
+                .filteredOn(stat -> stat.type() == KpiCardResponse.KpiMetricType.TOTAL_COST)
+                .singleElement()
+                .satisfies(stat -> assertThat(stat.currentValue()).isCloseTo(openEnded ? 3.75 : 1.25,
+                        within(1e-6)));
+        assertThat(spansPartitionsRead("KpiCards_getThreadKpiCards", seeded.projectId()))
+                .isIn(expectedWeekSets);
+    }
+
+    private record SeededThread(UUID projectId, Instant now, Set<String> spanWeeks) {
+        Set<String> weeksRead(Instant from, Instant to) {
+            return spanWeeks.stream()
+                    .filter(week -> week.compareTo(yyyymmdd(mondayOf(from))) >= 0)
+                    .filter(week -> to == null || week.compareTo(yyyymmdd(mondayOf(to))) <= 0)
+                    .collect(Collectors.toSet());
+        }
+    }
+
+    /**
+     * The filler spans are two per week on different traces of the same project, so only partition pruning, not the
+     * primary key, can keep a read out of those weeks.
+     */
+    private SeededThread seedThreadWithSpansInManyWeeks() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var now = Instant.now();
+        var farFuture = Instant.parse("2201-08-30T03:18:08Z");
+        var threadId = "thread-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
+                .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
+                .projectName(projectName)
+                .threadId(threadId)
+                .startTime(now)
+                .endTime(now.plusMillis(100))
+                .errorInfo(null)
+                .feedbackScores(null)
+                .usage(null)
+                .build(), API_KEY, WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(List.of(
+                newSpan(now, traceId).toBuilder().projectName(projectName)
+                        .totalEstimatedCost(new BigDecimal("1.25")).build(),
+                newSpan(farFuture, traceId).toBuilder().projectName(projectName)
+                        .totalEstimatedCost(new BigDecimal("2.5")).build()),
+                API_KEY, WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(FILLER_MONDAYS.stream()
+                .flatMap(monday -> Stream.of(0, 1).map(_ -> newSpan(
+                        monday.atTime(12, 0).toInstant(ZoneOffset.UTC), ID_GENERATOR.generateId())
+                        .toBuilder().projectName(projectName).build()))
+                .toList(), API_KEY, WORKSPACE_NAME);
+        // Thread rows are written asynchronously after ingestion, and thread charts and KPI cards skip a thread without one.
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(100))
+                .untilAsserted(() -> assertThat(traceResourceClient
+                        .getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).threadModelId()).isNotNull());
+        var spanWeeks = Stream.concat(FILLER_WEEKS.stream(),
+                Stream.of(yyyymmdd(mondayOf(now)), yyyymmdd(mondayOf(farFuture))))
+                .collect(Collectors.toSet());
+        return new SeededThread(projectId, now, spanWeeks);
+    }
+
     @Test
     void alertTotalCostCountsAFarFutureSpanOfATraceInTheWindow() {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
@@ -459,12 +621,9 @@ class SpansReadPathPartitionPruningTest {
         // The alert window bounds trace_id only, so the far-future week must come from the span-weeks pre-pass.
         var expected = totalCost(createTraceWithAFarFutureSpan(projectName, now).spans());
 
-        var actual = projectMetricsDAO.getTotalCost(List.of(projectId), now.minus(Duration.ofHours(1)), null)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
-                        .put(RequestContext.USER_NAME, USER))
-                .block();
+        var actual = fireTraceCostAlert(projectId);
 
-        assertThat(actual).isEqualByComparingTo(expected);
+        assertThat(new BigDecimal(actual.metricValue())).isEqualByComparingTo(expected);
     }
 
     /** Each read takes the project name and the trace id, and returns the traces it read. */
@@ -511,6 +670,55 @@ class SpansReadPathPartitionPruningTest {
     /** A trace and the spans written for it. */
     @Builder(toBuilder = true)
     private record TraceWithSpans(Trace trace, List<Span> spans) {
+    }
+
+    /**
+     * The alert job is the only reader of the alert total cost, so it is driven through a cost alert: a zero threshold
+     * fires on the first run, and the webhook carries the total the job read.
+     */
+    private MetricsAlertPayload fireTraceCostAlert(UUID projectId) {
+        var webhookPath = "/alert-webhook-" + RandomStringUtils.secure().nextAlphanumeric(12);
+        wireMock.server().stubFor(post(urlEqualTo(webhookPath)).willReturn(aResponse().withStatus(200)));
+        // The webhook sender names the workspace in the payload.
+        wireMock.server().stubFor(get(urlPathEqualTo("/workspaces/workspace-name"))
+                .withQueryParam("id", equalTo(WORKSPACE_ID))
+                .willReturn(aResponse().withStatus(200).withBody(WORKSPACE_NAME)));
+        var alert = Alert.builder()
+                .name("cost-" + RandomStringUtils.secure().nextAlphanumeric(12))
+                .enabled(true)
+                .alertType(AlertType.GENERAL)
+                .projectId(projectId)
+                .webhook(Webhook.builder()
+                        .url("http://localhost:%d%s".formatted(wireMock.server().port(), webhookPath))
+                        .secretToken(UUID.randomUUID().toString())
+                        .build())
+                .triggers(List.of(AlertTrigger.builder()
+                        .eventType(AlertEventType.TRACE_COST)
+                        .triggerConfigs(List.of(AlertTriggerConfig.builder()
+                                .type(AlertTriggerConfigType.THRESHOLD_COST)
+                                .configValue(Map.of(
+                                        AlertTriggerConfig.THRESHOLD_CONFIG_KEY, "0",
+                                        AlertTriggerConfig.WINDOW_CONFIG_KEY, "3600"))
+                                .build()))
+                        .build()))
+                .build();
+        var alertId = alertResourceClient.createAlert(alert, API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
+
+        String body;
+        try {
+            body = Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500))
+                    .until(() -> wireMock.server().findAll(postRequestedFor(urlEqualTo(webhookPath))),
+                            requests -> !requests.isEmpty())
+                    .getFirst().getBodyAsString();
+        } finally {
+            // The scheduler re-fires an enabled alert on every run, so it must not outlive this test.
+            alertResourceClient.deleteAlertBatch(BatchDelete.builder().ids(Set.of(alertId)).build(), API_KEY,
+                    WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+        }
+        @SuppressWarnings("unchecked")
+        WebhookEvent<Map<String, Object>> event = JsonUtils.readValue(body, WebhookEvent.class);
+        var metadata = (List<?>) event.getPayload().get("metadata");
+        return JsonUtils.readValue(JsonUtils.writeValueAsString(metadata.getFirst()), MetricsAlertPayload.class);
     }
 
     /** A trace at {@code now} with one span beside it and one a bad clock files under a far-future week. */
@@ -586,7 +794,7 @@ class SpansReadPathPartitionPruningTest {
 
     /** The searched spans and the responses. */
     @Builder(toBuilder = true)
-    private record SpanSearch(List<Span> expected, Span.SpanPage page, ProjectStats stats) {
+    private record SpanSearch(String token, List<Span> expected, Span.SpanPage page, ProjectStats stats) {
     }
 
     private SpanSearch spanSearch() {
@@ -610,7 +818,7 @@ class SpansReadPathPartitionPruningTest {
                 null, null, fromTime, null, token);
         var stats = spanResourceClient.getSpansStats(projectName, null, null, API_KEY, WORKSPACE_NAME,
                 Map.of("search", token, "from_time", fromTime));
-        return SpanSearch.builder().expected(expected).page(page).stats(stats).build();
+        return SpanSearch.builder().token(token).expected(expected).page(page).stats(stats).build();
     }
 
     @Test
@@ -620,6 +828,91 @@ class SpansReadPathPartitionPruningTest {
         assertThat(search.page().total()).isEqualTo(search.expected().size());
         SpanAssertions.assertSpan(search.page().content(), search.expected(), USER);
         TraceAssertions.assertStats(search.stats().stats(), StatsUtils.getProjectSpanStatItems(search.expected()));
+    }
+
+    /** One span search shared by the statement cases, each checking a different statement of it. */
+    private Stream<Arguments> spanSearchStatements() {
+        var search = spanSearch();
+        return Stream.of("count_spans_by_project_id", "get_span_stats", "get_span_stats_feedback_scores")
+                .map(queryName -> arguments(queryName, search));
+    }
+
+    @ParameterizedTest(name = "{0} prunes the spans partitions")
+    @MethodSource("spanSearchStatements")
+    void spanSearchStatementPrunesPartitions(String queryName, SpanSearch search) {
+        assertPlanPrunesSpanPartitions(queryName, search.token());
+    }
+
+    @Test
+    void spanFindSearchPrunesPartitions() {
+        var search = spanSearch();
+
+        assertSubqueryPrunesSpanPartitions("find_spans_by_project_id", search.token());
+    }
+
+    /**
+     * Every {@code spans} read in the plan of the statement this search sent selects fewer parts by partition key than
+     * the table holds. The search's only partition-key predicate is the week hint, so this is the hint pruning.
+     */
+    private void assertPlanPrunesSpanPartitions(String queryName, String token) {
+        var plan = JsonUtils.getJsonNodeFromString(String.join("\n", template.stream(connection -> Flux.from(
+                connection.createStatement("EXPLAIN indexes = 1, json = 1 " + searchStatement(queryName, token)
+                        .query())
+                        .execute())
+                .flatMap(result -> result.map((row, _) -> row.get(0, String.class)))).collectList().block()));
+        var partitionSelections = plan.findParents("Node Type").stream()
+                .filter(node -> "ReadFromMergeTree".equals(node.path("Node Type").asText()))
+                .filter(node -> "%s.spans".formatted(DATABASE_NAME).equals(node.path("Description").asText()))
+                .flatMap(node -> StreamSupport.stream(node.path("Indexes").spliterator(), false))
+                .filter(index -> "Partition".equals(index.path("Type").asText()))
+                .toList();
+        assertThat(partitionSelections)
+                .as("every spans read of %s selects by partition key", queryName)
+                .isNotEmpty()
+                .allSatisfy(index -> assertThat(index.path("Selected Parts").asInt())
+                        .isLessThan(index.path("Initial Parts").asInt()));
+    }
+
+    /**
+     * The find statement runs its search in a scalar subquery, whose read the plan does not show, so its partition
+     * selection is read from the server log ClickHouse writes for every read of the statement.
+     */
+    private void assertSubqueryPrunesSpanPartitions(String queryName, String token) {
+        var queryId = searchStatement(queryName, token).queryId();
+        Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
+                .untilAsserted(() -> assertThat(partitionKeySelections(queryId))
+                        .as("%s reads spans with a partition-key selection", queryName)
+                        .anySatisfy(selection -> assertThat(selection.getLeft()).isLessThan(selection.getRight())));
+    }
+
+    /** Each read's "Selected N/M parts by partition key", as (N, M). */
+    private List<Pair<Integer, Integer>> partitionKeySelections(String queryId) {
+        return template.stream(connection -> Flux.from(connection.createStatement(PARTITION_KEY_SELECTIONS)
+                .bind("query_id", queryId)
+                .bind("logger", "%s.spans %%".formatted(DATABASE_NAME))
+                .execute())
+                .flatMap(result -> result.map((row, _) -> row.get(0, String.class))))
+                .map(PARTITION_KEY_SELECTION::matcher)
+                .filter(Matcher::find)
+                .map(matcher -> Pair.of(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2))))
+                .collectList()
+                .block();
+    }
+
+    private record SearchStatement(String queryId, String query) {
+    }
+
+    /** Polled: a statement's query_log row is written asynchronously, flushed every 200 ms here. */
+    private SearchStatement searchStatement(String queryName, String token) {
+        return Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
+                .until(() -> template.nonTransaction(connection -> Mono.from(connection
+                        .createStatement(SEARCH_STATEMENT)
+                        .bind("query_name", queryName)
+                        .bind("token", token)
+                        .execute())
+                        .flatMap(result -> Mono.from(result.map((row, _) -> new SearchStatement(
+                                row.get(0, String.class), row.get(1, String.class))))))
+                        .block(), Objects::nonNull);
     }
 
     private void batchUpdateTags(Span span, Set<UUID> ids) {

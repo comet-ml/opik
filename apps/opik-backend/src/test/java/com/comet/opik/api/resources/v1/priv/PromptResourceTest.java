@@ -96,6 +96,8 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -1990,6 +1992,74 @@ class PromptResourceTest {
                     .build();
 
             getPromptAndAssert(promptId, expectedPrompt, API_KEY, TEST_WORKSPACE, promptVersion.variables());
+        }
+
+        @Test
+        @DisplayName("when versions are created concurrently, then id order matches version number order")
+        void when__versionsCreatedConcurrently__thenIdOrderMatchesVersionNumberOrder() throws Exception {
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            // id and commit left null so the server mints them; that is the path the per-prompt lock orders
+            int concurrency = 20;
+            var createdVersions = new ArrayList<PromptVersion>();
+            var executor = Executors.newFixedThreadPool(concurrency);
+            try {
+                // One latch releases every request together, so they all contend for the per-prompt lock
+                var start = new CountDownLatch(1);
+                var futures = IntStream.range(0, concurrency)
+                        .mapToObj(i -> factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                .id(null)
+                                .commit(null)
+                                .createdBy(USER)
+                                .build())
+                        .map(version -> executor.submit(() -> {
+                            start.await();
+                            return createPromptVersion(
+                                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
+                                    API_KEY, TEST_WORKSPACE);
+                        }))
+                        .toList();
+                start.countDown();
+                for (var future : futures) {
+                    createdVersions.add(future.get(30, TimeUnit.SECONDS));
+                }
+            } finally {
+                executor.shutdownNow();
+                // A timed-out request must not keep writing into the tests that follow
+                assertThat(executor.awaitTermination(30, TimeUnit.SECONDS)).isTrue();
+            }
+
+            List<PromptVersion> expectedVersions = createdVersions.stream()
+                    .sorted(Comparator.comparing(
+                            (PromptVersion version) -> Integer.parseInt(version.versionNumber().substring(1)))
+                            .reversed())
+                    .toList();
+
+            // The versions page orders by id DESC, so it only matches when ids follow version numbers
+            findPromptVersionsAndAssertPage(expectedVersions, promptId, API_KEY, TEST_WORKSPACE,
+                    expectedVersions.size(), 1, expectedVersions.size() + 1);
+
+            // The prompt view carries neither on latestVersion: promptId is not in it, template_structure is not selected
+            var expectedLatestVersion = expectedVersions.getFirst().toBuilder()
+                    .promptId(null)
+                    .templateStructure(null)
+                    .build();
+
+            assertThat(getPrompt(promptId, API_KEY, TEST_WORKSPACE).latestVersion())
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .isEqualTo(expectedLatestVersion);
         }
 
         @Test

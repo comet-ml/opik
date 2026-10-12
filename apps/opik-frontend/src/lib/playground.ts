@@ -1,3 +1,6 @@
+import first from "lodash/first";
+import isNil from "lodash/isNil";
+import omitBy from "lodash/omitBy";
 import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
 import {
@@ -32,10 +35,13 @@ import {
 } from "@/types/providers";
 import {
   generateDefaultLLMPromptMessage,
+  hasAudiosInContent,
   hasImagesInContent,
   hasVideosInContent,
 } from "@/lib/llm";
+import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import {
+  supportsAudioInput,
   supportsImageInput,
   supportsVideoInput,
 } from "@/lib/modelCapabilities";
@@ -239,17 +245,69 @@ export const generateDefaultPrompt = ({
   modelResolver,
 }: GenerateDefaultPromptParams): PlaygroundPromptType => {
   const modelByDefault = modelResolver(lastPickedModel || "", setupProviders);
-  const provider = providerResolver(modelByDefault);
+  // The model resolver can pick the first set-up provider's static default model before the model
+  // registry loads, but mapping that model back to a provider needs the registry. A picked model
+  // that maps to no provider can only be that default, so it belongs to the first set-up provider.
+  const provider =
+    providerResolver(modelByDefault) ||
+    (modelByDefault && first(setupProviders)) ||
+    "";
 
   return {
     name: "Prompt",
-    messages: [generateDefaultLLMPromptMessage()],
+    messages: [
+      generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.system }),
+      generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user }),
+    ],
     model: modelByDefault,
     provider,
     configs: getDefaultConfigByProvider(provider, modelByDefault),
     ...initPrompt,
     id: generateRandomString(),
   };
+};
+
+export const restoreMissingProviderAndConfigKeys = (
+  prompt: PlaygroundPromptType,
+  providerResolver: ProviderResolver,
+): PlaygroundPromptType => {
+  if (prompt.provider) {
+    return prompt;
+  }
+
+  const provider = providerResolver(prompt.model);
+
+  if (!provider) {
+    return prompt;
+  }
+
+  // Not restoreMissingConfigKeys: without a provider the prompt never had its provider's settings,
+  // so nothing it lacks was the user's choice, Claude's temperature/Top P pair included.
+  return {
+    ...prompt,
+    provider,
+    configs: {
+      ...getDefaultConfigByProvider(provider, prompt.model),
+      ...omitBy(prompt.configs, isNil),
+    } as LLMPromptConfigsType,
+  };
+};
+
+export const isEmptyMessage = (message: LLMMessage) =>
+  !message.content || message.content.length === 0;
+
+// The default prompt starts with a System message, and leaving it blank means "no system
+// prompt". The backend rejects a blank system message for Gemini, Vertex AI and OpenAI's
+// Responses API.
+export const dropEmptySystemMessages = (messages: LLMMessage[]) =>
+  messages.filter(
+    (message) =>
+      message.role !== LLM_MESSAGE_ROLE.system || !isEmptyMessage(message),
+  );
+
+export const canRunMessages = (messages: LLMMessage[]) => {
+  const messagesToSend = dropEmptySystemMessages(messages);
+  return messagesToSend.length > 0 && !messagesToSend.some(isEmptyMessage);
 };
 
 export const hasUnsupportedMedia = (
@@ -263,10 +321,14 @@ export const hasUnsupportedMedia = (
   const hasVideos = prompt.messages.some((message) =>
     hasVideosInContent(message.content),
   );
+  const hasAudios = prompt.messages.some((message) =>
+    hasAudiosInContent(message.content),
+  );
 
   return (
     (hasImages && !supportsImageInput(prompt.model)) ||
-    (hasVideos && !supportsVideoInput(prompt.model))
+    (hasVideos && !supportsVideoInput(prompt.model)) ||
+    (hasAudios && !supportsAudioInput(prompt.model))
   );
 };
 

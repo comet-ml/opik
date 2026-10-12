@@ -458,6 +458,7 @@ export * from "./ProjectStatsSummary.js";
 export * from "./ProjectStatsSummaryItem.js";
 export * from "./ProjectVisibility.js";
 export * from "./Prompt.js";
+export * from "./PromptCacheOptions.js";
 export * from "./PromptDetail.js";
 export * from "./PromptDetailTemplateStructure.js";
 export * from "./PromptPagePublic.js";

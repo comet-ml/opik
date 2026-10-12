@@ -24,8 +24,10 @@ to its trace.
     <Steps>
       <Step title="Install the Opik skill">
         ```bash
-        npx skills add comet-ml/opik-skills
+        uvx opik mcp configure
         ```
+
+        It installs the Opik skills and connects the Opik MCP server. It needs [`uv`](https://docs.astral.sh/uv/).
 
         This skill is compatible with all coding agents including Claude Code, Codex, Cursor, OpenCode and more.
       </Step>

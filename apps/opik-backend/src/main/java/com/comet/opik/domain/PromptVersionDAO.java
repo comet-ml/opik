@@ -249,12 +249,15 @@ interface PromptVersionDAO {
         return findSingleVersion(promptId, workspaceId, null, versionNumber, null);
     }
 
+    // Masks always have a NULL version_number, so filtering on it instead of version_type gives the same max while
+    // reading only the (workspace_id, prompt_id, version_number) index. It stays a MAX rather than the latest row by
+    // id: versions created before ids were minted under the lock can have their id order inverted.
     @SqlQuery("""
             SELECT COALESCE(MAX(CAST(SUBSTRING(version_number, 2) AS UNSIGNED)), 0)
             FROM prompt_versions
             WHERE workspace_id = :workspace_id
             AND prompt_id = :prompt_id
-            AND version_type = 'prompt_version'
+            AND version_number IS NOT NULL
             """)
     int findMaxVersionNumber(@Bind("workspace_id") String workspaceId, @Bind("prompt_id") UUID promptId);
 
