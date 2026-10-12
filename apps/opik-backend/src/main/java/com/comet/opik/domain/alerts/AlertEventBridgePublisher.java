@@ -25,6 +25,7 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsRequest;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsRequestEntry;
@@ -142,6 +143,8 @@ public class AlertEventBridgePublisher {
         return switch (throwable) {
             case FailedEntryException failed -> RETRYABLE_ENTRY_ERROR_CODES.contains(failed.getErrorCode());
             case AwsServiceException aws -> aws.isThrottlingException() || aws.statusCode() >= 500;
+            // I/O failures and attempt timeouts; the client itself doesn't retry
+            case SdkClientException clientError -> true;
             default -> false;
         };
     }

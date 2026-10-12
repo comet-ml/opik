@@ -23,9 +23,13 @@ import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.Optional;
 
 public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
+
+    static final Duration EVENT_BRIDGE_CALL_ATTEMPT_TIMEOUT = Duration.ofSeconds(2);
+    static final Duration EVENT_BRIDGE_CALL_TIMEOUT = Duration.ofSeconds(8);
 
     @Provides
     @Singleton
@@ -87,7 +91,9 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
         // Retries are bounded by the publisher, which also retries throttled entries of partial failures
         var builder = EventBridgeClient.builder()
                 .credentialsProvider(eventBridgeCredentialsProvider())
-                .overrideConfiguration(override -> override.retryStrategy(AwsRetryStrategy.doNotRetry()));
+                .overrideConfiguration(override -> override.retryStrategy(AwsRetryStrategy.doNotRetry())
+                        .apiCallAttemptTimeout(EVENT_BRIDGE_CALL_ATTEMPT_TIMEOUT)
+                        .apiCallTimeout(EVENT_BRIDGE_CALL_TIMEOUT));
 
         eventBridgeRegion(config).ifPresent(builder::region);
 

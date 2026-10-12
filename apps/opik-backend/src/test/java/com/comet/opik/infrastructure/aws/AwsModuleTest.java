@@ -8,6 +8,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import software.amazon.awssdk.regions.Region;
 
+import java.time.Duration;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -58,6 +59,9 @@ class AwsModuleTest {
         assertThat(client).isPresent();
         try (var eventBridgeClient = client.get()) {
             assertThat(eventBridgeClient.serviceClientConfiguration().region()).isEqualTo(Region.EU_WEST_1);
+            var override = eventBridgeClient.serviceClientConfiguration().overrideConfiguration();
+            assertThat(override.apiCallAttemptTimeout()).contains(Duration.ofSeconds(2));
+            assertThat(override.apiCallTimeout()).contains(Duration.ofSeconds(8));
         }
     }
 }

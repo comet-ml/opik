@@ -14,6 +14,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.test.StepVerifier;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.eventbridge.model.EventBridgeException;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsRequest;
@@ -178,6 +179,21 @@ class AlertEventBridgePublisherTest {
                 .verifyComplete();
 
         verify(client, times(3)).putEvents(any(PutEventsRequest.class));
+    }
+
+    @Test
+    void publishWhenClientErrorIsTransientRetriesUntilAccepted() {
+        when(client.putEvents(any(PutEventsRequest.class)))
+                .thenThrow(SdkClientException.create("Unable to execute HTTP request: Read timed out"))
+                .thenReturn(successResponse());
+        var alert = alert(null);
+
+        StepVerifier.withVirtualTime(() -> publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME,
+                AlertEventType.TRACE_COST, payload(alert, List.of("event-1"), List.of())))
+                .thenAwait(RETRY_WINDOW)
+                .verifyComplete();
+
+        verify(client, times(2)).putEvents(any(PutEventsRequest.class));
     }
 
     @Test
