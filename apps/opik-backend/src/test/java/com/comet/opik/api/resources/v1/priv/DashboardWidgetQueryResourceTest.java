@@ -69,7 +69,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -320,6 +319,7 @@ class DashboardWidgetQueryResourceTest {
     @Test
     @DisplayName("a dashboard saved query reads back as it was saved")
     void getDashboardSavedQuery__thenReturnsIt() {
+        Instant before = Instant.now();
         UUID queryId = saveDashboardQuery(WINDOWED_QUERY, projectIdA);
 
         try (var response = dashboardSavedQueries().path(queryId.toString()).request()
@@ -329,7 +329,9 @@ class DashboardWidgetQueryResourceTest {
             assertThat(saved).usingRecursiveComparison().ignoringFields("createdAt")
                     .isEqualTo(DashboardSavedQuery.builder().id(queryId).projectId(projectIdA).sql(WINDOWED_QUERY)
                             .createdBy(USER).build());
-            assertThat(saved.createdAt()).isCloseTo(Instant.now(), within(5, ChronoUnit.SECONDS));
+            // MySQL stamps created_at by its own clock; a second either side absorbs drift from the test's.
+            assertThat(saved.createdAt()).isBetween(before.minus(1, ChronoUnit.SECONDS),
+                    Instant.now().plus(1, ChronoUnit.SECONDS));
         }
     }
 
