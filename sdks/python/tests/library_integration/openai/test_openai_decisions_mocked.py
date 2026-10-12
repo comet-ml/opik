@@ -177,16 +177,18 @@ def test_openai_decisions_create__happyflow(
 def test_openai_decisions_create__async__happyflow(fake_backend):
     client = track_openai(_async_client())
 
-    async def run() -> None:
-        await client.decisions.create(
+    async def run() -> openai.types.Decision:
+        return await client.decisions.create(
             model=DECISIONS_MODEL_FOR_TESTS,
             input=DECISIONS_INPUT_FOR_TESTS,
             questions=DECISIONS_QUESTIONS_FOR_TESTS,
         )
 
-    asyncio.run(run())
+    decision = asyncio.run(run())
 
     opik.flush_tracker()
+
+    assert decision.answers[1].choice == "billing"
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(
