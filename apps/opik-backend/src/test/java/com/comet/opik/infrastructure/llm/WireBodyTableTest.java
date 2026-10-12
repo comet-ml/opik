@@ -195,9 +195,13 @@ class WireBodyTableTest {
         assertThatThrownBy(() -> {
             if (JUDGE_PATH.equals(row.path())) {
                 scoreTrace(row);
+                return;
+            }
+            var request = JsonUtils.treeToValue(row.request(), ChatCompletionRequest.class);
+            if (Boolean.TRUE.equals(request.stream())) {
+                chatCompletionService.createAndStreamResponse(request, WORKSPACE_ID, mock(ChunkedOutputHandlers.class));
             } else {
-                chatCompletionService.create(JsonUtils.treeToValue(row.request(), ChatCompletionRequest.class),
-                        WORKSPACE_ID);
+                chatCompletionService.create(request, WORKSPACE_ID);
             }
         }).hasMessageContaining(row.rejected());
         assertThat(wireMock.getAllServeEvents()).isEmpty();

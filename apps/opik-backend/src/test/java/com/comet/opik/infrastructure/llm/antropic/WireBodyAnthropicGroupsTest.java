@@ -84,7 +84,9 @@ class WireBodyAnthropicGroupsTest {
 
     private Set<String> group(String name) {
         var ids = new HashSet<String>();
-        groups.path(name).forEach(id -> ids.add(id.asText()));
+        groups.path(name).forEach(id -> assertThat(ids.add(id.asText()))
+                .as("'%s' is listed twice in group '%s'", id.asText(), name)
+                .isTrue());
         return ids;
     }
 

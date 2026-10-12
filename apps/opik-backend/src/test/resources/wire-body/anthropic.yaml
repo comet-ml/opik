@@ -214,6 +214,10 @@ rows:
     models: [registry-only]
     request: {custom_parameters: {output_config: {effort: ultra}}}
     rejected: Unsupported custom_parameters.output_config.effort for the model
+  - name: a streamed request is rejected the same way, before anything is streamed
+    models: [effort-to-high]
+    request: {stream: true, custom_parameters: {output_config: {effort: xhigh}}}
+    rejected: Unsupported custom_parameters.output_config.effort for the model
   - name: an output_config that is not an object is rejected
     model: claude-opus-4-7
     request: {custom_parameters: {output_config: high}}
