@@ -16,7 +16,8 @@ import java.util.regex.Pattern;
 @Data
 public class AlertsEventBridgeConfig {
 
-    private static final String REGION = "[a-z]{2}(?:-[a-z]+)+-\\d";
+    // Covers commercial, GovCloud (us-gov-west-1) and European Sovereign Cloud (eusc-de-east-1) regions
+    private static final String REGION = "[a-z]{2,4}(?:-[a-z]+)+-\\d+";
     private static final String BUS_NAME = "[/.\\-_A-Za-z0-9]{1,256}";
     private static final Pattern REGION_PATTERN = Pattern.compile(REGION);
     private static final Pattern BUS_NAME_PATTERN = Pattern.compile(BUS_NAME);

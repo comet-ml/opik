@@ -21,6 +21,7 @@ class AlertsEventBridgeConfigTest {
             "team/opik.alerts_1",
             "arn:aws:events:us-east-1:123456789012:event-bus/opik-alerts",
             "arn:aws-us-gov:events:us-gov-west-1:123456789012:event-bus/opik-alerts",
+            "arn:aws-eusc:events:eusc-de-east-1:123456789012:event-bus/opik-alerts",
             "arn:aws-cn:events:cn-north-1:123456789012:event-bus/default"})
     void eventBusWhenValidHasNoViolations(String eventBus) {
         var config = new AlertsEventBridgeConfig();
@@ -59,7 +60,7 @@ class AlertsEventBridgeConfigTest {
 
     @ParameterizedTest
     @NullAndEmptySource
-    @ValueSource(strings = {"us-east-1", "eu-central-2", "ap-southeast-4", "us-gov-west-1"})
+    @ValueSource(strings = {"us-east-1", "eu-central-2", "ap-southeast-4", "us-gov-west-1", "eusc-de-east-1"})
     void regionWhenValidHasNoViolations(String region) {
         var config = new AlertsEventBridgeConfig();
         config.setRegion(region);
@@ -68,7 +69,8 @@ class AlertsEventBridgeConfigTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"us-east", "US-EAST-1", "useast1", "us-east-1a", "us_east_1", "us-east-12"})
+    @ValueSource(strings = {"us-east", "US-EAST-1", "useast1", "us-east-1a", "us_east_1", "u-east-1",
+            "europe-de-east-1", "eusc-1", "eusc-de-east-"})
     void regionWhenInvalidReportsViolation(String region) {
         var config = new AlertsEventBridgeConfig();
         config.setRegion(region);
