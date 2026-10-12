@@ -28,9 +28,13 @@ import set from "lodash/set";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import {
+  describeRunFailure,
   dropEmptySystemMessages,
-  parseCompletionOutput,
+  RunFailedError,
+  RunFailure,
 } from "@/lib/playground";
+import { hasVisibleControls } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
+import { parseComposedProviderType } from "@/lib/provider";
 import { useHydrateDatasetItemData } from "@/v2/pages/PlaygroundPage/useHydrateDatasetItemData";
 import { useHydratePromptMetadata } from "@/v2/pages/PlaygroundPage/useHydratePromptMetadata";
 import { collectPromptVersionRefs } from "@/api/playground/promptLinkage";
@@ -225,6 +229,7 @@ const usePromptDatasetItemCombination = ({
           isLoading: true,
           value: null,
           error: undefined,
+          errorHint: undefined,
           selectedRuleIds,
           usage: undefined,
         });
@@ -312,16 +317,30 @@ const usePromptDatasetItemCombination = ({
           run.pythonProxyError ||
           !run.result
         ) {
-          throw new Error(parseCompletionOutput(run));
+          throw new RunFailedError(
+            describeRunFailure(run, {
+              canTuneRequestRate: hasVisibleControls(
+                parseComposedProviderType(prompt.provider),
+                prompt.model,
+                prompt.configs,
+              ),
+              sentMessages: messagesToSend,
+            }),
+          );
         }
       } catch (error) {
-        const typedError = error as Error;
         // Stopping a run is not a failure
         const stopped = controller.signal.aborted;
+        const failure: RunFailure =
+          error instanceof RunFailedError
+            ? error.failure
+            : { message: (error as Error).message || "Unknown error" };
 
         updateOutput(prompt.id, datasetItemId, {
           isLoading: false,
-          ...(stopped ? {} : { error: typedError.message || "Unknown error" }),
+          ...(stopped
+            ? {}
+            : { error: failure.message, errorHint: failure.hint }),
         });
       } finally {
         deleteAbortController(key);

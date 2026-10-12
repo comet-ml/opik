@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.CustomParametersOverrides;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.infrastructure.llm.OpenAiStreamingHelper;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
@@ -27,7 +28,8 @@ public class CustomLlmProvider implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        ChatCompletionRequest cleanedRequest = normalizeForProvider(cleanModelName(request));
+        ChatCompletionRequest cleanedRequest = CustomParametersOverrides
+                .apply(normalizeForProvider(cleanModelName(request)));
         return openAiClient.chatCompletion(cleanedRequest).execute();
     }
 
@@ -38,7 +40,8 @@ public class CustomLlmProvider implements LlmProviderService {
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        ChatCompletionRequest cleanedRequest = normalizeForProvider(cleanModelName(request));
+        ChatCompletionRequest cleanedRequest = CustomParametersOverrides
+                .apply(normalizeForProvider(cleanModelName(request)));
         OpenAiStreamingHelper.executeStreamingRequest(openAiClient, cleanedRequest, handleMessage, handleClose,
                 handleError);
     }
@@ -78,6 +81,8 @@ public class CustomLlmProvider implements LlmProviderService {
 
     // Ollama's /v1 endpoint reads only max_tokens and silently drops max_completion_tokens, so the limit never applied.
     // Bedrock documents max_completion_tokens for its OpenAI-compatible body, so it gets the limit in that field only.
+    // An extra body limit moves to that same name, whichever one it was typed under, or the provider skips it and runs
+    // at the slider's limit.
     // Neither gets the 0 the playground slider allows: OpenAI-style APIs reject it, and Ollama passes it to its runner
     // as the budget. A generic custom server gets the request exactly as sent, since some of them need
     // max_completion_tokens.
@@ -89,6 +94,8 @@ public class CustomLlmProvider implements LlmProviderService {
                     .from(request)
                     .maxTokens(firstPositiveTokenLimit(request))
                     .maxCompletionTokens(null)
+                    .customParameters(CustomParametersOverrides.withTokenLimitUnder(
+                            CustomParametersOverrides.MAX_TOKENS, request.customParameters()))
                     .build();
         }
         if (provider == LlmProvider.BEDROCK) {
@@ -96,6 +103,8 @@ public class CustomLlmProvider implements LlmProviderService {
                     .from(request)
                     .maxCompletionTokens(firstPositiveTokenLimit(request))
                     .maxTokens(null)
+                    .customParameters(CustomParametersOverrides.withTokenLimitUnder(
+                            CustomParametersOverrides.MAX_COMPLETION_TOKENS, request.customParameters()))
                     .frequencyPenalty(nonZeroOrNull(request.frequencyPenalty()))
                     .presencePenalty(nonZeroOrNull(request.presencePenalty()))
                     .build();

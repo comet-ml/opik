@@ -1,5 +1,6 @@
 import first from "lodash/first";
 import isNil from "lodash/isNil";
+import last from "lodash/last";
 import omitBy from "lodash/omitBy";
 import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
@@ -14,6 +15,7 @@ import {
 import {
   getDefaultThinkingEffort,
   getDefaultThinkingLevel,
+  getOpenRouterDefaultMaxTokens,
   isClaudeModel,
   supportsAnthropicThinkingEffort,
   supportsGeminiThinkingLevel,
@@ -46,6 +48,7 @@ import {
   supportsVideoInput,
 } from "@/lib/modelCapabilities";
 import {
+  DropdownModelCheck,
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
@@ -166,7 +169,7 @@ export const getDefaultConfigByProvider = (
 
   if (providerType === PROVIDER_TYPE.OPEN_ROUTER) {
     return {
-      maxTokens: DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS,
+      maxTokens: getOpenRouterDefaultMaxTokens(model),
       temperature: DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE,
       topP: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P,
       topK: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_K,
@@ -235,6 +238,7 @@ interface GenerateDefaultPromptParams {
   lastPickedModel?: PROVIDER_MODEL_TYPE | "";
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
+  isDropdownModel: DropdownModelCheck;
 }
 
 export const generateDefaultPrompt = ({
@@ -243,8 +247,17 @@ export const generateDefaultPrompt = ({
   lastPickedModel,
   providerResolver,
   modelResolver,
+  isDropdownModel,
 }: GenerateDefaultPromptParams): PlaygroundPromptType => {
-  const modelByDefault = modelResolver(lastPickedModel || "", setupProviders);
+  // The model resolver keeps any model it can resolve, so a stored prompt on a
+  // model later taken out of the picker keeps it. A new prompt only starts on
+  // a remembered pick the picker still offers.
+  const rememberedModel =
+    lastPickedModel &&
+    isDropdownModel(lastPickedModel, providerResolver(lastPickedModel))
+      ? lastPickedModel
+      : "";
+  const modelByDefault = modelResolver(rememberedModel, setupProviders);
   // The model resolver can pick the first set-up provider's static default model before the model
   // registry loads, but mapping that model back to a provider needs the registry. A picked model
   // that maps to no provider can only be that default, so it belongs to the first set-up provider.
@@ -332,15 +345,104 @@ export const hasUnsupportedMedia = (
   );
 };
 
+// Kept short: the output cell shows one truncated line, with the full text only in a tooltip.
+export const OUTPUT_LIMIT_REACHED_MESSAGE =
+  "The model used up Max output tokens while thinking. Raise Max output tokens or lower the reasoning effort.";
+
 export const parseCompletionOutput = (run: RunStreamingReturn) => {
   return (
     run.result ||
     run.opikError ||
     run.providerError ||
     run.pythonProxyError ||
-    "The AI provider returned an empty response. Please, try again."
+    (run.finishReason === "length"
+      ? OUTPUT_LIMIT_REACHED_MESSAGE
+      : "The AI provider returned an empty response. Please, try again.")
   );
 };
+
+const HTTP_BAD_REQUEST = 400;
+const HTTP_PAYMENT_REQUIRED = 402;
+const HTTP_TOO_MANY_REQUESTS = 429;
+
+export type RunFailureHint = {
+  // Set only when the status tells the cause. A hint guessed from the prompt has no title, so
+  // the provider's own error stays on the tag in case the guess is wrong.
+  title?: string;
+  action: string;
+};
+
+export type RunFailure = {
+  message: string;
+  hint?: RunFailureHint;
+};
+
+type RunFailureContext = {
+  canTuneRequestRate: boolean;
+  sentMessages: LLMMessage[];
+};
+
+const getRunFailureHint = (
+  errorStatus: number | null,
+  { canTuneRequestRate, sentMessages }: RunFailureContext,
+): RunFailureHint | undefined => {
+  if (errorStatus === HTTP_TOO_MANY_REQUESTS) {
+    return {
+      title: "Rate limit reached",
+      action: canTuneRequestRate
+        ? "Wait a moment and run again. If it keeps happening, lower Max concurrent requests or raise Throttling in Model parameters."
+        : "Wait a moment and run again.",
+    };
+  }
+  // The backend reports OpenAI's insufficient_quota as 402, and OpenRouter sends 402 when credits run out.
+  if (errorStatus === HTTP_PAYMENT_REQUIRED) {
+    return {
+      title: "Out of credits",
+      action:
+        "Add credits or raise your quota with the provider, then run again.",
+    };
+  }
+  if (errorStatus !== HTTP_BAD_REQUEST) return undefined;
+
+  // Which role mixes are rejected differs by provider and model, and each provider words its 400
+  // differently, so the cause is guessed from the prompt rather than read from the error text.
+  if (!sentMessages.some((message) => message.role === LLM_MESSAGE_ROLE.user)) {
+    return {
+      action:
+        "This model needs a User message. Add one with + Message, then run again.",
+    };
+  }
+  if (last(sentMessages)?.role === LLM_MESSAGE_ROLE.assistant) {
+    return {
+      action:
+        "This model needs the last message to be a User message. Add one at the end with + Message, or remove the last Assistant message, then run again.",
+    };
+  }
+  return undefined;
+};
+
+export const describeRunFailure = (
+  run: RunStreamingReturn,
+  context: RunFailureContext,
+): RunFailure => {
+  const hint = getRunFailureHint(run.errorStatus, context);
+  if (!hint) return { message: parseCompletionOutput(run) };
+  if (!hint.title) return { message: parseCompletionOutput(run), hint };
+
+  const providerMessage =
+    run.opikError || run.providerError || run.pythonProxyError;
+  return { message: providerMessage || hint.title, hint };
+};
+
+export class RunFailedError extends Error {
+  failure: RunFailure;
+
+  constructor(failure: RunFailure) {
+    super(failure.message);
+    this.name = "RunFailedError";
+    this.failure = failure;
+  }
+}
 
 export const parseCompletionError = (run: RunStreamingReturn) => {
   if (run.opikError) {
