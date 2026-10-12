@@ -14,11 +14,12 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.sun.net.httpserver.HttpServer;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.exception.InternalServerException;
 import dev.langchain4j.exception.InvalidRequestException;
-import dev.langchain4j.exception.LangChain4jException;
 import dev.langchain4j.exception.NonRetriableException;
 import dev.langchain4j.exception.TimeoutException;
+import dev.langchain4j.model.anthropic.internal.api.AnthropicStreamingException;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.output.FinishReason;
@@ -178,7 +179,11 @@ class AnthropicStreamedChatModelTest {
 
         assertThatThrownBy(() -> judge.chat(judgeRequest()))
                 .isInstanceOf(InvalidRequestException.class)
-                .isInstanceOf(NonRetriableException.class);
+                .isInstanceOf(NonRetriableException.class)
+                .hasMessageContaining("invalid_request_error")
+                .cause()
+                .isInstanceOfSatisfying(HttpException.class,
+                        httpException -> assertThat(httpException.statusCode()).isEqualTo(400));
     }
 
     @Test
@@ -192,7 +197,12 @@ class AnthropicStreamedChatModelTest {
         var judge = judge(wireMockConfig(), "claude-sonnet-5", "{}");
 
         assertThatThrownBy(() -> judge.chat(judgeRequest()))
-                .isInstanceOf(InternalServerException.class);
+                .isInstanceOf(InternalServerException.class)
+                .isNotInstanceOf(NonRetriableException.class)
+                .hasMessageContaining("Overloaded")
+                .cause()
+                .isInstanceOfSatisfying(HttpException.class,
+                        httpException -> assertThat(httpException.statusCode()).isEqualTo(529));
     }
 
     @Test
@@ -203,9 +213,10 @@ class AnthropicStreamedChatModelTest {
         var judge = judge(wireMockConfig(), "claude-sonnet-5", "{}");
 
         assertThatThrownBy(() -> judge.chat(judgeRequest()))
-                .isInstanceOf(LangChain4jException.class)
+                .isInstanceOfSatisfying(AnthropicStreamingException.class,
+                        streamingException -> assertThat(streamingException.type()).isEqualTo("overloaded_error"))
                 .isNotInstanceOf(NonRetriableException.class)
-                .hasMessageContaining("Overloaded");
+                .hasMessage("Overloaded");
     }
 
     @Test
@@ -223,14 +234,14 @@ class AnthropicStreamedChatModelTest {
     }
 
     @Test
-    void failsTheAttemptAndHangsUpWhenTheAnswerRunsPastTheCallTimeout() throws Exception {
+    void keepsAPingingStreamAliveUntilTheCallTimeoutThenHangsUp() throws Exception {
         var clientHungUp = startStallingServer(messageStart(10, 0) + thinkingStart(0), 0);
-        var judge = judge(stallingServerConfig(), timeouts(Duration.seconds(5), Duration.milliseconds(500)));
+        var judge = judge(stallingServerConfig(), timeouts(Duration.milliseconds(300), Duration.seconds(1)));
 
         var start = System.nanoTime();
         assertThatThrownBy(() -> judge.chat(judgeRequest()))
                 .isInstanceOf(TimeoutException.class)
-                .hasMessageContaining("did not finish the answer within PT0.5S");
+                .hasMessageContaining("did not finish the answer within PT1S");
 
         assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)).isLessThan(3_000);
         assertThat(clientHungUp.await(5, TimeUnit.SECONDS)).isTrue();
