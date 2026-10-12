@@ -218,9 +218,15 @@ describe("sanitizeConfigForRequest max output tokens", () => {
     ["custom-llm/b-ollama/qwen3:0.6b"],
     ["custom-llm/Bedrock us-east-2/openai.gpt-oss-20b-1:0"],
   ])("on %s, where 0 means no limit", (model) => {
+    it.each([0, 0.5])("leaves out a stored %s", (maxCompletionTokens) => {
+      expect(
+        sanitizeConfigForRequest(model as PROVIDER_MODEL_TYPE, {
+          maxCompletionTokens,
+        }),
+      ).toEqual({});
+    });
+
     it.each([
-      [0, undefined],
-      [0.5, undefined],
       [1, 1],
       [20.5, 20],
       [100000, 100000],
@@ -229,9 +235,7 @@ describe("sanitizeConfigForRequest max output tokens", () => {
         sanitizeConfigForRequest(model as PROVIDER_MODEL_TYPE, {
           maxCompletionTokens,
         }),
-      ).toEqual(
-        expected === undefined ? {} : { maxCompletionTokens: expected },
-      );
+      ).toEqual({ maxCompletionTokens: expected });
     });
   });
 
