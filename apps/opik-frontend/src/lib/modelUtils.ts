@@ -13,6 +13,7 @@ import {
   ANTHROPIC_MODEL_CAPABILITIES,
   DEFAULT_ANTHROPIC_CONFIGS,
   DEFAULT_OPEN_AI_CONFIGS,
+  DEFAULT_OPEN_ROUTER_CONFIGS,
   OPENAI_MODEL_CAPABILITIES,
 } from "@/constants/llm";
 import {
@@ -21,6 +22,7 @@ import {
 } from "@/lib/provider";
 import {
   getMaxOutputTokens,
+  getOpenRouterMaxOutputTokens,
   isCustomProviderModel,
 } from "@/lib/modelCapabilities";
 import isPlainObject from "lodash/isPlainObject";
@@ -1179,6 +1181,15 @@ export const resolveMaxCompletionTokens = (
   // one-token answer, so it gets the default rather than the new floor.
   const requested = value || MAX_COMPLETION_TOKENS_DEFAULT[provider];
   return Math.min(Math.max(Math.floor(requested), min), max);
+};
+
+export const getOpenRouterDefaultMaxTokens = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): number => {
+  const modelMaxOutputTokens = getOpenRouterMaxOutputTokens(model);
+  return modelMaxOutputTokens
+    ? Math.min(DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS, modelMaxOutputTokens)
+    : DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS;
 };
 
 // The backend turns on adaptive thinking for any level on these models, and Anthropic then refuses

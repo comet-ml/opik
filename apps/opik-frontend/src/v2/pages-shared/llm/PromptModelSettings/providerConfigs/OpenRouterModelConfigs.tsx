@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  getOpenRouterDefaultMaxTokens,
   getOpenRouterReasoningEffortOptions,
   resolveEffort,
   resolveSamplingParams,
@@ -94,7 +95,7 @@ const OpenRouterModelConfigs = ({
           step={1}
           integer
           hint={getNoOutputLimitHint(configs.maxTokens)}
-          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS}
+          defaultValue={getOpenRouterDefaultMaxTokens(model)}
           label="Max tokens"
           tooltip={
             <PromptModelConfigsTooltipContent
