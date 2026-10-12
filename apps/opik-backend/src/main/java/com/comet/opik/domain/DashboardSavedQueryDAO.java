@@ -1,6 +1,6 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.SavedQuery;
+import com.comet.opik.api.DashboardSavedQuery;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -16,17 +16,17 @@ import java.util.Set;
 import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
-@RegisterConstructorMapper(SavedQuery.class)
-interface SavedQueryDAO {
+@RegisterConstructorMapper(DashboardSavedQuery.class)
+interface DashboardSavedQueryDAO {
 
-    @SqlUpdate("INSERT INTO saved_queries(id, workspace_id, project_id, `sql`, created_by) "
+    @SqlUpdate("INSERT INTO dashboard_saved_queries(id, workspace_id, project_id, `sql`, created_by) "
             + "VALUES (:query.id, :workspaceId, :query.projectId, :query.sql, :query.createdBy)")
-    void save(@BindMethods("query") SavedQuery query, @Bind("workspaceId") String workspaceId);
+    void save(@BindMethods("query") DashboardSavedQuery query, @Bind("workspaceId") String workspaceId);
 
-    @SqlQuery("SELECT id, project_id, `sql`, created_at, created_by FROM saved_queries "
+    @SqlQuery("SELECT id, project_id, `sql`, created_at, created_by FROM dashboard_saved_queries "
             + "WHERE id = :id AND workspace_id = :workspaceId")
-    Optional<SavedQuery> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+    Optional<DashboardSavedQuery> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
-    @SqlQuery("SELECT id FROM saved_queries WHERE workspace_id = :workspaceId AND id IN (<ids>)")
+    @SqlQuery("SELECT id FROM dashboard_saved_queries WHERE workspace_id = :workspaceId AND id IN (<ids>)")
     Set<UUID> findExistingIds(@BindList("ids") Collection<UUID> ids, @Bind("workspaceId") String workspaceId);
 }

@@ -1,6 +1,6 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.SavedQuery;
+import com.comet.opik.api.DashboardSavedQuery;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -18,28 +18,28 @@ import java.util.UUID;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
-@ImplementedBy(SavedQueryServiceImpl.class)
-public interface SavedQueryService {
+@ImplementedBy(DashboardSavedQueryServiceImpl.class)
+public interface DashboardSavedQueryService {
 
-    SavedQuery create(SavedQuery query);
+    DashboardSavedQuery create(DashboardSavedQuery query);
 
-    Optional<SavedQuery> findById(UUID id);
+    Optional<DashboardSavedQuery> findById(UUID id);
 
-    /** Which of {@code ids} are saved queries of the caller's workspace. */
+    /** Which of {@code ids} are dashboard saved queries of the caller's workspace. */
     Set<UUID> findExistingIds(Set<UUID> ids);
 }
 
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-class SavedQueryServiceImpl implements SavedQueryService {
+class DashboardSavedQueryServiceImpl implements DashboardSavedQueryService {
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
 
     @Override
-    public SavedQuery create(@NonNull SavedQuery query) {
+    public DashboardSavedQuery create(@NonNull DashboardSavedQuery query) {
         String workspaceId = requestContext.get().getWorkspaceId();
         var saved = query.toBuilder()
                 .id(idGenerator.generateId())
@@ -47,19 +47,20 @@ class SavedQueryServiceImpl implements SavedQueryService {
                 .build();
 
         return template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(SavedQueryDAO.class);
+            var dao = handle.attach(DashboardSavedQueryDAO.class);
             dao.save(saved, workspaceId);
-            log.info("Saved query '{}' in workspace '{}', project '{}'", saved.id(), workspaceId,
+            log.info("Created dashboard saved query '{}' in workspace '{}', project '{}'", saved.id(),
+                    workspaceId,
                     saved.projectId() == null ? "all" : saved.projectId());
             return dao.findById(saved.id(), workspaceId).orElseThrow();
         });
     }
 
     @Override
-    public Optional<SavedQuery> findById(@NonNull UUID id) {
+    public Optional<DashboardSavedQuery> findById(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
         return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(SavedQueryDAO.class).findById(id, workspaceId));
+                handle -> handle.attach(DashboardSavedQueryDAO.class).findById(id, workspaceId));
     }
 
     @Override
@@ -69,6 +70,6 @@ class SavedQueryServiceImpl implements SavedQueryService {
         }
         String workspaceId = requestContext.get().getWorkspaceId();
         return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(SavedQueryDAO.class).findExistingIds(ids, workspaceId));
+                handle -> handle.attach(DashboardSavedQueryDAO.class).findExistingIds(ids, workspaceId));
     }
 }

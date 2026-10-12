@@ -16,7 +16,7 @@ class OllieChartWidgetsTest {
     private static final UUID QUERY_ID = UUID.randomUUID();
 
     @Test
-    @DisplayName("finds the saved query an Ollie chart references by widget id")
+    @DisplayName("finds the dashboard saved query an Ollie chart references by widget id")
     void findQueryId__whenOllieChart__thenReturnsIt() {
         var config = config("ollie_chart", "\"id\": \"%s\"".formatted(QUERY_ID));
 
@@ -37,7 +37,7 @@ class OllieChartWidgetsTest {
     }
 
     @Test
-    @DisplayName("refuses SQL in the widget, and a query without a saved query id")
+    @DisplayName("refuses SQL in the widget, and a query without a dashboard saved query id")
     void validate__whenQueryCarriesSqlOrNoId__thenErrors() {
         assertThat(OllieChartWidgets.validate(config("ollie_chart", "\"id\": \"%s\", \"sql\": \"SELECT 1\""
                 .formatted(QUERY_ID)))).singleElement().asString().contains("query.sql");

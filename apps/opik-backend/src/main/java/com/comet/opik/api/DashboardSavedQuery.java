@@ -19,7 +19,7 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record SavedQuery(
+public record DashboardSavedQuery(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @Nullable @Schema(description = "Project the query is bounded to. Omit for every project in the workspace.") UUID projectId,
         // Well above any generated query, and below ClickHouse's 256 KiB max_query_size.

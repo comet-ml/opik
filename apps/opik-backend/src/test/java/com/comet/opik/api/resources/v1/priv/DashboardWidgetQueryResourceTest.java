@@ -2,9 +2,9 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.Dashboard;
+import com.comet.opik.api.DashboardSavedQuery;
 import com.comet.opik.api.DashboardScope;
 import com.comet.opik.api.DashboardWidgetQueryRequest;
-import com.comet.opik.api.SavedQuery;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -145,8 +145,8 @@ class DashboardWidgetQueryResourceTest {
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_A, WORKSPACE_NAME_A, WORKSPACE_ID_A, USER);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_B, WORKSPACE_NAME_B, WORKSPACE_ID_B, USER);
-        mockSavedQueriesAuth(API_KEY_A, WORKSPACE_NAME_A, WORKSPACE_ID_A);
-        mockSavedQueriesAuth(API_KEY_B, WORKSPACE_NAME_B, WORKSPACE_ID_B);
+        mockDashboardSavedQueriesAuth(API_KEY_A, WORKSPACE_NAME_A, WORKSPACE_ID_A);
+        mockDashboardSavedQueriesAuth(API_KEY_B, WORKSPACE_NAME_B, WORKSPACE_ID_B);
 
         var projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         dashboardClient = new DashboardResourceClient(client, baseURI);
@@ -164,11 +164,11 @@ class DashboardWidgetQueryResourceTest {
     }
 
     @Test
-    @DisplayName("runs the saved query over the requested date range")
+    @DisplayName("runs the dashboard saved query over the requested date range")
     void runWidgetQuery__whenRangeCoversTrace__thenReturnsIt() {
         String widgetId = UUID.randomUUID().toString();
         UUID dashboardId = dashboardClient.create(
-                dashboard(widgetId, "ollie_chart", saveQuery(WINDOWED_QUERY, projectIdA)),
+                dashboard(widgetId, "ollie_chart", saveDashboardQuery(WINDOWED_QUERY, projectIdA)),
                 API_KEY_A, WORKSPACE_NAME_A);
 
         var response = run(dashboardClient.callRunWidgetQuery(dashboardId, widgetId,
@@ -184,7 +184,7 @@ class DashboardWidgetQueryResourceTest {
     void runWidgetQuery__whenRangeExcludesTrace__thenNoRows() {
         String widgetId = UUID.randomUUID().toString();
         UUID dashboardId = dashboardClient.create(
-                dashboard(widgetId, "ollie_chart", saveQuery(WINDOWED_QUERY, projectIdA)),
+                dashboard(widgetId, "ollie_chart", saveDashboardQuery(WINDOWED_QUERY, projectIdA)),
                 API_KEY_A, WORKSPACE_NAME_A);
 
         var response = run(dashboardClient.callRunWidgetQuery(dashboardId, widgetId,
@@ -199,7 +199,7 @@ class DashboardWidgetQueryResourceTest {
     void runWidgetQuery__whenProjectFromAnotherWorkspace__thenNoRows() {
         String widgetId = UUID.randomUUID().toString();
         UUID dashboardId = dashboardClient.create(
-                dashboard(widgetId, "ollie_chart", saveQuery(WINDOWED_QUERY, projectIdB)),
+                dashboard(widgetId, "ollie_chart", saveDashboardQuery(WINDOWED_QUERY, projectIdB)),
                 API_KEY_A, WORKSPACE_NAME_A);
 
         var response = run(dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(null, null),
@@ -209,11 +209,11 @@ class DashboardWidgetQueryResourceTest {
     }
 
     @Test
-    @DisplayName("runs a saved query on an insights view")
+    @DisplayName("runs a dashboard saved query on an insights view")
     void runWidgetQuery__whenInsightsView__thenReturnsRows() {
         String widgetId = UUID.randomUUID().toString();
         UUID viewId = insightsViewClient.create(
-                dashboard(widgetId, "ollie_chart", saveQuery(WINDOWED_QUERY, projectIdA)).toBuilder()
+                dashboard(widgetId, "ollie_chart", saveDashboardQuery(WINDOWED_QUERY, projectIdA)).toBuilder()
                         .scope(DashboardScope.INSIGHTS).build(),
                 API_KEY_A, WORKSPACE_NAME_A);
 
@@ -229,7 +229,7 @@ class DashboardWidgetQueryResourceTest {
     void runWidgetQuery__whenNoSavedQuery__thenNotFound() {
         String widgetId = UUID.randomUUID().toString();
         UUID dashboardId = dashboardClient.create(
-                dashboard(widgetId, "text_markdown", saveQuery(WINDOWED_QUERY, projectIdA)),
+                dashboard(widgetId, "text_markdown", saveDashboardQuery(WINDOWED_QUERY, projectIdA)),
                 API_KEY_A, WORKSPACE_NAME_A);
 
         assertStatus(dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(null, null), API_KEY_A,
@@ -267,7 +267,7 @@ class DashboardWidgetQueryResourceTest {
     void runWidgetQuery__whenRangeReversed__thenBadRequest() {
         String widgetId = UUID.randomUUID().toString();
         UUID dashboardId = dashboardClient.create(
-                dashboard(widgetId, "ollie_chart", saveQuery(WINDOWED_QUERY, projectIdA)),
+                dashboard(widgetId, "ollie_chart", saveDashboardQuery(WINDOWED_QUERY, projectIdA)),
                 API_KEY_A, WORKSPACE_NAME_A);
 
         assertStatus(dashboardClient.callRunWidgetQuery(dashboardId, widgetId,
@@ -294,7 +294,7 @@ class DashboardWidgetQueryResourceTest {
             @Nullable Instant end, Response.Status expected) {
         String widgetId = UUID.randomUUID().toString();
         UUID dashboardId = dashboardClient.create(
-                dashboard(widgetId, "ollie_chart", saveQuery(WINDOWED_QUERY, projectIdA)),
+                dashboard(widgetId, "ollie_chart", saveDashboardQuery(WINDOWED_QUERY, projectIdA)),
                 API_KEY_A, WORKSPACE_NAME_A);
 
         assertStatus(dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(start, end), API_KEY_A,
@@ -317,14 +317,14 @@ class DashboardWidgetQueryResourceTest {
     }
 
     @Test
-    @DisplayName("a saved query reads back as it was saved")
-    void getSavedQuery__thenReturnsIt() {
-        UUID queryId = saveQuery(WINDOWED_QUERY, projectIdA);
+    @DisplayName("a dashboard saved query reads back as it was saved")
+    void getDashboardSavedQuery__thenReturnsIt() {
+        UUID queryId = saveDashboardQuery(WINDOWED_QUERY, projectIdA);
 
-        try (var response = savedQueries().path(queryId.toString()).request()
+        try (var response = dashboardSavedQueries().path(queryId.toString()).request()
                 .header(HttpHeaders.AUTHORIZATION, API_KEY_A).header(WORKSPACE_HEADER, WORKSPACE_NAME_A).get()) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
-            var saved = response.readEntity(SavedQuery.class);
+            var saved = response.readEntity(DashboardSavedQuery.class);
             assertThat(saved.sql()).isEqualTo(WINDOWED_QUERY);
             assertThat(saved.projectId()).isEqualTo(projectIdA);
         }
@@ -332,9 +332,11 @@ class DashboardWidgetQueryResourceTest {
 
     @Test
     @DisplayName("a query that is too long is refused, and a workspace off the allowlist cannot save one")
-    void saveQuery__whenTooLongOrNotAllowlisted__thenRefused() {
-        assertStatus(callSaveQuery("SELECT 1 -- " + "x".repeat(70_000), null, API_KEY_A, WORKSPACE_NAME_A), 422);
-        assertStatus(callSaveQuery(WINDOWED_QUERY, null, API_KEY_B, WORKSPACE_NAME_B),
+    void saveDashboardQuery__whenTooLongOrNotAllowlisted__thenRefused() {
+        assertStatus(
+                callSaveDashboardQuery("SELECT 1 -- " + "x".repeat(70_000), null, API_KEY_A, WORKSPACE_NAME_A),
+                422);
+        assertStatus(callSaveDashboardQuery(WINDOWED_QUERY, null, API_KEY_B, WORKSPACE_NAME_B),
                 Response.Status.NOT_IMPLEMENTED);
     }
 
@@ -361,31 +363,34 @@ class DashboardWidgetQueryResourceTest {
         return createPartialDashboard(DashboardScope.WORKSPACE).config(sections).build();
     }
 
-    private UUID saveQuery(String sql, @Nullable UUID projectId) {
-        try (var response = callSaveQuery(sql, projectId, API_KEY_A, WORKSPACE_NAME_A)) {
+    private UUID saveDashboardQuery(String sql, @Nullable UUID projectId) {
+        try (var response = callSaveDashboardQuery(sql, projectId, API_KEY_A, WORKSPACE_NAME_A)) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.CREATED.getStatusCode());
-            return response.readEntity(SavedQuery.class).id();
+            return response.readEntity(DashboardSavedQuery.class).id();
         }
     }
 
-    private Response callSaveQuery(String sql, @Nullable UUID projectId, String apiKey, String workspaceName) {
-        return savedQueries().request()
+    private Response callSaveDashboardQuery(String sql, @Nullable UUID projectId, String apiKey,
+            String workspaceName) {
+        return dashboardSavedQueries().request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(SavedQuery.builder().sql(sql).projectId(projectId).build()));
+                .post(Entity.json(DashboardSavedQuery.builder().sql(sql).projectId(projectId).build()));
     }
 
-    private void mockSavedQueriesAuth(String apiKey, String workspaceName, String workspaceId) {
-        // The default AuthTestUtils stub only matches /v1/private/*; saved queries authenticate under /v1/internal/*.
+    private void mockDashboardSavedQueriesAuth(String apiKey, String workspaceName, String workspaceId) {
+        // The default AuthTestUtils stub only matches /v1/private/*; dashboard saved queries authenticate
+        // under /v1/internal/*.
         wireMock.server().stubFor(post(urlPathEqualTo("/opik/auth"))
                 .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
                 .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
-                .withRequestBody(matchingJsonPath("$.path", matching("/v1/internal/saved-queries(/.*)?")))
+                .withRequestBody(
+                        matchingJsonPath("$.path", matching("/v1/internal/dashboard-saved-queries(/.*)?")))
                 .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(USER, workspaceId, workspaceName, null))));
     }
 
-    private WebTarget savedQueries() {
-        return client.target("%s/v1/internal/saved-queries".formatted(baseURI));
+    private WebTarget dashboardSavedQueries() {
+        return client.target("%s/v1/internal/dashboard-saved-queries".formatted(baseURI));
     }
 
     private static DashboardWidgetQueryRequest window(@Nullable Instant start, @Nullable Instant end) {

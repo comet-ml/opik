@@ -15,14 +15,15 @@ import java.util.stream.StreamSupport;
 /**
  * Reads the Ollie chart widgets out of a stored dashboard config, which is otherwise opaque to the backend: widgets sit
  * in {@code sections[].widgets[]}, and an {@code ollie_chart} references the query it runs at {@code config.query.id},
- * a {@link com.comet.opik.api.SavedQuery} that only Ollie can create. The config never carries the SQL itself.
+ * a {@link com.comet.opik.api.DashboardSavedQuery} that only Ollie can create. The config never carries the
+ * SQL itself.
  */
 @UtilityClass
 class OllieChartWidgets {
 
     static final String TYPE = "ollie_chart";
 
-    /** The saved query the Ollie chart widget {@code widgetId} runs, if there is one. */
+    /** The dashboard saved query the Ollie chart widget {@code widgetId} runs, if there is one. */
     static Optional<UUID> findQueryId(JsonNode config, String widgetId) {
         return ollieCharts(config)
                 .filter(widget -> widgetId.equals(widget.path("id").asText(null)))
@@ -30,7 +31,7 @@ class OllieChartWidgets {
                 .flatMap(widget -> queryId(widget.path("config").path("query")));
     }
 
-    /** Every saved query the Ollie charts in {@code config} reference. */
+    /** Every dashboard saved query the Ollie charts in {@code config} reference. */
     static Set<UUID> queryIds(JsonNode config) {
         return ollieCharts(config)
                 .flatMap(widget -> queryId(widget.path("config").path("query")).stream())
@@ -50,11 +51,13 @@ class OllieChartWidgets {
             }
             String widgetId = widget.path("id").asText();
             if (query.has("sql")) {
-                errors.add("Ollie chart '%s': query.sql is not accepted; reference a saved query by query.id"
-                        .formatted(widgetId));
+                errors.add(
+                        ("Ollie chart '%s': query.sql is not accepted; reference a dashboard saved query"
+                                + " by query.id").formatted(widgetId));
             }
             if (queryId(query).isEmpty()) {
-                errors.add("Ollie chart '%s': query.id must be a saved query id".formatted(widgetId));
+                errors.add(
+                        "Ollie chart '%s': query.id must be a dashboard saved query id".formatted(widgetId));
             }
         });
         return errors;

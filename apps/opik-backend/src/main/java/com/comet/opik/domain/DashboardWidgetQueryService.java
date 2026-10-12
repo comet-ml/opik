@@ -28,15 +28,16 @@ import java.util.UUID;
 import java.util.concurrent.CompletionException;
 
 /**
- * Runs the saved query an Ollie chart widget references, so the browser asks for a widget's rows by reference and
- * never supplies SQL: saved queries are created only through {@code /v1/internal}, by Ollie.
+ * Runs the dashboard saved query an Ollie chart widget references, so the browser asks for a widget's rows
+ * by reference and never supplies SQL: dashboard saved queries are created only through
+ * {@code /v1/internal}, by Ollie.
  */
 @ImplementedBy(DashboardWidgetQueryServiceImpl.class)
 public interface DashboardWidgetQueryService {
 
     /**
-     * Runs the saved query of widget {@code widgetId} on dashboard {@code dashboardId} over the requested date range,
-     * with the same gates, account and checks as Custom Charts free-form SQL.
+     * Runs the dashboard saved query of widget {@code widgetId} on dashboard {@code dashboardId} over the
+     * requested date range, with the same gates, account and checks as Custom Charts free-form SQL.
      */
     AnalyticsQueryResponse runSavedQuery(UUID dashboardId, DashboardScope scope, String widgetId,
             DashboardWidgetQueryRequest request);
@@ -56,7 +57,7 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
     static final Instant MAX_BOUND_EXCLUSIVE = Instant.parse(InRangeValidator.MAX_ANALYTICS_DB_PRECISION_9);
 
     private final DashboardService dashboardService;
-    private final SavedQueryService savedQueryService;
+    private final DashboardSavedQueryService dashboardSavedQueryService;
     private final FreeFormSqlQueryService freeFormSqlQueryService;
     private final Provider<RequestContext> requestContext;
     private final ServiceTogglesConfig serviceToggles;
@@ -67,13 +68,13 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
     @Inject
     DashboardWidgetQueryServiceImpl(
             @NonNull DashboardService dashboardService,
-            @NonNull SavedQueryService savedQueryService,
+            @NonNull DashboardSavedQueryService dashboardSavedQueryService,
             @NonNull FreeFormSqlQueryService freeFormSqlQueryService,
             @NonNull Provider<RequestContext> requestContext,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
             @NonNull @Config("customCharts") CustomChartsConfig customCharts) {
         this.dashboardService = dashboardService;
-        this.savedQueryService = savedQueryService;
+        this.dashboardSavedQueryService = dashboardSavedQueryService;
         this.freeFormSqlQueryService = freeFormSqlQueryService;
         this.requestContext = requestContext;
         this.serviceToggles = serviceToggles;
@@ -102,16 +103,20 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
 
         var savedQuery = OllieChartWidgets
                 .findQueryId(dashboardService.findById(dashboardId, scope).config(), widgetId)
-                .flatMap(savedQueryService::findById)
-                .orElseThrow(() -> new NotFoundException("No saved query for widget '%s'".formatted(widgetId)));
+                .flatMap(dashboardSavedQueryService::findById)
+                .orElseThrow(
+                        () -> new NotFoundException(
+                                "No dashboard saved query for widget '%s'".formatted(widgetId)));
 
-        log.info("Running saved query of widget '{}' on dashboard '{}' in workspace '{}', project '{}'", widgetId,
-                dashboardId, workspaceId, savedQuery.projectId() == null ? "all" : savedQuery.projectId());
+        log.info("Running dashboard saved query of widget '{}' on dashboard '{}' in workspace '{}', "
+                + "project '{}'", widgetId, dashboardId, workspaceId,
+                savedQuery.projectId() == null ? "all" : savedQuery.projectId());
 
         String sql = bindWindow(savedQuery.sql(), start, end);
         try {
             return freeFormSqlQueryService
-                    .executeQuery(FreeFormSqlAccount.EXTENDED, workspaceId, savedQuery.projectId(), sql)
+                    .executeQuery(FreeFormSqlAccount.EXTENDED, workspaceId, savedQuery.projectId(),
+                            sql)
                     .join();
         } catch (CompletionException e) {
             // Unwrap so the mapped WebApplicationException, and its HTTP status, reaches the JAX-RS handling.
@@ -121,9 +126,10 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
     }
 
     /**
-     * Substitutes the date range into the saved query. The caller's input is safe here because it arrives as a parsed
-     * {@link Instant} and the text spliced in is formatted by the server, digits and separators only; the
-     * {@code toDateTime64} wrapper only gives the value the {@code DateTime64(9)} type the placeholders stand for.
+     * Substitutes the date range into the dashboard saved query. The caller's input is safe here because it
+     * arrives as a parsed {@link Instant} and the text spliced in is formatted by the server, digits and separators
+     * only; the {@code toDateTime64} wrapper only gives the value the {@code DateTime64(9)} type the placeholders stand
+     * for.
      */
     static String bindWindow(String sql, Instant start, Instant end) {
         return sql.replace(WINDOW_START_PLACEHOLDER, dateTimeExpression(start))
