@@ -119,7 +119,7 @@ public class AlertEventBridgePublisher {
                     publishCounter.add(1, metricAttributes(workspaceId, workspaceName, "error").toBuilder()
                             .put(ERROR_TYPE_KEY, errorType(error))
                             .build());
-                    log.error("Failed to publish alert to EventBridge, alertName='{}', alertId='{}', bus='{}'",
+                    log.warn("Failed to publish alert to EventBridge, alertName='{}', alertId='{}', bus='{}'",
                             alert.name(), alert.id(), eventBus, error);
                     return Mono.empty();
                 })
