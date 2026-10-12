@@ -1,0 +1,32 @@
+## Automatic Annotation Queue Population
+
+Annotation queues can now fill themselves. Turn on **Automation** when creating or editing a queue and describe what's worth reviewing as conditions on feedback scores (for example, a low score from an online evaluation rule). Traces and threads logged by your application are added to the queue as soon as they qualify, so reviewers see the problem cases without anyone watching the traces list. Conditions are combined with AND (up to five), you can optionally cap how many items automation adds, and the items table shows how each item arrived under **Source**. Automation is enabled by default; self-hosted deployments can switch it off with `TOGGLE_ANNOTATION_QUEUE_AUTOMATION_ENABLED=false`.
+
+The Traces and Threads tables also gain an **Annotation queues** column that lists the queues each row belongs to, with links straight to the queue.
+
+[Learn more in the annotation queues docs](/evaluation/advanced/annotation_queues).
+
+## Bug Fixes & Improvements
+
+- **Prompt versions in the experiment compare view** — The Configuration tab now has a "Prompt version" row with one value per experiment, so you can see which prompt version each experiment ran. It works with "show differences only". Compare prompts and conversations in the side panel also render as formatted messages instead of a single flattened string.
+- **Static custom headers on OpenAI and OpenRouter providers** — The provider dialog accepts custom headers for these providers, which enables things like OpenRouter app attribution (`HTTP-Referer`, `X-OpenRouter-Title`).
+- **Simpler `opik mcp configure` onboarding** — The command now asks for one client and finishes inside it, including the browser sign-in for Claude Code. `npx opik mcp configure` works as a wrapper around the `uvx` command.
+- **More accurate model parameters in the Playground** — Model parameters that a provider would reject are no longer sent, the parameters button is hidden for providers with nothing to set, and low and medium thinking levels are offered for Gemini 3.1 Flash Lite.
+- **Pretty-printed conversations in span output** — A conversation logged as a span's output is displayed as readable messages.
+- **Better filtering** — Quick filters route to the table of the selected entity, and dotted metadata keys are bracket-quoted in filters so they match correctly.
+- **Experiment table polish** — The experiment name column stays pinned in the compare table, the Compare button reacts to how many experiments are selected, judge-reason newlines are kept at Detailed row height, and the column picker shows the selected-column count.
+- **More accurate token usage and costs** — Gemini tool-use prompt tokens, Bedrock cache tokens, and Nova usage fields are now counted in `prompt_tokens`/`total_tokens`, and Gemini tool-use prompt tokens are priced as input. OTel spans from `quarkus-langchain4j` provider names are priced as well.
+- **Integration reliability** — LiteLLM streams that are abandoned or fail mid-iteration now end their span, ADK LLM spans keep usage when the inference span ends early, LangChain usage is kept when `base_url` is a string, and Azure OpenAI haystack components are recorded with `provider=azure`.
+- **SDK and metric fixes** — `ignore_arguments` applies to arguments passed through `**kwargs`, paginated dataset and experiment streams no longer stop at an unreadable record, feedback score batches are bounded by payload size, and the PromptInjection metric no longer flags normal output. Moderation and Usefulness no longer read a null judge score as 0.0, and ConversationDegenerationMetric scores wordless assistant turns.
+- **Alert and rule fixes** — Stored alert configurations using the enum-name form of an operator are accepted, and code-metric rules score traces that have no metadata.
+- **Hidden internal workspaces** — Internal workspaces no longer appear in the MCP OAuth consent list.
+
+## Performance Improvements
+
+- **Faster trace, span and experiment reads** — Reads that look up traces, spans or experiment items by ID now only scan the weeks those IDs resolve to, which reduces the data read for stats, scored-span lookups and experiment reads.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.82...2.2.88)
+
+_Releases_: `2.2.83`, `2.2.84`, `2.2.85`, `2.2.86`, `2.2.87`, `2.2.88`
