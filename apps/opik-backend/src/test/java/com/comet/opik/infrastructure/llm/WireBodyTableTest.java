@@ -20,8 +20,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
-import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import jakarta.ws.rs.core.MediaType;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import org.junit.jupiter.api.AfterAll;
@@ -39,18 +39,20 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
-import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -78,13 +80,34 @@ class WireBodyTableTest {
         ANTHROPIC(LlmProvider.ANTHROPIC, "anthropic", "/v1/", "/v1/messages", """
                 {"id":"msg_1","type":"message","role":"assistant","model":"claude",\
                 "content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn",\
-                "usage":{"input_tokens":1,"output_tokens":1}}""");
+                "usage":{"input_tokens":1,"output_tokens":1}}""", """
+                event: message_start
+                data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant",\
+                "model":"claude","content":[],"stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}
+
+                event: content_block_start
+                data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+                event: content_block_delta
+                data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}
+
+                event: content_block_stop
+                data: {"type":"content_block_stop","index":0}
+
+                event: message_delta
+                data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}
+
+                event: message_stop
+                data: {"type":"message_stop"}
+
+                """);
 
         private final LlmProvider llmProvider;
         private final String rowsFile;
         private final String baseUrlPath;
         private final String endpointPath;
         private final String response;
+        private final String streamResponse;
     }
 
     private record Row(String model, String path, JsonNode request, JsonNode body, String rejected) {
@@ -124,50 +147,74 @@ class WireBodyTableTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource
-    void anthropic(String name, Row row) {
-        assertWireBody(Provider.ANTHROPIC, row);
+    void anthropicSends(String name, Row row) {
+        assertSends(Provider.ANTHROPIC, row);
     }
 
-    private Stream<Arguments> anthropic() {
-        return rows(Provider.ANTHROPIC);
+    private Stream<Arguments> anthropicSends() {
+        return rows(Provider.ANTHROPIC, false);
     }
 
-    private void assertWireBody(Provider provider, Row row) {
-        wireMock.resetAll();
-        wireMock.stubFor(post(urlPathEqualTo(provider.endpointPath)).willReturn(okJson(provider.response)));
-
-        if (row.rejected() != null) {
-            assertThatThrownBy(() -> send(row)).hasMessageContaining(row.rejected());
-            assertThat(sentRequests(provider)).isEmpty();
-            return;
-        }
-
-        send(row);
-
-        await().atMost(5, SECONDS).until(() -> !sentRequests(provider).isEmpty());
-        var sent = sentRequests(provider);
-        assertThat(sent).hasSize(1);
-        assertThat(readStrict(sent.getFirst().getBodyAsString())).isEqualTo(row.body());
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void anthropicRejects(String name, Row row) {
+        assertRejects(Provider.ANTHROPIC, row);
     }
 
-    private void send(Row row) {
+    private Stream<Arguments> anthropicRejects() {
+        return rows(Provider.ANTHROPIC, true);
+    }
+
+    private void assertSends(Provider provider, Row row) {
         if (JUDGE_PATH.equals(row.path())) {
-            var code = JsonUtils.treeToValue(row.request(), LlmAsJudgeCode.class);
-            var chatRequest = OnlineScoringEngine.prepareLlmRequest(code, null,
-                    llmProviderFactory.getStructuredOutputStrategy(row.model()), List.of());
-            chatCompletionService.scoreTrace(chatRequest, code.model(), WORKSPACE_ID);
-            return;
-        }
-        var request = JsonUtils.treeToValue(row.request(), ChatCompletionRequest.class);
-        if (Boolean.TRUE.equals(request.stream())) {
-            chatCompletionService.createAndStreamResponse(request, WORKSPACE_ID, mock(ChunkedOutputHandlers.class));
+            stubProvider(provider, false);
+            scoreTrace(row);
         } else {
-            chatCompletionService.create(request, WORKSPACE_ID);
+            var request = JsonUtils.treeToValue(row.request(), ChatCompletionRequest.class);
+            var stream = Boolean.TRUE.equals(request.stream());
+            stubProvider(provider, stream);
+            if (stream) {
+                var handlers = mock(ChunkedOutputHandlers.class);
+                chatCompletionService.createAndStreamResponse(request, WORKSPACE_ID, handlers);
+                verify(handlers, timeout(5_000)).handleClose();
+                verify(handlers, never()).handleError(any());
+            } else {
+                chatCompletionService.create(request, WORKSPACE_ID);
+            }
         }
+
+        var sent = wireMock.getAllServeEvents();
+        assertThat(sent).hasSize(1);
+        assertThat(sent.getFirst().getRequest().getUrl()).isEqualTo(provider.endpointPath);
+        assertThat(readStrict(sent.getFirst().getRequest().getBodyAsString())).isEqualTo(row.body());
     }
 
-    private List<LoggedRequest> sentRequests(Provider provider) {
-        return wireMock.findAll(postRequestedFor(urlPathEqualTo(provider.endpointPath)));
+    private void assertRejects(Provider provider, Row row) {
+        stubProvider(provider, false);
+
+        assertThatThrownBy(() -> {
+            if (JUDGE_PATH.equals(row.path())) {
+                scoreTrace(row);
+            } else {
+                chatCompletionService.create(JsonUtils.treeToValue(row.request(), ChatCompletionRequest.class),
+                        WORKSPACE_ID);
+            }
+        }).hasMessageContaining(row.rejected());
+        assertThat(wireMock.getAllServeEvents()).isEmpty();
+    }
+
+    private void stubProvider(Provider provider, boolean stream) {
+        wireMock.resetAll();
+        wireMock.stubFor(post(urlPathEqualTo(provider.endpointPath)).willReturn(stream
+                ? aResponse().withHeader("Content-Type", MediaType.SERVER_SENT_EVENTS).withBody(provider.streamResponse)
+                : okJson(provider.response)));
+    }
+
+    private void scoreTrace(Row row) {
+        var code = JsonUtils.treeToValue(row.request(), LlmAsJudgeCode.class);
+        var chatRequest = OnlineScoringEngine.prepareLlmRequest(code, null,
+                llmProviderFactory.getStructuredOutputStrategy(row.model()), List.of());
+        chatCompletionService.scoreTrace(chatRequest, code.model(), WORKSPACE_ID);
     }
 
     private ProviderApiKey providerApiKey(Provider provider) {
@@ -184,7 +231,7 @@ class WireBodyTableTest {
      * {@code models} section stands for every model in that group.
      */
     @SneakyThrows
-    private Stream<Arguments> rows(Provider provider) {
+    private Stream<Arguments> rows(Provider provider, boolean rejected) {
         JsonNode file;
         try (InputStream is = getClass().getClassLoader()
                 .getResourceAsStream("wire-body/%s.yaml".formatted(provider.rowsFile))) {
@@ -192,6 +239,9 @@ class WireBodyTableTest {
         }
         var arguments = new ArrayList<Arguments>();
         for (var row : file.get("rows")) {
+            if (row.hasNonNull("rejected") != rejected) {
+                continue;
+            }
             var path = row.path("path").asText("chat");
             var defaults = file.path("defaults").path(path);
             for (var model : models(file.path("models"), row)) {
