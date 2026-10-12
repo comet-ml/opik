@@ -120,9 +120,9 @@ class LlmProviderGeminiTest {
         var result = LlmProviderGemini.withCutOffWhileThinking(request(maxCompletionTokens, customParameters),
                 response);
 
-        assertThat(result.finishReason()).isEqualTo(expected);
-        assertThat(result.aiMessage()).isEqualTo(response.aiMessage());
-        assertThat(result.tokenUsage()).isEqualTo(response.tokenUsage());
+        assertThat(result.finishReason()).as("[%s] finish reason", name).isEqualTo(expected);
+        assertThat(result.aiMessage()).as("[%s] message", name).isEqualTo(response.aiMessage());
+        assertThat(result.tokenUsage()).as("[%s] token usage", name).isEqualTo(response.tokenUsage());
     }
 
     private static ChatResponse response(String text, FinishReason finishReason, TokenUsage tokenUsage) {
