@@ -216,10 +216,9 @@ anthropic:
   - id: "claude-mythos-5-1"
     label: "Claude Mythos 5.1"
     structuredOutput: true
-  - id: "claude-mythos-preview"
-    label: "Claude Mythos Preview"
-    structuredOutput: true
   - id: "claude-3-7-sonnet-20250219"
+  - id: "claude-mythos-preview"
+    structuredOutput: true
   - id: "claude-opus-4-1-20250805"
     structuredOutput: true
   - id: "claude-opus-4-20250514"
@@ -243,8 +242,6 @@ gemini:
     label: "Gemini 3.5 Flash"
   - id: "gemini-3.5-flash-lite"
     label: "Gemini 3.5 Flash Lite"
-  - id: "gemini-3.5-transcribe"
-    label: "Gemini 3.5 Transcribe"
   - id: "gemini-3.1-pro-preview"
     label: "Gemini 3.1 Pro Preview"
     structuredOutput: true
@@ -266,8 +263,6 @@ gemini:
     label: "Gemma 4 26B A4B IT"
   - id: "gemma-4-31b-it"
     label: "Gemma 4 31B IT"
-  - id: "gemini-flash-latest-high-res-exp"
-    label: "Gemini Flash Latest High Res Exp"
   - id: "gemini-omni-1.1-flash"
     label: "Gemini Omni 1.1 Flash"
   - id: "lyria-3-clip-preview"
@@ -300,8 +295,10 @@ gemini:
   - id: "gemini-3.1-flash-lite-preview"
     structuredOutput: true
   - id: "gemini-3.1-flash-tts-preview"
+  - id: "gemini-3.5-transcribe"
   - id: "gemini-3.8-flash-lite-tts"
   - id: "gemini-3.8-flash-tts"
+  - id: "gemini-flash-latest-high-res-exp"
   - id: "gemini-omni-flash-preview"
   - id: "gemini-pro-vision"
   - id: "nano-banana-pro-preview"
@@ -335,14 +332,6 @@ vertex-ai:
     qualifiedName: "vertex_ai/gemini-3.1-flash-lite"
     label: "Gemini 3.1 Flash Lite"
     structuredOutput: true
-  - id: "gemini-3.1-flash-lite-preview"
-    qualifiedName: "vertex_ai/gemini-3.1-flash-lite-preview"
-    label: "Gemini 3.1 Flash Lite Preview"
-    structuredOutput: true
-  - id: "gemini-3-pro-preview"
-    qualifiedName: "vertex_ai/gemini-3-pro-preview"
-    label: "Gemini 3 Pro Preview"
-    structuredOutput: true
   - id: "gemini-3-flash-preview"
     qualifiedName: "vertex_ai/gemini-3-flash-preview"
     label: "Gemini 3 Flash Preview"
@@ -355,19 +344,14 @@ vertex-ai:
     qualifiedName: "vertex_ai/gemini-2.5-flash"
     label: "Gemini 2.5 Flash"
     structuredOutput: true
-  - id: "gemini-2.0-flash-001"
-    qualifiedName: "vertex_ai/gemini-2.0-flash-001"
-    label: "Gemini 2.0 Flash 001"
-    structuredOutput: true
-  - id: "gemini-2.0-flash-lite-001"
-    qualifiedName: "vertex_ai/gemini-2.0-flash-lite-001"
-    label: "Gemini 2.0 Flash Lite 001"
   - id: "gemini-omni-1.1-flash"
     qualifiedName: "vertex_ai/gemini-omni-1.1-flash"
     label: "Gemini Omni 1.1 Flash"
-  - id: "gemini-robotics-er-2"
-    qualifiedName: "vertex_ai/gemini-robotics-er-2"
-    label: "Gemini Robotics Er 2"
+  - id: "gemini-2.0-flash-001"
+    qualifiedName: "vertex_ai/gemini-2.0-flash-001"
+    structuredOutput: true
+  - id: "gemini-2.0-flash-lite-001"
+    qualifiedName: "vertex_ai/gemini-2.0-flash-lite-001"
   - id: "gemini-2.5-flash-lite-preview-06-17"
     qualifiedName: "vertex_ai/gemini-2.5-flash-lite-preview-06-17"
     structuredOutput: true
@@ -383,6 +367,14 @@ vertex-ai:
   - id: "gemini-2.5-pro-preview-05-06"
     qualifiedName: "vertex_ai/gemini-2.5-pro-preview-05-06"
     structuredOutput: true
+  - id: "gemini-3-pro-preview"
+    qualifiedName: "vertex_ai/gemini-3-pro-preview"
+    structuredOutput: true
+  - id: "gemini-3.1-flash-lite-preview"
+    qualifiedName: "vertex_ai/gemini-3.1-flash-lite-preview"
+    structuredOutput: true
+  - id: "gemini-robotics-er-2"
+    qualifiedName: "vertex_ai/gemini-robotics-er-2"
 openrouter:
   - id: "ai21/jamba-large-1.7"
     label: "ai21/jamba-large-1.7"
