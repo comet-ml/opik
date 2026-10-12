@@ -230,7 +230,7 @@ public class LlmModelRegistryService {
                     log.warn("Skipping override model with missing id for provider '{}'", provider);
                     return;
                 }
-                existingIds.merge(m.id(), m, LlmModelRegistryService::inheritReasoningFlagIfUnset);
+                existingIds.merge(m.id(), m, LlmModelRegistryService::inheritFlagsIfUnset);
             });
 
             result.put(provider, List.copyOf(existingIds.values()));
@@ -240,11 +240,15 @@ public class LlmModelRegistryService {
     }
 
     // The remote copy is re-uploaded only when the sync script finds new models, so it can lag the classpath
-    // file a release ships. Its stale entries leave the flag out, so only an entry that sets it may change it.
-    private static LlmModelDefinition inheritReasoningFlagIfUnset(LlmModelDefinition existing,
+    // file a release ships. Its stale entries leave the flags out, so only an entry that sets one may change it.
+    private static LlmModelDefinition inheritFlagsIfUnset(LlmModelDefinition existing,
             LlmModelDefinition override) {
-        return override.reasoning() == null
-                ? override.toBuilder().reasoning(existing.reasoning()).build()
-                : override;
+        return override.toBuilder()
+                .reasoning(Optional.ofNullable(override.reasoning()).orElse(existing.reasoning()))
+                .supportedParameters(Optional.ofNullable(override.supportedParameters())
+                        .orElse(existing.supportedParameters()))
+                .reasoningEfforts(Optional.ofNullable(override.reasoningEfforts())
+                        .orElse(existing.reasoningEfforts()))
+                .build();
     }
 }

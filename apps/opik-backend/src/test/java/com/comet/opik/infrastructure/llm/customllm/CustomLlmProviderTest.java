@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.utils.JsonUtils;
@@ -9,6 +10,7 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
@@ -152,6 +155,96 @@ class CustomLlmProviderTest {
         assertPenalties(name, sentBody(), expectedPenalty);
     }
 
+    @ParameterizedTest
+    @EnumSource(value = LlmProvider.class, names = {"CUSTOM_LLM", "OLLAMA", "BEDROCK"})
+    void generateSendsAnExtraBodyKeyOnceWithTheExtraBodyValue(LlmProvider provider) {
+        var request = ChatCompletionRequest.builder()
+                .from(request(66, null))
+                .temperature(0.25)
+                .customParameters(Map.of("temperature", 0.95, "top_k", 7))
+                .build();
+
+        newProvider(provider).generate(request, "workspace-id");
+
+        var rawBody = sentRawBody();
+        var body = JsonUtils.getJsonNodeFromString(rawBody);
+        assertThat(StringUtils.countMatches(rawBody, "\"temperature\"")).isEqualTo(1);
+        assertThat(body.get("temperature").asDouble()).isEqualTo(0.95);
+        assertThat(body.get("top_k").asInt()).isEqualTo(7);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("extraBodyTokenLimitCases")
+    void generateSendsTheExtraBodyTokenLimitOnceUnderTheNameTheProviderReads(
+            String name, LlmProvider provider, Map<String, Object> customParameters,
+            Integer expectedMaxTokens, Integer expectedMaxCompletionTokens) {
+        newProvider(provider).generate(extraBodyLimitRequest(customParameters), "workspace-id");
+
+        assertExtraBodyTokenLimit(name, sentRawBody(), expectedMaxTokens, expectedMaxCompletionTokens);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("extraBodyTokenLimitCases")
+    void generateStreamSendsTheExtraBodyTokenLimitOnceUnderTheNameTheProviderReads(
+            String name, LlmProvider provider, Map<String, Object> customParameters,
+            Integer expectedMaxTokens, Integer expectedMaxCompletionTokens) throws Exception {
+        wireMock.stubFor(post(urlEqualTo(COMPLETIONS_PATH)).willReturn(aResponse()
+                .withHeader("Content-Type", "text/event-stream")
+                .withBody(COMPLETION_STREAM)));
+        var done = new CompletableFuture<Void>();
+
+        newProvider(provider).generateStream(extraBodyLimitRequest(customParameters), "workspace-id",
+                response -> {
+                }, () -> done.complete(null), done::completeExceptionally);
+        done.get(10, TimeUnit.SECONDS);
+
+        assertExtraBodyTokenLimit(name, sentRawBody(), expectedMaxTokens, expectedMaxCompletionTokens);
+    }
+
+    @Test
+    void judgeSendsEachRepeatedExtraBodyKeyOnceWithTheExtraBodyValue() {
+        var config = LlmProviderClientApiConfig.builder()
+                .apiKey("test-key")
+                .baseUrl(wireMock.baseUrl() + "/v1")
+                .configuration(Map.of("provider_name", PROVIDER_NAME))
+                .build();
+        var parameters = LlmAsJudgeModelParameters.builder()
+                .name("custom-llm/" + PROVIDER_NAME + "/" + MODEL)
+                .temperature(0.25)
+                .seed(7)
+                .customParameters(JsonUtils.getJsonNodeFromString("""
+                        {"temperature": 0.95, "seed": 42}
+                        """))
+                .build();
+
+        clientGenerator.generateChat(config, parameters).chat("hello");
+
+        var rawBody = sentRawBody();
+        var body = JsonUtils.getJsonNodeFromString(rawBody);
+        assertThat(StringUtils.countMatches(rawBody, "\"temperature\"")).isEqualTo(1);
+        assertThat(body.get("temperature").asDouble()).isEqualTo(0.95);
+        assertThat(StringUtils.countMatches(rawBody, "\"seed\"")).isEqualTo(1);
+        assertThat(body.get("seed").asInt()).isEqualTo(42);
+    }
+
+    private static Stream<Arguments> extraBodyTokenLimitCases() {
+        return Stream.of(
+                arguments("Ollama gets an extra body max_completion_tokens as max_tokens", LlmProvider.OLLAMA,
+                        Map.of("max_completion_tokens", 12), 12, null),
+                arguments("Ollama gets an extra body max_tokens as is", LlmProvider.OLLAMA,
+                        Map.of("max_tokens", 12), 12, null),
+                arguments("Ollama keeps the extra body max_tokens when both names are there", LlmProvider.OLLAMA,
+                        Map.of("max_tokens", 12, "max_completion_tokens", 30), 12, null),
+                arguments("Bedrock gets an extra body max_tokens as max_completion_tokens", LlmProvider.BEDROCK,
+                        Map.of("max_tokens", 40), null, 40),
+                arguments("Bedrock gets an extra body max_completion_tokens as is", LlmProvider.BEDROCK,
+                        Map.of("max_completion_tokens", 40), null, 40),
+                arguments("A custom provider gets an extra body max_tokens as typed", LlmProvider.CUSTOM_LLM,
+                        Map.of("max_tokens", 12), 12, null),
+                arguments("A custom provider gets an extra body max_completion_tokens as typed",
+                        LlmProvider.CUSTOM_LLM, Map.of("max_completion_tokens", 12), null, 12));
+    }
+
     private static Stream<Arguments> penaltyCases() {
         return Stream.of(
                 arguments("Bedrock gets no penalty of 0", LlmProvider.BEDROCK, 0.0, null),
@@ -210,6 +303,13 @@ class CustomLlmProviderTest {
                 .build();
     }
 
+    private ChatCompletionRequest extraBodyLimitRequest(Map<String, Object> customParameters) {
+        return ChatCompletionRequest.builder()
+                .from(request(66, null))
+                .customParameters(customParameters)
+                .build();
+    }
+
     private ChatCompletionRequest penaltyRequest(Double penalty) {
         return ChatCompletionRequest.builder()
                 .from(request(4000, null))
@@ -219,9 +319,13 @@ class CustomLlmProviderTest {
     }
 
     private JsonNode sentBody() {
+        return JsonUtils.getJsonNodeFromString(sentRawBody());
+    }
+
+    private String sentRawBody() {
         var requests = wireMock.findAll(postRequestedFor(urlEqualTo(COMPLETIONS_PATH)));
         assertThat(requests).hasSize(1);
-        return JsonUtils.getJsonNodeFromString(requests.getFirst().getBodyAsString());
+        return requests.getFirst().getBodyAsString();
     }
 
     private void assertPenalties(String name, JsonNode body, Double expectedPenalty) {
@@ -231,6 +335,18 @@ class CustomLlmProviderTest {
         assertThat(body.has("presence_penalty") ? body.get("presence_penalty").asDouble() : null)
                 .as("[%s] presence_penalty", name)
                 .isEqualTo(expectedPenalty);
+    }
+
+    private void assertExtraBodyTokenLimit(
+            String name, String rawBody, Integer expectedMaxTokens, Integer expectedMaxCompletionTokens) {
+        assertThat(StringUtils.countMatches(rawBody, "\"max_tokens\""))
+                .as("[%s] max_tokens keys", name)
+                .isEqualTo(expectedMaxTokens == null ? 0 : 1);
+        assertThat(StringUtils.countMatches(rawBody, "\"max_completion_tokens\""))
+                .as("[%s] max_completion_tokens keys", name)
+                .isEqualTo(expectedMaxCompletionTokens == null ? 0 : 1);
+        assertTokenLimit(name, JsonUtils.getJsonNodeFromString(rawBody), expectedMaxTokens,
+                expectedMaxCompletionTokens);
     }
 
     private void assertTokenLimit(
