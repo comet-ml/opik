@@ -48,6 +48,7 @@ const streamedRun = (
   endTime: "",
   usage: null,
   choices: null,
+  finishReason: null,
   providerError: null,
   opikError: null,
   pythonProxyError: null,
