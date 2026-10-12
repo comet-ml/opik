@@ -114,5 +114,24 @@ class TraceDAOImplTest {
             var spanWeeks = sql.substring(sql.indexOf("span_weeks AS ("), sql.indexOf("spans_data AS ("));
             assertThat(spanWeeks).contains("AND trace_id IN (SELECT trace_id FROM annotation_queue_trace_ids)");
         }
+
+        @Test
+        @DisplayName("the trace score averages count only the queue's own scores")
+        void traceScoreAveragesAreScopedToTheQueue() {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .annotationQueueId(UUID.randomUUID())
+                    .build();
+            var sql = FilterUtils.newTraceThreadFindTemplate(TraceDAOImpl.SELECT_FEEDBACK_SCORES_STATS, criteria,
+                    "1", true)
+                    .add("filters_present", true)
+                    .add("has_legacy_scores", true)
+                    .render();
+
+            var traceFs = sql.substring(sql.indexOf("trace_fs AS ("), sql.indexOf("trace_fs_per_name AS ("));
+            assertThat(traceFs)
+                    .contains("AND source_queue_id = :annotation_queue_id")
+                    .doesNotContain("FROM feedback_scores FINAL");
+        }
     }
 }

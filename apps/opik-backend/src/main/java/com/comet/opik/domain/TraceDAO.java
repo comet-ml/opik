@@ -3476,7 +3476,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                 <if(filters_present)> AND trace_id IN (SELECT id FROM trace_final) <endif>
             ), trace_fs AS (
-                <if(has_legacy_scores)>
+                <if(has_legacy_scores && !annotation_queue_id)>
                 SELECT project_id, entity_id, name, value,
                        feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
@@ -3493,6 +3493,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
+                  <if(annotation_queue_id)> AND source_queue_id = :annotation_queue_id <endif>
                   <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                   <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                   <if(filters_present)> AND entity_id IN (SELECT id FROM trace_final) <endif>
