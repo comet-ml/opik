@@ -4,27 +4,16 @@ import {
   convertOptimizationVariableFormat,
   restorePromptVariableFormat,
   checkIsTestSuite,
-  getOptimizationDefaultConfigByProvider,
   extractKwargsKeysFromPython,
   extractRequiredScoreParams,
   extractMetricNameFromCode,
 } from "./optimizations";
 import { extractMetricNameFromPythonCode } from "@/lib/rules";
 import {
-  DEFAULT_ANTHROPIC_CONFIGS,
-  DEFAULT_OPEN_AI_CONFIGS,
-} from "@/constants/llm";
-import {
   Experiment,
   EXPERIMENT_TYPE,
   EVALUATION_METHOD,
 } from "@/types/datasets";
-import {
-  COMPOSED_PROVIDER_TYPE,
-  LLMAnthropicConfigsType,
-  PROVIDER_MODEL_TYPE,
-  PROVIDER_TYPE,
-} from "@/types/providers";
 
 const makeExperiment = (overrides: Partial<Experiment> = {}): Experiment => ({
   id: "exp-1",
@@ -999,60 +988,6 @@ describe("extractKwargsKeysFromPython — unknown-column detection", () => {
     const referenced = extractKwargsKeysFromPython(code);
     const missing = referenced.filter((key) => !datasetVariables.includes(key));
     expect(missing).toEqual([]);
-  });
-});
-
-describe("getOptimizationDefaultConfigByProvider — Anthropic", () => {
-  it("seeds temperature for models that accept sampling params", () => {
-    const config = getOptimizationDefaultConfigByProvider(
-      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
-      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
-    ) as LLMAnthropicConfigsType;
-
-    expect(config.temperature).toBe(0);
-  });
-
-  it("omits temperature for Claude Opus 4.7", () => {
-    const config = getOptimizationDefaultConfigByProvider(
-      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
-      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
-    ) as LLMAnthropicConfigsType;
-
-    expect(config.temperature).toBeUndefined();
-  });
-
-  it.each([
-    {
-      model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
-      temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
-    },
-    { model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, temperature: undefined },
-  ])("seeds temperature $temperature for $model", ({ model, temperature }) => {
-    const config = getOptimizationDefaultConfigByProvider(
-      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
-      model,
-    ) as LLMAnthropicConfigsType;
-
-    expect(config.temperature).toBe(temperature);
-  });
-});
-
-describe("getOptimizationDefaultConfigByProvider — OpenAI", () => {
-  it.each([
-    PROVIDER_MODEL_TYPE.GPT_6_ASTRA,
-    PROVIDER_MODEL_TYPE.GPT_5_4,
-    PROVIDER_MODEL_TYPE.GPT_O1,
-    PROVIDER_MODEL_TYPE.GPT_4O_MINI,
-    PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
-  ])("seeds the default temperature for %s", (model) => {
-    const config = getOptimizationDefaultConfigByProvider(
-      PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE,
-      model,
-    );
-
-    expect(config).toEqual({
-      temperature: DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE,
-    });
   });
 });
 

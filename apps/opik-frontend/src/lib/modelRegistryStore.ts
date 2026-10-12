@@ -32,6 +32,8 @@ import { PROVIDER_TYPE, ProviderModelsMap } from "@/types/providers";
 export type ModelFlags = {
   reasoning: boolean;
   structuredOutput: boolean;
+  supportedParameters?: string[];
+  reasoningEfforts?: string[];
 };
 
 const buildInitialFlags = (): Map<string, ModelFlags> => {

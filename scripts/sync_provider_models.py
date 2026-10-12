@@ -124,6 +124,30 @@ class ModelEntry(NamedTuple):
     label: str
 
 
+# Only the parameters the playground's OpenRouter panel has a control for: OpenRouter's full lists would more than double the
+# registry every client downloads.
+OPENROUTER_PANEL_PARAMETERS = {
+    "temperature",
+    "top_p",
+    "top_k",
+    "frequency_penalty",
+    "presence_penalty",
+    "repetition_penalty",
+    "min_p",
+    "top_a",
+    "max_tokens",
+    "max_completion_tokens",
+    "reasoning",
+    "reasoning_effort",
+}
+
+
+class OpenRouterCapabilities(NamedTuple):
+    # None when OpenRouter lists no parameters at all (its router models), which says nothing about what they accept.
+    supported_parameters: list[str] | None
+    reasoning_efforts: list[str]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Dropdown filtering — only show useful models in the frontend dropdown.
 # Java enums keep all models for backend validation.
@@ -147,6 +171,7 @@ OPENAI_DROPDOWN_EXCLUDE = [
     r"-chat-latest$",
     r"^o1-preview",
     r"^o1-mini",
+    r"^gpt-live",               # realtime voice model, 400 "not a chat model" on /v1/chat/completions
 ]
 
 GEMINI_DROPDOWN_EXCLUDE = [
@@ -166,11 +191,18 @@ GEMINI_DROPDOWN_EXCLUDE = [
     # sync sources.
     r"^gemma-(2|3)-",
     r"^gemini-gemma-",
+    r"^gemini-omni",             # video generation, 400 "only supports Interactions API" on generateContent
+    r"^lyria-",                  # music generation, answers with audio the playground cannot show
 ]
 
 VERTEXAI_DROPDOWN_EXCLUDE = [
     r"-exp-",                    # experimental
     r"-preview-\d{2}-\d{2}$",   # dated previews
+    r"/gemini-omni",             # video generation, Interactions API only
+]
+
+OPENROUTER_DROPDOWN_EXCLUDE = [
+    r":batch$",                  # batch API only, 404 "cannot be used with the chat/completions endpoint"
 ]
 
 
@@ -285,13 +317,17 @@ def build_deprecated_set(prices: dict) -> set[str]:
 
 
 def filter_for_dropdown(
-    entries: list[ModelEntry], provider: str, deprecated: set[str] | None = None,
+    entries: list[ModelEntry],
+    provider: str,
+    deprecated: set[str] | None = None,
+    served: set[str] | None = None,
 ) -> list[ModelEntry]:
     """Filter and sort model entries for the frontend dropdown."""
     exclude = {
         "openai": OPENAI_DROPDOWN_EXCLUDE,
         "gemini": GEMINI_DROPDOWN_EXCLUDE,
         "vertexai": VERTEXAI_DROPDOWN_EXCLUDE,
+        "openrouter": OPENROUTER_DROPDOWN_EXCLUDE,
     }.get(provider, [])
 
     sort_fn = {
@@ -306,6 +342,9 @@ def filter_for_dropdown(
         filtered = [e for e in filtered if not matches_any(e.value, exclude)]
     if deprecated:
         filtered = [e for e in filtered if e.value not in deprecated]
+    # Empty when the source fetch failed: hiding every model would be worse than showing stale ones.
+    if served:
+        filtered = [e for e in filtered if e.value in served]
     if provider == "anthropic":
         filtered = _deduplicate_by_base(filtered)
     if sort_fn:
@@ -400,17 +439,27 @@ def matches_any(s: str, patterns: list[str]) -> bool:
 # Source fetching
 # ─────────────────────────────────────────────────────────────────────────────
 
-def fetch_openrouter_models() -> list[str]:
-    """Fetch chat-capable model IDs from OpenRouter API."""
+# The YAML is uploaded to the CDN without review, so a malformed list counts as no list (every control stays)
+# instead of a string turning into single letters that hide them all.
+def _string_list(value) -> list[str]:
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+
+def fetch_openrouter_models() -> dict[str, OpenRouterCapabilities]:
+    """Fetch chat-capable models from OpenRouter API, keyed by id."""
     resp = requests.get(OPENROUTER_API_URL, timeout=30)
     resp.raise_for_status()
     models = resp.json()["data"]
-    chat_ids = []
+    chat_models = {}
     for m in models:
         modality = (m.get("architecture") or {}).get("modality", "")
         if "text" in modality:
-            chat_ids.append(m["id"])
-    return sorted(set(chat_ids))
+            supported = _string_list(m.get("supported_parameters"))
+            chat_models[m["id"]] = OpenRouterCapabilities(
+                supported_parameters=sorted(set(supported) & OPENROUTER_PANEL_PARAMETERS) if supported else None,
+                reasoning_efforts=_string_list((m.get("reasoning") or {}).get("supported_efforts")),
+            )
+    return dict(sorted(chat_models.items()))
 
 
 def fetch_openai_models(api_key: str) -> list[str]:
@@ -1002,11 +1051,23 @@ def _parse_yaml_reasoning_flags(yaml_content: str) -> dict[str, dict[str, bool]]
     return result
 
 
+def _openrouter_capability_lines(capabilities: OpenRouterCapabilities | None) -> list[str]:
+    if capabilities is None:
+        return []
+    lines = []
+    if capabilities.supported_parameters is not None:
+        lines.append(f"    supportedParameters: [{', '.join(capabilities.supported_parameters)}]")
+    if capabilities.reasoning_efforts:
+        lines.append(f"    reasoningEfforts: [{', '.join(capabilities.reasoning_efforts)}]")
+    return lines
+
+
 def regenerate_llm_models_yaml(
     existing_content: str,
     models_by_provider: dict[str, list[ModelEntry]],
     dropdown_by_provider: dict[str, list[ModelEntry]] | None = None,
     openai_reasoning: dict[str, bool] | None = None,
+    openrouter_capabilities: dict[str, OpenRouterCapabilities] | None = None,
 ) -> str:
     """
     Regenerate llm-models-default.yaml from the synced model entries.
@@ -1032,6 +1093,7 @@ def regenerate_llm_models_yaml(
     reasoning_flags = _parse_yaml_reasoning_flags(existing_content)
     dropdown_by_provider = dropdown_by_provider or {}
     openai_reasoning = openai_reasoning or {}
+    openrouter_capabilities = openrouter_capabilities or {}
 
     lines: list[str] = []
 
@@ -1084,6 +1146,8 @@ def regenerate_llm_models_yaml(
             seeded_reasoning = is_openai and openai_reasoning.get(model_id, False)
             if not excluded_from_reasoning and (provider_reasoning.get(model_id) or seeded_reasoning):
                 lines.append("    reasoning: true")
+            if provider_key == "openrouter":
+                lines.extend(_openrouter_capability_lines(openrouter_capabilities.get(model_id)))
 
     # Preserve any provider sections not managed by the sync script
     managed_yaml_keys = set(_PROVIDER_TO_YAML_KEY.values())
@@ -1179,10 +1243,76 @@ def _cleared_reasoning_ids(existing_yaml_content: str, regenerated_yaml_content:
     return sorted(before.keys() - after.keys())
 
 
+def _parse_yaml_labelled_ids(yaml_content: str, section: str) -> tuple[set[str], set[str]]:
+    ids: set[str] = set()
+    labelled: set[str] = set()
+    current_provider: str | None = None
+    current_id: str | None = None
+    for line in yaml_content.splitlines():
+        provider_match = re.match(r'^(\S[^:]+):\s*$', line)
+        if provider_match:
+            current_provider = provider_match.group(1)
+            current_id = None
+            continue
+        if current_provider != section:
+            continue
+        id_match = re.match(r'^\s+- id:\s+"([^"]+)"', line)
+        if id_match:
+            current_id = id_match.group(1)
+            ids.add(current_id)
+            continue
+        if current_id and re.match(r'^\s+label:', line):
+            labelled.add(current_id)
+    return ids, labelled
+
+
+def _openrouter_picker_changes(
+    existing_yaml_content: str, regenerated_yaml_content: str,
+) -> tuple[list[str], list[str]]:
+    before_ids, before_labelled = _parse_yaml_labelled_ids(existing_yaml_content, "openrouter")
+    _, after_labelled = _parse_yaml_labelled_ids(regenerated_yaml_content, "openrouter")
+    shown = sorted((after_labelled - before_labelled) & before_ids)
+    hidden = sorted(before_labelled - after_labelled)
+    return shown, hidden
+
+
+def _parse_yaml_openrouter_capabilities(yaml_content: str) -> dict[str, dict[str, frozenset[str]]]:
+    result: dict[str, dict[str, frozenset[str]]] = {}
+    current_provider: str | None = None
+    current_id: str | None = None
+    for line in yaml_content.splitlines():
+        provider_match = re.match(r'^(\S[^:]+):\s*$', line)
+        if provider_match:
+            current_provider = provider_match.group(1)
+            current_id = None
+            continue
+        if current_provider != "openrouter":
+            continue
+        id_match = re.match(r'^\s+- id:\s+"([^"]+)"', line)
+        if id_match:
+            current_id = id_match.group(1)
+            result[current_id] = {}
+            continue
+        capability_match = re.match(r'^\s+(supportedParameters|reasoningEfforts):\s*\[(.*)\]', line)
+        if current_id and capability_match:
+            result[current_id][capability_match.group(1)] = frozenset(
+                item.strip() for item in capability_match.group(2).split(",") if item.strip()
+            )
+    return result
+
+
+def _changed_openrouter_capability_ids(existing_yaml_content: str, regenerated_yaml_content: str) -> list[str]:
+    before = _parse_yaml_openrouter_capabilities(existing_yaml_content)
+    after = _parse_yaml_openrouter_capabilities(regenerated_yaml_content)
+    return sorted(model_id for model_id in before.keys() & after.keys() if before[model_id] != after[model_id])
+
+
 def _should_write_files(
     total_added: int,
     seeded_reasoning_ids: list[str],
     cleared_reasoning_ids: list[str],
+    picker_changed_ids: list[str],
+    capability_changed_ids: list[str],
     force_regen: bool,
     fell_back: bool,
 ) -> bool:
@@ -1190,7 +1320,13 @@ def _should_write_files(
     # A failed provider is rebuilt from the prices JSON, or for OpenRouter from an empty API list, so even a real addition elsewhere would ship degraded data.
     if force_regen:
         return True
-    return not fell_back and (total_added > 0 or bool(seeded_reasoning_ids) or bool(cleared_reasoning_ids))
+    return not fell_back and (
+        total_added > 0
+        or bool(seeded_reasoning_ids)
+        or bool(cleared_reasoning_ids)
+        or bool(picker_changed_ids)
+        or bool(capability_changed_ids)
+    )
 
 
 def main():
@@ -1215,12 +1351,12 @@ def main():
     # OpenRouter (always from API, no key needed)
     print("Fetching OpenRouter models...", file=sys.stderr)
     try:
-        openrouter_api_models = fetch_openrouter_models()
-        print(f"  Found {len(openrouter_api_models)} chat models from API", file=sys.stderr)
+        openrouter_capabilities = fetch_openrouter_models()
+        print(f"  Found {len(openrouter_capabilities)} chat models from API", file=sys.stderr)
     except Exception as e:
         print(f"  WARNING: OpenRouter API fetch failed: {e}", file=sys.stderr)
         fell_back = True
-        openrouter_api_models = []
+        openrouter_capabilities = {}
 
     # OpenAI
     if openai_key:
@@ -1291,7 +1427,7 @@ def main():
     all_changes = {}
 
     new_or_java, or_entries, or_added, or_stale = sync_openrouter(
-        openrouter_api_models, prices, or_java,
+        list(openrouter_capabilities), prices, or_java,
     )
     all_changes["openrouter"] = {"entries": or_entries, "added": or_added, "stale": or_stale}
 
@@ -1324,8 +1460,12 @@ def main():
     new_providers_ts = regenerate_providers_ts(providers_ts, models_by_provider)
 
     # Dropdown (src/constants/providerModels.ts) gets curated subset — filtered and sorted
+    # OpenRouter answers 404 for an id it no longer lists, so the picker shows only the ids it serves today.
     dropdown_by_provider = {
-        provider: filter_for_dropdown(entries, provider, deprecated)
+        provider: filter_for_dropdown(
+            entries, provider, deprecated,
+            served=set(openrouter_capabilities) if provider == "openrouter" else None,
+        )
         for provider, entries in models_by_provider.items()
     }
     new_models_data_ts = regenerate_models_data_ts(models_data_ts, dropdown_by_provider)
@@ -1340,11 +1480,15 @@ def main():
     new_llm_models_yaml = regenerate_llm_models_yaml(
         llm_models_yaml_content, models_by_provider, dropdown_by_provider,
         openai_reasoning=openai_reasoning,
+        openrouter_capabilities=openrouter_capabilities,
     )
     seeded_reasoning_ids = _seeded_reasoning_ids(
         llm_models_yaml_content, models_by_provider["openai"], openai_reasoning,
     )
     cleared_reasoning_ids = _cleared_reasoning_ids(llm_models_yaml_content, new_llm_models_yaml)
+    openrouter_shown, openrouter_hidden = _openrouter_picker_changes(llm_models_yaml_content, new_llm_models_yaml)
+    picker_changed_ids = openrouter_shown + openrouter_hidden
+    capability_changed_ids = _changed_openrouter_capability_ids(llm_models_yaml_content, new_llm_models_yaml)
 
     # 5. Print summary
     total_added = 0
@@ -1383,18 +1527,32 @@ def main():
             print(f"- Total models: {len(entries)} (dropdown: {len(dropdown)})")
         print()
 
-    if seeded_reasoning_ids or cleared_reasoning_ids:
+    if seeded_reasoning_ids or cleared_reasoning_ids or picker_changed_ids or capability_changed_ids:
         print("### Registry")
         for model_id in seeded_reasoning_ids:
             print(f"  + {model_id} (reasoning)")
         for model_id in cleared_reasoning_ids:
             print(f"  - {model_id} (reasoning)")
+        for model_id in openrouter_shown:
+            print(f"  + openrouter {model_id} (picker)")
+        for model_id in openrouter_hidden:
+            print(f"  - openrouter {model_id} (picker)")
+        for model_id in capability_changed_ids:
+            print(f"  ~ openrouter {model_id} (parameters)")
         print()
 
     if not _should_write_files(
-        total_added, seeded_reasoning_ids, cleared_reasoning_ids, args.force_regen, fell_back,
+        total_added,
+        seeded_reasoning_ids,
+        cleared_reasoning_ids,
+        picker_changed_ids,
+        capability_changed_ids,
+        args.force_regen,
+        fell_back,
     ):
-        if fell_back and (total_added > 0 or seeded_reasoning_ids or cleared_reasoning_ids):
+        if fell_back and (
+            total_added > 0 or seeded_reasoning_ids or cleared_reasoning_ids or picker_changed_ids or capability_changed_ids
+        ):
             print("A provider API call failed: fallback data not published; retry when the API is reachable, or rerun with --force-regen.")
         elif total_stale > 0:
             print(f"No new models found. {total_stale} stale model(s) flagged for manual review.")

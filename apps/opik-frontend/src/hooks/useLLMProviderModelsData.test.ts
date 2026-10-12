@@ -6,6 +6,7 @@ import useLLMProviderModelsData from "./useLLMProviderModelsData";
 import { getProviderFromModel } from "@/lib/provider";
 import { DECISION_MODELS } from "@/constants/decisionModels";
 import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
+import { getLatestModelFlags } from "@/lib/modelRegistryStore";
 
 const registry = vi.hoisted(() => ({
   data: undefined as LlmModelsByProvider | undefined,
@@ -27,13 +28,15 @@ vi.mock("@/hooks/useOpenAICompatibleModels", () => ({
 const GEMINI_2_5_PRO = {
   id: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
   label: "Gemini 2.5 Pro",
-  structuredOutput: true,
+  structured_output: true,
   reasoning: true,
 };
 
 const GEMINI_AND_VERTEX_REGISTRY: LlmModelsByProvider = {
   [PROVIDER_TYPE.GEMINI]: [GEMINI_2_5_PRO],
-  [PROVIDER_TYPE.VERTEX_AI]: [GEMINI_2_5_PRO],
+  [PROVIDER_TYPE.VERTEX_AI]: [
+    { ...GEMINI_2_5_PRO, qualified_name: "vertex_ai/gemini-2.5-pro" },
+  ],
 };
 
 beforeEach(() => {
@@ -81,6 +84,104 @@ describe("useLLMProviderModelsData", () => {
   });
 });
 
+describe("useLLMProviderModelsData OpenRouter lists", () => {
+  it("indexes the parameters and effort levels the registry sends", () => {
+    registry.data = {
+      [PROVIDER_TYPE.OPEN_ROUTER]: [
+        {
+          id: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+          label: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+          structured_output: true,
+          reasoning: false,
+          supported_parameters: ["max_tokens", "reasoning_effort"],
+          reasoning_efforts: ["high", "low"],
+        },
+      ],
+    };
+
+    renderHook(() => useLLMProviderModelsData());
+
+    expect(
+      getLatestModelFlags(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO),
+    ).toMatchObject({
+      supportedParameters: ["max_tokens", "reasoning_effort"],
+      reasoningEfforts: ["high", "low"],
+    });
+  });
+});
+
+describe("useLLMProviderModelsData model flags", () => {
+  it("reads the registry's snake_case fields", () => {
+    const { result } = renderHook(() => useLLMProviderModelsData());
+
+    expect(
+      result.current.providerModels[PROVIDER_TYPE.VERTEX_AI]?.map(
+        (m) => m.value,
+      ),
+    ).toEqual(["vertex_ai/gemini-2.5-pro"]);
+    expect(getLatestModelFlags("vertex_ai/gemini-2.5-pro")).toEqual({
+      reasoning: true,
+      structuredOutput: true,
+    });
+  });
+
+  const GEMINI_ENTRY = {
+    id: "gemini-shared",
+    label: "Gemini Shared",
+    structured_output: false,
+    reasoning: false,
+  };
+  const VERTEX_ENTRY = {
+    id: "gemini-shared",
+    qualified_name: "vertex_ai/gemini-shared",
+    label: "Gemini Shared",
+    structured_output: true,
+    reasoning: true,
+  };
+
+  it.each<[string, LlmModelsByProvider]>([
+    [
+      "Gemini first",
+      {
+        [PROVIDER_TYPE.GEMINI]: [GEMINI_ENTRY],
+        [PROVIDER_TYPE.VERTEX_AI]: [VERTEX_ENTRY],
+      },
+    ],
+    [
+      "Vertex AI first",
+      {
+        [PROVIDER_TYPE.VERTEX_AI]: [VERTEX_ENTRY],
+        [PROVIDER_TYPE.GEMINI]: [GEMINI_ENTRY],
+      },
+    ],
+  ])(
+    "keeps Gemini and Vertex AI flags apart for a shared bare id (%s)",
+    (_, data) => {
+      registry.data = data;
+      renderHook(() => useLLMProviderModelsData());
+
+      expect(getLatestModelFlags("gemini-shared")).toEqual({
+        reasoning: false,
+        structuredOutput: false,
+      });
+      expect(getLatestModelFlags("vertex_ai/gemini-shared")).toEqual({
+        reasoning: true,
+        structuredOutput: true,
+      });
+    },
+  );
+
+  it("still resolves a bare id that only Vertex AI lists", () => {
+    registry.data = { [PROVIDER_TYPE.VERTEX_AI]: [VERTEX_ENTRY] };
+    renderHook(() => useLLMProviderModelsData());
+
+    expect(getLatestModelFlags("gemini-shared")).toEqual({
+      reasoning: true,
+      structuredOutput: true,
+    });
+  });
+});
+
 describe("useLLMProviderModelsData hasRegistryModels", () => {
   it("is true when a known provider has models", () => {
     const { result } = renderHook(() => useLLMProviderModelsData());
@@ -100,5 +201,76 @@ describe("useLLMProviderModelsData hasRegistryModels", () => {
     const { result } = renderHook(() => useLLMProviderModelsData());
 
     expect(result.current.hasRegistryModels).toBe(false);
+  });
+});
+
+const model = (
+  id: PROVIDER_MODEL_TYPE,
+  extra: { label?: string; qualified_name?: string } = {},
+) => ({ id, structured_output: false, reasoning: false, ...extra });
+
+const PICKER_REGISTRY: LlmModelsByProvider = {
+  [PROVIDER_TYPE.OPEN_AI]: [
+    model(PROVIDER_MODEL_TYPE.GPT_4O_MINI, { label: "GPT 4o Mini" }),
+    model(PROVIDER_MODEL_TYPE.GPT_LIVE_1),
+  ],
+  [PROVIDER_TYPE.GEMINI]: [
+    model(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, { label: "Gemini 2.5 Flash" }),
+    model(PROVIDER_MODEL_TYPE.GEMINI_OMNI_1_1_FLASH),
+    model(PROVIDER_MODEL_TYPE.LYRIA_3_5),
+  ],
+  [PROVIDER_TYPE.VERTEX_AI]: [
+    model(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+      qualified_name: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      label: "Gemini 2.5 Flash",
+    }),
+    model(PROVIDER_MODEL_TYPE.GEMINI_OMNI_1_1_FLASH, {
+      qualified_name: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_OMNI_1_1_FLASH,
+    }),
+  ],
+};
+
+describe("useLLMProviderModelsData isDropdownModel", () => {
+  beforeEach(() => {
+    registry.data = PICKER_REGISTRY;
+  });
+
+  it.each<[PROVIDER_MODEL_TYPE | "", PROVIDER_TYPE | "", boolean]>([
+    [PROVIDER_MODEL_TYPE.GPT_4O_MINI, PROVIDER_TYPE.OPEN_AI, true],
+    [PROVIDER_MODEL_TYPE.GPT_LIVE_1, PROVIDER_TYPE.OPEN_AI, false],
+    [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, PROVIDER_TYPE.GEMINI, true],
+    [PROVIDER_MODEL_TYPE.GEMINI_OMNI_1_1_FLASH, PROVIDER_TYPE.GEMINI, false],
+    [PROVIDER_MODEL_TYPE.LYRIA_3_5, PROVIDER_TYPE.GEMINI, false],
+    [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, PROVIDER_TYPE.VERTEX_AI, true],
+    [
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      PROVIDER_TYPE.VERTEX_AI,
+      true,
+    ],
+    [
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_OMNI_1_1_FLASH,
+      PROVIDER_TYPE.VERTEX_AI,
+      false,
+    ],
+    [PROVIDER_MODEL_TYPE.GPT_4O_MINI, PROVIDER_TYPE.GEMINI, false],
+    ["", PROVIDER_TYPE.OPEN_AI, false],
+    [PROVIDER_MODEL_TYPE.GPT_4O_MINI, "", false],
+  ])("%j under %j is in the picker: %s", (modelName, provider, expected) => {
+    const { result } = renderHook(() => useLLMProviderModelsData());
+
+    expect(result.current.isDropdownModel(modelName, provider)).toBe(expected);
+  });
+
+  it("keeps a stored model that left the picker valid, so stored prompts keep it", () => {
+    const { result } = renderHook(() => useLLMProviderModelsData());
+
+    expect(
+      result.current.calculateModelProvider(PROVIDER_MODEL_TYPE.GPT_LIVE_1),
+    ).toBe(PROVIDER_TYPE.OPEN_AI);
+    expect(
+      result.current.calculateDefaultModel(PROVIDER_MODEL_TYPE.GPT_LIVE_1, [
+        PROVIDER_TYPE.OPEN_AI,
+      ]),
+    ).toBe(PROVIDER_MODEL_TYPE.GPT_LIVE_1);
   });
 });

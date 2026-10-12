@@ -22,7 +22,7 @@ import {
   getDefaultConfigByProvider,
   restoreMissingProviderAndConfigKeys,
 } from "@/lib/playground";
-import { updateProviderConfig } from "@/lib/modelUtils";
+import { updateProviderConfig, withShownThinkingLevel } from "@/lib/modelUtils";
 import {
   PLAYGROUND_LAST_PICKED_MODEL,
   PLAYGROUND_PROMPT_COLORS,
@@ -214,16 +214,23 @@ const PlaygroundPrompt = ({
   const handleUpdateModel = useCallback(
     (newModel: PROVIDER_MODEL_TYPE, newProvider: COMPOSED_PROVIDER_TYPE) => {
       let newConfigs: LLMPromptConfigsType;
+      // The picker reports the bare provider type ("custom-llm"), while `provider` is the row's
+      // key ("custom-llm:mock"). Compared as is, two models of one Custom LLM, Ollama or Bedrock
+      // row would look like a provider change and lose every setting.
+      const newRowProvider =
+        providerResolver(newModel, newProvider) || newProvider;
 
-      if (newProvider !== provider) {
+      if (newRowProvider !== provider) {
         // Provider changed: Reset to default configs for the new provider
         newConfigs = getDefaultConfigByProvider(newProvider, newModel);
       } else {
         // Model changed within same provider: Adjust existing configs if needed
-        const adjustedConfigs = updateProviderConfig(configs, {
+        const shownConfigs = withShownThinkingLevel(model, configs);
+        const adjustedConfigs = updateProviderConfig(shownConfigs, {
           model: newModel,
           provider: newProvider,
           openAiPipelineMode,
+          previousModel: model,
         });
         newConfigs = adjustedConfigs || configs;
       }
@@ -239,6 +246,8 @@ const PlaygroundPrompt = ({
       updatePrompt,
       promptId,
       provider,
+      model,
+      providerResolver,
       configs,
       setLastPickedModel,
       openAiPipelineMode,
@@ -300,7 +309,11 @@ const PlaygroundPrompt = ({
           configs: getDefaultConfigByProvider(newProvider, newModel),
         });
 
-        updateOutput(promptId, "", { value: null });
+        updateOutput(promptId, "", {
+          value: null,
+          error: undefined,
+          errorHint: undefined,
+        });
       } else {
         const restored = restoreMissingProviderAndConfigKeys(
           prompt,
@@ -356,11 +369,10 @@ const PlaygroundPrompt = ({
     () => ({
       model,
       provider,
-      configs,
       workspaceName,
       onAccept: handleImproveAccept,
     }),
-    [model, provider, configs, workspaceName, handleImproveAccept],
+    [model, provider, workspaceName, handleImproveAccept],
   );
 
   const promptColor =
