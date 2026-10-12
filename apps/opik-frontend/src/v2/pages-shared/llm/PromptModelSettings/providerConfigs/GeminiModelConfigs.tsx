@@ -18,9 +18,9 @@ import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import {
-  getDefaultThinkingLevel,
   getThinkingLevelOptions,
   resolveSamplingParams,
+  resolveThinkingLevel,
 } from "@/lib/modelUtils";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 
@@ -38,7 +38,6 @@ const GeminiModelConfigs = ({
   unsupportedParams,
 }: geminiModelConfigsProps) => {
   const thinkingLevelOptions = getThinkingLevelOptions(model);
-  const defaultThinkingLevel = getDefaultThinkingLevel(model);
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const visible = getGeminiVisibleControls({
     model,
@@ -112,7 +111,7 @@ const GeminiModelConfigs = ({
           </div>
           <SelectBox
             id="thinkingLevel"
-            value={configs.thinkingLevel || defaultThinkingLevel}
+            value={resolveThinkingLevel(model ?? "", configs)}
             onChange={(value: GeminiThinkingLevel) =>
               onChange({ thinkingLevel: value })
             }
