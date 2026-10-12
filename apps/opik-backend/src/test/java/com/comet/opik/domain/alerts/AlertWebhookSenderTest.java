@@ -100,6 +100,30 @@ class AlertWebhookSenderTest {
     }
 
     @Test
+    void createAndSendWebhookWhenEventIdGenerationThrowsStillSendsWebhook() {
+        when(idGenerator.generateId()).thenThrow(new IllegalStateException("boom"));
+        var alert = alert(true, "https://example.com/hook");
+
+        StepVerifier.create(send(alert, WORKSPACE_NAME)).verifyComplete();
+
+        verify(eventBridgePublisher, never()).publish(any(), anyString(), anyString(), anyString(), any(), anyMap());
+        verify(webhookPublisher).publishWebhookEvent(eq(AlertEventType.TRACE_COST), eq(alert), eq(WORKSPACE_ID),
+                eq(WORKSPACE_NAME), anyMap(), anyInt());
+    }
+
+    @Test
+    void createAndSendWebhookWhenEventBridgeDisabledGeneratesNoEventId() {
+        when(eventBridgePublisher.isEnabled()).thenReturn(false);
+        var alert = alert(true, "https://example.com/hook");
+
+        StepVerifier.create(send(alert, WORKSPACE_NAME)).verifyComplete();
+
+        verifyNoInteractions(idGenerator);
+        verify(webhookPublisher).publishWebhookEvent(eq(AlertEventType.TRACE_COST), eq(alert), eq(WORKSPACE_ID),
+                eq(WORKSPACE_NAME), anyMap(), anyInt());
+    }
+
+    @Test
     void createAndSendWebhookWhenWebhookUrlEmptyStillPublishesToEventBridge() {
         var alert = alert(true, "");
 

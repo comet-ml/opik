@@ -84,16 +84,17 @@ public class AlertWebhookSender {
         String eventBridgeWorkspaceName = resolvedWorkspaceName;
         Map<String, Object> payload = buildPayload(alert, eventType, eventIds, payloads, userNames);
 
-        String eventBridgeEventId = idGenerator.generateId().toString();
-
-        // Fire-and-forget: EventBridge retries must not hold up, or fail, the webhook delivery
-        Mono.defer(() -> eventBridgePublisher.publish(alert, eventBridgeEventId, workspaceId,
-                eventBridgeWorkspaceName, eventType, payload))
-                .onErrorResume(error -> {
-                    log.error("Failed to publish alert '{}' to EventBridge", alert.id(), error);
-                    return Mono.empty();
-                })
-                .subscribe();
+        if (eventBridgePublisher.isEnabled()) {
+            // Fire-and-forget: EventBridge retries must not hold up, or fail, the webhook delivery. The eventId is
+            // fixed here, once per trigger, and every retry inside publish reuses it.
+            Mono.defer(() -> eventBridgePublisher.publish(alert, idGenerator.generateId().toString(), workspaceId,
+                    eventBridgeWorkspaceName, eventType, payload))
+                    .onErrorResume(error -> {
+                        log.error("Failed to publish alert '{}' to EventBridge", alert.id(), error);
+                        return Mono.empty();
+                    })
+                    .subscribe();
+        }
 
         if (!hasWebhookUrl) {
             log.warn("Alert '{}' has no webhook configuration, skipping webhook", alert.id());
