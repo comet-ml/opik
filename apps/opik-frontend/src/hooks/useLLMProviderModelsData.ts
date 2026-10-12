@@ -79,7 +79,7 @@ const transformFetched = (
     out[provider] = filtered.map((m) => ({
       value: getRoutableProviderModelValue(
         provider as COMPOSED_PROVIDER_TYPE,
-        m.qualified_name ?? m.id,
+        m.qualified_name || m.id,
       ),
       label: m.label ?? m.id,
     }));
@@ -107,6 +107,9 @@ const buildFlagsIndex = (
 ): Map<string, ModelFlags> => {
   const index = new Map<string, ModelFlags>();
   for (const [provider, models] of Object.entries(fetched)) {
+    if (!KNOWN_PROVIDER_TYPES.has(provider)) {
+      continue;
+    }
     for (const m of models) {
       const flags: ModelFlags = {
         reasoning: m.reasoning,
@@ -115,7 +118,7 @@ const buildFlagsIndex = (
       index.set(
         getRoutableProviderModelValue(
           provider as COMPOSED_PROVIDER_TYPE,
-          m.qualified_name ?? m.id,
+          m.qualified_name || m.id,
         ),
         flags,
       );

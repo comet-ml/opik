@@ -128,6 +128,16 @@ describe("useLLMProviderModelsData model flags", () => {
         [PROVIDER_TYPE.GEMINI]: [GEMINI_ENTRY],
       },
     ],
+    [
+      "an unknown provider last",
+      {
+        [PROVIDER_TYPE.GEMINI]: [GEMINI_ENTRY],
+        [PROVIDER_TYPE.VERTEX_AI]: [VERTEX_ENTRY],
+        "acme-llm": [
+          { ...GEMINI_ENTRY, structured_output: true, reasoning: true },
+        ],
+      },
+    ],
   ])(
     "keeps Gemini and Vertex AI flags apart for a shared bare id (%s)",
     (_, data) => {
