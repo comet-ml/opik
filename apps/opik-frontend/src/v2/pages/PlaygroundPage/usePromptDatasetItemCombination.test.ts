@@ -57,7 +57,10 @@ const streamedRun = (
   ...overrides,
 });
 
-const processRun = async (run: RunStreamingReturn) => {
+const processRun = async (
+  run: RunStreamingReturn,
+  promptToRun: PlaygroundPromptType = prompt,
+) => {
   mocks.runStreaming.mockResolvedValue(run);
   const log = vi.fn();
   const { result } = renderHook(() =>
@@ -73,7 +76,7 @@ const processRun = async (run: RunStreamingReturn) => {
   );
 
   await result.current.processCombination(
-    { prompt },
+    { prompt: promptToRun },
     { log, finishLogging: vi.fn() },
   );
 
@@ -109,6 +112,37 @@ describe("usePromptDatasetItemCombination", () => {
       });
     },
   );
+
+  it("tells a System-only prompt rejected with a 400 to add a User message", async () => {
+    const systemOnlyPrompt: PlaygroundPromptType = {
+      ...prompt,
+      model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      provider: PROVIDER_TYPE.ANTHROPIC,
+      messages: [
+        {
+          id: "message-1",
+          role: LLM_MESSAGE_ROLE.system,
+          content: "What parameters do I send you?",
+        },
+      ],
+    };
+
+    await processRun(
+      streamedRun({
+        errorStatus: 400,
+        providerError: "messages: Field required",
+      }),
+      systemOnlyPrompt,
+    );
+
+    expect(mocks.updateOutput).toHaveBeenLastCalledWith(PROMPT_ID, "", {
+      isLoading: false,
+      error: "messages: Field required",
+      errorHint: expect.objectContaining({
+        title: "This model needs a User message",
+      }),
+    });
+  });
 
   it("clears the previous run's error and hint when a new run starts", async () => {
     await processRun(streamedRun({ result: "Hello" }));

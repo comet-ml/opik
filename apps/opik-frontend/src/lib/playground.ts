@@ -342,6 +342,7 @@ export const parseCompletionOutput = (run: RunStreamingReturn) => {
   );
 };
 
+const HTTP_BAD_REQUEST = 400;
 const HTTP_PAYMENT_REQUIRED = 402;
 const HTTP_TOO_MANY_REQUESTS = 429;
 
@@ -355,9 +356,14 @@ export type RunFailure = {
   hint?: RunFailureHint;
 };
 
+type RunFailureContext = {
+  canTuneRequestRate: boolean;
+  sentMessages: LLMMessage[];
+};
+
 const getRunFailureHint = (
   errorStatus: number | null,
-  canTuneRequestRate: boolean,
+  { canTuneRequestRate, sentMessages }: RunFailureContext,
 ): RunFailureHint | undefined => {
   if (errorStatus === HTTP_TOO_MANY_REQUESTS) {
     return {
@@ -375,14 +381,25 @@ const getRunFailureHint = (
         "Add credits or raise your quota with the provider, then run again.",
     };
   }
+  // Anthropic and Gemini reject a System-only prompt with a 400, each in its own words,
+  // so the cause is read from the prompt rather than from the error text.
+  if (
+    errorStatus === HTTP_BAD_REQUEST &&
+    sentMessages.every((message) => message.role === LLM_MESSAGE_ROLE.system)
+  ) {
+    return {
+      title: "This model needs a User message",
+      action: "Add a User message with + Message, then run again.",
+    };
+  }
   return undefined;
 };
 
 export const describeRunFailure = (
   run: RunStreamingReturn,
-  canTuneRequestRate: boolean,
+  context: RunFailureContext,
 ): RunFailure => {
-  const hint = getRunFailureHint(run.errorStatus, canTuneRequestRate);
+  const hint = getRunFailureHint(run.errorStatus, context);
   if (!hint) return { message: parseCompletionOutput(run) };
 
   const providerMessage =

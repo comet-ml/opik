@@ -318,14 +318,14 @@ const usePromptDatasetItemCombination = ({
           !run.result
         ) {
           throw new RunFailedError(
-            describeRunFailure(
-              run,
-              hasVisibleControls(
+            describeRunFailure(run, {
+              canTuneRequestRate: hasVisibleControls(
                 parseComposedProviderType(prompt.provider),
                 prompt.model,
                 prompt.configs,
               ),
-            ),
+              sentMessages: messagesToSend,
+            }),
           );
         }
       } catch (error) {

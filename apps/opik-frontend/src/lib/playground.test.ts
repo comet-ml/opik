@@ -501,10 +501,21 @@ describe("describeRunFailure", () => {
     ...overrides,
   });
 
+  const userPrompt = [systemMessage("Be brief."), userMessage("Hi")];
+  const withSettings = { canTuneRequestRate: true, sentMessages: userPrompt };
+  const withoutSettings = {
+    canTuneRequestRate: false,
+    sentMessages: userPrompt,
+  };
+  const systemOnly = {
+    canTuneRequestRate: true,
+    sentMessages: [systemMessage("What parameters do I send you?")],
+  };
+
   it("names a rate-limited run and gives the next step on its own", () => {
     const run = failedRun({ errorStatus: 429, opikError: OPENAI_RATE_LIMIT });
 
-    expect(describeRunFailure(run, true)).toEqual({
+    expect(describeRunFailure(run, withSettings)).toEqual({
       message: OPENAI_RATE_LIMIT,
       hint: {
         title: "Rate limit reached",
@@ -517,7 +528,7 @@ describe("describeRunFailure", () => {
   it("does not point at settings the model has no panel for", () => {
     const run = failedRun({ errorStatus: 429, opikError: OPENAI_RATE_LIMIT });
 
-    expect(describeRunFailure(run, false).hint?.action).toBe(
+    expect(describeRunFailure(run, withoutSettings).hint?.action).toBe(
       "Wait a moment and run again.",
     );
   });
@@ -528,7 +539,7 @@ describe("describeRunFailure", () => {
       opikError: "You exceeded your current quota.",
     });
 
-    expect(describeRunFailure(run, true)).toEqual({
+    expect(describeRunFailure(run, withSettings)).toEqual({
       message: "You exceeded your current quota.",
       hint: {
         title: "Out of credits",
@@ -541,7 +552,9 @@ describe("describeRunFailure", () => {
   it("falls back to the title when a 429 came with no readable message", () => {
     const run = failedRun({ errorStatus: 429 });
 
-    expect(describeRunFailure(run, false).message).toBe("Rate limit reached");
+    expect(describeRunFailure(run, withoutSettings).message).toBe(
+      "Rate limit reached",
+    );
   });
 
   it.each<[string, Partial<RunStreamingReturn>, string]>([
@@ -556,8 +569,53 @@ describe("describeRunFailure", () => {
       "Unexpected error",
     ],
   ])("leaves %s as the provider wrote it", (_label, overrides, expected) => {
-    expect(describeRunFailure(failedRun(overrides), true)).toEqual({
+    expect(describeRunFailure(failedRun(overrides), withSettings)).toEqual({
       message: expected,
+    });
+  });
+
+  it("tells a System-only prompt rejected with a 400 to add a User message", () => {
+    const run = failedRun({
+      errorStatus: 400,
+      providerError: "messages: Field required",
+    });
+
+    expect(describeRunFailure(run, systemOnly)).toEqual({
+      message: "messages: Field required",
+      hint: {
+        title: "This model needs a User message",
+        action: "Add a User message with + Message, then run again.",
+      },
+    });
+  });
+
+  it("keeps the rate-limit hint for a System-only prompt that hit a 429", () => {
+    const run = failedRun({ errorStatus: 429, opikError: OPENAI_RATE_LIMIT });
+
+    expect(describeRunFailure(run, systemOnly).hint?.title).toBe(
+      "Rate limit reached",
+    );
+  });
+
+  it.each([500, 401, null])(
+    "does not blame the missing User message for a %s status",
+    (errorStatus) => {
+      const run = failedRun({ errorStatus, opikError: "Unexpected error" });
+
+      expect(describeRunFailure(run, systemOnly)).toEqual({
+        message: "Unexpected error",
+      });
+    },
+  );
+
+  it("gives no hint for a 400 when the prompt has a User message", () => {
+    const run = failedRun({
+      errorStatus: 400,
+      providerError: "temperature: must be at most 1",
+    });
+
+    expect(describeRunFailure(run, withSettings)).toEqual({
+      message: "temperature: must be at most 1",
     });
   });
 });
