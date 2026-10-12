@@ -2909,6 +2909,16 @@ describe("OpenRouter request contract", () => {
       request: { ...WITHOUT_MAX_TOKENS, maxTokens: 20 },
     },
     {
+      model: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
+      maxTokens: 4000,
+      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 2048 },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
+      maxTokens: 1000,
+      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 1000 },
+    },
+    {
       model: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH,
       maxTokens: 0,
       request: omit(WITHOUT_MAX_TOKENS, ["temperature", "topP"]),

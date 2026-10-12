@@ -1,6 +1,8 @@
 import React from "react";
 import {
   getOpenRouterDefaultMaxTokens,
+  getOpenRouterMaxTokensLimit,
+  resolveOpenRouterMaxTokens,
   resolveSamplingParams,
 } from "@/lib/modelUtils";
 import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
@@ -71,11 +73,11 @@ const OpenRouterModelConfigs = ({
       )}
       {visible.maxTokens && (
         <SliderInputControl
-          value={configs.maxTokens}
+          value={resolveOpenRouterMaxTokens(model, configs.maxTokens)}
           onChange={(v) => onChange({ maxTokens: v })}
           id="maxTokens"
           min={0}
-          max={10000}
+          max={getOpenRouterMaxTokensLimit(model)}
           step={1}
           integer
           hint={getNoOutputLimitHint(configs.maxTokens)}
