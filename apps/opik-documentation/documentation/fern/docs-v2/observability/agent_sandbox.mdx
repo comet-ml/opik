@@ -13,8 +13,7 @@ graph, all visible in the Opik UI.
 
 Beyond running your agent, the playground lets you edit the prompts your agent loads from the
 [Prompt Library](/development/prompt-library/overview) without changing your code. Once
-you're happy with the results, save the edit as a new prompt version and your agent picks it up
-the next time it loads the prompt.
+you're happy with the results, save the edit as a new prompt version for your agent to use.
 
 <video
   src="/img/v2/observability/agent-sandbox-demo.mp4"
@@ -43,17 +42,6 @@ the next time it loads the prompt.
 
       client = opik.Opik()
 
-      # Create the prompt in the Prompt Library if it does not exist yet
-      if client.get_chat_prompt("my-agent-prompt", project_name="my-agent") is None:
-          client.create_chat_prompt(
-              name="my-agent-prompt",
-              messages=[
-                  {"role": "system", "content": "You are a helpful assistant."},
-                  {"role": "user", "content": "{{query}}"},
-              ],
-              project_name="my-agent",
-          )
-
       @opik.track(entrypoint=True, project_name="my-agent")
       def my_agent(query: str, max_results: int = 5) -> str:
           prompt = client.get_chat_prompt("my-agent-prompt", project_name="my-agent")
@@ -62,6 +50,17 @@ the next time it loads the prompt.
           return result
 
       if __name__ == "__main__":
+          # Create the prompt in the Prompt Library if it does not exist yet
+          if client.get_chat_prompt("my-agent-prompt", project_name="my-agent") is None:
+              client.create_chat_prompt(
+                  name="my-agent-prompt",
+                  messages=[
+                      {"role": "system", "content": "You are a helpful assistant."},
+                      {"role": "user", "content": "{{query}}"},
+                  ],
+                  project_name="my-agent",
+              )
+
           # Keep the process alive so the runner can pick up jobs
           threading.Event().wait()
       ```
@@ -70,18 +69,6 @@ the next time it loads the prompt.
       import { Opik, track } from "opik";
 
       const client = new Opik();
-
-      // Create the prompt in the Prompt Library if it does not exist yet
-      if (!(await client.getChatPrompt({ name: "my-agent-prompt", projectName: "my-agent" }))) {
-        await client.createChatPrompt({
-          name: "my-agent-prompt",
-          messages: [
-            { role: "system", content: "You are a helpful assistant." },
-            { role: "user", content: "{{query}}" },
-          ],
-          projectName: "my-agent",
-        });
-      }
 
       const myAgent = track(
         {
@@ -102,6 +89,26 @@ the next time it loads the prompt.
           return result;
         }
       );
+
+      async function main() {
+        // Create the prompt in the Prompt Library if it does not exist yet
+        const existing = await client.getChatPrompt({
+          name: "my-agent-prompt",
+          projectName: "my-agent",
+        });
+        if (!existing) {
+          await client.createChatPrompt({
+            name: "my-agent-prompt",
+            messages: [
+              { role: "system", content: "You are a helpful assistant." },
+              { role: "user", content: "{{query}}" },
+            ],
+            projectName: "my-agent",
+          });
+        }
+      }
+
+      main();
       ```
     </CodeBlocks>
 
@@ -116,9 +123,15 @@ the next time it loads the prompt.
     thread as shown in the Python example.
   </Step>
   <Step title="Start the playground">
-    ```bash
-    opik endpoint --project my-agent -- python3 my_agent.py
-    ```
+    <CodeBlocks>
+      ```bash title="Python"
+      opik endpoint --project my-agent -- python3 my_agent.py
+      ```
+
+      ```bash title="TypeScript"
+      opik endpoint --project my-agent -- npx tsx my_agent.ts
+      ```
+    </CodeBlocks>
 
     The CLI validates that an entrypoint exists, opens a browser-based pairing flow, registers
     your agents, and begins polling for jobs.
@@ -142,8 +155,14 @@ the next time it loads the prompt.
     Edits are not saved right away: the prompt shows **Unsaved changes**. Click **Run** again and
     your agent uses the edited prompt for that run, so you can see the impact immediately. Try
     different wordings and compare results across runs. When you're satisfied, click the save
-    icon next to **Unsaved changes** to save the edit as a new prompt version. Your agent picks
-    up the new version the next time it loads the prompt.
+    icon next to **Unsaved changes** to save the edit as a new prompt version. Later runs in the
+    playground use the saved version.
+
+    <Note>
+      The SDK caches prompts. If your agent runs in another process, it can take up to the cache
+      lifetime for that process to load the new version. The cache lifetime is 300 seconds by
+      default. Set `OPIK_PROMPT_CACHE_TTL_SECONDS` to change it.
+    </Note>
   </Step>
 </Steps>
 
