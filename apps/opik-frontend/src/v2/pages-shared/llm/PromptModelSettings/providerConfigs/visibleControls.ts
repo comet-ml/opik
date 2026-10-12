@@ -14,7 +14,7 @@ import {
 import {
   OpenRouterParam,
   getOpenRouterReasoningEffortOptions,
-  isAnthropicThinkingOn,
+  isAnthropicThinkingRequested,
   resolveEffort,
   resolveSamplingParams,
   supportsGeminiThinkingLevel,
@@ -85,7 +85,7 @@ export const getAnthropicVisibleControls = ({
   return {
     samplingParams:
       supportsSamplingParams(model) &&
-      !isAnthropicThinkingOn(model ?? "", configs),
+      !isAnthropicThinkingRequested(model ?? "", configs),
     maxCompletionTokens: supports("maxCompletionTokens"),
     throttling: supports("throttling"),
     maxConcurrentRequests: supports("maxConcurrentRequests"),

@@ -19,7 +19,7 @@ import {
   getAnthropicThinkingEffortOptions,
   getMaxCompletionTokensRange,
   hasEffortWithoutThinking,
-  isAnthropicThinkingOn,
+  isAnthropicThinkingRequested,
   resolveEffort,
   resolveMaxCompletionTokens,
   resolveSamplingParams,
@@ -67,7 +67,7 @@ const AnthropicModelConfigs = ({
   );
   const samplingOffWhileThinking =
     supportsSamplingParams(model) &&
-    isAnthropicThinkingOn(model ?? "", configs);
+    isAnthropicThinkingRequested(model ?? "", configs);
 
   if (!isAnyControlVisible(visible)) return null;
 
