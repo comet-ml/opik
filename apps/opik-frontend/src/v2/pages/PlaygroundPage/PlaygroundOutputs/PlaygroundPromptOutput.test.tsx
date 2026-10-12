@@ -97,6 +97,27 @@ describe("PlaygroundPromptOutput", () => {
     expect(tag).not.toContainElement(nextStep);
   });
 
+  it("should keep the provider's error on the tag when the next step is only a suggestion", () => {
+    const action =
+      "This model needs a User message. Add one with + Message, then run again.";
+    output = {
+      isLoading: false,
+      value: null,
+      error: "messages: Field required",
+      errorHint: { action },
+      stale: false,
+    };
+
+    renderOutput();
+
+    expect(screen.getByTestId("playground-output-error")).toHaveTextContent(
+      "Run failed: messages: Field required",
+    );
+    expect(
+      screen.getByTestId("playground-output-error-action"),
+    ).toHaveTextContent(action);
+  });
+
   it("should show no next step for an error that has none", () => {
     output = {
       isLoading: false,

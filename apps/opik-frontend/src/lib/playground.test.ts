@@ -588,7 +588,7 @@ describe("describeRunFailure", () => {
       [systemMessage("Reply with ok."), assistantMessage("Sure.")],
     ],
   ])(
-    "asks for a User message when a %s prompt is rejected with a 400",
+    "suggests a User message under the provider's error when a %s prompt is rejected with a 400",
     (_label, sentMessages) => {
       const run = failedRun({
         errorStatus: 400,
@@ -600,8 +600,8 @@ describe("describeRunFailure", () => {
       ).toEqual({
         message: "messages: Field required",
         hint: {
-          title: "This model needs a User message",
-          action: "Add a User message with + Message, then run again.",
+          action:
+            "This model needs a User message. Add one with + Message, then run again.",
         },
       });
     },
@@ -612,6 +612,14 @@ describe("describeRunFailure", () => {
 
     expect(describeRunFailure(run, systemOnly).hint?.title).toBe(
       "Rate limit reached",
+    );
+  });
+
+  it("keeps the plain error as the message when a role suggestion comes with no provider text", () => {
+    const run = failedRun({ errorStatus: 400 });
+
+    expect(describeRunFailure(run, systemOnly).message).toBe(
+      "The AI provider returned an empty response. Please, try again.",
     );
   });
 
@@ -657,15 +665,14 @@ describe("describeRunFailure", () => {
       ],
     };
 
-    it("is told to end with a User message when the model rejects it with a 400", () => {
+    it("gets a suggestion to end with a User message under the provider's error on a 400", () => {
       const run = failedRun({ errorStatus: 400, providerError: PREFILL_ERROR });
 
       expect(describeRunFailure(run, endsWithAssistant)).toEqual({
         message: PREFILL_ERROR,
         hint: {
-          title: "This model needs the last message to be a User message",
           action:
-            "Add a User message at the end with + Message, or remove the last Assistant message, then run again.",
+            "This model needs the last message to be a User message. Add one at the end with + Message, or remove the last Assistant message, then run again.",
         },
       });
     });

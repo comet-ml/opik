@@ -348,7 +348,9 @@ const HTTP_PAYMENT_REQUIRED = 402;
 const HTTP_TOO_MANY_REQUESTS = 429;
 
 export type RunFailureHint = {
-  title: string;
+  // Set only when the status tells the cause. A hint guessed from the prompt has no title, so
+  // the provider's own error stays on the tag in case the guess is wrong.
+  title?: string;
   action: string;
 };
 
@@ -385,18 +387,17 @@ const getRunFailureHint = (
   if (errorStatus !== HTTP_BAD_REQUEST) return undefined;
 
   // Which role mixes are rejected differs by provider and model, and each provider words its 400
-  // differently, so the cause is read from the prompt rather than from the error text.
+  // differently, so the cause is guessed from the prompt rather than read from the error text.
   if (!sentMessages.some((message) => message.role === LLM_MESSAGE_ROLE.user)) {
     return {
-      title: "This model needs a User message",
-      action: "Add a User message with + Message, then run again.",
+      action:
+        "This model needs a User message. Add one with + Message, then run again.",
     };
   }
   if (last(sentMessages)?.role === LLM_MESSAGE_ROLE.assistant) {
     return {
-      title: "This model needs the last message to be a User message",
       action:
-        "Add a User message at the end with + Message, or remove the last Assistant message, then run again.",
+        "This model needs the last message to be a User message. Add one at the end with + Message, or remove the last Assistant message, then run again.",
     };
   }
   return undefined;
@@ -408,6 +409,7 @@ export const describeRunFailure = (
 ): RunFailure => {
   const hint = getRunFailureHint(run.errorStatus, context);
   if (!hint) return { message: parseCompletionOutput(run) };
+  if (!hint.title) return { message: parseCompletionOutput(run), hint };
 
   const providerMessage =
     run.opikError || run.providerError || run.pythonProxyError;

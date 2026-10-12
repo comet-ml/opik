@@ -113,7 +113,7 @@ describe("usePromptDatasetItemCombination", () => {
     },
   );
 
-  it("tells a System-only prompt rejected with a 400 to add a User message", async () => {
+  it("keeps the provider's error and suggests a User message when a System-only prompt is rejected with a 400", async () => {
     const systemOnlyPrompt: PlaygroundPromptType = {
       ...prompt,
       model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
@@ -138,9 +138,10 @@ describe("usePromptDatasetItemCombination", () => {
     expect(mocks.updateOutput).toHaveBeenLastCalledWith(PROMPT_ID, "", {
       isLoading: false,
       error: "messages: Field required",
-      errorHint: expect.objectContaining({
-        title: "This model needs a User message",
-      }),
+      errorHint: {
+        action:
+          "This model needs a User message. Add one with + Message, then run again.",
+      },
     });
   });
 
