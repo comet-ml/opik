@@ -281,7 +281,7 @@ class DashboardWidgetQueryResourceTest {
 
     @ParameterizedTest
     @EnumSource(value = WorkspaceUserPermission.class, names = {"DASHBOARD_VIEW", "PROJECT_DATA_VIEW"})
-    @DisplayName("a member without either permission is refused")
+    @DisplayName("a member without a required permission is refused")
     void runWidgetQuery__whenPermissionDenied__thenForbidden(WorkspaceUserPermission denied) {
         String apiKey = UUID.randomUUID().toString();
         String workspaceName = UUID.randomUUID().toString();
