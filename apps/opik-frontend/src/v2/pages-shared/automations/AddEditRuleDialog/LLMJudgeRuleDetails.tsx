@@ -50,12 +50,14 @@ import {
   RESERVED_SPAN_LLM_JUDGE_VARIABLES,
   RESERVED_TRACE_LLM_JUDGE_VARIABLES,
 } from "@/constants/llm";
-import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
+import {
+  EvaluationRuleFormType,
+  updateConfigForModelChange,
+} from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
-import { updateProviderConfig } from "@/lib/modelUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { isDecisionModel } from "@/lib/modelCapabilities";
 import { DECISION_MODELS } from "@/constants/decisionModels";
@@ -345,14 +347,12 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                         const currentConfig = form.getValues(
                           "llmJudgeDetails.config",
                         );
-                        const adjustedConfig = updateProviderConfig(
+                        const adjustedConfig = updateConfigForModelChange(
                           currentConfig,
+                          { model: previousModel, provider },
                           { model: m, provider: selectedProvider },
                         );
-                        if (
-                          adjustedConfig &&
-                          adjustedConfig !== currentConfig
-                        ) {
+                        if (adjustedConfig !== currentConfig) {
                           form.setValue(
                             "llmJudgeDetails.config",
                             adjustedConfig,

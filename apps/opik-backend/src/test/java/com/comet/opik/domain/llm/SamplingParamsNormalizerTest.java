@@ -246,4 +246,34 @@ class SamplingParamsNormalizerTest {
 
         assertThat(SamplingParamsNormalizer.normalizeRequest(original)).isSameAs(original);
     }
+
+    @Test
+    void dropOpenAiReasoningModelParamsRemovesSamplingParamsAndPenaltiesOnly() {
+        var request = ChatCompletionRequest.builder()
+                .model("gpt-5-mini")
+                .temperature(0.7)
+                .topP(0.9)
+                .frequencyPenalty(0.5)
+                .presencePenalty(0.4)
+                .maxCompletionTokens(100)
+                .seed(7)
+                .build();
+
+        var normalized = SamplingParamsNormalizer.dropOpenAiReasoningModelParams(request);
+
+        assertThat(normalized.temperature()).isNull();
+        assertThat(normalized.topP()).isNull();
+        assertThat(normalized.frequencyPenalty()).isNull();
+        assertThat(normalized.presencePenalty()).isNull();
+        assertThat(normalized.model()).isEqualTo("gpt-5-mini");
+        assertThat(normalized.maxCompletionTokens()).isEqualTo(100);
+        assertThat(normalized.seed()).isEqualTo(7);
+    }
+
+    @Test
+    void dropOpenAiReasoningModelParamsReturnsTheSameRequestWhenNothingIsSet() {
+        var request = ChatCompletionRequest.builder().model("o3").maxCompletionTokens(100).build();
+
+        assertThat(SamplingParamsNormalizer.dropOpenAiReasoningModelParams(request)).isSameAs(request);
+    }
 }

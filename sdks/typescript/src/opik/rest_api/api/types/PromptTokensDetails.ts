@@ -2,4 +2,5 @@
 
 export interface PromptTokensDetails {
     cachedTokens?: number;
+    cacheWriteTokens?: number;
 }

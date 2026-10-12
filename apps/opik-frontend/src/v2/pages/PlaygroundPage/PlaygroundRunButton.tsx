@@ -8,7 +8,7 @@ import {
   useIsPromptRunning,
   usePromptById,
 } from "@/store/PlaygroundStore";
-import { hasUnsupportedMedia } from "@/lib/playground";
+import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import { DATASET_TYPE } from "@/types/datasets";
 
@@ -30,21 +30,19 @@ const PlaygroundRunButton = ({
   const { datasetId, itemsTotal } = usePlaygroundDataset();
   const datasetType = useDatasetType();
 
-  const hasEmptyMessages = prompt?.messages.some(
-    (m) => !m.content || m.content.length === 0,
-  );
+  const hasUnrunnableMessages = !!prompt && !canRunMessages(prompt.messages);
   const hasMediaCompatibilityIssue = !!prompt && hasUnsupportedMedia(prompt);
   const isDatasetEmpty = !!datasetId && itemsTotal === 0;
   const isPromptRunDisabled =
     !prompt?.model ||
-    !!hasEmptyMessages ||
+    hasUnrunnableMessages ||
     hasMediaCompatibilityIssue ||
     isDatasetEmpty;
 
   let promptRunDisabledReason: string | null = null;
   if (!prompt?.model) {
     promptRunDisabledReason = "Please select an LLM model for this prompt";
-  } else if (hasEmptyMessages) {
+  } else if (hasUnrunnableMessages) {
     promptRunDisabledReason =
       "Message is empty. Please add some text to proceed";
   } else if (hasMediaCompatibilityIssue) {

@@ -5,6 +5,7 @@ import { DECISION_MODELS } from "@/constants/decisionModels";
 type ModelPricingEntry = {
   supports_vision?: boolean;
   supports_video_input?: boolean;
+  supports_audio_input?: boolean;
   [key: string]: unknown;
 };
 
@@ -145,6 +146,53 @@ export const supportsImageInput = (model?: string | null): boolean => {
 
   // Default to false if no match found
   return false;
+};
+
+const SNAPSHOT_DATE_SUFFIX = /-\d{4}-\d{2}-\d{2}$/;
+
+const baseModelName = (modelName: string) => {
+  const normalized = normalizeModelName(modelName);
+  return normalized
+    .slice(normalized.lastIndexOf("/") + 1)
+    .split(":")[0]
+    .replace(SNAPSHOT_DATE_SUFFIX, "");
+};
+
+// The pricing data flags audio under only some of a model's names:
+// gemini-2.5-flash has no flag while gemini/gemini-2.5-flash does, and
+// gpt-4o-audio-preview is listed only as dated snapshots like
+// gpt-4o-audio-preview-2024-12-17. An exact-name lookup like supportsImageInput's
+// would block audio on models that accept it, so support is pooled across every
+// provider-prefixed and dated name of the same model.
+// An explicit false under any name still wins: one stray flag
+// (replicate/openai/gpt-4o) would otherwise allow audio on gpt-4o, which takes none.
+const audioBaseNames = (flag: boolean) =>
+  new Set(
+    Object.entries(modelEntries)
+      .filter(
+        ([modelName, entry]) =>
+          modelName && entry?.supports_audio_input === flag,
+      )
+      .map(([modelName]) => baseModelName(modelName)),
+  );
+
+const AUDIO_CAPABLE_BASE_NAMES = audioBaseNames(true);
+const AUDIO_DENIED_BASE_NAMES = audioBaseNames(false);
+
+export const supportsAudioInput = (model?: string | null): boolean => {
+  if (!model) {
+    return false;
+  }
+
+  if (isCustomProviderModel(model)) {
+    return true;
+  }
+
+  const baseName = baseModelName(model);
+  return (
+    AUDIO_CAPABLE_BASE_NAMES.has(baseName) &&
+    !AUDIO_DENIED_BASE_NAMES.has(baseName)
+  );
 };
 
 /**

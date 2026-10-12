@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveTraceEvaluatorVariableDefault } from "./llm";
+import {
+  generateDefaultLLMPromptMessage,
+  getNextMessageType,
+  resolveTraceEvaluatorVariableDefault,
+} from "./llm";
 import {
   RESERVED_SPAN_EVALUATOR_VARIABLES,
   RESERVED_SPAN_LLM_JUDGE_VARIABLES,
@@ -8,6 +12,7 @@ import {
   RESERVED_TRACE_LLM_JUDGE_VARIABLES,
 } from "@/constants/llm";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
+import { LLM_MESSAGE_ROLE } from "@/types/llm";
 
 /**
  * Covers the sentinel auto-fill that decides whether a reserved variable name
@@ -129,5 +134,44 @@ describe("resolveTraceEvaluatorVariableDefault", () => {
         RESERVED_TRACE_LLM_JUDGE_VARIABLES,
       ),
     ).toBe("");
+  });
+});
+
+describe("getNextMessageType", () => {
+  const nextRoleAfter = (role: string) =>
+    getNextMessageType(
+      generateDefaultLLMPromptMessage({ role: role as LLM_MESSAGE_ROLE }),
+    );
+
+  it("adds an assistant message after a user message", () => {
+    expect(nextRoleAfter(LLM_MESSAGE_ROLE.user)).toBe(
+      LLM_MESSAGE_ROLE.assistant,
+    );
+  });
+
+  it.each([
+    LLM_MESSAGE_ROLE.assistant,
+    LLM_MESSAGE_ROLE.ai,
+    LLM_MESSAGE_ROLE.system,
+    LLM_MESSAGE_ROLE.tool_execution_result,
+    "tool",
+    "developer",
+  ])("adds a user message after a %s message", (role) => {
+    expect(nextRoleAfter(role)).toBe(LLM_MESSAGE_ROLE.user);
+  });
+
+  it("alternates user and assistant as messages are added", () => {
+    const roles = [LLM_MESSAGE_ROLE.system];
+    for (let i = 0; i < 4; i++) {
+      roles.push(nextRoleAfter(roles[roles.length - 1]));
+    }
+
+    expect(roles).toEqual([
+      LLM_MESSAGE_ROLE.system,
+      LLM_MESSAGE_ROLE.user,
+      LLM_MESSAGE_ROLE.assistant,
+      LLM_MESSAGE_ROLE.user,
+      LLM_MESSAGE_ROLE.assistant,
+    ]);
   });
 });

@@ -27,7 +27,10 @@ import cloneDeep from "lodash/cloneDeep";
 import set from "lodash/set";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
-import { parseCompletionOutput } from "@/lib/playground";
+import {
+  dropEmptySystemMessages,
+  parseCompletionOutput,
+} from "@/lib/playground";
 import { useHydrateDatasetItemData } from "@/v2/pages/PlaygroundPage/useHydrateDatasetItemData";
 import { useHydratePromptMetadata } from "@/v2/pages/PlaygroundPage/useHydratePromptMetadata";
 import { collectPromptVersionRefs } from "@/api/playground/promptLinkage";
@@ -226,7 +229,8 @@ const usePromptDatasetItemCombination = ({
           usage: undefined,
         });
 
-        const providerMessages = prompt.messages.map((m) =>
+        const messagesToSend = dropEmptySystemMessages(prompt.messages);
+        const providerMessages = messagesToSend.map((m) =>
           transformMessageIntoProviderMessage(m, datasetItemData),
         );
 
@@ -283,7 +287,7 @@ const usePromptDatasetItemCombination = ({
           // Only role and content describe the template; id, promptId,
           // promptVersionId and autoImprove are Playground editor state and
           // have no place in the stored experiment config.
-          templateMessages: prompt.messages.map(({ role, content }) => ({
+          templateMessages: messagesToSend.map(({ role, content }) => ({
             role,
             content,
           })),
