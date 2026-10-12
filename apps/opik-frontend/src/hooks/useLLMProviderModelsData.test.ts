@@ -6,6 +6,7 @@ import useLLMProviderModelsData from "./useLLMProviderModelsData";
 import { getProviderFromModel } from "@/lib/provider";
 import { DECISION_MODELS } from "@/constants/decisionModels";
 import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
+import { getLatestModelFlags } from "@/lib/modelRegistryStore";
 
 const registry = vi.hoisted(() => ({
   data: undefined as LlmModelsByProvider | undefined,
@@ -77,6 +78,32 @@ describe("useLLMProviderModelsData", () => {
           (m) => m.value,
         ) ?? [],
       ).not.toContain(value);
+    });
+  });
+});
+
+describe("useLLMProviderModelsData OpenRouter lists", () => {
+  it("indexes the parameters and effort levels the registry sends", () => {
+    registry.data = {
+      [PROVIDER_TYPE.OPEN_ROUTER]: [
+        {
+          id: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+          label: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+          structuredOutput: true,
+          reasoning: false,
+          supported_parameters: ["max_tokens", "reasoning_effort"],
+          reasoning_efforts: ["high", "low"],
+        },
+      ],
+    };
+
+    renderHook(() => useLLMProviderModelsData());
+
+    expect(
+      getLatestModelFlags(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO),
+    ).toMatchObject({
+      supportedParameters: ["max_tokens", "reasoning_effort"],
+      reasoningEfforts: ["high", "low"],
     });
   });
 });

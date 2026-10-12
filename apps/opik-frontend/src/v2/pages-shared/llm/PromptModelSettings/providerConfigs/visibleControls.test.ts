@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   createSupports,
@@ -17,6 +17,10 @@ import {
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
+import {
+  resetModelRegistryStoreForTesting,
+  setLatestModelFlags,
+} from "@/lib/modelRegistryStore";
 
 const ANTHROPIC_CONFIG = {
   temperature: 0.4,
@@ -232,6 +236,133 @@ describe("the OpenRouter sampling and penalty sliders", () => {
       frequencyPenalty: penalties,
       presencePenalty: penalties,
     });
+  });
+});
+
+describe("the OpenRouter panel on a model with OpenRouter's lists", () => {
+  const OPEN_ROUTER_CONFIG: LLMOpenRouterConfigsType = {
+    maxTokens: 0,
+    temperature: 1,
+    topP: 1,
+    topK: 0,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+    repetitionPenalty: 1,
+    minP: 0,
+    topA: 0,
+  };
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it.each<[string, string[], string[], string[]]>([
+    [
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      [
+        "frequency_penalty",
+        "max_tokens",
+        "presence_penalty",
+        "temperature",
+        "top_p",
+      ],
+      [],
+      [
+        "temperature",
+        "maxTokens",
+        "topP",
+        "frequencyPenalty",
+        "presencePenalty",
+      ],
+    ],
+    [
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      ["max_tokens", "reasoning", "reasoning_effort"],
+      ["high", "medium", "low", "minimal"],
+      ["maxTokens", "reasoningEffort"],
+    ],
+    [
+      PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5,
+      ["max_tokens", "reasoning", "temperature", "top_k", "top_p"],
+      [],
+      ["samplingParams", "maxTokens", "topK"],
+    ],
+    [
+      PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_8B_INSTRUCT,
+      [
+        "frequency_penalty",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "repetition_penalty",
+        "temperature",
+        "top_k",
+        "top_p",
+      ],
+      [],
+      [
+        "temperature",
+        "maxTokens",
+        "topP",
+        "topK",
+        "frequencyPenalty",
+        "presencePenalty",
+        "repetitionPenalty",
+        "minP",
+      ],
+    ],
+  ])("on %s shows only what it lists", (model, params, efforts, shown) => {
+    setLatestModelFlags(
+      new Map([
+        [
+          model,
+          {
+            reasoning: false,
+            structuredOutput: false,
+            supportedParameters: params,
+            reasoningEfforts: efforts,
+          },
+        ],
+      ]),
+    );
+
+    const visible = getOpenRouterVisibleControls({
+      model: model as PROVIDER_MODEL_TYPE,
+      configs: OPEN_ROUTER_CONFIG,
+      supports: createSupports(
+        new Set(["throttling", "maxConcurrentRequests"]),
+      ),
+    });
+
+    expect(
+      Object.entries(visible)
+        .filter(([, isVisible]) => isVisible)
+        .map(([control]) => control),
+    ).toEqual(shown);
+  });
+
+  it("hides the effort on a surface that cannot store it", () => {
+    setLatestModelFlags(
+      new Map([
+        [
+          PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+          {
+            reasoning: false,
+            structuredOutput: false,
+            supportedParameters: ["reasoning_effort"],
+            reasoningEfforts: ["low"],
+          },
+        ],
+      ]),
+    );
+
+    expect(
+      getOpenRouterVisibleControls({
+        model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+        configs: { temperature: 0 },
+        supports: createSupports(RULE_UNSUPPORTED_PARAMS),
+      }).reasoningEffort,
+    ).toBe(false);
   });
 });
 
