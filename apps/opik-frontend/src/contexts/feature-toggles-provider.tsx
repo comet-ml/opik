@@ -14,6 +14,7 @@ type FeatureTogglesState = {
   features: FeatureToggles;
   setFeatures: OnChangeFn<FeatureToggles>;
   isFeatureEnabled: (feature: FeatureToggleKeys) => boolean;
+  isLoaded: boolean;
   defaultPageSize: number;
 };
 
@@ -51,6 +52,7 @@ const initialState: FeatureTogglesState = {
   features: DEFAULT_STATE,
   setFeatures: () => undefined,
   isFeatureEnabled: () => false,
+  isLoaded: false,
   defaultPageSize: DEFAULT_PAGE_SIZE_FALLBACK,
 };
 
@@ -60,10 +62,11 @@ const FeatureTogglesProviderContext =
 export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [features, setFeatures] = useState<FeatureToggles>(DEFAULT_STATE);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [defaultPageSize, setDefaultPageSize] = useState<number>(
     DEFAULT_PAGE_SIZE_FALLBACK,
   );
-  const { data } = useFeatureToggle({
+  const { data, isError } = useFeatureToggle({
     workspaceName,
   });
 
@@ -93,16 +96,23 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
         setDefaultPageSize(raw);
       }
     }
-  }, [data]);
+    // Flipped in the same effect as setFeatures so no render ever sees
+    // isLoaded=true next to the defaults. A failed fetch counts as loaded:
+    // the defaults are then the final answer.
+    if (data || isError) {
+      setIsLoaded(true);
+    }
+  }, [data, isError]);
 
   const value = useMemo(() => {
     return {
       features,
       setFeatures,
       isFeatureEnabled: (feature: FeatureToggleKeys) => features[feature],
+      isLoaded,
       defaultPageSize,
     };
-  }, [features, defaultPageSize]);
+  }, [features, isLoaded, defaultPageSize]);
 
   return (
     <FeatureTogglesProviderContext.Provider value={value}>
@@ -120,6 +130,17 @@ export const useIsFeatureEnabled = (feature: FeatureToggleKeys) => {
     );
 
   return context.isFeatureEnabled(feature);
+};
+
+export const useAreFeatureTogglesLoaded = () => {
+  const context = useContext(FeatureTogglesProviderContext);
+
+  if (context === undefined)
+    throw new Error(
+      "useAreFeatureTogglesLoaded must be used within a FeatureTogglesProvider",
+    );
+
+  return context.isLoaded;
 };
 
 export const useDefaultPageSize = () => {

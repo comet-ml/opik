@@ -6,7 +6,10 @@ import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { useActiveProjectId, useActiveWorkspaceName } from "@/store/AppStore";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { setActiveProject } from "@/hooks/useActiveProjectInitializer";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import {
+  useAreFeatureTogglesLoaded,
+  useIsFeatureEnabled,
+} from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import Loader from "@/shared/Loader/Loader";
 import NoData from "@/shared/NoData/NoData";
@@ -21,6 +24,7 @@ const ProjectPage = () => {
   const projectHomepageEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.PROJECT_HOMEPAGE_ENABLED,
   );
+  const featureTogglesLoaded = useAreFeatureTogglesLoaded();
 
   const { data, isPending, isError } = useProjectById({
     projectId,
@@ -92,6 +96,10 @@ const ProjectPage = () => {
   }
 
   if (last(pathname.split("/")) === projectId) {
+    if (!featureTogglesLoaded) {
+      return <Loader />;
+    }
+
     return (
       <Navigate to={pathname + (projectHomepageEnabled ? "/home" : "/logs")} />
     );

@@ -3,9 +3,13 @@ import { ArrowUpRight } from "lucide-react";
 import { buttonVariants } from "@/ui/button";
 import { useLoggedInUserName } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import {
+  useAreFeatureTogglesLoaded,
+  useIsFeatureEnabled,
+} from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import usePluginsStore from "@/store/PluginsStore";
+import Loader from "@/shared/Loader/Loader";
 import DailyBriefingSection from "./DailyBriefing/DailyBriefingSection";
 import RecentActivitySection from "./RecentActivitySection";
 
@@ -21,6 +25,11 @@ const ProjectHomePage = () => {
   const projectHomepageEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.PROJECT_HOMEPAGE_ENABLED,
   );
+  const featureTogglesLoaded = useAreFeatureTogglesLoaded();
+
+  if (!featureTogglesLoaded) {
+    return <Loader />;
+  }
 
   if (!projectHomepageEnabled) {
     return (

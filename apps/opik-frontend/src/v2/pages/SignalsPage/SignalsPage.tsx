@@ -4,7 +4,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { BookOpenCheck, Play, Settings2 } from "lucide-react";
 import { useActiveProjectId } from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import {
+  useAreFeatureTogglesLoaded,
+  useIsFeatureEnabled,
+} from "@/contexts/feature-toggles-provider";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import {
@@ -97,6 +100,7 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   const agentInsightsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.AGENT_INSIGHTS_ENABLED,
   );
+  const featureTogglesLoaded = useAreFeatureTogglesLoaded();
 
   // Running / enabling / configuring diagnostics are write actions gated on
   // workspace-settings permission; viewing issues stays open to all.
@@ -289,6 +293,10 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
 
   const showJobControls =
     isActive || hasData || Boolean(job?.last_scan_at) || Boolean(failedReason);
+
+  if (!featureTogglesLoaded) {
+    return <SignalsPageSkeleton />;
+  }
 
   if (!AssistantSidebar || !ollieEnabled || !agentInsightsEnabled) {
     return (
