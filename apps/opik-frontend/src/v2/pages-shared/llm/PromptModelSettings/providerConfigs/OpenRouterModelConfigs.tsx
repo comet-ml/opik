@@ -20,6 +20,10 @@ import {
 } from "@/types/providers";
 import { DEFAULT_OPEN_ROUTER_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
+import {
+  NO_OUTPUT_LIMIT_TOOLTIP,
+  getNoOutputLimitHint,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/noOutputLimit";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import {
   Select,
@@ -88,10 +92,14 @@ const OpenRouterModelConfigs = ({
           min={0}
           max={10000}
           step={1}
+          integer
+          hint={getNoOutputLimitHint(configs.maxTokens)}
           defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS}
           label="Max tokens"
           tooltip={
-            <PromptModelConfigsTooltipContent text="The maximum number of tokens to generate. The exact limit varies by model. Set to 0 to use the provider's default. (One token is roughly 4 characters for standard English text)." />
+            <PromptModelConfigsTooltipContent
+              text={`The maximum number of tokens to generate. The exact limit varies by model. ${NO_OUTPUT_LIMIT_TOOLTIP} (One token is roughly 4 characters for standard English text).`}
+            />
           }
         />
       )}

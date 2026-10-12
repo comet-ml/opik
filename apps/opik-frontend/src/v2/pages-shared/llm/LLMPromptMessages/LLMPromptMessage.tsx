@@ -81,6 +81,7 @@ const MESSAGE_TYPE_OPTIONS = [
 
 export interface LLMPromptMessageHandle {
   insertAtCursor: (text: string) => void;
+  focus: () => void;
 }
 
 interface LLMPromptMessageProps {
@@ -175,8 +176,36 @@ const LLMPromptMessage = forwardRef<
       }
     }, []);
 
+    const focusOnCreateRef = useRef(false);
+
+    const focusAtEnd = useCallback((view: EditorView) => {
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+      view.focus();
+    }, []);
+
+    const handleCreateEditor = useCallback(
+      (view: EditorView) => {
+        editorViewRef.current = view;
+        if (focusOnCreateRef.current) {
+          focusOnCreateRef.current = false;
+          focusAtEnd(view);
+        }
+      },
+      [focusAtEnd],
+    );
+
     useImperativeHandle(ref, () => ({
       insertAtCursor: insertTextAtCursor,
+      focus: () => {
+        const view = editorViewRef.current;
+        if (view) {
+          focusAtEnd(view);
+        } else {
+          // The editor is created a render after this message mounts, so a
+          // focus request for a just-added message has to wait for it.
+          focusOnCreateRef.current = true;
+        }
+      },
     }));
 
     const hasJsonData = !isEmpty(jsonTreeData);
@@ -363,9 +392,7 @@ const LLMPromptMessage = forwardRef<
                     }
                   >
                     <CodeMirror
-                      onCreateEditor={(view) => {
-                        editorViewRef.current = view;
-                      }}
+                      onCreateEditor={handleCreateEditor}
                       onFocus={onFocus}
                       onUpdate={handleEditorUpdate}
                       theme={codeMirrorPromptTheme}
