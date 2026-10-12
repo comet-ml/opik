@@ -1,5 +1,8 @@
 import React from "react";
-import { resolveSamplingParams } from "@/lib/modelUtils";
+import {
+  getOpenRouterDefaultMaxTokens,
+  resolveSamplingParams,
+} from "@/lib/modelUtils";
 import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 import {
   createSupports,
@@ -76,7 +79,7 @@ const OpenRouterModelConfigs = ({
           step={1}
           integer
           hint={getNoOutputLimitHint(configs.maxTokens)}
-          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS}
+          defaultValue={getOpenRouterDefaultMaxTokens(model)}
           label="Max tokens"
           tooltip={
             <PromptModelConfigsTooltipContent
