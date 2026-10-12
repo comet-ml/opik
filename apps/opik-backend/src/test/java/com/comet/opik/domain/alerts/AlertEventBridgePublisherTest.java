@@ -143,8 +143,8 @@ class AlertEventBridgePublisherTest {
                 payload(alert, eventIds, List.of(largeMetadata)))).verifyComplete();
 
         var entry = captureEntries(1).getFirst();
-        assertThat(entry.detail().getBytes(StandardCharsets.UTF_8).length)
-                .isLessThanOrEqualTo(AlertEventBridgePublisher.MAX_DETAIL_BYTES);
+        assertThat(AlertEventBridgePublisher.entrySize(entry.detail()))
+                .isLessThanOrEqualTo(AlertEventBridgePublisher.MAX_ENTRY_BYTES);
 
         JsonNode detail = JsonUtils.getJsonNodeFromString(entry.detail());
         assertThat(detail.get("truncated").asBoolean()).isTrue();
@@ -153,6 +153,25 @@ class AlertEventBridgePublisherTest {
         assertThat(opik.get("metadata")).isEmpty();
         assertThat(opik.get("eventIds")).hasSize(AlertEventBridgePublisher.MAX_TRUNCATED_LIST_SIZE);
         assertThat(opik.get("eventCount").asInt()).isEqualTo(eventIds.size());
+    }
+
+    @Test
+    void publishWhenEntryFitsWithoutCountingBusNameDoesNotTruncate() {
+        when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
+        var alert = alert(null);
+        // Over the old 250,000-byte detail budget, yet within 256 KiB once only the counted fields are summed
+        var eventIds = IntStream.range(0, 850).mapToObj(i -> i + "-" + "x".repeat(300)).toList();
+
+        StepVerifier.create(publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
+                payload(alert, eventIds, List.of()))).verifyComplete();
+
+        var entry = captureEntries(1).getFirst();
+        assertThat(entry.detail().getBytes(StandardCharsets.UTF_8).length).isGreaterThan(250_000);
+        assertThat(AlertEventBridgePublisher.entrySize(entry.detail()))
+                .isLessThanOrEqualTo(AlertEventBridgePublisher.MAX_ENTRY_BYTES);
+        JsonNode detail = JsonUtils.getJsonNodeFromString(entry.detail());
+        assertThat(detail.get("truncated").asBoolean()).isFalse();
+        assertThat(detail.get("opik").get("eventIds")).hasSize(eventIds.size());
     }
 
     @Test
@@ -165,8 +184,8 @@ class AlertEventBridgePublisherTest {
                 payload(alert, eventIds, List.of()))).verifyComplete();
 
         var entry = captureEntries(1).getFirst();
-        assertThat(entry.detail().getBytes(StandardCharsets.UTF_8).length)
-                .isLessThanOrEqualTo(AlertEventBridgePublisher.MAX_DETAIL_BYTES);
+        assertThat(AlertEventBridgePublisher.entrySize(entry.detail()))
+                .isLessThanOrEqualTo(AlertEventBridgePublisher.MAX_ENTRY_BYTES);
 
         JsonNode detail = JsonUtils.getJsonNodeFromString(entry.detail());
         assertThat(detail.get("truncated").asBoolean()).isTrue();

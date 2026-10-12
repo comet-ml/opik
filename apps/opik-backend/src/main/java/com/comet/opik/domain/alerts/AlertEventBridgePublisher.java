@@ -58,8 +58,10 @@ public class AlertEventBridgePublisher {
     static final String SOURCE = "comet.opik";
     static final String DETAIL_TYPE = "Opik Alert";
     static final String SCHEMA_VERSION = "1";
-    // PutEvents caps an entry at 256 KB, which also counts Source, DetailType and the bus name
-    static final int MAX_DETAIL_BYTES = 250_000;
+    // PutEvents caps an entry at 256 KB, counting only Time (14 bytes), Source, DetailType, Detail and Resources;
+    // the bus name doesn't count
+    static final int MAX_ENTRY_BYTES = 256 * 1024;
+    private static final int TIME_BYTES = 14;
     static final int MAX_TRUNCATED_LIST_SIZE = 1_000;
 
     private static final int MAX_RETRIES = 2;
@@ -180,12 +182,12 @@ public class AlertEventBridgePublisher {
 
     private String serializeWithinLimit(AlertEventBridgeDetail detail) {
         String json = JsonUtils.writeValueAsString(detail);
-        int size = detailSize(json);
-        if (size <= MAX_DETAIL_BYTES) {
+        int size = entrySize(json);
+        if (size <= MAX_ENTRY_BYTES) {
             return json;
         }
 
-        log.warn("EventBridge detail for alertId='{}' is '{}' bytes, dropping metadata and capping lists",
+        log.warn("EventBridge entry for alertId='{}' is '{}' bytes, dropping metadata and capping lists",
                 detail.alertId(), size);
 
         Map<String, Object> product = new HashMap<>(detail.opik());
@@ -195,12 +197,12 @@ public class AlertEventBridgePublisher {
         var truncated = detail.toBuilder().truncated(true).opik(product).build();
 
         json = JsonUtils.writeValueAsString(truncated);
-        size = detailSize(json);
-        if (size <= MAX_DETAIL_BYTES) {
+        size = entrySize(json);
+        if (size <= MAX_ENTRY_BYTES) {
             return json;
         }
 
-        log.warn("EventBridge detail for alertId='{}' is still '{}' bytes, dropping eventIds and userNames",
+        log.warn("EventBridge entry for alertId='{}' is still '{}' bytes, dropping eventIds and userNames",
                 detail.alertId(), size);
 
         product.put("eventIds", List.of());
@@ -208,8 +210,11 @@ public class AlertEventBridgePublisher {
         return JsonUtils.writeValueAsString(truncated.toBuilder().opik(product).build());
     }
 
-    private static int detailSize(String json) {
-        return json.getBytes(StandardCharsets.UTF_8).length;
+    static int entrySize(String detail) {
+        return TIME_BYTES
+                + SOURCE.getBytes(StandardCharsets.UTF_8).length
+                + DETAIL_TYPE.getBytes(StandardCharsets.UTF_8).length
+                + detail.getBytes(StandardCharsets.UTF_8).length;
     }
 
     private static List<?> capList(Object value) {
