@@ -31,6 +31,7 @@ import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -77,6 +78,7 @@ class DashboardServiceImpl implements DashboardService {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull ProjectService projectService;
+    private final @NonNull SavedQueryService savedQueryService;
 
     @Override
     public Dashboard create(@NonNull Dashboard dashboard, @NonNull DashboardScope scope) {
@@ -317,8 +319,13 @@ class DashboardServiceImpl implements DashboardService {
                 ids.size(), scope, workspaceId);
     }
 
-    private static void validateOllieCharts(JsonNode config) {
-        var errors = OllieChartWidgets.validate(config);
+    private void validateOllieCharts(JsonNode config) {
+        var errors = new ArrayList<>(OllieChartWidgets.validate(config));
+        var queryIds = OllieChartWidgets.queryIds(config);
+        var existing = savedQueryService.findExistingIds(queryIds);
+        queryIds.stream()
+                .filter(queryId -> !existing.contains(queryId))
+                .forEach(queryId -> errors.add("Saved query '%s' not found".formatted(queryId)));
         if (!errors.isEmpty()) {
             throw new ClientErrorException(Response.status(422).entity(new ErrorMessage(errors)).build());
         }

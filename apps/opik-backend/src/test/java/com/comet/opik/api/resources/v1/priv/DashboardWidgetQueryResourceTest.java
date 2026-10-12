@@ -4,6 +4,7 @@ import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.DashboardScope;
 import com.comet.opik.api.DashboardWidgetQueryRequest;
+import com.comet.opik.api.SavedQuery;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -28,6 +29,9 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.annotation.Nullable;
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -57,6 +61,13 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static com.comet.opik.api.resources.utils.resources.DashboardTestDataFactory.createPartialDashboard;
+import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matching;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -114,6 +125,8 @@ class DashboardWidgetQueryResourceTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
+    private ClientSupport client;
+    private String baseURI;
     private DashboardResourceClient dashboardClient;
     private InsightsViewResourceClient insightsViewClient;
     private TraceResourceClient traceResourceClient;
@@ -125,12 +138,15 @@ class DashboardWidgetQueryResourceTest {
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
-        var baseURI = TestUtils.getBaseUrl(client);
+        this.client = client;
+        baseURI = TestUtils.getBaseUrl(client);
 
         ClientSupportUtils.config(client);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_A, WORKSPACE_NAME_A, WORKSPACE_ID_A, USER);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_B, WORKSPACE_NAME_B, WORKSPACE_ID_B, USER);
+        mockSavedQueriesAuth(API_KEY_A, WORKSPACE_NAME_A, WORKSPACE_ID_A);
+        mockSavedQueriesAuth(API_KEY_B, WORKSPACE_NAME_B, WORKSPACE_ID_B);
 
         var projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         dashboardClient = new DashboardResourceClient(client, baseURI);
@@ -151,7 +167,8 @@ class DashboardWidgetQueryResourceTest {
     @DisplayName("runs the saved query over the requested date range")
     void runWidgetQuery__whenRangeCoversTrace__thenReturnsIt() {
         String widgetId = UUID.randomUUID().toString();
-        UUID dashboardId = dashboardClient.create(dashboard(widgetId, "ollie_chart", WINDOWED_QUERY, projectIdA),
+        UUID dashboardId = dashboardClient.create(
+                dashboard(widgetId, "ollie_chart", saveQuery(WINDOWED_QUERY, projectIdA)),
                 API_KEY_A, WORKSPACE_NAME_A);
 
         var response = run(dashboardClient.callRunWidgetQuery(dashboardId, widgetId,
@@ -166,7 +183,8 @@ class DashboardWidgetQueryResourceTest {
     @DisplayName("a date range that excludes the trace returns no rows")
     void runWidgetQuery__whenRangeExcludesTrace__thenNoRows() {
         String widgetId = UUID.randomUUID().toString();
-        UUID dashboardId = dashboardClient.create(dashboard(widgetId, "ollie_chart", WINDOWED_QUERY, projectIdA),
+        UUID dashboardId = dashboardClient.create(
+                dashboard(widgetId, "ollie_chart", saveQuery(WINDOWED_QUERY, projectIdA)),
                 API_KEY_A, WORKSPACE_NAME_A);
 
         var response = run(dashboardClient.callRunWidgetQuery(dashboardId, widgetId,
@@ -180,7 +198,8 @@ class DashboardWidgetQueryResourceTest {
     @DisplayName("a saved project from another workspace returns no rows")
     void runWidgetQuery__whenProjectFromAnotherWorkspace__thenNoRows() {
         String widgetId = UUID.randomUUID().toString();
-        UUID dashboardId = dashboardClient.create(dashboard(widgetId, "ollie_chart", WINDOWED_QUERY, projectIdB),
+        UUID dashboardId = dashboardClient.create(
+                dashboard(widgetId, "ollie_chart", saveQuery(WINDOWED_QUERY, projectIdB)),
                 API_KEY_A, WORKSPACE_NAME_A);
 
         var response = run(dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(null, null),
@@ -194,7 +213,7 @@ class DashboardWidgetQueryResourceTest {
     void runWidgetQuery__whenInsightsView__thenReturnsRows() {
         String widgetId = UUID.randomUUID().toString();
         UUID viewId = insightsViewClient.create(
-                dashboard(widgetId, "ollie_chart", WINDOWED_QUERY, projectIdA).toBuilder()
+                dashboard(widgetId, "ollie_chart", saveQuery(WINDOWED_QUERY, projectIdA)).toBuilder()
                         .scope(DashboardScope.INSIGHTS).build(),
                 API_KEY_A, WORKSPACE_NAME_A);
 
@@ -209,7 +228,8 @@ class DashboardWidgetQueryResourceTest {
     @DisplayName("an unknown widget, or one that is not an Ollie chart, is not found")
     void runWidgetQuery__whenNoSavedQuery__thenNotFound() {
         String widgetId = UUID.randomUUID().toString();
-        UUID dashboardId = dashboardClient.create(dashboard(widgetId, "text_markdown", WINDOWED_QUERY, projectIdA),
+        UUID dashboardId = dashboardClient.create(
+                dashboard(widgetId, "text_markdown", saveQuery(WINDOWED_QUERY, projectIdA)),
                 API_KEY_A, WORKSPACE_NAME_A);
 
         assertStatus(dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(null, null), API_KEY_A,
@@ -224,7 +244,7 @@ class DashboardWidgetQueryResourceTest {
     @DisplayName("a dashboard of another workspace is not found")
     void runWidgetQuery__whenDashboardOfAnotherWorkspace__thenNotFound() {
         String widgetId = UUID.randomUUID().toString();
-        UUID dashboardIdB = dashboardClient.create(dashboard(widgetId, "ollie_chart", WINDOWED_QUERY, projectIdB),
+        UUID dashboardIdB = dashboardClient.create(dashboard(widgetId, "ollie_chart", null),
                 API_KEY_B, WORKSPACE_NAME_B);
 
         assertStatus(dashboardClient.callRunWidgetQuery(dashboardIdB, widgetId, window(null, null), API_KEY_A,
@@ -235,7 +255,7 @@ class DashboardWidgetQueryResourceTest {
     @DisplayName("a workspace not on the Custom Charts allowlist gets 501")
     void runWidgetQuery__whenWorkspaceNotAllowlisted__thenNotImplemented() {
         String widgetId = UUID.randomUUID().toString();
-        UUID dashboardIdB = dashboardClient.create(dashboard(widgetId, "ollie_chart", WINDOWED_QUERY, projectIdB),
+        UUID dashboardIdB = dashboardClient.create(dashboard(widgetId, "ollie_chart", null),
                 API_KEY_B, WORKSPACE_NAME_B);
 
         assertStatus(dashboardClient.callRunWidgetQuery(dashboardIdB, widgetId, window(null, null), API_KEY_B,
@@ -246,7 +266,8 @@ class DashboardWidgetQueryResourceTest {
     @DisplayName("a date range that ends before it starts is rejected")
     void runWidgetQuery__whenRangeReversed__thenBadRequest() {
         String widgetId = UUID.randomUUID().toString();
-        UUID dashboardId = dashboardClient.create(dashboard(widgetId, "ollie_chart", WINDOWED_QUERY, projectIdA),
+        UUID dashboardId = dashboardClient.create(
+                dashboard(widgetId, "ollie_chart", saveQuery(WINDOWED_QUERY, projectIdA)),
                 API_KEY_A, WORKSPACE_NAME_A);
 
         assertStatus(dashboardClient.callRunWidgetQuery(dashboardId, widgetId,
@@ -272,7 +293,8 @@ class DashboardWidgetQueryResourceTest {
     void runWidgetQuery__whenRangeAtBounds__thenStatus(String description, @Nullable Instant start,
             @Nullable Instant end, Response.Status expected) {
         String widgetId = UUID.randomUUID().toString();
-        UUID dashboardId = dashboardClient.create(dashboard(widgetId, "ollie_chart", WINDOWED_QUERY, projectIdA),
+        UUID dashboardId = dashboardClient.create(
+                dashboard(widgetId, "ollie_chart", saveQuery(WINDOWED_QUERY, projectIdA)),
                 API_KEY_A, WORKSPACE_NAME_A);
 
         assertStatus(dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(start, end), API_KEY_A,
@@ -295,22 +317,75 @@ class DashboardWidgetQueryResourceTest {
     }
 
     @Test
-    @DisplayName("saving an Ollie chart whose query is too long is refused")
-    void createDashboard__whenSavedQueryTooLong__thenUnprocessable() {
-        String sql = "SELECT 1 -- " + "x".repeat(70_000);
+    @DisplayName("a saved query reads back as it was saved")
+    void getSavedQuery__thenReturnsIt() {
+        UUID queryId = saveQuery(WINDOWED_QUERY, projectIdA);
 
-        assertStatus(dashboardClient.callCreate(dashboard(UUID.randomUUID().toString(), "ollie_chart", sql, null),
-                API_KEY_A, WORKSPACE_NAME_A), 422);
+        try (var response = savedQueries().path(queryId.toString()).request()
+                .header(HttpHeaders.AUTHORIZATION, API_KEY_A).header(WORKSPACE_HEADER, WORKSPACE_NAME_A).get()) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
+            var saved = response.readEntity(SavedQuery.class);
+            assertThat(saved.sql()).isEqualTo(WINDOWED_QUERY);
+            assertThat(saved.projectId()).isEqualTo(projectIdA);
+        }
     }
 
-    private static Dashboard dashboard(String widgetId, String type, String sql, @Nullable UUID projectId) {
-        var query = projectId == null
-                ? Map.of("sql", sql)
-                : Map.of("sql", sql, "projectId", projectId.toString());
-        JsonNode config = JsonUtils.valueToTree(Map.of("sections", List.of(Map.of(
+    @Test
+    @DisplayName("a query that is too long is refused, and a workspace off the allowlist cannot save one")
+    void saveQuery__whenTooLongOrNotAllowlisted__thenRefused() {
+        assertStatus(callSaveQuery("SELECT 1 -- " + "x".repeat(70_000), null, API_KEY_A, WORKSPACE_NAME_A), 422);
+        assertStatus(callSaveQuery(WINDOWED_QUERY, null, API_KEY_B, WORKSPACE_NAME_B),
+                Response.Status.NOT_IMPLEMENTED);
+    }
+
+    @Test
+    @DisplayName("a dashboard cannot carry SQL in an Ollie chart, or reference a query that was not saved")
+    void createDashboard__whenChartCarriesSqlOrUnknownQuery__thenUnprocessable() {
+        String widgetId = UUID.randomUUID().toString();
+        JsonNode inlineSql = JsonUtils.valueToTree(Map.of("sections", List.of(Map.of(
                 "id", UUID.randomUUID().toString(),
-                "widgets", List.of(Map.of("id", widgetId, "type", type, "config", Map.of("query", query)))))));
-        return createPartialDashboard(DashboardScope.WORKSPACE).config(config).build();
+                "widgets", List.of(Map.of("id", widgetId, "type", "ollie_chart",
+                        "config", Map.of("query", Map.of("sql", WINDOWED_QUERY))))))));
+
+        assertStatus(dashboardClient.callCreate(createPartialDashboard(DashboardScope.WORKSPACE).config(inlineSql)
+                .build(), API_KEY_A, WORKSPACE_NAME_A), 422);
+        assertStatus(dashboardClient.callCreate(dashboard(widgetId, "ollie_chart", UUID.randomUUID()), API_KEY_A,
+                WORKSPACE_NAME_A), 422);
+    }
+
+    private static Dashboard dashboard(String widgetId, String type, @Nullable UUID queryId) {
+        Map<String, Object> config = queryId == null ? Map.of() : Map.of("query", Map.of("id", queryId.toString()));
+        JsonNode sections = JsonUtils.valueToTree(Map.of("sections", List.of(Map.of(
+                "id", UUID.randomUUID().toString(),
+                "widgets", List.of(Map.of("id", widgetId, "type", type, "config", config))))));
+        return createPartialDashboard(DashboardScope.WORKSPACE).config(sections).build();
+    }
+
+    private UUID saveQuery(String sql, @Nullable UUID projectId) {
+        try (var response = callSaveQuery(sql, projectId, API_KEY_A, WORKSPACE_NAME_A)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.CREATED.getStatusCode());
+            return response.readEntity(SavedQuery.class).id();
+        }
+    }
+
+    private Response callSaveQuery(String sql, @Nullable UUID projectId, String apiKey, String workspaceName) {
+        return savedQueries().request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(SavedQuery.builder().sql(sql).projectId(projectId).build()));
+    }
+
+    private void mockSavedQueriesAuth(String apiKey, String workspaceName, String workspaceId) {
+        // The default AuthTestUtils stub only matches /v1/private/*; saved queries authenticate under /v1/internal/*.
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/auth"))
+                .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
+                .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
+                .withRequestBody(matchingJsonPath("$.path", matching("/v1/internal/saved-queries(/.*)?")))
+                .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(USER, workspaceId, workspaceName, null))));
+    }
+
+    private WebTarget savedQueries() {
+        return client.target("%s/v1/internal/saved-queries".formatted(baseURI));
     }
 
     private static DashboardWidgetQueryRequest window(@Nullable Instant start, @Nullable Instant end) {
