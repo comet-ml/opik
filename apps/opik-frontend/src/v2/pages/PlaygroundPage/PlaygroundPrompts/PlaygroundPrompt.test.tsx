@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen } from "@testing-library/react";
+import groupBy from "lodash/groupBy";
+import mapValues from "lodash/mapValues";
 
 import {
   COMPOSED_PROVIDER_TYPE,
@@ -8,6 +10,8 @@ import {
 } from "@/types/providers";
 import { PlaygroundPromptType } from "@/types/playground";
 import { getDefaultConfigByProvider } from "@/lib/playground";
+import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
+import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import PlaygroundPrompt from "./PlaygroundPrompt";
 
 const PROVIDER_ROWS: Record<string, COMPOSED_PROVIDER_TYPE> = {
@@ -21,9 +25,26 @@ const PROVIDER_ROWS: Record<string, COMPOSED_PROVIDER_TYPE> = {
   "gpt-4o-mini": "openai",
 };
 
-const providerResolver = (
-  model?: PROVIDER_MODEL_TYPE | "",
-): COMPOSED_PROVIDER_TYPE | "" => (model && PROVIDER_ROWS[model]) || "";
+const REGISTRY: LlmModelsByProvider = {
+  openai: [
+    {
+      id: "gpt-4o-mini",
+      label: "GPT-4o mini",
+      structuredOutput: true,
+      reasoning: false,
+    },
+  ],
+};
+
+const PROVIDER_KEY_MODELS = mapValues(
+  groupBy(
+    Object.keys(PROVIDER_ROWS).filter(
+      (model) => PROVIDER_ROWS[model] !== "openai",
+    ),
+    (model) => PROVIDER_ROWS[model],
+  ),
+  (models) => models.map((value) => ({ value, label: value })),
+);
 
 let prompt: PlaygroundPromptType;
 const updatePrompt = vi.fn();
@@ -37,6 +58,19 @@ vi.mock("@/store/PlaygroundStore", () => ({
   useUpdatePrompt: () => updatePrompt,
   useDeletePrompt: () => vi.fn(),
   useUpdateOutput: () => vi.fn(),
+}));
+
+vi.mock("@/api/llm/useLlmModels", () => ({
+  default: () => ({
+    data: REGISTRY,
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
+}));
+
+vi.mock("@/hooks/useOpenAICompatibleModels", () => ({
+  default: () => PROVIDER_KEY_MODELS,
 }));
 
 vi.mock("@tanstack/react-query", () => ({
@@ -143,7 +177,10 @@ const renderPrompt = (model: string) => {
       providerKeys={Object.values(PROVIDER_ROWS)}
       hasLoadedProviderKeys={false}
       hasRegistryModels={false}
-      providerResolver={providerResolver}
+      providerResolver={
+        renderHook(() => useLLMProviderModelsData()).result.current
+          .calculateModelProvider
+      }
       modelResolver={vi.fn()}
     />,
   );
