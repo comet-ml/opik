@@ -29,7 +29,7 @@ public interface ClickHousePartitionMetricsDAO {
 
     @Builder(toBuilder = true)
     record PartitionStat(String table, String partition, long parts, long rows, long bytes,
-            long maxPartBytes, long lastActivityEpochSeconds) {
+            long maxPartBytes, long lastActivityEpochSeconds, long coldBytes, long ttlMoveDueParts) {
     }
 
     @Builder(toBuilder = true)
@@ -52,8 +52,13 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
      * r2dbc driver maps them to {@code Long} (raw {@code sum}/{@code count} yield UInt64). The
      * partition key uses {@code partition_id} so it aligns with the {@code _partition_id} virtual
      * column used by the LWD query.
+     *
+     * <p>{@code ttl_move_due_parts} counts only past {@code YYYYMMDD}/{@code YYYYMM} partitions:
+     * {@code system.parts} shows TTL times as 32-bit {@code DateTime}, so an {@code id_at} past 2106
+     * looks expired there while ClickHouse never moves it.
      */
     private static final String PARTITION_STATS_SQL = """
+            WITH (SELECT groupArray(name) FROM system.disks WHERE type = 'ObjectStorage') AS object_storage_disks
             SELECT
                 table AS table_name,
                 partition_id AS partition_id,
@@ -61,7 +66,13 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
                 toInt64(sum(rows)) AS rows,
                 toInt64(sum(bytes_on_disk)) AS bytes,
                 toInt64(max(bytes_on_disk)) AS max_part_bytes,
-                toInt64(toUnixTimestamp(max(modification_time))) AS last_activity
+                toInt64(toUnixTimestamp(max(modification_time))) AS last_activity,
+                toInt64(sumIf(bytes_on_disk, has(object_storage_disks, disk_name))) AS cold_bytes,
+                toInt64(countIf(NOT has(object_storage_disks, disk_name)
+                    AND notEmpty(move_ttl_info.max) AND now() >= arrayMax(move_ttl_info.max)
+                    AND match(partition_id, '^[0-9]{6}([0-9]{2})?$')
+                    AND substring(formatDateTime(now(), '%Y%m%d'), 1, length(partition_id)) >= partition_id
+                )) AS ttl_move_due_parts
             FROM system.parts
             WHERE database = :database_name AND active
             GROUP BY table, partition_id
@@ -123,6 +134,8 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
                         .bytes(row.get("bytes", Long.class))
                         .maxPartBytes(row.get("max_part_bytes", Long.class))
                         .lastActivityEpochSeconds(row.get("last_activity", Long.class))
+                        .coldBytes(row.get("cold_bytes", Long.class))
+                        .ttlMoveDueParts(row.get("ttl_move_due_parts", Long.class))
                         .build()))
                 .collectList();
     }
