@@ -53,6 +53,16 @@ export const REGISTRY_MODEL = {
   openAiReasoning: 'GPT 5 Mini',
   /** OpenAI non-reasoning: the control that proves the strip is conditional. */
   openAiStandard: 'GPT 4o Mini',
+  /**
+   * An OpenAI model the bundled pricing artifact carries NO `max_output_tokens`
+   * for (`gpt-live-1`), so its Max output tokens cap can only come from
+   * `MAX_COMPLETION_TOKENS_FALLBACK` — the one model that takes that branch
+   * (opik#8847).
+   *
+   * Cheap by the same rule as the rest of this list, and never reached: the
+   * specs using it short-circuit the completion in the browser.
+   */
+  openAiWithoutPricingCap: 'GPT Live 1',
   /** Gemini 3 generation: drops temperature and top_p. Offered by Gemini AND Vertex AI. */
   gemini3: 'Gemini 3 Flash Preview',
   /** Gemini 2.x control: keeps both. Offered by Gemini AND Vertex AI. */

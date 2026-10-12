@@ -1459,6 +1459,79 @@ export class PlaygroundPage {
     return this.page.getByTestId(`${controlId}-input`);
   }
 
+  /**
+   * The THUMB of a named slider control, which carries the control's live range.
+   *
+   * `SliderInputControl` puts the control id on the Slider root (`<id>-slider`)
+   * and Radix renders the thumb inside it with `role="slider"`, so the root is
+   * the only handle that scopes a range read to one control. Neither carries a
+   * testid; one added now would be missing from the deployed versions this
+   * suite also runs against — the same trade-off `modelParametersTrigger`
+   * carries.
+   */
+  sliderThumb(controlId: string): Locator {
+    return this.modelParametersPanel().locator(`#${controlId}-slider`).getByRole('slider');
+  }
+
+  /**
+   * The minimum and maximum a named slider control currently offers.
+   *
+   * Read off the thumb's `aria-value*` attributes: that is what Radix derives
+   * from the control's own `min`/`max` props and what assistive technology is
+   * told, so a panel rendering a stale range fails here. Asserted unique
+   * first — a control mounted twice would otherwise have its range read from
+   * whichever the DOM ordered first.
+   *
+   * Both attributes are asserted present before being converted, rather than
+   * defaulted: `Number(null)` is 0, which is a plausible-looking floor and
+   * would make a missing attribute read as a real measurement.
+   */
+  async readSliderRange(controlId: string): Promise<{ min: number; max: number }> {
+    return test.step(`read the ${controlId} range`, async () => {
+      const thumb = this.sliderThumb(controlId);
+      await expect(thumb, `exactly one "${controlId}" slider is mounted`).toHaveCount(1);
+      const [min, max] = await Promise.all([
+        thumb.getAttribute('aria-valuemin'),
+        thumb.getAttribute('aria-valuemax'),
+      ]);
+      expect(min, `the ${controlId} slider reports a minimum`).not.toBeNull();
+      expect(max, `the ${controlId} slider reports a maximum`).not.toBeNull();
+      return { min: Number(min), max: Number(max) };
+    });
+  }
+
+  /**
+   * Type a value into a named slider control's number input and commit it.
+   *
+   * The click is load-bearing and not redundant with `fill()`: it moves the
+   * pointer off the gear trigger, whose hover tooltip would otherwise sit above
+   * the menu and swallow the Escape that `closeModelParameters` sends.
+   * `SliderInputControl` writes through to the config on blur, so the blur is
+   * what commits — a value left focused is still only local state.
+   */
+  async setSliderValue(controlId: string, value: string): Promise<void> {
+    return test.step(`set ${controlId} to ${value}`, async () => {
+      const input = this.sliderInput(controlId);
+      await input.click();
+      await input.fill(value);
+      await input.blur();
+    });
+  }
+
+  /**
+   * The hint line a named slider control renders beneath itself — for Max
+   * output tokens, the "No limit" note `getNoOutputLimitHint` returns at 0.
+   *
+   * `SliderInputControl` renders it as a `<p>` immediately after the Slider
+   * root and only when a hint is passed, so its ABSENCE is as much the
+   * assertion as its text; hence a locator rather than a text read. Addressed
+   * through the slider's id because the hint has no handle of its own, and a
+   * panel-wide text lookup would match whichever control happened to show one.
+   */
+  sliderHint(controlId: string): Locator {
+    return this.modelParametersPanel().locator(`#${controlId}-slider ~ p`);
+  }
+
   /** The Thinking effort dropdown. Its text is the effort the panel claims. */
   thinkingEffortSelect(): Locator {
     return this.modelParametersPanel().getByLabel('Thinking effort');

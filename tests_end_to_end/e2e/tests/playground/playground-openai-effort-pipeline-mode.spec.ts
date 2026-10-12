@@ -1,7 +1,10 @@
 import { test, expect, REGISTRY_MODEL } from '@e2e/fixtures';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
 import { captureCompletionBody } from '@e2e/core/playground-completions';
-import type { Page } from '@playwright/test';
+import {
+  expectPinApplied,
+  pinOpenAiPipelineMode,
+} from '@e2e/core/openai-pipeline-mode';
 
 /**
  * The reasoning effort `max`, offered only on an OpenAI key set to the
@@ -30,18 +33,9 @@ import type { Page } from '@playwright/test';
  *
  * ## How the pipeline mode is set, and why not on the real key
  *
- * The workspace's OpenAI key is shared and pre-existing. Flipping its stored
- * `openai_pipeline_mode` would change behaviour for every other spec and every
- * human on this deployment, and there is no second key to use instead — a
- * built-in provider is one row per workspace. So the real response is fetched
- * and ONE field rewritten on its way to the browser: every other provider, the
- * key's id, its status and the response's shape are the deployment's own.
- *
- * That is deliberately not the browser-side STUB the `modelRegistryProviders`
- * fixture warns against. That warning is about answering the query with a
- * fabricated body, which leaves `useModelSelection` on an empty provider config
- * in about a third of parallel runs; here the body is the real one and the
- * provider list it carries is untouched.
+ * `pinOpenAiPipelineMode` rewrites the one field on the real provider-keys
+ * response on its way to the browser; see `core/openai-pipeline-mode.ts` for
+ * why that rather than the stored key or a fabricated body.
  *
  * ## RECORDED GAP, not a claim
  *
@@ -59,80 +53,11 @@ import type { Page } from '@playwright/test';
  * browser, and the models are registered unbilled by `modelRegistryProviders`.
  */
 
-type OpenAiPipelineMode = 'chat_completions_api' | 'responses_api';
-
 /** The five efforts gpt-5.5 and gpt-5.6-sol both take on Chat Completions. */
 const CHAT_COMPLETIONS_EFFORTS = ['None', 'Low', 'Medium', 'High', 'xHigh'] as const;
 
 /** The one the Responses API adds, for a model that declares it. */
 const RESPONSES_ONLY_EFFORT = 'Max';
-
-/** `useProviderKeys`' read — `PROVIDER_KEYS_REST_ENDPOINT`, trailing slash and all. */
-function isProviderKeysRead(url: string): boolean {
-  return /\/v1\/private\/llm-provider-key\/?$/.test(new URL(url).pathname);
-}
-
-interface PipelineModePin {
-  /** Change the mode the next provider-keys read will report. */
-  set(mode: OpenAiPipelineMode): void;
-  /** How many OpenAI key rows have been rewritten so far. */
-  rewrites(): number;
-}
-
-/**
- * Make the browser see the workspace's OpenAI key on a chosen pipeline mode.
- *
- * One route for the whole test, with the mode behind a mutable cell, so a test
- * that flips the mode and reloads does not depend on Playwright's
- * last-handler-wins ordering to undo an earlier pin.
- */
-async function pinOpenAiPipelineMode(
-  page: Page,
-  initial: OpenAiPipelineMode,
-): Promise<PipelineModePin> {
-  let mode = initial;
-  let rewrites = 0;
-
-  await page.route(
-    (url) => isProviderKeysRead(url.toString()),
-    async (route) => {
-      const response = await route.fetch();
-      const body = (await response.json()) as {
-        content?: Array<Record<string, unknown>>;
-      };
-      body.content = (body.content ?? []).map((key) => {
-        if (key.provider !== 'openai') return key;
-        rewrites += 1;
-        return {
-          ...key,
-          configuration: {
-            ...((key.configuration as Record<string, unknown>) ?? {}),
-            openai_pipeline_mode: mode,
-          },
-        };
-      });
-      await route.fulfill({ response, json: body });
-    },
-  );
-
-  return { set: (next) => { mode = next; }, rewrites: () => rewrites };
-}
-
-/**
- * Assert the pin actually had something to rewrite.
- *
- * Without this the whole spec is vacuous on a workspace with no OpenAI key: the
- * map would be a no-op, the panel would fall back to the Chat Completions
- * default, and "Max is not offered" would pass for a reason that has nothing to
- * do with the gate.
- */
-function expectPinApplied(pin: PipelineModePin): void {
-  expect(
-    pin.rewrites(),
-    'the workspace must have an OpenAI key for the pipeline mode to be pinned on — ' +
-      'with none, every assertion here passes by default',
-  ).toBeGreaterThan(0);
-}
 
 test.describe(
   'Playground — OpenAI reasoning effort and the key’s pipeline mode',
