@@ -29,6 +29,7 @@ import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import {
   describeRunFailure,
+  dropEmptySystemMessages,
   RunFailedError,
   RunFailure,
 } from "@/lib/playground";
@@ -233,7 +234,8 @@ const usePromptDatasetItemCombination = ({
           usage: undefined,
         });
 
-        const providerMessages = prompt.messages.map((m) =>
+        const messagesToSend = dropEmptySystemMessages(prompt.messages);
+        const providerMessages = messagesToSend.map((m) =>
           transformMessageIntoProviderMessage(m, datasetItemData),
         );
 
@@ -290,7 +292,7 @@ const usePromptDatasetItemCombination = ({
           // Only role and content describe the template; id, promptId,
           // promptVersionId and autoImprove are Playground editor state and
           // have no place in the stored experiment config.
-          templateMessages: prompt.messages.map(({ role, content }) => ({
+          templateMessages: messagesToSend.map(({ role, content }) => ({
             role,
             content,
           })),

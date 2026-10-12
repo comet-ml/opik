@@ -1,4 +1,5 @@
 import {
+  ANTHROPIC_THINKING_EFFORT_VALUES,
   AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
@@ -474,6 +475,13 @@ export const supportsAnthropicThinkingEffort = (
   !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
     ?.thinkingEffortOptions;
 
+// A Claude model with no row is one this build does not know yet. The backend checks its effort only
+// against the known level names and lets Anthropic judge the rest, so a stored level must pass through
+// rather than be dropped as unsupported. A row without thinkingEffortOptions means the model takes none.
+export const knowsAnthropicEffortLevels = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean => !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE];
+
 export const getDefaultThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): AnthropicThinkingEffort =>
@@ -492,9 +500,7 @@ export const getNestedThinkingEffort = (
   customParameters: unknown,
 ): AnthropicThinkingEffort | undefined => {
   const effort = asRecord(asRecord(customParameters).output_config).effort;
-  return typeof effort === "string"
-    ? (effort as AnthropicThinkingEffort)
-    : undefined;
+  return ANTHROPIC_THINKING_EFFORT_VALUES.find((level) => level === effort);
 };
 
 // Keeps every other key, inside output_config too, so fields no form control shows survive a save.
@@ -687,6 +693,27 @@ export type SamplingParams = { temperature?: number; topP?: number };
 export const isClaudeModel = (model: PROVIDER_MODEL_TYPE | ""): boolean =>
   /claude/i.test((model.split("/").pop() ?? "").trim());
 
+// OpenRouter names OpenAI's and Google's models `<vendor>/<native id>`, with routing variants after a
+// colon (`:free`, `:batch`). The native id is used only when that provider's list has it: ids only
+// OpenRouter uses (o3-mini-high, gpt-5-chat) have no row to read, and guessing would hide working sliders.
+const OPEN_ROUTER_NATIVE_ID_PATTERN = /^(openai|google)\/([^:]+)/;
+
+const getNativeModelBehindOpenRouter = (
+  model: PROVIDER_MODEL_TYPE,
+): PROVIDER_MODEL_TYPE | undefined => {
+  const match = OPEN_ROUTER_NATIVE_ID_PATTERN.exec(model);
+  if (!match) {
+    return undefined;
+  }
+  const [, vendor, id] = match;
+  const nativeProvider =
+    vendor === "openai" ? PROVIDER_TYPE.OPEN_AI : PROVIDER_TYPE.GEMINI;
+  const listed = (getLatestProviderModelsSnapshot()[nativeProvider] ?? []).some(
+    (option) => option.value === id,
+  );
+  return listed ? (id as PROVIDER_MODEL_TYPE) : undefined;
+};
+
 /**
  * The single interpreter of temperature/topP for a model: capability gating plus Anthropic's
  * temperature-XOR-topP rule.
@@ -719,6 +746,13 @@ export const resolveSamplingParams = (
   }
 
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
+
+  if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+    const native = getNativeModelBehindOpenRouter(model);
+    if (native) {
+      return resolveSamplingParams(native, configs);
+    }
+  }
 
   if (provider === PROVIDER_TYPE.ANTHROPIC) {
     // Anthropic takes one of the pair, never both: temperature wins a config carrying both, and
@@ -768,12 +802,25 @@ const isSentThroughOpenAiResponsesApi = (
 export const supportsPenaltyParams = (
   model?: PROVIDER_MODEL_TYPE | "",
   openAiPipelineMode?: OpenAiPipelineMode,
-): boolean =>
-  !model ||
-  getProviderFromModel(model as PROVIDER_MODEL_TYPE) !==
-    PROVIDER_TYPE.OPEN_AI ||
-  (!isReasoningModel(model) &&
-    !isSentThroughOpenAiResponsesApi(model, openAiPipelineMode));
+): boolean => {
+  if (!model) {
+    return true;
+  }
+
+  const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
+
+  if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+    const native = getNativeModelBehindOpenRouter(model);
+    // No pipeline mode: that belongs to the OpenAI key, which never carries an OpenRouter request.
+    return !native || supportsPenaltyParams(native);
+  }
+
+  return (
+    provider !== PROVIDER_TYPE.OPEN_AI ||
+    (!isReasoningModel(model) &&
+      !isSentThroughOpenAiResponsesApi(model, openAiPipelineMode))
+  );
+};
 
 export type EffortParams = {
   reasoningEffort?: OpenAIReasoningEffort;
@@ -928,7 +975,9 @@ export const sanitizeConfigForRequest = (
     if (provider === PROVIDER_TYPE.ANTHROPIC) {
       const customParameters = withThinkingEffort(
         sanitized.custom_parameters,
-        effort.thinkingEffort,
+        knowsAnthropicEffortLevels(model)
+          ? effort.thinkingEffort
+          : getNestedThinkingEffort(sanitized.custom_parameters),
       );
       if (customParameters) {
         sanitized.custom_parameters = customParameters;
