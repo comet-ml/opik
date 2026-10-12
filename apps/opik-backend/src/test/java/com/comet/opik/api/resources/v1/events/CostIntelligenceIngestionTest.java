@@ -498,7 +498,7 @@ class CostIntelligenceIngestionTest {
 
             await().atMost(30, SECONDS).untilAsserted(() -> {
                 var rows = getCipxBlocks(span.id(), ws.workspaceId());
-                assertThat(rows).hasSize(4);
+                assertThat(rows).hasSize(5);
 
                 assertThat(rows).allSatisfy(row -> {
                     assertThat(row.lane()).isEqualTo("mcp_servers");
@@ -511,7 +511,8 @@ class CostIntelligenceIngestionTest {
                                 tuple("mcp_tools_active", "mcp_servers", "GitHub"),
                                 tuple("mcp_server_instructions", "mcp_servers", "GitHub"),
                                 tuple("mcp_tools_deferred", "mcp_servers", "claude.ai Notion"),
-                                tuple("mcp_server_instructions", "", ""));
+                                tuple("mcp_server_instructions", "", ""),
+                                tuple("mcp_tools_deferred", "", ""));
 
                 // The ticket's claim: the per-server rows sum to the lane, short only of what
                 // names no server.
@@ -1455,7 +1456,8 @@ class CostIntelligenceIngestionTest {
                               {"category":"mcp_tools_active","side":"input","cache_status":"read","chars":200,"tool_name":"create_branch","tool_server":"GitHub","tool_use_id":"","resource":"","kind":"tool_schema"},
                               {"category":"mcp_server_instructions","side":"input","cache_status":"read","parent_category":"mcp_server_instructions","chars":100,"tool_name":"","tool_server":"GitHub","tool_use_id":"","resource":"","kind":"system_text"},
                               {"category":"mcp_tools_deferred","side":"input","cache_status":"read","parent_category":"mcp_tools_deferred","chars":60,"tool_name":"","tool_server":"claude.ai Notion","tool_use_id":"","resource":"","kind":"system_text"},
-                              {"category":"mcp_server_instructions","side":"input","cache_status":"read","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"system_text"}
+                              {"category":"mcp_server_instructions","side":"input","cache_status":"read","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"system_text"},
+                              {"category":"mcp_tools_deferred","side":"input","cache_status":"read","chars":30,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
                             ]
                           }
                         }

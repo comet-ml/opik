@@ -325,8 +325,9 @@ public class CipxSpendBlockDAO {
          */
         private static String bdLane(String category, String toolServer) {
             // MCP instructions and deferred listings join a server's row only when the engine named the
-            // server (OPIK-8721). Older engines and harnesses whose wire names none stay in the lane
-            // total alone, which the breakdown reports as not attributable to a server.
+            // server (OPIK-8721). Blocks from older engines, and from harnesses whose wire format names no
+            // server, stay in the lane total alone, which the breakdown reports as not attributable to a
+            // server.
             if (toolServer.isEmpty()
                     && (category.equals("mcp_tools_deferred") || category.equals("mcp_server_instructions"))) {
                 return "";
