@@ -131,6 +131,15 @@ export const useIntervalBounds = (
 
   const reanchorToNow = useCallback(() => {
     if (!current.live) return false;
+    // Held like the tick, so an export in flight resolves with its own rows; the caller refetches this window instead.
+    if (
+      isFetchingWindow(
+        queryClient,
+        scopeToWindow(windowId, current.selectionKey),
+      )
+    ) {
+      return false;
+    }
     if (hasEnded(current)) {
       setAnchored(closeAtEndOfDay(current));
       return true;
@@ -141,7 +150,7 @@ export const useIntervalBounds = (
 
     setAnchored({ ...current, bounds: next });
     return true;
-  }, [current]);
+  }, [current, queryClient, windowId]);
 
   return {
     intervalStart: current.bounds.intervalStart,

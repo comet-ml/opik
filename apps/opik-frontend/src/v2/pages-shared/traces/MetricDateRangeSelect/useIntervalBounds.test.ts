@@ -96,6 +96,42 @@ const renderWindowQuery = (
     { wrapper: createWrapper() },
   );
 
+const renderWindowExport = () => {
+  let resolveExport: (rows: string[]) => void = () => {};
+  const fetchExport = (toTime: string | undefined) =>
+    new Promise<string[]>(
+      (resolve) =>
+        (resolveExport = (rows) =>
+          resolve(rows.map((row) => `${row}@${toTime}`))),
+    );
+  const { result } = renderHook(
+    () => {
+      const intervalWindow = useIntervalBounds(liveCustomRange);
+      const { refetch: refetchExport } = useQuery({
+        queryKey: [
+          "window-export",
+          { toTime: intervalWindow.intervalEnd },
+        ] as const,
+        queryFn: ({ queryKey: [, { toTime }] }) => fetchExport(toTime),
+        enabled: false,
+        meta: windowQueryMeta(intervalWindow.selectionKey),
+      });
+      return { intervalWindow, refetchExport };
+    },
+    { wrapper: createWrapper() },
+  );
+  let exported: string[] | undefined;
+  act(() => {
+    result.current.refetchExport().then(({ data }) => (exported = data));
+  });
+
+  return {
+    result,
+    resolveExport: (rows: string[]) => act(async () => resolveExport(rows)),
+    exported: () => exported,
+  };
+};
+
 const tick = (ms = REANCHOR_INTERVAL) =>
   act(() => {
     vi.advanceTimersByTime(ms);
@@ -668,35 +704,7 @@ describe("useIntervalBounds", () => {
     });
 
     it("should not move the window while an export of its rows is in flight, so the export resolves with them", async () => {
-      let resolveExport: (rows: string[]) => void = () => {};
-      const fetchExport = vi.fn(
-        (toTime: string | undefined) =>
-          new Promise<string[]>(
-            (resolve) =>
-              (resolveExport = (rows) =>
-                resolve(rows.map((row) => `${row}@${toTime}`))),
-          ),
-      );
-      const { result } = renderHook(
-        () => {
-          const intervalWindow = useIntervalBounds(liveCustomRange);
-          const { refetch: refetchExport } = useQuery({
-            queryKey: [
-              "window-export",
-              { toTime: intervalWindow.intervalEnd },
-            ] as const,
-            queryFn: ({ queryKey: [, { toTime }] }) => fetchExport(toTime),
-            enabled: false,
-            meta: windowQueryMeta(intervalWindow.selectionKey),
-          });
-          return { intervalWindow, refetchExport };
-        },
-        { wrapper: createWrapper() },
-      );
-      let exported: string[] | undefined;
-      act(() => {
-        result.current.refetchExport().then(({ data }) => (exported = data));
-      });
+      const { result, resolveExport, exported } = renderWindowExport();
 
       tick();
       tick();
@@ -704,8 +712,8 @@ describe("useIntervalBounds", () => {
         now.utc().format(),
       );
 
-      await act(async () => resolveExport(["row"]));
-      expect(exported).toEqual([`row@${now.utc().format()}`]);
+      await resolveExport(["row"]);
+      expect(exported()).toEqual([`row@${now.utc().format()}`]);
 
       tick();
       expect(result.current.intervalWindow.intervalEnd).toBe(
@@ -713,6 +721,31 @@ describe("useIntervalBounds", () => {
           .add(3 * REANCHOR_INTERVAL, "ms")
           .utc()
           .format(),
+      );
+    });
+
+    it("should not move the window on Refresh while an export of its rows is in flight, so the export resolves with them", async () => {
+      const { result, resolveExport, exported } = renderWindowExport();
+      vi.setSystemTime(later.toDate());
+
+      let moved = true;
+      act(() => {
+        moved = result.current.intervalWindow.reanchorToNow();
+      });
+      expect(moved).toBe(false);
+      expect(result.current.intervalWindow.intervalEnd).toBe(
+        now.utc().format(),
+      );
+
+      await resolveExport(["row"]);
+      expect(exported()).toEqual([`row@${now.utc().format()}`]);
+
+      act(() => {
+        moved = result.current.intervalWindow.reanchorToNow();
+      });
+      expect(moved).toBe(true);
+      expect(result.current.intervalWindow.intervalEnd).toBe(
+        later.utc().format(),
       );
     });
 
