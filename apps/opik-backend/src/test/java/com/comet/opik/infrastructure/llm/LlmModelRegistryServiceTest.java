@@ -163,6 +163,31 @@ class LlmModelRegistryServiceTest {
         assertThat(result.get().model().reasoning()).isEqualTo(reasoning);
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            "claude-mythos-preview, ANTHROPIC",
+            "claude-3-7-sonnet-20250219, ANTHROPIC",
+            "claude-opus-4-20250514, ANTHROPIC",
+            "claude-opus-4-1-20250805, ANTHROPIC",
+            "claude-sonnet-4-20250514, ANTHROPIC",
+            "gemini-flash-latest-high-res-exp, GEMINI",
+            "gemini-3-pro-preview, GEMINI",
+            "vertex_ai/gemini-robotics-er-2, VERTEX_AI",
+            "vertex_ai/gemini-2.0-flash-001, VERTEX_AI",
+            "vertex_ai/gemini-2.0-flash-lite-001, VERTEX_AI",
+            "vertex_ai/gemini-3-pro-preview, VERTEX_AI",
+            "vertex_ai/gemini-3.1-flash-lite-preview, VERTEX_AI"
+    })
+    void defaultResourceHidesModelsThatCannotRunButStillResolvesThem(String model, LlmProvider provider) {
+        var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
+
+        var result = service.findModel(model);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().provider()).isEqualTo(provider);
+        assertThat(result.get().model().label()).isNull();
+    }
+
     @Test
     void missingClasspathResourceThrows() {
         var config = new LlmModelRegistryConfig();
