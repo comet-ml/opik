@@ -29,7 +29,6 @@ import OpenRouterModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/pr
 import GeminiModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiModelConfigs";
 import VertexAIModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
 import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
-import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import {
   isOpenAICompatibleProvider,
@@ -177,13 +176,16 @@ const PromptModelConfigs = ({
         align="end"
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        <div className="mb-5 flex w-72 items-center gap-1">
+        <div className="mb-5 w-72">
           <h5 className="comet-body-s-accented text-foreground">
             Model parameters
           </h5>
-          <ExplainerIcon
-            {...EXPLAINERS_MAP[EXPLAINER_ID.whats_these_configuration_things]}
-          />
+          <p className="comet-body-xs mt-1 text-light-slate">
+            {
+              EXPLAINERS_MAP[EXPLAINER_ID.whats_these_configuration_things]
+                .description
+            }
+          </p>
         </div>
         {providerForm}
       </DropdownMenuContent>
