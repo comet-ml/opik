@@ -1598,7 +1598,7 @@ def test_track__span_and_trace_input_output_updated_via_opik_context(fake_backen
         id=ANY_BUT_NONE,
         name="f",
         input={"x": "f-input", "trace-input-key": "trace-input-value"},
-        output={"output": "f-output", "trace-output-key": "trace-output-value"},
+        output={"trace-output-key": "trace-output-value"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
@@ -1607,7 +1607,7 @@ def test_track__span_and_trace_input_output_updated_via_opik_context(fake_backen
                 id=ANY_BUT_NONE,
                 name="f",
                 input={"x": "f-input", "span-input-key": "span-input-value"},
-                output={"output": "f-output", "span-output-key": "span-output-value"},
+                output={"span-output-key": "span-output-value"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
@@ -1720,7 +1720,7 @@ def test_track__span_output_key_set_via_opik_context_collides_with_return_value_
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_track__dict_returned_with_key_set_via_opik_context__explicit_value_kept_other_keys_merged(
+def test_track__dict_returned_with_key_set_via_opik_context__only_explicit_output_logged(
     fake_backend,
 ):
     @tracker.track
@@ -1744,7 +1744,7 @@ def test_track__dict_returned_with_key_set_via_opik_context__explicit_value_kept
                 id=ANY_BUT_NONE,
                 name="f",
                 input={"x": "f-input"},
-                output={"answer": "explicit-answer", "sources": ["doc-1"]},
+                output={"answer": "explicit-answer"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
@@ -1759,57 +1759,7 @@ def test_track__dict_returned_with_key_set_via_opik_context__explicit_value_kept
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_track__nested_dict_returned_with_nested_key_set_via_opik_context__explicit_value_kept_returned_nested_keys_merged(
-    fake_backend,
-):
-    @tracker.track
-    def f(x):
-        opik_context.update_current_span(
-            output={"details": {"source": "explicit-source"}}
-        )
-        return {
-            "details": {"source": "returned-source", "score": 0.9},
-            "answer": "returned-answer",
-        }
-
-    f("f-input")
-    tracker.flush_tracker()
-
-    EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_BUT_NONE,
-        name="f",
-        input={"x": "f-input"},
-        output={
-            "details": {"source": "returned-source", "score": 0.9},
-            "answer": "returned-answer",
-        },
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        last_updated_at=ANY_BUT_NONE,
-        spans=[
-            SpanModel(
-                id=ANY_BUT_NONE,
-                name="f",
-                input={"x": "f-input"},
-                output={
-                    "details": {"source": "explicit-source", "score": 0.9},
-                    "answer": "returned-answer",
-                },
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                spans=[],
-                source="sdk",
-            )
-        ],
-        source="sdk",
-    )
-
-    assert len(fake_backend.trace_trees) == 1
-
-    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
-
-
-def test_track__guardrail_returns_pydantic_model_with_key_set_via_opik_context__explicit_value_kept_model_fields_merged(
+def test_track__guardrail_returns_pydantic_model_with_key_set_via_opik_context__only_explicit_output_logged(
     fake_backend,
 ):
     class CheckResult(pydantic.BaseModel):
@@ -1838,7 +1788,7 @@ def test_track__guardrail_returns_pydantic_model_with_key_set_via_opik_context__
                 name="Guardrail",
                 type="guardrail",
                 input={"generation": "some text"},
-                output={"validation_passed": True, "reason": "explicit-reason"},
+                output={"reason": "explicit-reason"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
