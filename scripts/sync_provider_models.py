@@ -146,6 +146,7 @@ class OpenRouterCapabilities(NamedTuple):
     # None when OpenRouter lists no parameters at all (its router models), which says nothing about what they accept.
     supported_parameters: list[str] | None
     reasoning_efforts: list[str]
+    output_modalities: list[str]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -199,6 +200,12 @@ VERTEXAI_DROPDOWN_EXCLUDE = [
 
 OPENROUTER_DROPDOWN_EXCLUDE = [
     r":batch$",                  # batch API only, 404 "cannot be used with the chat/completions endpoint"
+    r"^openai/gpt-3\.5-turbo-instruct",    # completions API only
+    r"^openai/gpt-5-image",                # 400 on the temperature the playground always sends
+    r"^relace/relace-apply",               # code-merge model, 400 on a chat request
+    r"^thinkingmachines/inkling.*:free$",  # 403 "only available on agentic harnesses"
+    r"^openai/gpt-5\.2-chat$",             # its only endpoint is Azure and BYOK only: 404 "No endpoints found"
+    r"^minimax/minimax-m1$",               # answers only in its reasoning; the content stays empty
 ]
 
 
@@ -454,8 +461,15 @@ def fetch_openrouter_models() -> dict[str, OpenRouterCapabilities]:
             chat_models[m["id"]] = OpenRouterCapabilities(
                 supported_parameters=sorted(set(supported) & OPENROUTER_PANEL_PARAMETERS) if supported else None,
                 reasoning_efforts=_string_list((m.get("reasoning") or {}).get("supported_efforts")),
+                output_modalities=_string_list((m.get("architecture") or {}).get("output_modalities")),
             )
     return dict(sorted(chat_models.items()))
+
+
+# OpenRouter answers 404 for an id it no longer lists, so the picker shows only the ids it serves today.
+# Audio output (music, voice) fails on a text-only request, and the playground can't play it back.
+def _openrouter_picker_ids(capabilities: dict[str, OpenRouterCapabilities]) -> set[str]:
+    return {model_id for model_id, model in capabilities.items() if "audio" not in model.output_modalities}
 
 
 def fetch_openai_models(api_key: str) -> list[str]:
@@ -1456,11 +1470,10 @@ def main():
     new_providers_ts = regenerate_providers_ts(providers_ts, models_by_provider)
 
     # Dropdown (src/constants/providerModels.ts) gets curated subset — filtered and sorted
-    # OpenRouter answers 404 for an id it no longer lists, so the picker shows only the ids it serves today.
     dropdown_by_provider = {
         provider: filter_for_dropdown(
             entries, provider, deprecated,
-            served=set(openrouter_capabilities) if provider == "openrouter" else None,
+            served=_openrouter_picker_ids(openrouter_capabilities) if provider == "openrouter" else None,
         )
         for provider, entries in models_by_provider.items()
     }
