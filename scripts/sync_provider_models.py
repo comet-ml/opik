@@ -167,7 +167,6 @@ GEMINI_DROPDOWN_EXCLUDE = [
     r"^nano-banana",
     r"-image",
     r"-tts",
-    r"-transcribe",              # speech-to-text, answers a text prompt with empty text
     r"-exp$",                    # experimental, removed without a deprecation date
     r"^gemini-robotics",         # robotics models, 404 on Vertex AI
     # Retired: Gemini answers "no longer available", Vertex AI 404. The deprecated filter misses them: their

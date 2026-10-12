@@ -170,7 +170,6 @@ class LlmModelRegistryServiceTest {
             "claude-opus-4-20250514, ANTHROPIC",
             "claude-opus-4-1-20250805, ANTHROPIC",
             "claude-sonnet-4-20250514, ANTHROPIC",
-            "gemini-3.5-transcribe, GEMINI",
             "gemini-flash-latest-high-res-exp, GEMINI",
             "gemini-3-pro-preview, GEMINI",
             "vertex_ai/gemini-robotics-er-2, VERTEX_AI",

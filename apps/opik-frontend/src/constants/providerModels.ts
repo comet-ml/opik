@@ -3208,6 +3208,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 3.5 Flash Lite",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_5_TRANSCRIBE,
+      label: "Gemini 3.5 Transcribe",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
       label: "Gemini 3.1 Pro Preview",
     },
