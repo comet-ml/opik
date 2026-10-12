@@ -266,8 +266,7 @@ class AnthropicClientGeneratorTest {
                 "claude-fable-5-1           | {}",
                 "claude-sonnet-5            | {\"thinking\": {\"type\": \"adaptive\"}}",
                 "claude-sonnet-4-6          | {\"thinking\": {\"type\": \"adaptive\"}}",
-                "claude-opus-4-8            | {\"thinking\": {\"type\": \"adaptive\"}}",
-                "claude-3-7-sonnet-20250219 | {\"thinking\": {\"type\": \"enabled\", \"budget_tokens\": 1024}}"})
+                "claude-opus-4-8            | {\"thinking\": {\"type\": \"adaptive\"}}"})
         void givesAJudgeThatWillThinkRoomForThinkingAndTheAnswer(String modelName, String customParameters) {
             var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
                     .name(modelName)
@@ -307,17 +306,21 @@ class AnthropicClientGeneratorTest {
             assertThat(parameters.maxOutputTokens()).isEqualTo(expected);
         }
 
-        @Test
-        void maxTokensAddsHeadroomAboveThinkingBudgetWhenOnlyBudgetProvided() {
+        @ParameterizedTest(name = "{0} with budget_tokens {1}")
+        @CsvSource(delimiter = '|', value = {
+                "claude-3-7-sonnet-20250219 | 1024  | 5120",
+                "claude-sonnet-5            | 4096  | 8192",
+                "claude-sonnet-5            | 4999  | 9095",
+                "claude-sonnet-5            | 20000 | 24096"})
+        void givesTheAnswerItsRoomAboveAThinkingBudgetWhenOnlyTheBudgetIsSet(String modelName, int budget,
+                int expected) {
             var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
-                    .name("claude-sonnet-5")
+                    .name(modelName)
                     .customParameters(JsonUtils.getJsonNodeFromString(
-                            "{\"thinking\": {\"type\": \"enabled\", \"budget_tokens\": 20000}}"))
+                            "{\"thinking\": {\"type\": \"enabled\", \"budget_tokens\": %d}}".formatted(budget)))
                     .build());
 
-            assertThat(parameters.maxOutputTokens())
-                    .isEqualTo(20000 + DEFAULT_MAX_TOKENS)
-                    .isGreaterThan(parameters.thinkingBudgetTokens());
+            assertThat(parameters.maxOutputTokens()).isEqualTo(expected);
         }
 
         @Test
@@ -477,6 +480,7 @@ class AnthropicClientGeneratorTest {
                 "claude-opus-4-8 | {\"thinking\": {\"type\": \"adaptive\"}, \"output_config\": {\"effort\": \"high\"}} | 5000",
                 "claude-opus-4-5-20251101 | {\"output_config\": {\"effort\": \"high\"}}                   | 4096",
                 "claude-opus-5   | {\"thinking\": {\"type\": \"disabled\"}, \"output_config\": {\"effort\": \"high\"}} | 4096",
+                "claude-sonnet-5 | {\"thinking\": {\"type\": \"enabled\", \"budget_tokens\": 4096}}            | 8192",
                 "claude-sonnet-5 | {\"max_tokens\": 3000, \"output_config\": {\"effort\": \"max\"}}              | 3000"})
         void sizesMaxTokensForWhetherTheJudgeWillThink(String model, String customParameters, int expectedMaxTokens) {
             var body = bodySentToAnthropic(model, customParameters);

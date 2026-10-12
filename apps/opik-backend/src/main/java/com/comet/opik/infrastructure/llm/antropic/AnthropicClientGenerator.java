@@ -164,16 +164,21 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     /**
      * Resolves the {@code max_tokens} sent to Anthropic, guaranteeing {@code max_tokens > thinking.budget_tokens}
      * (Anthropic rejects otherwise, since max_tokens covers thinking + output). An explicit rule value is honored
-     * when it already clears the budget; otherwise it is raised to leave output headroom above the budget.
+     * when it already clears the budget; otherwise it is raised to leave output headroom above the budget. Without
+     * an explicit value, the answer always gets that headroom on top of the budget, even when the thinking default
+     * alone would clear it: a 5,000 default against a 4,096 budget would leave the answer only 904 tokens.
      */
     private int resolveMaxTokens(Integer maxTokens, Integer thinkingBudgetTokens, boolean willThink) {
-        int resolved = maxTokens != null ? maxTokens : defaultMaxTokens(willThink);
-        if (thinkingBudgetTokens != null && resolved <= thinkingBudgetTokens) {
-            // Widen to long before adding headroom so an extreme budget can't overflow to a negative int.
-            return (int) Math.min(Integer.MAX_VALUE,
-                    (long) thinkingBudgetTokens + LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS);
+        if (thinkingBudgetTokens == null) {
+            return maxTokens != null ? maxTokens : defaultMaxTokens(willThink);
         }
-        return resolved;
+        // Widen to long before adding headroom so an extreme budget can't overflow to a negative int.
+        int budgetWithAnswerRoom = (int) Math.min(Integer.MAX_VALUE,
+                (long) thinkingBudgetTokens + LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS);
+        if (maxTokens == null) {
+            return Math.max(defaultMaxTokens(willThink), budgetWithAnswerRoom);
+        }
+        return maxTokens > thinkingBudgetTokens ? maxTokens : budgetWithAnswerRoom;
     }
 
     private int defaultMaxTokens(boolean willThink) {
