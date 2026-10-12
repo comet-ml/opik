@@ -255,8 +255,14 @@ describe("PromptImprovementDialog — the model and settings a run sends", () =>
   });
 });
 
-describe("PromptImprovementDialog — closing during a run", () => {
-  it("drops the old run's output after the dialog is closed and reopened", async () => {
+type DialogProps = React.ComponentProps<typeof PromptImprovementDialog>;
+
+describe("PromptImprovementDialog — a run still streaming when its session ends", () => {
+  it.each<[string, Partial<DialogProps>[]]>([
+    ["the dialog is closed and reopened", [{ open: false }, { open: true }]],
+    ["the source prompt's text changes", [{ originalPrompt: "a limerick" }]],
+    ["the source prompt becomes another version", [{ id: "version-2" }]],
+  ])("drops the old run's output after %s", async (_, nextProps) => {
     let streamOldChunk: (chunk: string) => void = () => {};
     let finishOldRun: (result: object) => void = () => {};
     let oldSignal: AbortSignal | undefined;
@@ -276,22 +282,22 @@ describe("PromptImprovementDialog — closing during a run", () => {
         });
       },
     );
-    const dialogFor = (open: boolean) => (
+    const dialogWith = (props: Partial<DialogProps>) => (
       <TooltipProvider>
         <PromptImprovementDialog
           {...dialogProps}
-          open={open}
+          open
           model={PROVIDER_MODEL_TYPE.GPT_4O_MINI}
           originalPrompt="write a haiku"
+          {...props}
         />
       </TooltipProvider>
     );
-    const { rerender } = render(dialogFor(true));
+    const { rerender } = render(dialogWith({}));
     fireEvent.click(screen.getByRole("button", { name: /Improve prompt/ }));
     await waitFor(() => expect(improvement.improvePrompt).toHaveBeenCalled());
 
-    rerender(dialogFor(false));
-    rerender(dialogFor(true));
+    nextProps.forEach((props) => rerender(dialogWith(props)));
     await act(async () => {
       streamOldChunk("Old prompt");
       finishOldRun({ result: "Old prompt", finishReason: "length" });
