@@ -18,15 +18,16 @@ import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.collections4.MapUtils;
-import org.apache.commons.lang3.ObjectUtils;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 // langchain4j's Responses models build the request body inside the model and have no slot for extra keys, so the
 // extra body is added where the model hands that request to the openai-java client.
@@ -39,6 +40,9 @@ class OpenAiResponsesExtraBody {
     private static final String RESPONSE_FORMAT = "response_format";
     private static final Set<String> CHAT_COMPLETIONS_KEYS = Set.of(
             MAX_TOKENS, MAX_COMPLETION_TOKENS, REASONING_EFFORT, RESPONSE_FORMAT);
+    // Written from the request itself. Replaced from the extra body, the call would no longer match the request that
+    // was logged and costed, or the reply would not come back in the shape the caller asked for.
+    private static final List<String> KEYS_OPIK_SETS = List.of("model", "input", "stream");
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
@@ -49,17 +53,29 @@ class OpenAiResponsesExtraBody {
     // The Responses API names these settings max_output_tokens, reasoning.effort and text.format, so a config saved
     // for a Chat Completions key would be rejected if they went out as given. As typed fields they are written under
     // the Responses names, and an extra body key that already uses a Responses name is merged later and wins.
-    ChatCompletionRequest moveChatCompletionsKeysToTypedFields(@NonNull ChatCompletionRequest request) {
+    ChatCompletionRequest toResponsesRequest(@NonNull ChatCompletionRequest request) {
         var customParameters = request.customParameters();
-        if (MapUtils.isEmpty(customParameters)
-                || CHAT_COMPLETIONS_KEYS.stream().noneMatch(customParameters::containsKey)) {
+        if (MapUtils.isEmpty(customParameters)) {
+            return request;
+        }
+        KEYS_OPIK_SETS.stream()
+                .filter(customParameters::containsKey)
+                .findFirst()
+                .ifPresent(key -> {
+                    throw new BadRequestException(
+                            "custom_parameters.%s is set by Opik from the request and cannot be replaced"
+                                    .formatted(key));
+                });
+        if (CHAT_COMPLETIONS_KEYS.stream().noneMatch(customParameters::containsKey)) {
             return request;
         }
         var builder = ChatCompletionRequest.builder().from(request);
         if (customParameters.containsKey(MAX_COMPLETION_TOKENS) || customParameters.containsKey(MAX_TOKENS)) {
-            builder.maxCompletionTokens(ObjectUtils.firstNonNull(
-                    valueOf(customParameters, MAX_COMPLETION_TOKENS, Integer.class),
-                    valueOf(customParameters, MAX_TOKENS, Integer.class)))
+            builder.maxCompletionTokens(Stream.of(MAX_COMPLETION_TOKENS, MAX_TOKENS)
+                    .filter(key -> customParameters.get(key) != null)
+                    .findFirst()
+                    .map(key -> valueOf(customParameters, key, Integer.class))
+                    .orElse(null))
                     .maxTokens(null);
         }
         if (customParameters.containsKey(REASONING_EFFORT)) {
@@ -109,12 +125,11 @@ class OpenAiResponsesExtraBody {
     }
 
     private <T> T valueOf(Map<String, Object> customParameters, String key, Class<T> type) {
-        var value = customParameters.get(key);
         try {
-            return JsonUtils.getMapper().convertValue(value, type);
+            return JsonUtils.getMapper().convertValue(customParameters.get(key), type);
         } catch (IllegalArgumentException exception) {
             throw new BadRequestException(
-                    "Invalid custom_parameters.%s for the OpenAI Responses API: '%s'".formatted(key, value));
+                    "Invalid custom_parameters.%s for the OpenAI Responses API".formatted(key), exception);
         }
     }
 

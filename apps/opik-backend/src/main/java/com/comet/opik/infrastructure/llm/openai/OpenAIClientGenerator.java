@@ -177,7 +177,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
 
     ChatModel newResponsesApiChatModel(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
-        var judgeRequest = OpenAiResponsesExtraBody.moveChatCompletionsKeysToTypedFields(ChatCompletionRequest.builder()
+        var judgeRequest = OpenAiResponsesExtraBody.toResponsesRequest(ChatCompletionRequest.builder()
                 .customParameters(
                         OpenAiResponsesExtraBody.fromJudgeCustomParameters(modelParameters.customParameters()))
                 .build());

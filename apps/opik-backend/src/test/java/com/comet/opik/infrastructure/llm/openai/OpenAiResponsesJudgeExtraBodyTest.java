@@ -15,6 +15,7 @@ import dev.langchain4j.model.chat.request.ResponseFormat;
 import dev.langchain4j.model.chat.request.ResponseFormatType;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.request.json.JsonSchema;
+import jakarta.ws.rs.BadRequestException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 /**
@@ -55,6 +57,14 @@ class OpenAiResponsesJudgeExtraBodyTest {
                     .build())
             .build();
 
+    private static final ObjectNode JUDGE_BODY = parse("""
+            {"model":"gpt-6-sol",
+             "input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"Score the answer"}]}],
+             "store":false,"temperature":0.2,
+             "text":{"format":{"type":"json_schema","name":"scoring_schema","strict":false,
+                               "schema":{"type":"object","properties":{"reason":{"type":"string"}},"required":[]}}}}
+            """);
+
     private WireMockServer openAi;
     private OpenAIClientGenerator generator;
 
@@ -76,14 +86,12 @@ class OpenAiResponsesJudgeExtraBodyTest {
 
     @Test
     void judgeSendsItsCustomParametersWithTheChatCompletionsKeysUnderTheirResponsesNames() {
-        var withoutCustomParameters = sentBody(null);
-
         var sent = sentBody(JsonUtils.getJsonNodeFromString("""
                 {"max_tokens":300,"reasoning_effort":"low","response_format":{"type":"json_object"},
                  "service_tier":"flex","metadata":{"rule":"r1"}}
                 """));
 
-        var expected = withoutCustomParameters.deepCopy()
+        var expected = JUDGE_BODY.deepCopy()
                 .put("max_output_tokens", 300)
                 .put("service_tier", "flex")
                 .setAll(Map.of(
@@ -95,17 +103,25 @@ class OpenAiResponsesJudgeExtraBodyTest {
     @ParameterizedTest
     @ValueSource(strings = {"{}", "\"fast\"", "[1, 2]", "null"})
     void judgeWithoutAnObjectOfCustomParametersSendsOnlyItsOwnSettings(String customParameters) {
-        assertThat(sentBody(JsonUtils.getJsonNodeFromString(customParameters))).isEqualTo(sentBody(null));
+        assertThat(sentBody(JsonUtils.getJsonNodeFromString(customParameters))).isEqualTo(JUDGE_BODY);
+        assertThat(sentBody(null)).isEqualTo(JUDGE_BODY);
+    }
+
+    @Test
+    void judgeRejectsAnExtraBodyKeyOpikSetsFromTheRequest() {
+        var modelParameters = LlmAsJudgeModelParameters.builder()
+                .name("gpt-6-sol")
+                .customParameters(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-other\"}"))
+                .build();
+
+        assertThatThrownBy(() -> generator.newOpenAiChatLanguageModel(responsesKey(), modelParameters))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("custom_parameters.model is set by Opik from the request and cannot be replaced");
     }
 
     private ObjectNode sentBody(JsonNode customParameters) {
         openAi.resetRequests();
-        var config = LlmProviderClientApiConfig.builder()
-                .apiKey("test-key")
-                .baseUrl(openAi.baseUrl())
-                .configuration(Map.of("openai_pipeline_mode", "responses_api"))
-                .build();
-        var judge = generator.newOpenAiChatLanguageModel(config, LlmAsJudgeModelParameters.builder()
+        var judge = generator.newOpenAiChatLanguageModel(responsesKey(), LlmAsJudgeModelParameters.builder()
                 .name("gpt-6-sol")
                 .temperature(0.2)
                 .customParameters(customParameters)
@@ -115,11 +131,22 @@ class OpenAiResponsesJudgeExtraBodyTest {
 
         var requests = openAi.findAll(postRequestedFor(urlPathEqualTo(RESPONSES_PATH)));
         assertThat(requests).hasSize(1);
+        return parse(requests.getFirst().getBodyAsString());
+    }
+
+    private static ObjectNode parse(String body) {
         try {
-            return STRICT_JSON.readValue(requests.getFirst().getBodyAsString(), ObjectNode.class);
+            return STRICT_JSON.readValue(body, ObjectNode.class);
         } catch (Exception exception) {
-            throw new AssertionError("Sent body is not valid JSON with unique keys: "
-                    + requests.getFirst().getBodyAsString(), exception);
+            throw new AssertionError("Sent body is not valid JSON with unique keys: " + body, exception);
         }
+    }
+
+    private LlmProviderClientApiConfig responsesKey() {
+        return LlmProviderClientApiConfig.builder()
+                .apiKey("test-key")
+                .baseUrl(openAi.baseUrl())
+                .configuration(Map.of("openai_pipeline_mode", "responses_api"))
+                .build();
     }
 }

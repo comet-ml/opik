@@ -40,7 +40,7 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var responsesRequest = OpenAiResponsesExtraBody.moveChatCompletionsKeysToTypedFields(request);
+        var responsesRequest = OpenAiResponsesExtraBody.toResponsesRequest(request);
         var strictJsonSchema = LlmProviderOpenAiResponsesMapper.extractRequestedStrictJsonSchema(responsesRequest);
         var chatModel = clientGenerator.newResponsesApiChatModel(config, strictJsonSchema,
                 responsesRequest.customParameters());
@@ -56,7 +56,7 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        var responsesRequest = OpenAiResponsesExtraBody.moveChatCompletionsKeysToTypedFields(request);
+        var responsesRequest = OpenAiResponsesExtraBody.toResponsesRequest(request);
         var strictJsonSchema = LlmProviderOpenAiResponsesMapper.extractRequestedStrictJsonSchema(responsesRequest);
         var streamingChatModel = clientGenerator.newResponsesApiStreamingChatModel(config, strictJsonSchema,
                 responsesRequest.customParameters());
