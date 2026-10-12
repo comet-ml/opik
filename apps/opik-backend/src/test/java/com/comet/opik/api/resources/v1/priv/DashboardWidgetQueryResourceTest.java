@@ -69,6 +69,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -325,8 +326,10 @@ class DashboardWidgetQueryResourceTest {
                 .header(HttpHeaders.AUTHORIZATION, API_KEY_A).header(WORKSPACE_HEADER, WORKSPACE_NAME_A).get()) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
             var saved = response.readEntity(DashboardSavedQuery.class);
-            assertThat(saved.sql()).isEqualTo(WINDOWED_QUERY);
-            assertThat(saved.projectId()).isEqualTo(projectIdA);
+            assertThat(saved).usingRecursiveComparison().ignoringFields("createdAt")
+                    .isEqualTo(DashboardSavedQuery.builder().id(queryId).projectId(projectIdA).sql(WINDOWED_QUERY)
+                            .createdBy(USER).build());
+            assertThat(saved.createdAt()).isCloseTo(Instant.now(), within(5, ChronoUnit.SECONDS));
         }
     }
 
