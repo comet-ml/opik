@@ -384,7 +384,7 @@ const getRunFailureHint = (
   }
   if (errorStatus !== HTTP_BAD_REQUEST) return undefined;
 
-  // Which role mixes a provider rejects differs by provider and model, and each words its 400
+  // Which role mixes are rejected differs by provider and model, and each provider words its 400
   // differently, so the cause is read from the prompt rather than from the error text.
   if (!sentMessages.some((message) => message.role === LLM_MESSAGE_ROLE.user)) {
     return {
