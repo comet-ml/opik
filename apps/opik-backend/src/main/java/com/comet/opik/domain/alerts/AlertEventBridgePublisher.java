@@ -180,7 +180,7 @@ public class AlertEventBridgePublisher {
 
     private String serializeWithinLimit(AlertEventBridgeDetail detail) {
         String json = JsonUtils.writeValueAsString(detail);
-        int size = json.getBytes(StandardCharsets.UTF_8).length;
+        int size = detailSize(json);
         if (size <= MAX_DETAIL_BYTES) {
             return json;
         }
@@ -192,8 +192,24 @@ public class AlertEventBridgePublisher {
         product.put("metadata", List.of());
         product.computeIfPresent("eventIds", (key, value) -> capList(value));
         product.computeIfPresent("userNames", (key, value) -> capList(value));
+        var truncated = detail.toBuilder().truncated(true).opik(product).build();
 
-        return JsonUtils.writeValueAsString(detail.toBuilder().truncated(true).opik(product).build());
+        json = JsonUtils.writeValueAsString(truncated);
+        size = detailSize(json);
+        if (size <= MAX_DETAIL_BYTES) {
+            return json;
+        }
+
+        log.warn("EventBridge detail for alertId='{}' is still '{}' bytes, dropping eventIds and userNames",
+                detail.alertId(), size);
+
+        product.put("eventIds", List.of());
+        product.put("userNames", List.of());
+        return JsonUtils.writeValueAsString(truncated.toBuilder().opik(product).build());
+    }
+
+    private static int detailSize(String json) {
+        return json.getBytes(StandardCharsets.UTF_8).length;
     }
 
     private static List<?> capList(Object value) {

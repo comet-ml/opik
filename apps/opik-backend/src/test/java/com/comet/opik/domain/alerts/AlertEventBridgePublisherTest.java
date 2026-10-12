@@ -156,6 +156,29 @@ class AlertEventBridgePublisherTest {
     }
 
     @Test
+    void publishWhenDetailStillExceedsLimitAfterCappingDropsLists() {
+        when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
+        var alert = alert(null);
+        var eventIds = IntStream.range(0, 2_000).mapToObj(i -> i + "-" + "x".repeat(300)).toList();
+
+        StepVerifier.create(publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
+                payload(alert, eventIds, List.of()))).verifyComplete();
+
+        var entry = captureEntries(1).getFirst();
+        assertThat(entry.detail().getBytes(StandardCharsets.UTF_8).length)
+                .isLessThanOrEqualTo(AlertEventBridgePublisher.MAX_DETAIL_BYTES);
+
+        JsonNode detail = JsonUtils.getJsonNodeFromString(entry.detail());
+        assertThat(detail.get("truncated").asBoolean()).isTrue();
+        assertThat(detail.get("eventId").asText()).isEqualTo(EVENT_ID);
+        JsonNode opik = detail.get("opik");
+        assertThat(opik.get("eventIds")).isEmpty();
+        assertThat(opik.get("userNames")).isEmpty();
+        assertThat(opik.get("metadata")).isEmpty();
+        assertThat(opik.get("eventCount").asInt()).isEqualTo(eventIds.size());
+    }
+
+    @Test
     void publishWhenClientThrowsSwallowsError() {
         when(client.putEvents(any(PutEventsRequest.class)))
                 .thenThrow(new IllegalStateException("boom"));
