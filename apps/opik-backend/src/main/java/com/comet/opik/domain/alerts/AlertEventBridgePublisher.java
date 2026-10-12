@@ -240,10 +240,14 @@ public class AlertEventBridgePublisher {
         try {
             baseUri = new URI(baseUrl.trim());
         } catch (URISyntaxException exception) {
+            log.debug("Omitting EventBridge alert url, base_url is not a valid URI, alertId='{}'", alert.id(),
+                    exception);
             return null;
         }
         if (!baseUri.isAbsolute() || baseUri.getHost() == null
                 || !Set.of("http", "https").contains(baseUri.getScheme().toLowerCase(Locale.ROOT))) {
+            log.debug("Omitting EventBridge alert url, base_url is not an absolute http(s) URL with a host, "
+                    + "alertId='{}'", alert.id());
             return null;
         }
 
