@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { withLowReasoning } from "./promptImprovementConfigs";
+import { withReasoningAtMostLow } from "./promptImprovementConfigs";
 import { getDefaultConfigByProvider } from "@/lib/playground";
 import { sanitizeConfigForRequest } from "@/lib/modelUtils";
 import { snakeCaseObj } from "@/lib/utils";
@@ -29,7 +29,7 @@ vi.mock("@/lib/modelUtils", async (importOriginal) => {
   };
 });
 
-const sentForDefaultsWithLowReasoning = (
+const sentForDefaultsWithReasoningAtMostLow = (
   provider: PROVIDER_TYPE,
   model: string,
 ) => {
@@ -40,7 +40,7 @@ const sentForDefaultsWithLowReasoning = (
   return snakeCaseObj(
     sanitizeConfigForRequest(
       model as PROVIDER_MODEL_TYPE,
-      withLowReasoning(model as PROVIDER_MODEL_TYPE, defaults) as Record<
+      withReasoningAtMostLow(model as PROVIDER_MODEL_TYPE, defaults) as Record<
         string,
         unknown
       >,
@@ -48,7 +48,7 @@ const sentForDefaultsWithLowReasoning = (
   );
 };
 
-describe("withLowReasoning", () => {
+describe("withReasoningAtMostLow", () => {
   it.each([
     {
       provider: PROVIDER_TYPE.OPEN_AI,
@@ -81,7 +81,9 @@ describe("withLowReasoning", () => {
       expected: { custom_parameters: { thinking: { level: "low" } } },
     },
   ])("sends low reasoning for $model", ({ provider, model, expected }) => {
-    expect(sentForDefaultsWithLowReasoning(provider, model)).toMatchObject({
+    expect(
+      sentForDefaultsWithReasoningAtMostLow(provider, model),
+    ).toMatchObject({
       ...expected,
       max_completion_tokens: 4000,
     });
@@ -90,16 +92,25 @@ describe("withLowReasoning", () => {
   // Lowering must never switch thinking on: these models think less than "low" by default.
   it("keeps a Gemini model whose default thinks less than low", () => {
     expect(
-      sentForDefaultsWithLowReasoning(
+      sentForDefaultsWithReasoningAtMostLow(
         PROVIDER_TYPE.GEMINI,
         PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
       ),
     ).toMatchObject({ custom_parameters: { thinking: { level: "off" } } });
   });
 
+  it("keeps an OpenAI effort that is already below low", () => {
+    expect(
+      withReasoningAtMostLow(PROVIDER_MODEL_TYPE.GPT_5_NANO, {
+        maxCompletionTokens: 4000,
+        reasoningEffort: "minimal",
+      }),
+    ).toMatchObject({ reasoningEffort: "minimal" });
+  });
+
   it("picks Off rather than Low where a Claude model offers it", () => {
     expect(
-      withLowReasoning(MODEL_WITH_OFF, {
+      withReasoningAtMostLow(MODEL_WITH_OFF, {
         maxCompletionTokens: 4000,
         thinkingEffort: "high",
       }),
@@ -113,7 +124,7 @@ describe("withLowReasoning", () => {
       model: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
     },
   ])("adds no effort to $model, which takes none", ({ provider, model }) => {
-    const sent = sentForDefaultsWithLowReasoning(provider, model);
+    const sent = sentForDefaultsWithReasoningAtMostLow(provider, model);
 
     expect(sent).not.toHaveProperty("reasoning_effort");
     expect(sent).not.toHaveProperty("custom_parameters");
@@ -124,7 +135,7 @@ describe("withLowReasoning", () => {
       PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE,
       PROVIDER_MODEL_TYPE.GPT_5_NANO,
     );
-    withLowReasoning(PROVIDER_MODEL_TYPE.GPT_5_NANO, defaults);
+    withReasoningAtMostLow(PROVIDER_MODEL_TYPE.GPT_5_NANO, defaults);
 
     expect(defaults).toMatchObject({ reasoningEffort: "high" });
   });

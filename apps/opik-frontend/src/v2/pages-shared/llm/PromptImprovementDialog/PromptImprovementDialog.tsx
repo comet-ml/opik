@@ -46,7 +46,7 @@ import {
 import { cn } from "@/lib/utils";
 import { parseComposedProviderType } from "@/lib/provider";
 import { parseLLMMessageContent } from "@/lib/llm";
-import { withLowReasoning } from "./promptImprovementConfigs";
+import { withReasoningAtMostLow } from "./promptImprovementConfigs";
 
 const PROMPT_IMPROVEMENT_PROGRESS_MESSAGES = [
   "Analyzing your instructions...",
@@ -93,7 +93,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
   const runControllerRef = useRef<AbortController | null>(null);
 
   // The dialog has no settings panel, so it runs the model at its defaults, with reasoning lowered
-  // by withLowReasoning. The prompt's own settings are sized for its task: a small max tokens
+  // by withReasoningAtMostLow. The prompt's own settings are sized for its task: a small max tokens
   // there would cut off every rewrite.
   const {
     model,
@@ -106,7 +106,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
     defaultProvider,
   });
   const configs = useMemo(
-    () => withLowReasoning(model, modelDefaults),
+    () => withReasoningAtMostLow(model, modelDefaults),
     [model, modelDefaults],
   );
   const isReasoningLowered = !isEqual(configs, modelDefaults);
