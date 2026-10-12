@@ -11,6 +11,6 @@ public record LlmModelDefinition(
         String id,
         String qualifiedName,
         String label,
-        boolean structuredOutput,
+        Boolean structuredOutput,
         Boolean reasoning) {
 }

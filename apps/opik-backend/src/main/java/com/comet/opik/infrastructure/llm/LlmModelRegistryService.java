@@ -13,6 +13,7 @@ import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.ObjectUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
@@ -21,6 +22,7 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +40,7 @@ public class LlmModelRegistryService {
     private final Client httpClient;
     // volatile: reload() is called from the scheduled job thread
     private volatile Map<String, List<LlmModelDefinition>> registry;
+    private volatile Map<String, List<LlmModelDefinition>> lastGoodRemote;
 
     @Inject
     public LlmModelRegistryService(@NonNull @Config OpikConfiguration configuration,
@@ -127,10 +130,17 @@ public class LlmModelRegistryService {
             try {
                 var remote = loadRemoteResource(config.getRemoteUrl());
                 result = merge(result, remote);
+                lastGoodRemote = remote;
                 log.debug("Merged remote model registry from '{}'", config.getRemoteUrl());
             } catch (Exception e) {
-                log.warn("Failed to fetch remote model registry from '{}', using classpath defaults",
-                        config.getRemoteUrl(), e);
+                if (lastGoodRemote == null) {
+                    log.warn("Failed to fetch remote model registry from '{}', using classpath defaults",
+                            config.getRemoteUrl(), e);
+                } else {
+                    log.warn("Failed to fetch remote model registry from '{}', keeping the last good copy",
+                            config.getRemoteUrl(), e);
+                    result = merge(result, lastGoodRemote);
+                }
             }
         }
 
@@ -158,13 +168,17 @@ public class LlmModelRegistryService {
     private static Map<String, List<LlmModelDefinition>> immutable(Map<String, List<LlmModelDefinition>> raw) {
         var copy = new LinkedHashMap<String, List<LlmModelDefinition>>(raw.size());
         raw.forEach((provider, models) -> copy.put(provider,
-                models.stream().map(LlmModelRegistryService::defaultReasoningToFalse).toList()));
-        return Map.copyOf(copy);
+                models.stream().map(LlmModelRegistryService::defaultFlagsToFalse).toList()));
+        // Not Map.copyOf: its iteration order changes between JVM starts, and the API lists providers in it.
+        return Collections.unmodifiableMap(copy);
     }
 
-    // The API omits null fields, and the frontend types the flag as a required boolean.
-    private static LlmModelDefinition defaultReasoningToFalse(LlmModelDefinition model) {
-        return model.reasoning() == null ? model.toBuilder().reasoning(false).build() : model;
+    // The API omits null fields, and the frontend types the flags as required booleans.
+    private static LlmModelDefinition defaultFlagsToFalse(LlmModelDefinition model) {
+        return model.toBuilder()
+                .structuredOutput(ObjectUtils.getIfNull(model.structuredOutput(), false))
+                .reasoning(ObjectUtils.getIfNull(model.reasoning(), false))
+                .build();
     }
 
     private Map<String, List<LlmModelDefinition>> loadClasspathResource(String resourceName) {
@@ -230,7 +244,7 @@ public class LlmModelRegistryService {
                     log.warn("Skipping override model with missing id for provider '{}'", provider);
                     return;
                 }
-                existingIds.merge(m.id(), m, LlmModelRegistryService::inheritReasoningFlagIfUnset);
+                existingIds.merge(m.id(), m, LlmModelRegistryService::inheritUnsetFields);
             });
 
             result.put(provider, List.copyOf(existingIds.values()));
@@ -239,12 +253,15 @@ public class LlmModelRegistryService {
         return result;
     }
 
-    // The remote copy is re-uploaded only when the sync script finds new models, so it can lag the classpath
-    // file a release ships. Its stale entries leave the flag out, so only an entry that sets it may change it.
-    private static LlmModelDefinition inheritReasoningFlagIfUnset(LlmModelDefinition existing,
-            LlmModelDefinition override) {
-        return override.reasoning() == null
-                ? override.toBuilder().reasoning(existing.reasoning()).build()
-                : override;
+    // An upper layer can lag the classpath file a release ships (the remote copy) or set only a few fields
+    // (a local override). A field it leaves out keeps the lower layer's value, so only an entry that sets a
+    // field may change it.
+    private static LlmModelDefinition inheritUnsetFields(LlmModelDefinition existing, LlmModelDefinition override) {
+        return override.toBuilder()
+                .qualifiedName(ObjectUtils.getIfNull(override.qualifiedName(), existing.qualifiedName()))
+                .label(ObjectUtils.getIfNull(override.label(), existing.label()))
+                .structuredOutput(ObjectUtils.getIfNull(override.structuredOutput(), existing.structuredOutput()))
+                .reasoning(ObjectUtils.getIfNull(override.reasoning(), existing.reasoning()))
+                .build();
     }
 }
