@@ -43,6 +43,17 @@ the next time it loads the prompt.
 
       client = opik.Opik()
 
+      # Create the prompt in the Prompt Library if it does not exist yet
+      if client.get_chat_prompt("my-agent-prompt", project_name="my-agent") is None:
+          client.create_chat_prompt(
+              name="my-agent-prompt",
+              messages=[
+                  {"role": "system", "content": "You are a helpful assistant."},
+                  {"role": "user", "content": "{{query}}"},
+              ],
+              project_name="my-agent",
+          )
+
       @opik.track(entrypoint=True, project_name="my-agent")
       def my_agent(query: str, max_results: int = 5) -> str:
           prompt = client.get_chat_prompt("my-agent-prompt", project_name="my-agent")
@@ -60,6 +71,18 @@ the next time it loads the prompt.
 
       const client = new Opik();
 
+      // Create the prompt in the Prompt Library if it does not exist yet
+      if (!(await client.getChatPrompt({ name: "my-agent-prompt", projectName: "my-agent" }))) {
+        await client.createChatPrompt({
+          name: "my-agent-prompt",
+          messages: [
+            { role: "system", content: "You are a helpful assistant." },
+            { role: "user", content: "{{query}}" },
+          ],
+          projectName: "my-agent",
+        });
+      }
+
       const myAgent = track(
         {
           entrypoint: true,
@@ -74,7 +97,7 @@ the next time it loads the prompt.
             name: "my-agent-prompt",
             projectName: "my-agent",
           });
-          const messages = prompt?.format({ query });
+          const messages = prompt!.format({ query });
           // Your agent logic here
           return result;
         }
@@ -84,6 +107,9 @@ the next time it loads the prompt.
 
     Parameter types are displayed as input fields in the UI. In Python they are inferred from
     type hints; in TypeScript, provide them explicitly via the `params` option.
+
+    The example creates the prompt only when it is not in the Prompt Library. If you restart
+    your agent, the code does not replace the prompt versions that you saved from the playground.
 
     The process must keep running so the runner can pick up jobs. If your agent is not already
     served by a web framework (for example FastAPI, Flask, Express, or Fastify), block the main
