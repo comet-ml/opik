@@ -8,9 +8,10 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.fasterxml.jackson.databind.JsonNode;
-import dev.langchain4j.model.anthropic.AnthropicChatModel;
+import dev.langchain4j.model.anthropic.AnthropicStreamingChatModel;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
 import dev.langchain4j.model.chat.ChatModel;
+import io.dropwizard.util.Duration;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
@@ -20,11 +21,11 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class AnthropicClientGenerator implements LlmProviderClientGenerator<AnthropicClient> {
 
-    // max_tokens caps thinking plus the answer. The judge call is not streamed, so it has to finish inside the
-    // judge's HTTP timeout (LLM_PROVIDER_CLIENT_CONNECT_TIMEOUT, 60s by default), and a timed-out call is retried
-    // and billed again. Claude judges measured 90-160 tokens/s, so 5,000 tokens ends within that minute; a larger
-    // default would turn a judge that runs out of tokens into one that times out several times.
-    static final int THINKING_JUDGE_MAX_TOKENS = 5_000;
+    // max_tokens caps thinking plus the answer. Claude Sonnet 5 at effort max spent 4,100-11,300 tokens judging the
+    // same short trace. At the 90-160 tokens/s Claude judges measured, 16,000 tokens still end inside the judge call
+    // timeout (LLM_PROVIDER_CLIENT_JUDGE_CALL_TIMEOUT, 3 minutes by default), so a runaway judge stops at max_tokens
+    // and is billed once, rather than timing out and being retried.
+    static final int THINKING_JUDGE_MAX_TOKENS = 16_000;
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
@@ -59,17 +60,28 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
             LlmAsJudgeModelParameters modelParameters) {
         var outputConfig = AnthropicEffort.toOutputConfig(modelParameters.name(), modelParameters.customParameters());
         if (outputConfig.isEmpty()) {
-            return newChatModelBuilder(config, modelParameters).build();
+            return streamed(newChatModelBuilder(config, modelParameters).build());
         }
         return new AnthropicOutputConfigChatModel(outputConfig.get(),
-                customParameters -> newChatModelBuilder(config, modelParameters)
+                customParameters -> streamed(newChatModelBuilder(config, modelParameters)
                         .customParameters(customParameters)
-                        .build());
+                        .build()));
     }
 
-    private AnthropicChatModel.AnthropicChatModelBuilder newChatModelBuilder(LlmProviderClientApiConfig config,
-            LlmAsJudgeModelParameters modelParameters) {
-        var builder = AnthropicChatModel.builder()
+    // A judge that thinks can write for minutes, and a call that is not streamed has to return the whole answer
+    // before the HTTP timeout (LLM_PROVIDER_CLIENT_CONNECT_TIMEOUT, 60s) fires. Streamed, that timeout only covers
+    // the wait for the response headers; the silence between events and the whole call get limits of their own.
+    private ChatModel streamed(AnthropicStreamingChatModel model) {
+        var callTimeout = llmProviderClientConfig.getJudgeCallTimeout().toJavaDuration();
+        var idleTimeout = Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
+                .map(Duration::toJavaDuration)
+                .orElse(callTimeout);
+        return new AnthropicStreamedChatModel(model, idleTimeout, callTimeout);
+    }
+
+    private AnthropicStreamingChatModel.AnthropicStreamingChatModelBuilder newChatModelBuilder(
+            LlmProviderClientApiConfig config, LlmAsJudgeModelParameters modelParameters) {
+        var builder = AnthropicStreamingChatModel.builder()
                 .apiKey(config.apiKey())
                 .modelName(modelParameters.name())
                 .logRequests(llmProviderClientConfig.getLogRequests())
@@ -141,7 +153,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
      * guarantees a {@code max_tokens} is always sent. Anthropic requires max_tokens, and without an explicit
      * cap adaptive thinking can consume the whole budget, yielding an empty response (finishReason=LENGTH).
      */
-    private void applyCustomParameters(AnthropicChatModel.AnthropicChatModelBuilder builder,
+    private void applyCustomParameters(AnthropicStreamingChatModel.AnthropicStreamingChatModelBuilder builder,
             JsonNode customParameters, ThinkingParams thinking, boolean willThink) {
         Optional.ofNullable(thinking.type()).ifPresent(builder::thinkingType);
 

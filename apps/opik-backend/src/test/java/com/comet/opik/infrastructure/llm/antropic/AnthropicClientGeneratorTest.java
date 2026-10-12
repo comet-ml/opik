@@ -38,7 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
@@ -474,9 +474,23 @@ class AnthropicClientGeneratorTest {
         private static final String MESSAGES_PATH = "/v1/messages";
         private static final String SCORE_NAME = "Correctness";
         private static final String MESSAGES_RESPONSE = """
-                {"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-4-6",\
-                "content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn",\
-                "usage":{"input_tokens":1,"output_tokens":1}}""";
+                event: message_start
+                data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant",\
+                "model":"claude-sonnet-4-6","content":[],"usage":{"input_tokens":1,"output_tokens":1}}}
+
+                event: content_block_start
+                data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":"ok"}}
+
+                event: content_block_stop
+                data: {"type":"content_block_stop","index":0}
+
+                event: message_delta
+                data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}
+
+                event: message_stop
+                data: {"type":"message_stop"}
+
+                """;
 
         private WireMockServer wireMock;
 
@@ -494,7 +508,9 @@ class AnthropicClientGeneratorTest {
         @BeforeEach
         void stubMessages() {
             wireMock.resetAll();
-            wireMock.stubFor(post(urlPathEqualTo(MESSAGES_PATH)).willReturn(okJson(MESSAGES_RESPONSE)));
+            wireMock.stubFor(post(urlPathEqualTo(MESSAGES_PATH)).willReturn(aResponse()
+                    .withHeader("Content-Type", "text/event-stream")
+                    .withBody(MESSAGES_RESPONSE)));
         }
 
         @ParameterizedTest(name = "{0} at {1}")
@@ -508,11 +524,11 @@ class AnthropicClientGeneratorTest {
 
         @ParameterizedTest(name = "{0} with custom_parameters {1}")
         @CsvSource(delimiter = '|', value = {
-                "claude-sonnet-5 | {\"output_config\": {\"effort\": \"max\"}}                                   | 5000",
-                "claude-opus-5-5 | {\"output_config\": {\"effort\": \"high\"}}                                  | 5000",
-                "claude-opus-4-8 | {\"thinking\": {\"type\": \"adaptive\"}, \"output_config\": {\"effort\": \"high\"}} | 5000",
-                "claude-opus-4-8 | {\"output_config\": {\"effort\": \"high\"}}                                  | 5000",
-                "claude-sonnet-4-6 | {\"output_config\": {\"effort\": \"max\"}}                                 | 5000",
+                "claude-sonnet-5 | {\"output_config\": {\"effort\": \"max\"}}                                   | 16000",
+                "claude-opus-5-5 | {\"output_config\": {\"effort\": \"high\"}}                                  | 16000",
+                "claude-opus-4-8 | {\"thinking\": {\"type\": \"adaptive\"}, \"output_config\": {\"effort\": \"high\"}} | 16000",
+                "claude-opus-4-8 | {\"output_config\": {\"effort\": \"high\"}}                                  | 16000",
+                "claude-sonnet-4-6 | {\"output_config\": {\"effort\": \"max\"}}                                 | 16000",
                 "claude-opus-4-5-20251101 | {\"output_config\": {\"effort\": \"high\"}}                   | 4096",
                 "claude-opus-5   | {\"thinking\": {\"type\": \"disabled\"}, \"output_config\": {\"effort\": \"high\"}} | 4096",
                 "claude-sonnet-5 | {\"max_tokens\": 3000, \"output_config\": {\"effort\": \"max\"}}              | 3000"})
