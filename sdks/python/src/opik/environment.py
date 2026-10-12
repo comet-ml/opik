@@ -108,8 +108,9 @@ def in_aws_lambda() -> bool:
     return "LAMBDA_TASK_ROOT" in os.environ
 
 
-def get_installation_type() -> Literal["cloud", "self-hosted", "local"]:
-    config = opik.config.OpikConfig()
+def get_installation_type(
+    config: opik.config.OpikConfig,
+) -> Literal["cloud", "self-hosted", "local"]:
     url_override = config.url_override
     if url_helpers.get_base_url(url_override) == url_helpers.get_base_url(
         opik.config.OPIK_URL_CLOUD

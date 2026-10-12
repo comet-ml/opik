@@ -25,6 +25,11 @@ permissions:
   packages: read
 
 env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
   OPIK_ANALYTICS_ENABLE: False
@@ -48,8 +53,6 @@ jobs:
           contents: read
           packages: write
         uses: ./.github/workflows/build_e2e_docker.yaml
-        with:
-          include_guardrails: true
 
     run-e2e-tests:
         name: Opik Optimizer E2E Tests Python ${{matrix.python_version}}
@@ -86,10 +89,8 @@ jobs:
           run: |
             docker pull "ghcr.io/comet-ml/opik/opik-backend:$TAG"
             docker pull "ghcr.io/comet-ml/opik/opik-python-backend:$TAG"
-            docker pull "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG"
             docker tag "ghcr.io/comet-ml/opik/opik-backend:$TAG" ghcr.io/comet-ml/opik/opik-backend:latest
             docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
-            docker tag "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG" ghcr.io/comet-ml/opik/opik-guardrails-backend:latest
 
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v7
@@ -107,10 +108,9 @@ jobs:
             TOGGLE_RUNNERS_ENABLED: "true"
             OPIK_BACKEND_PULL_POLICY: never
             PYTHON_BACKEND_PULL_POLICY: never
-            OPIK_GUARDRAILS_BACKEND_PULL_POLICY: never
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --backend --port-mapping --guardrails
+            ./opik.sh --backend --port-mapping
 
         - name: Check Opik server availability
           shell: bash
@@ -163,7 +163,7 @@ jobs:
           if: always()
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --stop --guardrails
+            ./opik.sh --stop
 
     dataset-source-check:
         name: Opik Optimizer Integration Smoke Tests

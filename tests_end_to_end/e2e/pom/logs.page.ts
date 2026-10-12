@@ -18,6 +18,24 @@ export type ExplainKind = 'error' | 'duration' | 'cost';
  */
 export type LogsRowHeight = 'small' | 'medium' | 'large';
 
+/**
+ * One filter as the Logs URL carries it (`traces_filters` / `spans_filters`).
+ *
+ * Every field is optional because the shape is what is under test: a quick
+ * filter on a span's `provider` must produce a `string` filter with NO `key`,
+ * while one on a metadata attribute must produce a `dictionary` filter WITH
+ * one. A type that required `key` could not express the first, and a spec
+ * reading through it could not tell the two apart.
+ */
+export type LogsUrlFilter = {
+  id?: string;
+  field?: string;
+  type?: string;
+  key?: string;
+  operator?: string;
+  value?: string;
+};
+
 // Maps an explain kind to the Traces table column id (used in data-cell-id)
 // and the owl trigger's aria-label, per apps/opik-frontend/src/plugins/comet/explain/registry.ts.
 const EXPLAIN_COLUMN: Record<ExplainKind, string> = {
@@ -81,9 +99,128 @@ export class LogsPage {
     });
   }
 
+  /**
+   * Open Logs with the Traces tab active, optionally at a chosen date range.
+   *
+   * The sibling of `gotoSpans` and `gotoThreads`, and not the same thing as
+   * `goto()`: that one states no `logsType` at all, so the active tab is
+   * whatever localStorage last persisted for the project — and a bare `/logs`
+   * on a fresh profile resolves to Threads, not Traces (`useLogsType`). A spec
+   * about the Traces table has to say so.
+   *
+   * `timeRange` is the page's own `time_range` query param, the same one the
+   * other two take. It is also persisted per project, and it decides whether
+   * the read is windowed at all — so an unstated range is whichever one the
+   * profile last stored.
+   */
+  async gotoTraces(projectId: string, opts: { timeRange?: string } = {}): Promise<void> {
+    return test.step(
+      `Open Logs (Traces) for project ${projectId}${opts.timeRange ? ` over ${opts.timeRange}` : ''}`,
+      async () => {
+        this.projectId = projectId;
+        const env = loadEnvConfig();
+        const params = new URLSearchParams({ logsType: 'traces' });
+        if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
+        );
+      },
+    );
+  }
+
   /** The Threads/Traces/Spans tab toggle for "Spans". */
   get spansTab(): Locator {
     return this.page.getByRole('radio', { name: 'Spans' });
+  }
+
+  /** The Threads/Traces/Spans tab toggle for "Traces". */
+  get tracesTab(): Locator {
+    return this.page.getByRole('radio', { name: 'Traces' });
+  }
+
+  /**
+   * Which entity table is on screen, read from the toggle itself.
+   *
+   * Asserted rather than assumed by every spec that cares: `logsType` is
+   * persisted per project in localStorage, so the active tab survives between
+   * visits and a spec that inherited it would silently be driving the other
+   * table.
+   */
+  async activeLogsTab(): Promise<'threads' | 'traces' | 'spans'> {
+    return test.step('Read which entity tab is active', async () => {
+      const checked = async (tab: Locator) =>
+        (await tab.getAttribute('aria-checked')) === 'true';
+      if (await checked(this.tracesTab)) return 'traces';
+      if (await checked(this.spansTab)) return 'spans';
+      if (await checked(this.threadsTab)) return 'threads';
+      throw new Error('LogsPage.activeLogsTab: no entity toggle reported itself selected');
+    });
+  }
+
+  /**
+   * The filters the URL carries for one of the two tables, parsed.
+   *
+   * `null` when the param is absent, which is deliberately distinct from `[]`:
+   * "the Traces filter was never written" is the assertion that separates a
+   * quick filter correctly routed to the Spans table from one that wrote to
+   * both, and an empty array would be a write.
+   *
+   * Read from the URL rather than from the chip bar because the URL is where
+   * the filter's wire shape lives — field, type, operator and key, exactly as
+   * the table will send them.
+   */
+  async readUrlFilters(type: 'traces' | 'spans'): Promise<LogsUrlFilter[] | null> {
+    return test.step(`Read the ${type} filters from the URL`, async () => {
+      const raw = new URL(this.page.url()).searchParams.get(`${type}_filters`);
+      if (raw === null) return null;
+      return JSON.parse(raw) as LogsUrlFilter[];
+    });
+  }
+
+  /**
+   * Wait until the URL carries filters for `type` that satisfy `predicate`.
+   *
+   * The quick filter writes the param with `replaceIn`, so there is no
+   * navigation to await — the settle point is the param itself holding the
+   * expected shape. Polling the parsed value (rather than string-matching the
+   * URL) keeps the wait honest about JSON key order and encoding.
+   */
+  async waitForUrlFilters(
+    type: 'traces' | 'spans',
+    predicate: (filters: LogsUrlFilter[]) => boolean,
+  ): Promise<LogsUrlFilter[]> {
+    return test.step(`Wait for the ${type} filters in the URL`, async () => {
+      await expect
+        .poll(
+          async () => {
+            const filters = await this.readUrlFilters(type);
+            return filters !== null && predicate(filters);
+          },
+          { message: `${type}_filters in the URL`, timeout: 15_000 },
+        )
+        .toBe(true);
+      return (await this.readUrlFilters(type))!;
+    });
+  }
+
+  /**
+   * The chip ids currently pinned to one table's chip bar, read from the store
+   * that owns them.
+   *
+   * `null` when nothing has been stored yet, which is the state a chip bar
+   * showing its defaults is in — and the precondition that makes "the filter
+   * pinned a chip that was not pinned before" mean something. Read from
+   * localStorage because the bar renders a chip for a default and for a pinned
+   * id identically, so the DOM cannot distinguish "already there" from
+   * "just added".
+   */
+  async readPinnedChipIds(type: 'traces' | 'spans'): Promise<string[] | null> {
+    return test.step(`Read the pinned chips stored for the ${type} table`, async () => {
+      const key = `chips:pinnedConfig:logs.${type}`;
+      const raw = await this.page.evaluate((k) => window.localStorage.getItem(k), key);
+      if (raw === null) return null;
+      return JSON.parse(raw) as string[];
+    });
   }
 
   /**

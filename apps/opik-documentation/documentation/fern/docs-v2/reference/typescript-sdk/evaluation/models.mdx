@@ -17,7 +17,7 @@ The TypeScript SDK provides flexible model configuration through direct integrat
 
 The TypeScript SDK supports three ways to configure models for evaluation and prompt generation:
 
-1. **Model ID strings** - Simple string identifiers (e.g., `"gpt-5-nano"`, `"claude-3-5-sonnet-latest"`)
+1. **Model ID strings** - Simple string identifiers (e.g., `"gpt-5-nano"`, `"claude-sonnet-4-6"`)
 2. **LanguageModel instances** - Pre-configured Vercel AI SDK models with custom settings
 3. **OpikBaseModel implementations** - Custom model integrations for unsupported providers
 
@@ -43,7 +43,7 @@ await evaluatePrompt({
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
-  model: "claude-3-5-sonnet-latest",
+  model: "claude-sonnet-4-6",
   projectName: "my-project",
 });
 
@@ -184,8 +184,8 @@ Anthropic's Claude models are supported through the `@ai-sdk/anthropic` package.
 **Example model IDs**:
 
 ```typescript
-"claude-3-5-sonnet-latest";
-"claude-3-5-haiku-latest";
+"claude-sonnet-4-6";
+"claude-haiku-4-5";
 ```
 
 **Usage**:
@@ -194,7 +194,7 @@ Anthropic's Claude models are supported through the `@ai-sdk/anthropic` package.
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
-  model: "claude-3-5-sonnet-latest",
+  model: "claude-sonnet-4-6",
   projectName: "my-project",
 });
 ```
@@ -242,7 +242,7 @@ const genModel = openai("gpt-5-nano", {
   structuredOutputs: true, // Provider-specific feature
 });
 
-const evalModel = anthropic("claude-3-5-sonnet-latest");
+const evalModel = anthropic("claude-sonnet-4-6");
 
 // Use different models for generation and evaluation
 await evaluatePrompt({
@@ -268,7 +268,7 @@ import { Hallucination, AnswerRelevance } from "opik";
 // Use different models for different metrics
 const hallucinationMetric = new Hallucination({ model: "gpt-5-nano" });
 const relevanceMetric = new AnswerRelevance({
-  model: "claude-3-5-sonnet-latest",
+  model: "claude-sonnet-4-6",
 });
 
 await evaluatePrompt({
@@ -431,14 +431,14 @@ Choose models based on task requirements:
 ```typescript
 // Complex reasoning: GPT-5, Claude Sonnet
 model: "gpt-5";
-model: "claude-3-5-sonnet-latest";
+model: "claude-sonnet-4-6";
 
 // Fast responses: GPT-5-nano, Gemini Flash
 model: "gpt-5-nano";
 model: "gemini-2.0-flash";
 
 // Long context: Claude, Gemini
-model: "claude-3-5-sonnet-latest"; // 200K context
+model: "claude-sonnet-4-6"; // 1M context
 model: "gemini-1.5-pro"; // 1M context
 ```
 

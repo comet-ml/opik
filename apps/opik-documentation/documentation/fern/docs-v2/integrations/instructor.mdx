@@ -128,7 +128,7 @@ client = instructor.from_anthropic(
 )
 
 user_info = client.chat.completions.create(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-6",
     response_model=UserInfo,
     messages=[{"role": "user", "content": "John Doe is 30 years old."}],
     max_tokens=1000,

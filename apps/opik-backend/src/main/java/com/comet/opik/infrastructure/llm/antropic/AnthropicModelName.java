@@ -5,6 +5,9 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -34,7 +37,8 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     CLAUDE_MYTHOS_5_1("claude-mythos-5-1"),
     CLAUDE_MYTHOS_PREVIEW("claude-mythos-preview"),
     CLAUDE_OPUS_4_6_20260205("claude-opus-4-6-20260205"),
-    CLAUDE_OPUS_4_7_20260416("claude-opus-4-7-20260416");
+    CLAUDE_OPUS_4_7_20260416("claude-opus-4-7-20260416"),
+    CLAUDE_OPUS_5_5("claude-opus-5-5");
 
     private final String value;
 
@@ -72,6 +76,37 @@ public enum AnthropicModelName implements StructuredOutputSupported {
             CLAUDE_SONNET_4_5_20250929.value,
             CLAUDE_SONNET_4_6.value);
 
+    static final List<String> ALL_EFFORT_LEVELS = List.of("low", "medium", "high", "xhigh", "max");
+    private static final List<String> EFFORT_LEVELS_WITHOUT_XHIGH = List.of("low", "medium", "high", "max");
+    private static final List<String> EFFORT_LEVELS_UP_TO_HIGH = List.of("low", "medium", "high");
+
+    // A map of the constants rather than a constructor argument, for the sync reason given on
+    // SAMPLING_CAPABLE_MODEL_IDS. Levels per https://platform.claude.com/docs/en/build-with-claude/effort.
+    // thinkingEffortOptions in the frontend's ANTHROPIC_MODEL_CAPABILITIES must offer a subset of these.
+    private static final Map<String, List<String>> EFFORT_LEVELS_BY_MODEL_ID = Map.ofEntries(
+            Map.entry(CLAUDE_OPUS_5_5.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_OPUS_5.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_OPUS_4_8.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_OPUS_4_7.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_OPUS_4_7_20260416.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_SONNET_5.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_FABLE_5.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_FABLE_5_1.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_MYTHOS_5.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_MYTHOS_5_1.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_OPUS_4_6.value, EFFORT_LEVELS_WITHOUT_XHIGH),
+            Map.entry(CLAUDE_OPUS_4_6_20260205.value, EFFORT_LEVELS_WITHOUT_XHIGH),
+            Map.entry(CLAUDE_MYTHOS_PREVIEW.value, EFFORT_LEVELS_WITHOUT_XHIGH),
+            Map.entry(CLAUDE_SONNET_4_6.value, EFFORT_LEVELS_WITHOUT_XHIGH),
+            Map.entry(CLAUDE_OPUS_4_5.value, EFFORT_LEVELS_UP_TO_HIGH),
+            Map.entry(CLAUDE_SONNET_3_7.value, List.of()),
+            Map.entry(CLAUDE_HAIKU_4_5.value, List.of()),
+            Map.entry(CLAUDE_OPUS_4.value, List.of()),
+            Map.entry(CLAUDE_OPUS_4_1.value, List.of()),
+            Map.entry(CLAUDE_SONNET_4.value, List.of()),
+            Map.entry(CLAUDE_SONNET_4_5.value, List.of()),
+            Map.entry(CLAUDE_SONNET_4_5_20250929.value, List.of()));
+
     private static final Set<String> ALL_MODEL_IDS = Arrays.stream(values())
             .map(AnthropicModelName::getValue)
             .collect(Collectors.toUnmodifiableSet());
@@ -83,6 +118,10 @@ public enum AnthropicModelName implements StructuredOutputSupported {
 
     public static Set<String> allModelIds() {
         return ALL_MODEL_IDS;
+    }
+
+    static Optional<List<String>> effortLevels(String modelId) {
+        return Optional.ofNullable(modelId).map(EFFORT_LEVELS_BY_MODEL_ID::get);
     }
 
     @Override

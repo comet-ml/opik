@@ -1,4 +1,10 @@
 name: Docs - Test cookbooks
+env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
 on:
   workflow_dispatch:
     inputs:

@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.openai;
 import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.openai.models.ReasoningEffort;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
@@ -30,7 +31,11 @@ import dev.langchain4j.model.openai.internal.chat.Tool;
 import dev.langchain4j.model.openai.internal.chat.ToolCall;
 import dev.langchain4j.model.openai.internal.chat.ToolMessage;
 import dev.langchain4j.model.openai.internal.chat.ToolType;
+import dev.langchain4j.model.openai.internal.shared.CompletionTokensDetails;
+import dev.langchain4j.model.openai.internal.shared.PromptTokensDetails;
 import dev.langchain4j.model.openai.internal.shared.Usage;
+import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesChatRequestParameters;
+import dev.langchain4j.model.openaiofficial.OpenAiOfficialTokenUsage;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
 import jakarta.ws.rs.BadRequestException;
@@ -38,6 +43,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -50,9 +56,9 @@ import java.util.Optional;
  * <br/>
  * Scope: text-only system/user/assistant messages, tool calling (tool specs, tool_choice,
  * assistant tool_calls, tool result resume), structured response formats (json_object and
- * json_schema), basic sampling parameters, token usage, and finish reason. Multimodal content and
- * per-token streaming of tool-call argument deltas are intentionally out of scope and should be
- * added incrementally.
+ * json_schema), basic sampling parameters, reasoning effort, token usage, and finish reason.
+ * Multimodal content and per-token streaming of tool-call argument deltas are intentionally out of
+ * scope and should be added incrementally.
  */
 @lombok.experimental.UtilityClass
 @Slf4j
@@ -83,6 +89,7 @@ class LlmProviderOpenAiResponsesMapper {
         Optional.ofNullable(request.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(request.topP()).ifPresent(builder::topP);
         Optional.ofNullable(resolveMaxOutputTokens(request)).ifPresent(builder::maxOutputTokens);
+        Optional.ofNullable(toResponsesParameters(request)).ifPresent(builder::parameters);
 
         warnIfDroppedSamplingParam(request);
 
@@ -364,11 +371,21 @@ class LlmProviderOpenAiResponsesMapper {
         if (tokenUsage == null) {
             return null;
         }
-        return Usage.builder()
+        var builder = Usage.builder()
                 .promptTokens(tokenUsage.inputTokenCount())
                 .completionTokens(tokenUsage.outputTokenCount())
-                .totalTokens(tokenUsage.totalTokenCount())
-                .build();
+                .totalTokens(tokenUsage.totalTokenCount());
+        if (tokenUsage instanceof OpenAiOfficialTokenUsage responsesUsage) {
+            Optional.ofNullable(responsesUsage.inputTokensDetails())
+                    .map(OpenAiOfficialTokenUsage.InputTokensDetails::cachedTokens)
+                    .map(cached -> PromptTokensDetails.builder().cachedTokens(cached).build())
+                    .ifPresent(builder::promptTokensDetails);
+            Optional.ofNullable(responsesUsage.outputTokensDetails())
+                    .map(OpenAiOfficialTokenUsage.OutputTokensDetails::reasoningTokens)
+                    .map(reasoning -> CompletionTokensDetails.builder().reasoningTokens(reasoning).build())
+                    .ifPresent(builder::completionTokensDetails);
+        }
+        return builder.build();
     }
 
     private String toFinishReasonString(FinishReason finishReason) {
@@ -406,6 +423,21 @@ class LlmProviderOpenAiResponsesMapper {
         if (CollectionUtils.isNotEmpty(request.stop())) {
             log.debug("Dropping unsupported 'stop'='{}' for OpenAI Responses API", request.stop());
         }
+    }
+
+    /**
+     * The generic ChatRequest has no reasoning-effort slot, so it travels in the Responses-specific
+     * parameters; ChatRequest merges those with the plain fields set alongside them. The value is
+     * passed through unchecked because the accepted set differs per model ({@code max} exists only
+     * on the Responses API) and OpenAI's own 400 names the problem better than a local enum would.
+     */
+    private OpenAiOfficialResponsesChatRequestParameters toResponsesParameters(ChatCompletionRequest request) {
+        if (StringUtils.isBlank(request.reasoningEffort())) {
+            return null;
+        }
+        return OpenAiOfficialResponsesChatRequestParameters.builder()
+                .reasoningEffort(ReasoningEffort.of(request.reasoningEffort()))
+                .build();
     }
 
     private Integer resolveMaxOutputTokens(ChatCompletionRequest request) {

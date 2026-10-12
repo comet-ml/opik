@@ -2,6 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.ExperimentExecutionRequest;
+import com.comet.opik.api.LlmProvider;
+import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.comet.opik.domain.template.MustacheParser;
 import com.comet.opik.utils.JsonUtils;
@@ -14,22 +16,28 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 @DisplayName("ExperimentMessageRenderer Test")
 class ExperimentMessageRendererTest {
 
+    private LlmProviderFactory llmProviderFactory;
     private ExperimentMessageRenderer renderer;
 
     @BeforeEach
     void setUp() {
-        renderer = new ExperimentMessageRenderer(new MustacheParser());
+        llmProviderFactory = Mockito.mock(LlmProviderFactory.class);
+        renderer = new ExperimentMessageRenderer(new MustacheParser(), llmProviderFactory);
     }
 
     @Nested
@@ -259,6 +267,60 @@ class ExperimentMessageRendererTest {
         }
 
         @Test
+        @DisplayName("should send every parameter of the config the OpenRouter panel sends")
+        void applyOpenRouterConfigs() {
+            var messages = List.of(
+                    ExperimentExecutionRequest.PromptVariant.Message.builder()
+                            .role("user")
+                            .content(new TextNode("Hello"))
+                            .build());
+
+            var mapper = JsonUtils.getMapper();
+            var configs = Map.<String, JsonNode>of(
+                    "maxTokens", mapper.valueToTree(512),
+                    "temperature", mapper.valueToTree(0.7),
+                    "topP", mapper.valueToTree(0.9),
+                    "frequencyPenalty", mapper.valueToTree(0.5),
+                    "presencePenalty", mapper.valueToTree(0.3),
+                    "custom_parameters", JsonUtils.getJsonNodeFromString(
+                            "{\"top_k\": 40, \"min_p\": 0.1, \"top_a\": 0.2, \"repetition_penalty\": 1.1}"));
+
+            var prompt = new ExperimentExecutionRequest.PromptVariant(
+                    "openai/gpt-4o", messages, configs, null, null);
+
+            ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
+
+            assertThat(request).isEqualTo(ChatCompletionRequest.builder()
+                    .model("openai/gpt-4o")
+                    .messages(request.messages())
+                    .stream(false)
+                    .maxTokens(512)
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .frequencyPenalty(0.5)
+                    .presencePenalty(0.3)
+                    .customParameters(Map.of("top_k", 40, "min_p", 0.1, "top_a", 0.2, "repetition_penalty", 1.1))
+                    .build());
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"0", "\"512\"", "null"})
+        @DisplayName("should send no max_tokens for 0, which the OpenRouter panel uses for no limit, or a non-number")
+        void skipMaxTokensForZeroOrNonNumericValue(String json) {
+            var messages = List.of(
+                    ExperimentExecutionRequest.PromptVariant.Message.builder()
+                            .role("user")
+                            .content(new TextNode("Hello"))
+                            .build());
+
+            var prompt = new ExperimentExecutionRequest.PromptVariant(
+                    "openai/gpt-4o", messages, Map.of("maxTokens", JsonUtils.getJsonNodeFromString(json)), null,
+                    null);
+
+            assertThat(renderer.buildChatCompletionRequest(prompt, messages).maxTokens()).isNull();
+        }
+
+        @Test
         @DisplayName("should forward custom_parameters so provider-specific settings reach the request")
         void forwardCustomParameters() {
             var messages = List.of(
@@ -317,6 +379,70 @@ class ExperimentMessageRendererTest {
             ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
 
             assertThat(request.customParameters()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("buildChatCompletionRequest reasoning effort")
+    class ReasoningEffort {
+
+        private static final String OPENAI_MODEL = "gpt-5.5";
+        private static final List<ExperimentExecutionRequest.PromptVariant.Message> MESSAGES = List.of(
+                ExperimentExecutionRequest.PromptVariant.Message.builder()
+                        .role("user")
+                        .content(new TextNode("Hello"))
+                        .build());
+
+        private ChatCompletionRequest buildWithEffort(String model, JsonNode effort) {
+            var prompt = new ExperimentExecutionRequest.PromptVariant(
+                    model, MESSAGES, Map.of("reasoningEffort", effort), null, null);
+            return renderer.buildChatCompletionRequest(prompt, MESSAGES);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"none", "low", "high", "xhigh", "max"})
+        @DisplayName("should forward the stored effort for an OpenAI model")
+        void forwardReasoningEffortForOpenAi(String effort) {
+            when(llmProviderFactory.getLlmProvider(OPENAI_MODEL)).thenReturn(LlmProvider.OPEN_AI);
+
+            var request = buildWithEffort(OPENAI_MODEL, new TextNode(effort));
+
+            assertThat(request.reasoningEffort()).isEqualTo(effort);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = LlmProvider.class, names = "OPEN_AI", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("should not forward a stored effort to any other provider")
+        void dropReasoningEffortForOtherProviders(LlmProvider provider) {
+            var model = "some-" + provider.getValue() + "-model";
+            when(llmProviderFactory.getLlmProvider(model)).thenReturn(provider);
+
+            var request = buildWithEffort(model, new TextNode("high"));
+
+            assertThat(request.reasoningEffort()).isNull();
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"\"\"", "\"  \"", "5", "null", "{\"effort\": \"high\"}"})
+        @DisplayName("should leave the effort unset when the stored value is blank or not a string")
+        void ignoreBlankOrNonTextualReasoningEffort(String json) {
+            var request = buildWithEffort(OPENAI_MODEL, JsonUtils.getJsonNodeFromString(json));
+
+            assertThat(request.reasoningEffort()).isNull();
+            verifyNoInteractions(llmProviderFactory);
+        }
+
+        @Test
+        @DisplayName("should leave the effort unset when the configs carry none")
+        void noReasoningEffortWhenAbsent() {
+            var prompt = new ExperimentExecutionRequest.PromptVariant(
+                    OPENAI_MODEL, MESSAGES, Map.of("temperature", JsonUtils.getMapper().valueToTree(0.7)), null,
+                    null);
+
+            var request = renderer.buildChatCompletionRequest(prompt, MESSAGES);
+
+            assertThat(request.reasoningEffort()).isNull();
+            verifyNoInteractions(llmProviderFactory);
         }
     }
 }

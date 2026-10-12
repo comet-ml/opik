@@ -55,6 +55,33 @@ describe("getLoggedParameters", () => {
     ).toBe("high");
   });
 
+  it("records no penalties for a Responses API key, which never sent them", () => {
+    const stored = configs({
+      temperature: 0.3,
+      frequencyPenalty: 0.5,
+      presencePenalty: 0.2,
+    });
+
+    expect(
+      getLoggedParameters({
+        model: PROVIDER_MODEL_TYPE.GPT_4O,
+        configs: stored,
+        openAiPipelineMode: "responses_api",
+      }),
+    ).toEqual({ temperature: 0.3 });
+    expect(
+      getLoggedParameters({
+        model: PROVIDER_MODEL_TYPE.GPT_4O,
+        configs: stored,
+        openAiPipelineMode: "chat_completions_api",
+      }),
+    ).toEqual({
+      temperature: 0.3,
+      frequencyPenalty: 0.5,
+      presencePenalty: 0.2,
+    });
+  });
+
   it("records what a model that accepts them was sent", () => {
     const parameters = getLoggedParameters({
       model: PROVIDER_MODEL_TYPE.GPT_4O,
@@ -63,5 +90,25 @@ describe("getLoggedParameters", () => {
 
     expect(parameters.temperature).toBe(0.3);
     expect(parameters.topP).toBe(0.85);
+  });
+
+  it("records the OpenRouter sampling params where the request carried them", () => {
+    const parameters = getLoggedParameters({
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+      configs: configs({
+        topK: 40,
+        minP: 0.1,
+        topA: 0.2,
+        repetitionPenalty: 1.1,
+      }),
+    });
+
+    expect(parameters.topK).toBeUndefined();
+    expect(parameters.custom_parameters).toEqual({
+      top_k: 40,
+      min_p: 0.1,
+      top_a: 0.2,
+      repetition_penalty: 1.1,
+    });
   });
 });

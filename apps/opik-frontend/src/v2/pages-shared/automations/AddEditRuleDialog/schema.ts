@@ -1,4 +1,5 @@
 import { z } from "zod";
+import has from "lodash/has";
 import uniq from "lodash/uniq";
 import omit from "lodash/omit";
 import {
@@ -9,16 +10,27 @@ import {
   EVAL_TRIGGER_SCOPE,
 } from "@/types/automations";
 import {
+  ANTHROPIC_THINKING_EFFORT_VALUES,
+  AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
   PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
 } from "@/types/providers";
 import {
+  getAnthropicThinkingEffortOptions,
+  getNestedThinkingEffort,
   getThinkingLevelOptions,
+  knowsAnthropicEffortLevels,
   resolveSamplingParams,
   updateProviderConfig,
+  withoutThinkingAmount,
+  withThinkingEffort,
 } from "@/lib/modelUtils";
-import { getProviderFromModel } from "@/lib/provider";
+import {
+  getProviderFromModel,
+  parseComposedProviderType,
+} from "@/lib/provider";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -234,6 +246,9 @@ const LLMJudgeBaseSchema = z.object({
     thinkingLevel: z
       .enum(["auto", "none", "off", "minimal", "low", "medium", "high"])
       .optional(),
+    // Same arrangement for the Anthropic effort, which the judge reads from
+    // custom_parameters.output_config.effort.
+    thinkingEffort: z.enum(ANTHROPIC_THINKING_EFFORT_VALUES).optional(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
   messages: z.array(
@@ -611,12 +626,53 @@ const convertProviderToLLMMessages = (
     id: generateRandomString(),
   }));
 
+export const updateConfigForModelChange = <
+  T extends {
+    thinkingEffort?: AnthropicThinkingEffort;
+    custom_parameters?: Record<string, unknown> | null;
+  },
+>(
+  config: T,
+  previous: { model: string; provider: COMPOSED_PROVIDER_TYPE | "" },
+  next: { model: PROVIDER_MODEL_TYPE; provider: COMPOSED_PROVIDER_TYPE },
+): T => {
+  const adjusted = updateProviderConfig(config, next) ?? config;
+
+  // Same rule as the playground, which resets a prompt's configs on a provider change: the extra body
+  // belongs to the previous provider. Kept, it is saved with no editor to show it and is sent again
+  // once the rule goes back to a Custom LLM.
+  if (previous.provider && previous.provider !== next.provider) {
+    return adjusted.custom_parameters == null
+      ? adjusted
+      : { ...adjusted, custom_parameters: null };
+  }
+
+  // updateProviderConfig leaves custom_parameters alone because opening a rule must keep the effort
+  // stored for a Claude model with no row. On a switch that copy belongs to the previous model; the
+  // flat thinkingEffort, already fitted to the next model, is what carries the user's choice.
+  if (
+    previous.model === next.model ||
+    !previous.provider ||
+    parseComposedProviderType(previous.provider) !== PROVIDER_TYPE.ANTHROPIC ||
+    !has(adjusted.custom_parameters, ["output_config", "effort"])
+  ) {
+    return adjusted;
+  }
+
+  return {
+    ...adjusted,
+    custom_parameters:
+      withThinkingEffort(adjusted.custom_parameters, undefined) ?? null,
+  };
+};
+
 export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
   const model = data.model?.name ?? "";
   const persistedCustomParameters = data.model?.custom_parameters ?? null;
   const thinking = (
     persistedCustomParameters as { thinking?: { level?: unknown } } | null
   )?.thinking;
+  const persistedEffort = getNestedThinkingEffort(persistedCustomParameters);
   const rawConfig = {
     temperature: data.model?.temperature,
     seed: data.model?.seed ?? null,
@@ -625,6 +681,10 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
       typeof thinking?.level === "string"
         ? (thinking.level as GeminiThinkingLevel)
         : undefined,
+    // A value outside the enum would fail the form's validation on a field nobody can see.
+    thinkingEffort: ANTHROPIC_THINKING_EFFORT_VALUES.find(
+      (e) => e === persistedEffort,
+    ),
   };
   // Normalize stale persisted configs (e.g. Opus 4.7 with `temperature: 0`
   // saved before this PR) so an unedited submit doesn't 400 on Anthropic.
@@ -654,7 +714,13 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     | LLMJudgeDetailsThreadFormType
     | LLMJudgeDetailsSpanFormType,
 ) => {
-  const { temperature, seed, custom_parameters, thinkingLevel } = data.config;
+  const {
+    temperature,
+    seed,
+    custom_parameters,
+    thinkingLevel,
+    thinkingEffort,
+  } = data.config;
   const model: LLMJudgeObject["model"] = {
     name: data.model as PROVIDER_MODEL_TYPE,
   };
@@ -692,8 +758,10 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     (custom_parameters ?? {}) as Record<string, unknown>
   ).thinking as Record<string, unknown> | undefined;
 
-  // Merge rather than replace: budget_tokens and include_thoughts also live under `thinking` and
-  // are not represented in the form, so an unchanged load -> save must not drop them.
+  // Merge rather than replace: include_thoughts also lives under `thinking` and is not represented
+  // in the form, so an unchanged load -> save must not drop it. A persisted budget_tokens is dropped:
+  // the backend lets it outrank any level, so the judge would think with that budget while the form
+  // shows Low, or keep thinking under Off.
   // "auto" is the absence of a setting — the model applies its own dynamic budget — so it is stored
   // as no thinking block rather than as a level the backend would have to special-case.
   const thinkingCustomParameters =
@@ -704,12 +772,8 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
       (o) => o.value === thinkingLevel,
     )
       ? {
-          // "off" must clear any persisted budget_tokens: an explicit budget outranks the level
-          // server-side, so keeping both would leave thinking on while the UI reads "Off".
           thinking: {
-            ...(thinkingLevel === "off"
-              ? omit(persistedThinking ?? {}, "budget_tokens")
-              : persistedThinking ?? {}),
+            ...omit(persistedThinking ?? {}, "budget_tokens"),
             level: thinkingLevel,
           },
         }
@@ -721,8 +785,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   //
   // Only for those models, though. `custom_parameters.thinking` is not Gemini-only — Anthropic reads
   // `thinking.{type,budget_tokens}` for extended thinking — so omitting it unconditionally would
-  // silently disable extended thinking on an unedited save of an Anthropic rule. Same for a Gemini
-  // 2.5 rule holding an explicit budget_tokens, whose default level is "auto".
+  // silently disable extended thinking on an unedited save of an Anthropic rule.
   const persistedCustomParameters = (custom_parameters ?? {}) as Record<
     string,
     unknown
@@ -731,33 +794,58 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   // level this model rejects — a stale "off" carried onto a model that cannot disable thinking has
   // to go, which is what the level check above is for.
   //
-  // Otherwise carry the block through untouched. "auto", or no level at all, means "the form has no
-  // level of its own here", not "delete whatever else was in there": budget_tokens and
+  // Otherwise carry the block through untouched. No level at all means "the form has no level of
+  // its own here", not "delete whatever else was in there": budget_tokens and
   // include_thoughts are not represented in the form, and Anthropic keeps type/budget_tokens under
   // this same key for extended thinking.
   // "none" is an explicit "do not think", so it removes a persisted thinking block rather than just
   // declining to add one — otherwise a level saved earlier keeps being sent. "auto" is the weaker
-  // "let the model decide" and leaves the block alone, since it may hold fields the form cannot
-  // represent (budget_tokens, include_thoughts, or Anthropic's type).
+  // "let the model decide": it drops the persisted level and budget_tokens, so the judge gets no
+  // thinking config, and keeps the rest (include_thoughts), which the form cannot represent.
+  // Anthropic's type and budget_tokens live under this key too, so this only applies to a model with
+  // a level control.
   const formClearsThinking = thinkingLevel === "none";
   const formRejectedItsLevel =
     thinkingLevel != null &&
     thinkingLevel !== "auto" &&
     thinkingLevel !== "none" &&
     !thinkingCustomParameters;
-  const otherCustomParameters =
-    thinkingCustomParameters || formRejectedItsLevel || formClearsThinking
-      ? omit(persistedCustomParameters, "thinking")
-      : persistedCustomParameters;
+  const formSetsAuto =
+    thinkingLevel === "auto" &&
+    getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).length > 0;
+  let otherCustomParameters = persistedCustomParameters;
+  if (thinkingCustomParameters || formRejectedItsLevel || formClearsThinking) {
+    otherCustomParameters = omit(persistedCustomParameters, "thinking");
+  } else if (formSetsAuto) {
+    otherCustomParameters =
+      withoutThinkingAmount(persistedCustomParameters) ?? {};
+  }
 
-  if (
-    Object.keys(otherCustomParameters).length > 0 ||
-    thinkingCustomParameters
-  ) {
-    model.custom_parameters = {
-      ...otherCustomParameters,
-      ...thinkingCustomParameters,
-    };
+  const mergedCustomParameters = {
+    ...otherCustomParameters,
+    ...thinkingCustomParameters,
+  };
+
+  // Only an Anthropic rule's effort is the form's to manage. A custom provider's JSON editor may hold
+  // an output_config the user typed for their own gateway, and it must survive a save untouched.
+  const formEffort = getAnthropicThinkingEffortOptions(
+    data.model as PROVIDER_MODEL_TYPE,
+  ).some((o) => o.value === thinkingEffort)
+    ? thinkingEffort
+    : undefined;
+  const finalCustomParameters =
+    getProviderFromModel(data.model as PROVIDER_MODEL_TYPE) ===
+    PROVIDER_TYPE.ANTHROPIC
+      ? withThinkingEffort(
+          mergedCustomParameters,
+          knowsAnthropicEffortLevels(data.model as PROVIDER_MODEL_TYPE)
+            ? formEffort
+            : getNestedThinkingEffort(mergedCustomParameters),
+        )
+      : mergedCustomParameters;
+
+  if (finalCustomParameters && Object.keys(finalCustomParameters).length > 0) {
+    model.custom_parameters = finalCustomParameters;
   }
 
   return {

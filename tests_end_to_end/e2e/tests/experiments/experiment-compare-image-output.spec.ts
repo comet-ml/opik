@@ -133,4 +133,79 @@ test.describe('Experiment compare — inline image output', { tag: ['@t2-cuj', '
       });
     },
   );
+
+  /**
+   * opik#8547 (`5497c82`) — a picture in the trace INPUT renumbers the output's
+   * placeholders, and the thumbnail strip has to follow the conversation.
+   *
+   * The two tests above cannot catch this, and not by oversight: their images
+   * live in the output alone, where the combined `{input, output}` pass and an
+   * output-only pass number identically — so both lists agree whichever one the
+   * strip was handed. Put a picture on each side and they disagree. The output's
+   * own text is then numbered [image_1], while a strip still built from the
+   * output-only list would label that same picture [image_0] and leave the
+   * input's out altogether.
+   *
+   * Both failure modes are silent, again: a mislabelled thumbnail is a
+   * perfectly ordinary-looking row, and so is a missing one.
+   */
+  test(
+    'a picture in the input renumbers the output, and the strip follows the conversation',
+    { tag: ['@cap:experiments.compare-row-detail'] },
+    async ({ experimentImageOutput, project, page }) => {
+      const seed = experimentImageOutput.inputAndOutput;
+      const compare = new CompareExperimentsPage(page, project.id, experimentImageOutput.datasetId, [
+        experimentImageOutput.experimentId,
+      ]);
+
+      await test.step('Open the row detail panel for the item with images on both sides', async () => {
+        await compare.gotoResults();
+        await compare.waitForResultsReady();
+        await compare.openRowPanel(seed.datasetItemId);
+      });
+
+      await test.step('The output text is numbered across input and output', async () => {
+        // Read off the Assistant bubble rather than through
+        // `readPanelOutputText`: a `{ output: "…" }` payload now renders as a
+        // conversation, so the output text is the bubble's body — and the text
+        // here ("out:[image_1]") is not markdown, so it renders as a plain
+        // `div.comet-markdown` that the prettified-paragraph locator never
+        // matches.
+        const text = await compare.panelMessageText(
+          { experimentName: experimentImageOutput.experimentName },
+          'Assistant',
+        );
+        expect(text, 'the output text with its placeholder').toBe(seed.expectedText);
+        // And the image really was lifted out of the text: without this, an
+        // output that rendered its raw base64 alongside a thumbnail would
+        // satisfy everything else here.
+        expect(text, 'raw base64 left in the rendered output').not.toContain(
+          seed.rawOutput.slice(0, 48),
+        );
+      });
+
+      await test.step('The strip holds both pictures and each resolves to its own', async () => {
+        // The mapping is the claim: [image_0] is the INPUT's blue picture and
+        // [image_1] the output's red one. A strip built from the output-only
+        // list carries one thumbnail labelled [image_0] pointing at the red
+        // picture, which fails both halves of this.
+        for (const [placeholder, url] of Object.entries(seed.expectedUrlByPlaceholder)) {
+          await compare.expectThumbnailResolvesTo(placeholder, url);
+          await compare.expectThumbnailDecodes(placeholder);
+        }
+      });
+
+      await test.step('The panel shows those thumbnails and no others', async () => {
+        await expect(compare.panelMediaThumbnails, 'inline thumbnails in the panel').toHaveCount(
+          seed.expectedThumbnailCount,
+        );
+        const alts = await compare.panelMediaThumbnails.evaluateAll((nodes) =>
+          nodes.map((n) => n.getAttribute('alt') ?? ''),
+        );
+        expect(alts.sort(), 'the placeholders the panel rendered').toEqual(
+          Object.keys(seed.expectedUrlByPlaceholder).map(mediaAlt).sort(),
+        );
+      });
+    },
+  );
 });

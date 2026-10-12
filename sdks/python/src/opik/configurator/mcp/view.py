@@ -7,9 +7,9 @@ the CLI supplies the ``rich`` one, and tests inject a recording double.
 import abc
 import contextlib
 import dataclasses
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
-from opik.configurator.mcp import spec as mcp_spec
+from opik.configurator.mcp import targets as mcp_targets
 
 
 @dataclasses.dataclass
@@ -54,11 +54,49 @@ SIGN_IN_HINT = (
 
 def sign_in_failed_message(client_display_name: str) -> str:
     """What to do about a client that was registered but not signed in."""
-    return (
-        f"{client_display_name} is registered but not signed in. Run "
-        f"`claude mcp login {mcp_spec.SERVER_NAME}` to finish it — until then the server "
-        "contributes no tools."
+    command = next(
+        target.sign_in_command
+        for target in mcp_targets.HOST_TARGETS
+        if target.display_name == client_display_name
     )
+    return (
+        f"{client_display_name} is registered but not signed in. Run `{command}` to "
+        "finish it — until then the server contributes no tools."
+    )
+
+
+def next_steps(
+    hosted: bool,
+    registered: Sequence[Tuple[mcp_targets.HostTarget, mcp_targets.InstallResult]],
+) -> List[str]:
+    """What is left in each registered client, a line each, for whoever ran a run
+    without a terminal: often a coding agent."""
+    steps = []
+    for target, result in registered:
+        name, check = target.display_name, f"check with `{target.status_command}`"
+        if not hosted or (result.sign_in_attempted and not result.sign_in_failed):
+            if target.status_command:
+                steps.append(f"{name}: {'signed in; ' if hosted else ''}{check}.")
+            continue
+        sign_in = (
+            "the sign-in did not finish. Sign in"
+            if result.sign_in_failed
+            else "sign in"
+        )
+        if target.key == "claude-code":
+            # `claude mcp login` refuses to run without a terminal, so an agent
+            # cannot run it: this one is for the user.
+            steps.append(
+                f"{name}: {sign_in} from a terminal with `{target.sign_in_command}`, "
+                f"or with `/mcp` in a Claude Code session; then {check}."
+            )
+        elif target.sign_in_command:
+            steps.append(
+                f"{name}: {sign_in} with `{target.sign_in_command}`, then {check}."
+            )
+        else:
+            steps.append(f"{name}: sign in from its MCP settings when it asks.")
+    return steps
 
 
 class InstallView(abc.ABC):

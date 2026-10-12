@@ -2,8 +2,10 @@ FROM maven:3.9.16-amazoncorretto-25-al2023 AS build
 
 WORKDIR /opt/opik-backend
 
-# Copy parent POM first for dependency caching
-COPY pom.xml spotless.xml ./
+# Copy parent POM first for dependency caching. lombok.config belongs here, where the code compiles: without it
+# Lombok drops copyable annotations such as @Config from generated @Inject constructors, and Guice injects an empty
+# config object instead of the configured one.
+COPY pom.xml spotless.xml lombok.config ./
 RUN mvn dependency:go-offline
 
 # Copy source code

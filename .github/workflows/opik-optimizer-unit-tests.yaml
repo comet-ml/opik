@@ -16,6 +16,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
   OPIK_ANALYTICS_ENABLE: False

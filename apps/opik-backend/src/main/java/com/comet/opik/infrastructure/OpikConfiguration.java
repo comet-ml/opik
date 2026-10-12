@@ -40,6 +40,9 @@ public class OpikConfiguration extends JobConfiguration {
     private CustomChartsConfig customCharts = new CustomChartsConfig();
 
     @Valid @NotNull @JsonProperty
+    private FreeFormSqlPostRunCheckConfig freeFormSqlPostRunCheck = new FreeFormSqlPostRunCheckConfig();
+
+    @Valid @NotNull @JsonProperty
     private UuidValidationConfig uuidValidation = UuidValidationConfig.builder().build();
 
     @Valid @NotNull @JsonProperty
