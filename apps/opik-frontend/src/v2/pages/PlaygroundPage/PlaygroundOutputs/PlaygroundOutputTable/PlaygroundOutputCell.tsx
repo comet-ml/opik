@@ -62,6 +62,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
   const stale = output?.stale ?? false;
   const traceId = output?.traceId ?? null;
   const error = output?.error;
+  const errorHint = output?.errorHint;
   const selectedRuleIds = output?.selectedRuleIds;
 
   const datasetType = useDatasetType();
@@ -171,7 +172,11 @@ const PlaygroundOutputCell: React.FunctionComponent<
           )}
           <div className="mb-2 min-h-[var(--cell-top-height)]">
             {error ? (
-              <PlaygroundOutputError message={error} stale={stale} />
+              <PlaygroundOutputError
+                message={error}
+                hint={errorHint}
+                stale={stale}
+              />
             ) : isTestSuite ? (
               <PlaygroundOutputAssertionStatus
                 experimentId={experimentId}

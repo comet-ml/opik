@@ -248,6 +248,18 @@ class TestTaskModelTemperaturePinning:
         )
         assert params["temperature"] == 0.2
 
+    def test_task_params__explicit_top_p__is_not_pinned(self):
+        params = ensure_default_model_params(
+            {"top_p": 0.55}, deterministic=True, model="claude-haiku-4-5-20251001"
+        )
+        assert "temperature" not in params
+        assert params["top_p"] == 0.55
+
+    def test_params__explicit_max_completion_tokens__gets_no_max_tokens(self):
+        params = ensure_default_model_params({"max_completion_tokens": 77})
+        assert params["max_completion_tokens"] == 77
+        assert "max_tokens" not in params
+
     def test_task_params__explicit_null_max_tokens__is_defaulted(self):
         params = ensure_default_model_params({"max_tokens": None})
         assert params["max_tokens"] == optimizers_module.LLM_MAX_TOKENS

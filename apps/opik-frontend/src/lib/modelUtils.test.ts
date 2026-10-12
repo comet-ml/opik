@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import omit from "lodash/omit";
 import {
   getAnthropicThinkingEffortOptions,
@@ -6,7 +6,9 @@ import {
   getDefaultThinkingLevel,
   getRoutableProviderModelValue,
   getOpenAIReasoningEffortOptions,
+  getOpenRouterReasoningEffortOptions,
   getThinkingLevelOptions,
+  isAnthropicThinkingRequested,
   isReasoningModel,
   resolveEffort,
   resolveSamplingParams,
@@ -20,6 +22,7 @@ import {
   supportsPenaltyParams,
   supportsSamplingParams,
   supportsVertexAIThinkingLevel,
+  thinksOnlyWhenAsked,
   updateProviderConfig,
   withoutThinkingAmount,
   withShownThinkingLevel,
@@ -41,6 +44,7 @@ import {
 import { ANTHROPIC_MODEL_CAPABILITIES } from "@/constants/llm";
 import {
   getLatestProviderModelsSnapshot,
+  ModelFlags,
   resetModelRegistryStoreForTesting,
   setLatestModelFlags,
   setLatestProviderModelsSnapshot,
@@ -388,6 +392,106 @@ describe("updateProviderConfig — OpenAI", () => {
     });
     expect(result?.reasoningEffort).toBe("high");
   });
+
+  it.each<
+    [
+      string,
+      PROVIDER_MODEL_TYPE,
+      OpenAIReasoningEffort,
+      PROVIDER_MODEL_TYPE,
+      OpenAiPipelineMode,
+      OpenAIReasoningEffort,
+    ]
+  >([
+    [
+      "moves a picked minimal to low, not to none, on GPT 5.1",
+      PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GPT_5_1,
+      "chat_completions_api",
+      "low",
+    ],
+    [
+      "moves a picked minimal to low on a model that starts at low",
+      PROVIDER_MODEL_TYPE.GPT_5_MINI,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GPT_6_ASTRA,
+      "chat_completions_api",
+      "low",
+    ],
+    [
+      "moves a picked none to low on o4-mini",
+      PROVIDER_MODEL_TYPE.GPT_5_1,
+      "none",
+      PROVIDER_MODEL_TYPE.GPT_O4_MINI,
+      "chat_completions_api",
+      "low",
+    ],
+    [
+      "moves a picked none to minimal on GPT 5 Nano",
+      PROVIDER_MODEL_TYPE.GPT_5_1,
+      "none",
+      PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      "chat_completions_api",
+      "minimal",
+    ],
+    [
+      "moves a picked xhigh to high on GPT 5 Nano",
+      PROVIDER_MODEL_TYPE.GPT_5_4_NANO,
+      "xhigh",
+      PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      "chat_completions_api",
+      "high",
+    ],
+    [
+      "moves a picked max to xhigh on a Responses API model without max",
+      PROVIDER_MODEL_TYPE.GPT_6_SOL,
+      "max",
+      PROVIDER_MODEL_TYPE.GPT_5_5,
+      "responses_api",
+      "xhigh",
+    ],
+    [
+      "keeps a picked low the next model offers",
+      PROVIDER_MODEL_TYPE.GPT_O4_MINI,
+      "low",
+      PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      "chat_completions_api",
+      "low",
+    ],
+    [
+      "keeps the default high",
+      PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      "high",
+      PROVIDER_MODEL_TYPE.GPT_5_1,
+      "chat_completions_api",
+      "high",
+    ],
+    [
+      "uses high for a max a Chat Completions key showed as high",
+      PROVIDER_MODEL_TYPE.GPT_6_SOL,
+      "max",
+      PROVIDER_MODEL_TYPE.GPT_6_LUNA,
+      "chat_completions_api",
+      "high",
+    ],
+  ])(
+    "on a switch %s",
+    (
+      _,
+      previousModel,
+      reasoningEffort,
+      model,
+      openAiPipelineMode,
+      expected,
+    ) => {
+      const result = updateProviderConfig(
+        { maxCompletionTokens: 4000, reasoningEffort },
+        { model, provider: OPEN_AI, openAiPipelineMode, previousModel },
+      );
+      expect(result?.reasoningEffort).toBe(expected);
+    },
+  );
 
   it("keeps a valid reasoningEffort across reasoning-model switches", () => {
     const config: LLMOpenAIConfigsType = {
@@ -867,13 +971,34 @@ describe("Gemini thinking level", () => {
     expect(getThinkingLevelOptions(PROVIDER_MODEL_TYPE.GPT_4O)).toEqual([]);
   });
 
-  it("offers an off option for the 2.5 family so thinking can be disabled again", () => {
-    const values = getThinkingLevelOptions(
-      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
-    ).map((o) => o.value);
-
-    expect(values).toContain("off");
+  // Both providers answer 2.5 Flash and Flash Lite at a zero budget with thinking off.
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+  ])("offers an off option for %s so thinking can be disabled", (model) => {
+    expect(getThinkingLevelOptions(model).map((o) => o.value)).toEqual([
+      "auto",
+      "off",
+      "low",
+      "medium",
+      "high",
+    ]);
   });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+  ])(
+    "sends off on %s as a thinking block the backend turns into a zero budget",
+    (model) => {
+      expect(
+        sanitizeConfigForRequest(model, { thinkingLevel: "off" })
+          .custom_parameters,
+      ).toEqual({ thinking: { level: "off" } });
+    },
+  );
 
   it("does not offer off for Gemini 3, which cannot disable thinking", () => {
     const values = getThinkingLevelOptions(
@@ -1278,6 +1403,114 @@ describe("updateProviderConfig — Gemini thinking level", () => {
     });
 
     expect(next).toBe(config);
+  });
+
+  it.each<
+    [
+      string,
+      PROVIDER_MODEL_TYPE,
+      GeminiThinkingLevel,
+      PROVIDER_MODEL_TYPE,
+      GeminiThinkingLevel,
+    ]
+  >([
+    [
+      "replaces the previous model's default with the next one's",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "high",
+      PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
+      "medium",
+    ],
+    [
+      "does not carry Flash Lite's default off onto 2.5 Flash",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      "off",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "auto",
+    ],
+    [
+      "keeps a level the user picked when the next model offers it",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "high",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+      "high",
+    ],
+    [
+      "keeps a picked low across a family change",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "low",
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
+      "low",
+    ],
+    [
+      "moves a picked level the next model does not offer to the nearest one",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "low",
+    ],
+    [
+      "moves a picked medium to low, the lower of two equally near levels",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "medium",
+      PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+      "low",
+    ],
+    [
+      "moves a picked off to the least thinking a model that cannot turn it off offers",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "off",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "minimal",
+    ],
+    [
+      "moves a picked off to low on 2.5 Pro, which has no off",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "off",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+      "low",
+    ],
+    [
+      "uses the next model's default for a picked auto it does not offer",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      "auto",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "high",
+    ],
+    [
+      "uses the next model's default for a level the previous one did not show",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+      "high",
+    ],
+    [
+      "applies the same rule on Vertex AI",
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW,
+      "high",
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
+      "medium",
+    ],
+    [
+      "moves to the nearest level on Vertex AI too",
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW,
+      "minimal",
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      "low",
+    ],
+  ])("on a switch %s", (_, previousModel, thinkingLevel, model, expected) => {
+    const next = updateProviderConfig(
+      { thinkingLevel },
+      {
+        model,
+        provider: (model.startsWith("vertex_ai/")
+          ? PROVIDER_TYPE.VERTEX_AI
+          : PROVIDER_TYPE.GEMINI) as COMPOSED_PROVIDER_TYPE,
+        previousModel,
+      },
+    );
+
+    expect(next?.thinkingLevel).toBe(expected);
   });
 });
 
@@ -2203,7 +2436,7 @@ describe("max on the OpenAI Responses API only", () => {
     {
       model: PROVIDER_MODEL_TYPE.GPT_6_1_SOL,
       chatCompletions: LOW_TO_XHIGH,
-      responsesApi: LOW_TO_XHIGH,
+      responsesApi: [...LOW_TO_XHIGH, "max"],
     },
     {
       model: PROVIDER_MODEL_TYPE.GPT_5_5,
@@ -2313,6 +2546,28 @@ describe("an OpenAI reasoning model reached through a custom gateway", () => {
 describe("an OpenAI or Gemini model reached through OpenRouter", () => {
   const SAMPLING: SamplingParams = { temperature: 0.7, topP: 0.9 };
 
+  // Out of the picker because OpenRouter no longer serves them on chat completions. The registry still
+  // lists them, which is how the app resolves a stored prompt's id to OpenRouter.
+  const UNLISTED_OPEN_ROUTER_MODELS = [
+    PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH,
+    PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW_BATCH,
+    PROVIDER_MODEL_TYPE.OPENAI_GPT_5_CHAT,
+  ];
+
+  beforeEach(() => {
+    const snapshot = getLatestProviderModelsSnapshot();
+    setLatestProviderModelsSnapshot({
+      ...snapshot,
+      [PROVIDER_TYPE.OPEN_ROUTER]: [
+        ...(snapshot[PROVIDER_TYPE.OPEN_ROUTER] ?? []),
+        ...UNLISTED_OPEN_ROUTER_MODELS.map((value) => ({
+          value,
+          label: value,
+        })),
+      ],
+    });
+  });
+
   afterEach(() => {
     resetModelRegistryStoreForTesting();
   });
@@ -2402,25 +2657,30 @@ describe("Anthropic request contract", () => {
     "high",
     "max",
   ];
+  const OFF_TO_MAX: AnthropicThinkingEffort[] = ["off", ...LOW_TO_MAX];
+  const OFF_TO_MAX_WITHOUT_XHIGH: AnthropicThinkingEffort[] = [
+    "off",
+    ...LOW_TO_MAX_WITHOUT_XHIGH,
+  ];
 
   it.each<[PROVIDER_MODEL_TYPE, AnthropicThinkingEffort[]]>([
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5, LOW_TO_MAX],
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8, LOW_TO_MAX],
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, LOW_TO_MAX],
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7_20260416, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8, OFF_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, OFF_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7_20260416, OFF_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_PREVIEW, LOW_TO_MAX_WITHOUT_XHIGH],
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, LOW_TO_MAX_WITHOUT_XHIGH],
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6_20260205, LOW_TO_MAX_WITHOUT_XHIGH],
-    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, LOW_TO_MAX_WITHOUT_XHIGH],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, OFF_TO_MAX_WITHOUT_XHIGH],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6_20260205, OFF_TO_MAX_WITHOUT_XHIGH],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, OFF_TO_MAX_WITHOUT_XHIGH],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5, ["low", "medium", "high"]],
   ])(
-    "offers %s exactly the effort levels Anthropic accepts",
+    "offers %s exactly the effort levels Anthropic accepts, after Off where it thinks only when asked",
     (model, levels) => {
       expect(supportsAnthropicThinkingEffort(model)).toBe(true);
       expect(
@@ -2454,7 +2714,7 @@ describe("Anthropic request contract", () => {
   });
 
   it.each<[PROVIDER_MODEL_TYPE, AnthropicThinkingEffort]>([
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, "medium"],
   ])("defaults %s to Anthropic's own default, %s", (model, effort) => {
@@ -2462,12 +2722,44 @@ describe("Anthropic request contract", () => {
     expect(resolveEffort(model, {})).toEqual({ thinkingEffort: effort });
   });
 
+  it.each([
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6_20260205,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7_20260416,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8,
+  ])("defaults %s, which thinks only when asked, to Off", (model) => {
+    expect(thinksOnlyWhenAsked(model)).toBe(true);
+    expect(getDefaultThinkingEffort(model)).toBe("off");
+  });
+
+  it("shows Off for a Sonnet 4.6 config that stores no effort", () => {
+    expect(resolveEffort(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {})).toEqual({
+      thinkingEffort: "off",
+    });
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+    PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1,
+    PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5,
+  ])("offers no Off on %s, which thinks by default or not at all", (model) => {
+    expect(thinksOnlyWhenAsked(model)).toBe(false);
+    expect(
+      getAnthropicThinkingEffortOptions(model).map((o) => o.value),
+    ).not.toContain("off");
+  });
+
   it("coerces an adaptive effort to the model default when switching to Opus 4.7", () => {
     const result = updateProviderConfig(
       { maxCompletionTokens: 4000, thinkingEffort: ADAPTIVE },
       { model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, provider: ANTHROPIC },
     );
-    expect(result?.thinkingEffort).toBe("high");
+    expect(result?.thinkingEffort).toBe("off");
   });
 
   it("coerces an effort Opus 5.5 does not take to its medium default", () => {
@@ -2486,12 +2778,98 @@ describe("Anthropic request contract", () => {
     expect(result?.thinkingEffort).toBe("medium");
   });
 
-  it("coerces xhigh when switching to Sonnet 4.6, which tops out at max", () => {
+  it.each<
+    [
+      string,
+      PROVIDER_MODEL_TYPE,
+      AnthropicThinkingEffort,
+      PROVIDER_MODEL_TYPE,
+      AnthropicThinkingEffort,
+    ]
+  >([
+    [
+      "replaces Sonnet 4.6's default off with Opus 5.5's own medium",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "off",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      "medium",
+    ],
+    [
+      "replaces Sonnet 5's default high with Sonnet 4.6's own off",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
+      "high",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "off",
+    ],
+    [
+      "keeps a picked high on Sonnet 4.6, now that high is not its default",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "high",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      "high",
+    ],
+    [
+      "replaces Opus 5.5's default medium with Opus 5's own high",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      "medium",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5,
+      "high",
+    ],
+    [
+      "keeps a level the user picked when the next model offers it",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "low",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      "low",
+    ],
+    [
+      "keeps a picked high that is not the previous model's default",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      "high",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "high",
+    ],
+    [
+      "moves a picked xhigh to high, the lower of two equally near levels",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      "xhigh",
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "high",
+    ],
+    [
+      "moves a picked max to high on Opus 4.5",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      "max",
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5,
+      "high",
+    ],
+  ])("on a switch %s", (_, previousModel, thinkingEffort, model, expected) => {
+    const result = updateProviderConfig(
+      { maxCompletionTokens: 4000, thinkingEffort },
+      { model, provider: ANTHROPIC, previousModel },
+    );
+    expect(result?.thinkingEffort).toBe(expected);
+  });
+
+  it("returns the same config when the previous default is also the next one", () => {
+    const config: LLMAnthropicConfigsType = {
+      maxCompletionTokens: 4000,
+      thinkingEffort: "off",
+    };
+    const result = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      provider: ANTHROPIC,
+      previousModel: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    });
+    expect(result).toBe(config);
+  });
+
+  it("coerces a loaded xhigh on Sonnet 4.6, which tops out at max, to its default", () => {
     const result = updateProviderConfig(
       { maxCompletionTokens: 4000, thinkingEffort: "xhigh" },
       { model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, provider: ANTHROPIC },
     );
-    expect(result?.thinkingEffort).toBe("high");
+    expect(result?.thinkingEffort).toBe("off");
   });
 
   it("keeps a stored thinkingEffort the model offers", () => {
@@ -2543,7 +2921,7 @@ describe("Anthropic request contract", () => {
         thinkingEffort: ADAPTIVE,
         custom_parameters: { output_config: { effort: "xhigh" } },
       }),
-    ).toEqual({ thinkingEffort: "high" });
+    ).toEqual({ thinkingEffort: "off" });
   });
 
   describe("on a Claude model this build has no row for", () => {
@@ -2594,18 +2972,62 @@ describe("Anthropic request contract", () => {
     ).toEqual({ output_config: { effort: "low" } });
   });
 
-  it("sends Sonnet 4.6 temperature alone and its effort under custom_parameters", () => {
+  it("sends Sonnet 4.6 at a level its effort under custom_parameters and no sampling params, since it then thinks", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
         ...FULL_CONFIG,
+      }),
+    ).toEqual({
+      maxCompletionTokens: 4000,
+      throttling: 0,
+      maxConcurrentRequests: 5,
+      custom_parameters: { output_config: { effort: "low" } },
+    });
+  });
+
+  it("sends Sonnet 4.6 at Off its temperature alone and no effort", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        ...FULL_CONFIG,
+        thinkingEffort: "off",
+        custom_parameters: { output_config: { effort: "max", format: "x" } },
       }),
     ).toEqual({
       temperature: 0.7,
       maxCompletionTokens: 4000,
       throttling: 0,
       maxConcurrentRequests: 5,
-      custom_parameters: { output_config: { effort: "low" } },
+      custom_parameters: { output_config: { format: "x" } },
     });
+  });
+
+  it.each<[string, AnthropicThinkingEffort | undefined, boolean]>([
+    ["no effort stored, so its Off default", undefined, false],
+    ["Off", "off", false],
+    ["a level", "low", true],
+  ])(
+    "reads Sonnet 4.6 with %s as asking for thinking: %s",
+    (_, thinkingEffort, thinking) => {
+      expect(
+        isAnthropicThinkingRequested(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+          thinkingEffort,
+        }),
+      ).toBe(thinking);
+      expect(
+        resolveSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+          temperature: 0.3,
+          thinkingEffort,
+        }),
+      ).toEqual(thinking ? {} : { temperature: 0.3 });
+    },
+  );
+
+  it("never reads a model that thinks by default as asking for thinking", () => {
+    expect(
+      isAnthropicThinkingRequested(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
+        thinkingEffort: "low",
+      }),
+    ).toBe(false);
   });
 
   it("sends Sonnet 5 no sampling params and its xhigh effort", () => {
@@ -2622,7 +3044,7 @@ describe("Anthropic request contract", () => {
     });
   });
 
-  it("replaces an adaptive effort persisted on Opus 4.6 with the default", () => {
+  it("replaces an adaptive effort persisted on Opus 4.6 with the default, Off", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, {
         maxCompletionTokens: 4000,
@@ -2631,7 +3053,6 @@ describe("Anthropic request contract", () => {
     ).toEqual({
       maxCompletionTokens: 4000,
       temperature: 0,
-      custom_parameters: { output_config: { effort: "high" } },
     });
   });
 
@@ -2705,7 +3126,7 @@ describe("Anthropic request contract", () => {
     }
   });
 
-  it("sends the effort the dropdown displays", () => {
+  it("sends the effort the dropdown displays, and none for Off", () => {
     for (const model of Object.keys(
       ANTHROPIC_MODEL_CAPABILITIES,
     ) as PROVIDER_MODEL_TYPE[]) {
@@ -2714,9 +3135,10 @@ describe("Anthropic request contract", () => {
       }).custom_parameters as
         | { output_config?: { effort?: string } }
         | undefined;
+      const displayed = resolveEffort(model, {}).thinkingEffort;
 
       expect(sent?.output_config?.effort).toBe(
-        resolveEffort(model, {}).thinkingEffort,
+        displayed === "off" ? undefined : displayed,
       );
     }
   });
@@ -2982,5 +3404,286 @@ describe("OpenRouter request contract", () => {
         temperature: 0.7,
       }),
     ).toEqual({ temperature: 0.7 });
+  });
+});
+
+describe("OpenRouter parameters follow the model's OpenRouter lists", () => {
+  const LISTS: Record<
+    string,
+    Pick<ModelFlags, "supportedParameters" | "reasoningEfforts">
+  > = {
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI]: {
+      supportedParameters: [
+        "frequency_penalty",
+        "max_completion_tokens",
+        "max_tokens",
+        "presence_penalty",
+        "temperature",
+        "top_p",
+      ],
+    },
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO]: {
+      supportedParameters: [
+        "max_completion_tokens",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+      ],
+      reasoningEfforts: ["high", "medium", "low", "minimal"],
+    },
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_LUNA]: {
+      supportedParameters: ["max_tokens", "reasoning", "reasoning_effort"],
+      reasoningEfforts: ["max", "xhigh", "high", "medium", "low", "none"],
+    },
+    [PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH]: {
+      supportedParameters: ["max_tokens", "reasoning", "reasoning_effort"],
+      reasoningEfforts: ["high"],
+    },
+    [PROVIDER_MODEL_TYPE.OPENAI_O4_MINI]: {
+      supportedParameters: ["max_tokens", "reasoning"],
+    },
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO_0613]: {
+      supportedParameters: [
+        "frequency_penalty",
+        "max_completion_tokens",
+        "presence_penalty",
+        "temperature",
+        "top_p",
+      ],
+    },
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH]: {
+      supportedParameters: ["max_tokens", "reasoning", "temperature", "top_p"],
+    },
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW]: {
+      supportedParameters: [
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "temperature",
+        "top_p",
+      ],
+      reasoningEfforts: ["high", "medium", "low", "minimal"],
+    },
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5]: {
+      supportedParameters: [
+        "max_completion_tokens",
+        "max_tokens",
+        "reasoning",
+        "temperature",
+        "top_k",
+        "top_p",
+      ],
+    },
+    [PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_8B_INSTRUCT]: {
+      supportedParameters: [
+        "frequency_penalty",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "repetition_penalty",
+        "temperature",
+        "top_k",
+        "top_p",
+      ],
+    },
+  };
+
+  const CONFIG: LLMOpenRouterConfigsType = {
+    maxTokens: 512,
+    temperature: 0.7,
+    topP: 0.9,
+    topK: 40,
+    frequencyPenalty: 0.5,
+    presencePenalty: 0.5,
+    repetitionPenalty: 1.1,
+    minP: 0.05,
+    topA: 0.1,
+  };
+
+  beforeEach(() => {
+    setLatestModelFlags(
+      new Map(
+        Object.entries(LISTS).map(([model, lists]) => [
+          model,
+          { reasoning: false, structuredOutput: false, ...lists },
+        ]),
+      ),
+    );
+  });
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it.each<[PROVIDER_MODEL_TYPE, Record<string, unknown>]>([
+    [
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      {
+        maxTokens: 512,
+        temperature: 0.7,
+        topP: 0.9,
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.5,
+      },
+    ],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO, { maxTokens: 512 }],
+    [
+      PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH,
+      { maxTokens: 512, temperature: 0.7, topP: 0.9 },
+    ],
+    // Listed by OpenRouter, but Google asks to keep Gemini 3 at its default temperature.
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW, { maxTokens: 512 }],
+    [
+      PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5,
+      { maxTokens: 512, temperature: 0.7, custom_parameters: { top_k: 40 } },
+    ],
+    [
+      PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_8B_INSTRUCT,
+      {
+        maxTokens: 512,
+        temperature: 0.7,
+        topP: 0.9,
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.5,
+        custom_parameters: {
+          top_k: 40,
+          min_p: 0.05,
+          repetition_penalty: 1.1,
+        },
+      },
+    ],
+    [
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO_0613,
+      {
+        maxTokens: 512,
+        temperature: 0.7,
+        topP: 0.9,
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.5,
+      },
+    ],
+    [
+      PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT,
+      {
+        maxTokens: 512,
+        temperature: 0.7,
+        topP: 0.9,
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.5,
+        custom_parameters: {
+          top_k: 40,
+          min_p: 0.05,
+          top_a: 0.1,
+          repetition_penalty: 1.1,
+        },
+      },
+    ],
+  ])("sends %s only the parameters it lists", (model, request) => {
+    expect(sanitizeConfigForRequest(model, { ...CONFIG })).toEqual(request);
+  });
+
+  it("drops a stale nested copy of a parameter the model does not list", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI, {
+        temperature: 0.7,
+        custom_parameters: { top_k: 5, transforms: ["middle-out"] },
+      }),
+    ).toEqual({
+      temperature: 0.7,
+      custom_parameters: { transforms: ["middle-out"] },
+    });
+  });
+
+  it.each<[PROVIDER_MODEL_TYPE, OpenAIReasoningEffort[]]>([
+    [
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      ["minimal", "low", "medium", "high"],
+    ],
+    [
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_LUNA,
+      ["none", "low", "medium", "high", "xhigh", "max"],
+    ],
+    [PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH, ["high"]],
+    [
+      PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW,
+      ["minimal", "low", "medium", "high"],
+    ],
+    // OpenRouter lists no levels for the o-series, so OpenAI's own are used.
+    [PROVIDER_MODEL_TYPE.OPENAI_O4_MINI, ["low", "medium", "high"]],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5, []],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH, []],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI, []],
+    [PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT, []],
+  ])("offers %s the effort levels %j", (model, levels) => {
+    expect(
+      getOpenRouterReasoningEffortOptions(model).map((o) => o.value),
+    ).toEqual(levels);
+  });
+
+  it.each<{
+    name: string;
+    model: PROVIDER_MODEL_TYPE;
+    configs: Record<string, unknown>;
+    customParameters: unknown;
+  }>([
+    {
+      name: "sends a picked level in OpenRouter's reasoning object",
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      configs: { reasoningEffort: "low" },
+      customParameters: { reasoning: { effort: "low" } },
+    },
+    {
+      name: "sends no effort for Default",
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      configs: {},
+      customParameters: undefined,
+    },
+    {
+      name: "drops a level the model does not offer",
+      model: PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH,
+      configs: { reasoningEffort: "low" },
+      customParameters: undefined,
+    },
+    {
+      name: "drops a level on a model without reasoning",
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      configs: { reasoningEffort: "high" },
+      customParameters: undefined,
+    },
+    {
+      name: "keeps the other reasoning fields and lets the panel's level win",
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      configs: {
+        reasoningEffort: "high",
+        custom_parameters: { reasoning: { effort: "low", exclude: true } },
+      },
+      customParameters: { reasoning: { effort: "high", exclude: true } },
+    },
+    {
+      name: "clears a nested level for Default",
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      configs: {
+        custom_parameters: { reasoning: { effort: "low" }, seed: 1 },
+      },
+      customParameters: { seed: 1 },
+    },
+  ])("$name", ({ model, configs, customParameters }) => {
+    const request = sanitizeConfigForRequest(model, configs);
+
+    expect(request.reasoningEffort).toBeUndefined();
+    expect(request.custom_parameters).toEqual(customParameters);
+  });
+
+  it("shows the level the request sends", () => {
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO, {
+        reasoningEffort: "minimal",
+      }),
+    ).toEqual({ reasoningEffort: "minimal" });
+    expect(
+      resolveEffort(PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH, {
+        reasoningEffort: "minimal",
+      }),
+    ).toEqual({});
   });
 });

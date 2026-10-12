@@ -1,6 +1,8 @@
 import asyncLib from "async";
 import { v7 } from "uuid";
 import pick from "lodash/pick";
+import omit from "lodash/omit";
+import isPlainObject from "lodash/isPlainObject";
 
 import {
   LogExperiment,
@@ -20,7 +22,10 @@ import api, {
 } from "@/api/api";
 import { snakeCaseObj } from "@/lib/utils";
 import { createBatchProcessor } from "@/lib/batches";
-import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
+import {
+  getRequestParameters,
+  RunStreamingReturn,
+} from "@/api/playground/useCompletionProxyStreaming";
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
@@ -31,7 +36,6 @@ import {
 import { ProviderMessageType } from "@/types/llm";
 import { parseCompletionError, parseCompletionOutput } from "@/lib/playground";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
-import { sanitizeConfigForRequest } from "@/lib/modelUtils";
 
 export interface LogQueueParams extends RunStreamingReturn {
   promptId: string;
@@ -252,22 +256,29 @@ const getSpanFromRun = (
   };
 };
 
-/**
- * What the request actually carried, for the trace to record.
- *
- * The stored config deliberately keeps a parameter the selected model rejects so that switching
- * back to one that accepts it restores the value, and sanitizeConfigForRequest is what decides
- * which of those reach the provider. Logging the raw config instead would report a temperature the
- * call never ran at.
- */
+const TOKEN_LIMIT_KEYS = ["max_tokens", "max_completion_tokens"];
+
 export const getLoggedParameters = (
   run: Pick<LogQueueParams, "model" | "configs" | "openAiPipelineMode">,
-): Record<string, unknown> =>
-  sanitizeConfigForRequest(
+): Record<string, unknown> => {
+  const { custom_parameters: extraBody, ...parameters } = getRequestParameters(
     run.model,
-    run.configs as unknown as Record<string, unknown>,
+    run.configs,
     run.openAiPipelineMode,
   );
+  if (!isPlainObject(extraBody)) return parameters;
+
+  // Mirrors the backend (CustomParametersOverrides): it sends each extra body key at the top level
+  // in place of the field of the same name, and treats the two token limit names as one limit.
+  const extraBodyParameters = extraBody as Record<string, unknown>;
+  const replacesTokenLimit = TOKEN_LIMIT_KEYS.some(
+    (key) => key in extraBodyParameters,
+  );
+  return {
+    ...(replacesTokenLimit ? omit(parameters, TOKEN_LIMIT_KEYS) : parameters),
+    ...extraBodyParameters,
+  };
+};
 
 const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
   // Use the actual model from the response headers if available
