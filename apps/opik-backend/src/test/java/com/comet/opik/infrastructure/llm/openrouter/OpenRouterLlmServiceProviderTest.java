@@ -1,7 +1,11 @@
 package com.comet.opik.infrastructure.llm.openrouter;
 
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.utils.JsonUtils;
@@ -10,6 +14,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.google.common.collect.Sets;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -19,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -57,6 +65,7 @@ class OpenRouterLlmServiceProviderTest {
             """);
 
     private WireMockServer wireMock;
+    private OpenRouterLlmServiceProvider serviceProvider;
     private LlmProviderService provider;
 
     @BeforeAll
@@ -70,8 +79,8 @@ class OpenRouterLlmServiceProviderTest {
         clientConfig.setOpenRouterUrl(wireMock.baseUrl() + "/api/v1");
 
         var clientGenerator = new OpenRouterModule().clientGenerator(clientConfig);
-        provider = new OpenRouterLlmServiceProvider(clientGenerator, mock(LlmProviderFactory.class))
-                .getService(LlmProviderClientApiConfig.builder().apiKey("test-key").build());
+        serviceProvider = new OpenRouterLlmServiceProvider(clientGenerator, mock(LlmProviderFactory.class));
+        provider = serviceProvider.getService(LlmProviderClientApiConfig.builder().apiKey("test-key").build());
     }
 
     @AfterAll
@@ -135,6 +144,57 @@ class OpenRouterLlmServiceProviderTest {
         var body = sentBody();
         assertThat(body.has("max_tokens")).isFalse();
         assertThat(body.get("max_completion_tokens").asInt()).isEqualTo(12);
+    }
+
+    @Test
+    void judgeSendsTheRuleCustomParametersAsTopLevelKeys() {
+        score(LlmAsJudgeModelParameters.builder()
+                .name("openai/gpt-4o")
+                .temperature(0.0)
+                .customParameters(JsonUtils.getJsonNodeFromString("""
+                        {"top_k": 40, "min_p": 0.1, "reasoning": {"effort": "high"}}
+                        """))
+                .build());
+
+        var body = sentBody();
+        assertThat(body.get("top_k").asInt()).isEqualTo(40);
+        assertThat(body.get("min_p").asDouble()).isEqualTo(0.1);
+        assertThat(body.get("reasoning")).isEqualTo(JsonUtils.getJsonNodeFromString("""
+                {"effort": "high"}
+                """));
+        assertThat(body.get("temperature").asDouble()).isEqualTo(0.0);
+        assertThat(body.has("custom_parameters")).isFalse();
+        assertThat(body.at("/response_format/type").asText()).isEqualTo("json_schema");
+    }
+
+    @Test
+    void judgeSendsACustomTemperatureForAModelThatTakesNoTypedOne() {
+        score(LlmAsJudgeModelParameters.builder()
+                .name("anthropic/claude-opus-4.7")
+                .temperature(0.0)
+                .customParameters(JsonUtils.getJsonNodeFromString("""
+                        {"temperature": 1.0}
+                        """))
+                .build());
+
+        var rawBody = sentRawBody();
+        assertThat(StringUtils.countMatches(rawBody, "\"temperature\"")).isEqualTo(1);
+        assertThat(JsonUtils.getJsonNodeFromString(rawBody).get("temperature").asDouble()).isEqualTo(1.0);
+    }
+
+    private void score(LlmAsJudgeModelParameters modelParameters) {
+        List<ChatMessage> messages = List.of(UserMessage.from("Score the answer"));
+        var schema = List.of(LlmAsJudgeOutputSchema.builder()
+                .name("Relevance")
+                .type(LlmAsJudgeOutputSchemaType.INTEGER)
+                .description("How relevant the answer is")
+                .build());
+        ChatRequest request = new ToolCallingStrategy()
+                .apply(ChatRequest.builder().messages(messages), messages, schema)
+                .build();
+
+        serviceProvider.getLanguageModel(LlmProviderClientApiConfig.builder().apiKey("test-key").build(),
+                modelParameters).chat(request);
     }
 
     private ChatCompletionRequest playgroundRequest(boolean stream) {
