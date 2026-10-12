@@ -124,10 +124,10 @@ interface LlmProviderAnthropicMapper {
         // A thinking block carries no text, and it comes first: as a choice of its own it would be the empty answer
         // callers read from the first choice, ahead of the real one. When thinking used up max_tokens it is all there
         // is, and one is kept so the choice still carries the finish reason.
-        var answer = response.content.stream()
+        var nonThinkingContent = response.content.stream()
                 .filter(content -> !StringUtils.equalsAny(content.type, "thinking", "redacted_thinking"))
                 .toList();
-        return (answer.isEmpty() ? response.content.subList(0, 1) : answer).stream()
+        return (nonThinkingContent.isEmpty() ? response.content.subList(0, 1) : nonThinkingContent).stream()
                 .map(content -> toChoice(content, response))
                 .toList();
     }
