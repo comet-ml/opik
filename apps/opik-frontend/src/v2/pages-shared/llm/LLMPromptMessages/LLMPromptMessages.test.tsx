@@ -167,6 +167,28 @@ describe("LLMPromptMessages focus", () => {
       expect(focusMessage).toHaveBeenCalledWith("first");
     });
 
+    it("should not focus when it turns on after the first render", () => {
+      const { rerender } = render(
+        <LLMPromptMessages
+          messages={[createMessage("first")]}
+          onChange={vi.fn()}
+          onAddMessage={vi.fn()}
+          autoFocusFirstMessage={false}
+        />,
+      );
+
+      rerender(
+        <LLMPromptMessages
+          messages={[createMessage("first")]}
+          onChange={vi.fn()}
+          onAddMessage={vi.fn()}
+          autoFocusFirstMessage
+        />,
+      );
+
+      expect(focusMessage).not.toHaveBeenCalled();
+    });
+
     it("should not focus anything when it is off", () => {
       render(<Harness initialMessages={[createMessage("first")]} />);
 

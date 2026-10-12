@@ -76,8 +76,9 @@ const LLMPromptMessages = ({
   }, [messages]);
 
   useEffect(() => {
-    if (!autoFocusFirstMessage || didAutoFocusRef.current) return;
+    if (didAutoFocusRef.current) return;
     didAutoFocusRef.current = true;
+    if (!autoFocusFirstMessage) return;
     const { activeElement } = document;
     if (activeElement && activeElement !== document.body) return;
     messageRefsMap.current.get(messages[0]?.id)?.focus();
