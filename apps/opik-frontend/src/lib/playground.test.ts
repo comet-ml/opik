@@ -185,7 +185,7 @@ describe("getDefaultConfigByProvider — the starting max output tokens", () => 
     { model: "openai/computer-use-preview", maxTokens: 4000 },
     { model: "acme/unlisted-model", maxTokens: 4000 },
   ])(
-    "starts OpenRouter $model at $maxTokens, within what OpenRouter lists for it",
+    "starts OpenRouter $model at $maxTokens: 4000, or OpenRouter's own lower limit for the model",
     ({ model, maxTokens }) => {
       expect(
         getDefaultConfigByProvider(

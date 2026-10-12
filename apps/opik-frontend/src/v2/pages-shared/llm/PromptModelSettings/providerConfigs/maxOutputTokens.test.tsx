@@ -146,7 +146,7 @@ describe("OpenRouter max output tokens", () => {
     [PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT, 0, "0"],
     [PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI, 4000, "4000"],
   ] as const)(
-    "on %s shows a stored %d as %s, within what OpenRouter lists for it",
+    "on %s shows a stored %d as %s, never above OpenRouter's own limit for the model",
     (model, stored, shown) => {
       renderOpenRouter(model, stored);
 
