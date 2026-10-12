@@ -35,7 +35,7 @@ const renderWidgetQuery = () => {
           dashboardId: "d1",
           scope: DASHBOARD_SCOPE.WORKSPACE,
           widgetId: "w1",
-          sql: "SELECT 1",
+          queryId: "q1",
         },
         { retryDelay: 0 },
       ),

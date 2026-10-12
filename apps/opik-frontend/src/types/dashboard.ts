@@ -156,10 +156,9 @@ export interface OllieChartWidgetType {
   config: {
     // Vega-Lite spec with no config or size; references its data as {"name": "rows"}.
     spec?: Record<string, unknown>;
-    // Pinned query; {{window_start}} / {{window_end}} follow the dashboard date range.
+    // The saved query the widget runs, which only Ollie can create; the widget never holds its SQL.
     query?: {
-      sql: string;
-      projectId?: string | null;
+      id: string;
     };
     // What the query reads: "workspace" (experiments, datasets) sits on experiments dashboards, "project" (traces,
     // spans, scores, threads) on multi-project ones. Ollie keeps to that; the backend does not check it yet.

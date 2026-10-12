@@ -36,7 +36,6 @@ const OllieChartEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   const [specText, setSpecText] = useState(() =>
     JSON.stringify(config.spec ?? {}, null, 2),
   );
-  const [sqlText, setSqlText] = useState(() => config.query?.sql ?? "");
   const specValid = parseSpec(specText) !== null;
 
   useImperativeHandle(ref, () => ({
@@ -52,34 +51,10 @@ const OllieChartEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     }
   };
 
-  const handleSqlChange = (value: string) => {
-    setSqlText(value);
-    updatePreviewWidget({
-      config: { ...config, query: { ...config.query, sql: value } },
-    });
-  };
-
   return (
     <div className="space-y-4">
       {config.description && (
         <p className="comet-body-s text-muted-slate">{config.description}</p>
-      )}
-      {config.query && (
-        <div className="space-y-2">
-          <Label>Query</Label>
-          <div className="overflow-hidden rounded-md border">
-            <CodeMirror
-              value={sqlText}
-              onChange={handleSqlChange}
-              theme={codemirrorTheme}
-              height="160px"
-            />
-          </div>
-          <p className="comet-body-xs text-light-slate">
-            {"{{window_start}}"} and {"{{window_end}}"} follow the dashboard
-            date range.
-          </p>
-        </div>
       )}
       <div className="space-y-2">
         <Label>Vega-Lite spec</Label>

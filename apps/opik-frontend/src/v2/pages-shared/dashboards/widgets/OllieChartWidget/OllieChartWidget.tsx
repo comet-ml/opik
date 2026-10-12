@@ -109,14 +109,14 @@ const OllieChartWidget: React.FunctionComponent<
       dashboardId: dashboardId ?? "",
       scope: dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE,
       widgetId: widgetId ?? "",
-      sql: query?.sql ?? "",
+      queryId: query?.id ?? "",
       intervalStart,
       intervalEnd,
     },
     // A preview has no saved widget to run, so it shows the rows the chart was made with.
-    { enabled: Boolean(query?.sql && dashboardId && widgetId && !preview) },
+    { enabled: Boolean(query?.id && dashboardId && widgetId && !preview) },
   );
-  const live = Boolean(query?.sql && !preview);
+  const live = Boolean(query?.id && !preview);
 
   if (!widget) {
     return null;
@@ -125,14 +125,14 @@ const OllieChartWidget: React.FunctionComponent<
   // Editing goes through Ollie when it is on; without it the JSON editor stays as the fallback. The bridge is read
   // at click time: the sidebar attaches it after this widget first renders.
   const editInOllie =
-    ollieEnabled && spec && query?.sql
+    ollieEnabled && spec && query?.id
       ? () =>
           window.opikBridge?.editChart?.({
             widgetId: widget.id,
             title: widget.title || widget.generatedTitle || "Ollie chart",
             description: config.description,
             spec,
-            query: { sql: query.sql, projectId: query.projectId },
+            query: { id: query.id },
             rows: live ? rows : snapshotRows,
           })
       : undefined;
@@ -188,7 +188,7 @@ const OllieChartWidget: React.FunctionComponent<
           readOnly={readOnly}
           titleAdornment={<OllieBadge />}
           meta={
-            query?.sql && dataUpdatedAt ? (
+            query?.id && dataUpdatedAt ? (
               <>
                 <ComputedAgo timestamp={dataUpdatedAt} />
                 <TooltipWrapper content="Refresh">
