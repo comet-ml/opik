@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.94](https://img.shields.io/badge/Version-2.2.94-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.94](https://img.shields.io/badge/AppVersion-2.2.94-informational?style=flat-square)
+![Version: 2.2.97](https://img.shields.io/badge/Version-2.2.97-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.97](https://img.shields.io/badge/AppVersion-2.2.97-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -58,7 +58,6 @@ Go to the chart folder, set VERSION you want to install and run helm install
 
 ```bash
 cd deployment/helm_chart/opik
-helm repo add bitnami https://charts.bitnami.com/bitnami
 helm dependency build
 VERSION=0.1.0
 helm upgrade --install opik -n opik --create-namespace -f values.yaml \
@@ -92,6 +91,8 @@ Call opik api on http://localhost:5173/api
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
+| altinity-clickhouse-operator.crdHook.image.repository | string | `"alpine/kubectl"` |  |
+| altinity-clickhouse-operator.crdHook.image.tag | string | `"1.35.0"` |  |
 | altinity-clickhouse-operator.enabled | bool | `true` |  |
 | altinity-clickhouse-operator.metrics.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.enabled | bool | `false` |  |
@@ -227,7 +228,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.templates.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.templates.volumeClaimTemplate | string | `"storage-vc-template"` |  |
 | clickhouse.terminationGracePeriodSeconds | int | `nil` | Pod termination grace period in seconds. Unset keeps the Kubernetes default (30). |
-| clickhouse.tieredStorage | object | `{"cold":{"cache":{"maxSize":"214748364800","path":"/var/cache/clickhouse_s3","storage":"200Gi","storageClassName":"","volumeName":"s3-cache-vc-template"},"s3":{"endpoint":"","maxGetRps":1000,"maxPutRps":500,"prefix":"clickhouse-cold/","readOnly":false,"region":"","useEnvironmentCredentials":true}},"coldTierMigration":{"activeDeadlineSeconds":1320,"enabled":true,"image":"alpine/kubectl:1.35.0","nodeSelector":{},"pollTimeoutSeconds":1200,"serviceAccountName":"","tolerations":[]},"enabled":false,"hot":{"keepFreeSpaceBytes":"10737418240"}}` | Tiered storage (hot local disk -> cold S3 with a read-through cache). Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold disks) and provisions a per-node EBS cache volume for the S3 cache. This is pure server-side infrastructure: it stays inert until a migration attaches the `tiered_replicated` policy to a table, so `enabled: false` (default) is a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros ({shard}/{replica}) cannot be used because the S3 disk is read at server start, before macros bind. |
+| clickhouse.tieredStorage | object | `{"cold":{"cache":{"maxSize":"214748364800","path":"/var/cache/clickhouse_s3","storage":"200Gi","storageClassName":"","volumeName":"s3-cache-vc-template"},"s3":{"endpoint":"","maxGetRps":1000,"maxPutRps":500,"prefix":"clickhouse-cold/","readOnly":false,"region":"","useEnvironmentCredentials":true}},"coldTierMigration":{"activeDeadlineSeconds":1320,"enabled":true,"image":"alpine/kubectl:1.35.0","nodeSelector":{},"pollTimeoutSeconds":1200,"serviceAccountName":"","tolerations":[]},"enabled":false,"hot":{"keepFreeSpaceBytes":"10737418240"},"ttl":{"activeDeadlineSeconds":600,"enabled":false,"nodeSelector":{},"resources":{},"tables":[{"moveAfterWeeks":13,"name":"traces_local"}],"tolerations":[]}}` | Tiered storage (hot local disk -> cold S3 with a read-through cache). Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold disks) and provisions a per-node EBS cache volume for the S3 cache. This is pure server-side infrastructure: it stays inert until the `tiered_replicated` policy is attached to a table (see `ttl`), so `enabled: false` (default) is a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros ({shard}/{replica}) cannot be used because the S3 disk is read at server start, before macros bind. |
 | clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
 | component.backend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
 | component.backend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |

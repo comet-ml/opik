@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createSupports,
   getOpenAIVisibleControls,
+  getOpenRouterVisibleControls,
   hasVisibleControls,
 } from "./visibleControls";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import {
   LLMOpenAIConfigsType,
+  LLMOpenRouterConfigsType,
   OpenAiPipelineMode,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
@@ -142,6 +144,17 @@ describe("hasVisibleControls", () => {
     ).toBe(false);
   });
 
+  it("is false for an openrouter OpenAI reasoning model on a rule", () => {
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_6_ASTRA,
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(false);
+  });
+
   it("is true for openrouter on the playground with only a temperature", () => {
     expect(
       hasVisibleControls(
@@ -178,6 +191,47 @@ describe("hasVisibleControls", () => {
 
   it("is false for the Opik free model, which has no panel", () => {
     expect(hasVisibleControls(PROVIDER_TYPE.OPIK_FREE, "", {})).toBe(false);
+  });
+});
+
+describe("the OpenRouter sampling and penalty sliders", () => {
+  const OPEN_ROUTER_CONFIG: LLMOpenRouterConfigsType = {
+    maxTokens: 0,
+    temperature: 1,
+    topP: 1,
+    topK: 0,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+    repetitionPenalty: 1,
+    minP: 0,
+    topA: 0,
+  };
+
+  it.each<[PROVIDER_MODEL_TYPE, boolean, boolean]>([
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO, false, false],
+    [PROVIDER_MODEL_TYPE.OPENAI_O3, false, false],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW, false, true],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI, true, true],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH, true, true],
+    [PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH, true, true],
+  ])("on %s show sampling: %s, penalties: %s", (model, sampling, penalties) => {
+    const visible = getOpenRouterVisibleControls({
+      model,
+      configs: OPEN_ROUTER_CONFIG,
+      supports: createSupports(),
+    });
+
+    expect({
+      temperature: visible.temperature,
+      topP: visible.topP,
+      frequencyPenalty: visible.frequencyPenalty,
+      presencePenalty: visible.presencePenalty,
+    }).toEqual({
+      temperature: sampling,
+      topP: sampling,
+      frequencyPenalty: penalties,
+      presencePenalty: penalties,
+    });
   });
 });
 

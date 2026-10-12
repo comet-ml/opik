@@ -43,7 +43,6 @@ const hasProducedOutput = (text: string): boolean =>
 const RUN_COMPLETE_TEXT = /Run complete/;
 
 export interface PlaygroundVariantConfig {
-  /** Optional system prompt — if set, first message is converted to role=system then a User message is appended. */
   systemPrompt?: string;
   /** User prompt body. Supports `{{column}}` templating against suite/dataset items. */
   userPrompt: string;
@@ -112,35 +111,16 @@ export class PlaygroundPage {
     });
   }
 
-  /**
-   * Configure the variant at the given index.
-   * - If `systemPrompt` is set, the FIRST message row gets its role flipped to
-   *   System, then a new User message row is appended with the userPrompt.
-   * - Otherwise, the first message row (already User by default) is filled directly.
-   */
   async configureVariant(index: number, cfg: PlaygroundVariantConfig): Promise<void> {
     return test.step(`configure variant ${index}`, async () => {
       if (cfg.modelDisplayName) {
         await this.setModelForVariant(index, cfg.modelDisplayName);
       }
 
-      const messages = this.variantMessages(index);
-
       if (cfg.systemPrompt !== undefined) {
-        // Flip first message role to System and fill it.
-        const firstMessage = messages.first();
-        await firstMessage.getByRole('button', { name: 'User' }).click();
-        await this.page.getByRole('menuitemcheckbox', { name: 'System' }).click();
-        await this.fillMessageBody(firstMessage, cfg.systemPrompt);
-
-        // Add a new message; defaults to User.
-        await this.variantCard(index).getByRole('button', { name: 'Message' }).click();
-        const userMessage = messages.nth(1);
-        await this.fillMessageBody(userMessage, cfg.userPrompt);
-      } else {
-        const firstMessage = messages.first();
-        await this.fillMessageBody(firstMessage, cfg.userPrompt);
+        await this.fillMessageBody(this.variantMessage(index, 'system'), cfg.systemPrompt);
       }
+      await this.fillMessageBody(this.variantMessage(index, 'user'), cfg.userPrompt);
     });
   }
 
@@ -366,7 +346,7 @@ export class PlaygroundPage {
   /**
    * The message editors of every variant card on the page.
    *
-   * Counted rather than addressed by index so "exactly one empty message" is
+   * Counted rather than addressed by index so "exactly one empty prompt" is
    * assertable as a single statement: a second card that also happened to be
    * empty would otherwise pass an index-based check.
    */
@@ -392,6 +372,66 @@ export class PlaygroundPage {
           return (clone.textContent ?? '').trim();
         }),
       );
+    });
+  }
+
+  messageEditor(variantIndex: number, messageIndex: number): Locator {
+    return this.variantCard(variantIndex)
+      .getByTestId('playground-message-row')
+      .nth(messageIndex)
+      .locator('.cm-content')
+      .first();
+  }
+
+  async addMessage(variantIndex: number): Promise<void> {
+    return test.step(`click + Message on variant ${variantIndex}`, async () => {
+      await this.variantCard(variantIndex).getByRole('button', { name: 'Message' }).click();
+    });
+  }
+
+  async focusUserMessageAtLineStart(): Promise<void> {
+    return test.step('put the cursor at the start of the user message', async () => {
+      await this.variantMessage(0, 'user').locator('.cm-content').first().click();
+      await this.page.keyboard.press('Home');
+    });
+  }
+
+  /**
+   * CodeMirror draws its own blinking `.cm-cursor` and `.cm-scroller` clips it,
+   * so "is the cursor visible" is asked as geometry: a pixel check would depend
+   * on the blink phase. Signed: positive is how many CSS pixels of the cursor
+   * stick out past the scroll box's left edge and get cut off (OPIK-5298);
+   * zero or negative means the cursor is fully inside.
+   */
+  async userMessageCursorLeftOverflowPx(): Promise<number> {
+    return test.step('measure how far the user message cursor sticks out on the left', async () => {
+      return this.variantMessage(0, 'user')
+        .locator('.cm-editor')
+        .first()
+        .evaluate((editor) => {
+          const cursor = editor.querySelector('.cm-cursor');
+          const scroller = editor.querySelector('.cm-scroller');
+          if (!cursor || !scroller) return Number.POSITIVE_INFINITY;
+          return scroller.getBoundingClientRect().left - cursor.getBoundingClientRect().left;
+        });
+    });
+  }
+
+  async emptyUserMessageWithBackspace(): Promise<void> {
+    return test.step('replace the user message with one character, then delete it with Backspace', async () => {
+      await this.variantMessage(0, 'user').locator('.cm-content').first().click();
+      await this.page.keyboard.press('ControlOrMeta+A');
+      await this.page.keyboard.type('a');
+      await this.page.keyboard.press('Backspace');
+    });
+  }
+
+  async userMessageCursorHeightPx(): Promise<number> {
+    return test.step('measure the height of the user message cursor', async () => {
+      return this.variantMessage(0, 'user')
+        .locator('.cm-cursor')
+        .first()
+        .evaluate((cursor) => cursor.getBoundingClientRect().height);
     });
   }
 
@@ -800,8 +840,7 @@ export class PlaygroundPage {
   async runSimplePromptAndAwaitResponse(args: RunSimplePromptArgs): Promise<RunSimplePromptResult> {
     return test.step('run simple prompt and await response', async () => {
       await this.setModelForVariant(0, args.modelDisplayName);
-      const messages = this.variantMessages(0);
-      await this.fillMessageBody(messages.first(), args.prompt);
+      await this.fillMessageBody(this.variantMessage(0, 'user'), args.prompt);
 
       // Use the top-right Run button (playground-run-button testid) for inline runs.
       await this.runButton().click();
@@ -1051,14 +1090,14 @@ export class PlaygroundPage {
   }
 
   /**
-   * Open the text-prompt library menu in the first message row of variant 0,
+   * Open the text-prompt library menu in the User message row of variant 0,
    * hover the named prompt to reveal the version submenu, and click the specified
    * version label (e.g. "v1"). The button lives inside the message-row actions
    * area which is hidden until the row is hovered.
    */
   async loadTextPromptVersionFromLibrary(promptName: string, versionLabel: string): Promise<void> {
     return test.step(`load text prompt "${promptName}" version "${versionLabel}" from message-row library`, async () => {
-      const messageRow = this.variantMessages(0).first();
+      const messageRow = this.variantMessage(0, 'user');
       await messageRow.hover();
       await messageRow.getByTestId('load-text-prompt-button').click();
 
@@ -1072,17 +1111,17 @@ export class PlaygroundPage {
       const card = this.variantCard(0);
       // For text prompts the loaded-prompt chip is inside the message-row actions
       // area which is only visible on hover (invisible group-hover:visible).
-      // Hovering the first message row reveals it without affecting chat-prompt cards.
-      await this.variantMessages(0).first().hover();
+      // Hovering the User message row reveals it without affecting chat-prompt cards.
+      await this.variantMessage(0, 'user').hover();
       await expect(card.getByText(promptName)).toBeVisible();
       await expect(card.getByText(versionLabel, { exact: true })).toBeVisible();
     });
   }
 
-  /** Edit the content of the first message in variant 0 directly in the Playground editor. */
-  async editFirstMessage(newContent: string): Promise<void> {
-    return test.step('edit first message in Playground', async () => {
-      const editor = this.variantMessages(0).first().locator('.cm-content').first();
+  /** Edit the content of the User message in variant 0 directly in the Playground editor. */
+  async editUserMessage(newContent: string): Promise<void> {
+    return test.step('edit the user message in Playground', async () => {
+      const editor = this.variantMessage(0, 'user').locator('.cm-content').first();
       await editor.click();
       await editor.fill(newContent);
     });
@@ -1099,13 +1138,13 @@ export class PlaygroundPage {
   }
 
   /**
-   * Click the Save button (disk icon) in the first message row of variant 0 and submit the
+   * Click the Save button (disk icon) in the User message row of variant 0 and submit the
    * "Save to prompt library" dialog in "Update existing" mode (text prompts).
    * Assumes a text prompt is already loaded so the dialog defaults to update mode.
    */
   async saveTextPromptToLibrary(): Promise<void> {
     return test.step('save text prompt to library from Playground', async () => {
-      const messageRow = this.variantMessages(0).first();
+      const messageRow = this.variantMessage(0, 'user');
       await messageRow.hover();
       await messageRow.getByTestId('save-text-prompt-button').click();
       await this.submitSaveDialog();
@@ -1113,13 +1152,13 @@ export class PlaygroundPage {
   }
 
   /**
-   * Click the Save button in the first message row of variant 0 and submit the
+   * Click the Save button in the User message row of variant 0 and submit the
    * "Save to prompt library" dialog as a new text prompt.
    * Fills the given name and clicks "Save to library".
    */
   async saveNewTextPromptToLibrary(promptName: string): Promise<void> {
     return test.step(`save new text prompt "${promptName}" to library from Playground`, async () => {
-      const messageRow = this.variantMessages(0).first();
+      const messageRow = this.variantMessage(0, 'user');
       await messageRow.hover();
       await messageRow.getByTestId('save-text-prompt-button').click();
       await this.submitSaveDialog(promptName);
@@ -1294,10 +1333,10 @@ export class PlaygroundPage {
     });
   }
 
-  /** Type a prompt into variant 0's first message row. */
-  async fillFirstMessage(text: string): Promise<void> {
-    return test.step('fill the first message of variant 0', async () => {
-      await this.fillMessageBody(this.variantMessages(0).first(), text);
+  /** Type a prompt into variant 0's User message row. */
+  async fillUserMessage(text: string): Promise<void> {
+    return test.step('fill the user message of variant 0', async () => {
+      await this.fillMessageBody(this.variantMessage(0, 'user'), text);
     });
   }
 
@@ -1437,18 +1476,53 @@ export class PlaygroundPage {
     });
   }
 
-  /** The `scrollLeft` of a panel's sticky header half and its body half. */
-  async panelScrollOffsets(
-    panel: 'variables' | 'outputs',
-  ): Promise<{ header: number; body: number }> {
-    return test.step(`read ${panel} panel header/body scroll offsets`, async () => {
+  async panelBodyScrollLeft(panel: 'variables' | 'outputs'): Promise<number> {
+    return test.step(`read the ${panel} panel body scroll offset`, async () => {
+      const body = panel === 'variables' ? this.variablesPanel('body') : this.outputsPanel('body');
+      return body.evaluate((el) => el.scrollLeft);
+    });
+  }
+
+  // Compared by position, not scrollLeft: with scroll-driven animations the header
+  // never scrolls, it is translated. Cells pair up by column: `data-header-id` is the
+  // column id and `data-cell-id` is `<rowId>_<columnId>`.
+  async panelColumnDrift(panel: 'variables' | 'outputs'): Promise<number> {
+    return test.step(`measure ${panel} panel header/body column drift`, async () => {
       const half = (h: 'header' | 'body') =>
         panel === 'variables' ? this.variablesPanel(h) : this.outputsPanel(h);
-      const [header, body] = await Promise.all([
-        half('header').evaluate((el) => el.scrollLeft),
-        half('body').evaluate((el) => el.scrollLeft),
-      ]);
-      return { header, body };
+      const headerCells = await half('header')
+        .locator('th[data-header-id]')
+        .evaluateAll((cells) =>
+          cells.map((c) => [c.getAttribute('data-header-id') ?? '', c.getBoundingClientRect().left] as const),
+        );
+      const firstRow = half('body').locator('tr[data-row-id]').first();
+      const cellIdPrefix = `${await firstRow.getAttribute('data-row-id')}_`;
+      const bodyLefts = await firstRow.locator('td[data-cell-id]').evaluateAll(
+        (cells, prefix) =>
+          cells.map((c) => {
+            const columnId = (c.getAttribute('data-cell-id') ?? '').slice(prefix.length);
+            return [columnId, c.getBoundingClientRect().left] as const;
+          }),
+        cellIdPrefix,
+      );
+      const columnIds = (cells: ReadonlyArray<readonly [string, number]>) =>
+        cells.map(([columnId]) => columnId).sort();
+      const headerLefts = new Map(headerCells);
+
+      expect(bodyLefts.length).toBeGreaterThan(0);
+      expect(columnIds(bodyLefts)).toEqual(columnIds(headerCells));
+      return Math.max(
+        ...bodyLefts.map(([columnId, left]) => Math.abs(left - (headerLefts.get(columnId) ?? Number.NaN))),
+      );
+    });
+  }
+
+  async wheelOverPanelHeader(panel: 'variables' | 'outputs', deltaX: number): Promise<void> {
+    return test.step(`wheel ${deltaX}px sideways over the ${panel} panel header`, async () => {
+      const header = panel === 'variables' ? this.variablesPanel('header') : this.outputsPanel('header');
+      await header.hover();
+      await this.page.mouse.wheel(deltaX, 0);
+      await this.settle();
     });
   }
 
@@ -1581,8 +1655,10 @@ export class PlaygroundPage {
     );
   }
 
-  private variantMessages(index: number): Locator {
-    return this.variantCard(index).getByTestId('playground-message-row');
+  private variantMessage(index: number, role: 'system' | 'user'): Locator {
+    return this.variantCard(index).locator(
+      `[data-testid="playground-message-row"][data-role="${role}"]`,
+    );
   }
 
   private modelPicker(index: number): Locator {
