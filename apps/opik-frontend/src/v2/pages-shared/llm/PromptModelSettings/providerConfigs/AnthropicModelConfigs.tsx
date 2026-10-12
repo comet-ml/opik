@@ -33,7 +33,7 @@ const getEffortDescription = (model?: PROVIDER_MODEL_TYPE | "") => {
     return "Changes how long Claude's answers are and how readily it calls tools. It doesn't turn on thinking.";
   }
   if (thinksOnlyWhenAsked(model)) {
-    return "Off answers without thinking. At any level Claude can think before it answers and decides how much; at lower levels it often answers straight away. Effort also controls how many tokens Claude spends on the whole response. Lower effort is faster and cheaper; higher effort is more thorough.";
+    return "Off answers without thinking. At any other level, Claude can think before it answers and decides how much; at lower levels it often answers straight away. Effort also controls how many tokens Claude spends on the whole response. Lower effort is faster and cheaper; higher effort is more thorough.";
   }
   return "Controls how many tokens Claude spends on the whole response, thinking included. Lower effort is faster and cheaper; higher effort is more thorough.";
 };
