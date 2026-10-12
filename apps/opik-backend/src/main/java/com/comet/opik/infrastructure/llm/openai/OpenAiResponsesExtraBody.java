@@ -40,9 +40,9 @@ class OpenAiResponsesExtraBody {
     private static final String RESPONSE_FORMAT = "response_format";
     private static final Set<String> CHAT_COMPLETIONS_KEYS = Set.of(
             MAX_TOKENS, MAX_COMPLETION_TOKENS, REASONING_EFFORT, RESPONSE_FORMAT);
-    // Written from the request itself. Replaced from the extra body, the call would no longer match the request that
-    // was logged and costed, or the reply would not come back in the shape the caller asked for.
-    private static final List<String> KEYS_OPIK_SETS = List.of("model", "input", "stream");
+    // Opik writes these from the request itself. If the extra body replaced them, the call would no longer match the
+    // request that was logged and costed, or the reply would not come back in the shape the caller asked for.
+    private static final List<String> OPIK_MANAGED_KEYS = List.of("model", "input", "stream");
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
@@ -58,7 +58,7 @@ class OpenAiResponsesExtraBody {
         if (MapUtils.isEmpty(customParameters)) {
             return request;
         }
-        KEYS_OPIK_SETS.stream()
+        OPIK_MANAGED_KEYS.stream()
                 .filter(customParameters::containsKey)
                 .findFirst()
                 .ifPresent(key -> {

@@ -20,9 +20,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -31,6 +33,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
  * Drives a judge's real langchain4j Responses model against a local stub, so what is asserted is the
@@ -100,11 +103,19 @@ class OpenAiResponsesJudgeExtraBodyTest {
         assertThat(sent).isEqualTo(expected);
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"{}", "\"fast\"", "[1, 2]", "null"})
-    void judgeWithoutAnObjectOfCustomParametersSendsOnlyItsOwnSettings(String customParameters) {
-        assertThat(sentBody(JsonUtils.getJsonNodeFromString(customParameters))).isEqualTo(JUDGE_BODY);
-        assertThat(sentBody(null)).isEqualTo(JUDGE_BODY);
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("customParametersWithNothingToSend")
+    void judgeWithNoCustomParametersToSendSendsOnlyItsOwnSettings(String name, JsonNode customParameters) {
+        assertThat(sentBody(customParameters)).isEqualTo(JUDGE_BODY);
+    }
+
+    private static Stream<Arguments> customParametersWithNothingToSend() {
+        return Stream.of(
+                arguments("none", null),
+                arguments("an empty object", JsonUtils.getJsonNodeFromString("{}")),
+                arguments("a string", JsonUtils.getJsonNodeFromString("\"fast\"")),
+                arguments("an array", JsonUtils.getJsonNodeFromString("[1, 2]")),
+                arguments("JSON null", JsonUtils.getJsonNodeFromString("null")));
     }
 
     @Test
