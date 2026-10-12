@@ -91,6 +91,7 @@ public class AlertEventBridgePublisher {
     /**
      * @param eventId stays stable for one triggered alert, so consumers can dedupe on source + detail.eventId
      * @param workspaceName null when it couldn't be resolved, in which case the envelope omits it
+     * @param triggeredAt when the trigger fired; used for detail.triggeredAt and the entry Time
      * @param payload the product payload built for the webhook, with its metadata still serialized
      * @return a Mono that completes once the alert is published or the publish has failed; it never errors
      */
@@ -99,12 +100,11 @@ public class AlertEventBridgePublisher {
             @NonNull String workspaceId,
             @Nullable String workspaceName,
             @NonNull AlertEventType eventType,
+            @NonNull Instant triggeredAt,
             @NonNull Map<String, Object> payload) {
         if (client.isEmpty()) {
             return Mono.empty();
         }
-
-        Instant triggeredAt = Instant.now();
 
         return Mono.fromCallable(() -> buildEntry(alert, eventId, workspaceId, workspaceName, eventType, payload,
                 triggeredAt))

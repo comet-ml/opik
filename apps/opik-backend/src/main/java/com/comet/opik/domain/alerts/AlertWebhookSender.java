@@ -14,6 +14,7 @@ import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -46,6 +47,7 @@ public class AlertWebhookSender {
      * @param payloads the set of aggregated event payloads
      * @param userNames the set of user names who triggered events
      * @param triggerKey identifies this trigger across reprocessing; the EventBridge eventId is derived from it
+     * @param triggeredAt when the trigger fired, stable across reprocessing like the trigger key
      * @return Mono that completes when the webhook is sent
      */
     public Mono<Void> createAndSendWebhook(
@@ -56,7 +58,8 @@ public class AlertWebhookSender {
             @NonNull List<String> eventIds,
             @NonNull List<String> payloads,
             @NonNull List<String> userNames,
-            @NonNull String triggerKey) {
+            @NonNull String triggerKey,
+            @NonNull Instant triggeredAt) {
 
         if (Boolean.FALSE.equals(alert.enabled())) {
             log.warn("Alert '{}' is disabled, skipping webhook", alert.id());
@@ -91,7 +94,7 @@ public class AlertWebhookSender {
             // Fire-and-forget: EventBridge retries must not hold up, or fail, the webhook delivery. The eventId is
             // derived from the trigger, so reprocessing a trigger and every retry inside publish reuse it.
             Mono.defer(() -> eventBridgePublisher.publish(alert, eventBridgeEventId(triggerKey), workspaceId,
-                    eventBridgeWorkspaceName, eventType, payload))
+                    eventBridgeWorkspaceName, eventType, triggeredAt, payload))
                     .onErrorResume(error -> {
                         log.error("Failed to publish alert '{}' to EventBridge", alert.id(), error);
                         return Mono.empty();

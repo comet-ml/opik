@@ -99,7 +99,7 @@ class MetricsAlertJobTest {
         lenient().when(idGenerator.generateId()).thenReturn(EVENT_ID);
         lenient().when(projectService.findByIds(anyString(), any())).thenReturn(List.of());
         lenient().when(alertWebhookSender.createAndSendWebhook(
-                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString()))
+                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString(), any()))
                 .thenReturn(Mono.empty());
 
         job = new MetricsAlertJob(webhookConfig, lockService, alertService, projectMetricsDAO,
@@ -120,7 +120,7 @@ class MetricsAlertJobTest {
 
         verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
                 any(), eq(WORKSPACE_ID), anyString(), eq(eventType), anyList(), anyList(), anyList(),
-                eq(alert.id() + ":" + EVENT_ID));
+                eq(alert.id() + ":" + EVENT_ID), any());
     }
 
     @ParameterizedTest
@@ -136,7 +136,7 @@ class MetricsAlertJobTest {
         job.doJob(null);
 
         verify(alertWebhookSender, after(NO_CALL_WINDOW_MS).never()).createAndSendWebhook(
-                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString());
+                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString(), any());
     }
 
     @ParameterizedTest
@@ -156,7 +156,7 @@ class MetricsAlertJobTest {
         job.doJob(null);
 
         verify(alertWebhookSender, after(NO_CALL_WINDOW_MS).never()).createAndSendWebhook(
-                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString());
+                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString(), any());
     }
 
     @ParameterizedTest
@@ -174,7 +174,7 @@ class MetricsAlertJobTest {
         ArgumentCaptor<List<String>> payloadCaptor = listCaptor();
         verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
                 any(), eq(WORKSPACE_ID), anyString(), eq(eventType), anyList(),
-                payloadCaptor.capture(), anyList(), anyString());
+                payloadCaptor.capture(), anyList(), anyString(), any());
 
         List<String> payloads = payloadCaptor.getValue();
         assertThat(payloads).hasSize(1);
@@ -224,7 +224,7 @@ class MetricsAlertJobTest {
         ArgumentCaptor<List<String>> payloadCaptor = listCaptor();
         verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
                 any(), eq(WORKSPACE_ID), anyString(), eq(eventType), anyList(),
-                payloadCaptor.capture(), anyList(), anyString());
+                payloadCaptor.capture(), anyList(), anyString(), any());
 
         JsonNode payload = JsonUtils.readValue(payloadCaptor.getValue().getFirst(), JsonNode.class);
 
@@ -243,7 +243,7 @@ class MetricsAlertJobTest {
 
         verify(alertService, never()).findAllByWorkspaceAndEventTypes(any(), any());
         verify(alertWebhookSender, never()).createAndSendWebhook(
-                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString());
+                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString(), any());
     }
 
     /**
@@ -283,7 +283,7 @@ class MetricsAlertJobTest {
 
         verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
                 any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
-                anyList(), anyList(), anyList(), anyString());
+                anyList(), anyList(), anyList(), anyString(), any());
         assertThat(windowSecondsPassedToDao()).isEqualTo(expectedSeconds);
     }
 
@@ -307,7 +307,7 @@ class MetricsAlertJobTest {
 
         verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
                 any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
-                anyList(), anyList(), anyList(), anyString());
+                anyList(), anyList(), anyList(), anyString(), any());
         assertThat(windowSecondsPassedToDao()).isEqualTo(1800L);
     }
 
@@ -329,7 +329,7 @@ class MetricsAlertJobTest {
         job.doJob(null);
 
         verify(alertWebhookSender, after(NO_CALL_WINDOW_MS).never()).createAndSendWebhook(
-                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString());
+                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString(), any());
         verify(lockService, never()).lockUsingToken(any(), any(java.time.Duration.class));
     }
 
