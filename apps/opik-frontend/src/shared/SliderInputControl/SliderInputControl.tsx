@@ -9,6 +9,8 @@ import TooltipWrapper, {
   TooltipWrapperProps,
 } from "@/shared/TooltipWrapper/TooltipWrapper";
 
+const COMMIT_KEYS = ["Enter", "Tab", "Escape"];
+
 interface SliderInputControlProps {
   min: number;
   max: number;
@@ -114,6 +116,13 @@ const SliderInputControl = ({
             }
             onChange={(event) => setLocalValue(event.target.value)}
             onBlur={(event) => validateAndHandleChange(event.target.value)}
+            onKeyDown={(event) => {
+              // Inside a Radix menu, Tab does not move focus and Escape unmounts the
+              // menu without a blur, so onBlur alone would drop the typed value.
+              if (COMMIT_KEYS.includes(event.key)) {
+                validateAndHandleChange(event.currentTarget.value);
+              }
+            }}
             value={localValue || ""}
             dimension="xs"
             variant="ghost"
