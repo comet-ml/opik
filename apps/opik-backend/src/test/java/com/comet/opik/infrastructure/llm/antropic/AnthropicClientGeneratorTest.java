@@ -514,6 +514,8 @@ class AnthropicClientGeneratorTest {
                 "claude-sonnet-5 | {\"output_config\": {\"effort\": \"max\"}}                                   | 5000",
                 "claude-opus-5-5 | {\"output_config\": {\"effort\": \"high\"}}                                  | 5000",
                 "claude-opus-4-8 | {\"thinking\": {\"type\": \"adaptive\"}, \"output_config\": {\"effort\": \"high\"}} | 5000",
+                "claude-opus-4-8 | {\"output_config\": {\"effort\": \"high\"}}                                  | 5000",
+                "claude-sonnet-4-6 | {\"output_config\": {\"effort\": \"max\"}}                                 | 5000",
                 "claude-opus-4-5-20251101 | {\"output_config\": {\"effort\": \"high\"}}                   | 4096",
                 "claude-opus-5   | {\"thinking\": {\"type\": \"disabled\"}, \"output_config\": {\"effort\": \"high\"}} | 4096",
                 "claude-sonnet-5 | {\"thinking\": {\"type\": \"enabled\", \"budget_tokens\": 4096}}            | 8192",
