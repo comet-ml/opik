@@ -4,6 +4,7 @@ import { Info, RotateCcw } from "lucide-react";
 import { Input } from "@/ui/input";
 import toNumber from "lodash/toNumber";
 import { Slider } from "@/ui/slider";
+import { cn } from "@/lib/utils";
 import React, { useEffect, useState } from "react";
 import TooltipWrapper, {
   TooltipWrapperProps,
@@ -107,8 +108,15 @@ const SliderInputControl = ({
         </div>
 
         <div className="flex items-center">
-          {!resetDisabled && (value ?? defaultValue) !== defaultValue && (
-            <Button variant="minimal" size="icon-sm" onClick={handleResetValue}>
+          {!resetDisabled && (
+            <Button
+              variant="minimal"
+              size="icon-sm"
+              onClick={handleResetValue}
+              className={cn({
+                invisible: (value ?? defaultValue) === defaultValue,
+              })}
+            >
               <RotateCcw />
             </Button>
           )}

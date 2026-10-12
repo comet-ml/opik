@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/ui/select";
+import { ArrowScrollArea } from "@/ui/arrow-scroll-area";
 import { ListAction } from "@/ui/list-action";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -332,7 +333,9 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
               />
             </div>
             <SelectSeparator />
-            <div className="flex-1 overflow-y-auto py-1">{renderOptions()}</div>
+            <ArrowScrollArea className="max-h-64 py-1">
+              {renderOptions()}
+            </ArrowScrollArea>
             {canUpdateAIProviders && (
               <>
                 <SelectSeparator />
