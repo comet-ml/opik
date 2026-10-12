@@ -1,5 +1,6 @@
 import first from "lodash/first";
 import isNil from "lodash/isNil";
+import last from "lodash/last";
 import omitBy from "lodash/omitBy";
 import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
@@ -341,6 +342,87 @@ export const parseCompletionOutput = (run: RunStreamingReturn) => {
     "The AI provider returned an empty response. Please, try again."
   );
 };
+
+const HTTP_BAD_REQUEST = 400;
+const HTTP_PAYMENT_REQUIRED = 402;
+const HTTP_TOO_MANY_REQUESTS = 429;
+
+export type RunFailureHint = {
+  title: string;
+  action: string;
+};
+
+export type RunFailure = {
+  message: string;
+  hint?: RunFailureHint;
+};
+
+type RunFailureContext = {
+  canTuneRequestRate: boolean;
+  sentMessages: LLMMessage[];
+};
+
+const getRunFailureHint = (
+  errorStatus: number | null,
+  { canTuneRequestRate, sentMessages }: RunFailureContext,
+): RunFailureHint | undefined => {
+  if (errorStatus === HTTP_TOO_MANY_REQUESTS) {
+    return {
+      title: "Rate limit reached",
+      action: canTuneRequestRate
+        ? "Wait a moment and run again. If it keeps happening, lower Max concurrent requests or raise Throttling in Model parameters."
+        : "Wait a moment and run again.",
+    };
+  }
+  // The backend reports OpenAI's insufficient_quota as 402, and OpenRouter sends 402 when credits run out.
+  if (errorStatus === HTTP_PAYMENT_REQUIRED) {
+    return {
+      title: "Out of credits",
+      action:
+        "Add credits or raise your quota with the provider, then run again.",
+    };
+  }
+  if (errorStatus !== HTTP_BAD_REQUEST) return undefined;
+
+  // Which role mixes are rejected differs by provider and model, and each provider words its 400
+  // differently, so the cause is read from the prompt rather than from the error text.
+  if (!sentMessages.some((message) => message.role === LLM_MESSAGE_ROLE.user)) {
+    return {
+      title: "This model needs a User message",
+      action: "Add a User message with + Message, then run again.",
+    };
+  }
+  if (last(sentMessages)?.role === LLM_MESSAGE_ROLE.assistant) {
+    return {
+      title: "This model needs the last message to be a User message",
+      action:
+        "Add a User message at the end with + Message, or remove the last Assistant message, then run again.",
+    };
+  }
+  return undefined;
+};
+
+export const describeRunFailure = (
+  run: RunStreamingReturn,
+  context: RunFailureContext,
+): RunFailure => {
+  const hint = getRunFailureHint(run.errorStatus, context);
+  if (!hint) return { message: parseCompletionOutput(run) };
+
+  const providerMessage =
+    run.opikError || run.providerError || run.pythonProxyError;
+  return { message: providerMessage || hint.title, hint };
+};
+
+export class RunFailedError extends Error {
+  failure: RunFailure;
+
+  constructor(failure: RunFailure) {
+    super(failure.message);
+    this.name = "RunFailedError";
+    this.failure = failure;
+  }
+}
 
 export const parseCompletionError = (run: RunStreamingReturn) => {
   if (run.opikError) {
