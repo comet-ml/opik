@@ -35,7 +35,6 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -53,7 +52,6 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -269,12 +267,7 @@ class FarFutureIdsMetricsResourceTest {
         var threadIds = idTimes.stream().map(_ -> RandomStringUtils.secure().nextAlphabetic(10)).toList();
         createEntities(EntityType.THREADS, projectName, idTimes, durationsMs,
                 idTimes.stream().map(_ -> false).toList(), costs, threadIds);
-        // Thread rows are written asynchronously after ingestion, and thread charts and KPI cards skip a thread without one.
-        Awaitility.await()
-                .atMost(Duration.ofSeconds(10))
-                .pollInterval(Duration.ofMillis(100))
-                .untilAsserted(() -> assertThat(threadIds).allSatisfy(threadId -> assertThat(traceResourceClient
-                        .getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).threadModelId()).isNotNull()));
+        traceResourceClient.awaitThreadRows(threadIds, projectId, null, API_KEY, WORKSPACE_NAME);
     }
 
     private void createEntities(EntityType entityType, String projectName, List<Instant> idTimes,

@@ -8,6 +8,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
@@ -19,6 +20,7 @@ import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardRequest.EntityType;
 import com.comet.opik.api.metrics.KpiCardResponse;
+import com.comet.opik.api.metrics.KpiCardResponse.KpiMetric;
 import com.comet.opik.api.metrics.KpiCardResponse.KpiMetricType;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -34,7 +36,6 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.IdGenerator;
-import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -77,6 +78,7 @@ import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -86,6 +88,10 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.traces.ThreadTestUtils.buildCostedSpan;
+import static com.comet.opik.api.resources.utils.traces.ThreadTestUtils.buildThreadTrace;
+import static com.comet.opik.api.resources.utils.traces.ThreadTestUtils.deleteThreadRow;
+import static com.comet.opik.api.resources.utils.traces.ThreadTestUtils.withPerTraceChip;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
@@ -797,7 +803,7 @@ class KpiCardsResourceTest {
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
 
         if (entityType == EntityType.THREADS) {
-            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.awaitThreadRows(threadIds, null, projectName, API_KEY, WORKSPACE_NAME);
             traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
 
             traceResourceClient.threadFeedbackScores(List.of(
@@ -932,7 +938,8 @@ class KpiCardsResourceTest {
         Instant intervalEnd = intervalStart.plus(1, ChronoUnit.MINUTES);
 
         assertThat(threadIds)
-                .extracting(threadId -> getThreadRowMintedAt(threadId, projectId))
+                .extracting(threadId -> traceResourceClient.getThreadRowMintedAt(threadId, projectId, API_KEY,
+                        WORKSPACE_NAME))
                 .allSatisfy(rowMintedAt -> assertThat(rowMintedAt).isBetween(intervalStart, intervalEnd));
 
         KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
@@ -941,7 +948,7 @@ class KpiCardsResourceTest {
                 .intervalEnd(intervalEnd)
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        assertFilteredMetrics(response, EntityType.THREADS, threadCount, 0, 0, 0);
+        assertFilterFixtureThreadKpiCards(response, threadCount, 0);
     }
 
     @Test
@@ -957,10 +964,11 @@ class KpiCardsResourceTest {
         Instant intervalEnd = now.minus(1, ChronoUnit.SECONDS);
 
         List<String> threadIds = createThreadsWithTraceIdsMintedAt(projectName, ranAt, ranAt,
-                mintThreadRowIdsNow(projectId, 3));
+                traceResourceClient.mintThreadRowIdsNow(projectId, 3, API_KEY, WORKSPACE_NAME));
 
         assertThat(threadIds)
-                .extracting(threadId -> getThreadRowMintedAt(threadId, projectId))
+                .extracting(threadId -> traceResourceClient.getThreadRowMintedAt(threadId, projectId, API_KEY,
+                        WORKSPACE_NAME))
                 .allSatisfy(rowMintedAt -> assertThat(rowMintedAt).isAfter(intervalEnd));
 
         KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
@@ -969,7 +977,7 @@ class KpiCardsResourceTest {
                 .intervalEnd(intervalEnd)
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        assertFilteredMetrics(response, EntityType.THREADS, 3, 0, 0, 0);
+        assertFilterFixtureThreadKpiCards(response, 3, 0);
     }
 
     @Test
@@ -1007,7 +1015,7 @@ class KpiCardsResourceTest {
                 .intervalEnd(intervalEnd)
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        assertFilteredMetrics(response, EntityType.THREADS, 1, 0, 0, 0);
+        assertFilterFixtureThreadKpiCards(response, 1, 0);
     }
 
     @Test
@@ -1019,7 +1027,7 @@ class KpiCardsResourceTest {
 
         Instant intervalStart = Instant.now().minus(1, ChronoUnit.SECONDS);
         Instant ranAt = intervalStart.minus(30, ChronoUnit.SECONDS);
-        String threadId = mintThreadRowIdsNow(projectId, 1).getFirst();
+        String threadId = traceResourceClient.mintThreadRowIdsNow(projectId, 1, API_KEY, WORKSPACE_NAME).getFirst();
 
         createThreadWithCostOnFirstTrace(projectName, threadId, List.of(
                 factory.manufacturePojo(Trace.class).toBuilder()
@@ -1039,7 +1047,8 @@ class KpiCardsResourceTest {
 
         Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
 
-        assertThat(getThreadRowMintedAt(threadId, projectId)).isBetween(intervalStart, intervalEnd);
+        assertThat(traceResourceClient.getThreadRowMintedAt(threadId, projectId, API_KEY, WORKSPACE_NAME))
+                .isBetween(intervalStart, intervalEnd);
 
         KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
                 .entityType(EntityType.THREADS)
@@ -1047,9 +1056,10 @@ class KpiCardsResourceTest {
                 .intervalEnd(intervalEnd)
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        assertMetric(response, KpiMetricType.COUNT, 0.0, 1.0);
-        assertMetric(response, KpiMetricType.AVG_DURATION, null, null);
-        assertMetric(response, KpiMetricType.TOTAL_COST, 0.0, FILTER_COST);
+        assertKpiCards(response,
+                metric(KpiMetricType.COUNT, 0.0, 1.0),
+                metric(KpiMetricType.AVG_DURATION, null, null),
+                metric(KpiMetricType.TOTAL_COST, 0.0, FILTER_COST));
     }
 
     @Test
@@ -1080,12 +1090,14 @@ class KpiCardsResourceTest {
                         .endTime(ranAt.plus(FILTER_DURATION_MS * 3, ChronoUnit.MILLIS))
                         .build()));
         createThreadWithCostOnFirstTrace(projectName, realThreadId, List.of(
-                buildThreadTrace(projectName, realThreadId, ranAt.plus(2, ChronoUnit.MILLIS), FILTER_DURATION_MS)));
+                buildThreadTrace(factory, idGenerator, projectName, realThreadId, ranAt.plus(2, ChronoUnit.MILLIS),
+                        FILTER_DURATION_MS)));
 
         Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
 
         assertThat(List.of(sentinelOnlyThreadId, realThreadId))
-                .extracting(threadId -> getThreadRowMintedAt(threadId, projectId))
+                .extracting(threadId -> traceResourceClient.getThreadRowMintedAt(threadId, projectId, API_KEY,
+                        WORKSPACE_NAME))
                 .allSatisfy(rowMintedAt -> assertThat(rowMintedAt).isBetween(intervalStart, intervalEnd));
 
         var startTimeFilter = TraceThreadFilter.builder()
@@ -1103,7 +1115,7 @@ class KpiCardsResourceTest {
                 .filters(JsonUtils.writeValueAsString(List.of(startTimeFilter)))
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        assertFilteredMetrics(filtered, EntityType.THREADS, 1, 0, 0, 0);
+        assertFilterFixtureThreadKpiCards(filtered, 1, 0);
 
         var threadList = traceResourceClient.getTraceThreads(projectId, null, API_KEY, WORKSPACE_NAME,
                 List.of(startTimeFilter), null,
@@ -1114,7 +1126,7 @@ class KpiCardsResourceTest {
 
         KpiCardResponse unfiltered = projectResourceClient.getKpiCards(projectId, request, API_KEY, WORKSPACE_NAME);
 
-        assertFilteredMetrics(unfiltered, EntityType.THREADS, 2, 0, 0, 0);
+        assertFilterFixtureThreadKpiCards(unfiltered, 2, 0);
     }
 
     @ParameterizedTest
@@ -1128,12 +1140,14 @@ class KpiCardsResourceTest {
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
         Instant intervalStart = Instant.now();
-        String threadId = mintThreadRowIdsNow(projectId, 1).getFirst();
+        String threadId = traceResourceClient.mintThreadRowIdsNow(projectId, 1, API_KEY, WORKSPACE_NAME).getFirst();
         Mono.delay(Duration.ofSeconds(1)).block();
 
-        Trace trace = buildThreadTrace(projectName, threadId, Instant.now(), FILTER_DURATION_MS);
+        Trace trace = buildThreadTrace(factory, idGenerator, projectName, threadId, Instant.now(), FILTER_DURATION_MS);
         traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
-        spanResourceClient.batchCreateSpans(List.of(buildCostedSpan(projectName, trace, FILTER_COST)), API_KEY,
+        spanResourceClient.batchCreateSpans(
+                List.of(buildCostedSpan(factory, idGenerator, projectName, trace, BigDecimal.valueOf(FILTER_COST))),
+                API_KEY,
                 WORKSPACE_NAME);
 
         Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
@@ -1177,7 +1191,7 @@ class KpiCardsResourceTest {
                 .filters(JsonUtils.writeValueAsString(List.of(filter)))
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        assertFilteredMetrics(response, EntityType.THREADS, expectedThreadIds.size(), 0, 0, 0);
+        assertFilterFixtureThreadKpiCards(response, expectedThreadIds.size(), 0);
     }
 
     static Stream<Arguments> threadRowTimestampFilterArguments() {
@@ -1217,10 +1231,11 @@ class KpiCardsResourceTest {
         List<Span> spans = new ArrayList<>();
         for (ThreadRowKind kind : ThreadRowKind.values()) {
             String threadId = RandomStringUtils.secure().nextAlphabetic(10);
-            Trace trace = buildThreadTrace(projectName, threadId, Instant.now(), FILTER_DURATION_MS);
+            Trace trace = buildThreadTrace(factory, idGenerator, projectName, threadId, Instant.now(),
+                    FILTER_DURATION_MS);
             threadIds.put(kind, threadId);
             traces.add(trace);
-            spans.add(buildCostedSpan(projectName, trace, FILTER_COST));
+            spans.add(buildCostedSpan(factory, idGenerator, projectName, trace, BigDecimal.valueOf(FILTER_COST)));
         }
         traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
@@ -1267,7 +1282,7 @@ class KpiCardsResourceTest {
                 .filters(JsonUtils.writeValueAsString(List.of(filter)))
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        assertFilteredMetrics(response, EntityType.THREADS, expectedThreadIds.size(), 0, 0, 0);
+        assertFilterFixtureThreadKpiCards(response, expectedThreadIds.size(), 0);
     }
 
     static Stream<Arguments> threadRowChipArguments() {
@@ -1325,15 +1340,17 @@ class KpiCardsResourceTest {
 
         Instant intervalStart = Instant.now();
         String threadId = rowOpenedBeforeTraces
-                ? mintThreadRowIdsNow(projectId, 1).getFirst()
+                ? traceResourceClient.mintThreadRowIdsNow(projectId, 1, API_KEY, WORKSPACE_NAME).getFirst()
                 : RandomStringUtils.secure().nextAlphabetic(10);
         createThreadStraddlingStart(projectName, threadId, intervalStart);
         Instant intervalEnd = intervalStart.plus(1, ChronoUnit.MINUTES);
 
         if (rowOpenedBeforeTraces) {
-            assertThat(getThreadRowMintedAt(threadId, projectId)).isBetween(intervalStart, intervalEnd);
+            assertThat(traceResourceClient.getThreadRowMintedAt(threadId, projectId, API_KEY, WORKSPACE_NAME))
+                    .isBetween(intervalStart, intervalEnd);
         } else {
-            assertThat(getThreadRowMintedAt(threadId, projectId)).isBefore(intervalStart);
+            assertThat(traceResourceClient.getThreadRowMintedAt(threadId, projectId, API_KEY, WORKSPACE_NAME))
+                    .isBefore(intervalStart);
         }
 
         KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
@@ -1342,40 +1359,43 @@ class KpiCardsResourceTest {
                 .intervalEnd(intervalEnd)
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        assertMetric(response, KpiMetricType.COUNT, 1.0, 1.0);
-        assertMetric(response, KpiMetricType.AVG_DURATION, (double) DURATION_2, (double) DURATION_1);
-        assertMetric(response, KpiMetricType.TOTAL_COST, COST_2, COST_1);
+        assertKpiCards(response,
+                metric(KpiMetricType.COUNT, 1.0, 1.0),
+                metric(KpiMetricType.AVG_DURATION, (double) DURATION_2, (double) DURATION_1),
+                metric(KpiMetricType.TOTAL_COST, COST_2, COST_1));
     }
 
-    @ParameterizedTest
-    @EnumSource(value = Source.class, names = "SDK", mode = EnumSource.Mode.EXCLUDE)
-    @DisplayName("the UI's source = sdk filter keeps only sdk traces, like the thread list")
-    void threadSourceFilterKeepsOnlySdkTraces(Source otherSource) {
+    @ParameterizedTest(name = "{0}: {1} vs {2}")
+    @MethodSource("com.comet.opik.api.resources.utils.traces.ThreadTestUtils#perTraceChips")
+    @DisplayName("the UI's source or environment chip keeps only the matching traces, like the thread list")
+    void threadPerTraceChipKeepsOnlyMatchingTraces(TraceThreadField field, String matchingValue, String otherValue) {
         mockTargetWorkspace();
         var projectName = RandomStringUtils.secure().nextAlphabetic(10);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
         Instant intervalStart = Instant.now();
-        String sdkThreadId = RandomStringUtils.secure().nextAlphabetic(10);
-        String otherSourceThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+        String matchingThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+        String otherValueThreadId = RandomStringUtils.secure().nextAlphabetic(10);
         String mixedThreadId = RandomStringUtils.secure().nextAlphabetic(10);
 
-        Trace sdkTrace = buildThreadTrace(projectName, sdkThreadId, Source.SDK,
-                intervalStart.plus(1, ChronoUnit.SECONDS), DURATION_1);
-        Trace otherSourceTrace = buildThreadTrace(projectName, otherSourceThreadId, otherSource,
-                intervalStart.plus(2, ChronoUnit.SECONDS), DURATION_2);
-        Trace mixedSdkTrace = buildThreadTrace(projectName, mixedThreadId, Source.SDK,
-                intervalStart.plus(3, ChronoUnit.SECONDS), DURATION_3);
-        Trace mixedOtherSourceTrace = buildThreadTrace(projectName, mixedThreadId, otherSource,
-                intervalStart.plus(4, ChronoUnit.SECONDS), DURATION_4);
+        Trace matchingTrace = withPerTraceChip(buildThreadTrace(factory, idGenerator, projectName, matchingThreadId,
+                intervalStart.plus(1, ChronoUnit.SECONDS), DURATION_1), field, matchingValue);
+        Trace otherValueTrace = withPerTraceChip(buildThreadTrace(factory, idGenerator, projectName,
+                otherValueThreadId, intervalStart.plus(2, ChronoUnit.SECONDS), DURATION_2), field, otherValue);
+        Trace mixedMatchingTrace = withPerTraceChip(buildThreadTrace(factory, idGenerator, projectName, mixedThreadId,
+                intervalStart.plus(3, ChronoUnit.SECONDS), DURATION_3), field, matchingValue);
+        Trace mixedOtherValueTrace = withPerTraceChip(buildThreadTrace(factory, idGenerator, projectName,
+                mixedThreadId, intervalStart.plus(4, ChronoUnit.SECONDS), DURATION_4), field, otherValue);
 
-        createThread(projectName, sdkThreadId, List.of(sdkTrace),
-                List.of(buildCostedSpan(projectName, sdkTrace, COST_1)));
-        createThread(projectName, otherSourceThreadId, List.of(otherSourceTrace),
-                List.of(buildCostedSpan(projectName, otherSourceTrace, COST_2)));
-        createThread(projectName, mixedThreadId, List.of(mixedSdkTrace, mixedOtherSourceTrace), List.of(
-                buildCostedSpan(projectName, mixedSdkTrace, COST_3),
-                buildCostedSpan(projectName, mixedOtherSourceTrace, COST_4)));
+        createThread(projectName, matchingThreadId, List.of(matchingTrace),
+                List.of(buildCostedSpan(factory, idGenerator, projectName, matchingTrace, BigDecimal.valueOf(COST_1))));
+        createThread(projectName, otherValueThreadId, List.of(otherValueTrace),
+                List.of(buildCostedSpan(factory, idGenerator, projectName, otherValueTrace,
+                        BigDecimal.valueOf(COST_2))));
+        createThread(projectName, mixedThreadId, List.of(mixedMatchingTrace, mixedOtherValueTrace), List.of(
+                buildCostedSpan(factory, idGenerator, projectName, mixedMatchingTrace, BigDecimal.valueOf(COST_3)),
+                buildCostedSpan(factory, idGenerator, projectName, mixedOtherValueTrace,
+                        BigDecimal.valueOf(COST_4))));
 
         Instant intervalEnd = intervalStart.plus(1, ChronoUnit.MINUTES);
         var request = KpiCardRequest.builder()
@@ -1383,24 +1403,101 @@ class KpiCardsResourceTest {
                 .intervalStart(intervalStart)
                 .intervalEnd(intervalEnd)
                 .build();
-        var sdkSourceFilter = TraceThreadFilter.builder()
-                .field(TraceThreadField.SOURCE)
+        var chipFilter = TraceThreadFilter.builder()
+                .field(field)
                 .operator(Operator.EQUAL)
-                .value(Source.SDK.getValue())
+                .value(matchingValue)
                 .build();
 
         KpiCardResponse filtered = projectResourceClient.getKpiCards(projectId, request.toBuilder()
-                .filters(JsonUtils.writeValueAsString(List.of(sdkSourceFilter)))
+                .filters(JsonUtils.writeValueAsString(List.of(chipFilter)))
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        assertMetric(filtered, KpiMetricType.COUNT, 2.0, 0.0);
-        assertMetric(filtered, KpiMetricType.AVG_DURATION, (DURATION_1 + DURATION_3) / 2.0, null);
-        assertMetric(filtered, KpiMetricType.TOTAL_COST, COST_1 + COST_3, 0.0);
+        assertKpiCards(filtered,
+                metric(KpiMetricType.COUNT, 2.0, 0.0),
+                metric(KpiMetricType.AVG_DURATION, (DURATION_1 + DURATION_3) / 2.0, null),
+                metric(KpiMetricType.TOTAL_COST, COST_1 + COST_3, 0.0));
 
         KpiCardResponse unfiltered = projectResourceClient.getKpiCards(projectId, request, API_KEY, WORKSPACE_NAME);
 
-        assertMetric(unfiltered, KpiMetricType.COUNT, 3.0, 0.0);
-        assertMetric(unfiltered, KpiMetricType.TOTAL_COST, COST_1 + COST_2 + COST_3 + COST_4, 0.0);
+        long mixedThreadDurationMs = Duration.between(mixedMatchingTrace.startTime(), mixedOtherValueTrace.endTime())
+                .toMillis();
+        assertKpiCards(unfiltered,
+                metric(KpiMetricType.COUNT, 3.0, 0.0),
+                metric(KpiMetricType.AVG_DURATION, (DURATION_1 + DURATION_2 + mixedThreadDurationMs) / 3.0, null),
+                metric(KpiMetricType.TOTAL_COST, COST_1 + COST_2 + COST_3 + COST_4, 0.0));
+    }
+
+    @Test
+    @DisplayName("the source = sdk filter skips a playground thread whose trace was updated before it was created, while both stored versions are still unmerged")
+    void threadSourceFilterSkipsUnmergedVersionsOfPlaygroundTraceUpdatedBeforeCreate() {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalStart = Instant.now();
+        String playgroundThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+        UUID playgroundTraceId = idGenerator.generateId(intervalStart.plus(1, ChronoUnit.SECONDS));
+        traceResourceClient.updateTrace(playgroundTraceId, TraceUpdate.builder()
+                .projectName(projectName)
+                .threadId(playgroundThreadId)
+                .build(), API_KEY, WORKSPACE_NAME);
+        String sdkThreadId = RandomStringUtils.secure().nextAlphabetic(10);
+        Trace sdkTrace = buildThreadTrace(factory, idGenerator, projectName, sdkThreadId, Source.SDK,
+                intervalStart.plus(2, ChronoUnit.SECONDS), DURATION_1);
+        createThread(projectName, sdkThreadId, List.of(sdkTrace),
+                List.of(buildCostedSpan(factory, idGenerator, projectName, sdkTrace, BigDecimal.valueOf(COST_1))));
+
+        var request = KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalStart.plus(1, ChronoUnit.MINUTES))
+                .build();
+        traceResourceClient.awaitThreadRows(List.of(playgroundThreadId), projectId, null, API_KEY, WORKSPACE_NAME);
+        assertMetric(projectResourceClient.getKpiCards(projectId, request, API_KEY, WORKSPACE_NAME),
+                KpiMetricType.COUNT, 2.0, 0.0);
+
+        traceResourceClient
+                .batchCreateTraces(List.of(buildThreadTrace(factory, idGenerator, projectName, playgroundThreadId,
+                        Source.PLAYGROUND, intervalStart.plus(1, ChronoUnit.SECONDS), DURATION_2).toBuilder()
+                        .id(playgroundTraceId)
+                        .lastUpdatedAt(null)
+                        .build()), API_KEY, WORKSPACE_NAME);
+
+        KpiCardResponse filtered = projectResourceClient.getKpiCards(projectId, request.toBuilder()
+                .filters(JsonUtils.writeValueAsString(List.of(TraceThreadFilter.builder()
+                        .field(TraceThreadField.SOURCE)
+                        .operator(Operator.EQUAL)
+                        .value(Source.SDK.getValue())
+                        .build())))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertKpiCards(filtered,
+                metric(KpiMetricType.COUNT, 1.0, 0.0),
+                metric(KpiMetricType.AVG_DURATION, (double) DURATION_1, null),
+                metric(KpiMetricType.TOTAL_COST, COST_1, 0.0));
+    }
+
+    @Test
+    @DisplayName("a thread whose row is missing is not counted, like the windowed thread list")
+    void threadWithMissingRowIsNotCounted() {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalStart = Instant.now();
+        List<String> threadIds = createThreadsWithTraceIdsMintedAt(projectName,
+                intervalStart.plus(1, ChronoUnit.SECONDS),
+                intervalStart.plus(1, ChronoUnit.SECONDS), 2);
+        deleteThreadRow(clickHouseTemplate, WORKSPACE_ID, projectId, threadIds.getLast());
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalStart.plus(1, ChronoUnit.MINUTES))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertFilterFixtureThreadKpiCards(response, 1, 0);
     }
 
     @Test
@@ -1444,48 +1541,20 @@ class KpiCardsResourceTest {
                 .filters(JsonUtils.writeValueAsString(List.of(queueFilter)))
                 .build(), API_KEY, WORKSPACE_NAME);
 
-        assertFilteredMetrics(response, EntityType.THREADS, 1, 1, 0, 0);
+        assertFilterFixtureThreadKpiCards(response, 1, 1);
     }
 
     private void createThreadStraddlingStart(String projectName, String threadId, Instant intervalStart) {
-        Trace previousTrace = buildThreadTrace(projectName, threadId, intervalStart.minus(30, ChronoUnit.SECONDS),
+        Trace previousTrace = buildThreadTrace(factory, idGenerator, projectName, threadId,
+                intervalStart.minus(30, ChronoUnit.SECONDS),
                 DURATION_1);
-        Trace currentTrace = buildThreadTrace(projectName, threadId, intervalStart.plus(1, ChronoUnit.SECONDS),
+        Trace currentTrace = buildThreadTrace(factory, idGenerator, projectName, threadId,
+                intervalStart.plus(1, ChronoUnit.SECONDS),
                 DURATION_2);
 
         createThread(projectName, threadId, List.of(previousTrace, currentTrace), List.of(
-                buildCostedSpan(projectName, previousTrace, COST_1),
-                buildCostedSpan(projectName, currentTrace, COST_2)));
-    }
-
-    private Trace buildThreadTrace(String projectName, String threadId, Source source, Instant ranAt,
-            long durationMs) {
-        return buildThreadTrace(projectName, threadId, ranAt, durationMs).toBuilder()
-                .source(source)
-                .build();
-    }
-
-    private Trace buildThreadTrace(String projectName, String threadId, Instant ranAt, long durationMs) {
-        return factory.manufacturePojo(Trace.class).toBuilder()
-                .id(idGenerator.generateId(ranAt))
-                .projectName(projectName)
-                .threadId(threadId)
-                .startTime(ranAt)
-                .endTime(ranAt.plus(durationMs, ChronoUnit.MILLIS))
-                .errorInfo(null)
-                .build();
-    }
-
-    private Span buildCostedSpan(String projectName, Trace trace, double cost) {
-        return factory.manufacturePojo(Span.class).toBuilder()
-                .id(idGenerator.generateId(trace.startTime().plus(1, ChronoUnit.MILLIS)))
-                .traceId(trace.id())
-                .projectName(projectName)
-                .startTime(trace.startTime())
-                .endTime(trace.endTime())
-                .totalEstimatedCost(BigDecimal.valueOf(cost))
-                .errorInfo(null)
-                .build();
+                buildCostedSpan(factory, idGenerator, projectName, previousTrace, BigDecimal.valueOf(COST_1)),
+                buildCostedSpan(factory, idGenerator, projectName, currentTrace, BigDecimal.valueOf(COST_2))));
     }
 
     private List<String> createThreadsWithTraceIdsMintedAt(String projectName, Instant ranAt,
@@ -1526,7 +1595,7 @@ class KpiCardsResourceTest {
         traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
 
-        Mono.delay(Duration.ofMillis(100)).block();
+        traceResourceClient.awaitThreadRows(threadIds, null, projectName, API_KEY, WORKSPACE_NAME);
         traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
 
         return threadIds;
@@ -1551,30 +1620,8 @@ class KpiCardsResourceTest {
         traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
 
-        // Closing a thread whose row is not written yet writes it with an id of about now, not of its first trace.
-        UUID projectId = projectResourceClient.getByName(projectName, API_KEY, WORKSPACE_NAME).id();
-        Awaitility.await()
-                .atMost(Duration.ofSeconds(10))
-                .pollInterval(Duration.ofMillis(100))
-                .untilAsserted(() -> assertThat(traceResourceClient
-                        .getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).threadModelId()).isNotNull());
+        traceResourceClient.awaitThreadRows(List.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
         traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
-    }
-
-    private List<String> mintThreadRowIdsNow(UUID projectId, int count) {
-        List<String> threadIds = Stream.generate(() -> RandomStringUtils.secure().nextAlphabetic(10))
-                .limit(count)
-                .toList();
-
-        threadIds.forEach(threadId -> traceResourceClient.openTraceThread(threadId, projectId, null, API_KEY,
-                WORKSPACE_NAME));
-
-        return threadIds;
-    }
-
-    private Instant getThreadRowMintedAt(String threadId, UUID projectId) {
-        return RetentionUtils.extractInstant(
-                traceResourceClient.getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).threadModelId());
     }
 
     @Test
@@ -1753,7 +1800,7 @@ class KpiCardsResourceTest {
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
 
         if (entityType == EntityType.THREADS) {
-            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.awaitThreadRows(threadIds, null, projectName, API_KEY, WORKSPACE_NAME);
             traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
         }
     }
@@ -1820,6 +1867,33 @@ class KpiCardsResourceTest {
         assertMetric(response, KpiMetricType.TOTAL_COST,
                 currentCount > 0 ? FILTER_COST * currentCount : 0.0,
                 previousCount > 0 ? FILTER_COST * previousCount : 0.0);
+    }
+
+    private void assertFilterFixtureThreadKpiCards(KpiCardResponse response, int currentCount, int previousCount) {
+        assertKpiCards(response,
+                metric(KpiMetricType.COUNT, (double) currentCount, (double) previousCount),
+                metric(KpiMetricType.AVG_DURATION, currentCount > 0 ? (double) FILTER_DURATION_MS : null,
+                        previousCount > 0 ? (double) FILTER_DURATION_MS : null),
+                metric(KpiMetricType.TOTAL_COST, FILTER_COST * currentCount, FILTER_COST * previousCount));
+    }
+
+    private void assertKpiCards(KpiCardResponse actual, KpiMetric... expected) {
+        assertThat(actual)
+                .usingRecursiveComparison()
+                .ignoringCollectionOrder()
+                .withComparatorForType(KpiCardsResourceTest::compareWithinTolerance, Double.class)
+                .isEqualTo(KpiCardResponse.builder().stats(List.of(expected)).build());
+    }
+
+    private static int compareWithinTolerance(Double actual, Double expected) {
+        if (actual == null || expected == null) {
+            return Objects.equals(actual, expected) ? 0 : 1;
+        }
+        return Math.abs(actual - expected) <= TOLERANCE.value ? 0 : Double.compare(actual, expected);
+    }
+
+    private static KpiMetric metric(KpiMetricType type, Double current, Double previous) {
+        return KpiMetric.builder().type(type).currentValue(current).previousValue(previous).build();
     }
 
     private void assertNoMetric(KpiCardResponse response, KpiMetricType type) {

@@ -35,6 +35,7 @@ import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClie
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.traces.ThreadTestUtils;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
@@ -84,7 +85,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -97,6 +98,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
+import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -107,7 +109,6 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toList;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.tuple;
 
 @DisplayName("Find Trace Threads  Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -940,14 +941,7 @@ class FindTraceThreadsResourceTest {
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            // Thread rows are created asynchronously from the trace batch, so the model id is only
-            // available once the row lands; a fixed delay makes this flaky on a loaded runner.
-            Awaitility.await()
-                    .atMost(10, TimeUnit.SECONDS)
-                    .pollInterval(100, TimeUnit.MILLISECONDS)
-                    .untilAsserted(() -> assertThat(traceResourceClient
-                            .getTraceThread(threadId, projectId, apiKey, workspaceName)
-                            .threadModelId()).isNotNull());
+            traceResourceClient.awaitThreadRows(List.of(threadId), projectId, null, apiKey, workspaceName);
 
             var createdThread = traceResourceClient.getTraceThread(threadId, projectId, apiKey, workspaceName);
 
@@ -1303,16 +1297,17 @@ class FindTraceThreadsResourceTest {
             assertThat(placeholderTrace).extracting(Trace::startTime, Trace::input).containsExactly(Instant.EPOCH,
                     null);
 
+            var expectedThreads = getExpectedThreads(List.of(realTrace), projectId, threadId, List.of(),
+                    TraceThreadStatus.ACTIVE).stream()
+                    .map(thread -> thread.toBuilder().numberOfMessages(4L).build())
+                    .toList();
+
             var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE, List.of(),
                     List.of(), Map.of("truncate", String.valueOf(truncate)));
-            var thread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY, TEST_WORKSPACE);
-
-            assertThat(Stream.concat(page.content().stream(), Stream.of(thread)))
-                    .extracting(TraceThread::id, TraceThread::startTime, TraceThread::numberOfMessages,
-                            TraceThread::firstMessage, TraceThread::lastMessage)
-                    .containsExactly(
-                            tuple(threadId, realTrace.startTime(), 4L, realTrace.input(), realTrace.output()),
-                            tuple(threadId, realTrace.startTime(), 4L, realTrace.input(), realTrace.output()));
+            TraceAssertions.assertThreads(expectedThreads, page.content());
+            TraceAssertions.assertThreads(expectedThreads,
+                    List.of(traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
+                            TEST_WORKSPACE)));
         }
 
         @ParameterizedTest(name = "truncate={0}, withTimeWindow={1}")
@@ -1337,9 +1332,18 @@ class FindTraceThreadsResourceTest {
 
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
 
-            assertThat(traceResourceClient.getById(placeholderTraceId, TEST_WORKSPACE, API_KEY))
+            var placeholderTrace = traceResourceClient.getById(placeholderTraceId, TEST_WORKSPACE, API_KEY);
+            assertThat(placeholderTrace)
                     .extracting(Trace::startTime, Trace::input, Trace::output)
                     .containsExactly(Instant.EPOCH, placeholderInput, placeholderOutput);
+            var expectedThreads = getExpectedThreads(List.of(placeholderTrace), projectId, threadId, List.of(),
+                    TraceThreadStatus.ACTIVE).stream()
+                    .map(thread -> thread.toBuilder()
+                            .startTime(Instant.EPOCH)
+                            .endTime(null)
+                            .duration(null)
+                            .build())
+                    .toList();
 
             var queryParams = new HashMap<>(Map.of("truncate", String.valueOf(truncate)));
             if (withTimeWindow) {
@@ -1352,17 +1356,10 @@ class FindTraceThreadsResourceTest {
                     .pollInterval(500, TimeUnit.MILLISECONDS)
                     .atMost(30, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
-                        var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
-                                List.of(), List.of(), queryParams);
-                        var thread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
-                                TEST_WORKSPACE);
-
-                        assertThat(Stream.concat(page.content().stream(), Stream.of(thread)))
-                                .extracting(TraceThread::id, TraceThread::numberOfMessages,
-                                        TraceThread::firstMessage, TraceThread::lastMessage)
-                                .containsExactly(
-                                        tuple(threadId, 2L, placeholderInput, placeholderOutput),
-                                        tuple(threadId, 2L, placeholderInput, placeholderOutput));
+                        TraceAssertions.assertThreads(expectedThreads, traceResourceClient.getTraceThreads(projectId,
+                                null, API_KEY, TEST_WORKSPACE, List.of(), List.of(), queryParams).content());
+                        TraceAssertions.assertThreads(expectedThreads, List.of(traceResourceClient
+                                .getTraceThread(threadId, projectId, truncate, API_KEY, TEST_WORKSPACE)));
                     });
         }
 
@@ -1388,12 +1385,7 @@ class FindTraceThreadsResourceTest {
 
             // Registered from the placeholder, the thread row keeps a blank environment, so the thread falls back
             // to its traces' environment
-            Awaitility.await()
-                    .pollInterval(500, TimeUnit.MILLISECONDS)
-                    .atMost(30, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertThat(traceResourceClient
-                            .getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).threadModelId())
-                            .isNotNull());
+            traceResourceClient.awaitThreadRows(List.of(threadId), projectId, null, API_KEY, TEST_WORKSPACE);
 
             var realTrace = createTrace().toBuilder()
                     .id(idGenerator.generateId(ranAt.plusMillis(1)))
@@ -1405,16 +1397,17 @@ class FindTraceThreadsResourceTest {
                     .build();
             traceResourceClient.batchCreateTraces(List.of(realTrace), API_KEY, TEST_WORKSPACE);
 
+            var expectedThreads = getExpectedThreads(List.of(realTrace), projectId, threadId, List.of(),
+                    TraceThreadStatus.ACTIVE).stream()
+                    .map(thread -> thread.toBuilder().numberOfMessages(4L).build())
+                    .toList();
+
             var page = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE, List.of(),
                     List.of(), Map.of("truncate", String.valueOf(truncate)));
-            var thread = traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY, TEST_WORKSPACE);
-
-            assertThat(Stream.concat(page.content().stream(), Stream.of(thread)))
-                    .extracting(TraceThread::id, TraceThread::numberOfMessages, TraceThread::firstMessage,
-                            TraceThread::lastMessage, TraceThread::environment)
-                    .containsExactly(
-                            tuple(threadId, 4L, realTrace.input(), realTrace.output(), realTrace.environment()),
-                            tuple(threadId, 4L, realTrace.input(), realTrace.output(), realTrace.environment()));
+            TraceAssertions.assertThreads(expectedThreads, page.content());
+            TraceAssertions.assertThreads(expectedThreads,
+                    List.of(traceResourceClient.getTraceThread(threadId, projectId, truncate, API_KEY,
+                            TEST_WORKSPACE)));
         }
 
         @ParameterizedTest
@@ -2255,7 +2248,7 @@ class FindTraceThreadsResourceTest {
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
             Set<String> threadIds = traces.stream().map(Trace::threadId).collect(Collectors.toSet());
             // The closing stamp is what ties the threads
-            awaitThreadRows(threadIds, projectId);
+            traceResourceClient.awaitThreadRows(threadIds, projectId, null, API_KEY, TEST_WORKSPACE);
             traceResourceClient.closeTraceThreads(threadIds, null, projectName, API_KEY, TEST_WORKSPACE);
             Awaitility.await()
                     .atMost(10, TimeUnit.SECONDS)
@@ -2307,7 +2300,8 @@ class FindTraceThreadsResourceTest {
                     matching));
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-            awaitThreadRows(traces.stream().map(Trace::threadId).distinct().toList(), projectId);
+            traceResourceClient.awaitThreadRows(traces.stream().map(Trace::threadId).distinct().toList(), projectId,
+                    null, API_KEY, TEST_WORKSPACE);
 
             var sdkSource = TraceThreadFilter.builder()
                     .field(TraceThreadField.SOURCE)
@@ -2319,15 +2313,44 @@ class FindTraceThreadsResourceTest {
                     List.of(sdkSource), expectedThreadIds);
         }
 
-        @Test
-        @DisplayName("on a window, the page pushdown pages through exactly the full query's list for every sort and thread filter it computes")
-        void whenWindowedSortOrThreadFilter__thenPagePushdownMatchesFullQuery() {
+        private static final List<Integer> CLOSED = List.of(0, 4);
+        private static final List<Integer> TAGGED_IN_ORDER = List.of(1, 2, 6);
+        private static final Map<Integer, Set<String>> TAGS = Map.of(1, Set.of("alpha"), 2, Set.of("alpha"), 6,
+                Set.of("alpha", "beta"));
+
+        private record PushdownFixture(UUID projectId, Instant now, Instant beforeTagging, List<String> threadIds,
+                Map<String, Instant> startTimes, Map<String, Instant> endTimes, Map<String, Integer> traceCounts,
+                Map<String, String> environments) {
+
+            Map<String, String> window() {
+                return Map.of("from_time", now.minus(60, ChronoUnit.SECONDS).toString());
+            }
+
+            List<String> threadIdsAt(List<Integer> indexes) {
+                return indexes.stream().map(threadIds::get).toList();
+            }
+
+            int indexOf(TraceThread thread) {
+                return threadIds.indexOf(thread.id());
+            }
+        }
+
+        private PushdownFixture pushdownFixture;
+
+        private PushdownFixture pushdownFixture() {
+            if (pushdownFixture == null) {
+                pushdownFixture = seedPushdownFixture();
+            }
+            return pushdownFixture;
+        }
+
+        private PushdownFixture seedPushdownFixture() {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
             Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 
-            List<Trace> traces = new ArrayList<>();
             List<String> threadIds = new ArrayList<>();
+            List<Trace> traces = new ArrayList<>();
             for (int i = 0; i < 8; i++) {
                 String threadId = RandomStringUtils.secure().nextAlphanumeric(10);
                 threadIds.add(threadId);
@@ -2340,56 +2363,132 @@ class FindTraceThreadsResourceTest {
                 }
             }
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-            awaitThreadRows(threadIds, projectId);
+            traceResourceClient.awaitThreadRows(threadIds, projectId, null, API_KEY, TEST_WORKSPACE);
 
-            traceResourceClient.closeTraceThreads(Set.of(threadIds.get(0), threadIds.get(4)), null, projectName,
-                    API_KEY, TEST_WORKSPACE);
+            traceResourceClient.closeTraceThreads(Set.copyOf(CLOSED.stream().map(threadIds::get).toList()), null,
+                    projectName, API_KEY, TEST_WORKSPACE);
             Instant beforeTagging = Instant.now();
-            for (int i : List.of(1, 2, 6)) {
+            for (int i : TAGGED_IN_ORDER) {
                 var threadModelId = traceResourceClient.getTraceThread(threadIds.get(i), projectId, API_KEY,
                         TEST_WORKSPACE).threadModelId();
                 traceResourceClient.updateThread(TraceThreadUpdate.builder()
-                        .tags(i == 6 ? Set.of("alpha", "beta") : Set.of("alpha"))
+                        .tags(TAGS.get(i))
                         .build(), threadModelId, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
             }
             Awaitility.await()
                     .atMost(10, TimeUnit.SECONDS)
                     .pollInterval(100, TimeUnit.MILLISECONDS)
                     .untilAsserted(() -> assertThat(traceResourceClient
-                            .getTraceThread(threadIds.get(0), projectId, API_KEY, TEST_WORKSPACE).status())
+                            .getTraceThread(threadIds.getFirst(), projectId, API_KEY, TEST_WORKSPACE).status())
                             .isEqualTo(TraceThreadStatus.INACTIVE));
 
-            var window = Map.of("from_time", now.minus(60, ChronoUnit.SECONDS).toString());
-            for (String field : List.of(SortableFields.ID, SortableFields.START_TIME, SortableFields.END_TIME,
+            return new PushdownFixture(projectId, now, beforeTagging, threadIds,
+                    traces.stream().collect(Collectors.toMap(Trace::threadId, Trace::startTime,
+                            BinaryOperator.minBy(Comparator.naturalOrder()))),
+                    traces.stream().collect(Collectors.toMap(Trace::threadId, Trace::endTime,
+                            BinaryOperator.maxBy(Comparator.naturalOrder()))),
+                    traces.stream().collect(Collectors.toMap(Trace::threadId, _ -> 1, Integer::sum)),
+                    traces.stream().collect(Collectors.toMap(Trace::threadId, Trace::environment, (a, b) -> a)));
+        }
+
+        private Stream<Arguments> whenWindowedSort__thenPagePushdownMatchesFullQueryInExpectedOrder() {
+            return Stream.of(SortableFields.ID, SortableFields.START_TIME, SortableFields.END_TIME,
                     SortableFields.DURATION, SortableFields.NUMBER_OF_MESSAGES, SortableFields.LAST_UPDATED_AT,
                     SortableFields.CREATED_BY, SortableFields.CREATED_AT, SortableFields.STATUS,
-                    SortableFields.TAGS, SortableFields.ENVIRONMENT)) {
-                for (Direction direction : Direction.values()) {
-                    var sorting = List.of(SortingField.builder().field(field).direction(direction).build());
-                    assertThat(assertSortedPagePushdownMatchesFullQuery(projectId, window, List.of(), sorting))
-                            .as("sort %s %s", field, direction).hasSize(threadIds.size());
-                }
-            }
+                    SortableFields.TAGS, SortableFields.ENVIRONMENT)
+                    .flatMap(field -> Arrays.stream(Direction.values())
+                            .map(direction -> Arguments.of(field, direction)));
+        }
 
-            for (TraceThreadFilter filter : List.of(
-                    threadFilter(TraceThreadField.STATUS, Operator.EQUAL, TraceThreadStatus.INACTIVE.getValue()),
-                    threadFilter(TraceThreadField.TAGS, Operator.CONTAINS, "alpha"),
-                    threadFilter(TraceThreadField.NUMBER_OF_MESSAGES, Operator.GREATER_THAN, "2"),
-                    threadFilter(TraceThreadField.DURATION, Operator.GREATER_THAN, "300"),
-                    threadFilter(TraceThreadField.START_TIME, Operator.GREATER_THAN,
-                            now.minus(30, ChronoUnit.SECONDS).toString()),
-                    threadFilter(TraceThreadField.END_TIME, Operator.LESS_THAN,
-                            now.minus(30, ChronoUnit.SECONDS).toString()),
-                    threadFilter(TraceThreadField.LAST_UPDATED_AT, Operator.GREATER_THAN, beforeTagging.toString()),
-                    threadFilter(TraceThreadField.CREATED_AT, Operator.LESS_THAN, Instant.now().toString()),
-                    threadFilter(TraceThreadField.ID, Operator.EQUAL, threadIds.get(3)))) {
-                var sorting = List.of(
-                        SortingField.builder().field(SortableFields.DURATION).direction(Direction.DESC).build());
-                assertThat(assertSortedPagePushdownMatchesFullQuery(projectId, window, List.of(filter), sorting))
-                        .as("filter %s %s", filter.field(), filter.operator())
-                        .isNotEmpty()
-                        .hasSizeLessThanOrEqualTo(threadIds.size());
+        @ParameterizedTest(name = "sort {0} {1}")
+        @MethodSource
+        @DisplayName("on a window, the page pushdown pages through exactly the full query's list in the expected order for every sort it computes")
+        void whenWindowedSort__thenPagePushdownMatchesFullQueryInExpectedOrder(String field, Direction direction) {
+            var fixture = pushdownFixture();
+
+            var listed = assertSortedPagePushdownMatchesFullQuery(fixture.projectId(), fixture.window(), List.of(),
+                    List.of(SortingField.builder().field(field).direction(direction).build()));
+
+            var order = expectedOrder(fixture, field);
+            assertThat(listed).extracting(TraceThread::id).containsExactlyInAnyOrderElementsOf(fixture.threadIds());
+            assertThat(listed).isSortedAccordingTo(direction == Direction.ASC ? order : order.reversed());
+        }
+
+        private Stream<Arguments> whenWindowedThreadFilter__thenPagePushdownMatchesFullQueryWithExpectedThreads() {
+            return Stream.of(
+                    Arguments.of(TraceThreadField.STATUS, Operator.EQUAL,
+                            (Function<PushdownFixture, String>) _ -> TraceThreadStatus.INACTIVE.getValue(), CLOSED),
+                    Arguments.of(TraceThreadField.TAGS, Operator.CONTAINS,
+                            (Function<PushdownFixture, String>) _ -> "alpha", TAGGED_IN_ORDER),
+                    Arguments.of(TraceThreadField.NUMBER_OF_MESSAGES, Operator.GREATER_THAN,
+                            (Function<PushdownFixture, String>) _ -> "2", List.of(1, 2, 4, 5, 7)),
+                    Arguments.of(TraceThreadField.DURATION, Operator.GREATER_THAN,
+                            (Function<PushdownFixture, String>) _ -> "300", List.of(1, 2, 4, 5, 7)),
+                    Arguments.of(TraceThreadField.START_TIME, Operator.GREATER_THAN,
+                            (Function<PushdownFixture, String>) fixture -> fixture.now()
+                                    .minus(30, ChronoUnit.SECONDS).toString(),
+                            List.of(5, 6, 7)),
+                    Arguments.of(TraceThreadField.END_TIME, Operator.LESS_THAN,
+                            (Function<PushdownFixture, String>) fixture -> fixture.now()
+                                    .minus(30, ChronoUnit.SECONDS).toString(),
+                            List.of(0, 1, 2, 3)),
+                    Arguments.of(TraceThreadField.LAST_UPDATED_AT, Operator.GREATER_THAN,
+                            (Function<PushdownFixture, String>) fixture -> fixture.beforeTagging().toString(),
+                            TAGGED_IN_ORDER),
+                    Arguments.of(TraceThreadField.CREATED_AT, Operator.LESS_THAN,
+                            (Function<PushdownFixture, String>) _ -> Instant.now().toString(),
+                            List.of(0, 1, 2, 3, 4, 5, 6, 7)),
+                    Arguments.of(TraceThreadField.ID, Operator.EQUAL,
+                            (Function<PushdownFixture, String>) fixture -> fixture.threadIds().get(3), List.of(3)));
+        }
+
+        @ParameterizedTest(name = "filter {0} {1}")
+        @MethodSource
+        @DisplayName("on a window, the page pushdown pages through exactly the full query's list of the expected threads for every thread filter it computes")
+        void whenWindowedThreadFilter__thenPagePushdownMatchesFullQueryWithExpectedThreads(TraceThreadField field,
+                Operator operator, Function<PushdownFixture, String> value, List<Integer> expectedThreadIndexes) {
+            var fixture = pushdownFixture();
+
+            var listed = assertSortedPagePushdownMatchesFullQuery(fixture.projectId(), fixture.window(),
+                    List.of(threadFilter(field, operator, value.apply(fixture))),
+                    List.of(SortingField.builder().field(SortableFields.DURATION).direction(Direction.DESC).build()));
+
+            assertThat(listed).extracting(TraceThread::id)
+                    .containsExactlyInAnyOrderElementsOf(fixture.threadIdsAt(expectedThreadIndexes));
+        }
+
+        private Comparator<TraceThread> expectedOrder(PushdownFixture fixture, String field) {
+            return switch (field) {
+                case SortableFields.ID -> Comparator.comparing(TraceThread::id);
+                case SortableFields.START_TIME -> Comparator.comparing(
+                        thread -> fixture.startTimes().get(thread.id()));
+                case SortableFields.END_TIME -> Comparator.comparing(thread -> fixture.endTimes().get(thread.id()));
+                case SortableFields.DURATION -> Comparator.comparing(thread -> Duration.between(
+                        fixture.startTimes().get(thread.id()), fixture.endTimes().get(thread.id())));
+                case SortableFields.NUMBER_OF_MESSAGES -> Comparator.comparing(
+                        thread -> fixture.traceCounts().get(thread.id()));
+                case SortableFields.LAST_UPDATED_AT -> Comparator.comparing(
+                        thread -> lastUpdateRank(fixture.indexOf(thread)));
+                case SortableFields.STATUS -> Comparator.comparing(thread -> CLOSED.contains(fixture.indexOf(thread))
+                        ? TraceThreadStatus.INACTIVE.getValue()
+                        : TraceThreadStatus.ACTIVE.getValue());
+                // Arrays order element by element: [] < [alpha] < [alpha, beta], in either stored tag order.
+                case SortableFields.TAGS -> Comparator.comparing(
+                        thread -> TAGS.getOrDefault(fixture.indexOf(thread), Set.of()).size());
+                case SortableFields.ENVIRONMENT -> Comparator.comparing(
+                        thread -> fixture.environments().get(thread.id()));
+                // The rows are written as ingestion lands, so only the listed values can order them.
+                case SortableFields.CREATED_AT -> Comparator.comparing(TraceThread::createdAt);
+                case SortableFields.CREATED_BY -> Comparator.comparing(TraceThread::createdBy);
+                default -> throw new IllegalArgumentException(field);
+            };
+        }
+
+        private int lastUpdateRank(int threadIndex) {
+            if (TAGGED_IN_ORDER.contains(threadIndex)) {
+                return 2 + TAGGED_IN_ORDER.indexOf(threadIndex);
             }
+            return CLOSED.contains(threadIndex) ? 1 : 0;
         }
 
         private TraceThreadFilter threadFilter(TraceThreadField field, Operator operator, String value) {
@@ -2415,12 +2514,19 @@ class FindTraceThreadsResourceTest {
                             now.minus(10L + i, ChronoUnit.SECONDS)))
                     .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-            awaitThreadRows(traces.stream().map(Trace::threadId).toList(), projectId);
+            traceResourceClient.awaitThreadRows(traces.stream().map(Trace::threadId).toList(), projectId, null, API_KEY,
+                    TEST_WORKSPACE);
+
+            var expectedThreads = traces.stream()
+                    .sorted(Comparator.comparing(Trace::startTime).reversed())
+                    .map(trace -> getExpectedThreads(List.of(trace), projectId, trace.threadId(), List.of(),
+                            TraceThreadStatus.ACTIVE).getFirst())
+                    .toList();
 
             var oneBatch = traceResourceClient.searchTraceThreadsStream(TraceThreadSearchStreamRequest.builder()
                     .projectName(projectName)
                     .build(), API_KEY, TEST_WORKSPACE);
-            assertThat(oneBatch).hasSize(traces.size());
+            TraceAssertions.assertThreads(expectedThreads, oneBatch);
 
             List<TraceThread> batched = new ArrayList<>();
             UUID lastRetrieved = null;
@@ -2437,8 +2543,7 @@ class FindTraceThreadsResourceTest {
                 lastRetrieved = next.getLast().threadModelId();
             }
 
-            assertThat(batched).extracting(TraceThread::id)
-                    .containsExactlyElementsOf(oneBatch.stream().map(TraceThread::id).toList());
+            TraceAssertions.assertThreads(expectedThreads, batched);
         }
 
         @Test
@@ -2452,8 +2557,8 @@ class FindTraceThreadsResourceTest {
             traceResourceClient.batchCreateTraces(List.of(
                     threadTrace(projectName, withRow, now.minus(20, ChronoUnit.SECONDS)),
                     threadTrace(projectName, withoutRow, now.minus(10, ChronoUnit.SECONDS))), API_KEY, TEST_WORKSPACE);
-            awaitThreadRows(List.of(withRow, withoutRow), projectId);
-            deleteThreadRow(projectId, withoutRow);
+            traceResourceClient.awaitThreadRows(List.of(withRow, withoutRow), projectId, null, API_KEY, TEST_WORKSPACE);
+            ThreadTestUtils.deleteThreadRow(clickHouseTemplate, WORKSPACE_ID, projectId, withoutRow);
 
             String fromTime = now.minus(60, ChronoUnit.SECONDS).toString();
             String toTime = now.minus(1, ChronoUnit.SECONDS).toString();
@@ -2472,19 +2577,6 @@ class FindTraceThreadsResourceTest {
                     assertThat(page.total()).as("window %s, filters %s", window, filters).isEqualTo(expected.size());
                 }
             }
-        }
-
-        private void deleteThreadRow(UUID projectId, String threadId) {
-            clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
-                    DELETE FROM trace_threads
-                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND thread_id = :thread_id
-                    """)
-                    .bind("workspace_id", WORKSPACE_ID)
-                    .bind("project_id", projectId.toString())
-                    .bind("thread_id", threadId)
-                    .execute())
-                    .flatMap(result -> Mono.from(result.getRowsUpdated())))
-                    .block();
         }
 
         private void assertPagePushdownMatchesFullQuery(UUID projectId, Map<String, String> window,
@@ -2527,16 +2619,6 @@ class FindTraceThreadsResourceTest {
                     .operator(Operator.NOT_CONTAINS)
                     .value(RandomStringUtils.secure().nextAlphabetic(24))
                     .build();
-        }
-
-        // Closing a thread whose row is not written yet writes it with an id of about now, not of its first trace.
-        private void awaitThreadRows(Collection<String> threadIds, UUID projectId) {
-            Awaitility.await()
-                    .atMost(10, TimeUnit.SECONDS)
-                    .pollInterval(100, TimeUnit.MILLISECONDS)
-                    .untilAsserted(() -> assertThat(threadIds).allSatisfy(threadId -> assertThat(traceResourceClient
-                            .getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE).threadModelId())
-                            .isNotNull()));
         }
 
         private Trace threadTrace(String projectName, String threadId, Instant startTime) {
@@ -2593,11 +2675,13 @@ class FindTraceThreadsResourceTest {
                             .id(idGenerator.generateId(ranBeforeWindow))
                             .projectName(projectName)
                             .threadId(threadId)
+                            // The thread row keeps its first trace's environment, which is not a window measure.
+                            .environment(insideTrace.environment())
                             .startTime(ranBeforeWindow)
                             .endTime(ranBeforeWindow.plusMillis(500))
                             .build(), insideTrace);
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-            awaitThreadRows(List.of(threadId), projectId);
+            traceResourceClient.awaitThreadRows(List.of(threadId), projectId, null, API_KEY, TEST_WORKSPACE);
             traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY, TEST_WORKSPACE);
 
             Instant rowWrittenAt = RetentionUtils.extractInstant(
@@ -2622,9 +2706,8 @@ class FindTraceThreadsResourceTest {
                 listed = page.content();
             }
 
-            assertThat(listed).extracting(TraceThread::id).containsExactly(threadId);
-            assertThat(listed.getFirst().startTime()).isEqualTo(insideTrace.startTime());
-            assertThat(listed.getFirst().numberOfMessages()).isEqualTo(2L);
+            TraceAssertions.assertThreads(getExpectedThreads(List.of(insideTrace), projectId, threadId, List.of(),
+                    TraceThreadStatus.INACTIVE), listed);
         }
 
         private Stream<Arguments> provideBoundaryScenarios() {
@@ -3427,16 +3510,15 @@ class FindTraceThreadsResourceTest {
             var filteredPage = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName,
                     sdkSourceFilter, List.of(), queryParams);
 
-            assertThat(filteredPage.content()).extracting(TraceThread::id).containsExactly(sdkThreadId);
+            TraceAssertions.assertThreads(getExpectedThreads(List.of(sdkTrace), projectId, sdkThreadId, List.of(),
+                    TraceThreadStatus.ACTIVE), filteredPage.content());
             assertThat(filteredPage.total()).isEqualTo(1);
 
             var filteredStats = traceResourceClient.getTraceThreadStats(null, projectId, apiKey, workspaceName,
                     sdkSourceFilter, queryParams);
 
-            assertThat(filteredStats.stats())
-                    .filteredOn(stat -> stat.getName().equals("thread_count"))
-                    .extracting(stat -> ((ProjectStats.CountValueStat) stat).getValue())
-                    .containsExactly(1L);
+            TraceAssertions.assertStats(filteredStats.stats(),
+                    StatsUtils.getProjectThreadStatItems(List.of(sdkTrace), List.of(), null));
         }
     }
 

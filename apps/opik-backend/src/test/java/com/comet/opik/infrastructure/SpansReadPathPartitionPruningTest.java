@@ -601,12 +601,7 @@ class SpansReadPathPartitionPruningTest {
                         monday.atTime(12, 0).toInstant(ZoneOffset.UTC), ID_GENERATOR.generateId())
                         .toBuilder().projectName(projectName).build()))
                 .toList(), API_KEY, WORKSPACE_NAME);
-        // Thread rows are written asynchronously after ingestion, and thread charts and KPI cards skip a thread without one.
-        Awaitility.await()
-                .atMost(Duration.ofSeconds(10))
-                .pollInterval(Duration.ofMillis(100))
-                .untilAsserted(() -> assertThat(traceResourceClient
-                        .getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).threadModelId()).isNotNull());
+        traceResourceClient.awaitThreadRows(List.of(threadId), projectId, null, API_KEY, WORKSPACE_NAME);
         var spanWeeks = Stream.concat(FILLER_WEEKS.stream(),
                 Stream.of(yyyymmdd(mondayOf(now)), yyyymmdd(mondayOf(farFuture))))
                 .collect(Collectors.toSet());
