@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.TestConfigUtils;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.google.genai.Client;
 import dev.langchain4j.model.chat.ChatModel;
@@ -41,7 +42,9 @@ class LlmProviderVertexAITest {
     @Test
     @DisplayName("a streaming client that fails to build notifies the caller instead of hanging")
     void streamingBuildFailureNotifiesTheCaller() throws Exception {
-        var generator = new VertexAIClientGenerator(TestConfigUtils.loadConfigTest().getLlmProviderClient());
+        var configuration = TestConfigUtils.loadConfigTest();
+        var generator = new VertexAIClientGenerator(configuration.getLlmProviderClient(),
+                new LlmModelRegistryService(configuration, mock(jakarta.ws.rs.client.Client.class)));
         // A malformed key makes the streaming client throw at build time, before the stream starts.
         var apiConfig = LlmProviderClientApiConfig.builder().apiKey("not-a-service-account").configuration(Map.of())
                 .build();
