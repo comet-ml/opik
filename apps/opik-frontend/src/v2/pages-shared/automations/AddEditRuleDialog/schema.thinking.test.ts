@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   convertLLMJudgeDataToLLMJudgeObject,
   convertLLMJudgeObjectToLLMJudgeData,
+  updateConfigForModelChange,
 } from "./schema";
 import { LLMJudgeObject } from "@/types/automations";
 import {
@@ -209,5 +210,86 @@ describe("LLM judge thinking level round trip", () => {
     );
 
     expect(object.model.custom_parameters).toEqual({ some_other: 1 });
+  });
+});
+
+describe("LLM judge thinking level on a model switch", () => {
+  const GEMINI = PROVIDER_TYPE.GEMINI as COMPOSED_PROVIDER_TYPE;
+
+  it.each<[GeminiThinkingLevel, PROVIDER_MODEL_TYPE, GeminiThinkingLevel]>([
+    ["minimal", PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, "low"],
+    ["medium", PROVIDER_MODEL_TYPE.GEMINI_3_PRO, "low"],
+  ])(
+    "saves a %s picked on Gemini 3 Flash as the nearest level %s offers, %s",
+    (stored, next, expected) => {
+      const from = {
+        model: PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+        provider: GEMINI,
+      };
+      const opened = convertLLMJudgeObjectToLLMJudgeData(
+        persisted(from.model, { thinking: { level: stored } }),
+      ).config;
+      const switched = updateConfigForModelChange(opened, from, {
+        model: next,
+        provider: GEMINI,
+      });
+
+      expect(
+        convertLLMJudgeDataToLLMJudgeObject(asFormData(next, switched)).model
+          .custom_parameters,
+      ).toEqual({ thinking: { level: expected } });
+    },
+  );
+
+  it.each<
+    [
+      GeminiThinkingLevel,
+      GeminiThinkingLevel,
+      Record<string, unknown> | undefined,
+    ]
+  >([
+    ["high", "auto", undefined],
+    ["low", "low", { thinking: { level: "low" } }],
+  ])(
+    "moving a rule from Gemini 3 Pro at %s to Vertex AI 2.5 Flash shows and saves %s",
+    (level, expected, saved) => {
+      const from = {
+        model: PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+        provider: GEMINI,
+      };
+      const to = {
+        model: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+        provider: PROVIDER_TYPE.VERTEX_AI as COMPOSED_PROVIDER_TYPE,
+      };
+      const opened = convertLLMJudgeObjectToLLMJudgeData(
+        persisted(from.model, { thinking: { level } }),
+      ).config;
+      const switched = updateConfigForModelChange(opened, from, to);
+
+      expect(switched.thinkingLevel).toBe(expected);
+      expect(
+        convertLLMJudgeDataToLLMJudgeObject(asFormData(to.model, switched))
+          .model.custom_parameters,
+      ).toEqual(saved);
+    },
+  );
+
+  it("keeps include_thoughts and other keys when a switch drops the old nested level", () => {
+    const switched = updateConfigForModelChange(
+      {
+        thinkingLevel: "high",
+        custom_parameters: {
+          thinking: { level: "high", include_thoughts: true },
+          unrelated: "keep",
+        },
+      },
+      { model: PROVIDER_MODEL_TYPE.GEMINI_3_PRO, provider: GEMINI },
+      { model: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, provider: GEMINI },
+    );
+
+    expect(switched.custom_parameters).toEqual({
+      thinking: { include_thoughts: true },
+      unrelated: "keep",
+    });
   });
 });

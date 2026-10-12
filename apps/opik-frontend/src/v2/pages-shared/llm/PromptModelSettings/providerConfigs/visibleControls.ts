@@ -12,6 +12,7 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 import {
+  isAnthropicThinkingOn,
   resolveEffort,
   resolveSamplingParams,
   supportsGeminiThinkingLevel,
@@ -79,7 +80,9 @@ export const getAnthropicVisibleControls = ({
   const { thinkingEffort } = resolveEffort(model ?? "", configs);
 
   return {
-    samplingParams: supportsSamplingParams(model),
+    samplingParams:
+      supportsSamplingParams(model) &&
+      !isAnthropicThinkingOn(model ?? "", configs),
     maxCompletionTokens: supports("maxCompletionTokens"),
     throttling: supports("throttling"),
     maxConcurrentRequests: supports("maxConcurrentRequests"),

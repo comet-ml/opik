@@ -73,7 +73,7 @@ const GeminiModelConfigs = ({
           defaultValue={DEFAULT_GEMINI_CONFIGS.MAX_COMPLETION_TOKENS}
           label="Max output tokens"
           tooltip={
-            <PromptModelConfigsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
+            <PromptModelConfigsTooltipContent text="The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On thinking models, thinking tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
           }
         />
       )}
