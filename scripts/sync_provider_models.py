@@ -21,8 +21,8 @@ Usage:
 
 A provider whose API call fails keeps its current models in every file; the others still sync.
 
-Exit codes:
-  0  files written (or would be, with --dry-run), every provider API call succeeded
+Exit codes (with --dry-run, "written" means "would be written"):
+  0  files written, every provider API call succeeded
   1  nothing to write, every provider API call succeeded
   3  files written, but at least one provider API call failed
   4  nothing to write, and at least one provider API call failed
@@ -705,11 +705,16 @@ def regenerate_providers_ts(
     # Find the closing brace of the enum
     enum_close = content.index("\n}", opik_free_end)
 
-    existing_sections = {
-        provider: section
-        for section in content[opik_free_end:enum_close].split("\n\n")
+    enum_body = content[opik_free_end:enum_close]
+    marker_starts = sorted(
+        (enum_body.index(f"  {marker}"), provider)
         for provider, marker in _TS_ENUM_SECTION_MARKERS.items()
-        if section.startswith(f"  {marker}")
+        if f"  {marker}" in enum_body
+    )
+    section_ends = [start for start, _ in marker_starts[1:]] + [len(enum_body)]
+    existing_sections = {
+        provider: enum_body[start:end].rstrip("\n")
+        for (start, provider), end in zip(marker_starts, section_ends)
     }
 
     sections = []
