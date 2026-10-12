@@ -42,6 +42,17 @@ you're happy with the results, save the edit as a new prompt version for your ag
 
       client = opik.Opik()
 
+      # Create the prompt in the Prompt Library if it does not exist yet
+      if client.get_chat_prompt("my-agent-prompt", project_name="my-agent") is None:
+          client.create_chat_prompt(
+              name="my-agent-prompt",
+              messages=[
+                  {"role": "system", "content": "You are a helpful assistant."},
+                  {"role": "user", "content": "{{query}}"},
+              ],
+              project_name="my-agent",
+          )
+
       @opik.track(entrypoint=True, project_name="my-agent")
       def my_agent(query: str, max_results: int = 5) -> str:
           prompt = client.get_chat_prompt("my-agent-prompt", project_name="my-agent")
@@ -50,17 +61,6 @@ you're happy with the results, save the edit as a new prompt version for your ag
           return result
 
       if __name__ == "__main__":
-          # Create the prompt in the Prompt Library if it does not exist yet
-          if client.get_chat_prompt("my-agent-prompt", project_name="my-agent") is None:
-              client.create_chat_prompt(
-                  name="my-agent-prompt",
-                  messages=[
-                      {"role": "system", "content": "You are a helpful assistant."},
-                      {"role": "user", "content": "{{query}}"},
-                  ],
-                  project_name="my-agent",
-              )
-
           # Keep the process alive so the runner can pick up jobs
           threading.Event().wait()
       ```
@@ -70,28 +70,7 @@ you're happy with the results, save the edit as a new prompt version for your ag
 
       const client = new Opik();
 
-      const myAgent = track(
-        {
-          entrypoint: true,
-          name: "my-agent",
-          params: [
-            { name: "query", type: "string" },
-            { name: "maxResults", type: "number" },
-          ],
-        },
-        async (query: string, maxResults: number = 5): Promise<string> => {
-          const prompt = await client.getChatPrompt({
-            name: "my-agent-prompt",
-            projectName: "my-agent",
-          });
-          const messages = prompt!.format({ query });
-          // Your agent logic here
-          return result;
-        }
-      );
-
-      async function main() {
-        // Create the prompt in the Prompt Library if it does not exist yet
+      async function createPromptIfMissing() {
         const existing = await client.getChatPrompt({
           name: "my-agent-prompt",
           projectName: "my-agent",
@@ -108,7 +87,29 @@ you're happy with the results, save the edit as a new prompt version for your ag
         }
       }
 
-      main();
+      // Create the prompt in the Prompt Library if it does not exist yet
+      const promptReady = createPromptIfMissing();
+
+      const myAgent = track(
+        {
+          entrypoint: true,
+          name: "my-agent",
+          params: [
+            { name: "query", type: "string" },
+            { name: "maxResults", type: "number" },
+          ],
+        },
+        async (query: string, maxResults: number = 5): Promise<string> => {
+          await promptReady;
+          const prompt = await client.getChatPrompt({
+            name: "my-agent-prompt",
+            projectName: "my-agent",
+          });
+          const messages = prompt!.format({ query });
+          // Your agent logic here
+          return result;
+        }
+      );
       ```
     </CodeBlocks>
 
