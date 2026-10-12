@@ -11,7 +11,7 @@ import {
   PlaygroundRunInputChange,
 } from "@/types/playground";
 import { LLMMessage } from "@/types/llm";
-import { restoreMissingConfigKeys } from "@/lib/playground";
+import { restoreMissingConfigKeys, RunFailureHint } from "@/lib/playground";
 import { buildExperimentName } from "@/lib/experiments";
 import { JsonObject } from "@/types/shared";
 import { Filters } from "@/types/filters";
@@ -24,6 +24,7 @@ interface PlaygroundOutput {
   isLoading: boolean;
   value: string | null;
   error?: string;
+  errorHint?: RunFailureHint;
   stale: boolean;
   staleChanges?: PlaygroundRunInputChange[];
   traceId?: string;

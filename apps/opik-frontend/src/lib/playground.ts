@@ -1,5 +1,6 @@
 import first from "lodash/first";
 import isNil from "lodash/isNil";
+import last from "lodash/last";
 import omitBy from "lodash/omitBy";
 import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
@@ -341,6 +342,62 @@ export const parseCompletionOutput = (run: RunStreamingReturn) => {
     "The AI provider returned an empty response. Please, try again."
   );
 };
+
+const HTTP_NOT_FOUND = 404;
+
+export type RunFailureHint = {
+  action: string;
+};
+
+export type RunFailure = {
+  message: string;
+  hint?: RunFailureHint;
+};
+
+type RunFailureContext = {
+  model: string;
+};
+
+const getRunFailureHint = (
+  run: RunStreamingReturn,
+  { model }: RunFailureContext,
+): RunFailureHint | undefined => {
+  const providerMessage =
+    run.opikError || run.providerError || run.pythonProxyError;
+  const modelName = last(model.split("/"));
+  // Providers answer a model the key can't use with a 404 that names it. A 404 that doesn't name it
+  // has another cause, such as a custom provider's wrong URL ("Not Found").
+  if (
+    run.errorStatus === HTTP_NOT_FOUND &&
+    modelName &&
+    providerMessage?.includes(modelName)
+  ) {
+    return {
+      action:
+        "This model isn't available for your API key. Pick another model, or check which models your provider account can use.",
+    };
+  }
+  return undefined;
+};
+
+export const describeRunFailure = (
+  run: RunStreamingReturn,
+  context: RunFailureContext,
+): RunFailure => {
+  const hint = getRunFailureHint(run, context);
+  if (!hint) return { message: parseCompletionOutput(run) };
+  return { message: parseCompletionOutput(run), hint };
+};
+
+export class RunFailedError extends Error {
+  failure: RunFailure;
+
+  constructor(failure: RunFailure) {
+    super(failure.message);
+    this.name = "RunFailedError";
+    this.failure = failure;
+  }
+}
 
 export const parseCompletionError = (run: RunStreamingReturn) => {
   if (run.opikError) {
