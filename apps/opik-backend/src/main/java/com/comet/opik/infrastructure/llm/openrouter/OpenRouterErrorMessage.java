@@ -36,7 +36,7 @@ public record OpenRouterErrorMessage(
             return Optional.empty();
         }
         return text(error.metadata().path("raw"))
-                .map(raw -> parseObject(raw).flatMap(OpenRouterErrorMessage::messageOf).orElse(raw))
+                .map(raw -> parseObject(raw).flatMap(OpenRouterErrorMessage::reasonOf).orElse(raw))
                 .map(StringUtils::normalizeSpace)
                 .map(reason -> StringUtils.abbreviate(reason, MAX_UPSTREAM_REASON_LENGTH));
     }
@@ -56,7 +56,7 @@ public record OpenRouterErrorMessage(
         }
     }
 
-    private static Optional<String> messageOf(JsonNode upstreamError) {
+    private static Optional<String> reasonOf(JsonNode upstreamError) {
         return Stream.of(
                 upstreamError.path("error").path("message"),
                 upstreamError.path("error"),

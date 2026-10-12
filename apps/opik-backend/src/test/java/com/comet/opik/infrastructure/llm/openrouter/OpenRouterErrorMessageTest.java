@@ -20,7 +20,6 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -109,6 +108,10 @@ class OpenRouterErrorMessageTest {
                                 {"error":{"message":"Provider returned error","code":429,"metadata":{"raw":"google/gemma-4-31b-it:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations","provider_name":"Google AI Studio","is_byok":false,"provider_error_code":"429","limit_source":"upstream_provider_shared_pool","remedy_hint":"Retry shortly, add your own provider key (https://openrouter.ai/settings/integrations), or route to another provider with provider routing: https://openrouter.ai/docs/features/provider-routing"}}}""",
                         429,
                         "Google AI Studio: google/gemma-4-31b-it:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations"),
+                Arguments.of("upstream JSON, error as a string",
+                        """
+                                {"error":{"message":"Provider returned error","code":400,"metadata":{"raw":"{\\"error\\":\\"  Model   not found  \\"}","provider_name":"DeepInfra"}}}""",
+                        400, "DeepInfra: Model not found"),
                 Arguments.of("upstream JSON, detail shape",
                         """
                                 {"error":{"message":"Provider returned error","code":422,"metadata":{"raw":"{\\"detail\\":\\"Input should be a valid list\\"}","provider_name":"Chutes"}}}""",
@@ -156,19 +159,26 @@ class OpenRouterErrorMessageTest {
         assertThat(message).startsWith("Groq: <html>Bad gateway").endsWith("...").hasSize("Groq: ".length() + 500);
     }
 
-    @ParameterizedTest(name = "stream={0}")
-    @ValueSource(booleans = {true, false})
-    void failedCallReportsTheUpstreamReason(boolean stream) throws Exception {
-        wireMock.stubFor(post(urlEqualTo(COMPLETIONS_PATH)).willReturn(aResponse()
-                .withStatus(400)
-                .withHeader("Content-Type", "application/json")
-                .withBody(PROVIDER_ERROR)));
+    @Test
+    void generateWhenProviderFailsReportsTheUpstreamReason() {
+        stubProviderError();
 
-        var failure = stream
-                ? streamFailure()
-                : catchThrowable(() -> provider.generate(request(false), "workspace-id"));
+        var failure = catchThrowable(() -> provider.generate(request(false), "workspace-id"));
 
         assertThat(provider.getLlmProviderError(failure)).contains(new ErrorMessage(400, PROVIDER_ERROR_MESSAGE));
+    }
+
+    @Test
+    void generateStreamWhenProviderFailsReportsTheUpstreamReason() throws Exception {
+        stubProviderError();
+        var failure = new CompletableFuture<Throwable>();
+
+        provider.generateStream(request(true), "workspace-id", response -> {
+        }, () -> failure.completeExceptionally(new AssertionError("stream closed without an error")),
+                failure::complete);
+
+        assertThat(provider.getLlmProviderError(failure.get(10, TimeUnit.SECONDS)))
+                .contains(new ErrorMessage(400, PROVIDER_ERROR_MESSAGE));
     }
 
     @Test
@@ -192,12 +202,11 @@ class OpenRouterErrorMessageTest {
         Awaitility.await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(2)).untilFalse(closed);
     }
 
-    private Throwable streamFailure() throws Exception {
-        var failure = new CompletableFuture<Throwable>();
-        provider.generateStream(request(true), "workspace-id", response -> {
-        }, () -> failure.completeExceptionally(new AssertionError("stream closed without an error")),
-                failure::complete);
-        return failure.get(10, TimeUnit.SECONDS);
+    private void stubProviderError() {
+        wireMock.stubFor(post(urlEqualTo(COMPLETIONS_PATH)).willReturn(aResponse()
+                .withStatus(400)
+                .withHeader("Content-Type", "application/json")
+                .withBody(PROVIDER_ERROR)));
     }
 
     private ChatCompletionRequest request(boolean stream) {
