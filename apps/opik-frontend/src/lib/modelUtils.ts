@@ -12,6 +12,7 @@ import {
   ANTHROPIC_MODEL_CAPABILITIES,
   DEFAULT_ANTHROPIC_CONFIGS,
   DEFAULT_OPEN_AI_CONFIGS,
+  DEFAULT_OPEN_ROUTER_CONFIGS,
   OPENAI_MODEL_CAPABILITIES,
 } from "@/constants/llm";
 import {
@@ -987,6 +988,19 @@ export const resolveMaxCompletionTokens = (
   // one-token answer, so it gets the default rather than the new floor.
   const requested = value || MAX_COMPLETION_TOKENS_DEFAULT[provider];
   return Math.min(Math.max(Math.floor(requested), min), max);
+};
+
+export const getOpenRouterDefaultMaxTokens = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): number => {
+  // The pricing data lists OpenRouter's own limits under openrouter/<id>. The bare id finds the
+  // direct provider's entry, whose limit can differ.
+  const modelMaxOutputTokens = model
+    ? getMaxOutputTokens(`openrouter/${model}`)
+    : undefined;
+  return modelMaxOutputTokens
+    ? Math.min(DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS, modelMaxOutputTokens)
+    : DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS;
 };
 
 // Last-mile request hardening, complementary to updateProviderConfig: this

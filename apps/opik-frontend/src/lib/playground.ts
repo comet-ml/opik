@@ -14,6 +14,7 @@ import {
 import {
   getDefaultThinkingEffort,
   getDefaultThinkingLevel,
+  getOpenRouterDefaultMaxTokens,
   isClaudeModel,
   supportsAnthropicThinkingEffort,
   supportsGeminiThinkingLevel,
@@ -166,7 +167,7 @@ export const getDefaultConfigByProvider = (
 
   if (providerType === PROVIDER_TYPE.OPEN_ROUTER) {
     return {
-      maxTokens: DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS,
+      maxTokens: getOpenRouterDefaultMaxTokens(model),
       temperature: DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE,
       topP: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P,
       topK: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_K,
