@@ -109,14 +109,16 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     // Built here rather than by the model builder, which keeps its client private and is not closeable.
     private <T> T buildOwnedClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
             OwnedClientFactory<T> factory) {
-        var model = registryService.findModel(request.model())
+        // The enum fallback mirrors LlmProviderFactoryImpl's routing, so every model it sends here can be built here.
+        var modelId = registryService.findModel(request.model())
                 .filter(result -> result.provider() == LlmProvider.VERTEX_AI)
                 .map(result -> result.model().id())
+                .or(() -> VertexAIModelName.byQualifiedName(request.model()).map(VertexAIModelName::toString))
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported model: %s".formatted(request.model())));
 
         Client client = buildClient(apiKey);
         try {
-            return factory.create(client, model);
+            return factory.create(client, modelId);
         } catch (RuntimeException e) {
             closeSuppressing(client, e);
             throw e;

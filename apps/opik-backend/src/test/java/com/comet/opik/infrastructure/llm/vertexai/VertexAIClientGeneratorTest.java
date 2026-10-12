@@ -455,6 +455,22 @@ class VertexAIClientGeneratorTest {
         }
 
         @Test
+        @DisplayName("a model only the enum knows is still called by its bare id")
+        void enumOnlyModelIsStillCalledByItsBareId() {
+            var configuration = TestConfigUtils.loadConfigTest();
+            configuration.getLlmModelRegistry().setDefaultResource("llm-models-test.yaml");
+            var registryWithoutTheModel = registryOf(configuration);
+            assertThat(registryWithoutTheModel.findModel(MODEL))
+                    .as("the fixture registry must not know the model")
+                    .isEmpty();
+
+            completeVia(new VertexAIClientGenerator(clientConfig(), registryWithoutTheModel), "global");
+
+            wireMock.server().verify(postRequestedFor(urlPathMatching(
+                    ".*/publishers/google/models/gemini-2\\.5-flash:generateContent")));
+        }
+
+        @Test
         @DisplayName("a model the registry files under another provider is not sent to Vertex AI")
         void otherProvidersModelIsUnsupported() {
             var generator = new VertexAIClientGenerator(clientConfig(), registry);
