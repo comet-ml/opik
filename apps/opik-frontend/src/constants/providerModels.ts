@@ -194,10 +194,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1,
       label: "Claude Mythos 5.1",
     },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_PREVIEW,
-      label: "Claude Mythos Preview",
-    },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
@@ -3248,10 +3244,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemma 4 31B IT",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GEMINI_FLASH_LATEST_HIGH_RES_EXP,
-      label: "Gemini Flash Latest High Res Exp",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.GEMINI_OMNI_1_1_FLASH,
       label: "Gemini Omni 1.1 Flash",
     },
@@ -3299,14 +3291,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 3.1 Flash Lite",
     },
     {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
-      label: "Gemini 3.1 Flash Lite Preview",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO,
-      label: "Gemini 3 Pro Preview",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW,
       label: "Gemini 3 Flash Preview",
     },
@@ -3319,20 +3303,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 2.5 Flash",
     },
     {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH,
-      label: "Gemini 2.0 Flash 001",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH_LITE,
-      label: "Gemini 2.0 Flash Lite 001",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_OMNI_1_1_FLASH,
       label: "Gemini Omni 1.1 Flash",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_ROBOTICS_ER_2,
-      label: "Gemini Robotics Er 2",
     },
   ],
 
