@@ -262,7 +262,7 @@ describe("PromptImprovementDialog — a run still streaming when its session end
     ["the dialog is closed and reopened", [{ open: false }, { open: true }]],
     ["the source prompt's text changes", [{ originalPrompt: "a limerick" }]],
     ["the source prompt becomes another version", [{ id: "version-2" }]],
-  ])("drops the old run's output after %s", async (_, nextProps) => {
+  ])("drops the old run's output after %s", async (_, propUpdates) => {
     let streamOldChunk: (chunk: string) => void = () => {};
     let finishOldRun: (result: object) => void = () => {};
     let oldSignal: AbortSignal | undefined;
@@ -297,7 +297,7 @@ describe("PromptImprovementDialog — a run still streaming when its session end
     fireEvent.click(screen.getByRole("button", { name: /Improve prompt/ }));
     await waitFor(() => expect(improvement.improvePrompt).toHaveBeenCalled());
 
-    nextProps.forEach((props) => rerender(dialogWith(props)));
+    propUpdates.forEach((props) => rerender(dialogWith(props)));
     await act(async () => {
       streamOldChunk("Old prompt");
       finishOldRun({ result: "Old prompt", finishReason: "length" });
