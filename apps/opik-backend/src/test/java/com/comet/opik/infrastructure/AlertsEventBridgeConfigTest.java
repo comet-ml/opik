@@ -4,6 +4,7 @@ import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -75,5 +76,33 @@ class AlertsEventBridgeConfigTest {
         assertThat(VALIDATOR.validate(config))
                 .extracting(violation -> violation.getPropertyPath().toString())
                 .containsExactly("regionValid");
+    }
+
+    @ParameterizedTest
+    @CsvSource(nullValues = "null", value = {
+            "arn:aws:events:us-east-1:123456789012:event-bus/opik-alerts, us-east-1",
+            "arn:aws:events:us-east-1:123456789012:event-bus/opik-alerts, null",
+            "arn:aws:events:us-east-1:123456789012:event-bus/opik-alerts, ''",
+            "opik-alerts, eu-west-1"})
+    void regionWhenConsistentWithEventBusHasNoViolations(String eventBus, String region) {
+        var config = new AlertsEventBridgeConfig();
+        config.setEventBus(eventBus);
+        config.setRegion(region);
+
+        assertThat(VALIDATOR.validate(config)).isEmpty();
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "arn:aws:events:us-east-1:123456789012:event-bus/opik-alerts, eu-west-1",
+            "arn:aws-us-gov:events:us-gov-west-1:123456789012:event-bus/opik-alerts, us-gov-east-1"})
+    void regionWhenDifferentFromEventBusArnReportsViolation(String eventBus, String region) {
+        var config = new AlertsEventBridgeConfig();
+        config.setEventBus(eventBus);
+        config.setRegion(region);
+
+        assertThat(VALIDATOR.validate(config))
+                .extracting(violation -> violation.getPropertyPath().toString())
+                .containsExactly("regionConsistentWithEventBusArn");
     }
 }

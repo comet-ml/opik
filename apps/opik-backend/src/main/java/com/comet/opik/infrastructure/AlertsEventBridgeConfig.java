@@ -46,6 +46,13 @@ public class AlertsEventBridgeConfig {
     }
 
     @JsonIgnore
+    @AssertTrue(message = "region (ALERTS_EVENTBRIDGE_REGION) must match the region in the eventBus ARN (ALERTS_EVENTBRIDGE_EVENT_BUS) when both are set")
+    public boolean isRegionConsistentWithEventBusArn() {
+        return StringUtils.isBlank(region)
+                || getEventBusArnRegion().map(region::equals).orElse(true);
+    }
+
+    @JsonIgnore
     public Optional<String> getEventBusArnRegion() {
         return Optional.ofNullable(eventBus)
                 .map(BUS_ARN_PATTERN::matcher)
