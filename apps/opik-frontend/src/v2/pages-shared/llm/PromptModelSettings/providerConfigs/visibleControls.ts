@@ -58,7 +58,9 @@ export const getOpenAIVisibleControls = ({
 
   return {
     temperature: !isUndefined(temperature),
-    maxCompletionTokens: !isUndefined(configs.maxCompletionTokens),
+    maxCompletionTokens:
+      supports("maxCompletionTokens") &&
+      !isUndefined(configs.maxCompletionTokens),
     topP: supports("topP") && !isUndefined(topP),
     frequencyPenalty: showPenalties && !isUndefined(configs.frequencyPenalty),
     presencePenalty: showPenalties && !isUndefined(configs.presencePenalty),
@@ -99,7 +101,9 @@ const getGeminiFamilyVisibleControls = (
 
   return {
     temperature: !isUndefined(temperature),
-    maxCompletionTokens: !isUndefined(configs.maxCompletionTokens),
+    maxCompletionTokens:
+      supports("maxCompletionTokens") &&
+      !isUndefined(configs.maxCompletionTokens),
     topP: supports("topP") && !isUndefined(topP),
     thinkingLevel: showThinkingLevel,
     throttling: supports("throttling"),
@@ -131,18 +135,19 @@ export const getOpenRouterVisibleControls = ({
   const sampling = resolveSamplingPresentation(model);
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const independent = sampling === "independent";
+  const showPenalties = supportsPenaltyParams(model);
 
   return {
     // ExclusiveSamplingParams renders nothing when it can offer no choice and neither half is live.
     samplingParams:
       sampling === "exclusive" &&
       (supports("topP") || !isUndefined(temperature) || !isUndefined(topP)),
-    temperature: independent && !isUndefined(configs.temperature),
+    temperature: independent && !isUndefined(temperature),
     maxTokens: !isUndefined(configs.maxTokens),
-    topP: independent && supports("topP") && !isUndefined(configs.topP),
+    topP: independent && supports("topP") && !isUndefined(topP),
     topK: !isUndefined(configs.topK),
-    frequencyPenalty: !isUndefined(configs.frequencyPenalty),
-    presencePenalty: !isUndefined(configs.presencePenalty),
+    frequencyPenalty: showPenalties && !isUndefined(configs.frequencyPenalty),
+    presencePenalty: showPenalties && !isUndefined(configs.presencePenalty),
     repetitionPenalty: !isUndefined(configs.repetitionPenalty),
     minP: !isUndefined(configs.minP),
     topA: !isUndefined(configs.topA),
@@ -203,6 +208,8 @@ export const hasVisibleControls = (
         }),
       );
     case PROVIDER_TYPE.CUSTOM:
+    case PROVIDER_TYPE.OLLAMA:
+    case PROVIDER_TYPE.BEDROCK:
       return true;
     default:
       return false;

@@ -286,6 +286,37 @@ class TestCodingAgentFlow:
 
         assert calls == []
 
+    def test_install_mcp_without_a_terminal__ends_on_each_clients_next_step(self):
+        """Run by an agent: the ending names Claude Code's sign-in command."""
+        with (
+            mock.patch.object(
+                configure_cli.mcp_installer,
+                "detected_host_keys",
+                return_value=["claude-code"],
+            ),
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=False
+            ),
+            mock.patch.object(
+                configure_cli.assistants,
+                "setup",
+                return_value=assistants.Outcome(
+                    clients=1,
+                    skills=False,
+                    next_steps=(
+                        "Claude Code: sign in with `claude mcp login opik-mcp`.",
+                    ),
+                ),
+            ),
+            configure_cli.install_view.console.capture() as capture,
+        ):
+            configure_cli._setup_assistants({}, True, None, True)
+
+        out = " ".join(capture.get().split())
+        assert "claude mcp login opik-mcp" in out
+        assert "Start a new session" in out
+        assert "Restart your AI client" not in out
+
 
 def test_configure_no_terminal__assumes_the_defaults_instead_of_demanding_yes():
     """No terminal means nobody to ask, and every question has a sane default.

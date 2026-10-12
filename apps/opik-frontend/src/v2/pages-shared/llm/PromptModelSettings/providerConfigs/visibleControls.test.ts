@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createSupports,
   getOpenAIVisibleControls,
+  getOpenRouterVisibleControls,
   hasVisibleControls,
 } from "./visibleControls";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import {
   LLMOpenAIConfigsType,
+  LLMOpenRouterConfigsType,
   OpenAiPipelineMode,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
@@ -26,7 +28,18 @@ const ANTHROPIC_CONFIG = {
 const RULE_CONFIG = { temperature: 0.4 };
 
 describe("hasVisibleControls", () => {
-  it("is false for a Claude model without sampling params on a rule", () => {
+  it("is false on a rule for a newly synced Claude with no capability row", () => {
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.ANTHROPIC,
+        "claude-opus-9" as PROVIDER_MODEL_TYPE,
+        ANTHROPIC_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(false);
+  });
+
+  it("is true for a Claude model without sampling params on a rule, which keeps its effort", () => {
     expect(
       hasVisibleControls(
         PROVIDER_TYPE.ANTHROPIC,
@@ -34,7 +47,7 @@ describe("hasVisibleControls", () => {
         ANTHROPIC_CONFIG,
         RULE_UNSUPPORTED_PARAMS,
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("is true for the same Claude model on the playground", () => {
@@ -68,6 +81,24 @@ describe("hasVisibleControls", () => {
       ),
     ).toBe(true);
   });
+
+  it.each([
+    [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI],
+    [PROVIDER_TYPE.GEMINI, PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH],
+    [PROVIDER_TYPE.VERTEX_AI, PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH],
+  ])(
+    "is false for %s on a rule whose config carries only max output tokens",
+    (provider, model) => {
+      expect(
+        hasVisibleControls(
+          provider,
+          model,
+          { maxCompletionTokens: 4000 },
+          RULE_UNSUPPORTED_PARAMS,
+        ),
+      ).toBe(false);
+    },
+  );
 
   it("is false for a Gemini 3 model without a thinking row on a rule", () => {
     expect(
@@ -113,6 +144,17 @@ describe("hasVisibleControls", () => {
     ).toBe(false);
   });
 
+  it("is false for an openrouter OpenAI reasoning model on a rule", () => {
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_6_ASTRA,
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(false);
+  });
+
   it("is true for openrouter on the playground with only a temperature", () => {
     expect(
       hasVisibleControls(
@@ -134,12 +176,62 @@ describe("hasVisibleControls", () => {
     ).toBe(true);
   });
 
-  it.each([
-    PROVIDER_TYPE.OPIK_FREE,
-    PROVIDER_TYPE.OLLAMA,
-    PROVIDER_TYPE.BEDROCK,
-  ])("is false for %s, which has no panel", (provider) => {
-    expect(hasVisibleControls(provider, "", {})).toBe(false);
+  it.each([PROVIDER_TYPE.OLLAMA, PROVIDER_TYPE.BEDROCK])(
+    "is true for %s, which shares the custom panel and its JSON editor",
+    (provider) => {
+      expect(hasVisibleControls(provider, "", {})).toBe(true);
+      expect(
+        hasVisibleControls(provider, "", RULE_CONFIG, RULE_UNSUPPORTED_PARAMS),
+      ).toBe(true);
+      expect(
+        hasVisibleControls(provider, "", {}, OPTIMIZATION_UNSUPPORTED_PARAMS),
+      ).toBe(true);
+    },
+  );
+
+  it("is false for the Opik free model, which has no panel", () => {
+    expect(hasVisibleControls(PROVIDER_TYPE.OPIK_FREE, "", {})).toBe(false);
+  });
+});
+
+describe("the OpenRouter sampling and penalty sliders", () => {
+  const OPEN_ROUTER_CONFIG: LLMOpenRouterConfigsType = {
+    maxTokens: 0,
+    temperature: 1,
+    topP: 1,
+    topK: 0,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+    repetitionPenalty: 1,
+    minP: 0,
+    topA: 0,
+  };
+
+  it.each<[PROVIDER_MODEL_TYPE, boolean, boolean]>([
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO, false, false],
+    [PROVIDER_MODEL_TYPE.OPENAI_O3, false, false],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW, false, true],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI, true, true],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH, true, true],
+    [PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH, true, true],
+  ])("on %s show sampling: %s, penalties: %s", (model, sampling, penalties) => {
+    const visible = getOpenRouterVisibleControls({
+      model,
+      configs: OPEN_ROUTER_CONFIG,
+      supports: createSupports(),
+    });
+
+    expect({
+      temperature: visible.temperature,
+      topP: visible.topP,
+      frequencyPenalty: visible.frequencyPenalty,
+      presencePenalty: visible.presencePenalty,
+    }).toEqual({
+      temperature: sampling,
+      topP: sampling,
+      frequencyPenalty: penalties,
+      presencePenalty: penalties,
+    });
   });
 });
 

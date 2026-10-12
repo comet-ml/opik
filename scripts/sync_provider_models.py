@@ -75,9 +75,10 @@ OPENAI_EXCLUDE_PATTERNS = [
 # Only these prefixes are chat/completion models usable in our playground.
 OPENAI_CHAT_PREFIXES = ("gpt-", "o1", "o3", "o4", "chatgpt-")
 
-# LiteLLM flags these ChatGPT snapshots as supporting reasoning, but OpenAI's model pages list no reasoning for them and the API answers
-# reasoning_effort with 400 "Invalid 'reasoning_effort' for non-reasoning model". Must equal the `reasoning: false` rows of
-# OPENAI_MODEL_CAPABILITIES in apps/opik-frontend/src/constants/llm.ts (its llm.test.ts fails otherwise); one shared list is OPIK-8637.
+# LiteLLM marks these ChatGPT snapshots with `supports_reasoning`, a flag broader than what the frontend classifies as a reasoning model:
+# OpenAI's model pages list no reasoning for them and the API answers reasoning_effort with 400 "Invalid 'reasoning_effort' for non-reasoning
+# model". Must equal the `reasoning: false` rows of OPENAI_MODEL_CAPABILITIES in apps/opik-frontend/src/constants/llm.ts (its llm.test.ts
+# fails otherwise); one shared list is OPIK-8637.
 OPENAI_NON_REASONING_MODELS = {"gpt-5-chat-latest", "gpt-5.1-chat-latest", "gpt-5.2-chat-latest", "gpt-5.3-chat-latest"}
 
 ANTHROPIC_EXCLUDE_PATTERNS = [
@@ -1019,7 +1020,8 @@ def regenerate_llm_models_yaml(
       entries follow alphabetically with no label.
     - Preserves reasoning flags carried over from the existing file.
     - In the openai section only, also emits `reasoning: true` for models
-      that `openai_reasoning` marks, except OPENAI_NON_REASONING_MODELS.
+      that `openai_reasoning` marks. OPENAI_NON_REASONING_MODELS never get
+      the flag, even when the existing file carries it.
       Other sections stay carry-over only: LiteLLM's flag means "can emit
       reasoning tokens", which is broader than what the frontend treats as
       a reasoning model, and nothing reads the flag for other providers.
@@ -1077,12 +1079,10 @@ def regenerate_llm_models_yaml(
 
             if entry.structured_output:
                 lines.append("    structuredOutput: true")
-            seeded_reasoning = (
-                provider_key == "openai"
-                and openai_reasoning.get(model_id, False)
-                and model_id not in OPENAI_NON_REASONING_MODELS
-            )
-            if provider_reasoning.get(model_id) or seeded_reasoning:
+            is_openai = provider_key == "openai"
+            excluded_from_reasoning = is_openai and model_id in OPENAI_NON_REASONING_MODELS
+            seeded_reasoning = is_openai and openai_reasoning.get(model_id, False)
+            if not excluded_from_reasoning and (provider_reasoning.get(model_id) or seeded_reasoning):
                 lines.append("    reasoning: true")
 
     # Preserve any provider sections not managed by the sync script
@@ -1173,13 +1173,24 @@ def _seeded_reasoning_ids(
     )
 
 
+def _cleared_reasoning_ids(existing_yaml_content: str, regenerated_yaml_content: str) -> list[str]:
+    before = _parse_yaml_reasoning_flags(existing_yaml_content).get("openai", {})
+    after = _parse_yaml_reasoning_flags(regenerated_yaml_content).get("openai", {})
+    return sorted(before.keys() - after.keys())
+
+
 def _should_write_files(
-    total_added: int, seeded_reasoning_ids: list[str], force_regen: bool, fell_back: bool
+    total_added: int,
+    seeded_reasoning_ids: list[str],
+    cleared_reasoning_ids: list[str],
+    force_regen: bool,
+    fell_back: bool,
 ) -> bool:
-    # A run whose provider API failed rebuilds that provider's labels and dropdown from the prices JSON, so even a real addition would ship degraded data.
+    # Any provider falling back blocks every file, not only that provider's: the files ship together, so a partial sync never publishes.
+    # A failed provider is rebuilt from the prices JSON, or for OpenRouter from an empty API list, so even a real addition elsewhere would ship degraded data.
     if force_regen:
         return True
-    return not fell_back and (total_added > 0 or bool(seeded_reasoning_ids))
+    return not fell_back and (total_added > 0 or bool(seeded_reasoning_ids) or bool(cleared_reasoning_ids))
 
 
 def main():
@@ -1208,6 +1219,7 @@ def main():
         print(f"  Found {len(openrouter_api_models)} chat models from API", file=sys.stderr)
     except Exception as e:
         print(f"  WARNING: OpenRouter API fetch failed: {e}", file=sys.stderr)
+        fell_back = True
         openrouter_api_models = []
 
     # OpenAI
@@ -1332,6 +1344,7 @@ def main():
     seeded_reasoning_ids = _seeded_reasoning_ids(
         llm_models_yaml_content, models_by_provider["openai"], openai_reasoning,
     )
+    cleared_reasoning_ids = _cleared_reasoning_ids(llm_models_yaml_content, new_llm_models_yaml)
 
     # 5. Print summary
     total_added = 0
@@ -1370,14 +1383,18 @@ def main():
             print(f"- Total models: {len(entries)} (dropdown: {len(dropdown)})")
         print()
 
-    if seeded_reasoning_ids:
+    if seeded_reasoning_ids or cleared_reasoning_ids:
         print("### Registry")
         for model_id in seeded_reasoning_ids:
             print(f"  + {model_id} (reasoning)")
+        for model_id in cleared_reasoning_ids:
+            print(f"  - {model_id} (reasoning)")
         print()
 
-    if not _should_write_files(total_added, seeded_reasoning_ids, args.force_regen, fell_back):
-        if fell_back and (total_added > 0 or seeded_reasoning_ids):
+    if not _should_write_files(
+        total_added, seeded_reasoning_ids, cleared_reasoning_ids, args.force_regen, fell_back,
+    ):
+        if fell_back and (total_added > 0 or seeded_reasoning_ids or cleared_reasoning_ids):
             print("A provider API call failed: fallback data not published; retry when the API is reachable, or rerun with --force-regen.")
         elif total_stale > 0:
             print(f"No new models found. {total_stale} stale model(s) flagged for manual review.")

@@ -36,7 +36,10 @@ public class ClickHouseContainerUtils {
     public static ClickHouseContainer newClickHouseContainer(boolean reusable) {
         ClickHouseContainer container = new ClickHouseContainer(
                 DockerImageName.parse("clickhouse/clickhouse-server:26.3.16.16-alpine"))
-                .withReuse(reusable);
+                .withReuse(reusable)
+                // Same server default timezone as the Helm and docker-compose deployments.
+                .withCopyFileToContainer(MountableFile.forClasspathResource("timezone.xml"),
+                        "/etc/clickhouse-server/config.d/timezone.xml");
 
         CONTAINERS.add(container);
 

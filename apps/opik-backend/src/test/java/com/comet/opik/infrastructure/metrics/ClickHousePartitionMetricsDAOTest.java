@@ -140,6 +140,9 @@ class ClickHousePartitionMetricsDAOTest {
             assertThat(traces.parts()).isPositive();
             assertThat(traces.lastActivityEpochSeconds())
                     .isGreaterThan(Instant.now().minusSeconds(600).getEpochSecond());
+            // No object-storage disk in the test container.
+            assertThat(traces.coldBytes()).isZero();
+            assertThat(traces.ttlMoveDueParts()).isZero();
         });
 
         // Delete a subset through the trace API — the same path prod uses, which issues a

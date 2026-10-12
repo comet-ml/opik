@@ -2,6 +2,7 @@
 
 import logging
 import math
+import re
 from typing import Dict, Type, Any
 
 from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import GepaOptimizer
@@ -23,9 +24,42 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_TOKENS = 8192
 LLM_MAX_TOKENS = get_env_int("OPTSTUDIO_LLM_MAX_TOKENS", DEFAULT_MAX_TOKENS)
 
+# Google asks to keep Gemini 3 at its default temperature of 1.0: lower values
+# "may lead to looping or degraded performance"
+# (https://ai.google.dev/gemini-api/docs/gemini-3). drop_params cannot catch it:
+# the gateway's openai/ prefix hides the provider from litellm, so the pin would
+# reach Google. An allow-list of the generations known to take a low temperature,
+# the same one the frontend's supportsGeminiSamplingParams uses, so a newer
+# generation keeps its default until someone checks it.
+_LOW_TEMPERATURE_GEMINI_GENERATIONS = re.compile(
+    r"^gemini-(?:1\.0|1\.5|2\.0|2\.5)(?:-|$)"
+)
+_LOW_TEMPERATURE_UNVERSIONED_GEMINI_IDS = frozenset({"gemini-pro-vision"})
+# Only Google's own routes: native, Vertex AI and OpenRouter. A custom provider's
+# model name (custom-llm/<provider>/<name>) says nothing about what serves it, so
+# it keeps the pin, as it keeps its sliders in the frontend.
+_GOOGLE_ROUTE_PREFIXES = ("vertex_ai/", "google/", "~google/")
+
+
+def keeps_default_temperature(model: str | None) -> bool:
+    model_id = (model or "").strip()
+    for prefix in _GOOGLE_ROUTE_PREFIXES:
+        if model_id.startswith(prefix):
+            model_id = model_id[len(prefix) :]
+            break
+    if not model_id.startswith("gemini-"):
+        return False
+    return not (
+        _LOW_TEMPERATURE_GEMINI_GENERATIONS.match(model_id)
+        or model_id in _LOW_TEMPERATURE_UNVERSIONED_GEMINI_IDS
+    )
+
 
 def ensure_default_model_params(
-    model_params: Dict[str, Any] | None, *, deterministic: bool = False
+    model_params: Dict[str, Any] | None,
+    *,
+    deterministic: bool = False,
+    model: str | None = None,
 ) -> Dict[str, Any]:
     """Return model params with a reasonable max_tokens default so structured
     outputs (and baseline/per-trial task completions) don't truncate.
@@ -38,14 +72,19 @@ def ensure_default_model_params(
     their own temperature (the gpt-5 family) must ignore the pin rather than fail
     the run; that is already guaranteed process-wide by ``litellm.drop_params =
     True`` in ``opik_optimizer/base_optimizer.py``, which the runner imports, so
-    this does not set ``drop_params`` per call.
+    this does not set ``drop_params`` per call. Gemini 3 and newer never get the
+    pin (see ``keeps_default_temperature``), so pass the task ``model``.
     Leave ``deterministic`` False for the optimizer/reflection model, which needs
     sampling diversity to propose varied candidates.
     """
     params = dict(model_params or {})
     if params.get("max_tokens") is None:
         params["max_tokens"] = LLM_MAX_TOKENS
-    if deterministic and params.get("temperature") is None:
+    if (
+        deterministic
+        and params.get("temperature") is None
+        and not keeps_default_temperature(model)
+    ):
         params["temperature"] = OPTIMIZER_TASK_TEMPERATURE
     return params
 

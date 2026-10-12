@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import first from "lodash/first";
+import isEmpty from "lodash/isEmpty";
+import some from "lodash/some";
 import {
   COMPOSED_PROVIDER_TYPE,
   PROVIDER_MODEL_TYPE,
@@ -127,7 +129,13 @@ const buildFlagsIndex = (
 };
 
 const useLLMProviderModelsData = () => {
-  const { data: fetched, isPending, isError, error } = useLlmModels();
+  const {
+    data: fetched,
+    isPending,
+    isFetched,
+    isError,
+    error,
+  } = useLlmModels();
   const openAICompatibleModels = useOpenAICompatibleModels();
 
   // Dropdown-facing map: only entries that are flagged as visible (i.e.
@@ -312,8 +320,14 @@ const useLLMProviderModelsData = () => {
     calculateModelProvider,
     calculateDefaultModel,
     isPending,
+    isFetched,
     isError,
     error,
+    hasRegistryModels: some(
+      fetched,
+      (models, provider) =>
+        KNOWN_PROVIDER_TYPES.has(provider) && !isEmpty(models),
+    ),
   };
 };
 

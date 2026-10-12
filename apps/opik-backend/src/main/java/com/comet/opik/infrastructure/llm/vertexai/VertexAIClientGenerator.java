@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -48,7 +49,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             Optional.ofNullable(request.stop()).ifPresent(builder::stopSequences);
             Optional.ofNullable(request.presencePenalty()).ifPresent(builder::presencePenalty);
             Optional.ofNullable(request.frequencyPenalty()).ifPresent(builder::frequencyPenalty);
-            Optional.ofNullable(request.maxTokens()).ifPresent(builder::maxOutputTokens);
+            maxOutputTokens(request).ifPresent(builder::maxOutputTokens);
             Optional.ofNullable(request.seed()).ifPresent(builder::seed);
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
@@ -69,13 +70,21 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             Optional.ofNullable(request.stop()).ifPresent(builder::stopSequences);
             Optional.ofNullable(request.presencePenalty()).ifPresent(builder::presencePenalty);
             Optional.ofNullable(request.frequencyPenalty()).ifPresent(builder::frequencyPenalty);
-            Optional.ofNullable(request.maxTokens()).ifPresent(builder::maxOutputTokens);
+            maxOutputTokens(request).ifPresent(builder::maxOutputTokens);
             Optional.ofNullable(request.seed()).ifPresent(builder::seed);
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
 
             return new CloseableVertexAiStreamingChatModel(builder.build(), client);
         });
+    }
+
+    // Zero is never sent: the slider goes down to 0, and a zero cap could only ever produce an empty answer.
+    static Optional<Integer> maxOutputTokens(ChatCompletionRequest request) {
+        return Stream.of(request.maxCompletionTokens(), request.maxTokens())
+                .filter(Objects::nonNull)
+                .filter(tokens -> tokens > 0)
+                .findFirst();
     }
 
     /**

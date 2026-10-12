@@ -63,6 +63,9 @@ class FreeFormSqlPolicyCheckTest {
                 arguments("Distributed wrapper covered by its local read filtered in the plan", List.of(
                         entry(true, USER, List.of("opik.traces", "opik.traces_local"), List.of())),
                         plan("ReadFromMergeTree|opik.traces_local|filtered"), NONE),
+                arguments("local table read under IN, named by its wrapper in the query tree", List.of(
+                        entry(true, USER, List.of("opik.spans", "opik.traces", "opik.traces_local"), List.of())),
+                        plan("ReadFromMergeTree|opik.spans_local|filtered"), filter("opik.traces")),
                 arguments("tables outside the database and row generators", List.of(entry(true, USER,
                         List.of("system.one"), List.of())), plan("ReadFromSystemOne|system.one"), NONE));
     }
@@ -98,6 +101,12 @@ class FreeFormSqlPolicyCheckTest {
                         new FreeFormSqlSubqueries.SubqueryReads(Set.of("opik.feedback_scores"),
                                 Set.of("opik.feedback_scores"), false),
                         "opik.feedback_scores", "read without a row policy"),
+                arguments("a local table read in a scalar subquery while its wrapper is under IN", List.of(
+                        entry(true, USER, List.of("opik.spans", "opik.traces", "opik.traces_local"), List.of())),
+                        plan("ReadFromMergeTree|opik.spans_local|filtered"),
+                        new FreeFormSqlSubqueries.SubqueryReads(Set.of("opik.traces_local"), Set.of("opik.traces"),
+                                false),
+                        "opik.traces_local", "read without a row policy"),
                 arguments("a wrapper read on a shard is not covered by another shard's local read", List.of(
                         entry(true, USER, List.of("opik.traces"), List.of()),
                         entry(false, "default", List.of("opik.traces_local"), List.of("opik.traces_local")),

@@ -139,6 +139,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5,
+      label: "Claude Opus 5.5",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5,
       label: "Claude Opus 5",
     },

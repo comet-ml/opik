@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  canRunMessages,
   createCompletionAnnouncer,
+  dropEmptySystemMessages,
+  generateDefaultPrompt,
   getDefaultConfigByProvider,
   hasUnsupportedMedia,
+  isEmptyMessage,
   restoreMissingConfigKeys,
 } from "@/lib/playground";
 import {
@@ -21,6 +25,12 @@ const userMessage = (content: MessageContent): LLMMessage => ({
   content,
 });
 
+const systemMessage = (content: MessageContent): LLMMessage => ({
+  id: "system-message",
+  role: LLM_MESSAGE_ROLE.system,
+  content,
+});
+
 const imageMessage = userMessage([
   { type: "text", text: "Describe this" },
   { type: "image_url", image_url: { url: "https://example.com/cat.png" } },
@@ -28,6 +38,10 @@ const imageMessage = userMessage([
 
 const videoMessage = userMessage([
   { type: "video_url", video_url: { url: "https://example.com/cat.mp4" } },
+]);
+
+const audioMessage = userMessage([
+  { type: "audio_url", audio_url: { url: "https://example.com/cat.mp3" } },
 ]);
 
 describe("hasUnsupportedMedia", () => {
@@ -71,6 +85,24 @@ describe("hasUnsupportedMedia", () => {
         messages: [videoMessage],
       }),
     ).toBe(true);
+  });
+
+  it("returns true for audio on a model without audio support", () => {
+    expect(
+      hasUnsupportedMedia({
+        model: PROVIDER_MODEL_TYPE.GPT_4,
+        messages: [audioMessage],
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false for audio on a model flagged for audio under another name", () => {
+    expect(
+      hasUnsupportedMedia({
+        model: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+        messages: [audioMessage],
+      }),
+    ).toBe(false);
   });
 });
 
@@ -144,22 +176,55 @@ describe("getDefaultConfigByProvider — OpenAI", () => {
 
 describe("getDefaultConfigByProvider — Anthropic thinking effort", () => {
   it.each([
-    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
-    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
-    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
-  ])("seeds no thinkingEffort for %s while the backend drops it", (model) => {
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, "medium"],
+  ])("seeds %s with Anthropic's default effort, %s", (model, effort) => {
     const config = getDefaultConfigByProvider(
       PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
       model,
+    );
+
+    expect(config).toMatchObject({ thinkingEffort: effort });
+  });
+
+  it("seeds no thinkingEffort for a model that takes none", () => {
+    const config = getDefaultConfigByProvider(
+      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+      PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
     );
 
     expect(config).not.toHaveProperty("thinkingEffort");
   });
 });
 
+describe("getDefaultConfigByProvider — Ollama and Bedrock", () => {
+  const CUSTOM_DEFAULTS = {
+    temperature: 0,
+    maxCompletionTokens: 4000,
+    topP: 1,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+    custom_parameters: null,
+    throttling: 0,
+    maxConcurrentRequests: 5,
+  };
+
+  it.each([
+    [`${PROVIDER_TYPE.OLLAMA}:local`, "custom-llm/local/llama3.2"],
+    [`${PROVIDER_TYPE.BEDROCK}:aws`, "custom-llm/aws/openai.gpt-oss-120b-1:0"],
+    [PROVIDER_TYPE.CUSTOM, "custom-llm/gw/mistral-large-2411"],
+  ])("seeds %s with the custom provider's defaults", (provider, model) => {
+    expect(
+      getDefaultConfigByProvider(provider, model as PROVIDER_MODEL_TYPE),
+    ).toEqual(CUSTOM_DEFAULTS);
+  });
+});
+
 describe("restoreMissingConfigKeys", () => {
   const prompt = (
-    provider: PROVIDER_TYPE,
+    provider: PROVIDER_TYPE | COMPOSED_PROVIDER_TYPE,
     model: PROVIDER_MODEL_TYPE,
     configs: Record<string, unknown>,
   ) =>
@@ -226,6 +291,38 @@ describe("restoreMissingConfigKeys", () => {
     );
 
     expect(restored.configs).toMatchObject({ minP: 0, topA: 0 });
+    expect(restored.configs).not.toHaveProperty("temperature");
+    expect(restored.configs).not.toHaveProperty("topP");
+  });
+
+  it("fills the custom defaults into an Ollama prompt stored before it had a panel", () => {
+    const restored = restoreMissingConfigKeys(
+      prompt(
+        `${PROVIDER_TYPE.OLLAMA}:local`,
+        "custom-llm/local/llama3.2" as PROVIDER_MODEL_TYPE,
+        {},
+      ),
+    );
+
+    expect(restored.configs).toMatchObject({
+      temperature: 0,
+      maxCompletionTokens: 4000,
+      topP: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    });
+  });
+
+  it("leaves the sampling pair unset for a Claude on Bedrock stored without a config", () => {
+    const restored = restoreMissingConfigKeys(
+      prompt(
+        `${PROVIDER_TYPE.BEDROCK}:aws`,
+        "custom-llm/aws/us.anthropic.claude-sonnet-4-5-20250929-v1:0" as PROVIDER_MODEL_TYPE,
+        {},
+      ),
+    );
+
+    expect(restored.configs).toMatchObject({ maxCompletionTokens: 4000 });
     expect(restored.configs).not.toHaveProperty("temperature");
     expect(restored.configs).not.toHaveProperty("topP");
   });
@@ -378,5 +475,88 @@ describe("createCompletionAnnouncer", () => {
     announcer.loggingFinished();
 
     expect(announce).not.toHaveBeenCalled();
+  });
+});
+
+describe("generateDefaultPrompt", () => {
+  const generate = (initPrompt?: Partial<PlaygroundPromptType>) =>
+    generateDefaultPrompt({
+      initPrompt,
+      setupProviders: [],
+      providerResolver: () => "",
+      modelResolver: () => "",
+    });
+
+  it("starts with an empty system message and an empty user message", () => {
+    expect(
+      generate().messages.map(({ role, content }) => ({ role, content })),
+    ).toEqual([
+      { role: LLM_MESSAGE_ROLE.system, content: "" },
+      { role: LLM_MESSAGE_ROLE.user, content: "" },
+    ]);
+  });
+
+  it("keeps the messages of a prompt it is given", () => {
+    const messages = [userMessage("Hello")];
+
+    expect(generate({ messages }).messages).toBe(messages);
+  });
+});
+
+describe("isEmptyMessage", () => {
+  it.each([
+    ["an empty string", userMessage("")],
+    ["an empty part list", userMessage([])],
+  ])("treats %s as empty", (_, message) => {
+    expect(isEmptyMessage(message)).toBe(true);
+  });
+
+  it.each([
+    ["text", userMessage("Hello")],
+    ["a list of parts", imageMessage],
+  ])("treats %s as content", (_, message) => {
+    expect(isEmptyMessage(message)).toBe(false);
+  });
+});
+
+describe("dropEmptySystemMessages", () => {
+  it("drops a system message with no text", () => {
+    expect(
+      dropEmptySystemMessages([systemMessage(""), userMessage("Hello")]),
+    ).toEqual([userMessage("Hello")]);
+  });
+
+  it("keeps a system message with text and empty messages of other roles", () => {
+    const messages = [
+      systemMessage("Answer briefly"),
+      userMessage(""),
+      { id: "assistant", role: LLM_MESSAGE_ROLE.assistant, content: "" },
+    ];
+
+    expect(dropEmptySystemMessages(messages)).toEqual(messages);
+  });
+});
+
+describe("canRunMessages", () => {
+  it("allows a run with an empty system message and a filled user message", () => {
+    expect(canRunMessages([systemMessage(""), userMessage("Hello")])).toBe(
+      true,
+    );
+  });
+
+  it("blocks a run while the user message is empty", () => {
+    expect(canRunMessages([systemMessage(""), userMessage("")])).toBe(false);
+  });
+
+  it("blocks a run when only an empty system message is left", () => {
+    expect(canRunMessages([systemMessage("")])).toBe(false);
+  });
+
+  it("allows a run with an empty system message and a user message with an image", () => {
+    expect(canRunMessages([systemMessage([]), imageMessage])).toBe(true);
+  });
+
+  it("blocks a run while a user message has no parts", () => {
+    expect(canRunMessages([systemMessage(""), userMessage([])])).toBe(false);
   });
 });

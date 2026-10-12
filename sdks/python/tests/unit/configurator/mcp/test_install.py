@@ -1261,3 +1261,28 @@ class TestTheSignInIsItsOwnStep:
 
         assert report.sign_in == "failed"
         assert view._sign_in_failed == ("Claude Code",)
+
+
+class TestTheNextStepsComeFromTheResults:
+    """What a run without a terminal ends on is decided where the results are."""
+
+    def test_a_sign_in_that_did_not_finish__is_named(self, monkeypatch):
+        monkeypatch.setattr(
+            install.mcp_detection,
+            "detect_hosted_mcp_server",
+            lambda **kwargs: "https://www.comet.com/opik/api/v1/mcp",
+        )
+        result = targets.InstallResult(
+            "Codex", True, "Added", sign_in_attempted=True, sign_in_failed=True
+        )
+        codex = _target("codex", True, mock.Mock(return_value=result))
+        codex.sign_in_command = "codex mcp login opik-mcp"
+        codex.status_command = "codex mcp list"
+        monkeypatch.setattr(targets, "HOST_TARGETS", [codex])
+
+        report = install.setup_mcp_server(**_make_args(host_keys=["codex"]))
+
+        assert report.next_steps == (
+            "codex: the sign-in did not finish. Sign in with "
+            "`codex mcp login opik-mcp`, then check with `codex mcp list`.",
+        )

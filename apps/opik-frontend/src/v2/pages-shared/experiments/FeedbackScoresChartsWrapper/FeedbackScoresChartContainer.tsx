@@ -173,7 +173,7 @@ const FeedbackScoresChartContainer: React.FC<
   }, [isPending, noData, chartData, chartId, width]);
 
   return (
-    <Card className={cn("min-w-[400px]", className)} ref={ref}>
+    <Card className={cn("group/chart min-w-[400px]", className)} ref={ref}>
       <CardHeader className="space-y-0.5 px-4 pt-3">
         <CardTitle className="comet-body-s-accented">
           <TooltipWrapper content={tooltip}>{nameElement}</TooltipWrapper>

@@ -7,7 +7,7 @@ configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 # Create a politeness check validator
 politeness_check = PolitenessCheck(
-    llm_callable="gpt-3.5-turbo", on_fail=OnFailAction.NOOP
+    llm_callable="gpt-4o-mini", on_fail=OnFailAction.NOOP
 )
 
 # Create a Guard with the validator

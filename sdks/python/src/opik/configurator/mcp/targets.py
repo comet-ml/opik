@@ -8,7 +8,6 @@ import subprocess
 import sys
 from typing import Any, Callable, Dict, Final, List, Optional
 
-from opik.configurator import interactive_helpers
 from opik.configurator.mcp import json_config
 from opik.configurator.mcp import spec as mcp_spec
 from opik.configurator.mcp.spec import SERVER_NAME
@@ -41,6 +40,10 @@ class HostTarget:
     # ``top_level_key`` (Codex uses TOML) supply their own reader; see
     # ``read_registered_block``.
     read_block: Optional[Callable[[], Optional[Dict[str, Any]]]] = None
+    # For the hosts with a CLI, its sign-in to the hosted server and its list of
+    # servers with their status, named where a run leaves them to the user.
+    sign_in_command: Optional[str] = None
+    status_command: Optional[str] = None
 
 
 def _home() -> pathlib.Path:
@@ -162,6 +165,10 @@ class _CliUnavailable(Exception):
     """A client's CLI could not be run to completion."""
 
 
+class _CliTimedOut(_CliUnavailable):
+    """A client's CLI ran past the timeout, possibly waiting on the user."""
+
+
 def _run_client_cli(command: List[str], label: str) -> "subprocess.CompletedProcess":
     """Run a client's own CLI, or raise :class:`_CliUnavailable`.
 
@@ -189,7 +196,7 @@ def _run_client_cli(command: List[str], label: str) -> "subprocess.CompletedProc
             timeout=CLIENT_CLI_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
-        raise _CliUnavailable(
+        raise _CliTimedOut(
             f"`{label}` did not finish within {CLIENT_CLI_TIMEOUT_SECONDS}s and was "
             "stopped. It may be waiting for input, or asking you to log in — try "
             f"running `{label}` yourself to see."
@@ -302,15 +309,13 @@ def sign_in_command(
 
     Only Claude Code: Codex signs in inside `codex mcp add`, and the GUI clients
     prompt on first use. Only for the hosted server — a local one carries the API
-    key — and only with a terminal, since a coding agent or CI has no browser.
+    key — with a terminal or without, since a coding agent's machine has a browser.
     Run separately from the install so the caller can show progress for the
     install and hand the terminal over for the sign-in.
     """
     if target_key != "claude-code":
         return None
     if not isinstance(server_spec, mcp_spec.RemoteServerSpec):
-        return None
-    if not interactive_helpers.is_interactive():
         return None
     claude_executable = shutil.which("claude")
     if claude_executable is None or not _claude_supports_mcp_login(claude_executable):
@@ -386,6 +391,22 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         )
         result = _run_client_cli(command, label="codex mcp add")
     except _CliUnavailable as error:
+        # For the hosted server `codex mcp add` writes the entry, then waits for the
+        # browser sign-in. If nobody finishes it in time, the server is still
+        # registered and `codex mcp login` completes it: not a failed install.
+        if (
+            isinstance(error, _CliTimedOut)
+            and isinstance(server_spec, mcp_spec.RemoteServerSpec)
+            and (_read_codex_block() or {}).get("url") == server_spec.url
+        ):
+            return InstallResult(
+                target_display_name="Codex",
+                succeeded=True,
+                sign_in_attempted=True,
+                sign_in_failed=True,
+                detail=f"Added '{SERVER_NAME}' via `codex mcp add`; not signed in",
+                summary="Updated" if was_registered else "Added",
+            )
         return InstallResult(
             target_display_name="Codex", succeeded=False, detail=str(error)
         )
@@ -510,6 +531,8 @@ HOST_TARGETS: List[HostTarget] = [
         is_detected=lambda: shutil.which("claude") is not None
         or _claude_config_path().exists(),
         install=_install_claude_code,
+        sign_in_command=f"claude mcp login {SERVER_NAME}",
+        status_command="claude mcp list",
     ),
     HostTarget(
         key="codex",
@@ -521,6 +544,9 @@ HOST_TARGETS: List[HostTarget] = [
         or _codex_config_path().exists(),
         install=_install_codex,
         read_block=_read_codex_block,
+        sign_in_command=f"codex mcp login {SERVER_NAME}",
+        # Masks env values, unlike `codex mcp get`.
+        status_command="codex mcp list",
     ),
     HostTarget(
         key="cursor",
@@ -546,6 +572,8 @@ HOST_TARGETS: List[HostTarget] = [
         is_detected=lambda: shutil.which("opencode") is not None
         or _opencode_config_dir().exists(),
         install=_install_opencode,
+        sign_in_command=f"opencode mcp auth {SERVER_NAME}",
+        status_command="opencode mcp list",
     ),
 ]
 

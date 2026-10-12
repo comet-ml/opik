@@ -2,6 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.ExperimentExecutionRequest;
+import com.comet.opik.api.LlmProvider;
+import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.template.MustacheParser;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -15,6 +17,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +28,7 @@ import java.util.Map;
 class ExperimentMessageRenderer {
 
     private final @NonNull MustacheParser mustacheParser;
+    private final @NonNull LlmProviderFactory llmProviderFactory;
 
     Map<String, Object> buildTemplateContext(@NonNull DatasetItem datasetItem) {
         if (datasetItem.data() == null) {
@@ -85,6 +89,7 @@ class ExperimentMessageRenderer {
 
         if (prompt.configs() != null) {
             applyConfigs(builder, prompt.configs());
+            applyReasoningEffort(builder, prompt.model(), prompt.configs().get("reasoningEffort"));
         }
 
         return builder.build();
@@ -124,6 +129,21 @@ class ExperimentMessageRenderer {
         };
     }
 
+    /**
+     * Only the playground's OpenAI panel stores an effort under this key. Every other provider path
+     * either ignores the field (Anthropic, Gemini, Vertex), replaces it (the free model), or forwards
+     * it as-is to an endpoint that may reject it (OpenRouter, custom, Ollama, Bedrock), so it is set
+     * for OpenAI models only.
+     */
+    private void applyReasoningEffort(ChatCompletionRequest.Builder builder, String model, JsonNode effort) {
+        if (effort == null || !effort.isTextual() || StringUtils.isBlank(effort.asText())) {
+            return;
+        }
+        if (llmProviderFactory.getLlmProvider(model) == LlmProvider.OPEN_AI) {
+            builder.reasoningEffort(effort.asText());
+        }
+    }
+
     private void applyConfigs(ChatCompletionRequest.Builder builder, Map<String, JsonNode> configs) {
         var temperature = configs.get("temperature");
         if (temperature != null && temperature.isNumber()) {
@@ -157,10 +177,11 @@ class ExperimentMessageRenderer {
         }
 
         // Provider-specific parameters the flat config above cannot express — today that means Gemini
-        // and Vertex thinking. Only an object converts to a Map; Jackson throws on an array or scalar.
+        // and Vertex thinking, and Anthropic's output_config. Only an object converts to a Map;
+        // Jackson throws on an array or scalar.
         //
-        // Not Anthropic extended thinking: LlmProviderAnthropicMapper declares no mapping for
-        // thinking/customParameters, so the block never reaches AnthropicCreateMessageRequest, while
+        // Not Anthropic extended thinking: LlmProviderAnthropicMapper forwards only output_config from
+        // custom_parameters, so a thinking block never reaches AnthropicCreateMessageRequest, while
         // its thinkingEnabled(request) does read custom_parameters — so forwarding a thinking block
         // on that path gates temperature/top_p off without turning thinking on. Wiring that up is its
         // own change; until then an Anthropic experiment should not carry the block.

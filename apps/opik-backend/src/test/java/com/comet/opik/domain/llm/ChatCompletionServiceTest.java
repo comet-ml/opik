@@ -19,6 +19,7 @@ import dev.langchain4j.exception.TimeoutException;
 import dev.langchain4j.exception.UnsupportedFeatureException;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -609,6 +610,13 @@ class ChatCompletionServiceTest {
                                     "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API.\"}}")),
                             400,
                             "credit balance is too low"),
+                    Arguments.of(
+                            "Vertex AI reply cut off before writing any text",
+                            new InvalidRequestException("Vertex AI used up the max output tokens limit (1024) "
+                                    + "before writing any answer. Thinking tokens count toward this limit, so raise "
+                                    + "Max output tokens and run again"),
+                            400,
+                            "Vertex AI used up the max output tokens limit"),
                     Arguments.of(
                             "Cloudflare rate limit with a plain-text body",
                             new RuntimeException(new HttpException(429, "error code: 1015")),
@@ -1375,6 +1383,112 @@ class ChatCompletionServiceTest {
                     .hasMessageContaining("Unexpected error calling LLM provider")
                     .hasMessageContaining("Service is unreachable")
                     .hasMessageContaining(customMessage);
+        }
+    }
+
+    @Nested
+    @DisplayName("OpenAI reasoning models:")
+    class OpenAiReasoningModels {
+
+        private static final String WORKSPACE_ID = "test-workspace-id";
+
+        private ChatCompletionRequest requestWithSamplingParams(String model) {
+            return ChatCompletionRequest.builder()
+                    .model(model)
+                    .addUserMessage("ping")
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .frequencyPenalty(0.5)
+                    .presencePenalty(0.4)
+                    .maxCompletionTokens(100)
+                    .seed(7)
+                    .build();
+        }
+
+        private ChatCompletionRequest requestSentByCreate(String model, boolean reasoning) {
+            when(llmProviderFactory.isOpenAiReasoningModel(model)).thenReturn(reasoning);
+            when(llmProviderFactory.getService(WORKSPACE_ID, model)).thenReturn(llmProviderService);
+            var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
+            when(llmProviderService.generate(captor.capture(), anyString()))
+                    .thenReturn(podamFactory.manufacturePojo(ChatCompletionResponse.class));
+
+            chatCompletionService.create(requestWithSamplingParams(model), WORKSPACE_ID);
+
+            return captor.getValue();
+        }
+
+        @Test
+        @DisplayName("create: a reasoning model reaches the provider without sampling params or penalties")
+        void create__whenReasoningModel__thenDropSamplingParamsAndPenalties() {
+            var sent = requestSentByCreate("gpt-5-mini", true);
+
+            assertThat(sent.temperature()).isNull();
+            assertThat(sent.topP()).isNull();
+            assertThat(sent.frequencyPenalty()).isNull();
+            assertThat(sent.presencePenalty()).isNull();
+            assertThat(sent.maxCompletionTokens()).isEqualTo(100);
+            assertThat(sent.seed()).isEqualTo(7);
+        }
+
+        @Test
+        @DisplayName("create: any other model keeps every param")
+        void create__whenNotReasoningModel__thenKeepParams() {
+            var sent = requestSentByCreate("gpt-4o", false);
+
+            assertThat(sent.temperature()).isEqualTo(0.7);
+            assertThat(sent.topP()).isEqualTo(0.9);
+            assertThat(sent.frequencyPenalty()).isEqualTo(0.5);
+            assertThat(sent.presencePenalty()).isEqualTo(0.4);
+        }
+
+        @Test
+        @DisplayName("createAndStreamResponse: a reasoning model reaches the provider without sampling params or penalties")
+        void stream__whenReasoningModel__thenDropSamplingParamsAndPenalties() {
+            var model = "o3";
+            when(llmProviderFactory.isOpenAiReasoningModel(model)).thenReturn(true);
+            when(llmProviderFactory.getService(WORKSPACE_ID, model)).thenReturn(llmProviderService);
+            var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
+
+            chatCompletionService.createAndStreamResponse(requestWithSamplingParams(model), WORKSPACE_ID,
+                    mock(ChunkedOutputHandlers.class));
+
+            verify(llmProviderService).generateStream(captor.capture(), anyString(), any(), any(), any());
+            var sent = captor.getValue();
+            assertThat(sent.temperature()).isNull();
+            assertThat(sent.topP()).isNull();
+            assertThat(sent.frequencyPenalty()).isNull();
+            assertThat(sent.presencePenalty()).isNull();
+        }
+
+        private LlmAsJudgeModelParameters judgeParametersSentByScoreTrace(String model, boolean reasoning) {
+            when(llmProviderFactory.isOpenAiReasoningModel(model)).thenReturn(reasoning);
+            var captor = ArgumentCaptor.forClass(LlmAsJudgeModelParameters.class);
+            when(llmProviderFactory.getLanguageModel(anyString(), captor.capture())).thenReturn(chatModel);
+            when(chatModel.chat(any(ChatRequest.class))).thenReturn(mock(ChatResponse.class));
+            var modelParameters = LlmAsJudgeModelParameters.builder().name(model).temperature(0.0).seed(3).build();
+
+            chatCompletionService.scoreTrace(ChatRequest.builder().messages(UserMessage.from("score this")).build(),
+                    modelParameters, WORKSPACE_ID);
+
+            return captor.getValue();
+        }
+
+        @Test
+        @DisplayName("scoreTrace: a judge rule saved with a temperature does not send it to a reasoning model")
+        void scoreTrace__whenReasoningModel__thenDropTemperature() {
+            var sent = judgeParametersSentByScoreTrace("gpt-5-nano", true);
+
+            assertThat(sent.temperature()).isNull();
+            assertThat(sent.seed()).isEqualTo(3);
+            assertThat(sent.name()).isEqualTo("gpt-5-nano");
+        }
+
+        @Test
+        @DisplayName("scoreTrace: any other model keeps the rule's temperature")
+        void scoreTrace__whenNotReasoningModel__thenKeepTemperature() {
+            var sent = judgeParametersSentByScoreTrace("gpt-4o-mini", false);
+
+            assertThat(sent.temperature()).isEqualTo(0.0);
         }
     }
 }
