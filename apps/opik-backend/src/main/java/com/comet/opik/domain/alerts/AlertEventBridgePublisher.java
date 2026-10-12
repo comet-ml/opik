@@ -86,7 +86,7 @@ public class AlertEventBridgePublisher {
     }
 
     /**
-     * @param eventId stable for one triggered alert, so consumers can dedupe on source + detail.eventId
+     * @param eventId stays stable for one triggered alert, so consumers can dedupe on source + detail.eventId
      * @param workspaceName null when it couldn't be resolved, in which case the envelope omits it
      * @param payload the product payload built for the webhook, with its metadata still serialized
      * @return a Mono that completes once the alert is published or the publish has failed; it never errors
