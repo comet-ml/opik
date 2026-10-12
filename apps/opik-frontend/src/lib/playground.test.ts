@@ -33,6 +33,12 @@ const systemMessage = (content: MessageContent): LLMMessage => ({
   content,
 });
 
+const assistantMessage = (content: MessageContent): LLMMessage => ({
+  id: "assistant-message",
+  role: LLM_MESSAGE_ROLE.assistant,
+  content,
+});
+
 const imageMessage = userMessage([
   { type: "text", text: "Describe this" },
   { type: "image_url", image_url: { url: "https://example.com/cat.png" } },
@@ -574,20 +580,32 @@ describe("describeRunFailure", () => {
     });
   });
 
-  it("tells a System-only prompt rejected with a 400 to add a User message", () => {
-    const run = failedRun({
-      errorStatus: 400,
-      providerError: "messages: Field required",
-    });
+  it.each<[string, LLMMessage[]]>([
+    ["System-only", [systemMessage("What parameters do I send you?")]],
+    ["Assistant-only", [assistantMessage("I am a helpful assistant.")]],
+    [
+      "System + Assistant",
+      [systemMessage("Reply with ok."), assistantMessage("Sure.")],
+    ],
+  ])(
+    "asks for a User message when a %s prompt is rejected with a 400",
+    (_label, sentMessages) => {
+      const run = failedRun({
+        errorStatus: 400,
+        providerError: "messages: Field required",
+      });
 
-    expect(describeRunFailure(run, systemOnly)).toEqual({
-      message: "messages: Field required",
-      hint: {
-        title: "This model needs a User message",
-        action: "Add a User message with + Message, then run again.",
-      },
-    });
-  });
+      expect(
+        describeRunFailure(run, { canTuneRequestRate: true, sentMessages }),
+      ).toEqual({
+        message: "messages: Field required",
+        hint: {
+          title: "This model needs a User message",
+          action: "Add a User message with + Message, then run again.",
+        },
+      });
+    },
+  );
 
   it("keeps the rate-limit hint for a System-only prompt that hit a 429", () => {
     const run = failedRun({ errorStatus: 429, opikError: OPENAI_RATE_LIMIT });
@@ -608,14 +626,59 @@ describe("describeRunFailure", () => {
     },
   );
 
-  it("gives no hint for a 400 when the prompt has a User message", () => {
-    const run = failedRun({
-      errorStatus: 400,
-      providerError: "temperature: must be at most 1",
+  it.each<[string, LLMMessage[]]>([
+    ["System + User", userPrompt],
+    [
+      "User + Assistant + User",
+      [userMessage("Hi"), assistantMessage("Hello!"), userMessage("Say ok.")],
+    ],
+  ])(
+    "gives no hint for a 400 when a %s prompt ends with a User message",
+    (_label, sentMessages) => {
+      const run = failedRun({
+        errorStatus: 400,
+        providerError: "temperature: must be at most 1",
+      });
+
+      expect(
+        describeRunFailure(run, { canTuneRequestRate: true, sentMessages }),
+      ).toEqual({ message: "temperature: must be at most 1" });
+    },
+  );
+
+  describe("a prompt that ends with an Assistant message", () => {
+    const PREFILL_ERROR =
+      "This model does not support assistant message prefill. The conversation must end with a user message.";
+    const endsWithAssistant = {
+      canTuneRequestRate: true,
+      sentMessages: [
+        userMessage("Say ok."),
+        assistantMessage("Here is my answer:"),
+      ],
+    };
+
+    it("is told to end with a User message when the model rejects it with a 400", () => {
+      const run = failedRun({ errorStatus: 400, providerError: PREFILL_ERROR });
+
+      expect(describeRunFailure(run, endsWithAssistant)).toEqual({
+        message: PREFILL_ERROR,
+        hint: {
+          title: "This model needs the last message to be a User message",
+          action:
+            "Add a User message at the end with + Message, or remove the last Assistant message, then run again.",
+        },
+      });
     });
 
-    expect(describeRunFailure(run, withSettings)).toEqual({
-      message: "temperature: must be at most 1",
+    it("keeps the error as written for a 500", () => {
+      const run = failedRun({
+        errorStatus: 500,
+        opikError: "Unexpected error",
+      });
+
+      expect(describeRunFailure(run, endsWithAssistant)).toEqual({
+        message: "Unexpected error",
+      });
     });
   });
 });

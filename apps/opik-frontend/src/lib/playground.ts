@@ -1,5 +1,6 @@
 import first from "lodash/first";
 import isNil from "lodash/isNil";
+import last from "lodash/last";
 import omitBy from "lodash/omitBy";
 import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
@@ -381,15 +382,21 @@ const getRunFailureHint = (
         "Add credits or raise your quota with the provider, then run again.",
     };
   }
-  // Anthropic and Gemini reject a System-only prompt with a 400, each in its own words,
-  // so the cause is read from the prompt rather than from the error text.
-  if (
-    errorStatus === HTTP_BAD_REQUEST &&
-    sentMessages.every((message) => message.role === LLM_MESSAGE_ROLE.system)
-  ) {
+  if (errorStatus !== HTTP_BAD_REQUEST) return undefined;
+
+  // Which role mixes a provider rejects differs by provider and model, and each words its 400
+  // differently, so the cause is read from the prompt rather than from the error text.
+  if (!sentMessages.some((message) => message.role === LLM_MESSAGE_ROLE.user)) {
     return {
       title: "This model needs a User message",
       action: "Add a User message with + Message, then run again.",
+    };
+  }
+  if (last(sentMessages)?.role === LLM_MESSAGE_ROLE.assistant) {
+    return {
+      title: "This model needs the last message to be a User message",
+      action:
+        "Add a User message at the end with + Message, or remove the last Assistant message, then run again.",
     };
   }
   return undefined;
