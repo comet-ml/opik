@@ -191,11 +191,19 @@ class FreeFormSqlQueryServiceTest {
                         new ServerException(202, "Too many simultaneous queries for user", 500, "query-id")));
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
-                .join()).cause().satisfies(error -> {
-                    var response = ((WebApplicationException) error).getResponse();
-                    assertThat(response.getStatus()).isEqualTo(429);
-                    assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isEqualTo("1");
-                });
+                .join()).cause().satisfies(retryable());
+    }
+
+    @Test
+    @DisplayName("the concurrent-query cap hit by the post-run check is a retryable 429, not a failed check")
+    void tooManySimultaneousQueriesInCheckIsRetryable() {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainPlan(any(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.failedFuture(
+                        new ServerException(202, "Too many simultaneous queries for user", 500, "query-id")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
+                .join()).cause().satisfies(retryable());
     }
 
     @Test
@@ -320,6 +328,15 @@ class FreeFormSqlQueryServiceTest {
         config.setLogReadDelay(io.dropwizard.util.Duration.milliseconds(0));
         config.setMaxLogReadAttempts(1);
         return config;
+    }
+
+    static java.util.function.Consumer<Throwable> retryable() {
+        return error -> {
+            assertThat(error).isInstanceOf(WebApplicationException.class);
+            var response = ((WebApplicationException) error).getResponse();
+            assertThat(response.getStatus()).isEqualTo(429);
+            assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isEqualTo("1");
+        };
     }
 
     /** A withheld result: the status, and the constant message, with no row and no ClickHouse detail. */
