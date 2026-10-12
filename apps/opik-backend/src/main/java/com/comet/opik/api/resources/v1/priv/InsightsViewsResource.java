@@ -178,7 +178,8 @@ public class InsightsViewsResource {
             @ApiResponse(responseCode = "429", description = "Too many queries are running; retry after the Retry-After delay", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "501", description = "Ollie or Custom Charts is not enabled for this workspace")
     })
-    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_VIEW)
+    // The rows are project data, so this is gated like the endpoints behind the built-in charts.
+    @RequiredPermissions({WorkspaceUserPermission.DASHBOARD_VIEW, WorkspaceUserPermission.PROJECT_DATA_VIEW})
     @RateLimited(value = "dashboardWidgetQueries:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response runWidgetQuery(
             @PathParam("insightsViewId") UUID id,

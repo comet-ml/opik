@@ -22,6 +22,7 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.validation.InRangeValidator;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -35,6 +36,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -275,6 +277,21 @@ class DashboardWidgetQueryResourceTest {
 
         assertStatus(dashboardClient.callRunWidgetQuery(dashboardId, widgetId, window(start, end), API_KEY_A,
                 WORKSPACE_NAME_A), expected);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = WorkspaceUserPermission.class, names = {"DASHBOARD_VIEW", "PROJECT_DATA_VIEW"})
+    @DisplayName("a member without a required permission is refused")
+    void runWidgetQuery__whenPermissionDenied__thenForbidden(WorkspaceUserPermission denied) {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName, denied.getValue());
+        String widgetId = UUID.randomUUID().toString();
+
+        assertStatus(dashboardClient.callRunWidgetQuery(UUID.randomUUID(), widgetId, window(null, null), apiKey,
+                workspaceName), Response.Status.FORBIDDEN);
+        assertStatus(insightsViewClient.callRunWidgetQuery(UUID.randomUUID(), widgetId, window(null, null), apiKey,
+                workspaceName), Response.Status.FORBIDDEN);
     }
 
     @Test
