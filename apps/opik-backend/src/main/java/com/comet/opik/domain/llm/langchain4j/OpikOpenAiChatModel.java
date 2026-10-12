@@ -1,5 +1,6 @@
 package com.comet.opik.domain.llm.langchain4j;
 
+import com.comet.opik.infrastructure.llm.CustomParametersOverrides;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -96,7 +97,7 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
         List<Message> messages = toOpikMessages(chatRequest.messages());
 
         // Build the request with our converted messages
-        ChatCompletionRequest openAiRequest = ChatCompletionRequest.builder()
+        ChatCompletionRequest openAiRequest = CustomParametersOverrides.apply(ChatCompletionRequest.builder()
                 .messages(messages)
                 // Copy all parameters from toOpenAiChatRequest
                 .model(parameters.modelName())
@@ -120,7 +121,7 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
                 // without relying on LangChain4j's builder which doesn't support them
                 // Convert JsonNode to Map<String, Object> for the request
                 .customParameters(convertCustomParameters())
-                .build();
+                .build());
 
         ParsedAndRawResponse<ChatCompletionResponse> parsedAndRawResponse = withRetryMappingExceptions(
                 () -> client.chatCompletion(openAiRequest).executeRaw(), maxRetries);
