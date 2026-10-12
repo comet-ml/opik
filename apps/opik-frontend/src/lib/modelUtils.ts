@@ -1201,6 +1201,25 @@ export const isAnthropicThinkingRequested = (
   thinksOnlyWhenAsked(model) &&
   resolveEffort(model, configs).thinkingEffort !== "off";
 
+const OPEN_ROUTER_MAX_TOKENS_LIMIT = 10000;
+
+export const getOpenRouterMaxTokensLimit = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): number => {
+  const modelMaxOutputTokens = getOpenRouterMaxOutputTokens(model);
+  return modelMaxOutputTokens
+    ? Math.min(OPEN_ROUTER_MAX_TOKENS_LIMIT, modelMaxOutputTokens)
+    : OPEN_ROUTER_MAX_TOKENS_LIMIT;
+};
+
+// Only shown and sent clamped, never written back, so switching back to a model with a higher
+// limit brings the stored value back, as resolveMaxCompletionTokens does for OpenAI and Anthropic.
+export const resolveOpenRouterMaxTokens = (
+  model: PROVIDER_MODEL_TYPE | "" | undefined,
+  value: number | undefined,
+): number | undefined =>
+  value ? Math.min(value, getOpenRouterMaxTokensLimit(model)) : value;
+
 // Last-mile request hardening, complementary to updateProviderConfig: this
 // layer doesn't trust upstream and keeps the payload valid for stale state
 // (e.g. older persisted prompts missing maxCompletionTokens).
@@ -1255,7 +1274,10 @@ export const sanitizeConfigForRequest = (
         continue;
       }
       if (Math.floor(value) > 0) {
-        sanitized[key] = Math.floor(value);
+        sanitized[key] =
+          provider === PROVIDER_TYPE.OPEN_ROUTER
+            ? resolveOpenRouterMaxTokens(model, Math.floor(value))
+            : Math.floor(value);
       } else {
         delete sanitized[key];
       }
