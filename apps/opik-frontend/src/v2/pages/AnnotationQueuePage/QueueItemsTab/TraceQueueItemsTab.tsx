@@ -1,3 +1,4 @@
+import { getPrettifyConfig } from "@/lib/traces";
 import React, { useMemo, useState } from "react";
 import {
   JsonParam,
@@ -128,6 +129,7 @@ const TRACE_COLUMNS: ColumnData<Trace>[] = [
     cell: PrettyCell as never,
     customMeta: {
       fieldType: "input",
+      getPrettifyConfig,
     },
   },
   {
@@ -138,6 +140,7 @@ const TRACE_COLUMNS: ColumnData<Trace>[] = [
     cell: PrettyCell as never,
     customMeta: {
       fieldType: "output",
+      getPrettifyConfig,
     },
   },
   {
