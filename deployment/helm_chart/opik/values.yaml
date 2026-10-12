@@ -1055,8 +1055,8 @@ clickhouse:
   # -- Tiered storage (hot local disk -> cold S3 with a read-through cache).
   # Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold
   # disks) and provisions a per-node EBS cache volume for the S3 cache. This is
-  # pure server-side infrastructure: it stays inert until a migration attaches
-  # the `tiered_replicated` policy to a table, so `enabled: false` (default) is
+  # pure server-side infrastructure: it stays inert until the `tiered_replicated`
+  # policy is attached to a table (see `ttl`), so `enabled: false` (default) is
   # a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros
   # ({shard}/{replica}) cannot be used because the S3 disk is read at server
   # start, before macros bind.
@@ -1113,6 +1113,19 @@ clickhouse:
       # SA with get/list/watch on statefulsets and pods, and get/patch on the
       # altinity operator Deployment (falls back to the chart-created SA).
       serviceAccountName: ""
+      nodeSelector: {}
+      tolerations: []
+    # Post-sync job that puts each listed table on the tiered_replicated policy with a
+    # move-to-cold TTL, idempotently. It never moves existing data: that is a paced
+    # operator step (ALTER TABLE ... MATERIALIZE TTL). Tables that do not exist yet are skipped.
+    # Off unless turned on per environment.
+    ttl:
+      enabled: false
+      tables:
+        - name: traces_local
+          moveAfterWeeks: 13
+      activeDeadlineSeconds: 600
+      resources: {}
       nodeSelector: {}
       tolerations: []
   adminUser:
