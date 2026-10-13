@@ -10,6 +10,8 @@ import TooltipWrapper, {
   TooltipWrapperProps,
 } from "@/shared/TooltipWrapper/TooltipWrapper";
 
+const COMMIT_KEYS = ["Enter", "Tab", "Escape"];
+
 interface SliderInputControlProps {
   min: number;
   max: number;
@@ -22,7 +24,12 @@ interface SliderInputControlProps {
   tooltip?: TooltipWrapperProps["content"];
   resetDisabled?: boolean;
   suffix?: string;
+  integer?: boolean;
+  hint?: string;
 }
+
+const toShownValue = (value: number, integer?: boolean) =>
+  (integer ? Math.floor(value) : value).toString();
 
 const SliderInputControl = ({
   min,
@@ -36,20 +43,22 @@ const SliderInputControl = ({
   tooltip,
   resetDisabled,
   suffix,
+  integer,
+  hint,
 }: SliderInputControlProps) => {
   const sliderId = `${id}-slider`;
   const inputId = `${id}-input`;
 
   const [localValue, setLocalValue] = useState(
-    (value ?? defaultValue).toString(),
+    toShownValue(value ?? defaultValue, integer),
   );
 
   useEffect(() => {
-    setLocalValue((value ?? defaultValue).toString());
-  }, [value, defaultValue]);
+    setLocalValue(toShownValue(value ?? defaultValue, integer));
+  }, [value, defaultValue, integer]);
 
   const validateAndHandleChange = (value: string) => {
-    const numVal = toNumber(value);
+    const numVal = integer ? Math.floor(toNumber(value)) : toNumber(value);
 
     if (value === "") {
       onChange(defaultValue);
@@ -76,7 +85,7 @@ const SliderInputControl = ({
     }
 
     onChange(numVal);
-    setLocalValue(value);
+    setLocalValue(integer ? numVal.toString() : value);
   };
 
   const handleResetValue = () => {
@@ -123,6 +132,13 @@ const SliderInputControl = ({
             }
             onChange={(event) => setLocalValue(event.target.value)}
             onBlur={(event) => validateAndHandleChange(event.target.value)}
+            onKeyDown={(event) => {
+              // Inside a Radix menu, Tab does not move focus and Escape unmounts the
+              // menu without a blur, so onBlur alone would drop the typed value.
+              if (COMMIT_KEYS.includes(event.key)) {
+                validateAndHandleChange(event.currentTarget.value);
+              }
+            }}
             value={localValue || ""}
             dimension="xs"
             variant="ghost"
@@ -157,6 +173,7 @@ const SliderInputControl = ({
         max={max}
         step={step}
       />
+      {hint && <p className="comet-body-xs mt-2 text-light-slate">{hint}</p>}
     </div>
   );
 };
