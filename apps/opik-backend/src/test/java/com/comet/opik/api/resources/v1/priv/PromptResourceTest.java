@@ -2581,11 +2581,17 @@ class PromptResourceTest {
             var text = contentOnlyVersion("Hello {{name}} " + UUID.randomUUID(), randomMetadata());
             var chatTemplate = "[{\"role\":\"user\",\"content\":\"Hello {{name}} %s\"}]".formatted(UUID.randomUUID());
             var chat = contentOnlyVersion(chatTemplate, null);
+            var score = RandomUtils.secure().randomInt(1, 100);
 
             return Stream.of(
                     arguments(TemplateStructure.TEXT, text, text),
                     arguments(TemplateStructure.TEXT, text.toBuilder().metadata(null).build(),
                             text.toBuilder().metadata(JsonUtils.getJsonNodeFromString("{}")).build()),
+                    arguments(TemplateStructure.TEXT,
+                            text.toBuilder().metadata(JsonUtils.getJsonNodeFromString(
+                                    "{\"score\":%d}".formatted(score))).build(),
+                            text.toBuilder().metadata(JsonUtils.getJsonNodeFromString(
+                                    "{\"score\":%d.0}".formatted(score))).build()),
                     arguments(TemplateStructure.CHAT, chat,
                             chat.toBuilder().template(chatTemplate.replace(",", ", ").replace(":", ": ")).build()));
         }
@@ -2593,55 +2599,83 @@ class PromptResourceTest {
         @ParameterizedTest
         @MethodSource
         @DisplayName("when content changes or the request asks for a new version, then create a new version")
-        void when__contentChangesOrNewVersionIsRequested__thenCreateNewVersion(
-                Function<PromptVersion, PromptVersion> change) {
+        void when__contentChangesOrNewVersionIsRequested__thenCreateNewVersion(TemplateStructure templateStructure,
+                PromptVersion latest, PromptVersion requested) {
 
             var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
-                    .templateStructure(TemplateStructure.TEXT)
+                    .templateStructure(templateStructure)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
-            var latest = contentOnlyVersion("Hello {{name}} " + UUID.randomUUID(), randomMetadata());
-
             PromptVersion latestVersion = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), latest, TemplateStructure.TEXT), API_KEY,
-                    TEST_WORKSPACE);
-
-            var expectedVersion = change.apply(latest);
+                    createPromptVersionRequest(prompt.name(), latest, templateStructure), API_KEY, TEST_WORKSPACE);
 
             PromptVersion actualVersion = createPromptVersion(
-                    createPromptVersionRequest(prompt.name(), expectedVersion, TemplateStructure.TEXT), API_KEY,
-                    TEST_WORKSPACE);
+                    createPromptVersionRequest(prompt.name(), requested, templateStructure), API_KEY, TEST_WORKSPACE);
 
-            assertPromptVersion(actualVersion, expectedVersion, promptId);
-            findPromptVersionsAndAssertPage(List.of(actualVersion, latestVersion), promptId, API_KEY,
-                    TEST_WORKSPACE, null, 1, 2);
+            // id and commit are minted by the server when the request leaves them out
+            assertThat(actualVersion)
+                    .usingRecursiveComparison()
+                    .ignoringExpectedNullFields()
+                    .ignoringFields("promptId", "versionNumber", "variables", "templateStructure", "createdAt",
+                            "createdBy")
+                    .isEqualTo(requested);
+            assertThat(actualVersion.id()).isNotEqualTo(latestVersion.id());
+
+            // Masks are not listed with the prompt's versions, and the list is ordered by id, newest first
+            var expectedVersions = requested.versionType() == PromptVersionType.MASK
+                    ? List.of(latestVersion)
+                    : Stream.of(actualVersion, latestVersion)
+                            .sorted(Comparator.comparing(PromptVersion::id).reversed())
+                            .toList();
+            findPromptVersionsAndAssertPage(expectedVersions, promptId, API_KEY, TEST_WORKSPACE, null, 1,
+                    expectedVersions.size());
         }
 
         Stream<Arguments> when__contentChangesOrNewVersionIsRequested__thenCreateNewVersion() {
+            var text = contentOnlyVersion("Hello {{name}} " + UUID.randomUUID(), randomMetadata());
+            var chatTemplate = RandomStringUtils.secure().nextAlphanumeric(10);
+            var chat = contentOnlyVersion(chatTemplate, null);
+            var versionId = factory.manufacturePojo(UUID.class);
+
             return Stream.of(
-                    arguments((Function<PromptVersion, PromptVersion>) v -> v.toBuilder()
-                            .template(v.template() + " changed").build()),
-                    arguments((Function<PromptVersion, PromptVersion>) v -> v.toBuilder()
-                            .metadata(randomMetadata()).build()),
-                    arguments((Function<PromptVersion, PromptVersion>) v -> v.toBuilder()
-                            .type(PromptType.JINJA2).build()),
-                    arguments((Function<PromptVersion, PromptVersion>) v -> v.toBuilder()
-                            .changeDescription(UUID.randomUUID().toString()).build()),
-                    arguments((Function<PromptVersion, PromptVersion>) v -> v.toBuilder()
-                            .tags(Set.of(UUID.randomUUID().toString())).build()));
+                    arguments(TemplateStructure.TEXT, text,
+                            text.toBuilder().template(text.template() + " changed").build()),
+                    arguments(TemplateStructure.TEXT, text, text.toBuilder().metadata(randomMetadata()).build()),
+                    arguments(TemplateStructure.TEXT, text, text.toBuilder()
+                            .type(text.type() == PromptType.MUSTACHE ? PromptType.JINJA2 : PromptType.MUSTACHE)
+                            .build()),
+                    arguments(TemplateStructure.TEXT, text,
+                            text.toBuilder().changeDescription(UUID.randomUUID().toString()).build()),
+                    arguments(TemplateStructure.TEXT, text,
+                            text.toBuilder().tags(Set.of(UUID.randomUUID().toString())).build()),
+                    arguments(TemplateStructure.TEXT, text, text.toBuilder().id(versionId).build()),
+                    arguments(TemplateStructure.TEXT, text,
+                            text.toBuilder().commit(RandomStringUtils.secure().nextAlphanumeric(8)).build()),
+                    arguments(TemplateStructure.TEXT, text, text.toBuilder()
+                            .environments(Set.of("env_" + RandomStringUtils.secure().nextAlphanumeric(8))).build()),
+                    arguments(TemplateStructure.TEXT, text,
+                            text.toBuilder().versionType(PromptVersionType.MASK).build()),
+                    // A plain-text chat template is not the JSON string with the same text
+                    arguments(TemplateStructure.CHAT, chat,
+                            chat.toBuilder().template("\"%s\"".formatted(chatTemplate)).build()));
         }
 
         private PromptVersion contentOnlyVersion(String template, JsonNode metadata) {
-            return PromptVersion.builder()
+            return factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .id(null)
+                    .commit(null)
+                    .changeDescription(null)
+                    .tags(null)
+                    .environment(null)
+                    .environments(null)
+                    .versionType(PromptVersionType.PROMPT_VERSION)
                     .template(template)
                     .metadata(metadata)
-                    .type(PromptType.MUSTACHE)
-                    .createdAt(Instant.now())
                     .build();
         }
 

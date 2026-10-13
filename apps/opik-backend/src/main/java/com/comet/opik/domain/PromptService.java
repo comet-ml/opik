@@ -42,7 +42,9 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.io.UncheckedIOException;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -458,15 +460,26 @@ class PromptServiceImpl implements PromptService {
     // Chat templates are JSON, so formatting differences alone don't make a new version
     private static boolean isSameTemplate(TemplateStructure structure, String latest, String requested) {
         if (structure == TemplateStructure.CHAT) {
-            return JsonUtils.getJsonNodeFromStringWithFallback(latest)
-                    .equals(JsonUtils.getJsonNodeFromStringWithFallback(requested));
+            try {
+                return JsonUtils.getJsonNodeFromString(latest).equals(JsonUtils.getJsonNodeFromString(requested));
+            } catch (UncheckedIOException e) {
+                // Not both JSON: only the exact text is the same template
+                return latest.equals(requested);
+            }
         }
         return latest.equals(requested);
     }
 
     private static boolean isSameMetadata(JsonNode latest, JsonNode requested) {
-        return isEmptyMetadata(latest) ? isEmptyMetadata(requested) : latest.equals(requested);
+        return isEmptyMetadata(latest)
+                ? isEmptyMetadata(requested)
+                : latest.equals(NUMERIC_VALUE_COMPARATOR, requested);
     }
+
+    // 1 and 1.0 are the same value to the SDKs' checks, while JsonNode.equals also compares the number's type
+    private static final Comparator<JsonNode> NUMERIC_VALUE_COMPARATOR = (a, b) -> a.isNumber() && b.isNumber()
+            ? a.decimalValue().compareTo(b.decimalValue())
+            : a.equals(b) ? 0 : 1;
 
     private static boolean isEmptyMetadata(JsonNode metadata) {
         return metadata == null || metadata.isNull() || (metadata.isObject() && metadata.isEmpty());
