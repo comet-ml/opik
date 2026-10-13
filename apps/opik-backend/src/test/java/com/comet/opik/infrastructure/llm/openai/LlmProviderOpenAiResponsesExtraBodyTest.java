@@ -164,6 +164,9 @@ class LlmProviderOpenAiResponsesExtraBodyTest {
                 arguments("max_completion_tokens",
                         withExtraBody(request().maxTokens(512).build(), Map.of("max_completion_tokens", 64)),
                         Map.of("max_output_tokens", 64)),
+                arguments("max_completion_tokens as a whole number with a decimal point",
+                        withExtraBody(request().build(), Map.of("max_completion_tokens", 64.0)),
+                        Map.of("max_output_tokens", 64)),
                 arguments("max_completion_tokens over a max_tokens it does not read",
                         withExtraBody(request().build(), Map.of("max_completion_tokens", 64, "max_tokens", "lots")),
                         Map.of("max_output_tokens", 64)),
@@ -215,10 +218,19 @@ class LlmProviderOpenAiResponsesExtraBodyTest {
                 "custom_parameters.%s is set by Opik from the request and cannot be replaced".formatted(key));
     }
 
-    @Test
-    void rejectsAChatCompletionsKeyWhoseValueItsTypedSettingCannotTake() {
-        assertRejectedBeforeSending(withExtraBody(request().build(), Map.of("max_tokens", "lots")),
-                "Invalid custom_parameters.max_tokens for the OpenAI Responses API");
+    @ParameterizedTest(name = "{0}: {1}")
+    @MethodSource("valuesTheTypedSettingCannotTake")
+    void rejectsAChatCompletionsKeyWhoseValueItsTypedSettingCannotTake(String key, Object value) {
+        assertRejectedBeforeSending(withExtraBody(request().build(), Map.of(key, value)),
+                "Invalid custom_parameters.%s for the OpenAI Responses API".formatted(key));
+    }
+
+    private static Stream<Arguments> valuesTheTypedSettingCannotTake() {
+        return Stream.of(
+                arguments("max_tokens", "lots"),
+                arguments("max_tokens", 20.5),
+                arguments("max_completion_tokens", 20.5),
+                arguments("max_completion_tokens", "20.5"));
     }
 
     @Test

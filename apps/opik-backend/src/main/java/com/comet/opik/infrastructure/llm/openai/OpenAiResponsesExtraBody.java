@@ -43,6 +43,7 @@ class OpenAiResponsesExtraBody {
     // Opik writes these from the request itself. If the extra body replaced them, the call would no longer match the
     // request that was logged and costed, or the reply would not come back in the shape the caller asked for.
     private static final List<String> OPIK_MANAGED_KEYS = List.of("model", "input", "stream");
+    private static final String INVALID_CUSTOM_PARAMETER = "Invalid custom_parameters.%s for the OpenAI Responses API";
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
@@ -74,15 +75,16 @@ class OpenAiResponsesExtraBody {
             builder.maxCompletionTokens(Stream.of(MAX_COMPLETION_TOKENS, MAX_TOKENS)
                     .filter(key -> customParameters.get(key) != null)
                     .findFirst()
-                    .map(key -> valueOf(customParameters, key, Integer.class))
+                    .map(key -> convertTokenLimit(customParameters, key))
                     .orElse(null))
                     .maxTokens(null);
         }
         if (customParameters.containsKey(REASONING_EFFORT)) {
-            builder.reasoningEffort(valueOf(customParameters, REASONING_EFFORT, String.class));
+            builder.reasoningEffort(convertCustomParameterValue(customParameters, REASONING_EFFORT, String.class));
         }
         if (customParameters.containsKey(RESPONSE_FORMAT)) {
-            builder.responseFormat(valueOf(customParameters, RESPONSE_FORMAT, ResponseFormat.class));
+            builder.responseFormat(
+                    convertCustomParameterValue(customParameters, RESPONSE_FORMAT, ResponseFormat.class));
         }
         var rest = new LinkedHashMap<>(customParameters);
         rest.keySet().removeAll(CHAT_COMPLETIONS_KEYS);
@@ -124,12 +126,20 @@ class OpenAiResponsesExtraBody {
         return params.toBuilder().body(mergedBody.build()).build();
     }
 
-    private <T> T valueOf(Map<String, Object> customParameters, String key, Class<T> type) {
+    // Jackson would turn 20.5 into 20, so the call would go out with a limit nobody asked for.
+    private Integer convertTokenLimit(Map<String, Object> customParameters, String key) {
+        if (customParameters.get(key) instanceof Number number
+                && number.doubleValue() != Math.rint(number.doubleValue())) {
+            throw new BadRequestException(INVALID_CUSTOM_PARAMETER.formatted(key));
+        }
+        return convertCustomParameterValue(customParameters, key, Integer.class);
+    }
+
+    private <T> T convertCustomParameterValue(Map<String, Object> customParameters, String key, Class<T> type) {
         try {
             return JsonUtils.getMapper().convertValue(customParameters.get(key), type);
         } catch (IllegalArgumentException exception) {
-            throw new BadRequestException(
-                    "Invalid custom_parameters.%s for the OpenAI Responses API".formatted(key), exception);
+            throw new BadRequestException(INVALID_CUSTOM_PARAMETER.formatted(key), exception);
         }
     }
 
