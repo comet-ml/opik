@@ -13,7 +13,6 @@ type UseDashboardWidgetQueryParams = {
   widgetId: string;
   intervalStart?: string;
   intervalEnd?: string;
-  // Not sent: the backend runs the query the widget references. Keying on it refetches after the widget is edited.
   queryId: string;
 };
 

@@ -5,11 +5,6 @@
  * it only references primitives `main.scss` defines.
  */
 :root {
-  /* Charts */
-  --chart-tick-stroke: hsl(
-    var(--muted-slate)
-  ); /* axis labels: Tailwind muted-slate #64748B. Overrides main.scss's value, so Opik's own charts use it too */
-
   /* Categorical (Opik chart colours) */
   --chart-1: var(--chart-purple); /* Charts-Purple #945FCF */
   --chart-2: var(--chart-teal); /* Charts-Turquoise #12A4B4 */
@@ -246,9 +241,6 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  /* Charts */
-  --chart-tick-stroke: hsl(var(--muted-slate));
-
   /* Categorical (Opik chart colours) */
   --chart-1: var(--chart-purple);
   --chart-2: var(--chart-teal);
