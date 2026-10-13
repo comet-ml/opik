@@ -97,17 +97,26 @@ const THINKING_LEVELS_BY_MODEL: ReadonlyMap<
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH, MINIMAL_TO_HIGH],
   [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH, MINIMAL_TO_HIGH],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH, MINIMAL_TO_HIGH],
-  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, MINIMAL_TO_HIGH],
-  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, ["off", ...MINIMAL_TO_HIGH]],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
+    ["off", ...MINIMAL_TO_HIGH],
+  ],
   [PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO, LOW_TO_HIGH],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO, LOW_TO_HIGH],
   // The "minimal, high" row in Google's tables is the separate gemini-3.1-flash-lite-image model.
-  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, MINIMAL_TO_HIGH],
-  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW, MINIMAL_TO_HIGH],
-  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE, MINIMAL_TO_HIGH],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, ["off", ...MINIMAL_TO_HIGH]],
+  [
+    PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
+    ["off", ...MINIMAL_TO_HIGH],
+  ],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+    ["off", ...MINIMAL_TO_HIGH],
+  ],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
-    MINIMAL_TO_HIGH,
+    ["off", ...MINIMAL_TO_HIGH],
   ],
   [PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, MINIMAL_TO_HIGH],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW, MINIMAL_TO_HIGH],
@@ -210,9 +219,10 @@ export const getThinkingLevelOptions = (
 // Each model's own default thinking level, as Google's two tables state it. Preselecting it keeps
 // the control from silently changing a model's behaviour just by being shown: 2.5 Flash Lite ships
 // with thinking off (AI Studio's table; Vertex's says Auto), 2.5 Pro/Flash default to a dynamic
-// budget ("auto"), 3.8/3.7/3.6/3.5 Flash to
-// medium, and the 3.x Flash Lite models to minimal — none of which is "high". Models absent here
-// default to "high", which is what the Gemini 3 Pro and 3 Flash rows document.
+// budget ("auto"), 3.8/3.7/3.6/3.5 Flash to medium — none of which is "high". The 3.x Flash Lite
+// models show Off: Google lists their default as minimal, but they spend no thinking tokens on it, so
+// Off is what a user sees them do. Models absent here default to "high", which is what the Gemini 3
+// Pro and 3 Flash rows document.
 const DEFAULT_THINKING_LEVEL_BY_MODEL: ReadonlyMap<
   PROVIDER_MODEL_TYPE,
   GeminiThinkingLevel
@@ -250,23 +260,23 @@ const DEFAULT_THINKING_LEVEL_BY_MODEL: ReadonlyMap<
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
     "medium" as GeminiThinkingLevel,
   ],
-  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, "minimal" as GeminiThinkingLevel],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, "off" as GeminiThinkingLevel],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
-    "minimal" as GeminiThinkingLevel,
+    "off" as GeminiThinkingLevel,
   ],
-  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, "minimal" as GeminiThinkingLevel],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, "off" as GeminiThinkingLevel],
   [
     PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
-    "minimal" as GeminiThinkingLevel,
+    "off" as GeminiThinkingLevel,
   ],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
-    "minimal" as GeminiThinkingLevel,
+    "off" as GeminiThinkingLevel,
   ],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
-    "minimal" as GeminiThinkingLevel,
+    "off" as GeminiThinkingLevel,
   ],
 ]);
 
@@ -337,16 +347,33 @@ export const withoutThinkingAmount = (
   return isEmpty(rest) ? undefined : rest;
 };
 
-// Minimal on a model whose own default is minimal (the Flash Lite ones) is left off like "auto": the
-// same request by Google's tables, and sending it is not harmless, since Vertex answers an explicit
-// MINIMAL in a multi-turn prompt without thought signatures with a 400 — and a hand-written assistant
-// message has none.
+// Gemini 3 and later cannot turn thinking off (the backend drops an "off" for them too), so their Off
+// can only mean the model's own default, and it is left off the request like "auto". Sending the
+// documented MINIMAL instead is not harmless: Vertex answers it in a multi-turn prompt without
+// thought signatures with a 400, and a hand-written assistant message has none.
+const GEMINI_MAJOR_VERSION = /gemini-(\d{1,3})(?=[.-])/;
+
+const cannotTurnThinkingOff = (model: PROVIDER_MODEL_TYPE | ""): boolean => {
+  const match = GEMINI_MAJOR_VERSION.exec(model);
+  return !!match && Number(match[1]) >= 3;
+};
+
 export const leavesThinkingToModel = (
   model: PROVIDER_MODEL_TYPE | "",
   level: unknown,
 ): boolean =>
-  level === "auto" ||
-  (level === "minimal" && getDefaultThinkingLevel(model) === "minimal");
+  level === "auto" || (level === "off" && cannotTurnThinkingOff(model));
+
+const THINKING_LEVEL_DESCRIPTION =
+  "Controls the depth of reasoning the model performs before responding. Higher thinking level may result in more thorough but slower responses.";
+
+export const getThinkingLevelDescription = (
+  model: PROVIDER_MODEL_TYPE | "",
+): string =>
+  leavesThinkingToModel(model, "off") &&
+  getThinkingLevelOptions(model).some((o) => o.value === "off")
+    ? `${THINKING_LEVEL_DESCRIPTION} Off sends no thinking setting: Google lists this model's default as minimal, and it spends almost no thinking tokens on it.`
+    : THINKING_LEVEL_DESCRIPTION;
 
 const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
   off: "Off",
