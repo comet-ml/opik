@@ -84,7 +84,7 @@ const transformFetched = (
     out[provider] = filtered.map((m) => ({
       value: getRoutableProviderModelValue(
         provider as COMPOSED_PROVIDER_TYPE,
-        m.qualifiedName ?? m.id,
+        m.qualified_name || m.id,
       ),
       label: m.label ?? m.id,
     }));
@@ -112,22 +112,27 @@ const buildFlagsIndex = (
 ): Map<string, ModelFlags> => {
   const index = new Map<string, ModelFlags>();
   for (const [provider, models] of Object.entries(fetched)) {
+    if (!KNOWN_PROVIDER_TYPES.has(provider)) {
+      continue;
+    }
     for (const m of models) {
       const flags: ModelFlags = {
         reasoning: m.reasoning,
-        structuredOutput: m.structuredOutput,
+        structuredOutput: m.structured_output,
       };
-      index.set(m.id, flags);
-      if (m.qualifiedName) {
-        index.set(m.qualifiedName, flags);
-      }
       index.set(
         getRoutableProviderModelValue(
           provider as COMPOSED_PROVIDER_TYPE,
-          m.qualifiedName ?? m.id,
+          m.qualified_name || m.id,
         ),
         flags,
       );
+      // A Vertex AI entry shares its bare id with the Gemini entry of the same name, and the
+      // backend's provider order changes between restarts. The bare id only fills a gap (old
+      // prompts saved a bare Vertex AI id), so it never replaces another entry's own value.
+      if (!index.has(m.id)) {
+        index.set(m.id, flags);
+      }
     }
   }
   return index;
