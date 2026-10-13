@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.CustomParametersOverrides;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.infrastructure.llm.OpenAiStreamingHelper;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
@@ -21,7 +22,7 @@ public class LlmProviderOpenAi implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        return openAiClient.chatCompletion(request).execute();
+        return openAiClient.chatCompletion(CustomParametersOverrides.apply(request)).execute();
     }
 
     @Override
@@ -31,7 +32,8 @@ public class LlmProviderOpenAi implements LlmProviderService {
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        OpenAiStreamingHelper.executeStreamingRequest(openAiClient, request, handleMessage, handleClose, handleError);
+        OpenAiStreamingHelper.executeStreamingRequest(openAiClient, CustomParametersOverrides.apply(request),
+                handleMessage, handleClose, handleError);
     }
 
     @Override
