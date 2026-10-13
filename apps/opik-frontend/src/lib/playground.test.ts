@@ -543,6 +543,12 @@ describe("describeRunFailure — a model the API key can't use", () => {
   const MODEL_NOT_AVAILABLE =
     "This model isn't available for your API key. Pick another model, or check which models your provider account can use.";
 
+  const forModel = (model: string) => ({
+    canTuneRequestRate: true,
+    sentMessages: [userMessage("Hi")],
+    model,
+  });
+
   const failedRun = (
     overrides: Partial<RunStreamingReturn>,
   ): RunStreamingReturn => ({
@@ -551,6 +557,7 @@ describe("describeRunFailure — a model the API key can't use", () => {
     endTime: "",
     usage: null,
     choices: null,
+    finishReason: null,
     providerError: null,
     opikError: null,
     pythonProxyError: null,
@@ -567,7 +574,7 @@ describe("describeRunFailure — a model the API key can't use", () => {
     });
 
     expect(
-      describeRunFailure(run, { model: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5 }),
+      describeRunFailure(run, forModel(PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5)),
     ).toEqual({
       message: "model: claude-mythos-5",
       hint: { action: MODEL_NOT_AVAILABLE },
@@ -595,7 +602,7 @@ describe("describeRunFailure — a model the API key can't use", () => {
     (_provider, model, opikError) => {
       const run = failedRun({ errorStatus: 404, opikError });
 
-      expect(describeRunFailure(run, { model }).hint?.action).toBe(
+      expect(describeRunFailure(run, forModel(model)).hint?.action).toBe(
         MODEL_NOT_AVAILABLE,
       );
     },
@@ -608,7 +615,7 @@ describe("describeRunFailure — a model the API key can't use", () => {
     });
 
     expect(
-      describeRunFailure(run, { model: "custom-llm/my-gateway/llama-3.3-70b" }),
+      describeRunFailure(run, forModel("custom-llm/my-gateway/llama-3.3-70b")),
     ).toEqual({
       message: "Unexpected error calling LLM provider: 404 page not found",
     });
@@ -630,7 +637,7 @@ describe("describeRunFailure — a model the API key can't use", () => {
     (_label, model, opikError) => {
       const run = failedRun({ errorStatus: 404, opikError });
 
-      expect(describeRunFailure(run, { model }).hint).toBeUndefined();
+      expect(describeRunFailure(run, forModel(model)).hint).toBeUndefined();
     },
   );
 
@@ -643,7 +650,7 @@ describe("describeRunFailure — a model the API key can't use", () => {
       });
 
       expect(
-        describeRunFailure(run, { model: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5 }),
+        describeRunFailure(run, forModel(PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5)),
       ).toEqual({ message: "Internal error while running claude-mythos-5" });
     },
   );
@@ -746,15 +753,22 @@ describe("describeRunFailure", () => {
     ...overrides,
   });
 
+  const model = "gpt-4o";
   const userPrompt = [systemMessage("Be brief."), userMessage("Hi")];
-  const withSettings = { canTuneRequestRate: true, sentMessages: userPrompt };
+  const withSettings = {
+    canTuneRequestRate: true,
+    sentMessages: userPrompt,
+    model,
+  };
   const withoutSettings = {
     canTuneRequestRate: false,
     sentMessages: userPrompt,
+    model,
   };
   const systemOnly = {
     canTuneRequestRate: true,
     sentMessages: [systemMessage("What parameters do I send you?")],
+    model,
   };
 
   it("names a rate-limited run and gives the next step on its own", () => {
@@ -835,7 +849,11 @@ describe("describeRunFailure", () => {
       });
 
       expect(
-        describeRunFailure(run, { canTuneRequestRate: true, sentMessages }),
+        describeRunFailure(run, {
+          canTuneRequestRate: true,
+          sentMessages,
+          model,
+        }),
       ).toEqual({
         message: "messages: Field required",
         hint: {
@@ -888,7 +906,11 @@ describe("describeRunFailure", () => {
       });
 
       expect(
-        describeRunFailure(run, { canTuneRequestRate: true, sentMessages }),
+        describeRunFailure(run, {
+          canTuneRequestRate: true,
+          sentMessages,
+          model,
+        }),
       ).toEqual({ message: "temperature: must be at most 1" });
     },
   );
@@ -902,6 +924,7 @@ describe("describeRunFailure", () => {
         userMessage("Say ok."),
         assistantMessage("Here is my answer:"),
       ],
+      model,
     };
 
     it("gets a suggestion to end with a User message under the provider's error on a 400", () => {
