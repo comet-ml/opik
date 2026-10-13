@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure;
 import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
@@ -24,6 +25,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -35,6 +37,13 @@ public class FilterUtils {
     public static final int ANALYTICS_DELETE_BATCH_SIZE = 10000;
     public static final int UUID_POOL_MULTIPLIER = 2;
     private static final String LOG_COMMENT = "<query_name>:<workspace_id>:<user_name>:<details>";
+
+    /*
+     * A trace in no annotation queue has an empty queue id list, which only these operators accept: queue filters
+     * made only of them keep the unqueued traces, any other operator among them excludes them.
+     */
+    private static final Set<Operator> UNQUEUED_MATCHING_OPERATORS = Set.of(
+            Operator.NOT_CONTAINS, Operator.NOT_EQUAL, Operator.IS_EMPTY);
 
     /**
      * Sets the {@code sort_needs_wide} template flag when the sort targets a wide text column (input/output/metadata),
@@ -145,8 +154,15 @@ public class FilterUtils {
                             .ifPresent(spanScoresFilters -> template.add("span_feedback_scores_filters",
                                     spanScoresFilters));
                     FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.ANNOTATION_AGGREGATION)
-                            .ifPresent(traceAnnotationFilters -> template.add("annotation_queue_filters",
-                                    traceAnnotationFilters));
+                            .ifPresent(traceAnnotationFilters -> {
+                                template.add("annotation_queue_filters", traceAnnotationFilters);
+                                if (filters.stream()
+                                        .filter(filter -> filter.field() == TraceField.ANNOTATION_QUEUE_IDS
+                                                || filter.field() == TraceThreadField.ANNOTATION_QUEUE_IDS)
+                                        .allMatch(filter -> UNQUEUED_MATCHING_OPERATORS.contains(filter.operator()))) {
+                                    template.add("annotation_queue_filters_match_unqueued", true);
+                                }
+                            });
                     FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT_AGGREGATION)
                             .ifPresent(traceExperimentFilters -> template.add("experiment_filters",
                                     traceExperimentFilters));
@@ -169,6 +185,13 @@ public class FilterUtils {
                 });
         Optional.ofNullable(traceSearchCriteria.annotationQueueId())
                 .ifPresent(queueId -> template.add("annotation_queue_id", queueId.toString()));
+        // Queue conditions that only keep queued items let a query start from the queue's items instead of
+        // the whole project; filters that also keep unqueued items cannot narrow anything.
+        if (template.getAttribute("annotation_queue_id") != null
+                || (template.getAttribute("annotation_queue_filters") != null
+                        && template.getAttribute("annotation_queue_filters_match_unqueued") == null)) {
+            template.add("annotation_queue_narrows", true);
+        }
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> template.add("last_received_id", lastReceivedTraceId));
 

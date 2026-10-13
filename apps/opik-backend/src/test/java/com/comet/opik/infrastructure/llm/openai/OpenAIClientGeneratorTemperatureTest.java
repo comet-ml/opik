@@ -53,7 +53,7 @@ class OpenAIClientGeneratorTemperatureTest {
                 .build();
         var parameters = LlmAsJudgeModelParameters.builder().name(modelName).temperature(0.7).build();
 
-        return generator.newResponsesApiChatModel(config, parameters, false).defaultRequestParameters();
+        return generator.newResponsesApiChatModel(config, parameters).defaultRequestParameters();
     }
 
     /** The Responses builder gates independently of the Completions one, so it is asserted separately. */

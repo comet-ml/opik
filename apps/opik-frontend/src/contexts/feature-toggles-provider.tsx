@@ -33,6 +33,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.AGENT_INSIGHTS_ENABLED]: true,
   [FeatureToggleKeys.PROJECT_HOMEPAGE_ENABLED]: false,
   [FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED]: false,
+  [FeatureToggleKeys.EVENT_BRIDGE_ALERTS_ENABLED]: false,
   [FeatureToggleKeys.COST_INTELLIGENCE_ENABLED]: false,
   [FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED]: false,
   [FeatureToggleKeys.SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED]: false,
