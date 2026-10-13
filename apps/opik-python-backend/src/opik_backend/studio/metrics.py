@@ -912,14 +912,20 @@ def _build_code_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable
             error_msg = response.get("error", "Unknown error")
             logger.warning(f"Code metric error: {error_msg}")
             return ScoreResult(
-                name="code", value=0.0, reason=f"Error: {error_msg[:200]}"
+                name="code",
+                value=0.0,
+                reason=f"Error: {error_msg[:200]}",
+                scoring_failed=True,
             )
 
         scores = response.get("scores", [])
         if not scores:
             logger.warning("Code metric returned no scores")
             return ScoreResult(
-                name="code", value=0.0, reason="No ScoreResult returned by metric"
+                name="code",
+                value=0.0,
+                reason="No ScoreResult returned by metric",
+                scoring_failed=True,
             )
 
         # Return first score (studio expects single score)
@@ -928,10 +934,18 @@ def _build_code_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable
         logger.debug(
             f"Code metric returned score: name={score.get('name')}, value={score.get('value')}"
         )
+        # Carry the user's own `scoring_failed` through instead of rebuilding the
+        # result without it. A metric that flags its own failure (as every
+        # judge wrapper does) is reporting "could not score", not a real 0.0,
+        # and dropping the flag stores the placeholder as if it were a verdict.
+        # Matched against `True` rather than by truthiness, for the same reason
+        # as opik_backend.score_validation: a truthy non-boolean would launder
+        # a real score into a failure.
         return ScoreResult(
             name=score.get("name"),
             value=score.get("value", 0.0),
             reason=score.get("reason", ""),
+            scoring_failed=score.get("scoring_failed") is True,
         )
 
     # objective_name follows the metric's class `.name` (read via
