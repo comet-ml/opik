@@ -11,7 +11,8 @@ import type { Page } from '@playwright/test';
  * through the Responses API only; Chat Completions answers 400. So the panel
  * now learns the OpenAI key's `openai_pipeline_mode` from the provider-keys
  * query and gates the option on it, and anything already stored as `max` is
- * shown and sent as `high` while the key is on Chat Completions.
+ * shown and sent as the model's default (medium on gpt-5.6-sol) while the key
+ * is on Chat Completions.
  *
  * Both failure directions are user-visible and neither is loud: offering Max on
  * a Chat Completions key gives every run a 400, and dropping it on a Responses
@@ -225,7 +226,7 @@ test.describe(
     );
 
     test(
-      'a stored max is shown and sent as high once the key is back on Chat Completions',
+      "a stored max is shown and sent as the model's default once the key is back on Chat Completions",
       { tag: ['@cap:playground.configure-model-settings'] },
       async ({ modelRegistryProviders, project, page }) => {
         expect(modelRegistryProviders.providers).toContain('openai');
@@ -249,7 +250,7 @@ test.describe(
 
         await test.step('In Responses mode the request really carries max', async () => {
           // The positive control for the coercion below: without it, "the body
-          // says high" is equally satisfied by a build that can never send max
+          // says medium" is equally satisfied by a build that can never send max
           // at all, which would be the silent downgrade rather than the fix.
           await playground.fillUserMessage('Reply with the single word OK.');
           const body = await captureCompletionBody(page, () => playground.clickRun());
@@ -263,22 +264,22 @@ test.describe(
           await playground.waitForReady();
         });
 
-        await test.step('The panel reads High — the stored max is masked, not rejected', async () => {
+        await test.step("The panel reads Medium, the model's default — the stored max is masked, not rejected", async () => {
           await playground.openModelParameters(0);
           expect(
             await playground.readReasoningEffort(),
-            'resolveEffort must fall back to High for a stored value the key cannot take',
-          ).toBe('High');
+            "resolveEffort must fall back to the model's default for a stored value the key cannot take",
+          ).toBe('Medium');
           await playground.closeModelParameters();
         });
 
-        await test.step('…and the request carries high, not max and not a 400', async () => {
+        await test.step('…and the request carries medium, not max and not a 400', async () => {
           const body = await captureCompletionBody(page, () => playground.clickRun());
           expect(body.model).toBe('gpt-5.6-sol');
           expect(
             body.reasoning_effort,
             'sending the stored max to Chat Completions is the 400 this change prevents',
-          ).toBe('high');
+          ).toBe('medium');
         });
       },
     );
