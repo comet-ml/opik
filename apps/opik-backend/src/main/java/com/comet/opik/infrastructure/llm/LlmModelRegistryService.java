@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.api.LlmModelDefinition;
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.ModelParams;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -38,6 +39,7 @@ public class LlmModelRegistryService {
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
     private static final TypeReference<Map<String, List<ModelEntry>>> REGISTRY_TYPE = new TypeReference<>() {
     };
+    private static final CuratedCatalog NO_CATALOG = new CuratedCatalog(Map.of(), Map.of(), Map.of());
 
     private final LlmModelRegistryConfig config;
     private final Client httpClient;
@@ -72,16 +74,64 @@ public class LlmModelRegistryService {
     // layer leaves out from an explicit false.
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record ModelEntry(String id, String qualifiedName, String label, Boolean structuredOutput, Boolean reasoning) {
+    record ModelEntry(String id, String qualifiedName, String label, Boolean structuredOutput, Boolean reasoning,
+            String profile, ModelParams params, Boolean awaitingSync) {
 
-        LlmModelDefinition toDefinition() {
+        LlmModelDefinition toDefinition(ModelParams resolvedParams) {
             return LlmModelDefinition.builder()
                     .id(id)
                     .qualifiedName(qualifiedName)
                     .label(label)
                     .structuredOutput(BooleanUtils.isTrue(structuredOutput))
                     .reasoning(BooleanUtils.isTrue(reasoning))
+                    .params(resolvedParams)
                     .build();
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record ProviderDefaults(String profile, String reasoning) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record CuratedCatalog(
+            Map<String, ProviderDefaults> defaults,
+            Map<String, ModelParams> profiles,
+            Map<String, List<ModelEntry>> models) {
+
+        CuratedCatalog {
+            defaults = defaults == null ? Map.of() : defaults;
+            profiles = profiles == null ? Map.of() : profiles;
+            models = models == null ? Map.of() : models;
+        }
+
+        /** Provider profile, then the reasoning profile, then the model's own profile, then its own params. */
+        ModelParams resolve(String provider, ModelEntry entry) {
+            var providerDefaults = defaults.get(provider);
+            ModelParams resolved = null;
+            if (providerDefaults != null) {
+                resolved = profile(providerDefaults.profile(), provider, entry);
+                if (BooleanUtils.isTrue(entry.reasoning()) && providerDefaults.reasoning() != null) {
+                    resolved = ModelParams.overlay(resolved, profile(providerDefaults.reasoning(), provider, entry));
+                }
+            }
+            if (entry.profile() != null) {
+                resolved = ModelParams.overlay(resolved, profile(entry.profile(), provider, entry));
+            }
+            resolved = ModelParams.overlay(resolved, entry.params());
+            return resolved == null ? null : resolved.settled();
+        }
+
+        private ModelParams profile(String name, String provider, ModelEntry entry) {
+            if (name == null) {
+                return null;
+            }
+            var found = profiles.get(name);
+            if (found == null) {
+                log.warn("Unknown params profile '{}' for model '{}' of provider '{}', skipping it", name,
+                        entry.id(), provider);
+            }
+            return found;
         }
     }
 
@@ -144,6 +194,7 @@ public class LlmModelRegistryService {
     }
 
     private Map<String, List<LlmModelDefinition>> load() {
+        var catalog = loadCuratedCatalog();
         var result = loadClasspathResource(config.getDefaultResource());
 
         if (isRemoteConfigured() && httpClient != null) {
@@ -164,33 +215,71 @@ public class LlmModelRegistryService {
             }
         }
 
+        result = applyCurated(result, catalog.models());
+
         var overridePath = config.getLocalOverridePath();
         if (overridePath == null || overridePath.isBlank()) {
-            return toRegistry(result);
+            return toRegistry(result, catalog);
         }
 
         var path = Path.of(overridePath);
         if (!Files.exists(path)) {
             log.debug("Local override file not found at '{}', using defaults only", overridePath);
-            return toRegistry(result);
+            return toRegistry(result, catalog);
         }
 
         try {
             var overrides = loadFileResource(path);
-            return toRegistry(merge(result, overrides));
+            return toRegistry(merge(result, overrides), catalog);
         } catch (Exception e) {
             log.error("Failed to load local override registry from '{}', falling back to defaults",
                     overridePath, e);
-            return toRegistry(result);
+            return toRegistry(result, catalog);
         }
     }
 
-    private static Map<String, List<LlmModelDefinition>> toRegistry(Map<String, List<ModelEntry>> merged) {
+    private static Map<String, List<LlmModelDefinition>> toRegistry(Map<String, List<ModelEntry>> merged,
+            CuratedCatalog catalog) {
         var copy = new LinkedHashMap<String, List<LlmModelDefinition>>(merged.size());
         merged.forEach((provider, models) -> copy.put(provider,
-                models.stream().map(ModelEntry::toDefinition).toList()));
+                models.stream().map(m -> m.toDefinition(catalog.resolve(provider, m))).toList()));
         // Not Map.copyOf: its iteration order changes between JVM starts, and the API lists providers in it.
         return Collections.unmodifiableMap(copy);
+    }
+
+    private CuratedCatalog loadCuratedCatalog() {
+        var resourceName = config.getCuratedResource();
+        if (resourceName == null || resourceName.isBlank()) {
+            return NO_CATALOG;
+        }
+        try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourceName)) {
+            if (is == null) {
+                throw new IllegalStateException("Classpath resource not found: " + resourceName);
+            }
+            return YAML_MAPPER.readValue(is, CuratedCatalog.class);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to load classpath resource: " + resourceName, e);
+        }
+    }
+
+    // A curated row corrects a model the generated layers list; it never adds one, so a row written ahead of the
+    // sync (awaitingSync) waits until the sync lists the model.
+    static Map<String, List<ModelEntry>> applyCurated(
+            @NonNull Map<String, List<ModelEntry>> generated,
+            @NonNull Map<String, List<ModelEntry>> curated) {
+        var result = new LinkedHashMap<>(generated);
+        curated.forEach((provider, rows) -> {
+            var existing = result.get(provider);
+            if (existing == null || rows == null || rows.isEmpty()) {
+                return;
+            }
+            var byId = new LinkedHashMap<String, ModelEntry>();
+            rows.forEach(row -> byId.put(row.id(), row));
+            result.put(provider, existing.stream()
+                    .map(m -> byId.containsKey(m.id()) ? inheritUnsetFields(m, byId.get(m.id())) : m)
+                    .toList());
+        });
+        return result;
     }
 
     private Map<String, List<ModelEntry>> loadClasspathResource(String resourceName) {
@@ -274,6 +363,8 @@ public class LlmModelRegistryService {
                 .label(ObjectUtils.getIfNull(override.label(), existing.label()))
                 .structuredOutput(ObjectUtils.getIfNull(override.structuredOutput(), existing.structuredOutput()))
                 .reasoning(ObjectUtils.getIfNull(override.reasoning(), existing.reasoning()))
+                .profile(ObjectUtils.getIfNull(override.profile(), existing.profile()))
+                .params(ModelParams.overlay(existing.params(), override.params()))
                 .build();
     }
 }
