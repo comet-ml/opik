@@ -29,14 +29,14 @@ opik endpoint --project <project-name> -- python3 my_agent.py
 Then run your agent from the Opik UI. Enter inputs, hit **Run**, and see the full result with traces — every LLM call, tool invocation, and sub-step captured in real time.
 
 <Frame>
-  <img src="/img/v2/development/agent_sandbox.png" />
+  <img src="/img/v2/development/agent_sandbox.png" alt="Agent Playground with the Test input, Prompts, and Result panels" />
 </Frame>
 
-Switch to the **Configuration** tab to tweak prompts and parameters without changing code. The playground runs your agent against the unsaved configuration so you can test before committing changes.
+Use the **Prompts** panel, next to **Test input**, to edit the prompts your agent loads from the Prompt Library without changing code. The playground runs your agent with the unsaved edits so you can test before you save a new version.
 
 ## Roll out new versions
 
-When you're happy with a configuration, save it as a new version in the Prompt Library and
+When you're happy with a prompt edit, save it as a new version in the Prompt Library and
 update your code to pin to it (or keep it on `"latest"`). Every change is versioned, so you can
 always roll back.
 
