@@ -665,7 +665,7 @@ class VertexAIClientGeneratorTest {
         void judgeSendsTemperatureAndSeed() {
             var modelParameters = new LlmAsJudgeModelParameters(MODEL, 0.2, 7, null);
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig())
+            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry)
                     .generateChat(apiConfig(), modelParameters)) {
                 client.chat(UserMessage.from("hello"));
             }
@@ -684,7 +684,7 @@ class VertexAIClientGeneratorTest {
         }
 
         private LlmProviderVertexAI provider() {
-            return new LlmProviderVertexAI(new VertexAIClientGenerator(clientConfig()), apiConfig());
+            return new LlmProviderVertexAI(new VertexAIClientGenerator(clientConfig(), registry), apiConfig());
         }
 
         private LlmProviderClientApiConfig apiConfig() {
