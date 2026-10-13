@@ -1,6 +1,6 @@
 ## Automatic Annotation Queue Population
 
-Annotation queues can now fill themselves. Turn on **Automation** when creating or editing a queue and describe what's worth reviewing as conditions on feedback scores (for example, a low score from an online evaluation rule). Traces and threads logged by your application are added to the queue as soon as they qualify, so reviewers see the problem cases without anyone watching the traces list. Conditions are combined with AND (up to five), you can optionally cap how many items automation adds, and the items table shows how each item arrived under **Source**. Automation is enabled by default; self-hosted deployments can switch it off with `TOGGLE_ANNOTATION_QUEUE_AUTOMATION_ENABLED=false`.
+Annotation queues can now fill themselves. Turn on **Automation** when creating or editing a queue and describe what's worth reviewing as conditions on feedback scores (for example, a low score from an online evaluation rule). Traces and threads logged by your application are added to the queue as soon as they qualify, so reviewers see the problem cases without anyone watching the traces list. Conditions are combined with AND (up to five), you can optionally cap how many items automation adds, and the items table shows how each item arrived under **Source**. Automation is available out of the box.
 
 The Traces and Threads tables also gain an **Annotation queues** column that lists the queues each row belongs to, with links straight to the queue.
 
