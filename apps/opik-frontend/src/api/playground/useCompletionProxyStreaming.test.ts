@@ -360,9 +360,9 @@ describe("the reasoning effort a playground run sends", () => {
   });
 
   it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
-    "sends a stored max as high when the mode is %s",
+    "sends a stored max as the model's default, medium, when the mode is %s",
     async (mode) => {
-      expect(await sentReasoningEffort(mode)).toBe("high");
+      expect(await sentReasoningEffort(mode)).toBe("medium");
     },
   );
 });

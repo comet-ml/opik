@@ -22,6 +22,7 @@ import {
   getNestedThinkingEffort,
   getThinkingLevelOptions,
   knowsAnthropicEffortLevels,
+  leavesThinkingToModel,
   resolveSamplingParams,
   updateProviderConfig,
   withoutThinkingAmount,
@@ -244,7 +245,7 @@ const LLMJudgeBaseSchema = z.object({
     // Held as its own field so the shared model-config control can drive it, then folded into
     // custom_parameters.thinking on save — the backend reads it from there.
     thinkingLevel: z
-      .enum(["auto", "none", "off", "minimal", "low", "medium", "high"])
+      .enum(["auto", "off", "minimal", "low", "medium", "high"])
       .optional(),
     // Same arrangement for the Anthropic effort, which the judge reads from
     // custom_parameters.output_config.effort.
@@ -762,12 +763,15 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   // in the form, so an unchanged load -> save must not drop it. A persisted budget_tokens is dropped:
   // the backend lets it outrank any level, so the judge would think with that budget while the form
   // shows Low, or keep thinking under Off.
-  // "auto" is the absence of a setting — the model applies its own dynamic budget — so it is stored
-  // as no thinking block rather than as a level the backend would have to special-case.
+  // A level left to the model is the absence of a setting, so it is stored as no thinking block rather
+  // than as a level the backend would have to special-case.
+  const levelLeftToModel = leavesThinkingToModel(
+    data.model as PROVIDER_MODEL_TYPE,
+    thinkingLevel,
+  );
   const thinkingCustomParameters =
     thinkingLevel != null &&
-    thinkingLevel !== "auto" &&
-    thinkingLevel !== "none" &&
+    !levelLeftToModel &&
     getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).some(
       (o) => o.value === thinkingLevel,
     )
@@ -798,25 +802,19 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   // its own here", not "delete whatever else was in there": budget_tokens and
   // include_thoughts are not represented in the form, and Anthropic keeps type/budget_tokens under
   // this same key for extended thinking.
-  // "none" is an explicit "do not think", so it removes a persisted thinking block rather than just
-  // declining to add one — otherwise a level saved earlier keeps being sent. "auto" is the weaker
-  // "let the model decide": it drops the persisted level and budget_tokens, so the judge gets no
+  // A level left to the model drops the persisted level and budget_tokens, so the judge gets no
   // thinking config, and keeps the rest (include_thoughts), which the form cannot represent.
   // Anthropic's type and budget_tokens live under this key too, so this only applies to a model with
   // a level control.
-  const formClearsThinking = thinkingLevel === "none";
   const formRejectedItsLevel =
-    thinkingLevel != null &&
-    thinkingLevel !== "auto" &&
-    thinkingLevel !== "none" &&
-    !thinkingCustomParameters;
-  const formSetsAuto =
-    thinkingLevel === "auto" &&
+    thinkingLevel != null && !levelLeftToModel && !thinkingCustomParameters;
+  const formLeavesLevelToModel =
+    levelLeftToModel &&
     getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).length > 0;
   let otherCustomParameters = persistedCustomParameters;
-  if (thinkingCustomParameters || formRejectedItsLevel || formClearsThinking) {
+  if (thinkingCustomParameters || formRejectedItsLevel) {
     otherCustomParameters = omit(persistedCustomParameters, "thinking");
-  } else if (formSetsAuto) {
+  } else if (formLeavesLevelToModel) {
     otherCustomParameters =
       withoutThinkingAmount(persistedCustomParameters) ?? {};
   }
