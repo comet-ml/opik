@@ -101,15 +101,14 @@ rows:
     models: [reasoning]
     request: {reasoning_effort: ultra}
     body: {reasoning_effort: ultra}
-  - name: max effort is sent as high
+  # Combined with #8915: Chat Completions rejects max, so it is left out and the model runs at its own default.
+  - name: max effort is left out
     models: [reasoning, registry-only]
     request: {reasoning_effort: max}
-    body: {reasoning_effort: high}
-    # This row and the next flip when #8915 merges: it leaves a max effort out instead of sending high.
-  - name: max effort is sent as high on a streamed request too
+  - name: max effort is left out on a streamed request too
     model: gpt-5-nano
     request: {stream: true, reasoning_effort: max}
-    body: {stream: true, reasoning_effort: high}
+    body: {stream: true}
 
   # Max tokens, chat path.
   - name: no output cap sends none
