@@ -114,7 +114,7 @@ def test_test_suite_agentic__assertion_about_span_name__passes(
 @pytest.mark.skipif(
     not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
 )
-@pytest.mark.xfail(reason="flaky on CI with simple OpenAI models")
+@pytest.mark.xfail(reason="flaky on CI with simple OpenAI models", run=False)
 def test_test_suite_agentic__assertion_about_span_error__detects_failure(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
