@@ -1,5 +1,4 @@
 /*
- * The 171 chart tokens Opik's chart widgets use.
  * The `--chart-*` tokens, light on `:root`, dark on `:root[data-theme="dark"]`
  * (the theme provider sets `data-theme` next to the `.dark` class). Loaded after `main.scss`;
  * it only references primitives `main.scss` defines.
