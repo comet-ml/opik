@@ -9,21 +9,29 @@
 --   * id_week is the spans partition id: the YYYYMMDD of the Monday of the span's id_at, the same value the spans
 --     partition key produces and the read path binds, so no conversion sits between the two.
 --   * The projection serves the per-project weeks for project-scoped reads, which have no trace ids.
---   * ReplacingMergeTree collapses repeated registrations of the same (trace, week); merges rebuild the projection.
---   * No TTL and no partitioning: the table is small (~15 bytes per row) and must never forget a week.
--- Codecs: ZSTD(3) for the short repetitive workspace_id, ZSTD(1) for the UUID ids, as in spans_local_v2.
+--   * ReplacingMergeTree collapses repeated registrations of the same (trace, week), keeping the latest by
+--     last_updated_at; merges rebuild the projection.
+--   * last_updated_at is when the row was last registered, set by ClickHouse on insert (live writes and the backfill
+--     both leave it to the default). Every registration of a (trace, week) is a new insert, so it reads as "last seen",
+--     not "created".
+--   * No TTL and no partitioning: the table is small (~15 bytes per row on prod-test, measured before last_updated_at
+--     was added) and must never forget a week.
+-- Codecs: ZSTD(3) for the short repetitive workspace_id, ZSTD(1) for the UUID ids, Delta + ZSTD(1) for the timestamp,
+-- as in spans_local_v2.
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.span_weeks ON CLUSTER '{cluster}'
 (
-    workspace_id String          CODEC(ZSTD(3)),
-    project_id   FixedString(36) CODEC(ZSTD(1)),
-    trace_id     FixedString(36) CODEC(ZSTD(1)),
-    id_week      UInt32          CODEC(ZSTD(1)),
+    workspace_id    String                 CODEC(ZSTD(3)),
+    project_id      FixedString(36)        CODEC(ZSTD(1)),
+    trace_id        FixedString(36)        CODEC(ZSTD(1)),
+    id_week         UInt32                 CODEC(ZSTD(1)),
+    last_updated_at DateTime64(6, 'UTC')   DEFAULT now64(6) CODEC(Delta, ZSTD(1)),
     PROJECTION p_project_weeks (
         SELECT workspace_id, project_id, id_week, count()
         GROUP BY workspace_id, project_id, id_week
     )
 )
-ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/span_weeks', '{replica}')
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/span_weeks', '{replica}',
+    last_updated_at)
 ORDER BY (workspace_id, project_id, trace_id, id_week)
 SETTINGS deduplicate_merge_projection_mode = 'rebuild', lightweight_mutation_projection_mode = 'rebuild';
 
