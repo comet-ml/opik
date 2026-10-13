@@ -294,7 +294,11 @@ def test_judge_metric_sends_the_stored_model_id(httpserver, monkeypatch, stored_
         prompt.model,
     )
 
-    judge({}, "Paris")
+    result = judge({}, "Paris")
 
     sent_models = {request.get_json()["model"] for request, _ in httpserver.log}
     assert sent_models == {stored_model}
+    assert result.name == "g_eval_metric"
+    assert result.value == 0.7
+    assert result.reason == "ok"
+    assert not result.scoring_failed
