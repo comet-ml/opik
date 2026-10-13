@@ -84,6 +84,32 @@ describe("useLLMProviderModelsData", () => {
   });
 });
 
+describe("useLLMProviderModelsData OpenRouter lists", () => {
+  it("indexes the parameters and effort levels the registry sends", () => {
+    registry.data = {
+      [PROVIDER_TYPE.OPEN_ROUTER]: [
+        {
+          id: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+          label: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+          structured_output: true,
+          reasoning: false,
+          supported_parameters: ["max_tokens", "reasoning_effort"],
+          reasoning_efforts: ["high", "low"],
+        },
+      ],
+    };
+
+    renderHook(() => useLLMProviderModelsData());
+
+    expect(
+      getLatestModelFlags(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO),
+    ).toMatchObject({
+      supportedParameters: ["max_tokens", "reasoning_effort"],
+      reasoningEfforts: ["high", "low"],
+    });
+  });
+});
+
 describe("useLLMProviderModelsData model flags", () => {
   it("reads the registry's snake_case fields", () => {
     const { result } = renderHook(() => useLLMProviderModelsData());
