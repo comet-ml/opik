@@ -214,8 +214,13 @@ const PlaygroundPrompt = ({
   const handleUpdateModel = useCallback(
     (newModel: PROVIDER_MODEL_TYPE, newProvider: COMPOSED_PROVIDER_TYPE) => {
       let newConfigs: LLMPromptConfigsType;
+      // The picker reports the bare provider type ("custom-llm"), while `provider` is the row's
+      // key ("custom-llm:mock"). Compared as is, two models of one Custom LLM, Ollama or Bedrock
+      // row would look like a provider change and lose every setting.
+      const newRowProvider =
+        providerResolver(newModel, newProvider) || newProvider;
 
-      if (newProvider !== provider) {
+      if (newRowProvider !== provider) {
         // Provider changed: Reset to default configs for the new provider
         newConfigs = getDefaultConfigByProvider(newProvider, newModel);
       } else {
@@ -242,6 +247,7 @@ const PlaygroundPrompt = ({
       promptId,
       provider,
       model,
+      providerResolver,
       configs,
       setLastPickedModel,
       openAiPipelineMode,
