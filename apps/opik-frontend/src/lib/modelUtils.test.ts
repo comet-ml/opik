@@ -422,7 +422,7 @@ describe("updateProviderConfig — OpenAI", () => {
     ],
     [
       "moves a picked none to low on o4-mini",
-      PROVIDER_MODEL_TYPE.GPT_5_1,
+      PROVIDER_MODEL_TYPE.GPT_5_5,
       "none",
       PROVIDER_MODEL_TYPE.GPT_O4_MINI,
       "chat_completions_api",
@@ -430,7 +430,7 @@ describe("updateProviderConfig — OpenAI", () => {
     ],
     [
       "moves a picked none to minimal on GPT 5 Nano",
-      PROVIDER_MODEL_TYPE.GPT_5_1,
+      PROVIDER_MODEL_TYPE.GPT_5_5,
       "none",
       PROVIDER_MODEL_TYPE.GPT_5_NANO,
       "chat_completions_api",
@@ -461,7 +461,7 @@ describe("updateProviderConfig — OpenAI", () => {
       "low",
     ],
     [
-      "keeps the default high",
+      "keeps a picked high",
       PROVIDER_MODEL_TYPE.GPT_5_NANO,
       "high",
       PROVIDER_MODEL_TYPE.GPT_5_1,
@@ -469,12 +469,28 @@ describe("updateProviderConfig — OpenAI", () => {
       "high",
     ],
     [
-      "uses high for a max a Chat Completions key showed as high",
+      "uses the next model's default for a max a Chat Completions key showed as the default",
       PROVIDER_MODEL_TYPE.GPT_6_SOL,
       "max",
       PROVIDER_MODEL_TYPE.GPT_6_LUNA,
       "chat_completions_api",
-      "high",
+      "medium",
+    ],
+    [
+      "replaces GPT 5.4's default none with GPT 5.5's default",
+      PROVIDER_MODEL_TYPE.GPT_5_4,
+      "none",
+      PROVIDER_MODEL_TYPE.GPT_5_5,
+      "chat_completions_api",
+      "medium",
+    ],
+    [
+      "replaces GPT 5.5's default medium with GPT 5.4's default",
+      PROVIDER_MODEL_TYPE.GPT_5_5,
+      "medium",
+      PROVIDER_MODEL_TYPE.GPT_5_4,
+      "chat_completions_api",
+      "none",
     ],
   ])(
     "on a switch %s",
@@ -931,8 +947,12 @@ describe("Gemini thinking level", () => {
     [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO, ["low", "high"], "high"],
     [PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, AUTO_LOW_TO_HIGH, "auto"],
     [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO, AUTO_LOW_TO_HIGH, "auto"],
-    [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, AUTO_LOW_TO_HIGH, "auto"],
-    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH, AUTO_LOW_TO_HIGH, "auto"],
+    [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, AUTO_OFF_LOW_TO_HIGH, "auto"],
+    [
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      AUTO_OFF_LOW_TO_HIGH,
+      "auto",
+    ],
     [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, AUTO_OFF_LOW_TO_HIGH, "off"],
     [
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
@@ -1403,6 +1423,13 @@ describe("updateProviderConfig — Gemini thinking level", () => {
       "replaces the previous model's default with the next one's",
       PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
       "high",
+      PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
+      "medium",
+    ],
+    [
+      "does not carry Flash Lite's default minimal onto 3.5 Flash",
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+      "minimal",
       PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
       "medium",
     ],
@@ -3353,9 +3380,9 @@ describe("OpenRouter request contract", () => {
       request: { ...WITHOUT_MAX_TOKENS, maxTokens: 1000 },
     },
     {
-      model: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B_FREE,
+      model: PROVIDER_MODEL_TYPE.AMAZON_NOVA_LITE_V1,
       maxTokens: 9000,
-      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 7372 },
+      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 5120 },
     },
     {
       model: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
