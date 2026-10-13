@@ -147,6 +147,7 @@ OPENAI_DROPDOWN_EXCLUDE = [
     r"-chat-latest$",
     r"^o1-preview",
     r"^o1-mini",
+    r"^gpt-live",               # realtime voice model, 400 "not a chat model" on /v1/chat/completions
 ]
 
 GEMINI_DROPDOWN_EXCLUDE = [
@@ -166,11 +167,14 @@ GEMINI_DROPDOWN_EXCLUDE = [
     # sync sources.
     r"^gemma-(2|3)-",
     r"^gemini-gemma-",
+    r"^gemini-omni",             # video generation, 400 "only supports Interactions API" on generateContent
+    r"^lyria-",                  # music generation, answers with audio the playground cannot show
 ]
 
 VERTEXAI_DROPDOWN_EXCLUDE = [
     r"-exp-",                    # experimental
     r"-preview-\d{2}-\d{2}$",   # dated previews
+    r"/gemini-omni",             # video generation, Interactions API only
 ]
 
 
