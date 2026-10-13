@@ -441,8 +441,8 @@ def matches_any(s: str, patterns: list[str]) -> bool:
 # Source fetching
 # ─────────────────────────────────────────────────────────────────────────────
 
-# The YAML is uploaded to the CDN without review, so a malformed list counts as no list (every control stays)
-# instead of a string turning into single letters, or a partial list, that hides controls the model takes.
+# A malformed list counts as no list (every control stays) instead of a string turning into single letters,
+# or a partial list, that hides controls the model takes.
 def _string_list(value) -> list[str]:
     if isinstance(value, list) and all(isinstance(item, str) for item in value):
         return value
@@ -465,7 +465,8 @@ def fetch_openrouter_models() -> dict[str, OpenRouterCapabilities]:
                 output_modalities=_string_list((m.get("architecture") or {}).get("output_modalities")),
             )
     # A 200 with no chat models is an outage, not an answer: taken at its word, the sync would strip every
-    # model's capability lists and publish that unreviewed. Raising makes main treat it as a failed fetch.
+    # model's capability lists. Raising makes main treat it as a failed fetch, which writes nothing unless
+    # --force-regen is set.
     if not chat_models:
         raise ValueError("the model list has no chat models")
     return dict(sorted(chat_models.items()))
