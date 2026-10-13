@@ -123,6 +123,12 @@ class OpenRouterErrorMessageTest {
                 Arguments.of("no provider name", """
                         {"error":{"message":"Provider returned error","code":400,"metadata":{"raw":"Bad request"}}}""",
                         400, "Provider returned error: Bad request"),
+                Arguments.of("no provider name, other envelope message", """
+                        {"error":{"message":"Gateway rejected request","code":400,"metadata":{"raw":"Bad request"}}}""",
+                        400, "Gateway rejected request: Bad request"),
+                Arguments.of("no provider name, blank envelope message", """
+                        {"error":{"message":" ","code":400,"metadata":{"raw":"Bad request"}}}""",
+                        400, "Bad request"),
                 Arguments.of("no upstream body, no endpoints",
                         """
                                 {"error":{"message":"No endpoints found for openai/gpt-5.2-chat. Every candidate endpoint was removed during routing: Add BYOK Endpoints removed azure (the Azure endpoint is BYOK-only and you have no Azure key that can serve openai/gpt-5.2-chat-20251211).","code":404,"metadata":{"routing_funnel":[{"step":"Initial Endpoints","endpoint_count":1},{"step":"Add BYOK Endpoints","endpoint_count":0,"reason":"the Azure endpoint is BYOK-only and you have no Azure key that can serve openai/gpt-5.2-chat-20251211"}],"failed_routing_step":"Add BYOK Endpoints"}}}""",

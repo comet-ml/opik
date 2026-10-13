@@ -42,16 +42,16 @@ public class OpenAiStreamingHelper {
         // Create reusable logger for accumulating and logging the complete response
         StreamingResponseLogger logger = new StreamingResponseLogger(requestSummary, request.model());
 
-        var failedInStream = new AtomicBoolean();
+        var inStreamErrorReported = new AtomicBoolean();
 
         openAiClient.chatCompletion(request)
                 .onRawPartialResponse(rawResponse -> {
-                    if (failedInStream.get()) {
+                    if (inStreamErrorReported.get()) {
                         return;
                     }
                     var inStreamError = findInStreamError(rawResponse.rawServerSentEvent());
                     if (inStreamError.isPresent()) {
-                        failedInStream.set(true);
+                        inStreamErrorReported.set(true);
                         logger.logError(inStreamError.get());
                         handleError.accept(inStreamError.get());
                         return;
@@ -71,7 +71,7 @@ public class OpenAiStreamingHelper {
                     handleMessage.accept(response);
                 })
                 .onComplete(() -> {
-                    if (!failedInStream.get()) {
+                    if (!inStreamErrorReported.get()) {
                         handleClose.run();
                     }
                 })
@@ -83,8 +83,9 @@ public class OpenAiStreamingHelper {
     }
 
     // Once the stream has started, OpenRouter reports a failure as a plain data chunk with a top-level "error" object.
-    // langchain4j only fails on an "event: error" event, so it would parse this chunk as an empty answer. Raised the
-    // way langchain4j raises its own SSE errors, so the provider's error mapper reads the chunk like an error body.
+    // langchain4j only fails on an "event: error" event, so it would parse this chunk as an empty answer. The exception
+    // message must stay the raw chunk, as langchain4j does for "event: error": the provider's error mapper parses that
+    // message as the error body.
     private static Optional<RuntimeException> findInStreamError(ServerSentEvent event) {
         if (event == null || event.data() == null || !event.data().contains("\"error\"")) {
             return Optional.empty();
