@@ -334,6 +334,56 @@ export class OnlineEvaluationPage {
   }
 
   /**
+   * The sampling-rate control's reset arrow — `SliderInputControl`'s
+   * "restore the default" button, the one the rest of this dialog's rows also
+   * carry.
+   *
+   * Addressed as the `<button>` sibling of the input rather than by test id or
+   * accessible name because it has NEITHER: the component renders a bare
+   * `Button` wrapping a `RotateCcw` icon with no `aria-label`, and there are
+   * three other nameless buttons in this dialog, so nothing else in the subtree
+   * tells them apart. A `data-testid` on `SliderInputControl` is the right fix
+   * and belongs in the frontend; this spec cannot ship one, because the QA
+   * branch is only allowed to touch `tests_end_to_end/`.
+   *
+   * Anchored on the input's OWN test id rather than on a position, so it is not
+   * the `nth-child` kind of structural selector: it moves with the control, and
+   * it resolves to nothing — loudly — if the button ever stops being the
+   * input's sibling, instead of silently addressing a different button.
+   */
+  get samplingRateResetButton(): Locator {
+    return this.dialog.locator(
+      'xpath=.//input[@data-testid="sampling_rate-input"]/preceding-sibling::button',
+    );
+  }
+
+  /**
+   * The row holding the "Sampling rate" label, its reset arrow and its value
+   * box — the box whose height is the subject of the steady-row assertion.
+   */
+  get samplingRateControlRow(): Locator {
+    return this.dialog.locator(
+      'xpath=.//input[@data-testid="sampling_rate-input"]' +
+        '/ancestor::div[contains(@class,"justify-between")][1]',
+    );
+  }
+
+  /**
+   * Click the sampling-rate reset arrow and resolve once the input shows the
+   * default again.
+   *
+   * Deliberately asserts nothing about the dialog: whether the dialog is still
+   * open afterwards is the behaviour under test, and a POM that waited for it
+   * would absorb the failure it exists to expose.
+   */
+  async resetSamplingRate(): Promise<void> {
+    return test.step('click the sampling-rate reset arrow', async () => {
+      await this.samplingRateResetButton.click();
+      await expect(this.samplingRateInput).toHaveValue('100');
+    });
+  }
+
+  /**
    * Expand the Filtering & Sampling accordion, if it is not already open.
    * Idempotent: switching the rule TYPE re-renders the dialog body but leaves
    * the accordion open, so callers can invoke this without tracking state.

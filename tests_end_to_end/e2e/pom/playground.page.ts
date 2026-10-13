@@ -1131,6 +1131,173 @@ export class PlaygroundPage {
     );
   }
 
+  // --- The model picker's scrolling list (ArrowScrollArea) ---
+  //
+  // Everything below drives the dropdown ITSELF rather than using it to pick a
+  // known model, which is why none of it goes through `setModelForVariant`:
+  // that helper types a full model name into "Search model" before clicking, so
+  // the list it operates on is always one or two rows long and never scrolls.
+  // A spec about the scroll affordance has to filter to MANY options and leave
+  // them there.
+
+  /** Open variant `index`'s model picker and resolve once the listbox is up. */
+  async openModelPicker(index: number): Promise<void> {
+    return test.step(`open the model picker for variant ${index}`, async () => {
+      const listbox = this.page.getByRole('listbox');
+      // Same first-click-swallowed-as-hover retry as setModelForVariant.
+      await expect(async () => {
+        await this.modelPicker(index).click();
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+    });
+  }
+
+  /**
+   * Type `term` into the open picker's "Search model" box and resolve once the
+   * list holds exactly `expectedOptions` options.
+   *
+   * The count is required, not optional. Provider keys are workspace-global and
+   * the suite runs `fullyParallel`, so another spec's provider can match the
+   * same search term and quietly add its models to this list — which would send
+   * "scroll to the bottom and click the last option" into somebody else's
+   * group. Pinning the count turns that into an immediate, legible failure
+   * instead of a wrong assertion.
+   */
+  async filterModelOptions(term: string, expectedOptions: number): Promise<void> {
+    return test.step(`filter the model list to "${term}"`, async () => {
+      const listbox = this.page.getByRole('listbox');
+      await listbox.getByPlaceholder('Search model').fill(term);
+      await expect(
+        listbox.getByRole('option'),
+        `"${term}" must match exactly the ${expectedOptions} models this test seeded — ` +
+          'a different count means another provider in this workspace also matched',
+      ).toHaveCount(expectedOptions);
+    });
+  }
+
+  /** The scrolling viewport the filtered option list sits in. */
+  get modelListViewport(): Locator {
+    return this.page.getByTestId('arrow-scroll-viewport');
+  }
+
+  /**
+   * One of the list's scroll arrows.
+   *
+   * `ArrowScrollArea` MOUNTS an arrow only while that direction can still
+   * scroll, so a caller asserting an arrow is absent wants `toHaveCount(0)`
+   * rather than `toBeHidden()` — the two are different claims and only the
+   * first is the one this component makes.
+   */
+  modelListScrollArrow(direction: 'up' | 'down'): Locator {
+    return this.page.getByTestId(`scroll-${direction}-arrow`);
+  }
+
+  /** How far the option list is currently scrolled, in whole pixels. */
+  async modelListScrollTop(): Promise<number> {
+    return Math.round(await this.modelListViewport.evaluate((v) => v.scrollTop));
+  }
+
+  /** Whether the option list is longer than the box showing it. */
+  async modelListOverflows(): Promise<boolean> {
+    return this.modelListViewport.evaluate((v) => v.scrollHeight > v.clientHeight);
+  }
+
+  /** The visible height of the option list's box, in pixels. */
+  async modelListViewportHeight(): Promise<number> {
+    return this.modelListViewport.evaluate((v) => v.clientHeight);
+  }
+
+  /**
+   * Press a scroll arrow once and resolve when the list has stopped moving.
+   *
+   * The arrow scrolls with `behavior: "smooth"`, so the scrollTop right after
+   * the click is mid-animation — polled to a settled value rather than read
+   * once, and polled rather than slept on.
+   */
+  async clickModelListScrollArrow(direction: 'up' | 'down'): Promise<number> {
+    return test.step(`click the ${direction} scroll arrow`, async () => {
+      await this.modelListScrollArrow(direction).click();
+      let settled = -1;
+      await expect
+        .poll(
+          async () => {
+            const previous = settled;
+            settled = await this.modelListScrollTop();
+            return previous === settled;
+          },
+          {
+            timeout: 10_000,
+            intervals: [100, 150, 250],
+            message: 'the smooth scroll started by the arrow must come to rest',
+          },
+        )
+        .toBe(true);
+      return settled;
+    });
+  }
+
+  /**
+   * Scroll the option list to one end with the wheel, as a user would, and
+   * resolve once it is there.
+   *
+   * A wheel rather than assigning `scrollTop`: the arrows are driven by the
+   * viewport's own `onScroll`, and a programmatic assignment would be a weaker
+   * reproduction of the gesture whose effect on them is the thing under test.
+   * The delta is deliberately larger than the list so the browser clamps it at
+   * the end, which is what makes one gesture enough however long the list is.
+   */
+  async scrollModelListTo(edge: 'top' | 'bottom'): Promise<void> {
+    return test.step(`scroll the model list to the ${edge}`, async () => {
+      const overscroll = await this.modelListViewport.evaluate((v) => v.scrollHeight + 200);
+      await this.modelListViewport.hover();
+      await this.page.mouse.wheel(0, edge === 'bottom' ? overscroll : -overscroll);
+      await expect
+        .poll(
+          async () =>
+            this.modelListViewport.evaluate(
+              (v, atBottom) =>
+                atBottom
+                  ? Math.ceil(v.scrollTop) >= v.scrollHeight - v.clientHeight
+                  : v.scrollTop === 0,
+              edge === 'bottom',
+            ),
+          { timeout: 10_000, message: `the option list must come to rest at its ${edge}` },
+        )
+        .toBe(true);
+    });
+  }
+
+  /**
+   * Click one option of the open, filtered list by its exact label, and resolve
+   * once the popover has closed.
+   *
+   * Scoped to `providerGroup` for the same reason `selectModelFromProvider` is:
+   * while the search box holds text the list is flat and grouped by provider,
+   * and a workspace-global provider seeded by a parallel spec can offer a model
+   * under the same label.
+   */
+  async chooseModelOption(providerGroup: string, modelDisplayName: string): Promise<void> {
+    return test.step(`click the option "${modelDisplayName}"`, async () => {
+      assertAllowedModelDisplayName(modelDisplayName);
+      const listbox = this.page.getByRole('listbox');
+      const group = listbox.getByRole('group', { name: providerGroup, exact: true });
+      await expect(group, `the ${providerGroup} provider group`).toHaveCount(1);
+      const option = group.getByRole('option', { name: modelDisplayName, exact: true });
+      await expect(option, `"${modelDisplayName}" under ${providerGroup}`).toHaveCount(1);
+      await option.click();
+      await expect(
+        listbox,
+        'clicking an option must close the picker — a click the scroll arrow ' +
+          'swallowed instead would leave it open',
+      ).toBeHidden();
+    });
+  }
+
+  /** The model name variant `index`'s picker currently displays. */
+  async selectedModelLabel(index: number): Promise<string> {
+    return ((await this.modelPicker(index).textContent()) ?? '').trim();
+  }
+
   /**
    * A named control's label inside the open model-parameters panel.
    *
