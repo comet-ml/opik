@@ -13,6 +13,7 @@ import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.ObjectUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
@@ -230,7 +231,7 @@ public class LlmModelRegistryService {
                     log.warn("Skipping override model with missing id for provider '{}'", provider);
                     return;
                 }
-                existingIds.merge(m.id(), m, LlmModelRegistryService::inheritFlagsIfUnset);
+                existingIds.merge(m.id(), m, LlmModelRegistryService::inheritUnsetFields);
             });
 
             result.put(provider, List.copyOf(existingIds.values()));
@@ -240,15 +241,14 @@ public class LlmModelRegistryService {
     }
 
     // The remote copy is re-uploaded only when the sync script finds new models, so it can lag the classpath
-    // file a release ships. Its stale entries leave the flags out, so only an entry that sets one may change it.
-    private static LlmModelDefinition inheritFlagsIfUnset(LlmModelDefinition existing,
-            LlmModelDefinition override) {
+    // file a release ships. Its stale entries leave these fields out, so only an entry that sets one may change it.
+    // An empty list is set: it says the model takes none of the panel's parameters.
+    private static LlmModelDefinition inheritUnsetFields(LlmModelDefinition existing, LlmModelDefinition override) {
         return override.toBuilder()
-                .reasoning(Optional.ofNullable(override.reasoning()).orElse(existing.reasoning()))
-                .supportedParameters(Optional.ofNullable(override.supportedParameters())
-                        .orElse(existing.supportedParameters()))
-                .reasoningEfforts(Optional.ofNullable(override.reasoningEfforts())
-                        .orElse(existing.reasoningEfforts()))
+                .reasoning(ObjectUtils.getIfNull(override.reasoning(), existing.reasoning()))
+                .supportedParameters(
+                        ObjectUtils.getIfNull(override.supportedParameters(), existing.supportedParameters()))
+                .reasoningEfforts(ObjectUtils.getIfNull(override.reasoningEfforts(), existing.reasoningEfforts()))
                 .build();
     }
 }

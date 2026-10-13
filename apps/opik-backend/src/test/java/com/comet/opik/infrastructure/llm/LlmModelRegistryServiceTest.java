@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -208,6 +209,10 @@ class LlmModelRegistryServiceTest {
                                 .build(),
                         LlmModelDefinition.builder().id("openai/gpt-4o-mini")
                                 .supportedParameters(List.of("temperature"))
+                                .build(),
+                        LlmModelDefinition.builder().id("openai/o3")
+                                .supportedParameters(List.of("max_tokens", "reasoning"))
+                                .reasoningEfforts(List.of("high"))
                                 .build()));
 
         var overrides = Map.of(
@@ -215,6 +220,10 @@ class LlmModelRegistryServiceTest {
                         LlmModelDefinition.builder().id("openai/gpt-5-nano").label("openai/gpt-5-nano").build(),
                         LlmModelDefinition.builder().id("openai/gpt-4o-mini")
                                 .supportedParameters(List.of("temperature", "top_p"))
+                                .build(),
+                        LlmModelDefinition.builder().id("openai/o3")
+                                .supportedParameters(List.of())
+                                .reasoningEfforts(List.of())
                                 .build()));
 
         var merged = LlmModelRegistryService.merge(defaults, overrides);
@@ -226,6 +235,10 @@ class LlmModelRegistryServiceTest {
                         .build(),
                 LlmModelDefinition.builder().id("openai/gpt-4o-mini")
                         .supportedParameters(List.of("temperature", "top_p"))
+                        .build(),
+                LlmModelDefinition.builder().id("openai/o3")
+                        .supportedParameters(List.of())
+                        .reasoningEfforts(List.of())
                         .build());
     }
 
@@ -242,7 +255,7 @@ class LlmModelRegistryServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({
+    @ValueSource(strings = {
             "google/lyria-3-clip-preview",
             "google/lyria-3-pro-preview",
             "openai/gpt-audio",
@@ -263,6 +276,7 @@ class LlmModelRegistryServiceTest {
 
         assertThat(result).isPresent();
         assertThat(result.get().provider()).isEqualTo(LlmProvider.OPEN_ROUTER);
+        assertThat(result.get().model().id()).isEqualTo(model);
         assertThat(result.get().model().label()).isNull();
     }
 
