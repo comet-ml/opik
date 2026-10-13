@@ -6,6 +6,12 @@ The Traces and Threads tables also gain an **Annotation queues** column that lis
 
 [Learn more in the annotation queues docs](/evaluation/advanced/annotation_queues).
 
+## Jev as a Classifier Judge for Online Evaluation
+
+Online evaluation rules on traces and spans can now use [Jev](/integrations/typesafe), TypeSafe AI's classifier model served through OpenRouter, as the judge. Jev answers yes/no questions about a piece of text and returns a calibrated probability, which makes it a fast, low-cost option for pass/fail checks. Configure the **OpenRouter** provider, then pick `~typesafe/jev-latest` (or a pinned version such as `typesafe/jev-1.13`) in the rule's model selector. Each score's description becomes the question Jev is asked, and every score is answered in a single call.
+
+[Learn more in the online evaluation rules docs](/production/online-evaluation/rules#using-jev-as-a-classifier-judge).
+
 ## Bug Fixes & Improvements
 
 - **Prompt versions in the experiment compare view** — The Configuration tab now has a "Prompt version" row with one value per experiment, so you can see which prompt version each experiment ran. It works with "show differences only". Compare prompts and conversations in the side panel also render as formatted messages instead of a single flattened string.
