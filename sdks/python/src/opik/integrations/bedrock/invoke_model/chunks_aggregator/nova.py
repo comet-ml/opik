@@ -5,7 +5,7 @@ import logging
 from typing import Any, Dict, List
 
 from .. import usage_converters
-from .base import ChunkAggregator
+from .base import ChunkAggregator, updated_token_count
 
 LOGGER = logging.getLogger(__name__)
 
@@ -56,8 +56,12 @@ class NovaAggregator(ChunkAggregator):
                 elif "metadata" in chunk_data:
                     if "usage" in chunk_data["metadata"]:
                         reported_usage = chunk_data["metadata"]["usage"]
-                        input_tokens = reported_usage.get("inputTokens", 0)
-                        output_tokens = reported_usage.get("outputTokens", 0)
+                        input_tokens = updated_token_count(
+                            reported_usage.get("inputTokens"), input_tokens
+                        )
+                        output_tokens = updated_token_count(
+                            reported_usage.get("outputTokens"), output_tokens
+                        )
                         LOGGER.debug(
                             "Nova metadata usage: input=%d, output=%d",
                             input_tokens,
@@ -67,8 +71,12 @@ class NovaAggregator(ChunkAggregator):
                     # Use bedrock invocation metrics as authoritative source
                     metrics = chunk_data.get("amazon-bedrock-invocationMetrics", {})
                     if metrics:
-                        input_tokens = metrics.get("inputTokenCount", input_tokens)
-                        output_tokens = metrics.get("outputTokenCount", output_tokens)
+                        input_tokens = updated_token_count(
+                            metrics.get("inputTokenCount"), input_tokens
+                        )
+                        output_tokens = updated_token_count(
+                            metrics.get("outputTokenCount"), output_tokens
+                        )
                         # Only integers are taken. A field reported as null would
                         # otherwise replace a real count from metadata.usage and then
                         # be dropped, since the backend usage dict keeps only integers.
