@@ -2317,7 +2317,7 @@ describe("an OpenAI or Gemini model reached through OpenRouter", () => {
 
   // Out of the picker because OpenRouter no longer serves them on chat completions. The registry still
   // lists them, which is how the app resolves a stored prompt's id to OpenRouter.
-  const UNLISTED_OPEN_ROUTER_MODELS = [
+  const OUT_OF_PICKER_OPEN_ROUTER_MODELS = [
     PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH,
     PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW_BATCH,
     PROVIDER_MODEL_TYPE.OPENAI_GPT_5_CHAT,
@@ -2329,7 +2329,7 @@ describe("an OpenAI or Gemini model reached through OpenRouter", () => {
       ...snapshot,
       [PROVIDER_TYPE.OPEN_ROUTER]: [
         ...(snapshot[PROVIDER_TYPE.OPEN_ROUTER] ?? []),
-        ...UNLISTED_OPEN_ROUTER_MODELS.map((value) => ({
+        ...OUT_OF_PICKER_OPEN_ROUTER_MODELS.map((value) => ({
           value,
           label: value,
         })),
