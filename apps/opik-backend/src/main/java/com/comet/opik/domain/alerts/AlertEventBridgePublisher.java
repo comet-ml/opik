@@ -21,11 +21,13 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.exception.ApiCallAttemptTimeoutException;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsRequest;
@@ -33,6 +35,7 @@ import software.amazon.awssdk.services.eventbridge.model.PutEventsRequestEntry;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsResponse;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsResultEntry;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
@@ -150,8 +153,9 @@ public class AlertEventBridgePublisher {
         return switch (throwable) {
             case FailedEntryException failed -> RETRYABLE_ENTRY_ERROR_CODES.contains(failed.getErrorCode());
             case AwsServiceException aws -> aws.isThrottlingException() || aws.statusCode() >= 500;
-            // I/O failures and attempt timeouts; the client itself doesn't retry
-            case SdkClientException clientError -> true;
+            case ApiCallAttemptTimeoutException timeout -> true;
+            // Only I/O failures are transient; others, such as unresolvable credentials, would fail the same way
+            case SdkClientException clientError -> ExceptionUtils.indexOfType(clientError, IOException.class) >= 0;
             default -> false;
         };
     }

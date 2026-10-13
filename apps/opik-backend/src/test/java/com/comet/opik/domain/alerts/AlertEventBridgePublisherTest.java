@@ -11,11 +11,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.test.StepVerifier;
+import software.amazon.awssdk.core.exception.ApiCallAttemptTimeoutException;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.eventbridge.model.EventBridgeException;
@@ -24,6 +27,7 @@ import software.amazon.awssdk.services.eventbridge.model.PutEventsRequestEntry;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsResponse;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsResultEntry;
 
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -32,6 +36,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -284,10 +289,18 @@ class AlertEventBridgePublisherTest {
         verify(client, times(3)).putEvents(any(PutEventsRequest.class));
     }
 
-    @Test
-    void publishWhenClientErrorIsTransientRetriesUntilAccepted() {
+    static Stream<Arguments> transientClientErrors() {
+        return Stream.of(
+                Arguments.of(SdkClientException.create("Unable to execute HTTP request: Read timed out",
+                        new SocketTimeoutException("Read timed out"))),
+                Arguments.of(ApiCallAttemptTimeoutException.create(2_000)));
+    }
+
+    @ParameterizedTest
+    @MethodSource("transientClientErrors")
+    void publishWhenClientErrorIsTransientRetriesUntilAccepted(SdkClientException error) {
         when(client.putEvents(any(PutEventsRequest.class)))
-                .thenThrow(SdkClientException.create("Unable to execute HTTP request: Read timed out"))
+                .thenThrow(error)
                 .thenReturn(successResponse());
         var alert = alert(null);
 
@@ -297,6 +310,20 @@ class AlertEventBridgePublisherTest {
                 .verifyComplete();
 
         verify(client, times(2)).putEvents(any(PutEventsRequest.class));
+    }
+
+    @Test
+    void publishWhenClientErrorIsPermanentDoesNotRetry() {
+        when(client.putEvents(any(PutEventsRequest.class))).thenThrow(SdkClientException.create(
+                "Unable to load credentials from any of the providers in the chain"));
+        var alert = alert(null);
+
+        StepVerifier.withVirtualTime(() -> publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME,
+                AlertEventType.TRACE_COST, TRIGGERED_AT, payload(alert, List.of("event-1"), List.of())))
+                .thenAwait(RETRY_WINDOW)
+                .verifyComplete();
+
+        verify(client, times(1)).putEvents(any(PutEventsRequest.class));
     }
 
     @Test
