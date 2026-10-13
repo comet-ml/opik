@@ -151,9 +151,14 @@ def _call_fields(model: dict) -> tuple:
 
 
 def _flag(value) -> bool:
+    # Mirrors how the backend's YAML reader coerces a Boolean: "true" and non-zero numbers are true.
+    if isinstance(value, bool):
+        return value
     if isinstance(value, str):
         return value.strip().lower() == "true"
-    return value is True
+    if isinstance(value, (int, float)):
+        return value != 0
+    return False
 
 
 def smoke_models(head: dict[str, list[dict]]) -> list[ModelToCheck]:
