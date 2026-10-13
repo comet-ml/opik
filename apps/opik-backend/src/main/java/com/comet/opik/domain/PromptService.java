@@ -1019,8 +1019,7 @@ class PromptServiceImpl implements PromptService {
             } else if (trimmedCommit != null) {
                 promptVersion = promptVersionDAO.findByCommit(prompt.id(), trimmedCommit, workspaceId);
             } else {
-                List<PromptVersion> versions = promptVersionDAO.find(workspaceId, prompt.id(), 0, 1);
-                promptVersion = versions.isEmpty() ? null : versions.getFirst();
+                promptVersion = promptVersionDAO.findLatestVersion(workspaceId, prompt.id());
             }
 
             if (promptVersion == null) {
