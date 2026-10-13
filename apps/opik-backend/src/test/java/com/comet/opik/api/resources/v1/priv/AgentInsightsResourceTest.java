@@ -1067,12 +1067,12 @@ class AgentInsightsResourceTest {
         }
 
         @Test
-        @DisplayName("A caller without workspace settings permission gets 403")
+        @DisplayName("A caller without project data view permission gets 403")
         void updateIssueStatusWhenPermissionDeniedThenForbidden() {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = UUID.randomUUID().toString();
             AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
-                    WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE.getValue());
+                    WorkspaceUserPermission.PROJECT_DATA_VIEW.getValue());
 
             agentInsightsResourceClient.updateStatus(UUID.randomUUID(),
                     AgentInsightsIssueUpdate.builder()
