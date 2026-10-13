@@ -49,7 +49,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AnthropicClientGeneratorTest {
 
     private static final int DEFAULT_MAX_TOKENS = LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS;
-    private static final int THINKING_MAX_TOKENS = AnthropicClientGenerator.THINKING_JUDGE_MAX_TOKENS;
+    private static final int THINKING_MAX_TOKENS = 5_000;
 
     private final AnthropicClientGenerator generator = new AnthropicClientGenerator(new LlmProviderClientConfig());
 

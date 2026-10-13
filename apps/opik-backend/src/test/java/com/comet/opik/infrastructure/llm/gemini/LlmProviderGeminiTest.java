@@ -115,7 +115,7 @@ class LlmProviderGeminiTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("finishReasonCases")
     @DisplayName("keeps each finish reason, except an empty stream under an output limit with thinking not turned off, which gets length")
-    void addsLengthOnlyToAnEmptyStreamUnderALimit(String name, Integer maxCompletionTokens,
+    void keepsEachFinishReasonExceptAnEmptyStreamUnderALimit(String name, Integer maxCompletionTokens,
             Map<String, Object> customParameters, ChatResponse response, FinishReason expected) {
         var result = LlmProviderGemini.withCutOffWhileThinking(request(maxCompletionTokens, customParameters),
                 response);

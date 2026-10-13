@@ -24,7 +24,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     // judge's HTTP timeout (LLM_PROVIDER_CLIENT_CONNECT_TIMEOUT, 60s by default), and a timed-out call is retried
     // and billed again. Claude judges measured 90-160 tokens/s, so 5,000 tokens ends within that minute; a larger
     // default would turn a judge that runs out of tokens into one that times out several times.
-    static final int THINKING_JUDGE_MAX_TOKENS = 5_000;
+    private static final int THINKING_JUDGE_MAX_TOKENS = 5_000;
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 

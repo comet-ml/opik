@@ -108,7 +108,7 @@ public class ModelCapabilities {
      * <p>A name that is not an Anthropic id at all is left alone — see {@link #canonicalAnthropicId}.
      */
     public boolean rejectsSamplingParams(String modelName) {
-        return isAnthropicIdOutside(modelName, AnthropicModelName.samplingCapableModelIds());
+        return hasNewerAnthropicBehaviour(modelName, AnthropicModelName.samplingCapableModelIds());
     }
 
     /**
@@ -116,16 +116,16 @@ public class ModelCapabilities {
      * assumed to, for the reason given on {@link #rejectsSamplingParams}.
      */
     public boolean thinksByDefault(String modelName) {
-        return isAnthropicIdOutside(modelName, AnthropicModelName.thinkingOffByDefaultModelIds());
+        return hasNewerAnthropicBehaviour(modelName, AnthropicModelName.thinkingOffByDefaultModelIds());
     }
 
-    private boolean isAnthropicIdOutside(String modelName, Set<String> earlierBehaviourModelIds) {
+    private boolean hasNewerAnthropicBehaviour(String modelName, Set<String> modelIdsWithEarlierBehaviour) {
         var canonical = canonicalAnthropicId(modelName);
         if (canonical.isEmpty() || isLegacyGeneration(canonical)) {
             return false;
         }
         return knownAnthropicId(canonical)
-                .map(id -> !earlierBehaviourModelIds.contains(id))
+                .map(id -> !modelIdsWithEarlierBehaviour.contains(id))
                 .orElse(true);
     }
 
