@@ -22,7 +22,6 @@ import {
 } from "@/types/providers";
 import { PlaygroundPromptType } from "@/types/playground";
 import { LLM_MESSAGE_ROLE, LLMMessage, MessageContent } from "@/types/llm";
-import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 
 const userMessage = (content: MessageContent): LLMMessage => ({
   id: "message",
@@ -538,6 +537,7 @@ describe("describeRunFailure — a model the API key can't use", () => {
     opikError: null,
     pythonProxyError: null,
     errorStatus: null,
+    finishReason: null,
     actualModel: null,
     actualProvider: null,
     ...overrides,
@@ -804,6 +804,7 @@ describe("parseCompletionOutput", () => {
     providerError: null,
     opikError: null,
     pythonProxyError: null,
+    errorStatus: null,
     actualModel: null,
     actualProvider: null,
     ...overrides,
