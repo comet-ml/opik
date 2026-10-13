@@ -83,6 +83,7 @@ describe("getHeaderControls", () => {
       getHeaderControls({
         showClosed: false,
         canConfigure: true,
+        guidanceEnabled: true,
         showJobControls: false,
       }),
     ).toEqual({ settings: true, run: false });
@@ -93,9 +94,21 @@ describe("getHeaderControls", () => {
       getHeaderControls({
         showClosed: false,
         canConfigure: true,
+        guidanceEnabled: true,
         showJobControls: true,
       }),
     ).toEqual({ settings: true, run: true });
+  });
+
+  it("offers Settings for guidance without configure permission, but not Run", () => {
+    expect(
+      getHeaderControls({
+        showClosed: false,
+        canConfigure: false,
+        guidanceEnabled: true,
+        showJobControls: true,
+      }),
+    ).toEqual({ settings: true, run: false });
   });
 
   it("offers neither without configure permission or on Closed issues", () => {
@@ -104,6 +117,7 @@ describe("getHeaderControls", () => {
       getHeaderControls({
         showClosed: false,
         canConfigure: false,
+        guidanceEnabled: false,
         showJobControls: true,
       }),
     ).toEqual(none);
@@ -111,6 +125,7 @@ describe("getHeaderControls", () => {
       getHeaderControls({
         showClosed: true,
         canConfigure: true,
+        guidanceEnabled: true,
         showJobControls: true,
       }),
     ).toEqual(none);

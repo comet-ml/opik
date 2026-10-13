@@ -114,8 +114,8 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
     FeatureToggleKeys.AGENT_INSIGHTS_GUIDANCE_ENABLED,
   );
 
-  // Running / enabling / configuring diagnostics are write actions gated on
-  // workspace-settings permission; viewing issues stays open to all.
+  // Running / enabling diagnostics and changing issue status are gated on
+  // workspace-settings permission; viewing issues and editing guidance stay open to all.
   const {
     permissions: { canConfigureWorkspaceSettings: canConfigure },
   } = usePermissions();
@@ -363,6 +363,7 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
   const headerControls = getHeaderControls({
     showClosed,
     canConfigure,
+    guidanceEnabled,
     showJobControls,
   });
 
@@ -526,6 +527,7 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
             <DiagnosticsSettingsMenu
               projectId={projectId}
               enabled={isJobEnabled}
+              canConfigure={canConfigure}
               onEditGuidance={
                 guidanceEnabled ? () => setGuidanceOpen(true) : undefined
               }
@@ -550,13 +552,13 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
         )}
       </div>
       {renderBody()}
-      {guidanceEnabled && canConfigure && (
+      {guidanceEnabled && (
         <GuidanceSheet
           open={guidanceOpen}
           setOpen={setGuidanceOpen}
           projectId={projectId}
           job={job}
-          onRun={canRun ? handleRunDiagnostic : undefined}
+          onRun={canConfigure && canRun ? handleRunDiagnostic : undefined}
         />
       )}
     </PageBodyScrollContainer>
