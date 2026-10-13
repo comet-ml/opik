@@ -3,9 +3,9 @@ import api, { LLM_MODELS_REST_ENDPOINT, LLM_MODELS_KEY } from "@/api/api";
 
 export type LlmModelDefinition = {
   id: string;
-  qualifiedName?: string;
+  qualified_name?: string;
   label?: string;
-  structuredOutput: boolean;
+  structured_output: boolean;
   reasoning: boolean;
   supported_parameters?: string[];
   reasoning_efforts?: string[];
