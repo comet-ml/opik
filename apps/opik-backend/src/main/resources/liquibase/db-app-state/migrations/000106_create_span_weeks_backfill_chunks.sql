@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiagohora:000105_create_span_weeks_backfill_chunks
+--changeset thiagohora:000106_create_span_weeks_backfill_chunks
 --comment: Progress of the span weeks backfill: the span id ranges it planned, and which are done
 
 -- One row per chunk: the span ids from the UUIDv7 of Monday from_week up to, not including, that of Monday to_week
