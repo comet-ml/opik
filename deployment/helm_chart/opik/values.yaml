@@ -946,20 +946,6 @@ clickhouse:
         <clickhouse>
           <timezone>UTC</timezone>
         </clickhouse>
-      # Opt-in LWD reclaim (force-merge of quiet parts). Off by default: the first rollout
-      # force-merges every old part at once, which on a large install fills the merge pool for
-      # hours and blocks mutations (deletes). Enable only after sizing the backlog.
-      # Upgrading from a chart that set this by default (2.2.78+) drops it and rolls ClickHouse
-      # once; to keep it, uncomment this block in your own values. See the self-host Kubernetes docs.
-      # conf.d/merge_tree.xml: |
-      #   <clickhouse>
-      #     <merge_tree>
-      #       <max_bytes_to_merge_at_max_space_in_pool>429496729600</max_bytes_to_merge_at_max_space_in_pool>
-      #       <min_age_to_force_merge_seconds>604800</min_age_to_force_merge_seconds>
-      #       <min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>
-      #       <number_of_free_entries_in_pool_to_lower_max_size_of_merge>8</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
-      #     </merge_tree>
-      #   </clickhouse>
       conf.d/profiles.xml: |
         <clickhouse>
           <profiles>
@@ -1051,6 +1037,25 @@ clickhouse:
   # via `clickhouse.extraVolumeClaimTemplates` and referencing it by name in
   # `extraVolumeMounts` above.
   extraVolumes: []
+  # -- LWD reclaim: force-merge parts that stopped taking writes, so lightweight-deleted
+  # rows are physically removed. Renders conf.d/merge_tree.xml. Off by default: the first
+  # rollout makes every old part eligible at once, which on a large install fills the merge
+  # pool for hours and blocks mutations (deletes). Size the backlog first (self-host
+  # Kubernetes docs). Charts from 2.2.78 until this flag shipped it on; upgrading drops it and
+  # rolls ClickHouse once, so set `enabled: true` to keep it.
+  forceMerge:
+    enabled: false
+    # -- (int) A part quiet for this long becomes eligible for force-merge (min_age_to_force_merge_seconds).
+    minAgeSeconds: 604800
+    # -- (bool) false: per part. true: only once the whole partition is quiet, so a partition
+    # still taking writes never becomes eligible (min_age_to_force_merge_on_partition_only).
+    onPartitionOnly: false
+    # -- (int) Largest merge allowed (max_bytes_to_merge_at_max_space_in_pool). 400 GiB:
+    # month-sized parts outgrow the 150 GiB ClickHouse default.
+    maxBytesToMergeAtMaxSpaceInPool: 429496729600
+    # -- (int) Below this many free pool slots, the largest merges are throttled so they
+    # cannot starve the pool (number_of_free_entries_in_pool_to_lower_max_size_of_merge).
+    numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge: 8
   # -- Tiered storage (hot local disk -> cold S3 with a read-through cache).
   # Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold
   # disks) and provisions a per-node EBS cache volume for the S3 cache. This is

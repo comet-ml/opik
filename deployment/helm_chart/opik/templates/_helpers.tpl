@@ -57,6 +57,21 @@ component: clickhouse
 {{- end }}
 
 {{/*
+ClickHouse LWD-reclaim merge settings (conf.d/merge_tree.xml), from clickhouse.forceMerge.
+*/}}
+{{- define "opik.clickhouse.mergeTreeXml" -}}
+{{- $fm := .Values.clickhouse.forceMerge -}}
+<clickhouse>
+  <merge_tree>
+    <max_bytes_to_merge_at_max_space_in_pool>{{ int64 $fm.maxBytesToMergeAtMaxSpaceInPool }}</max_bytes_to_merge_at_max_space_in_pool>
+    <min_age_to_force_merge_seconds>{{ int64 $fm.minAgeSeconds }}</min_age_to_force_merge_seconds>
+    <min_age_to_force_merge_on_partition_only>{{ ternary 1 0 $fm.onPartitionOnly }}</min_age_to_force_merge_on_partition_only>
+    <number_of_free_entries_in_pool_to_lower_max_size_of_merge>{{ int64 $fm.numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge }}</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
+  </merge_tree>
+</clickhouse>
+{{- end }}
+
+{{/*
 ClickHouse tiered-storage server config (conf.d/storage.xml).
 
 Renders the hot -> cold storage policy per Section 5.3 of the Hyperscale plan.
