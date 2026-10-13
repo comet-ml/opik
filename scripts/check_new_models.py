@@ -60,7 +60,9 @@ SMOKE_MODELS = {
     "gemini": "gemini-2.5-flash-lite",
 }
 
-IDENTITY_FIELDS = ("id", "label")
+# The fields that change what the backend sends or where it routes a plain prompt. Others, such
+# as label (display only) or supportedParameters (v0 sends no optional params), are only counted.
+CALL_FIELDS = ("qualifiedName", "structuredOutput", "reasoning")
 
 SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_\-*.]{6,}"),
@@ -74,6 +76,12 @@ class ModelToCheck(NamedTuple):
     model_id: str
     request_model: str
     reason: str
+
+
+class UnexercisedChange(NamedTuple):
+    provider: str
+    model_id: str
+    fields: tuple[str, ...]
 
 
 class CheckResult(NamedTuple):
@@ -112,24 +120,33 @@ def request_model_name(model: dict) -> str:
     return model.get("qualifiedName") or model["id"]
 
 
-def find_models_to_check(base: dict[str, list[dict]], head: dict[str, list[dict]]) -> list[ModelToCheck]:
+def find_models_to_check(
+    base: dict[str, list[dict]], head: dict[str, list[dict]]
+) -> tuple[list[ModelToCheck], list[UnexercisedChange]]:
     to_check = []
+    unexercised = []
     for provider, models in head.items():
         base_by_id = {m["id"]: m for m in base.get(provider, [])}
         for model in models:
             before = base_by_id.get(model["id"])
             if before is None:
-                reason = "new"
-            elif _behaviour_fields(before) != _behaviour_fields(model):
-                reason = "changed"
+                to_check.append(ModelToCheck(provider, model["id"], request_model_name(model), "new"))
+            elif _call_fields(before) != _call_fields(model):
+                to_check.append(ModelToCheck(provider, model["id"], request_model_name(model), "changed"))
             else:
-                continue
-            to_check.append(ModelToCheck(provider, model["id"], request_model_name(model), reason))
-    return to_check
+                other = sorted(k for k in before.keys() | model.keys() if k != "id" and before.get(k) != model.get(k))
+                if other:
+                    unexercised.append(UnexercisedChange(provider, model["id"], tuple(other)))
+    return to_check, unexercised
 
 
-def _behaviour_fields(model: dict) -> dict:
-    return {k: v for k, v in model.items() if k not in IDENTITY_FIELDS}
+def _call_fields(model: dict) -> tuple:
+    # A missing flag and false mean the same in the bundled file, which is the bottom layer.
+    return (
+        model.get("qualifiedName") or None,
+        bool(model.get("structuredOutput")),
+        bool(model.get("reasoning")),
+    )
 
 
 def smoke_models(head: dict[str, list[dict]]) -> list[ModelToCheck]:
@@ -237,60 +254,146 @@ def _answer_note(response: requests.Response) -> str:
     return ""
 
 
-def render_report(results: list[CheckResult], mode: str, base_ref: str, call_cap: int, cut: int) -> str:
-    lines = [REPORT_MARKER, "## Live model check", ""]
-    calls = [r for r in results if r.result in ("pass", "fail", "would call")]
-    passed = sum(1 for r in calls if r.result == "pass")
-    if mode == "smoke":
+def render_report(
+    results: list[CheckResult], unexercised: list[UnexercisedChange], mode: str, base_ref: str, call_cap: int, cut: int
+) -> str:
+    lines = [REPORT_MARKER, "## Live model check", "", f"**{_headline(results, mode)}**", ""]
+    if mode == "smoke" and results:
         lines.append(
-            f"No model in `{LLM_MODELS_YAML.name}` is new or changed against `{base_ref}`, "
+            "No model is new or changed in a field this check exercises, "
             "so this run called one model per provider to check the harness."
         )
-    else:
-        lines.append(f"New or changed models in `{LLM_MODELS_YAML.name}` against `{base_ref}`.")
-    lines.append("")
+        lines.append("")
     lines.append(
-        f"**{passed} of {len(calls)} calls passed.** Each call sends one short prompt through the backend "
-        f"(`max_completion_tokens: {MAX_COMPLETION_TOKENS}`). A failure is for a person to read: "
+        f"Compared `{LLM_MODELS_YAML.name}` with `{base_ref}`. Each call sends one short prompt through the "
+        f"backend (`max_completion_tokens: {MAX_COMPLETION_TOKENS}`). A failure is for a person to read: "
         "it can be a real gap in the model data, or a provider-side limit."
     )
-    if cut:
+    providers = _provider_order(results)
+    if providers:
         lines.append("")
-        lines.append(f"The call cap of {call_cap} cut {cut} models; they are listed as not checked.")
+        for provider in providers:
+            rows = [r for r in results if r.model.provider == provider]
+            lines.append(f"- **{PROVIDER_LABELS.get(provider, provider)}:** {_counts(rows)}")
+    if cut:
+        lines += ["", f"The call cap of {call_cap} cut {cut} models; they are listed as not checked."]
 
-    for provider in _provider_order(results):
-        rows = [r for r in results if r.model.provider == provider]
-        lines += ["", f"### {PROVIDER_LABELS.get(provider, provider)}", ""]
-        lines += ["| Model | Why | Result | Seconds | Note |", "| --- | --- | --- | --- | --- |"]
-        for r in rows:
-            seconds = "" if r.seconds is None else f"{r.seconds:.1f}"
-            lines.append(f"| `{r.model.request_model}` | {r.model.reason} | {r.result} | {seconds} | {r.note} |")
+    failures = [r for r in results if r.result == "fail"]
+    if failures:
+        lines += [
+            "",
+            "### Failures",
+            "",
+            "| Provider | Model | Why | Seconds | Note |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+        for r in failures:
+            label = PROVIDER_LABELS.get(r.model.provider, r.model.provider)
+            lines.append(f"| {label} | `{r.model.request_model}` | {r.model.reason} | {r.seconds:.1f} | {r.note} |")
+
+    for provider in providers:
+        rows = sorted((r for r in results if r.model.provider == provider), key=lambda r: RESULT_ORDER[r.result])
+        shown = rows[:MAX_TABLE_ROWS]
+        lines += _details(
+            f"{PROVIDER_LABELS.get(provider, provider)}: {_models(len(rows))}",
+            ["| Model | Why | Result | Seconds | Note |", "| --- | --- | --- | --- | --- |"]
+            + [
+                f"| `{r.model.request_model}` | {r.model.reason} | {r.result} | {_seconds(r.seconds)} | {r.note} |"
+                for r in shown
+            ]
+            + ([] if len(rows) == len(shown) else ["", f"{len(rows) - len(shown)} more not shown."]),
+        )
+
+    if unexercised:
+        table = ["| Provider | Models | Fields that changed |", "| --- | --- | --- |"]
+        for provider in _provider_order(unexercised):
+            changes = [u for u in unexercised if u.provider == provider]
+            field_counts = {}
+            for change in changes:
+                for field in change.fields:
+                    field_counts[field] = field_counts.get(field, 0) + 1
+            fields = ", ".join(f"`{f}` ({n})" for f, n in sorted(field_counts.items()))
+            table.append(f"| {PROVIDER_LABELS.get(provider, provider)} | {len(changes)} | {fields} |")
+        lines += _details(
+            f"{_models(len(unexercised))} changed only in fields this check doesn't exercise",
+            [f"This check exercises {', '.join(f'`{f}`' for f in CALL_FIELDS)}.", ""] + table,
+        )
     lines.append("")
     return "\n".join(lines)
 
 
-def _provider_order(results: list[CheckResult]) -> list[str]:
+RESULT_ORDER = {"fail": 0, "pass": 1, "would call": 2, "not checked": 3}
+MAX_TABLE_ROWS = 100
+
+
+def _headline(results: list[CheckResult], mode: str) -> str:
+    calls = [r for r in results if r.result in ("pass", "fail")]
+    planned = [r for r in results if r.result == "would call"]
+    not_checked = [r for r in results if r.result == "not checked"]
+    if calls:
+        passed = sum(1 for r in calls if r.result == "pass")
+        return f"{passed} of {len(calls)} calls passed"
+    if planned:
+        return f"Dry run: {len(planned)} calls planned"
+    if mode == "smoke" or not not_checked:
+        return "No new or changed models"
+    n = len(not_checked)
+    models = "1 new or changed model is" if n == 1 else f"{n} new or changed models are"
+    if all(r.note == "no CI key" for r in not_checked):
+        return f"Nothing called: {models} on providers without a CI key"
+    return f"Nothing called: {models} not checked"
+
+
+def _counts(rows: list[CheckResult]) -> str:
+    parts = []
+    for result, word in (("pass", "passed"), ("fail", "failed"), ("would call", "to call")):
+        n = sum(1 for r in rows if r.result == result)
+        if n:
+            parts.append(f"{n} {word}")
+    reasons = {}
+    for r in rows:
+        if r.result == "not checked":
+            reasons[r.note] = reasons.get(r.note, 0) + 1
+    parts += [f"{n} not checked ({note})" for note, n in reasons.items()]
+    return ", ".join(parts)
+
+
+def _details(summary: str, body: list[str]) -> list[str]:
+    return ["", "<details>", f"<summary>{summary}</summary>", ""] + body + ["", "</details>"]
+
+
+def _models(n: int) -> str:
+    return f"{n} model" if n == 1 else f"{n} models"
+
+
+def _seconds(seconds: float | None) -> str:
+    return "" if seconds is None else f"{seconds:.1f}"
+
+
+def _provider_order(items: list) -> list[str]:
     seen = []
-    for r in results:
-        if r.model.provider not in seen:
-            seen.append(r.model.provider)
-    return seen
+    for item in items:
+        provider = item.model.provider if isinstance(item, CheckResult) else item.provider
+        if provider not in seen:
+            seen.append(provider)
+    rank = {provider: i for i, provider in enumerate(PROVIDER_LABELS)}
+    return sorted(seen, key=lambda p: rank.get(p, len(rank)))
 
 
-def plan(args: argparse.Namespace) -> tuple[list[ModelToCheck], str]:
+def plan(args: argparse.Namespace) -> tuple[list[ModelToCheck], list[UnexercisedChange], str]:
     base = load_registry_at_ref(args.base_ref)
     if args.head_ref:
         head = load_registry_at_ref(args.head_ref)
     else:
         head = load_registry_from_text((REPO_ROOT / LLM_MODELS_YAML).read_text())
-    to_check = find_models_to_check(base, head)
+    to_check, unexercised = find_models_to_check(base, head)
     if to_check:
-        return to_check, "changes"
-    return smoke_models(head), "smoke"
+        return to_check, unexercised, "changes"
+    return smoke_models(head), unexercised, "smoke"
 
 
 def run(args: argparse.Namespace) -> int:
-    to_check, mode = plan(args)
+    to_check, unexercised, mode = plan(args)
     keys = {p: os.environ.get(env, "") for p, env in PROVIDER_KEY_ENV.items()}
     secrets = [k for k in keys.values() if k]
 
@@ -318,9 +421,7 @@ def run(args: argparse.Namespace) -> int:
             print(f"  {result.result:4}  {model.provider}/{model.request_model}  {result.seconds}s  {result.note}")
             results.append(result)
 
-    provider_rank = {provider: i for i, provider in enumerate(PROVIDER_LABELS)}
-    results.sort(key=lambda r: provider_rank.get(r.model.provider, len(provider_rank)))
-    report = render_report(results, mode, args.base_ref, args.max_calls, cut)
+    report = render_report(results, unexercised, mode, args.base_ref, args.max_calls, cut)
     if args.output:
         Path(args.output).write_text(report)
     else:
