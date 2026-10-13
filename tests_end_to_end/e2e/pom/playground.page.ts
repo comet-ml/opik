@@ -1016,7 +1016,8 @@ export class PlaygroundPage {
    *
    * Which is not always the effort that is stored: `resolveEffort` masks a
    * stored value the selected model and pipeline mode do not offer, so a
-   * prompt holding `max` on a Chat Completions key reads "High" here. That gap
+   * prompt holding `max` on a Chat Completions key reads the model's default
+   * ("Medium" on gpt-5.6-sol) here. That gap
    * is the subject of opik#8682, not an artefact of this reader.
    */
   async readReasoningEffort(): Promise<string> {

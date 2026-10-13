@@ -35,6 +35,12 @@ const systemMessage = (content: MessageContent): LLMMessage => ({
   content,
 });
 
+const assistantMessage = (content: MessageContent): LLMMessage => ({
+  id: "assistant-message",
+  role: LLM_MESSAGE_ROLE.assistant,
+  content,
+});
+
 const imageMessage = userMessage([
   { type: "text", text: "Describe this" },
   { type: "image_url", image_url: { url: "https://example.com/cat.png" } },
@@ -146,6 +152,61 @@ describe("getDefaultConfigByProvider — the starting temperature", () => {
   });
 });
 
+describe("getDefaultConfigByProvider — the starting max output tokens", () => {
+  it.each<[PROVIDER_TYPE, PROVIDER_MODEL_TYPE, string]>([
+    [
+      PROVIDER_TYPE.OPEN_AI,
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      "maxCompletionTokens",
+    ],
+    [
+      PROVIDER_TYPE.OPEN_ROUTER,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      "maxTokens",
+    ],
+    [
+      PROVIDER_TYPE.ANTHROPIC,
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "maxCompletionTokens",
+    ],
+    [
+      PROVIDER_TYPE.GEMINI,
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "maxCompletionTokens",
+    ],
+    [
+      PROVIDER_TYPE.VERTEX_AI,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      "maxCompletionTokens",
+    ],
+  ])("starts a new %s prompt at 4000", (provider, model, key) => {
+    expect(
+      getDefaultConfigByProvider(provider as COMPOSED_PROVIDER_TYPE, model),
+    ).toMatchObject({ [key]: 4000 });
+  });
+
+  it.each([
+    { model: "google/gemma-2-27b-it", maxTokens: 2048 },
+    { model: "gryphe/mythomax-l2-13b", maxTokens: 3686 },
+    // OpenAI's own entry for gpt-3.5-turbo-instruct allows 4096.
+    { model: "openai/gpt-3.5-turbo-instruct", maxTokens: 3685 },
+    { model: "openai/gpt-4o-mini", maxTokens: 4000 },
+    // Only OpenAI and Azure list it, at 1024.
+    { model: "openai/computer-use-preview", maxTokens: 4000 },
+    { model: "acme/unlisted-model", maxTokens: 4000 },
+  ])(
+    "starts OpenRouter $model at $maxTokens: 4000, or OpenRouter's own lower limit for the model",
+    ({ model, maxTokens }) => {
+      expect(
+        getDefaultConfigByProvider(
+          PROVIDER_TYPE.OPEN_ROUTER as COMPOSED_PROVIDER_TYPE,
+          model as PROVIDER_MODEL_TYPE,
+        ),
+      ).toMatchObject({ maxTokens });
+    },
+  );
+});
+
 describe("getDefaultConfigByProvider — OpenAI", () => {
   const defaults = (model: PROVIDER_MODEL_TYPE) =>
     getDefaultConfigByProvider(
@@ -154,22 +215,25 @@ describe("getDefaultConfigByProvider — OpenAI", () => {
     ) as LLMOpenAIConfigsType;
 
   it.each([
-    PROVIDER_MODEL_TYPE.GPT_6_ASTRA,
-    PROVIDER_MODEL_TYPE.GPT_6_1_SOL,
-    PROVIDER_MODEL_TYPE.GPT_6_SOL,
-    PROVIDER_MODEL_TYPE.GPT_6_LUNA,
-    PROVIDER_MODEL_TYPE.GPT_5_6_LUNA,
-    PROVIDER_MODEL_TYPE.GPT_5_4,
-    PROVIDER_MODEL_TYPE.GPT_5,
-    PROVIDER_MODEL_TYPE.GPT_O1,
-  ])("seeds %s as a reasoning model with high effort", (model) => {
-    // Not 1: the request omits temperature for reasoning models anyway, and a seeded 1 would carry
-    // over to the next chat model the user picks.
-    expect(defaults(model)).toMatchObject({
-      temperature: 0,
-      reasoningEffort: "high",
-    });
-  });
+    [PROVIDER_MODEL_TYPE.GPT_6_ASTRA, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_6_1_SOL, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_6_SOL, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_6_LUNA, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_5_6_LUNA, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_5_4, "none"],
+    [PROVIDER_MODEL_TYPE.GPT_5, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_O1, "medium"],
+  ])(
+    "seeds %s as a reasoning model at OpenAI's default effort, %s",
+    (model, reasoningEffort) => {
+      // Not 1: the request omits temperature for reasoning models anyway, and a seeded 1 would carry
+      // over to the next chat model the user picks.
+      expect(defaults(model)).toMatchObject({
+        temperature: 0,
+        reasoningEffort,
+      });
+    },
+  );
 
   it("seeds o1-mini as a reasoning model without an effort", () => {
     const config = defaults(PROVIDER_MODEL_TYPE.GPT_O1_MINI);
@@ -194,8 +258,7 @@ describe("getDefaultConfigByProvider — OpenAI", () => {
 
 describe("getDefaultConfigByProvider — Anthropic thinking effort", () => {
   it.each([
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, "high"],
-    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, "medium"],
   ])("seeds %s with Anthropic's default effort, %s", (model, effort) => {
@@ -205,6 +268,19 @@ describe("getDefaultConfigByProvider — Anthropic thinking effort", () => {
     );
 
     expect(config).toMatchObject({ thinkingEffort: effort });
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+  ])("seeds %s, which thinks only when asked, with Off", (model) => {
+    const config = getDefaultConfigByProvider(
+      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+      model,
+    );
+
+    expect(config).toMatchObject({ thinkingEffort: "off" });
   });
 
   it("seeds no thinkingEffort for a model that takes none", () => {
@@ -290,6 +366,18 @@ describe("restoreMissingConfigKeys", () => {
 
     expect(restoreMissingConfigKeys(stored).configs).toMatchObject({
       temperature: 1,
+    });
+  });
+
+  it("keeps the 0 an OpenRouter prompt was stored with, which means no limit", () => {
+    const stored = prompt(
+      PROVIDER_TYPE.OPEN_ROUTER,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      { temperature: 0, topP: 1, maxTokens: 0 },
+    );
+
+    expect(restoreMissingConfigKeys(stored).configs).toMatchObject({
+      maxTokens: 0,
     });
   });
 
@@ -458,6 +546,12 @@ describe("describeRunFailure — a model the API key can't use", () => {
   const MODEL_NOT_AVAILABLE =
     "This model isn't available for your API key. Pick another model, or check which models your provider account can use.";
 
+  const forModel = (model: string) => ({
+    canTuneRequestRate: true,
+    sentMessages: [userMessage("Hi")],
+    model,
+  });
+
   const failedRun = (
     overrides: Partial<RunStreamingReturn>,
   ): RunStreamingReturn => ({
@@ -483,7 +577,7 @@ describe("describeRunFailure — a model the API key can't use", () => {
     });
 
     expect(
-      describeRunFailure(run, { model: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5 }),
+      describeRunFailure(run, forModel(PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5)),
     ).toEqual({
       message: "model: claude-mythos-5",
       hint: { action: MODEL_NOT_AVAILABLE },
@@ -511,7 +605,7 @@ describe("describeRunFailure — a model the API key can't use", () => {
     (_provider, model, opikError) => {
       const run = failedRun({ errorStatus: 404, opikError });
 
-      expect(describeRunFailure(run, { model }).hint?.action).toBe(
+      expect(describeRunFailure(run, forModel(model)).hint?.action).toBe(
         MODEL_NOT_AVAILABLE,
       );
     },
@@ -524,7 +618,7 @@ describe("describeRunFailure — a model the API key can't use", () => {
     });
 
     expect(
-      describeRunFailure(run, { model: "custom-llm/my-gateway/llama-3.3-70b" }),
+      describeRunFailure(run, forModel("custom-llm/my-gateway/llama-3.3-70b")),
     ).toEqual({
       message: "Unexpected error calling LLM provider: 404 page not found",
     });
@@ -546,7 +640,7 @@ describe("describeRunFailure — a model the API key can't use", () => {
     (_label, model, opikError) => {
       const run = failedRun({ errorStatus: 404, opikError });
 
-      expect(describeRunFailure(run, { model }).hint).toBeUndefined();
+      expect(describeRunFailure(run, forModel(model)).hint).toBeUndefined();
     },
   );
 
@@ -559,7 +653,7 @@ describe("describeRunFailure — a model the API key can't use", () => {
       });
 
       expect(
-        describeRunFailure(run, { model: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5 }),
+        describeRunFailure(run, forModel(PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5)),
       ).toEqual({ message: "Internal error while running claude-mythos-5" });
     },
   );
@@ -640,6 +734,227 @@ describe("createCompletionAnnouncer", () => {
   });
 });
 
+describe("describeRunFailure", () => {
+  const OPENAI_RATE_LIMIT =
+    "Rate limit reached for gpt-4o on requests per min (RPM): Limit 3. Please try again in 20s.";
+
+  const failedRun = (
+    overrides: Partial<RunStreamingReturn>,
+  ): RunStreamingReturn => ({
+    result: "",
+    startTime: "",
+    endTime: "",
+    usage: null,
+    choices: null,
+    finishReason: null,
+    providerError: null,
+    opikError: null,
+    pythonProxyError: null,
+    errorStatus: null,
+    actualModel: null,
+    actualProvider: null,
+    ...overrides,
+  });
+
+  const model = "gpt-4o";
+  const userPrompt = [systemMessage("Be brief."), userMessage("Hi")];
+  const withSettings = {
+    canTuneRequestRate: true,
+    sentMessages: userPrompt,
+    model,
+  };
+  const withoutSettings = {
+    canTuneRequestRate: false,
+    sentMessages: userPrompt,
+    model,
+  };
+  const systemOnly = {
+    canTuneRequestRate: true,
+    sentMessages: [systemMessage("What parameters do I send you?")],
+    model,
+  };
+
+  it("names a rate-limited run and gives the next step on its own", () => {
+    const run = failedRun({ errorStatus: 429, opikError: OPENAI_RATE_LIMIT });
+
+    expect(describeRunFailure(run, withSettings)).toEqual({
+      message: OPENAI_RATE_LIMIT,
+      hint: {
+        title: "Rate limit reached",
+        action:
+          "Wait a moment and run again. If it keeps happening, lower Max concurrent requests or raise Throttling in Model parameters.",
+      },
+    });
+  });
+
+  it("does not point at settings the model has no panel for", () => {
+    const run = failedRun({ errorStatus: 429, opikError: OPENAI_RATE_LIMIT });
+
+    expect(describeRunFailure(run, withoutSettings).hint?.action).toBe(
+      "Wait a moment and run again.",
+    );
+  });
+
+  it("tells an out-of-credits run to add credits, not to slow down", () => {
+    const run = failedRun({
+      errorStatus: 402,
+      opikError: "You exceeded your current quota.",
+    });
+
+    expect(describeRunFailure(run, withSettings)).toEqual({
+      message: "You exceeded your current quota.",
+      hint: {
+        title: "Out of credits",
+        action:
+          "Add credits or raise your quota with the provider, then run again.",
+      },
+    });
+  });
+
+  it("falls back to the title when a 429 came with no readable message", () => {
+    const run = failedRun({ errorStatus: 429 });
+
+    expect(describeRunFailure(run, withoutSettings).message).toBe(
+      "Rate limit reached",
+    );
+  });
+
+  it.each<[string, Partial<RunStreamingReturn>, string]>([
+    [
+      "a provider error",
+      { errorStatus: 401, providerError: "Invalid key" },
+      "Invalid key",
+    ],
+    [
+      "an error with no status",
+      { opikError: "Unexpected error" },
+      "Unexpected error",
+    ],
+  ])("leaves %s as the provider wrote it", (_label, overrides, expected) => {
+    expect(describeRunFailure(failedRun(overrides), withSettings)).toEqual({
+      message: expected,
+    });
+  });
+
+  it.each<[string, LLMMessage[]]>([
+    ["System-only", [systemMessage("What parameters do I send you?")]],
+    ["Assistant-only", [assistantMessage("I am a helpful assistant.")]],
+    [
+      "System + Assistant",
+      [systemMessage("Reply with ok."), assistantMessage("Sure.")],
+    ],
+  ])(
+    "suggests a User message under the provider's error when a %s prompt is rejected with a 400",
+    (_label, sentMessages) => {
+      const run = failedRun({
+        errorStatus: 400,
+        providerError: "messages: Field required",
+      });
+
+      expect(
+        describeRunFailure(run, {
+          canTuneRequestRate: true,
+          sentMessages,
+          model,
+        }),
+      ).toEqual({
+        message: "messages: Field required",
+        hint: {
+          action:
+            "This model needs a User message. Add one with + Message, then run again.",
+        },
+      });
+    },
+  );
+
+  it("keeps the rate-limit hint for a System-only prompt that hit a 429", () => {
+    const run = failedRun({ errorStatus: 429, opikError: OPENAI_RATE_LIMIT });
+
+    expect(describeRunFailure(run, systemOnly).hint?.title).toBe(
+      "Rate limit reached",
+    );
+  });
+
+  it("keeps the plain error as the message when a role suggestion comes with no provider text", () => {
+    const run = failedRun({ errorStatus: 400 });
+
+    expect(describeRunFailure(run, systemOnly).message).toBe(
+      "The AI provider returned an empty response. Please, try again.",
+    );
+  });
+
+  it.each([500, 401, null])(
+    "does not blame the missing User message for a %s status",
+    (errorStatus) => {
+      const run = failedRun({ errorStatus, opikError: "Unexpected error" });
+
+      expect(describeRunFailure(run, systemOnly)).toEqual({
+        message: "Unexpected error",
+      });
+    },
+  );
+
+  it.each<[string, LLMMessage[]]>([
+    ["System + User", userPrompt],
+    [
+      "User + Assistant + User",
+      [userMessage("Hi"), assistantMessage("Hello!"), userMessage("Say ok.")],
+    ],
+  ])(
+    "gives no hint for a 400 when a %s prompt ends with a User message",
+    (_label, sentMessages) => {
+      const run = failedRun({
+        errorStatus: 400,
+        providerError: "temperature: must be at most 1",
+      });
+
+      expect(
+        describeRunFailure(run, {
+          canTuneRequestRate: true,
+          sentMessages,
+          model,
+        }),
+      ).toEqual({ message: "temperature: must be at most 1" });
+    },
+  );
+
+  describe("a prompt that ends with an Assistant message", () => {
+    const PREFILL_ERROR =
+      "This model does not support assistant message prefill. The conversation must end with a user message.";
+    const endsWithAssistant = {
+      canTuneRequestRate: true,
+      sentMessages: [
+        userMessage("Say ok."),
+        assistantMessage("Here is my answer:"),
+      ],
+      model,
+    };
+
+    it("gets a suggestion to end with a User message under the provider's error on a 400", () => {
+      const run = failedRun({ errorStatus: 400, providerError: PREFILL_ERROR });
+
+      expect(describeRunFailure(run, endsWithAssistant)).toEqual({
+        message: PREFILL_ERROR,
+        hint: {
+          action:
+            "This model needs the last message to be a User message. Add one at the end with + Message, or remove the last Assistant message, then run again.",
+        },
+      });
+    });
+
+    it("keeps the error as written for a 500", () => {
+      const run = failedRun({
+        errorStatus: 500,
+        opikError: "Unexpected error",
+      });
+
+      expect(describeRunFailure(run, endsWithAssistant)).toEqual({
+        message: "Unexpected error",
+      });
+    });
+  });
+});
+
 describe("generateDefaultPrompt", () => {
   const generate = (initPrompt?: Partial<PlaygroundPromptType>) =>
     generateDefaultPrompt({
@@ -647,6 +962,7 @@ describe("generateDefaultPrompt", () => {
       setupProviders: [],
       providerResolver: () => "",
       modelResolver: () => "",
+      isDropdownModel: () => false,
     });
 
   it("starts with an empty system message and an empty user message", () => {

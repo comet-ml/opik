@@ -12,7 +12,7 @@ import {
 } from "@/types/automations";
 import {
   ANTHROPIC_THINKING_EFFORT_VALUES,
-  AnthropicThinkingEffort,
+  AnthropicEffortLevel,
   PROVIDER_MODEL_TYPE,
   ReasoningEffort,
   ResponsesApiOnlyReasoningEffort,
@@ -130,7 +130,7 @@ export const DEFAULT_GEMINI_CONFIGS = {
 };
 
 export const DEFAULT_OPEN_ROUTER_CONFIGS = {
-  MAX_TOKENS: 0,
+  MAX_TOKENS: 4000,
   TEMPERATURE: 0,
   TOP_P: 1,
   TOP_K: 0,
@@ -177,9 +177,16 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
       supportsSamplingParams?: boolean;
       // Must be a subset of the model's levels in EFFORT_LEVELS_BY_MODEL_ID in the backend's
       // AnthropicModelName, which answers any other level with a 400.
-      thinkingEffortOptions?: readonly AnthropicThinkingEffort[];
+      thinkingEffortOptions?: readonly AnthropicEffortLevel[];
       // Anthropic's own default, "high" unless stated.
-      defaultThinkingEffort?: AnthropicThinkingEffort;
+      defaultThinkingEffort?: AnthropicEffortLevel;
+      // The model runs without thinking unless the request asks for it, so the effort control gets
+      // an Off choice, which is its default, and the backend turns on adaptive thinking for any
+      // level. Must match THINKS_ONLY_WHEN_ASKED_MODEL_IDS in the backend's AnthropicModelName.
+      thinksOnlyWhenAsked?: boolean;
+      // The model has effort but no adaptive thinking, so the effort only changes answer length and
+      // tool use.
+      effortWithoutThinking?: boolean;
     }
   >
 > = {
@@ -192,12 +199,15 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8]: {
     thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7]: {
     thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7_20260416]: {
     thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5]: {
     thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
@@ -220,14 +230,17 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6]: {
     supportsSamplingParams: true,
     thinkingEffortOptions: ["low", "medium", "high", "max"],
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6_20260205]: {
     supportsSamplingParams: true,
     thinkingEffortOptions: ["low", "medium", "high", "max"],
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6]: {
     supportsSamplingParams: true,
     thinkingEffortOptions: ["low", "medium", "high", "max"],
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_3_7]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5]: { supportsSamplingParams: true },
@@ -236,6 +249,7 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5]: {
     supportsSamplingParams: true,
     thinkingEffortOptions: ["low", "medium", "high"],
+    effortWithoutThinking: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5]: { supportsSamplingParams: true },
@@ -256,6 +270,11 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
 // The rows pinned `reasoning: false` must equal OPENAI_NON_REASONING_MODELS in
 // scripts/sync_provider_models.py, or the registry flag the sync seeds would
 // contradict the panel (llm.test.ts enforces it; one source of truth is OPIK-8637).
+// defaultReasoningEffort is OpenAI's own default, "medium" unless stated. Each
+// model's page (developers.openai.com/api/docs/models/<id>) names it in its
+// "Reasoning.effort supports" line; the pages before gpt-5.1 name none, and the
+// SDK reference says "All models before gpt-5.1 default to medium". gpt-6-astra
+// states no default either, so it gets the fallback.
 export const OPENAI_MODEL_CAPABILITIES: Partial<
   Record<
     PROVIDER_MODEL_TYPE,
@@ -263,6 +282,7 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
       reasoning?: boolean;
       reasoningEffortOptions?: ReasoningEffort[];
       responsesApiOnlyEffortOptions?: ResponsesApiOnlyReasoningEffort[];
+      defaultReasoningEffort?: ReasoningEffort;
     }
   >
 > = {
@@ -306,24 +326,29 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.GPT_5_1]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high"],
+    defaultReasoningEffort: "none",
   },
   [PROVIDER_MODEL_TYPE.GPT_5_2]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "none",
   },
   [PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST]: { reasoning: false },
   [PROVIDER_MODEL_TYPE.GPT_5_3_CHAT_LATEST]: { reasoning: false },
   [PROVIDER_MODEL_TYPE.GPT_5_4]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "none",
   },
   [PROVIDER_MODEL_TYPE.GPT_5_4_MINI]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "none",
   },
   [PROVIDER_MODEL_TYPE.GPT_5_4_NANO]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "none",
   },
   [PROVIDER_MODEL_TYPE.GPT_5_5]: {
     reasoning: true,
@@ -362,6 +387,7 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.GPT_6_1_SOL]: {
     reasoning: true,
     reasoningEffortOptions: ["low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
   },
 };
 

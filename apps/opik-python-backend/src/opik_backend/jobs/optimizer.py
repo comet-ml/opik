@@ -130,7 +130,7 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> OptimizationJobResult:
         "config": {
             "dataset_name": "dataset-name",
             "prompt": {"messages": [{"role": "...", "content": "..."}]},
-            "llm_model": {"model": "openai/gpt-4o", "parameters": {...}},
+            "llm_model": {"model": "gpt-4o", "parameters": {...}},
             "evaluation": {"metrics": [{"type": "...", "parameters": {...}}]},
             "optimizer": {"type": "gepa", "parameters": {...}}
         },

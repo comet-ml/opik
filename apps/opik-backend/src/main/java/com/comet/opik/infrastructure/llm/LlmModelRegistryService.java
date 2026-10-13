@@ -4,6 +4,7 @@ import com.comet.opik.api.LlmModelDefinition;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -11,8 +12,11 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.core.Response;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.BooleanUtils;
+import org.apache.commons.lang3.ObjectUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
@@ -21,6 +25,7 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,13 +36,14 @@ import java.util.Optional;
 public class LlmModelRegistryService {
 
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
-    private static final TypeReference<Map<String, List<LlmModelDefinition>>> REGISTRY_TYPE = new TypeReference<>() {
+    private static final TypeReference<Map<String, List<ModelEntry>>> REGISTRY_TYPE = new TypeReference<>() {
     };
 
     private final LlmModelRegistryConfig config;
     private final Client httpClient;
     // volatile: reload() is called from the scheduled job thread
     private volatile Map<String, List<LlmModelDefinition>> registry;
+    private volatile Map<String, List<ModelEntry>> lastGoodRemote;
 
     @Inject
     public LlmModelRegistryService(@NonNull @Config OpikConfiguration configuration,
@@ -60,6 +66,26 @@ public class LlmModelRegistryService {
     }
 
     public record ModelLookupResult(@NonNull LlmProvider provider, @NonNull LlmModelDefinition model) {
+    }
+
+    // Separate from LlmModelDefinition because merge needs nullable flags: a primitive can't tell a flag a YAML
+    // layer leaves out from an explicit false.
+    @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record ModelEntry(String id, String qualifiedName, String label, Boolean structuredOutput, Boolean reasoning,
+            List<String> supportedParameters, List<String> reasoningEfforts) {
+
+        LlmModelDefinition toDefinition() {
+            return LlmModelDefinition.builder()
+                    .id(id)
+                    .qualifiedName(qualifiedName)
+                    .label(label)
+                    .structuredOutput(BooleanUtils.isTrue(structuredOutput))
+                    .reasoning(BooleanUtils.isTrue(reasoning))
+                    .supportedParameters(supportedParameters)
+                    .reasoningEfforts(reasoningEfforts)
+                    .build();
+        }
     }
 
     public Map<String, List<LlmModelDefinition>> getRegistry() {
@@ -127,47 +153,50 @@ public class LlmModelRegistryService {
             try {
                 var remote = loadRemoteResource(config.getRemoteUrl());
                 result = merge(result, remote);
+                lastGoodRemote = remote;
                 log.debug("Merged remote model registry from '{}'", config.getRemoteUrl());
             } catch (Exception e) {
-                log.warn("Failed to fetch remote model registry from '{}', using classpath defaults",
-                        config.getRemoteUrl(), e);
+                if (lastGoodRemote == null) {
+                    log.warn("Failed to fetch remote model registry from '{}', using classpath defaults",
+                            config.getRemoteUrl(), e);
+                } else {
+                    log.warn("Failed to fetch remote model registry from '{}', keeping the last good copy",
+                            config.getRemoteUrl(), e);
+                    result = merge(result, lastGoodRemote);
+                }
             }
         }
 
         var overridePath = config.getLocalOverridePath();
         if (overridePath == null || overridePath.isBlank()) {
-            return immutable(result);
+            return toRegistry(result);
         }
 
         var path = Path.of(overridePath);
         if (!Files.exists(path)) {
             log.debug("Local override file not found at '{}', using defaults only", overridePath);
-            return immutable(result);
+            return toRegistry(result);
         }
 
         try {
             var overrides = loadFileResource(path);
-            return immutable(merge(result, overrides));
+            return toRegistry(merge(result, overrides));
         } catch (Exception e) {
             log.error("Failed to load local override registry from '{}', falling back to defaults",
                     overridePath, e);
-            return immutable(result);
+            return toRegistry(result);
         }
     }
 
-    private static Map<String, List<LlmModelDefinition>> immutable(Map<String, List<LlmModelDefinition>> raw) {
-        var copy = new LinkedHashMap<String, List<LlmModelDefinition>>(raw.size());
-        raw.forEach((provider, models) -> copy.put(provider,
-                models.stream().map(LlmModelRegistryService::defaultReasoningToFalse).toList()));
-        return Map.copyOf(copy);
+    private static Map<String, List<LlmModelDefinition>> toRegistry(Map<String, List<ModelEntry>> merged) {
+        var copy = new LinkedHashMap<String, List<LlmModelDefinition>>(merged.size());
+        merged.forEach((provider, models) -> copy.put(provider,
+                models.stream().map(ModelEntry::toDefinition).toList()));
+        // Not Map.copyOf: its iteration order changes between JVM starts, and the API lists providers in it.
+        return Collections.unmodifiableMap(copy);
     }
 
-    // The API omits null fields, and the frontend types the flag as a required boolean.
-    private static LlmModelDefinition defaultReasoningToFalse(LlmModelDefinition model) {
-        return model.reasoning() == null ? model.toBuilder().reasoning(false).build() : model;
-    }
-
-    private Map<String, List<LlmModelDefinition>> loadClasspathResource(String resourceName) {
+    private Map<String, List<ModelEntry>> loadClasspathResource(String resourceName) {
         try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourceName)) {
             if (is == null) {
                 throw new IllegalStateException(
@@ -179,7 +208,7 @@ public class LlmModelRegistryService {
         }
     }
 
-    private Map<String, List<LlmModelDefinition>> loadFileResource(Path path) {
+    private Map<String, List<ModelEntry>> loadFileResource(Path path) {
         try (InputStream is = Files.newInputStream(path)) {
             return YAML_MAPPER.readValue(is, REGISTRY_TYPE);
         } catch (IOException e) {
@@ -187,7 +216,7 @@ public class LlmModelRegistryService {
         }
     }
 
-    private Map<String, List<LlmModelDefinition>> loadRemoteResource(String url) {
+    private Map<String, List<ModelEntry>> loadRemoteResource(String url) {
         var uri = URI.create(url);
         if (!"https".equals(uri.getScheme()) && !"http".equals(uri.getScheme())) {
             throw new IllegalArgumentException("Remote registry URL must use http or https scheme: " + url);
@@ -206,9 +235,9 @@ public class LlmModelRegistryService {
         }
     }
 
-    static Map<String, List<LlmModelDefinition>> merge(
-            @NonNull Map<String, List<LlmModelDefinition>> defaults,
-            @NonNull Map<String, List<LlmModelDefinition>> overrides) {
+    static Map<String, List<ModelEntry>> merge(
+            @NonNull Map<String, List<ModelEntry>> defaults,
+            @NonNull Map<String, List<ModelEntry>> overrides) {
         var result = new LinkedHashMap<>(defaults);
 
         overrides.forEach((provider, overrideModels) -> {
@@ -216,7 +245,7 @@ public class LlmModelRegistryService {
                 return;
             }
             var existing = result.getOrDefault(provider, List.of());
-            var existingIds = new LinkedHashMap<String, LlmModelDefinition>();
+            var existingIds = new LinkedHashMap<String, ModelEntry>();
             existing.forEach(m -> {
                 if (m.id() == null || m.id().isBlank()) {
                     log.warn("Skipping default model with missing id for provider '{}'", provider);
@@ -230,7 +259,7 @@ public class LlmModelRegistryService {
                     log.warn("Skipping override model with missing id for provider '{}'", provider);
                     return;
                 }
-                existingIds.merge(m.id(), m, LlmModelRegistryService::inheritReasoningFlagIfUnset);
+                existingIds.merge(m.id(), m, LlmModelRegistryService::inheritUnsetFields);
             });
 
             result.put(provider, List.copyOf(existingIds.values()));
@@ -239,12 +268,18 @@ public class LlmModelRegistryService {
         return result;
     }
 
-    // The remote copy is re-uploaded only when the sync script finds new models, so it can lag the classpath
-    // file a release ships. Its stale entries leave the flag out, so only an entry that sets it may change it.
-    private static LlmModelDefinition inheritReasoningFlagIfUnset(LlmModelDefinition existing,
-            LlmModelDefinition override) {
-        return override.reasoning() == null
-                ? override.toBuilder().reasoning(existing.reasoning()).build()
-                : override;
+    // An upper layer can lag the classpath file a release ships (the remote copy) or set only a few fields
+    // (a local override). A field it leaves out keeps the lower layer's value, so only an entry that sets a
+    // field may change it.
+    private static ModelEntry inheritUnsetFields(ModelEntry existing, ModelEntry override) {
+        return override.toBuilder()
+                .qualifiedName(ObjectUtils.getIfNull(override.qualifiedName(), existing.qualifiedName()))
+                .label(ObjectUtils.getIfNull(override.label(), existing.label()))
+                .structuredOutput(ObjectUtils.getIfNull(override.structuredOutput(), existing.structuredOutput()))
+                .reasoning(ObjectUtils.getIfNull(override.reasoning(), existing.reasoning()))
+                .supportedParameters(
+                        ObjectUtils.getIfNull(override.supportedParameters(), existing.supportedParameters()))
+                .reasoningEfforts(ObjectUtils.getIfNull(override.reasoningEfforts(), existing.reasoningEfforts()))
+                .build();
     }
 }
