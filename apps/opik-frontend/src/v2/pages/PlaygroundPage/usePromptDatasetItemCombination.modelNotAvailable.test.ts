@@ -46,6 +46,7 @@ const notFoundRun: RunStreamingReturn = {
   endTime: "",
   usage: null,
   choices: null,
+  finishReason: null,
   providerError: "model: claude-mythos-5",
   opikError: null,
   pythonProxyError: null,
