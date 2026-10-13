@@ -278,27 +278,34 @@ describe("ArrowScrollArea", () => {
       expect(viewport.scrollTop).toBe(MAX_SCROLL_TOP - 0.5);
     });
 
-    it("resumes when the list grows under an arrow held at the end", () => {
-      vi.useFakeTimers();
-      const fireResize = stubResizeObserver();
-      stubHeights(CONTENT_HEIGHT);
-      const viewport = renderArea();
+    it.each([
+      { when: "after the end was seen", isEndSeen: true },
+      { when: "before the end was seen", isEndSeen: false },
+    ])(
+      "resumes when the list grows under an arrow held at the end, $when",
+      ({ isEndSeen }) => {
+        vi.useFakeTimers();
+        const fireResize = stubResizeObserver();
+        stubHeights(CONTENT_HEIGHT);
+        const viewport = renderArea();
 
-      fireEvent.pointerDown(downArrow()!);
-      act(() => {
-        vi.advanceTimersByTime(5000);
-      });
-      // A browser fires this scroll event as the hold reaches the end; happy-dom does not.
-      fireEvent.scroll(viewport);
-      const scrollTopAtEnd = viewport.scrollTop;
-      stubHeights(2 * CONTENT_HEIGHT);
-      act(() => fireResize());
-      act(() => {
-        vi.advanceTimersByTime(1000);
-      });
+        fireEvent.pointerDown(downArrow()!);
+        act(() => {
+          vi.advanceTimersByTime(5000);
+        });
+        // A browser fires this scroll event as the hold reaches the end, unless the list grows
+        // first; happy-dom never fires it.
+        if (isEndSeen) fireEvent.scroll(viewport);
+        const scrollTopAtEnd = viewport.scrollTop;
+        stubHeights(2 * CONTENT_HEIGHT);
+        act(() => fireResize());
+        act(() => {
+          vi.advanceTimersByTime(1000);
+        });
 
-      expect(viewport.scrollTop).toBeGreaterThan(scrollTopAtEnd);
-    });
+        expect(viewport.scrollTop).toBeGreaterThan(scrollTopAtEnd);
+      },
+    );
 
     it("keeps a held arrow at the end of the list until release", () => {
       stubHeights(CONTENT_HEIGHT);

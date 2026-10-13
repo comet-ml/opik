@@ -86,28 +86,24 @@ const ArrowScrollArea: React.FC<ArrowScrollAreaProps> = ({
     return () => observer.disconnect();
   }, [updateArrows]);
 
-  // The hold loop stops requesting frames at the end of the list, so it is
-  // restarted from here when the list grows under a still-held arrow.
-  const canScrollHeldDirection =
-    heldDirection === "up" ? canScrollUp : canScrollDown;
-
   React.useEffect(() => {
     const viewport = viewportRef.current;
-    if (!heldDirection || !canScrollHeldDirection || !viewport) return;
+    if (!heldDirection || !viewport) return;
 
     let frame = 0;
     let previousTime: number | undefined;
+    // The loop keeps running at the end of the list so that it moves on when the
+    // list grows under the held arrow. Restarting it from the arrow state instead
+    // misses growth that lands before a scroll event reports the end.
     const scrollWhileHeld = (time: number) => {
-      if (previousTime !== undefined) {
+      if (previousTime !== undefined && canScroll(viewport, heldDirection)) {
         viewport.scrollTop +=
           SCROLL_SIGN[heldDirection] *
           HOLD_SCROLL_PX_PER_MS *
           (time - previousTime);
       }
       previousTime = time;
-      if (canScroll(viewport, heldDirection)) {
-        frame = requestAnimationFrame(scrollWhileHeld);
-      }
+      frame = requestAnimationFrame(scrollWhileHeld);
     };
     const holdTimer = window.setTimeout(() => {
       frame = requestAnimationFrame(scrollWhileHeld);
@@ -117,7 +113,7 @@ const ArrowScrollArea: React.FC<ArrowScrollAreaProps> = ({
       window.clearTimeout(holdTimer);
       cancelAnimationFrame(frame);
     };
-  }, [heldDirection, canScrollHeldDirection]);
+  }, [heldDirection]);
 
   const press = (direction: ScrollDirection) => {
     viewportRef.current?.scrollBy({
