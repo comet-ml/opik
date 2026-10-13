@@ -3,6 +3,8 @@ package com.comet.opik.infrastructure.llm;
 import com.comet.opik.api.LlmModelDefinition;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService.ModelEntry;
+import com.comet.opik.utils.JsonUtils;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.client.WebTarget;
@@ -179,15 +181,15 @@ class LlmModelRegistryServiceTest {
     void mergeOverridesExistingAndAddsNew() {
         var defaults = Map.of(
                 "openai", List.of(
-                        LlmModelDefinition.builder().id("gpt-4o").structuredOutput(true).build(),
-                        LlmModelDefinition.builder().id("gpt-3.5-turbo").build()));
+                        ModelEntry.builder().id("gpt-4o").structuredOutput(true).build(),
+                        ModelEntry.builder().id("gpt-3.5-turbo").build()));
 
         var overrides = Map.of(
                 "openai", List.of(
-                        LlmModelDefinition.builder().id("gpt-4o").structuredOutput(false).build(),
-                        LlmModelDefinition.builder().id("new-model").structuredOutput(true).build()),
+                        ModelEntry.builder().id("gpt-4o").structuredOutput(false).build(),
+                        ModelEntry.builder().id("new-model").structuredOutput(true).build()),
                 "anthropic", List.of(
-                        LlmModelDefinition.builder().id("claude-4").build()));
+                        ModelEntry.builder().id("claude-4").build()));
 
         var merged = LlmModelRegistryService.merge(defaults, overrides);
 
@@ -257,21 +259,21 @@ class LlmModelRegistryServiceTest {
     @Test
     void mergeKeepsTheLabelAndQualifiedNameAnOverrideLeavesOut() {
         var defaults = Map.of(
-                "vertex-ai", List.of(LlmModelDefinition.builder()
+                "vertex-ai", List.of(ModelEntry.builder()
                         .id("gemini-2.0-flash-001")
                         .qualifiedName("vertex_ai/gemini-2.0-flash-001")
                         .label("Gemini 2.0 Flash")
                         .build()));
 
         var overrides = Map.of(
-                "vertex-ai", List.of(LlmModelDefinition.builder()
+                "vertex-ai", List.of(ModelEntry.builder()
                         .id("gemini-2.0-flash-001")
                         .structuredOutput(true)
                         .build()));
 
         var merged = LlmModelRegistryService.merge(defaults, overrides);
 
-        assertThat(merged.get("vertex-ai")).containsExactly(LlmModelDefinition.builder()
+        assertThat(merged.get("vertex-ai")).containsExactly(ModelEntry.builder()
                 .id("gemini-2.0-flash-001")
                 .qualifiedName("vertex_ai/gemini-2.0-flash-001")
                 .label("Gemini 2.0 Flash")
@@ -294,6 +296,18 @@ class LlmModelRegistryServiceTest {
         var service = new LlmModelRegistryService(config);
 
         assertThat(service.getRegistry().keySet()).containsExactly("openai", "anthropic", "vertex-ai", "gemini");
+    }
+
+    @Test
+    void registryJsonHasBothFlagsWhenTheYamlLeavesThemOut() {
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+
+        var service = new LlmModelRegistryService(config);
+
+        assertThat(JsonUtils.valueToTree(service.getRegistry().get("openai").get(1)))
+                .isEqualTo(JsonUtils.getJsonNodeFromString("""
+                        {"id": "gpt-3.5-turbo", "structured_output": false, "reasoning": false}"""));
     }
 
     @Test
