@@ -18,6 +18,7 @@ import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -101,7 +102,11 @@ public class AlertJob extends Job {
                                     eventType,
                                     bucketData.eventIds(),
                                     bucketData.payloads(),
-                                    bucketData.userNames()))
+                                    bucketData.userNames(),
+                                    // firstSeen is fixed for the bucket's life, so reprocessing keeps the key
+                                    "%s:%s:%d".formatted(alertId, eventType.getValue(), bucketData.firstSeen()),
+                                    // When the bucket became ready to fire
+                                    Instant.ofEpochMilli(bucketData.firstSeen() + bucketData.windowSize())))
                             .then(bucketService.deleteBucket(bucketKey));
                 })
                 .doOnSuccess(__ -> log.info("Successfully processed and deleted bucket: '{}'", bucketKey))
@@ -119,6 +124,8 @@ public class AlertJob extends Job {
      * @param eventType the event type
      * @param eventIds the set of aggregated event IDs
      * @param payloads the set of aggregated event payloads
+     * @param triggerKey identifies the bucket's trigger across reprocessing
+     * @param triggeredAt when the bucket became ready to fire
      * @return Mono that completes when the webhook is sent
      */
     private Mono<Void> processAlertBucket(
@@ -128,7 +135,9 @@ public class AlertJob extends Job {
             @NonNull AlertEventType eventType,
             @NonNull List<String> eventIds,
             @NonNull List<String> payloads,
-            @NonNull List<String> userNames) {
+            @NonNull List<String> userNames,
+            @NonNull String triggerKey,
+            @NonNull Instant triggeredAt) {
 
         log.info(
                 "Processing alert bucket: alertId='{}', workspaceId='{}', workspaceName='{}', eventType='{}', eventCount='{}', payloadCount='{}'",
@@ -136,7 +145,7 @@ public class AlertJob extends Job {
 
         return Mono.fromCallable(() -> alertService.getByIdAndWorkspace(alertId, workspaceId))
                 .flatMap(alert -> alertWebhookSender.createAndSendWebhook(alert, workspaceId, workspaceName, eventType,
-                        eventIds, payloads, userNames))
+                        eventIds, payloads, userNames, triggerKey, triggeredAt))
                 .doOnSuccess(
                         __ -> log.info("Successfully sent webhook for alert '{}' with '{}' events and '{}' payloads",
                                 alertId, eventIds.size(), payloads.size()))

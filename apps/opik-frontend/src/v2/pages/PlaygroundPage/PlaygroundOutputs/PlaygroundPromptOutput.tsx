@@ -32,6 +32,7 @@ const PlaygroundPromptOutput = ({
   const output = useOutputByPromptDatasetItemId(promptId);
   const value = output?.value ?? null;
   const error = output?.error;
+  const errorHint = output?.errorHint;
   const isLoading = output?.isLoading ?? false;
   const stale = output?.stale ?? false;
   const usage = output?.usage;
@@ -49,7 +50,9 @@ const PlaygroundPromptOutput = ({
     }
 
     if (error) {
-      return <PlaygroundOutputError message={error} stale={stale} />;
+      return (
+        <PlaygroundOutputError message={error} hint={errorHint} stale={stale} />
+      );
     }
 
     return (
