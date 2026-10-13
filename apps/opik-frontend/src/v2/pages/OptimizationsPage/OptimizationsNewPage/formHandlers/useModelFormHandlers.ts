@@ -9,7 +9,7 @@ import {
   getOptimizationDefaultConfigByProvider,
 } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
 
-const THINKING_AMOUNT_KEYS = [
+const THINKING_LEVEL_KEYS = [
   "reasoningEffort",
   "thinkingEffort",
   "thinkingLevel",
@@ -39,7 +39,7 @@ export const useModelFormHandlers = (
       >;
       const pickedThinkingSettings = sameProvider
         ? Object.fromEntries(
-            THINKING_AMOUNT_KEYS.filter(
+            THINKING_LEVEL_KEYS.filter(
               (key) => previousConfig[key] !== undefined,
             ).map((key) => [key, previousConfig[key]]),
           )
