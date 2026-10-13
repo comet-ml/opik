@@ -93,7 +93,7 @@ public class AgentInsightsJobsResource {
             @ApiResponse(responseCode = "404", description = "Project not found, or guidance not enabled", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "422", description = "Guidance missing or over the length limit", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    @RequiredPermissions(WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE)
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response updateGuidance(@PathParam("projectId") @NotNull UUID projectId,
             @Valid @NotNull AgentInsightsGuidanceUpdate update) {
         AgentInsightsJob job = service.updateGuidance(projectId, update.guidance());
