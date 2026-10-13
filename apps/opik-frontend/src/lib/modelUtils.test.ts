@@ -2961,7 +2961,7 @@ describe("Anthropic request contract", () => {
     });
   });
 
-  it("sends Sonnet 4.6 at Off its temperature alone and no effort", () => {
+  it("sends Sonnet 4.6 with thinking off using temperature only and no effort", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
         ...FULL_CONFIG,
@@ -2998,7 +2998,7 @@ describe("Anthropic request contract", () => {
     },
   );
 
-  it("never reads a model that thinks by default as asking for thinking", () => {
+  it("does not read an effort level on a model that thinks by default as asking for thinking", () => {
     expect(
       isAnthropicThinkingRequested(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, {
         thinkingEffort: "low",

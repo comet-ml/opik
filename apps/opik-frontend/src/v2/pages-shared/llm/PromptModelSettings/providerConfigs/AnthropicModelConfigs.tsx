@@ -19,6 +19,7 @@ import {
   getAnthropicThinkingEffortOptions,
   getMaxCompletionTokensRange,
   hasEffortWithoutThinking,
+  hasThinkingInCustomParameters,
   isAnthropicThinkingRequested,
   resolveEffort,
   resolveMaxCompletionTokens,
@@ -39,6 +40,19 @@ const getEffortDescription = (model?: PROVIDER_MODEL_TYPE | "") => {
     return "Off answers without thinking. At any other level, Claude can think before it answers and decides how much; at lower levels it often answers straight away. Effort also controls how many tokens Claude spends on the whole response. Lower effort is faster and cheaper; higher effort is more thorough.";
   }
   return "Controls how many tokens Claude spends on the whole response, thinking included. Lower effort is faster and cheaper; higher effort is more thorough.";
+};
+
+const getSamplingOffNote = (
+  withTopP: boolean,
+  thinkingFromCustomParameters: boolean,
+) => {
+  const params = withTopP ? "Temperature and Top P are" : "Temperature is";
+  if (thinkingFromCustomParameters) {
+    return `${params} off because the custom parameters turn thinking on.`;
+  }
+  return `${params} off while Claude can think. Set Thinking effort to Off to use ${
+    withTopP ? "them" : "it"
+  }.`;
 };
 
 interface AnthropicModelConfigsProps {
@@ -86,9 +100,10 @@ const AnthropicModelConfigs = ({
 
       {samplingOffWhileThinking && (
         <p className="comet-body-xs text-muted-slate">
-          {supports("topP")
-            ? "Temperature and Top P are off while Claude can think. Set Thinking effort to Off to use them."
-            : "Temperature is off while Claude can think. Set Thinking effort to Off to use it."}
+          {getSamplingOffNote(
+            supports("topP"),
+            hasThinkingInCustomParameters(configs),
+          )}
         </p>
       )}
 

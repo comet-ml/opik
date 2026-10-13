@@ -1105,14 +1105,30 @@ export const resolveMaxCompletionTokens = (
   return Math.min(Math.max(Math.floor(requested), min), max);
 };
 
-// The backend turns on adaptive thinking for any level on these models, and Anthropic then refuses
-// the sampling pair: "temperature may only be set to 1 when thinking is enabled".
+export const hasThinkingInCustomParameters = (configs: EffortParams): boolean =>
+  asRecord(configs.custom_parameters).thinking != null;
+
+// Mirrors the backend, which leaves the sampling pair out whenever thinking is on, since Anthropic
+// refuses it then: "temperature may only be set to 1 when thinking is enabled". A thinking block in
+// custom_parameters decides on its own, "disabled" included, even beside an effort level. Only
+// without one does a level on a model that thinks only when asked turn on adaptive thinking.
 export const isAnthropicThinkingRequested = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: EffortParams,
-): boolean =>
-  thinksOnlyWhenAsked(model) &&
-  resolveEffort(model, configs).thinkingEffort !== "off";
+): boolean => {
+  if (hasThinkingInCustomParameters(configs)) {
+    const type = asRecord(asRecord(configs.custom_parameters).thinking).type;
+    return (
+      typeof type === "string" &&
+      type.trim() !== "" &&
+      type.toLowerCase() !== "disabled"
+    );
+  }
+  return (
+    thinksOnlyWhenAsked(model) &&
+    resolveEffort(model, configs).thinkingEffort !== "off"
+  );
+};
 
 // Last-mile request hardening, complementary to updateProviderConfig: this
 // layer doesn't trust upstream and keeps the payload valid for stale state

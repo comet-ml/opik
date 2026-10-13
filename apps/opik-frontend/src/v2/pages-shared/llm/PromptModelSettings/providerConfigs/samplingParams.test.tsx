@@ -340,6 +340,48 @@ describe("Anthropic thinking effort", () => {
     expect(screen.queryByText(BOTH_OFF_NOTE)).not.toBeInTheDocument();
   });
 
+  it("names the custom parameters when their thinking block turns thinking on at Off", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={
+          {
+            ...ANTHROPIC_CONFIG,
+            thinkingEffort: "off",
+            custom_parameters: { thinking: { type: "adaptive" } },
+          } as LLMAnthropicConfigsType
+        }
+        model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Temperature and Top P are off because the custom parameters turn thinking on.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the temperature beside a level when the custom parameters disable thinking", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={
+          {
+            ...ANTHROPIC_CONFIG,
+            thinkingEffort: "high",
+            custom_parameters: { thinking: { type: "disabled" } },
+          } as LLMAnthropicConfigsType
+        }
+        model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("temperature-input")).toHaveValue("0.4");
+    expect(screen.queryByText(BOTH_OFF_NOTE)).not.toBeInTheDocument();
+  });
+
   it("adds no note on Opus 4.7, which takes no sampling params at any effort", () => {
     renderPanel(
       <AnthropicModelConfigs
