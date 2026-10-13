@@ -40,6 +40,12 @@ analytics:
     endpoint: ${POSTHOG_API_HOST}
 theme:
   page-actions: toolbar
+# Fern's docs-search MCP server, off. Its "connect to the MCP server" line tops
+# every page served to agents and llms.txt, and agents asked to install Opik's
+# MCP server registered it instead.
+page-actions:
+  options:
+    mcp: false
 
 
 layout:

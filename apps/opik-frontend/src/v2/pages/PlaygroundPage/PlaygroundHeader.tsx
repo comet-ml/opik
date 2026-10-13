@@ -8,7 +8,7 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import RunExperimentControl from "@/v2/pages/PlaygroundPage/RunExperimentControl";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { hasUnsupportedMedia } from "@/lib/playground";
+import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
 import { LOGS_SOURCE } from "@/types/traces";
 import { useActiveProjectId } from "@/store/AppStore";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
@@ -136,24 +136,21 @@ const PlaygroundHeader = ({
     [promptMap],
   );
 
-  const allMessagesNotEmpty = useMemo(
-    () =>
-      Object.values(promptMap).every((p) =>
-        p.messages.every((m) => m.content?.length > 0),
-      ),
+  const allMessagesRunnable = useMemo(
+    () => Object.values(promptMap).every((p) => canRunMessages(p.messages)),
     [promptMap],
   );
 
   const isRunDisabled =
     !allPromptsHaveModels ||
-    !allMessagesNotEmpty ||
+    !allMessagesRunnable ||
     hasMediaCompatibilityIssues ||
     (isExperimentMode && !datasetName);
 
   const runDisabledReason = useMemo(() => {
     if (!allPromptsHaveModels)
       return "Please select an LLM model for your prompts";
-    if (!allMessagesNotEmpty)
+    if (!allMessagesRunnable)
       return "Some messages are empty. Please add some text to proceed";
     if (hasMediaCompatibilityIssues)
       return "Some prompts contain media but the selected model doesn't support media input";
@@ -162,7 +159,7 @@ const PlaygroundHeader = ({
     return null;
   }, [
     allPromptsHaveModels,
-    allMessagesNotEmpty,
+    allMessagesRunnable,
     hasMediaCompatibilityIssues,
     isExperimentMode,
     datasetName,

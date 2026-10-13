@@ -8771,6 +8771,13 @@ paths:
           description: "Filter traces created up to this time (ISO-8601 format). If\
             \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
+      - name: annotation_queue_id
+        in: query
+        schema:
+          type: string
+          description: Compute stats over the traces belonging to this annotation
+            queue and scope feedback scores to it
+          format: uuid
       responses:
         "200":
           description: Trace stats resource

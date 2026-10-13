@@ -108,12 +108,24 @@ public class ModelCapabilities {
      * <p>A name that is not an Anthropic id at all is left alone — see {@link #canonicalAnthropicId}.
      */
     public boolean rejectsSamplingParams(String modelName) {
+        return isAnthropicIdOutside(modelName, AnthropicModelName.samplingCapableModelIds());
+    }
+
+    /**
+     * Whether the model thinks when a request does not mention thinking. An Anthropic id we cannot place is
+     * assumed to, for the reason given on {@link #rejectsSamplingParams}.
+     */
+    public boolean thinksByDefault(String modelName) {
+        return isAnthropicIdOutside(modelName, AnthropicModelName.thinkingOffByDefaultModelIds());
+    }
+
+    private boolean isAnthropicIdOutside(String modelName, Set<String> earlierBehaviourModelIds) {
         var canonical = canonicalAnthropicId(modelName);
         if (canonical.isEmpty() || isLegacyGeneration(canonical)) {
             return false;
         }
         return knownAnthropicId(canonical)
-                .map(id -> !AnthropicModelName.samplingCapableModelIds().contains(id))
+                .map(id -> !earlierBehaviourModelIds.contains(id))
                 .orElse(true);
     }
 

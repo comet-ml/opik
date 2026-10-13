@@ -138,6 +138,21 @@ describe("PlaygroundRunButton", () => {
 
       expect(getRunButton()).toBeEnabled();
     });
+
+    it("should enable Run when the system message is left empty", () => {
+      const userPrompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, "Say hello");
+      prompt = {
+        ...userPrompt,
+        messages: [
+          { id: "system", role: LLM_MESSAGE_ROLE.system, content: "" },
+          ...userPrompt.messages,
+        ],
+      };
+
+      renderButton();
+
+      expect(getRunButton()).toBeEnabled();
+    });
   });
 
   describe("reason priority", () => {

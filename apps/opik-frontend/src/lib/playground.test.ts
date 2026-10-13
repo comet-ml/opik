@@ -1,10 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  canRunMessages,
   createCompletionAnnouncer,
+  describeRunFailure,
+  dropEmptySystemMessages,
+  generateDefaultPrompt,
   getDefaultConfigByProvider,
   hasUnsupportedMedia,
+  isEmptyMessage,
+  OUTPUT_LIMIT_REACHED_MESSAGE,
+  parseCompletionOutput,
   restoreMissingConfigKeys,
 } from "@/lib/playground";
+import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMAnthropicConfigsType,
@@ -14,10 +22,17 @@ import {
 } from "@/types/providers";
 import { PlaygroundPromptType } from "@/types/playground";
 import { LLM_MESSAGE_ROLE, LLMMessage, MessageContent } from "@/types/llm";
+import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 
 const userMessage = (content: MessageContent): LLMMessage => ({
   id: "message",
   role: LLM_MESSAGE_ROLE.user,
+  content,
+});
+
+const systemMessage = (content: MessageContent): LLMMessage => ({
+  id: "system-message",
+  role: LLM_MESSAGE_ROLE.system,
   content,
 });
 
@@ -115,6 +130,20 @@ describe("getDefaultConfigByProvider — Anthropic", () => {
     expect(config.temperature).toBeUndefined();
     expect(config.topP).toBeUndefined();
     expect(config.maxCompletionTokens).toBe(4000);
+  });
+});
+
+describe("getDefaultConfigByProvider — the starting temperature", () => {
+  it.each<[PROVIDER_TYPE, PROVIDER_MODEL_TYPE]>([
+    [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI],
+    [PROVIDER_TYPE.OPEN_ROUTER, PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI],
+    [PROVIDER_TYPE.ANTHROPIC, PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6],
+    [PROVIDER_TYPE.GEMINI, PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH],
+    [PROVIDER_TYPE.VERTEX_AI, PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH],
+  ])("starts a new %s prompt at 0", (provider, model) => {
+    expect(
+      getDefaultConfigByProvider(provider as COMPOSED_PROVIDER_TYPE, model),
+    ).toMatchObject({ temperature: 0 });
   });
 });
 
@@ -252,6 +281,39 @@ describe("restoreMissingConfigKeys", () => {
 
     expect(restored.configs).toMatchObject({ minP: 0, topA: 0 });
   });
+
+  it("keeps the temperature an OpenRouter prompt was stored with", () => {
+    const stored = prompt(
+      PROVIDER_TYPE.OPEN_ROUTER,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      { temperature: 1, topP: 1, maxTokens: 0 },
+    );
+
+    expect(restoreMissingConfigKeys(stored).configs).toMatchObject({
+      temperature: 1,
+    });
+  });
+
+  it.each([
+    { stored: "no temperature", configs: { topP: 1, maxTokens: 0 } },
+    {
+      stored: "a null temperature",
+      configs: { temperature: null, topP: 1, maxTokens: 0 },
+    },
+  ])(
+    "gives an OpenRouter prompt stored with $stored the new default 0",
+    ({ configs }) => {
+      const stored = prompt(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+        configs,
+      );
+
+      expect(restoreMissingConfigKeys(stored).configs).toMatchObject({
+        temperature: 0,
+      });
+    },
+  );
 
   it("leaves a cleared Anthropic temperature cleared when Top P is the live half", () => {
     // Restoring temperature here would silently override the user's Top P: with both set the
@@ -393,6 +455,116 @@ describe("restoreMissingConfigKeys", () => {
   });
 });
 
+describe("describeRunFailure — a model the API key can't use", () => {
+  const MODEL_NOT_AVAILABLE =
+    "This model isn't available for your API key. Pick another model, or check which models your provider account can use.";
+
+  const failedRun = (
+    overrides: Partial<RunStreamingReturn>,
+  ): RunStreamingReturn => ({
+    result: "",
+    startTime: "",
+    endTime: "",
+    usage: null,
+    choices: null,
+    providerError: null,
+    opikError: null,
+    pythonProxyError: null,
+    errorStatus: null,
+    actualModel: null,
+    actualProvider: null,
+    ...overrides,
+  });
+
+  it("keeps Anthropic's error and suggests another model", () => {
+    const run = failedRun({
+      errorStatus: 404,
+      providerError: "model: claude-mythos-5",
+    });
+
+    expect(
+      describeRunFailure(run, { model: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5 }),
+    ).toEqual({
+      message: "model: claude-mythos-5",
+      hint: { action: MODEL_NOT_AVAILABLE },
+    });
+  });
+
+  it.each([
+    [
+      "OpenAI",
+      "gpt-5.5-pro",
+      "The model `gpt-5.5-pro` does not exist or you do not have access to it.",
+    ],
+    [
+      "OpenRouter",
+      "openai/gpt-4-32k",
+      "No endpoints found for openai/gpt-4-32k.",
+    ],
+    [
+      "Vertex AI",
+      "vertex_ai/gemini-2.5-flash",
+      "Publisher Model `projects/p/locations/us-central1/publishers/google/models/gemini-2.5-flash` was not found or your project does not have access to it.",
+    ],
+  ])(
+    "suggests another model when %s answers 404 for the model",
+    (_provider, model, opikError) => {
+      const run = failedRun({ errorStatus: 404, opikError });
+
+      expect(describeRunFailure(run, { model }).hint?.action).toBe(
+        MODEL_NOT_AVAILABLE,
+      );
+    },
+  );
+
+  it("gives no hint for a 404 that does not name the model", () => {
+    const run = failedRun({
+      errorStatus: 404,
+      opikError: "Unexpected error calling LLM provider: 404 page not found",
+    });
+
+    expect(
+      describeRunFailure(run, { model: "custom-llm/my-gateway/llama-3.3-70b" }),
+    ).toEqual({
+      message: "Unexpected error calling LLM provider: 404 page not found",
+    });
+  });
+
+  it.each([
+    [
+      "a longer model id",
+      "custom-llm/my-gateway/llama-3",
+      "Unexpected error calling LLM provider: no deployment named llama-3-70b",
+    ],
+    [
+      "another word",
+      "custom-llm/my-gateway/a",
+      "Unexpected error calling LLM provider: 404 page not found",
+    ],
+  ])(
+    "gives no hint for a 404 that has the model's name only inside %s",
+    (_label, model, opikError) => {
+      const run = failedRun({ errorStatus: 404, opikError });
+
+      expect(describeRunFailure(run, { model }).hint).toBeUndefined();
+    },
+  );
+
+  it.each([500, null])(
+    "gives no hint for a %s status, even when the error names the model",
+    (errorStatus) => {
+      const run = failedRun({
+        errorStatus,
+        opikError: "Internal error while running claude-mythos-5",
+      });
+
+      expect(
+        describeRunFailure(run, { model: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5 }),
+      ).toEqual({ message: "Internal error while running claude-mythos-5" });
+    },
+  );
+});
+
 describe("createCompletionAnnouncer", () => {
   it("waits for logging to finish when the registry lands first", () => {
     const announce = vi.fn();
@@ -465,5 +637,138 @@ describe("createCompletionAnnouncer", () => {
     announcer.loggingFinished();
 
     expect(announce).not.toHaveBeenCalled();
+  });
+});
+
+describe("generateDefaultPrompt", () => {
+  const generate = (initPrompt?: Partial<PlaygroundPromptType>) =>
+    generateDefaultPrompt({
+      initPrompt,
+      setupProviders: [],
+      providerResolver: () => "",
+      modelResolver: () => "",
+    });
+
+  it("starts with an empty system message and an empty user message", () => {
+    expect(
+      generate().messages.map(({ role, content }) => ({ role, content })),
+    ).toEqual([
+      { role: LLM_MESSAGE_ROLE.system, content: "" },
+      { role: LLM_MESSAGE_ROLE.user, content: "" },
+    ]);
+  });
+
+  it("keeps the messages of a prompt it is given", () => {
+    const messages = [userMessage("Hello")];
+
+    expect(generate({ messages }).messages).toBe(messages);
+  });
+});
+
+describe("isEmptyMessage", () => {
+  it.each([
+    ["an empty string", userMessage("")],
+    ["an empty part list", userMessage([])],
+  ])("treats %s as empty", (_, message) => {
+    expect(isEmptyMessage(message)).toBe(true);
+  });
+
+  it.each([
+    ["text", userMessage("Hello")],
+    ["a list of parts", imageMessage],
+  ])("treats %s as content", (_, message) => {
+    expect(isEmptyMessage(message)).toBe(false);
+  });
+});
+
+describe("dropEmptySystemMessages", () => {
+  it("drops a system message with no text", () => {
+    expect(
+      dropEmptySystemMessages([systemMessage(""), userMessage("Hello")]),
+    ).toEqual([userMessage("Hello")]);
+  });
+
+  it("keeps a system message with text and empty messages of other roles", () => {
+    const messages = [
+      systemMessage("Answer briefly"),
+      userMessage(""),
+      { id: "assistant", role: LLM_MESSAGE_ROLE.assistant, content: "" },
+    ];
+
+    expect(dropEmptySystemMessages(messages)).toEqual(messages);
+  });
+});
+
+describe("canRunMessages", () => {
+  it("allows a run with an empty system message and a filled user message", () => {
+    expect(canRunMessages([systemMessage(""), userMessage("Hello")])).toBe(
+      true,
+    );
+  });
+
+  it("blocks a run while the user message is empty", () => {
+    expect(canRunMessages([systemMessage(""), userMessage("")])).toBe(false);
+  });
+
+  it("blocks a run when only an empty system message is left", () => {
+    expect(canRunMessages([systemMessage("")])).toBe(false);
+  });
+
+  it("allows a run with an empty system message and a user message with an image", () => {
+    expect(canRunMessages([systemMessage([]), imageMessage])).toBe(true);
+  });
+
+  it("blocks a run while a user message has no parts", () => {
+    expect(canRunMessages([systemMessage(""), userMessage([])])).toBe(false);
+  });
+});
+
+describe("parseCompletionOutput", () => {
+  const EMPTY_RESPONSE =
+    "The AI provider returned an empty response. Please, try again.";
+
+  const run = (overrides: Partial<RunStreamingReturn>): RunStreamingReturn => ({
+    result: "",
+    startTime: "",
+    endTime: "",
+    usage: null,
+    choices: null,
+    finishReason: null,
+    providerError: null,
+    opikError: null,
+    pythonProxyError: null,
+    actualModel: null,
+    actualProvider: null,
+    ...overrides,
+  });
+
+  it.each<[string, Partial<RunStreamingReturn>, string]>([
+    [
+      "says the limit ran out when nothing was written before it",
+      { finishReason: "length" },
+      OUTPUT_LIMIT_REACHED_MESSAGE,
+    ],
+    [
+      "keeps a cut-off answer the model did write",
+      { result: "1 2 3", finishReason: "length" },
+      "1 2 3",
+    ],
+    [
+      "keeps the provider's error over the limit message",
+      { finishReason: "length", providerError: "Rate limited" },
+      "Rate limited",
+    ],
+    [
+      "keeps the generic message for an empty answer that stopped normally",
+      { finishReason: "stop" },
+      EMPTY_RESPONSE,
+    ],
+    [
+      "keeps the generic message when no finish reason arrived",
+      {},
+      EMPTY_RESPONSE,
+    ],
+  ])("%s", (_, overrides, expected) => {
+    expect(parseCompletionOutput(run(overrides))).toBe(expected);
   });
 });

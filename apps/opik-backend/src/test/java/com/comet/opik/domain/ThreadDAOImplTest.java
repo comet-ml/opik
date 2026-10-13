@@ -4,6 +4,10 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.filter.TraceThreadFilter;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.infrastructure.FilterUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -16,6 +20,7 @@ import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -161,6 +166,8 @@ class ThreadDAOImplTest {
 
         private static final String THREAD_ID_PUSHDOWN = "AND thread_id = :thread_id_pushdown";
         private static final String TRACES_FINAL_IDS_IN = "thread_id IN (SELECT thread_id FROM traces_final_ids)";
+        private static final String TRACES_FINAL_IN = "thread_id IN (SELECT thread_id FROM traces_final)";
+        private static final String ROW_ID_RANGE = "AND id >= :uuid_from_time";
         private static final String SEARCH_CLAUSE = "ilike(thread_id, :search_text)";
 
         static Stream<Arguments> templatesSharingThePushdown() {
@@ -171,16 +178,15 @@ class ThreadDAOImplTest {
         }
 
         /**
-         * OPIK-7919: on the uuid_from_time branch trace_threads_final skips the traces_final_ids IN, so the
-         * thread_id equality is the only predicate left that prunes — and trace_threads is
-         * ORDER BY (workspace_id, project_id, thread_id, id), so it prunes on the primary key while
-         * {@code id >= :uuid_from_time} cannot. The count template was missing this line while the list and
-         * stats templates had it, which left countThreadTotal scanning every trace_threads row of the
-         * project. This pins all three templates to emit it identically.
+         * OPIK-7919: trace_threads is ORDER BY (workspace_id, project_id, thread_id, id), so a thread_id
+         * predicate prunes on the primary key while a row id range cannot. The count template was once missing
+         * the pushdown while the list and stats templates had it, which left countThreadTotal scanning every
+         * trace_threads row of the project. OPIK-8335: membership follows the window's traces, so a window
+         * emits the in-window thread set and never the row id range. This pins all three templates identically.
          */
         @ParameterizedTest(name = "{0} template")
         @MethodSource("templatesSharingThePushdown")
-        @DisplayName("trace_threads_final emits the thread_id pushdown on the uuid_from_time branch")
+        @DisplayName("on a window with the thread_id pushdown, trace_threads_final emits the pushdown and the prefilter's thread set, not the row id range")
         void traceThreadsFinalEmitsThreadIdPushdownOnUuidBranch(String name, String query) {
             var criteria = TraceSearchCriteria.builder()
                     .projectId(UUID.randomUUID())
@@ -192,25 +198,244 @@ class ThreadDAOImplTest {
                             .build()))
                     .build();
 
+            var traceThreadsFinal = traceThreadsFinalCte(renderWithGate(query, criteria));
+
+            assertThat(traceThreadsFinal).doesNotContain(ROW_ID_RANGE);
+            assertThat(traceThreadsFinal).contains(TRACES_FINAL_IDS_IN);
+            assertThat(traceThreadsFinal).contains(THREAD_ID_PUSHDOWN);
+        }
+
+        @ParameterizedTest(name = "{0} template")
+        @MethodSource("templatesSharingThePushdown")
+        @DisplayName("on a window without the prefilter, trace_threads_final takes its threads from the window's traces, not the row id range")
+        void traceThreadsFinalTakesWindowThreadsWithoutPrefilter(String name, String query) {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .uuidFromTime(UUID.randomUUID())
+                    .build();
+
+            var traceThreadsFinal = traceThreadsFinalCte(renderWithGate(query, criteria));
+
+            assertThat(traceThreadsFinal).doesNotContain(ROW_ID_RANGE);
+            assertThat(traceThreadsFinal).doesNotContain(TRACES_FINAL_IDS_IN);
+            assertThat(traceThreadsFinal).contains(TRACES_FINAL_IN);
+        }
+
+        private static String renderWithGate(String query, TraceSearchCriteria criteria) {
             var template = FilterUtils.newTraceThreadFindTemplate(query, criteria, SEARCH_CLAUSE, true);
             if (ThreadDAOImpl.shouldUseTracesFinalIdsPrefilter(criteria, template)) {
                 template.add("traces_final_ids", true);
             }
+            return template.render();
+        }
+    }
 
-            var traceThreadsFinal = traceThreadsFinalCte(template.render());
+    @Nested
+    @DisplayName("page pushdown on the list template")
+    class PagePushdown {
 
-            assertThat(traceThreadsFinal).contains("AND id >= :uuid_from_time");
-            assertThat(traceThreadsFinal).doesNotContain(TRACES_FINAL_IDS_IN);
-            assertThat(traceThreadsFinal).contains(THREAD_ID_PUSHDOWN);
+        private static final String SEARCH_CLAUSE = "ilike(thread_id, :search_text)";
+        private static final String PAGE_THREAD_IDS_IN = "AND thread_id IN :page_thread_ids";
+        private static final String TRACES_FINAL_IN = "thread_id IN (SELECT thread_id FROM traces_final)";
+        private static final String WINDOW_START = "AND id >= :uuid_from_time";
+
+        static Stream<Arguments> windows() {
+            return Stream.of(
+                    Arguments.of("from and to", UUID.randomUUID(), UUID.randomUUID()),
+                    Arguments.of("from only", UUID.randomUUID(), null),
+                    Arguments.of("to only", null, UUID.randomUUID()),
+                    Arguments.of("no window", null, null));
         }
 
-        /** The trace_threads_final CTE body, up to its ORDER BY — so the assertions cannot match another CTE. */
-        private static String traceThreadsFinalCte(String sql) {
-            int start = sql.indexOf("trace_threads_final AS (");
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("windows")
+        @DisplayName("the default sort takes the page pushdown whatever the window")
+        void defaultSortIsEligibleWhateverTheWindow(String name, UUID uuidFromTime, UUID uuidToTime) {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .uuidFromTime(uuidFromTime)
+                    .uuidToTime(uuidToTime)
+                    .build();
+
+            assertThat(ThreadDAOImpl.isPagePushdownEligible(listTemplate(criteria), criteria)).isTrue();
+        }
+
+        static Stream<Arguments> threadFilters() {
+            return Stream.of(
+                    Arguments.of(TraceThreadField.NUMBER_OF_MESSAGES, Operator.GREATER_THAN, "0", true),
+                    Arguments.of(TraceThreadField.STATUS, Operator.EQUAL, "inactive", true),
+                    Arguments.of(TraceThreadField.TAGS, Operator.CONTAINS, "a", true),
+                    Arguments.of(TraceThreadField.DURATION, Operator.GREATER_THAN, "1", true),
+                    Arguments.of(TraceThreadField.FIRST_MESSAGE, Operator.CONTAINS, "a", false),
+                    Arguments.of(TraceThreadField.LAST_MESSAGE, Operator.CONTAINS, "a", false));
+        }
+
+        @ParameterizedTest(name = "{0} {1}: {3}")
+        @MethodSource("threadFilters")
+        @DisplayName("a thread filter takes the page pushdown unless it reads the messages")
+        void threadFilterIsEligibleUnlessItReadsMessages(TraceThreadField field, Operator operator, String value,
+                boolean eligible) {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .uuidFromTime(UUID.randomUUID())
+                    .filters(List.of(TraceThreadFilter.builder().field(field).operator(operator).value(value).build()))
+                    .build();
+
+            assertThat(ThreadDAOImpl.isPagePushdownEligible(listTemplate(criteria), criteria)).isEqualTo(eligible);
+        }
+
+        static Stream<Arguments> sorts() {
+            return Stream.of(
+                    Arguments.of(SortableFields.START_TIME, true),
+                    Arguments.of(SortableFields.DURATION, true),
+                    Arguments.of(SortableFields.NUMBER_OF_MESSAGES, true),
+                    Arguments.of(SortableFields.STATUS, true),
+                    Arguments.of(SortableFields.TAGS, true),
+                    Arguments.of(SortableFields.TOTAL_ESTIMATED_COST, false),
+                    Arguments.of("usage.total_tokens", false),
+                    Arguments.of("feedback_scores.accuracy", false));
+        }
+
+        @ParameterizedTest(name = "{0}: {1}")
+        @MethodSource("sorts")
+        @DisplayName("a sort takes the page pushdown unless it needs the spans or the feedback scores")
+        void sortIsEligibleUnlessItNeedsSpansOrFeedback(String field, boolean eligible) {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .uuidFromTime(UUID.randomUUID())
+                    .sortingFields(List.of(SortingField.builder().field(field).direction(Direction.DESC).build()))
+                    .build();
+
+            assertThat(ThreadDAOImpl.isPagePushdownEligible(listTemplate(criteria), criteria)).isEqualTo(eligible);
+        }
+
+        @Test
+        @DisplayName("on a window, the pushed-down list reads the bound page ids and keeps the window on their traces")
+        void pushedDownListReadsTheBoundPageIdsOnAWindow() {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .uuidFromTime(UUID.randomUUID())
+                    .build();
+
+            var sql = listTemplate(criteria).add("page_pushdown", true).render();
+
+            var traceThreadsFinal = traceThreadsFinalCte(sql);
+            assertThat(traceThreadsFinal).contains(PAGE_THREAD_IDS_IN);
+            assertThat(traceThreadsFinal).doesNotContain(TRACES_FINAL_IN);
+            assertThat(tracesFinalCte(sql)).contains(PAGE_THREAD_IDS_IN).contains(WINDOW_START);
+        }
+
+        private static ST listTemplate(TraceSearchCriteria criteria) {
+            return FilterUtils.newTraceThreadFindTemplate(ThreadDAOImpl.SELECT_TRACES_THREADS_BY_PROJECT_IDS,
+                    criteria, SEARCH_CLAUSE, true);
+        }
+
+        private static String tracesFinalCte(String sql) {
+            int start = sql.indexOf("traces_final AS (");
             assertThat(start).isNotNegative();
-            int end = sql.indexOf("ORDER BY (workspace_id, project_id, thread_id, id)", start);
+            int end = sql.indexOf("spans_deduped AS (", start);
             assertThat(end).isGreaterThan(start);
             return sql.substring(start, end);
+        }
+    }
+
+    /** The trace_threads_final CTE body, up to its ORDER BY — so the assertions cannot match another CTE. */
+    private static String traceThreadsFinalCte(String sql) {
+        int start = sql.indexOf("trace_threads_final AS (");
+        assertThat(start).isNotNegative();
+        int end = sql.indexOf("ORDER BY (workspace_id, project_id, thread_id, id)", start);
+        assertThat(end).isGreaterThan(start);
+        return sql.substring(start, end);
+    }
+
+    @Nested
+    @DisplayName("annotation queue narrowing")
+    class AnnotationQueueNarrowing {
+
+        private static final String QUEUE_THREADS_PREFILTER = "AND id IN (SELECT thread_model_id FROM annotation_queue_thread_model_ids)";
+        private static final String QUEUE_THREADS_CHECK = "AND tt.thread_model_id IN (SELECT thread_model_id FROM annotation_queue_thread_model_ids)";
+        private static final String UNQUEUED_CHECK = "AND tt.thread_model_id NOT IN (SELECT thread_model_id FROM annotation_queue_memberships";
+
+        /**
+         * Whether a trace or thread in no queue (an empty queue id list) passes the operator. A new operator on
+         * the field fails {@link #everyQueueFilterOperatorIsClassified} until it is added here, so it cannot slip
+         * through as narrowing while it actually keeps unqueued items.
+         */
+        private static final Map<Operator, Boolean> ACCEPTS_UNQUEUED = Map.of(
+                Operator.CONTAINS, false,
+                Operator.EQUAL, false,
+                Operator.IS_NOT_EMPTY, false,
+                Operator.NOT_CONTAINS, true,
+                Operator.NOT_EQUAL, true,
+                Operator.IS_EMPTY, true);
+
+        private static ST template(List<TraceThreadFilter> filters, UUID annotationQueueId) {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .filters(filters)
+                    .annotationQueueId(annotationQueueId)
+                    .build();
+            var template = FilterUtils.newTraceThreadFindTemplate(
+                    ThreadDAOImpl.SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria, "1", true);
+            assertThat(ThreadDAOImpl.isPagePushdownEligible(template, criteria)).isFalse();
+            if (ThreadDAOImpl.shouldUseTracesFinalIdsPrefilter(criteria, template)) {
+                template.add("traces_final_ids", true);
+            }
+            return template;
+        }
+
+        private static TraceThreadFilter queueFilter(Operator operator) {
+            return TraceThreadFilter.builder()
+                    .field(TraceThreadField.ANNOTATION_QUEUE_IDS)
+                    .operator(operator)
+                    .value(UUID.randomUUID().toString())
+                    .build();
+        }
+
+        @Test
+        @DisplayName("every operator of the queue filter is classified as narrowing or keeping unqueued items")
+        void everyQueueFilterOperatorIsClassified() {
+            var supported = new FilterQueryBuilder().getSupportedOperators(TraceThreadField.ANNOTATION_QUEUE_IDS)
+                    .get(TraceThreadField.ANNOTATION_QUEUE_IDS);
+
+            assertThat(supported).containsExactlyInAnyOrderElementsOf(ACCEPTS_UNQUEUED.keySet());
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("operators")
+        @DisplayName("a queue filter either narrows the traces scan to the queue's threads or excludes failing threads")
+        void queueFilterNarrowsOnlyWhenItRejectsUnqueuedThreads(Operator operator, boolean acceptsUnqueued) {
+            var sql = template(List.of(queueFilter(operator)), null).render();
+
+            if (acceptsUnqueued) {
+                assertThat(sql).doesNotContain(QUEUE_THREADS_PREFILTER).doesNotContain(QUEUE_THREADS_CHECK)
+                        .contains(UNQUEUED_CHECK);
+            } else {
+                assertThat(sql).contains(QUEUE_THREADS_PREFILTER).contains(QUEUE_THREADS_CHECK)
+                        .doesNotContain(UNQUEUED_CHECK);
+            }
+        }
+
+        private static Stream<Arguments> operators() {
+            return ACCEPTS_UNQUEUED.entrySet().stream().map(entry -> Arguments.of(entry.getKey(), entry.getValue()));
+        }
+
+        @Test
+        @DisplayName("the queue id alone narrows the traces scan to that queue's threads")
+        void queueIdNarrowsToQueueThreads() {
+            var sql = template(null, UUID.randomUUID()).render();
+
+            assertThat(sql).contains(QUEUE_THREADS_PREFILTER).contains(QUEUE_THREADS_CHECK)
+                    .contains("AND queue_id = :annotation_queue_id");
+        }
+
+        @Test
+        @DisplayName("a queue filter makes the memberships cover every queue of the project, even with the queue id")
+        void queueFilterWithQueueIdKeepsEveryQueue() {
+            var sql = template(List.of(queueFilter(Operator.NOT_EQUAL)), UUID.randomUUID()).render();
+
+            assertThat(sql).doesNotContain("AND queue_id = :annotation_queue_id")
+                    .contains(QUEUE_THREADS_PREFILTER).contains(UNQUEUED_CHECK);
         }
     }
 }
