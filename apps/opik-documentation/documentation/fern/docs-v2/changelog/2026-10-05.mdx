@@ -1,0 +1,3 @@
+## Bug Fixes & Improvements
+
+- **TypeScript heuristic metrics now validate references and compare structured values by content** — `Contains` rejects empty and null substrings with a clear error. `ExactMatch` adds a `caseSensitive` option that defaults to its existing case-sensitive behavior, and compares JSON-like objects and arrays by value. Object key order does not affect scores, while array order remains significant; previously unequal structured outputs may now score as matches.
