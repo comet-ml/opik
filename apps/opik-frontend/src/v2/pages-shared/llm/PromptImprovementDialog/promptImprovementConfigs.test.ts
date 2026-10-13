@@ -137,6 +137,6 @@ describe("withReasoningAtMostLow", () => {
     );
     withReasoningAtMostLow(PROVIDER_MODEL_TYPE.GPT_5_NANO, defaults);
 
-    expect(defaults).toMatchObject({ reasoningEffort: "high" });
+    expect(defaults).toMatchObject({ reasoningEffort: "medium" });
   });
 });
