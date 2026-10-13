@@ -67,6 +67,7 @@ CALL_FIELDS = ("qualifiedName", "structuredOutput", "reasoning")
 SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_\-*.]{6,}"),
     re.compile(r"AIza[0-9A-Za-z_\-]{10,}"),
+    re.compile(r"\b(proj|org)[_-][A-Za-z0-9]{4,}"),
     re.compile(r"(?i)(api[_-]?key|authorization|x-goog-api-key|bearer)\s*[:=]?\s*\S+"),
 ]
 
@@ -144,9 +145,15 @@ def _call_fields(model: dict) -> tuple:
     # A missing flag and false mean the same in the bundled file, which is the bottom layer.
     return (
         model.get("qualifiedName") or None,
-        bool(model.get("structuredOutput")),
-        bool(model.get("reasoning")),
+        _flag(model.get("structuredOutput")),
+        _flag(model.get("reasoning")),
     )
+
+
+def _flag(value) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return value is True
 
 
 def smoke_models(head: dict[str, list[dict]]) -> list[ModelToCheck]:
@@ -163,7 +170,7 @@ def sanitize(text: str, secrets: list[str]) -> str:
         text = text.replace(secret, "[redacted]")
     for pattern in SECRET_PATTERNS:
         text = pattern.sub("[redacted]", text)
-    text = " ".join(text.split()).replace("|", "/")
+    text = " ".join(text.split()).replace("|", "/").replace("<", "&lt;").replace(">", "&gt;")
     if len(text) > ERROR_NOTE_MAX_CHARS:
         text = text[: ERROR_NOTE_MAX_CHARS - 1] + "…"
     return text
@@ -257,7 +264,7 @@ def _answer_note(response: requests.Response) -> str:
 def render_report(
     results: list[CheckResult], unexercised: list[UnexercisedChange], mode: str, base_ref: str, call_cap: int, cut: int
 ) -> str:
-    lines = [REPORT_MARKER, "## Live model check", "", f"**{_headline(results, mode)}**", ""]
+    lines = [REPORT_MARKER, "## Live model check", "", f"**{_headline(results, unexercised, mode)}**", ""]
     if mode == "smoke" and results:
         lines.append(
             "No model is new or changed in a field this check exercises, "
@@ -289,7 +296,9 @@ def render_report(
         ]
         for r in failures:
             label = PROVIDER_LABELS.get(r.model.provider, r.model.provider)
-            lines.append(f"| {label} | `{r.model.request_model}` | {r.model.reason} | {r.seconds:.1f} | {r.note} |")
+            lines.append(
+                f"| {label} | {_code(r.model.request_model)} | {r.model.reason} | {r.seconds:.1f} | {r.note} |"
+            )
 
     for provider in providers:
         rows = sorted((r for r in results if r.model.provider == provider), key=lambda r: RESULT_ORDER[r.result])
@@ -298,7 +307,7 @@ def render_report(
             f"{PROVIDER_LABELS.get(provider, provider)}: {_models(len(rows))}",
             ["| Model | Why | Result | Seconds | Note |", "| --- | --- | --- | --- | --- |"]
             + [
-                f"| `{r.model.request_model}` | {r.model.reason} | {r.result} | {_seconds(r.seconds)} | {r.note} |"
+                f"| {_code(r.model.request_model)} | {r.model.reason} | {r.result} | {_seconds(r.seconds)} | {r.note} |"
                 for r in shown
             ]
             + ([] if len(rows) == len(shown) else ["", f"{len(rows) - len(shown)} more not shown."]),
@@ -312,7 +321,7 @@ def render_report(
             for change in changes:
                 for field in change.fields:
                     field_counts[field] = field_counts.get(field, 0) + 1
-            fields = ", ".join(f"`{f}` ({n})" for f, n in sorted(field_counts.items()))
+            fields = ", ".join(f"{_code(f)} ({n})" for f, n in sorted(field_counts.items()))
             table.append(f"| {PROVIDER_LABELS.get(provider, provider)} | {len(changes)} | {fields} |")
         lines += _details(
             f"{_models(len(unexercised))} changed only in fields this check doesn't exercise",
@@ -326,7 +335,7 @@ RESULT_ORDER = {"fail": 0, "pass": 1, "would call": 2, "not checked": 3}
 MAX_TABLE_ROWS = 100
 
 
-def _headline(results: list[CheckResult], mode: str) -> str:
+def _headline(results: list[CheckResult], unexercised: list[UnexercisedChange], mode: str) -> str:
     calls = [r for r in results if r.result in ("pass", "fail")]
     planned = [r for r in results if r.result == "would call"]
     not_checked = [r for r in results if r.result == "not checked"]
@@ -336,6 +345,8 @@ def _headline(results: list[CheckResult], mode: str) -> str:
     if planned:
         return f"Dry run: {len(planned)} calls planned"
     if mode == "smoke" or not not_checked:
+        if unexercised:
+            return "Nothing called: no model is new or changed in a field this check exercises"
         return "No new or changed models"
     n = len(not_checked)
     models = "1 new or changed model is" if n == 1 else f"{n} new or changed models are"
@@ -360,6 +371,10 @@ def _counts(rows: list[CheckResult]) -> str:
 
 def _details(summary: str, body: list[str]) -> list[str]:
     return ["", "<details>", f"<summary>{summary}</summary>", ""] + body + ["", "</details>"]
+
+
+def _code(text: str) -> str:
+    return "`" + " ".join(str(text).split()).replace("`", "'").replace("|", "\\|") + "`"
 
 
 def _models(n: int) -> str:
