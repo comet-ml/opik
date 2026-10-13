@@ -190,8 +190,8 @@ describe("useLLMProviderModelsData hasRegistryModels", () => {
 
 const model = (
   id: PROVIDER_MODEL_TYPE,
-  extra: { label?: string; qualifiedName?: string } = {},
-) => ({ id, structuredOutput: false, reasoning: false, ...extra });
+  extra: { label?: string; qualified_name?: string } = {},
+) => ({ id, structured_output: false, reasoning: false, ...extra });
 
 const PICKER_REGISTRY: LlmModelsByProvider = {
   [PROVIDER_TYPE.OPEN_AI]: [
@@ -205,11 +205,11 @@ const PICKER_REGISTRY: LlmModelsByProvider = {
   ],
   [PROVIDER_TYPE.VERTEX_AI]: [
     model(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
-      qualifiedName: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      qualified_name: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
       label: "Gemini 2.5 Flash",
     }),
     model(PROVIDER_MODEL_TYPE.GEMINI_OMNI_1_1_FLASH, {
-      qualifiedName: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_OMNI_1_1_FLASH,
+      qualified_name: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_OMNI_1_1_FLASH,
     }),
   ],
 };

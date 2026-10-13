@@ -11,7 +11,7 @@ const registry = vi.hoisted(() => {
   const model = (id: string, label?: string) => ({
     id,
     label,
-    structuredOutput: false,
+    structured_output: false,
     reasoning: false,
   });
   return {

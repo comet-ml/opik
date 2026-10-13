@@ -134,12 +134,12 @@ describe("generateDefaultPrompt", () => {
         {
           id: OPEN_AI_DEFAULT_MODEL,
           label: "GPT 5.5",
-          structuredOutput: true,
+          structured_output: true,
           reasoning: true,
         },
         {
           id: PROVIDER_MODEL_TYPE.GPT_LIVE_1,
-          structuredOutput: false,
+          structured_output: false,
           reasoning: false,
         },
       ],
