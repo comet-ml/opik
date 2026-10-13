@@ -34,7 +34,7 @@ public class SpanWeeksDAO {
 
     private static final String INSERT = """
             INSERT INTO span_weeks (workspace_id, project_id, trace_id, id_week)
-            SETTINGS log_comment = '<log_comment>'
+            SETTINGS log_comment = '<log_comment>', max_partitions_per_insert_block = <max_partitions>
             FORMAT Values
                 <items:{item |
                     (:workspace_id, :project_id<item.index>, :trace_id<item.index>, :id_week<item.index>)
@@ -43,11 +43,16 @@ public class SpanWeeksDAO {
             ;
             """;
 
+    // span_weeks is partitioned by the year of id_week, and ids reach every year from 1969 (non-v7) to 2299 (saturated):
+    // async inserts merge many requests into one block, which may then span more years than the default 100 allows.
+    static final int MAX_PARTITIONS_PER_INSERT = 400;
+
     private static final String FIND_BY_TRACE_IDS = """
             SELECT DISTINCT project_id, trace_id, id_week
             FROM span_weeks
             WHERE workspace_id = :workspace_id
             AND trace_id IN :trace_ids
+            AND is_deleted = 0
             SETTINGS log_comment = '<log_comment>'
             """;
 
@@ -68,6 +73,7 @@ public class SpanWeeksDAO {
         List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(rows.size());
         ST template = getSTWithLogComment(INSERT, "insert_span_weeks", workspaceId, userName, rows.size());
         template.add("items", queryItems);
+        template.add("max_partitions", MAX_PARTITIONS_PER_INSERT);
         Statement statement = connection.createStatement(template.render());
 
         // Positional binds, as in CipxTraceIdentityDAO: workspace_id once at 0, then three per row in template order.

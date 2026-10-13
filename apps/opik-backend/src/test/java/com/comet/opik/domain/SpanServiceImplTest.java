@@ -15,6 +15,7 @@ import com.comet.opik.infrastructure.UuidValidationConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TestUuidV7TimestampValidatorFactory;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.common.eventbus.EventBus;
 import io.dropwizard.util.Duration;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -31,6 +32,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -51,6 +53,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -499,9 +502,11 @@ class SpanServiceImplTest {
     @Nested
     class RegisterWeeks {
 
+        private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
+
         @Test
         void registerWeeks__whenWriteDisabled__thenWritesNothing() {
-            var span = Span.builder()
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .id(idGenerator.generateId())
                     .traceId(idGenerator.generateId())
                     .projectId(idGenerator.generateId())
@@ -523,7 +528,11 @@ class SpanServiceImplTest {
             // An id on Monday 2025-03-03, so its week is the literal below rather than one computed here.
             var id = new UUID((Instant.parse("2025-03-03T00:00:00Z").toEpochMilli() << 16) | 0x7000L,
                     0x8000_0000_0000_0000L);
-            var complete = Span.builder().id(id).traceId(traceId).projectId(projectId).build();
+            var complete = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(id)
+                    .traceId(traceId)
+                    .projectId(projectId)
+                    .build();
             when(spanWeeksDAO.insert(any())).thenReturn(Mono.just(1L));
 
             StepVerifier.create(newSpanService(DatabaseAnalyticsDataModelConfig.builder()
@@ -534,6 +543,7 @@ class SpanServiceImplTest {
 
             verify(spanWeeksDAO).insert(List.of(
                     SpanWeek.builder().projectId(projectId).traceId(traceId).idWeek(20250303L).build()));
+            verifyNoMoreInteractions(spanWeeksDAO);
         }
 
         static Stream<Arguments> registerWeeks__whenASpanLacksARequiredField__thenRegistersOnlyTheCompleteOne() {
