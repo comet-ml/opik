@@ -292,8 +292,10 @@ const toFormModelConfig = (
     }
     // Not checked against the model's levels here, unlike the thinking level below: OpenRouter's
     // levels come from the registry, which can arrive after the form is seeded. The panel and the
-    // request both check them.
-    config.reasoningEffort ??= get(customParameters, ["reasoning", "effort"]);
+    // request both check them. Older and API-created runs can hold the effort flat, which the pick
+    // above drops (OpenRouter's defaults have no effort key), so it is read from `saved`.
+    config.reasoningEffort =
+      get(customParameters, ["reasoning", "effort"]) ?? saved.reasoningEffort;
   }
 
   if (supportsAnthropicThinkingEffort(model)) {
@@ -394,15 +396,15 @@ export const convertOptimizationStudioToFormData = (
     optimization?.studio_config?.optimizer.parameters ||
     getDefaultOptimizerConfig(optimizerType);
   const savedOptimizerModel = (baseOptimizerParams as { model?: string }).model;
-  const isOptimizerModelGone =
+  const isOptimizerModelUnavailable =
     !!savedOptimizerModel && !availableModels.includes(savedOptimizerModel);
   // Its model_parameters go too, as the picker's clear button does: without a model, the runner
   // applies them to the prompt model.
   const optimizerParams = {
-    ...(isOptimizerModelGone
+    ...(isOptimizerModelUnavailable
       ? omit(baseOptimizerParams, ["model_parameters"])
       : baseOptimizerParams),
-    model: isOptimizerModelGone ? undefined : savedOptimizerModel,
+    model: isOptimizerModelUnavailable ? undefined : savedOptimizerModel,
   };
 
   return {

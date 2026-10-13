@@ -802,6 +802,35 @@ describe("convertOptimizationStudioToFormData — OpenRouter effort on re-run", 
     expect(sent).toEqual(saved);
   });
 
+  it.each(["reasoning_effort", "reasoningEffort"])(
+    "shows a run's effort saved flat as %s and sends it nested",
+    (key) => {
+      const { panel, sent } = panelAndRequest(
+        toForm(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO, {
+          max_tokens: 700,
+          [key]: "low",
+        }),
+      );
+
+      expect(panel).toEqual({ reasoningEffort: "low" });
+      expect(sent).toEqual({
+        max_tokens: 700,
+        custom_parameters: { reasoning: { effort: "low" } },
+      });
+    },
+  );
+
+  it("prefers the nested effort over a flat copy of it", () => {
+    const { panel } = panelAndRequest(
+      toForm(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO, {
+        reasoning_effort: "high",
+        custom_parameters: { reasoning: { effort: "low" } },
+      }),
+    );
+
+    expect(panel).toEqual({ reasoningEffort: "low" });
+  });
+
   it("keeps the other values saved next to the effort", () => {
     const saved = {
       max_tokens: 700,
