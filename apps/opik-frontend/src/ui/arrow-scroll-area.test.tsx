@@ -23,12 +23,29 @@ const renderArea = () => {
       <div>Rows</div>
     </ArrowScrollArea>,
   );
-  return screen.getByText("Rows").parentElement!.parentElement!;
+  return screen.getByTestId("arrow-scroll-viewport");
 };
 
 const scrollViewportTo = (viewport: HTMLElement, scrollTop: number) => {
   viewport.scrollTop = scrollTop;
   fireEvent.scroll(viewport);
+};
+
+// happy-dom's ResizeObserver never calls back, so this one lets a test fire it.
+const stubResizeObserver = () => {
+  const callbacks: ResizeObserverCallback[] = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: ResizeObserverCallback) {
+        callbacks.push(callback);
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  return () =>
+    callbacks.forEach((callback) => callback([], {} as ResizeObserver));
 };
 
 const upArrow = () => screen.queryByTestId("scroll-up-arrow");
@@ -47,6 +64,7 @@ describe("ArrowScrollArea", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   describe("arrows", () => {
@@ -84,6 +102,25 @@ describe("ArrowScrollArea", () => {
 
       expect(upArrow()).toBeInTheDocument();
       expect(downArrow()).not.toBeInTheDocument();
+    });
+
+    it("treats a fractional scroll position less than a pixel from the end as the bottom", () => {
+      stubHeights(CONTENT_HEIGHT);
+      const viewport = renderArea();
+
+      scrollViewportTo(viewport, MAX_SCROLL_TOP - 0.5);
+
+      expect(upArrow()).toBeInTheDocument();
+      expect(downArrow()).not.toBeInTheDocument();
+    });
+
+    it("keeps the down arrow a full pixel from the end", () => {
+      stubHeights(CONTENT_HEIGHT);
+      const viewport = renderArea();
+
+      scrollViewportTo(viewport, MAX_SCROLL_TOP - 1);
+
+      expect(downArrow()).toBeInTheDocument();
     });
   });
 
@@ -205,6 +242,62 @@ describe("ArrowScrollArea", () => {
 
       expect(scrollTopAtEnd).toBeGreaterThanOrEqual(MAX_SCROLL_TOP);
       expect(viewport.scrollTop).toBe(scrollTopAtEnd);
+    });
+
+    it("stops scrolling at the top of the list while the up arrow is still held", () => {
+      vi.useFakeTimers();
+      stubHeights(CONTENT_HEIGHT);
+      const viewport = renderArea();
+      scrollViewportTo(viewport, MAX_SCROLL_TOP / 2);
+
+      fireEvent.pointerDown(upArrow()!);
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      const scrollTopAtTop = viewport.scrollTop;
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+
+      expect(scrollTopAtTop).toBeLessThanOrEqual(0);
+      expect(viewport.scrollTop).toBe(scrollTopAtTop);
+    });
+
+    it("does not move a held arrow from a fractional bottom", () => {
+      vi.useFakeTimers();
+      stubHeights(CONTENT_HEIGHT);
+      const viewport = renderArea();
+      scrollViewportTo(viewport, MAX_SCROLL_TOP - 2);
+
+      fireEvent.pointerDown(downArrow()!);
+      scrollViewportTo(viewport, MAX_SCROLL_TOP - 0.5);
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+
+      expect(viewport.scrollTop).toBe(MAX_SCROLL_TOP - 0.5);
+    });
+
+    it("resumes when the list grows under an arrow held at the end", () => {
+      vi.useFakeTimers();
+      const fireResize = stubResizeObserver();
+      stubHeights(CONTENT_HEIGHT);
+      const viewport = renderArea();
+
+      fireEvent.pointerDown(downArrow()!);
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      // A browser fires this scroll event as the hold reaches the end; happy-dom does not.
+      fireEvent.scroll(viewport);
+      const scrollTopAtEnd = viewport.scrollTop;
+      stubHeights(2 * CONTENT_HEIGHT);
+      act(() => fireResize());
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+
+      expect(viewport.scrollTop).toBeGreaterThan(scrollTopAtEnd);
     });
 
     it("keeps a held arrow at the end of the list until release", () => {

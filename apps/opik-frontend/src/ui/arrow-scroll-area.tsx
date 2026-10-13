@@ -86,9 +86,14 @@ const ArrowScrollArea: React.FC<ArrowScrollAreaProps> = ({
     return () => observer.disconnect();
   }, [updateArrows]);
 
+  // The hold loop stops requesting frames at the end of the list, so it is
+  // restarted from here when the list grows under a still-held arrow.
+  const canScrollHeldDirection =
+    heldDirection === "up" ? canScrollUp : canScrollDown;
+
   React.useEffect(() => {
     const viewport = viewportRef.current;
-    if (!heldDirection || !viewport) return;
+    if (!heldDirection || !canScrollHeldDirection || !viewport) return;
 
     let frame = 0;
     let previousTime: number | undefined;
@@ -112,7 +117,7 @@ const ArrowScrollArea: React.FC<ArrowScrollAreaProps> = ({
       window.clearTimeout(holdTimer);
       cancelAnimationFrame(frame);
     };
-  }, [heldDirection]);
+  }, [heldDirection, canScrollHeldDirection]);
 
   const press = (direction: ScrollDirection) => {
     viewportRef.current?.scrollBy({
@@ -136,6 +141,7 @@ const ArrowScrollArea: React.FC<ArrowScrollAreaProps> = ({
     <div className={cn("relative flex min-h-0 flex-col", className)}>
       <div
         ref={viewportRef}
+        data-testid="arrow-scroll-viewport"
         className="min-h-0 flex-1 scroll-py-6 overflow-y-auto"
         onScroll={updateArrows}
       >
