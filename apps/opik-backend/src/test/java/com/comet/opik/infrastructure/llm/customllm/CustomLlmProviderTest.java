@@ -10,6 +10,7 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
+import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -20,6 +21,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 import java.util.Map;
@@ -33,6 +35,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.Mockito.mock;
 
@@ -225,6 +228,59 @@ class CustomLlmProviderTest {
         assertThat(body.get("temperature").asDouble()).isEqualTo(0.95);
         assertThat(StringUtils.countMatches(rawBody, "\"seed\"")).isEqualTo(1);
         assertThat(body.get("seed").asInt()).isEqualTo(42);
+    }
+
+    @ParameterizedTest(name = "{0} rejects custom_parameters.{1}")
+    @MethodSource("opikManagedKeyCases")
+    void rejectsAnExtraBodyKeyOpikSetsFromTheRequestBeforeSending(LlmProvider provider, String key) {
+        var request = ChatCompletionRequest.builder()
+                .from(request(66, null))
+                .customParameters(Map.of(key, "other"))
+                .build();
+        var customLlmProvider = newProvider(provider);
+
+        assertThatThrownBy(() -> customLlmProvider.validateRequest(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(opikManagedKeyMessage(key));
+        assertThatThrownBy(() -> customLlmProvider.generate(request, "workspace-id"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(opikManagedKeyMessage(key));
+        assertThatThrownBy(() -> customLlmProvider.generateStream(request, "workspace-id", response -> {
+        }, () -> {
+        }, error -> {
+        }))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(opikManagedKeyMessage(key));
+        assertThat(wireMock.findAll(postRequestedFor(urlEqualTo(COMPLETIONS_PATH)))).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"model", "messages", "stream", "stream_options"})
+    void judgeRejectsAnExtraBodyKeyOpikSetsFromTheRequestBeforeSending(String key) {
+        var config = LlmProviderClientApiConfig.builder()
+                .apiKey("test-key")
+                .baseUrl(wireMock.baseUrl() + "/v1")
+                .configuration(Map.of("provider_name", PROVIDER_NAME))
+                .build();
+        var parameters = LlmAsJudgeModelParameters.builder()
+                .name("custom-llm/" + PROVIDER_NAME + "/" + MODEL)
+                .customParameters(JsonUtils.getMapper().valueToTree(Map.of(key, "other")))
+                .build();
+
+        assertThatThrownBy(() -> clientGenerator.generateChat(config, parameters))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(opikManagedKeyMessage(key));
+        assertThat(wireMock.findAll(postRequestedFor(urlEqualTo(COMPLETIONS_PATH)))).isEmpty();
+    }
+
+    private static Stream<Arguments> opikManagedKeyCases() {
+        return Stream.of(LlmProvider.CUSTOM_LLM, LlmProvider.OLLAMA, LlmProvider.BEDROCK)
+                .flatMap(provider -> Stream.of("model", "messages", "stream", "stream_options")
+                        .map(key -> arguments(provider, key)));
+    }
+
+    private static String opikManagedKeyMessage(String key) {
+        return "custom_parameters.%s is set by Opik from the request and cannot be replaced".formatted(key);
     }
 
     private static Stream<Arguments> extraBodyTokenLimitCases() {

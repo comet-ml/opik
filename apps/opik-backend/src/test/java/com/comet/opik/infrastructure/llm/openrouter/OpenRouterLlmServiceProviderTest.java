@@ -18,15 +18,19 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -36,6 +40,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -180,6 +185,48 @@ class OpenRouterLlmServiceProviderTest {
         var rawBody = sentRawBody();
         assertThat(StringUtils.countMatches(rawBody, "\"temperature\"")).isEqualTo(1);
         assertThat(JsonUtils.getJsonNodeFromString(rawBody).get("temperature").asDouble()).isEqualTo(1.0);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"model", "messages", "stream", "stream_options"})
+    void rejectsAnExtraBodyKeyOpikSetsFromTheRequestBeforeSending(String key) {
+        var request = ChatCompletionRequest.builder()
+                .from(playgroundRequest(true))
+                .customParameters(Map.of(key, "other"))
+                .build();
+
+        assertThatThrownBy(() -> provider.validateRequest(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(opikManagedKeyMessage(key));
+        assertThatThrownBy(() -> provider.generate(request, "workspace-id"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(opikManagedKeyMessage(key));
+        assertThatThrownBy(() -> provider.generateStream(request, "workspace-id", response -> {
+        }, () -> {
+        }, error -> {
+        }))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(opikManagedKeyMessage(key));
+        assertThat(wireMock.findAll(postRequestedFor(urlEqualTo(COMPLETIONS_PATH)))).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"model", "messages", "stream", "stream_options"})
+    void judgeRejectsAnExtraBodyKeyOpikSetsFromTheRequestBeforeSending(String key) {
+        var parameters = LlmAsJudgeModelParameters.builder()
+                .name("openai/gpt-4o")
+                .customParameters(JsonUtils.getMapper().valueToTree(Map.of(key, "other")))
+                .build();
+
+        assertThatThrownBy(() -> serviceProvider.getLanguageModel(
+                LlmProviderClientApiConfig.builder().apiKey("test-key").build(), parameters))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(opikManagedKeyMessage(key));
+        assertThat(wireMock.findAll(postRequestedFor(urlEqualTo(COMPLETIONS_PATH)))).isEmpty();
+    }
+
+    private static String opikManagedKeyMessage(String key) {
+        return "custom_parameters.%s is set by Opik from the request and cannot be replaced".formatted(key);
     }
 
     private void score(LlmAsJudgeModelParameters modelParameters) {

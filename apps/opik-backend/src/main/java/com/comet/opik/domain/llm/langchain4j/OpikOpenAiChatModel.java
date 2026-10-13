@@ -66,6 +66,9 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
     public OpikOpenAiChatModel(OpenAiChatModel.OpenAiChatModelBuilder builder, JsonNode customParameters) {
         super(builder);
         this.customParameters = customParameters;
+        // Checked while the judge model is built, so the scorer gets the 400 as is. Thrown from doChat, it would be
+        // retried and then reported as a 500, which the online scoring queue redelivers.
+        CustomParametersOverrides.rejectOpikManagedKeys(convertCustomParameters());
 
         // Extract client via reflection since it's private in parent
         try {

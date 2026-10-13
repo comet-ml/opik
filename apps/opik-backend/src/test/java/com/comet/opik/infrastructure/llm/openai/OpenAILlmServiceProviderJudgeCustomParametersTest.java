@@ -15,20 +15,25 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
+import java.util.Map;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -120,11 +125,30 @@ class OpenAILlmServiceProviderJudgeCustomParametersTest {
                 """));
     }
 
-    private void score(LlmAsJudgeModelParameters modelParameters) {
-        var config = LlmProviderClientApiConfig.builder()
+    @ParameterizedTest
+    @ValueSource(strings = {"model", "messages", "stream", "stream_options"})
+    void judgeRejectsAnExtraBodyKeyOpikSetsFromTheRequestBeforeSending(String key) {
+        var parameters = LlmAsJudgeModelParameters.builder()
+                .name("gpt-4o")
+                .customParameters(JsonUtils.getMapper().valueToTree(Map.of(key, "other")))
+                .build();
+
+        assertThatThrownBy(() -> serviceProvider.getLanguageModel(config(), parameters))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("custom_parameters.%s is set by Opik from the request and cannot be replaced"
+                        .formatted(key));
+        assertThat(wireMock.findAll(postRequestedFor(urlEqualTo(COMPLETIONS_PATH)))).isEmpty();
+    }
+
+    private LlmProviderClientApiConfig config() {
+        return LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
                 .baseUrl(wireMock.baseUrl())
                 .build();
+    }
+
+    private void score(LlmAsJudgeModelParameters modelParameters) {
+        var config = config();
         var schema = List.of(LlmAsJudgeOutputSchema.builder()
                 .name("Relevance")
                 .type(LlmAsJudgeOutputSchemaType.INTEGER)

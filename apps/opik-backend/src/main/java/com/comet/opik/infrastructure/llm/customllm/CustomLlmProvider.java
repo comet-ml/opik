@@ -46,9 +46,11 @@ public class CustomLlmProvider implements LlmProviderService {
                 handleError);
     }
 
+    // ChatCompletionService.create calls this before its retry loop. The same check in generate would be retried and
+    // then reported as a 500.
     @Override
     public void validateRequest(@NonNull ChatCompletionRequest request) {
-
+        CustomParametersOverrides.rejectOpikManagedKeys(request.customParameters());
     }
 
     @Override

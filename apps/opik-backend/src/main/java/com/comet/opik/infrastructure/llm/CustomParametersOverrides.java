@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.collections4.MapUtils;
@@ -16,6 +17,11 @@ public class CustomParametersOverrides {
 
     public static final String MAX_TOKENS = "max_tokens";
     public static final String MAX_COMPLETION_TOKENS = "max_completion_tokens";
+
+    // Unlike the sampling settings below, the extra body can't replace these: Opik writes them from the request, and
+    // a replaced one would send a call that no longer matches what was logged and costed, or bring the reply back in
+    // a shape the caller didn't ask for.
+    private static final List<String> OPIK_MANAGED_KEYS = List.of("model", "messages", "stream", "stream_options");
 
     // max_tokens and max_completion_tokens are two names for the one output limit, so a custom value under either
     // clears both typed fields. Left in, OpenAI answers 400 "Setting 'max_tokens' and 'max_completion_tokens' at the
@@ -39,6 +45,7 @@ public class CustomParametersOverrides {
             "reasoning_effort", builder -> builder.reasoningEffort(null));
 
     public ChatCompletionRequest apply(@NonNull ChatCompletionRequest request) {
+        rejectOpikManagedKeys(request.customParameters());
         if (MapUtils.isEmpty(request.customParameters())) {
             return request;
         }
@@ -53,6 +60,24 @@ public class CustomParametersOverrides {
         var builder = ChatCompletionRequest.builder().from(request);
         clearers.forEach(clear -> clear.accept(builder));
         return builder.build();
+    }
+
+    public void rejectOpikManagedKeys(Map<String, Object> customParameters) {
+        rejectOpikManagedKeys(OPIK_MANAGED_KEYS, customParameters);
+    }
+
+    public void rejectOpikManagedKeys(@NonNull List<String> opikManagedKeys, Map<String, Object> customParameters) {
+        if (MapUtils.isEmpty(customParameters)) {
+            return;
+        }
+        opikManagedKeys.stream()
+                .filter(customParameters::containsKey)
+                .findFirst()
+                .ifPresent(key -> {
+                    throw new BadRequestException(
+                            "custom_parameters.%s is set by Opik from the request and cannot be replaced"
+                                    .formatted(key));
+                });
     }
 
     public Map<String, Object> withTokenLimitUnder(@NonNull String limitKey, Map<String, Object> customParameters) {
