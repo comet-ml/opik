@@ -174,7 +174,11 @@ class SpanWeeksBackfillServiceTest {
         all.add(saturated);
         assertThat(weeks(traceIds, ws)).containsExactlyInAnyOrderElementsOf(all);
 
-        // Every chunk is done: a further step changes nothing.
+        // Every chunk is done: the next step finds nothing pending and marks the backfill complete, so later steps
+        // return without touching any database; none of them changes the index.
+        assertThat(backfillService.isCompleted()).isFalse();
+        backfillService.runStep().block();
+        assertThat(backfillService.isCompleted()).isTrue();
         backfillService.runStep().block();
         assertThat(weeks(traceIds, ws)).containsExactlyInAnyOrderElementsOf(all);
     }

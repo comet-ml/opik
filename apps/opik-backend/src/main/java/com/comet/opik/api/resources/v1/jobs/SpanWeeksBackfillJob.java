@@ -52,6 +52,10 @@ public class SpanWeeksBackfillJob extends Job implements InterruptableJob {
             log.info("Span weeks backfill job interrupted before execution, skipping");
             return;
         }
+        // Once the backfill is complete, return before taking the lock: no Redis, MySQL or ClickHouse call per tick.
+        if (backfillService.isCompleted()) {
+            return;
+        }
         try {
             lockService.bestEffortLock(
                     RUN_LOCK,
