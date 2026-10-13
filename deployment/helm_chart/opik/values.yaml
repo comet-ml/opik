@@ -220,6 +220,8 @@ component:
       # Publish Opik alerts to an Amazon EventBridge event bus (best-effort, no
       # durable retry). Off by default. EVENT_BUS takes a bus name or ARN; REGION
       # is optional and, when unset, is resolved from the ARN or the pod's region.
+      # When set with an ARN bus, it must match the ARN's region or the backend
+      # refuses to start.
       # The service account above needs `events:PutEvents` on the bus.
       # ALERTS_EVENTBRIDGE_ENABLED: "true"
       # ALERTS_EVENTBRIDGE_EVENT_BUS: "arn:aws:events:us-east-1:123456789012:event-bus/comet-alerts"
