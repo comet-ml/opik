@@ -1,7 +1,11 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
 import useModelSelection from "./useModelSelection";
 
@@ -39,31 +43,54 @@ vi.mock("@/api/llm/useLlmModels", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useOpenAICompatibleModels", () => ({
-  default: () => ({}),
-}));
-
 vi.mock("@/store/AppStore", () => ({
   default: vi.fn((selector) => selector({ activeWorkspaceName: "default" })),
 }));
 
-vi.mock("@/api/provider-keys/useProviderKeys", () => ({
-  default: () => ({
-    data: {
-      content: [
-        { ui_composed_provider: PROVIDER_TYPE.OPEN_AI },
-        { ui_composed_provider: PROVIDER_TYPE.GEMINI },
-      ],
-    },
-  }),
-}));
+vi.mock("@/api/provider-keys/useProviderKeys", () => {
+  const data = {
+    content: [
+      {
+        provider: PROVIDER_TYPE.OPEN_AI,
+        ui_composed_provider: PROVIDER_TYPE.OPEN_AI,
+      },
+      {
+        provider: PROVIDER_TYPE.GEMINI,
+        ui_composed_provider: PROVIDER_TYPE.GEMINI,
+      },
+      {
+        provider: PROVIDER_TYPE.CUSTOM,
+        provider_name: "acme",
+        ui_composed_provider: `${PROVIDER_TYPE.CUSTOM}:acme`,
+        configuration: {
+          models: "custom-llm/acme/llama-3, custom-llm/acme/qwen-3",
+        },
+      },
+      {
+        provider: PROVIDER_TYPE.OLLAMA,
+        provider_name: "local",
+        ui_composed_provider: `${PROVIDER_TYPE.OLLAMA}:local`,
+        configuration: { models: "custom-llm/local/llama3.2" },
+      },
+      {
+        provider: PROVIDER_TYPE.BEDROCK,
+        provider_name: "aws",
+        ui_composed_provider: `${PROVIDER_TYPE.BEDROCK}:aws`,
+        configuration: { models: "custom-llm/aws/openai.gpt-oss-120b-1:0" },
+      },
+    ],
+  };
+  return { default: () => ({ data }) };
+});
 
 describe("useModelSelection", () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
-  it.each<[string, PROVIDER_MODEL_TYPE, PROVIDER_MODEL_TYPE, PROVIDER_TYPE]>([
+  it.each<
+    [string, PROVIDER_MODEL_TYPE, PROVIDER_MODEL_TYPE, COMPOSED_PROVIDER_TYPE]
+  >([
     [
       "starts on a remembered pick from the picker",
       PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
@@ -87,6 +114,24 @@ describe("useModelSelection", () => {
       PROVIDER_MODEL_TYPE.LYRIA_3_5,
       PROVIDER_MODEL_TYPE.GPT_5_5,
       PROVIDER_TYPE.OPEN_AI,
+    ],
+    [
+      "keeps a remembered Custom LLM pick",
+      "custom-llm/acme/qwen-3" as PROVIDER_MODEL_TYPE,
+      "custom-llm/acme/qwen-3" as PROVIDER_MODEL_TYPE,
+      `${PROVIDER_TYPE.CUSTOM}:acme`,
+    ],
+    [
+      "keeps a remembered Ollama pick",
+      "custom-llm/local/llama3.2" as PROVIDER_MODEL_TYPE,
+      "custom-llm/local/llama3.2" as PROVIDER_MODEL_TYPE,
+      `${PROVIDER_TYPE.OLLAMA}:local`,
+    ],
+    [
+      "keeps a remembered Bedrock pick",
+      "custom-llm/aws/openai.gpt-oss-120b-1:0" as PROVIDER_MODEL_TYPE,
+      "custom-llm/aws/openai.gpt-oss-120b-1:0" as PROVIDER_MODEL_TYPE,
+      `${PROVIDER_TYPE.BEDROCK}:aws`,
     ],
   ])("%s", (_, lastPicked, expectedModel, expectedProvider) => {
     localStorage.setItem(PERSISTENCE_KEY, JSON.stringify(lastPicked));
