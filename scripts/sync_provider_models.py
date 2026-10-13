@@ -323,7 +323,7 @@ def filter_for_dropdown(
     entries: list[ModelEntry],
     provider: str,
     deprecated: set[str] | None = None,
-    served: set[str] | None = None,
+    served_ids: set[str] | None = None,
 ) -> list[ModelEntry]:
     """Filter and sort model entries for the frontend dropdown."""
     exclude = {
@@ -345,9 +345,8 @@ def filter_for_dropdown(
         filtered = [e for e in filtered if not matches_any(e.value, exclude)]
     if deprecated:
         filtered = [e for e in filtered if e.value not in deprecated]
-    # Empty when the source fetch failed: hiding every model would be worse than showing stale ones.
-    if served:
-        filtered = [e for e in filtered if e.value in served]
+    if served_ids is not None:
+        filtered = [e for e in filtered if e.value in served_ids]
     if provider == "anthropic":
         filtered = _deduplicate_by_base(filtered)
     if sort_fn:
@@ -443,9 +442,11 @@ def matches_any(s: str, patterns: list[str]) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 
 # The YAML is uploaded to the CDN without review, so a malformed list counts as no list (every control stays)
-# instead of a string turning into single letters that hide them all.
+# instead of a string turning into single letters, or a partial list, that hides controls the model takes.
 def _string_list(value) -> list[str]:
-    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return value
+    return []
 
 
 def fetch_openrouter_models() -> dict[str, OpenRouterCapabilities]:
@@ -463,6 +464,10 @@ def fetch_openrouter_models() -> dict[str, OpenRouterCapabilities]:
                 reasoning_efforts=_string_list((m.get("reasoning") or {}).get("supported_efforts")),
                 output_modalities=_string_list((m.get("architecture") or {}).get("output_modalities")),
             )
+    # A 200 with no chat models is an outage, not an answer: taken at its word, the sync would strip every
+    # model's capability lists and publish that unreviewed. Raising makes main treat it as a failed fetch.
+    if not chat_models:
+        raise ValueError("the model list has no chat models")
     return dict(sorted(chat_models.items()))
 
 
@@ -1061,14 +1066,31 @@ def _parse_yaml_reasoning_flags(yaml_content: str) -> dict[str, dict[str, bool]]
     return result
 
 
+_YAML_PLAIN_WORD = re.compile(r"[a-z][a-z0-9_]*")
+# In YAML 1.1 these bare words are booleans or null, so they are quoted too.
+_YAML_RESERVED_WORDS = {"y", "n", "yes", "no", "on", "off", "true", "false", "null"}
+
+
+# reasoning_efforts come from OpenRouter as they are, so anything but a plain word is written quoted.
+# A JSON string is also a valid YAML double-quoted scalar.
+def _yaml_flow_item(value: str) -> str:
+    if _YAML_PLAIN_WORD.fullmatch(value) and value not in _YAML_RESERVED_WORDS:
+        return value
+    return json.dumps(value)
+
+
+def _yaml_flow_sequence(values: list[str]) -> str:
+    return f"[{', '.join(_yaml_flow_item(value) for value in values)}]"
+
+
 def _openrouter_capability_lines(capabilities: OpenRouterCapabilities | None) -> list[str]:
     if capabilities is None:
         return []
     lines = []
     if capabilities.supported_parameters is not None:
-        lines.append(f"    supportedParameters: [{', '.join(capabilities.supported_parameters)}]")
+        lines.append(f"    supportedParameters: {_yaml_flow_sequence(capabilities.supported_parameters)}")
     if capabilities.reasoning_efforts:
-        lines.append(f"    reasoningEfforts: [{', '.join(capabilities.reasoning_efforts)}]")
+        lines.append(f"    reasoningEfforts: {_yaml_flow_sequence(capabilities.reasoning_efforts)}")
     return lines
 
 
@@ -1469,11 +1491,14 @@ def main():
     models_by_provider = {k: v["entries"] for k, v in all_changes.items()}
     new_providers_ts = regenerate_providers_ts(providers_ts, models_by_provider)
 
+    # None when the fetch failed: then the picker keeps its OpenRouter models rather than losing them all.
+    openrouter_picker_ids = _openrouter_picker_ids(openrouter_capabilities) if openrouter_capabilities else None
+
     # Dropdown (src/constants/providerModels.ts) gets curated subset — filtered and sorted
     dropdown_by_provider = {
         provider: filter_for_dropdown(
             entries, provider, deprecated,
-            served=_openrouter_picker_ids(openrouter_capabilities) if provider == "openrouter" else None,
+            served_ids=openrouter_picker_ids if provider == "openrouter" else None,
         )
         for provider, entries in models_by_provider.items()
     }
