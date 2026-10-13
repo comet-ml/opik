@@ -18,6 +18,8 @@ import { ACTION_BUTTON_CLASS } from "@/v2/pages/SignalsPage/helpers";
 type DiagnosticsSettingsMenuProps = {
   projectId: string;
   enabled: boolean;
+  // Auto-run and billing are for configurers; guidance is open to everyone on the project.
+  canConfigure: boolean;
   // Undefined hides "Edit project guidance" (guidance toggle off).
   onEditGuidance?: () => void;
 };
@@ -25,6 +27,7 @@ type DiagnosticsSettingsMenuProps = {
 const DiagnosticsSettingsMenu: React.FC<DiagnosticsSettingsMenuProps> = ({
   projectId,
   enabled,
+  canConfigure,
   onEditGuidance,
 }) => {
   const updateMutation = useUpdateAgentInsightsJobMutation();
@@ -59,36 +62,40 @@ const DiagnosticsSettingsMenu: React.FC<DiagnosticsSettingsMenuProps> = ({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[227px] p-1.5">
-        <DropdownMenuItem
-          size="sm"
-          role="menuitemcheckbox"
-          aria-checked={enabled}
-          className="h-auto gap-2 p-1"
-          disabled={updateMutation.isPending}
-          onSelect={(e) => {
-            e.preventDefault();
-            handleToggle(!enabled);
-          }}
-        >
-          <div className="flex min-w-0 flex-1 flex-col gap-px">
-            <span className="comet-body-xs text-foreground">
-              Automatic daily diagnostics
-            </span>
-            <span className="text-[10px] leading-3 text-muted-slate">
-              Runs on Ollie credits
-            </span>
-          </div>
-          <Switch
-            size="2xs"
-            checked={enabled}
-            tabIndex={-1}
-            aria-hidden
-            className="pointer-events-none"
-          />
-        </DropdownMenuItem>
+        {canConfigure && (
+          <DropdownMenuItem
+            size="sm"
+            role="menuitemcheckbox"
+            aria-checked={enabled}
+            className="h-auto gap-2 p-1"
+            disabled={updateMutation.isPending}
+            onSelect={(e) => {
+              e.preventDefault();
+              handleToggle(!enabled);
+            }}
+          >
+            <div className="flex min-w-0 flex-1 flex-col gap-px">
+              <span className="comet-body-xs text-foreground">
+                Automatic daily diagnostics
+              </span>
+              <span className="text-[10px] leading-3 text-muted-slate">
+                Runs on Ollie credits
+              </span>
+            </div>
+            <Switch
+              size="2xs"
+              checked={enabled}
+              tabIndex={-1}
+              aria-hidden
+              className="pointer-events-none"
+            />
+          </DropdownMenuItem>
+        )}
         {onEditGuidance && (
           <>
-            <DropdownMenuSeparator className="mx-0 bg-border" />
+            {canConfigure && (
+              <DropdownMenuSeparator className="mx-0 bg-border" />
+            )}
             <DropdownMenuItem
               size="sm"
               className="comet-body-xs h-6 p-1"
@@ -98,7 +105,7 @@ const DiagnosticsSettingsMenu: React.FC<DiagnosticsSettingsMenuProps> = ({
             </DropdownMenuItem>
           </>
         )}
-        {BillingLink && (
+        {canConfigure && BillingLink && (
           <DropdownMenuItem asChild>
             <BillingLink label="Manage billing" variant="menu" />
           </DropdownMenuItem>
