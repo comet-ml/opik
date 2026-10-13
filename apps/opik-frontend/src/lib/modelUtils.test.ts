@@ -782,7 +782,8 @@ describe("Gemini thinking level", () => {
 
   // Row for row from Google's tables: https://ai.google.dev/gemini-api/docs/thinking and
   // https://cloud.google.com/vertex-ai/generative-ai/docs/thinking. On 2.5, "auto" is Opik's name
-  // for the dynamic budget Google defaults to, and "off" for a zero budget.
+  // for the dynamic budget Google defaults to, and "off" for a zero budget. The two pages disagree on
+  // 2.5 Flash Lite (AI Studio: Off, Vertex: Auto); both rows follow AI Studio.
   it.each([
     [PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH, LOW_TO_HIGH, "medium"],
     [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH, LOW_TO_HIGH, "medium"],
@@ -1040,8 +1041,8 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     ).toEqual({ thinking: { level: "high" } });
   });
 
-  // The Flash Lite models do not think by default, so their preselected level must not switch
-  // thinking on — that regressed latency ~2x for a customer (OPIK-8102 follow-up).
+  // The Flash Lite models' default Minimal must not reach the provider as an explicit level: Vertex
+  // rejects one in a multi-turn prompt without thought signatures.
   const FLASH_LITE_MODELS = [
     PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
     PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
