@@ -1041,8 +1041,8 @@ clickhouse:
   # rows are physically removed. Renders conf.d/merge_tree.xml. Off by default: the first
   # rollout makes every old part eligible at once, which on a large install fills the merge
   # pool for hours and blocks mutations (deletes). Size the backlog first (self-host
-  # Kubernetes docs). Charts from 2.2.78 until this flag shipped it on; upgrading drops it and
-  # rolls ClickHouse once, so set `enabled: true` to keep it.
+  # Kubernetes docs). Charts 2.2.78 through the release before this flag enabled it by
+  # default; upgrading drops it and rolls ClickHouse once, so set `enabled: true` to keep it.
   forceMerge:
     enabled: false
     # -- (int) A part quiet for this long becomes eligible for force-merge (min_age_to_force_merge_seconds).

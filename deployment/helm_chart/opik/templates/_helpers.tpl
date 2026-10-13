@@ -61,6 +61,19 @@ ClickHouse LWD-reclaim merge settings (conf.d/merge_tree.xml), from clickhouse.f
 */}}
 {{- define "opik.clickhouse.mergeTreeXml" -}}
 {{- $fm := .Values.clickhouse.forceMerge -}}
+{{- /* A malformed value would render 0, which ClickHouse reads as "off", so fail instead. */ -}}
+{{- range $key, $min := dict "minAgeSeconds" 1 "maxBytesToMergeAtMaxSpaceInPool" 1 "numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge" 0 -}}
+{{- $v := get $fm $key -}}
+{{- if not (or (kindIs "float64" $v) (kindIs "int" $v) (kindIs "int64" $v)) -}}
+{{- fail (printf "clickhouse.forceMerge.%s must be a number, got %v" $key $v) -}}
+{{- end -}}
+{{- if or (ne (float64 $v) (float64 (int64 $v))) (lt (int64 $v) (int64 $min)) -}}
+{{- fail (printf "clickhouse.forceMerge.%s must be an integer >= %d, got %v" $key $min $v) -}}
+{{- end -}}
+{{- end -}}
+{{- if not (kindIs "bool" $fm.onPartitionOnly) -}}
+{{- fail (printf "clickhouse.forceMerge.onPartitionOnly must be true or false, got %v" $fm.onPartitionOnly) -}}
+{{- end -}}
 <clickhouse>
   <merge_tree>
     <max_bytes_to_merge_at_max_space_in_pool>{{ int64 $fm.maxBytesToMergeAtMaxSpaceInPool }}</max_bytes_to_merge_at_max_space_in_pool>

@@ -238,7 +238,7 @@ part. ClickHouse can force that merge for parts that have stopped receiving writ
 by default.
 
 <Warning>
-  Chart versions from 2.2.78 until this setting became opt-in enabled force-merge by default. Upgrading from one of
+  Chart versions 2.2.78 through the release before `clickhouse.forceMerge` was added enabled force-merge by default. Upgrading from one of
   those versions removes the settings and restarts ClickHouse once; set `clickhouse.forceMerge.enabled: true` to keep
   them. If ClickHouse is running a large merge backlog, let it finish before upgrading: a restart starts in-progress
   merges over.

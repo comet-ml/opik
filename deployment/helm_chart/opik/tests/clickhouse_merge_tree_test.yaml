@@ -69,3 +69,56 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "clickhouse.forceMerge.enabled renders conf.d/merge_tree.xml; remove it from clickhouse.configuration.files"
+
+  - it: fails on a non-numeric value
+    set:
+      clickhouse.forceMerge:
+        enabled: true
+        minAgeSeconds: seven-days
+    asserts:
+      - failedTemplate:
+          errorPattern: "clickhouse.forceMerge.minAgeSeconds must be a number"
+
+  - it: fails on zero or negative values
+    set:
+      clickhouse.forceMerge:
+        enabled: true
+        minAgeSeconds: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "clickhouse.forceMerge.minAgeSeconds must be an integer >= 1"
+
+  - it: fails on a negative pool threshold
+    set:
+      clickhouse.forceMerge:
+        enabled: true
+        numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge: -1
+    asserts:
+      - failedTemplate:
+          errorPattern: "numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge must be an integer >= 0"
+
+  - it: fails on a fractional value
+    set:
+      clickhouse.forceMerge:
+        enabled: true
+        maxBytesToMergeAtMaxSpaceInPool: 1.5
+    asserts:
+      - failedTemplate:
+          errorPattern: "maxBytesToMergeAtMaxSpaceInPool must be an integer >= 1"
+
+  - it: fails on a non-boolean onPartitionOnly
+    set:
+      clickhouse.forceMerge:
+        enabled: true
+        onPartitionOnly: "yes"
+    asserts:
+      - failedTemplate:
+          errorPattern: "clickhouse.forceMerge.onPartitionOnly must be true or false"
+
+  - it: does not validate while disabled
+    set:
+      clickhouse.forceMerge:
+        minAgeSeconds: seven-days
+    asserts:
+      - notExists:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
