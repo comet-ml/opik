@@ -226,13 +226,13 @@ describe("OptimizationsNewPageContent — algorithm model", () => {
 
   it.each([
     {
-      case: "an algorithm model no configured key backs",
+      case: "an algorithm model without a configured provider key",
       optimizerModel: "anthropic/claude-3-5-sonnet",
       providerKeysReady: true,
       blocked: true,
     },
     {
-      case: "an algorithm model a configured key backs",
+      case: "an algorithm model with a configured provider key",
       optimizerModel: "openai/gpt-4o",
       providerKeysReady: true,
       blocked: false,

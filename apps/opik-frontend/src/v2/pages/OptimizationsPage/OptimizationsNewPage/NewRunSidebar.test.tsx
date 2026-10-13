@@ -274,6 +274,19 @@ describe("NewRunSidebar — re-run model resolution", () => {
     expect(content.optimizerModel).toBe(PROVIDER_MODEL_TYPE.GPT_LIVE_1);
   });
 
+  it("seeds no model when the provider-keys request failed", () => {
+    mocks.providerKeysData = undefined;
+
+    const content = renderRerun(
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+    );
+
+    expect(content.availableModels).toEqual([]);
+    expect(content.modelName).toBe("");
+    expect(content.optimizerModel).toBeNull();
+  });
+
   it("waits for the registry before deciding the saved model is gone", () => {
     mocks.isRegistryFetched = false;
     mocks.hasRegistryModels = false;
