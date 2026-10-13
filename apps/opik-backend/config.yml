@@ -761,6 +761,20 @@ rateLimit:
       userFacingBucketName: ollie_state_upload
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for ollie state uploads. Please try again later."
+    dashboardWidgetQueries:
+      # Default: 300
+      # Description: how many saved widget queries (dashboards and insights views) are allowed per workspace in the
+      #   specified time bucket. Every viewer runs every Ollie chart on each load and date-range change.
+      limit: ${RATE_LIMIT_DASHBOARD_WIDGET_QUERIES_PER_WORKSPACE_LIMIT:-300}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_DASHBOARD_WIDGET_QUERIES_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Dashboard-Widget-Queries
+      # Description: User facing bucket name
+      userFacingBucketName: dashboard_widget_queries
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for dashboard widget queries in this workspace. Please try again later."
     getSpans:
       # Default: 30
       # Description: how many getSpansByProject queries are allowed per workspace in the specified time bucket
