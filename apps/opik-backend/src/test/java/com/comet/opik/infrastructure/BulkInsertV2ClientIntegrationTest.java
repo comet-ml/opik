@@ -13,7 +13,6 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
-import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
@@ -80,14 +79,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Covers the {@code bulkInsert.v2ClientEnabled} write path — feedback scores streamed to ClickHouse as
+ * Covers the JSONEachRow write path — feedback scores streamed to ClickHouse as
  * JSONEachRow through the v2 client instead of bound as named R2DBC parameters.
  *
- * <p>Why a separate class rather than a flag on the existing suites: the flag defaults to {@code false},
- * so every other test exercises the R2DBC path. Flipping it there would buy coverage of this path by
- * removing coverage of that one, and the R2DBC path is the one every install runs today. This class runs
- * the v2 path alongside them instead. Traces are created here only to hang scores off — that write still
- * goes through R2DBC.
+ * <p>Why a separate class: it was written when the path sat behind a toggle that defaulted off, so the
+ * rest of the suite exercised the R2DBC implementation instead. That implementation and its toggle are
+ * gone — every bulk write is JSONEachRow now, and the resource suites cover it end to end. This class
+ * keeps the column-level assertions those suites do not make: sentinels, omitted fields, the authored
+ * versus unauthored table split, and precision that only a real server can settle.
  *
  * <p>It deliberately asserts only what a real server can settle, since the framing and the settings are
  * already unit-tested in {@code JsonEachRowBulkInsertTest}:
@@ -152,7 +151,6 @@ class BulkInsertV2ClientIntegrationTest {
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .redisUrl(redisContainer.getRedisURI())
                         .runtimeInfo(wireMock.runtimeInfo())
-                        .customConfigs(List.of(new CustomConfig("bulkInsert.v2ClientEnabled", "true")))
                         .build());
     }
 
