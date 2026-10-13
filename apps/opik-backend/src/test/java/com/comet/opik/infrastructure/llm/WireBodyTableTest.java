@@ -11,6 +11,7 @@ import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.FreeModelConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
+import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonParser;
@@ -34,9 +35,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -48,7 +49,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
@@ -64,7 +65,6 @@ import static org.mockito.Mockito.when;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class WireBodyTableTest {
 
-    private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String JUDGE_PATH = "judge";
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
     // Parsing would otherwise hide a duplicate key: Jackson keeps only the last of two.
@@ -77,7 +77,7 @@ class WireBodyTableTest {
 
     @RequiredArgsConstructor
     private enum Provider {
-        ANTHROPIC(LlmProvider.ANTHROPIC, "anthropic", "/v1/", "/v1/messages", """
+        ANTHROPIC(LlmProvider.ANTHROPIC, Map.of(), "anthropic", "/v1/", "/v1/messages", """
                 {"id":"msg_1","type":"message","role":"assistant","model":"claude",\
                 "content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn",\
                 "usage":{"input_tokens":1,"output_tokens":1}}""", """
@@ -100,9 +100,61 @@ class WireBodyTableTest {
                 event: message_stop
                 data: {"type":"message_stop"}
 
-                """);
+                """),
+        OPENAI(LlmProvider.OPEN_AI, Map.of(), "openai", "/v1", "/v1/chat/completions", """
+                {"id":"chatcmpl-1","object":"chat.completion","created":1,"model":"gpt",\
+                "choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],\
+                "usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}""", """
+                data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1,"model":"gpt",\
+                "choices":[{"index":0,"delta":{"role":"assistant","content":"ok"},"finish_reason":null}]}
+
+                data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1,"model":"gpt",\
+                "choices":[{"index":0,"delta":{},"finish_reason":"stop"}],\
+                "usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
+
+                data: [DONE]
+
+                """),
+        OPENAI_RESPONSES(LlmProvider.OPEN_AI, Map.of("openai_pipeline_mode", "RESPONSES_API"), "openai-responses",
+                "/v1", "/v1/responses", """
+                        {"id":"resp_1","object":"response","created_at":1,"status":"completed","error":null,\
+                        "incomplete_details":null,"instructions":null,"max_output_tokens":null,"model":"gpt",\
+                        "parallel_tool_calls":true,"previous_response_id":null,"reasoning":{"effort":null,\
+                        "summary":null},"store":false,"temperature":1.0,"text":{"format":{"type":"text"}},\
+                        "tool_choice":"auto","tools":[],"top_p":1.0,"truncation":"disabled","user":null,\
+                        "metadata":{},"output":[{"type":"message","id":"msg_1","status":"completed",\
+                        "role":"assistant","content":[{"type":"output_text","text":"ok","annotations":[]}]}],\
+                        "usage":{"input_tokens":1,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,\
+                        "output_tokens_details":{"reasoning_tokens":0},"total_tokens":2}}""", """
+                        event: response.created
+                        data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_1",\
+                        "object":"response","created_at":1,"status":"in_progress","error":null,\
+                        "incomplete_details":null,"instructions":null,"max_output_tokens":null,"model":"gpt",\
+                        "parallel_tool_calls":true,"previous_response_id":null,"reasoning":{"effort":null,\
+                        "summary":null},"store":false,"temperature":1.0,"text":{"format":{"type":"text"}},\
+                        "tool_choice":"auto","tools":[],"top_p":1.0,"truncation":"disabled","user":null,\
+                        "metadata":{},"output":[],"usage":null}}
+
+                        event: response.output_text.delta
+                        data: {"type":"response.output_text.delta","sequence_number":1,"item_id":"msg_1",\
+                        "output_index":0,"content_index":0,"delta":"ok","logprobs":[]}
+
+                        event: response.completed
+                        data: {"type":"response.completed","sequence_number":2,"response":{"id":"resp_1",\
+                        "object":"response","created_at":1,"status":"completed","error":null,\
+                        "incomplete_details":null,"instructions":null,"max_output_tokens":null,"model":"gpt",\
+                        "parallel_tool_calls":true,"previous_response_id":null,"reasoning":{"effort":null,\
+                        "summary":null},"store":false,"temperature":1.0,"text":{"format":{"type":"text"}},\
+                        "tool_choice":"auto","tools":[],"top_p":1.0,"truncation":"disabled","user":null,\
+                        "metadata":{},"output":[{"type":"message","id":"msg_1","status":"completed",\
+                        "role":"assistant","content":[{"type":"output_text","text":"ok","annotations":[]}]}],\
+                        "usage":{"input_tokens":1,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,\
+                        "output_tokens_details":{"reasoning_tokens":0},"total_tokens":2}}}
+
+                        """);
 
         private final LlmProvider llmProvider;
+        private final Map<String, String> configuration;
         private final String rowsFile;
         private final String baseUrlPath;
         private final String endpointPath;
@@ -122,9 +174,14 @@ class WireBodyTableTest {
         var registryConfig = config.getLlmModelRegistry();
         registryConfig.setDefaultResource("wire-body/llm-models.yaml");
 
+        // One workspace per provider, since the two OpenAI routes are two keys for the same provider.
         var llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
-        when(llmProviderApiKeyService.findByProviders(eq(WORKSPACE_ID), anySet()))
-                .thenReturn(Arrays.stream(Provider.values()).map(this::providerApiKey).toList());
+        when(llmProviderApiKeyService.findByProviders(anyString(), anySet())).thenAnswer(invocation -> {
+            var provider = Provider.valueOf(invocation.getArgument(0));
+            return invocation.<Set<LlmProvider>>getArgument(1).contains(provider.llmProvider)
+                    ? List.of(providerApiKey(provider))
+                    : List.of();
+        });
 
         var freeModelConfig = new FreeModelConfig();
         freeModelConfig.setEnabled(false);
@@ -136,6 +193,9 @@ class WireBodyTableTest {
         var anthropicModule = new AnthropicModule();
         anthropicModule.llmServiceProvider(llmProviderFactory,
                 anthropicModule.clientGenerator(config.getLlmProviderClient()));
+        var openAiModule = new OpenAIModule();
+        openAiModule.llmServiceProvider(llmProviderFactory,
+                openAiModule.clientGenerator(config.getLlmProviderClient()));
 
         chatCompletionService = new ChatCompletionService(config.getLlmProviderClient(), llmProviderFactory);
     }
@@ -165,21 +225,51 @@ class WireBodyTableTest {
         return rows(Provider.ANTHROPIC, true);
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void openAiSends(String name, Row row) {
+        assertSends(Provider.OPENAI, row);
+    }
+
+    private Stream<Arguments> openAiSends() {
+        return rows(Provider.OPENAI, false);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void openAiResponsesSends(String name, Row row) {
+        assertSends(Provider.OPENAI_RESPONSES, row);
+    }
+
+    private Stream<Arguments> openAiResponsesSends() {
+        return rows(Provider.OPENAI_RESPONSES, false);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void openAiResponsesRejects(String name, Row row) {
+        assertRejects(Provider.OPENAI_RESPONSES, row);
+    }
+
+    private Stream<Arguments> openAiResponsesRejects() {
+        return rows(Provider.OPENAI_RESPONSES, true);
+    }
+
     private void assertSends(Provider provider, Row row) {
         if (JUDGE_PATH.equals(row.path())) {
             stubProvider(provider, false);
-            scoreTrace(row);
+            scoreTrace(provider, row);
         } else {
             var request = JsonUtils.treeToValue(row.request(), ChatCompletionRequest.class);
             var stream = Boolean.TRUE.equals(request.stream());
             stubProvider(provider, stream);
             if (stream) {
                 var handlers = mock(ChunkedOutputHandlers.class);
-                chatCompletionService.createAndStreamResponse(request, WORKSPACE_ID, handlers);
+                chatCompletionService.createAndStreamResponse(request, provider.name(), handlers);
                 verify(handlers, timeout(5_000)).handleClose();
                 verify(handlers, never()).handleError(any());
             } else {
-                chatCompletionService.create(request, WORKSPACE_ID);
+                chatCompletionService.create(request, provider.name());
             }
         }
 
@@ -194,14 +284,15 @@ class WireBodyTableTest {
 
         assertThatThrownBy(() -> {
             if (JUDGE_PATH.equals(row.path())) {
-                scoreTrace(row);
+                scoreTrace(provider, row);
                 return;
             }
             var request = JsonUtils.treeToValue(row.request(), ChatCompletionRequest.class);
             if (Boolean.TRUE.equals(request.stream())) {
-                chatCompletionService.createAndStreamResponse(request, WORKSPACE_ID, mock(ChunkedOutputHandlers.class));
+                chatCompletionService.createAndStreamResponse(request, provider.name(),
+                        mock(ChunkedOutputHandlers.class));
             } else {
-                chatCompletionService.create(request, WORKSPACE_ID);
+                chatCompletionService.create(request, provider.name());
             }
         }).hasMessageContaining(row.rejected());
         assertThat(wireMock.getAllServeEvents()).isEmpty();
@@ -214,11 +305,11 @@ class WireBodyTableTest {
                 : okJson(provider.response)));
     }
 
-    private void scoreTrace(Row row) {
+    private void scoreTrace(Provider provider, Row row) {
         var code = JsonUtils.treeToValue(row.request(), LlmAsJudgeCode.class);
         var chatRequest = OnlineScoringEngine.prepareLlmRequest(code, null,
                 llmProviderFactory.getStructuredOutputStrategy(row.model()), List.of());
-        chatCompletionService.scoreTrace(chatRequest, code.model(), WORKSPACE_ID);
+        chatCompletionService.scoreTrace(chatRequest, code.model(), provider.name());
     }
 
     private ProviderApiKey providerApiKey(Provider provider) {
@@ -226,6 +317,7 @@ class WireBodyTableTest {
                 .provider(provider.llmProvider)
                 .apiKey(EncryptionUtils.encrypt("test-key"))
                 .baseUrl(wireMock.baseUrl() + provider.baseUrlPath)
+                .configuration(provider.configuration)
                 .build();
     }
 

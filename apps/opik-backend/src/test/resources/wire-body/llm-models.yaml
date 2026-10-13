@@ -1,5 +1,6 @@
-# The registry facts the wire-body table runs on: main's Anthropic entries as of 2026-10-12, so a model sync
-# cannot flip a row. claude-opus-6 is a made-up id that only the registry knows (a model the CDN added).
+# The registry facts the wire-body table runs on: main's Anthropic entries as of 2026-10-12 and a few of its OpenAI
+# entries, so a model sync cannot flip a row. claude-opus-6 and gpt-7 are made-up ids that only the registry knows
+# (a model the CDN added).
 anthropic:
   - id: "claude-opus-5-5"
     structuredOutput: true
@@ -46,3 +47,15 @@ anthropic:
     structuredOutput: true
   - id: "claude-opus-6"
     structuredOutput: true
+openai:
+  - id: "gpt-5-nano"
+    structuredOutput: true
+    reasoning: true
+  - id: "o3-mini"
+    reasoning: true
+  - id: "gpt-4.1"
+    structuredOutput: true
+  - id: "gpt-3.5-turbo"
+  - id: "gpt-7"
+    structuredOutput: true
+    reasoning: true
