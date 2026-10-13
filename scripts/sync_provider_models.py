@@ -175,6 +175,15 @@ OPENAI_DROPDOWN_EXCLUDE = [
     r"^gpt-live",               # realtime voice model, 400 "not a chat model" on /v1/chat/completions
 ]
 
+# Retired, 404 "model: ...". The deprecated filter hid them only while the prices JSON listed them with a
+# deprecation_date; LiteLLM later drops a retired model's entry, and the next sync would show it again.
+ANTHROPIC_DROPDOWN_EXCLUDE = [
+    r"^claude-mythos-preview$",
+    r"^claude-3-7-sonnet-",
+    r"^claude-opus-4-1-",
+    r"^claude-(opus|sonnet)-4-2025",
+]
+
 GEMINI_DROPDOWN_EXCLUDE = [
     r"^aqa$",
     r"^text-embedding",
@@ -184,6 +193,13 @@ GEMINI_DROPDOWN_EXCLUDE = [
     r"^nano-banana",
     r"-image",
     r"-tts",
+    r"-exp$",                    # experimental, removed without a deprecation date
+    r"^gemini-robotics",         # robotics models, 404 on Vertex AI
+    # Retired: Gemini answers "no longer available", Vertex AI 404. The deprecated filter misses them: their
+    # vertex_ai/ entries have no deprecation_date or are gone, and LiteLLM dropped gemini-3-pro-preview's gemini/ entry.
+    r"^gemini-2\.0-",
+    r"^gemini-3-pro-preview$",
+    r"^gemini-3\.1-flash-lite-preview$",
     # Google removed Gemma 2 and Gemma 3 from the AI Studio Gemini API in
     # April 2026 (replaced by Gemma 4). The LiteLLM prices JSON still ships
     # `gemini/gemma-3-*-it` and `gemini/gemini-gemma-2-*-it` entries, but
@@ -332,6 +348,7 @@ def filter_for_dropdown(
     """Filter and sort model entries for the frontend dropdown."""
     exclude = {
         "openai": OPENAI_DROPDOWN_EXCLUDE,
+        "anthropic": ANTHROPIC_DROPDOWN_EXCLUDE,
         "gemini": GEMINI_DROPDOWN_EXCLUDE,
         "vertexai": VERTEXAI_DROPDOWN_EXCLUDE,
         "openrouter": OPENROUTER_DROPDOWN_EXCLUDE,
@@ -347,6 +364,9 @@ def filter_for_dropdown(
     filtered = entries
     if exclude:
         filtered = [e for e in filtered if not matches_any(e.value, exclude)]
+    # Vertex AI serves the same Gemini models; the Gemini patterns are ^-anchored, so they match only without the prefix.
+    if provider == "vertexai":
+        filtered = [e for e in filtered if not matches_any(e.value.removeprefix("vertex_ai/"), GEMINI_DROPDOWN_EXCLUDE)]
     if deprecated:
         filtered = [e for e in filtered if e.value not in deprecated]
     # Empty when the source fetch failed: hiding every model would be worse than showing stale ones.
