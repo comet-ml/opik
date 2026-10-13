@@ -1,4 +1,4 @@
-# What Anthropic receives for each rule, as main sends it on 2026-10-12. See WireBodyTableTest for the format.
+# What Anthropic receives for each rule, as main sends it on 2026-10-13. See WireBodyTableTest for the format.
 # "chat" rows go through the playground and API path (POST /v1/private/chat/completions); "judge" rows go
 # through online-evaluation scoring with the rule's model block as the request.
 
@@ -35,6 +35,17 @@ models:
   # In the registry only, not in AnthropicModelName: what a model the sync or the CDN just added looks like.
   registry-only:
     - claude-opus-6
+  # Every AnthropicModelName id outside THINKING_OFF_BY_DEFAULT_MODEL_IDS. A judge on these thinks even when the rule
+  # names no thinking, so it gets the 5000 max_tokens default instead of 4096; so does a registry-only model.
+  thinks-by-default:
+    - claude-fable-5
+    - claude-fable-5-1
+    - claude-mythos-5
+    - claude-mythos-5-1
+    - claude-mythos-preview
+    - claude-opus-5
+    - claude-opus-5-5
+    - claude-sonnet-5
   # AnthropicModelName.EFFORT_LEVELS_BY_MODEL_ID, by the levels each model is listed with.
   effort-all:
     - claude-fable-5
@@ -261,12 +272,15 @@ rows:
     models: [sampling]
     request: {temperature: 0.3}
     body: {temperature: 0.3}
-  - name: a judge drops temperature for a model that takes none
+  - name: a judge drops temperature for a model that takes none and thinks only when asked
     path: judge
-    models: [no-sampling, registry-only]
+    models: [claude-opus-4-7, claude-opus-4-7-20260416, claude-opus-4-8]
     request: {temperature: 0.3}
-    # #8881 raises max_tokens to 5000 for the models here that think by default (all but claude-opus-4-7,
-    # claude-opus-4-7-20260416 and claude-opus-4-8), since a thinking judge can spend all 4096 before it answers.
+  - name: a judge drops temperature and sends 5000 max_tokens for a model that thinks by default
+    path: judge
+    models: [thinks-by-default, registry-only]
+    request: {temperature: 0.3}
+    body: {max_tokens: 5000}
   - name: a judge on Claude 3 puts the output format in the prompt
     path: judge
     models: [legacy]
@@ -325,14 +339,14 @@ rows:
     body:
       temperature: 0.3
       thinking: {type: disabled}
-  - name: a judge sends adaptive thinking
+  - name: a judge sends adaptive thinking and 5000 max_tokens
     path: judge
     model: claude-opus-4-7
     request:
       custom_parameters: {thinking: {type: adaptive}}
     body:
       thinking: {type: adaptive}
-    # #8881 raises max_tokens to 5000 here, since the judge will think.
+      max_tokens: 5000
   - name: a judge sends max_tokens from custom_parameters
     path: judge
     model: claude-sonnet-4-6
@@ -341,13 +355,22 @@ rows:
     body: {max_tokens: 1000}
   - name: a judge sends the effort and the output schema in one output_config
     path: judge
-    models: [effort-all, effort-to-max, effort-to-high, registry-only]
+    models: [claude-opus-4-5-20251101, claude-opus-4-6, claude-opus-4-6-20260205, claude-opus-4-7,
+      claude-opus-4-7-20260416, claude-opus-4-8, claude-sonnet-4-6]
     request:
       custom_parameters: {output_config: {effort: high}}
     body:
       output_config: {effort: high}
-    # #8841 (with #8880) adds thinking: {type: adaptive} for claude-sonnet-4-6, claude-opus-4-6(-20260205),
-    # claude-opus-4-7(-20260416) and claude-opus-4-8; #8881 then raises max_tokens to 5000 wherever the judge thinks.
+    # #8841 (with #8880) adds thinking: {type: adaptive} for all of these but claude-opus-4-5-20251101, and then
+    # max_tokens 5000 as well, since the judge will think.
+  - name: a judge sends the effort, the output schema and 5000 max_tokens for a model that thinks by default
+    path: judge
+    models: [thinks-by-default, registry-only]
+    request:
+      custom_parameters: {output_config: {effort: high}}
+    body:
+      output_config: {effort: high}
+      max_tokens: 5000
   - name: a judge rejects effort on a model without effort
     path: judge
     models: [legacy, effort-none]

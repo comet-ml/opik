@@ -70,6 +70,14 @@ class WireBodyAnthropicGroupsTest {
     }
 
     @Test
+    void thinksByDefaultListsEveryModelOutsideTheThinkingOffSet() {
+        var expected = new HashSet<>(AnthropicModelName.allModelIds());
+        expected.removeAll(AnthropicModelName.thinkingOffByDefaultModelIds());
+
+        assertThat(group("thinks-by-default")).containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    @Test
     void registryOnlyModelsAreNotInTheEnum() {
         assertThat(group("registry-only")).doesNotContainAnyElementsOf(AnthropicModelName.allModelIds());
     }
