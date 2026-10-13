@@ -15,6 +15,8 @@ export interface VegaChartInput {
 export interface VegaRenderOptions {
   // The user's colour for a series label (workspace colour map), if any; the chart rules colour the rest.
   colorOverride?: (label: string) => string | undefined;
+  // Keeps remembered entity colours apart per workspace.
+  registryScope?: string;
   // "container" fills the element's height; a number fixes it.
   height?: number | "container";
 }
@@ -224,11 +226,20 @@ const applyChartRules = (
   unit: Unit,
   rows: VegaRows,
   tokens: ChartTokens,
-  colorOverride?: (label: string) => string | undefined,
+  {
+    colorOverride,
+    registryScope,
+    parentTransformed = false,
+  }: Pick<VegaRenderOptions, "colorOverride" | "registryScope"> & {
+    parentTransformed?: boolean;
+  },
 ) => {
   const encoding = unit.encoding as Record<string, Channel> | undefined;
   const mark = markType(unit);
   if (!encoding || !mark) return;
+  const transformed =
+    parentTransformed ||
+    (Array.isArray(unit.transform) && unit.transform.length > 0);
   const { color, x, y, xOffset } = encoding;
 
   TITLED_CHANNELS.forEach((name) => {
@@ -255,26 +266,29 @@ const applyChartRules = (
     });
   }
 
+  // An explicit domain is listed in full by the legend, so it is only safe when no transform can drop rows first.
   if (
     color &&
     typeof color.field === "string" &&
     !color.scale &&
+    !transformed &&
     (color.type === undefined || DISCRETE.has(color.type as string))
   ) {
     const field = color.field;
+    // Same values as the data: Vega matches domain entries by identity, so "200" would miss a coerced 200.
     const domain = uniq(
       rows
         .map((row) => row[field])
-        .filter((value) => value !== null && value !== undefined)
-        .map(String),
+        .filter((value) => value !== null && value !== undefined),
     );
     if (domain.length) {
       color.scale = {
         domain,
-        range: assignSeriesColors(domain, tokens, {
+        range: assignSeriesColors(domain.map(String), tokens, {
           field,
           strong: THIN_MARKS.has(mark),
           override: colorOverride,
+          registryScope,
         }),
       };
     }
@@ -294,24 +308,30 @@ const applyChartRules = (
   }
 };
 
-const NUMERIC = /^-?\d+(\.\d+)?([eE][-+]?\d+)?$/;
+// No leading zeros: "00123" is a code, not a number.
+const NUMERIC = /^-?(0|[1-9]\d*)(\.\d+)?([eE][-+]?\d+)?$/;
+
+const toNumber = (value: string): number | string => {
+  if (!NUMERIC.test(value)) return value;
+  const number = Number(value);
+  // A 64-bit id past 2^53 would come back as a different number.
+  const isInteger = !/[.eE]/.test(value);
+  return isInteger && !Number.isSafeInteger(number) ? value : number;
+};
 
 // toJSONString(map(...)) returns every value as a string; Vega needs numbers to scale and aggregate them.
 export const coerceNumericRows = (rows: VegaRows): VegaRows =>
   rows.map((row) => {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(row)) {
-      result[key] =
-        typeof value === "string" && NUMERIC.test(value)
-          ? Number(value)
-          : value;
+      result[key] = typeof value === "string" ? toNumber(value) : value;
     }
     return result;
   });
 
 export const prepareVegaSpec = (
   { spec, rows }: VegaChartInput,
-  { colorOverride, height = DEFAULT_HEIGHT }: VegaRenderOptions,
+  { colorOverride, registryScope, height = DEFAULT_HEIGHT }: VegaRenderOptions,
   tokens: ChartTokens = readChartTokens(),
 ): VegaSpec => {
   const prepared = cloneDeep(spec);
@@ -327,17 +347,26 @@ export const prepareVegaSpec = (
   const values = rows
     ? coerceNumericRows(rows)
     : (data?.values as VegaRows | undefined) ?? [];
-  if (rows && typeof data?.name === "string") {
+  if (rows) {
+    // Live rows always win: a spec carrying its own `values` (or any other source) would show stale data.
+    const name = typeof data?.name === "string" ? data.name : VEGA_ROWS_DATASET;
+    prepared.data = { name };
     prepared.datasets = {
       ...((prepared.datasets as object) ?? {}),
-      [data.name]: values,
+      [name]: values,
     };
   }
 
-  applyChartRules(prepared, values, tokens, colorOverride);
+  const ruleOptions = { colorOverride, registryScope };
+  applyChartRules(prepared, values, tokens, ruleOptions);
   if (Array.isArray(prepared.layer)) {
+    const parentTransformed =
+      Array.isArray(prepared.transform) && prepared.transform.length > 0;
     prepared.layer.forEach((layer: Unit) =>
-      applyChartRules(layer, values, tokens, colorOverride),
+      applyChartRules(layer, values, tokens, {
+        ...ruleOptions,
+        parentTransformed,
+      }),
     );
   }
 

@@ -170,11 +170,12 @@ function useBridgeContext(
       renderVega: (el, input, options) =>
         renderVegaChart(el, input, {
           colorOverride: (label) => colorMap?.[label],
+          registryScope: workspaceName,
           ...options,
         }),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [colorMap, themeMode],
+    [colorMap, themeMode, workspaceName],
   );
 
   return useMemo<BridgeContext>(

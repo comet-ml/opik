@@ -3,8 +3,8 @@ import { ChartTokens, SERIES_COUNT, resolveCssColor } from "./chartTokens";
 /**
  * Series colour assignment from the chart rules (src/styles/widget-tokens):
  *   1. A user override (the workspace colour map) wins.
- *   2. A key of a known entity kind (model, tool, project…) keeps the palette slot it got the first time it was
- *      seen, in every widget; each kind has its own sequence from --chart-1.
+ *   2. A key of a known entity kind (model, tool, project…) keeps its palette slot in every widget for as long as
+ *      it keeps being seen; each kind has its own ten slots, per workspace.
  *   3. Other keys take the next --chart-1…10 not already used in this chart.
  *   4. From the 11th colour on: generated colours, seeded by the key so a reload gives the same colour.
  *   5. Keys beyond MAX_SERIES take --chart-other.
@@ -31,25 +31,55 @@ const ENTITY_KINDS = [
   "language",
 ];
 
-// The registry lives in the browser until the workspace colour map can store entity slots server-side.
-const REGISTRY_KEY = "opik-chart-entity-colors";
+// The registry lives in the browser until the workspace colour map can store entity slots server-side. It holds at
+// most one entry per palette slot and kind; a new entity takes the slot of the one seen longest ago.
+const REGISTRY_KEY = "opik-chart-entity-colors-v2";
+const LEGACY_REGISTRY_KEY = "opik-chart-entity-colors";
+const DAY = 86_400_000;
 
-type Registry = Record<string, Record<string, number>>;
+type SlotEntry = { slot: number; seen: number };
+type Registry = Record<string, Record<string, SlotEntry>>;
 
-const readRegistry = (): Registry => {
+const registryKey = (scope?: string) =>
+  scope ? `${REGISTRY_KEY}:${scope}` : REGISTRY_KEY;
+
+const readRegistry = (scope?: string): Registry => {
   try {
-    return JSON.parse(localStorage.getItem(REGISTRY_KEY) ?? "{}") as Registry;
+    localStorage.removeItem(LEGACY_REGISTRY_KEY);
+    return JSON.parse(
+      localStorage.getItem(registryKey(scope)) ?? "{}",
+    ) as Registry;
   } catch {
     return {};
   }
 };
 
-const writeRegistry = (registry: Registry) => {
+const writeRegistry = (registry: Registry, scope?: string) => {
   try {
-    localStorage.setItem(REGISTRY_KEY, JSON.stringify(registry));
+    localStorage.setItem(registryKey(scope), JSON.stringify(registry));
   } catch {
     // Storage can be blocked; slots then hold for this chart only.
   }
+};
+
+// The slot a new entity takes: a free one, else the one held longest by an entity not in this chart.
+const claimSlot = (
+  slots: Record<string, SlotEntry>,
+  inChart: Set<string>,
+  used: Set<number>,
+): number | undefined => {
+  const taken = new Set(Object.values(slots).map((entry) => entry.slot));
+  const free = Array.from({ length: SERIES_COUNT }, (_, i) => i).find(
+    (i) => !taken.has(i) && !used.has(i),
+  );
+  if (free !== undefined) return free;
+
+  const [evicted] = Object.entries(slots)
+    .filter(([key, entry]) => !inChart.has(key) && !used.has(entry.slot))
+    .sort(([, a], [, b]) => a.seen - b.seen);
+  if (!evicted) return undefined;
+  delete slots[evicted[0]];
+  return evicted[1].slot;
 };
 
 // "model", "model_name", "spanType", "plan_tier" → the entity kind, if the field names one.
@@ -106,20 +136,25 @@ export interface AssignOptions {
   // Thin marks take the -strong variant.
   strong: boolean;
   override?: (key: string) => string | undefined;
+  // Remembered entity slots are kept per scope (the workspace).
+  registryScope?: string;
 }
 
 export const assignSeriesColors = (
   keys: string[],
   tokens: ChartTokens,
-  { field, strong, override }: AssignOptions,
+  { field, strong, override, registryScope }: AssignOptions,
 ): string[] => {
   const palette = strong ? tokens.paletteStrong : tokens.palette;
   const other = strong ? tokens.otherStrong : tokens.other;
   const kind = entityKind(field);
-  const registry = kind ? readRegistry() : {};
+  const registry = kind ? readRegistry(registryScope) : {};
   const slots = kind ? (registry[kind] ??= {}) : {};
   const used = new Set<number>();
   const result: (string | undefined)[] = new Array(keys.length);
+  const today = Math.floor(Date.now() / DAY);
+  const inChart = new Set(keys.slice(0, MAX_SERIES));
+  let registryChanged = false;
 
   // Overrides and remembered entity slots first, so palette order fills around them.
   keys.forEach((key, index) => {
@@ -129,14 +164,17 @@ export const assignSeriesColors = (
       result[index] = resolveCssColor(custom);
       return;
     }
-    const slot = slots[key];
-    if (slot !== undefined && slot < SERIES_COUNT && !used.has(slot)) {
-      used.add(slot);
-      result[index] = palette[slot];
+    const entry = slots[key];
+    if (entry && entry.slot < SERIES_COUNT && !used.has(entry.slot)) {
+      used.add(entry.slot);
+      result[index] = palette[entry.slot];
+      if (entry.seen !== today) {
+        entry.seen = today;
+        registryChanged = true;
+      }
     }
   });
 
-  let registryChanged = false;
   const avoidHues = palette
     .map(hueOf)
     .filter((h): h is number => h !== undefined);
@@ -151,11 +189,13 @@ export const assignSeriesColors = (
     }
 
     let slot: number | undefined;
-    if (kind && slots[key] === undefined) {
-      // A new entity takes its kind's next slot in sequence, and keeps it from then on.
-      slots[key] = Object.keys(slots).length;
-      registryChanged = true;
-      if (slots[key] < SERIES_COUNT && !used.has(slots[key])) slot = slots[key];
+    if (kind && !slots[key]) {
+      // A new entity claims a slot of its kind and keeps it while it keeps being seen.
+      slot = claimSlot(slots, inChart, used);
+      if (slot !== undefined) {
+        slots[key] = { slot, seen: today };
+        registryChanged = true;
+      }
     }
     slot ??= nextFree();
 
@@ -167,6 +207,6 @@ export const assignSeriesColors = (
     result[index] = palette[slot];
   });
 
-  if (kind && registryChanged) writeRegistry(registry);
+  if (kind && registryChanged) writeRegistry(registry, registryScope);
   return result as string[];
 };
