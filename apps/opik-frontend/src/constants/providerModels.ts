@@ -238,10 +238,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "amazon/nova-micro-v1",
     },
     {
-      value: PROVIDER_MODEL_TYPE.AMAZON_NOVA_PREMIER_V1,
-      label: "amazon/nova-premier-v1",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.AMAZON_NOVA_PRO_V1,
       label: "amazon/nova-pro-v1",
     },
@@ -555,10 +551,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-3.0-flash",
     },
     {
-      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_FIN,
-      label: "inclusionai/ling-3.0-flash-fin",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_VL,
       label: "inclusionai/ling-3.0-flash-vl",
     },
@@ -797,10 +789,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_HERMES_3_LLAMA_3_1_405B,
       label: "nousresearch/hermes-3-llama-3.1-405b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_HERMES_3_LLAMA_3_1_70B,
-      label: "nousresearch/hermes-3-llama-3.1-70b",
     },
     {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_HERMES_4_405B,

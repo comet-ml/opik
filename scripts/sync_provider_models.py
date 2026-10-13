@@ -214,6 +214,9 @@ OPENROUTER_DROPDOWN_EXCLUDE = [
     r"^thinkingmachines/inkling.*:free$",  # 403 "only available on agentic harnesses"
     r"^openai/gpt-5\.2-chat$",             # its only endpoint is Azure and BYOK only: 404 "No endpoints found"
     r"^minimax/minimax-m1$",               # answers only in its reasoning; the content stays empty
+    r"^amazon/nova-premier-v1$",           # retired on Bedrock: 400 "This model version has reached the end of its life"
+    r"^inclusionai/ling-3\.0-flash-fin$",  # no provider serves it: 404 "No endpoints found"
+    r"^nousresearch/hermes-3-llama-3\.1-70b$",  # streams the same junk sentence until the output limit
 ]
 
 

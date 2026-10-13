@@ -417,7 +417,6 @@ openrouter:
     label: "amazon/nova-micro-v1"
     supportedParameters: [max_tokens, temperature, top_k, top_p]
   - id: "amazon/nova-premier-v1"
-    label: "amazon/nova-premier-v1"
     supportedParameters: [max_tokens, temperature, top_k, top_p]
   - id: "amazon/nova-pro-v1"
     label: "amazon/nova-pro-v1"
@@ -761,7 +760,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
   - id: "inclusionai/ling-3.0-flash-fin"
-    label: "inclusionai/ling-3.0-flash-fin"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
   - id: "inclusionai/ling-3.0-flash-vl"
@@ -1008,7 +1006,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
   - id: "nousresearch/hermes-3-llama-3.1-70b"
-    label: "nousresearch/hermes-3-llama-3.1-70b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
   - id: "nousresearch/hermes-4-405b"
