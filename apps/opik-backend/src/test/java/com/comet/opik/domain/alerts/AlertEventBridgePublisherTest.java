@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -144,6 +145,24 @@ class AlertEventBridgePublisherTest {
         JsonNode detail = JsonUtils.getJsonNodeFromString(captureEntries(1).getFirst().detail());
         assertThat(detail.has("url")).isTrue();
         assertThat(detail.get("url").isNull()).isTrue();
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "https://host/opik?x=1#frag, https://host/opik/",
+            "https://host/opik/, https://host/opik/",
+            "https://host:8443/my%20opik, https://host:8443/my%20opik/",
+            "http://host, http://host/"})
+    void publishBuildsUrlFromBaseSchemeAuthorityAndPath(String baseUrl, String expectedBase) {
+        when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
+        var alert = alert(Map.of("base_url", baseUrl));
+
+        StepVerifier.create(publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
+                TRIGGERED_AT, payload(alert, List.of("event-1"), List.of()))).verifyComplete();
+
+        JsonNode detail = JsonUtils.getJsonNodeFromString(captureEntries(1).getFirst().detail());
+        assertThat(detail.get("url").asText()).isEqualTo(expectedBase + WORKSPACE_NAME + "/projects/" + PROJECT_ID
+                + "/alerts/" + alert.id());
     }
 
     @Test

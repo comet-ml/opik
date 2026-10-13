@@ -256,7 +256,9 @@ public class AlertEventBridgePublisher {
             return null;
         }
 
-        String base = baseUri.toString();
+        // A query or fragment on the base would end up in front of the appended path
+        String base = baseUri.getScheme() + "://" + baseUri.getRawAuthority()
+                + StringUtils.defaultString(baseUri.getRawPath());
         // projectId and alertId are UUIDs, already safe as path segments
         return (base.endsWith("/") ? base : base + "/") + encodePathSegment(workspaceName) + "/projects/"
                 + alert.projectId() + "/alerts/" + alert.id();
