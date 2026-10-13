@@ -70,7 +70,7 @@ class WireBodyAnthropicGroupsTest {
     }
 
     @Test
-    void thinksByDefaultListsEveryModelOutsideTheThinkingOffSet() {
+    void thinksByDefaultListsEveryModelOutsideTheThinkingOffByDefaultSet() {
         var expected = new HashSet<>(AnthropicModelName.allModelIds());
         expected.removeAll(AnthropicModelName.thinkingOffByDefaultModelIds());
 

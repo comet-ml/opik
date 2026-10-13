@@ -233,6 +233,8 @@ class WireBodyTableTest {
     }
 
     private Stream<Arguments> openAiSends() {
+        // No openAiRejects test: a rejected row added here would otherwise be skipped without running.
+        assertThat(rows(Provider.OPENAI, true)).isEmpty();
         return rows(Provider.OPENAI, false);
     }
 
@@ -338,6 +340,12 @@ class WireBodyTableTest {
         for (var row : file.get("rows")) {
             if (row.hasNonNull("rejected") != rejected) {
                 continue;
+            }
+            for (var key : List.of("request", "body")) {
+                if (row.has(key) && !row.get(key).isObject()) {
+                    throw new IllegalArgumentException("Row '%s': %s must be a map, got %s"
+                            .formatted(row.path("name").asText(), key, row.get(key)));
+                }
             }
             var path = row.path("path").asText("chat");
             var defaults = file.path("defaults").path(path);

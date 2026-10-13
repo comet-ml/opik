@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import lombok.SneakyThrows;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -34,9 +35,18 @@ class WireBodyOpenAiGroupsTest {
 
     @BeforeAll
     void loadRegistry() {
+        var ids = new HashSet<String>();
         for (var model : read("wire-body/llm-models.yaml").get("openai")) {
-            (model.path("reasoning").asBoolean() ? reasoningIds : otherIds).add(model.get("id").asText());
+            var id = model.get("id").asText();
+            assertThat(ids.add(id)).as("'%s' is listed twice in the registry file", id).isTrue();
+            (model.path("reasoning").asBoolean() ? reasoningIds : otherIds).add(id);
         }
+    }
+
+    @Test
+    void bothRoutesListTheSameGroups() {
+        assertThat(read("wire-body/openai-responses.yaml").get("models"))
+                .isEqualTo(read("wire-body/openai.yaml").get("models"));
     }
 
     @ParameterizedTest

@@ -105,7 +105,7 @@ rows:
     models: [reasoning, registry-only]
     request: {reasoning_effort: max}
     body: {reasoning_effort: high}
-    # #8915 leaves the effort out here and on the next row, so the model runs at its own default.
+    # This row and the next flip when #8915 merges: it leaves a max effort out instead of sending high.
   - name: max effort is sent as high on a streamed request too
     model: gpt-5-nano
     request: {stream: true, reasoning_effort: max}
