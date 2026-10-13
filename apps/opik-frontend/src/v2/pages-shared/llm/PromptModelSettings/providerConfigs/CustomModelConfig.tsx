@@ -17,7 +17,10 @@ import { Label } from "@/ui/label";
 import { FormErrorSkeleton } from "@/ui/form";
 import isUndefined from "lodash/isUndefined";
 import { resolveSamplingParams } from "@/lib/modelUtils";
-import { getExtraBodySliderOverlap } from "@/lib/extraBodyParameters";
+import {
+  getExtraBodySliderOverlap,
+  isSentToProvider,
+} from "@/lib/extraBodyParameters";
 import ExclusiveSamplingParams, {
   resolveSamplingPresentation,
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
@@ -74,9 +77,21 @@ const CustomModelConfig = ({
       top_p: supports("topP") && !isUndefined(topP),
       max_completion_tokens:
         supports("maxCompletionTokens") &&
-        !isUndefined(configs.maxCompletionTokens),
-      frequency_penalty: !isUndefined(configs.frequencyPenalty),
-      presence_penalty: !isUndefined(configs.presencePenalty),
+        isSentToProvider(
+          provider,
+          "max_completion_tokens",
+          configs.maxCompletionTokens,
+        ),
+      frequency_penalty: isSentToProvider(
+        provider,
+        "frequency_penalty",
+        configs.frequencyPenalty,
+      ),
+      presence_penalty: isSentToProvider(
+        provider,
+        "presence_penalty",
+        configs.presencePenalty,
+      ),
     },
   });
 

@@ -41,11 +41,13 @@ const renderPanel = (
     provider = PROVIDER_TYPE.CUSTOM,
     model = MODEL,
     sampling = { temperature: 0.25, topP: 1 },
+    sliders,
     unsupportedParams,
   }: {
     provider?: PROVIDER_TYPE;
     model?: PROVIDER_MODEL_TYPE;
     sampling?: { temperature?: number; topP?: number };
+    sliders?: Partial<LLMCustomConfigsType>;
     unsupportedParams?: typeof RULE_UNSUPPORTED_PARAMS;
   } = {},
 ) =>
@@ -58,6 +60,7 @@ const renderPanel = (
             maxCompletionTokens: 66,
             frequencyPenalty: 0,
             presencePenalty: 0,
+            ...sliders,
             custom_parameters: customParameters,
           } as LLMCustomConfigsType
         }
@@ -126,6 +129,60 @@ describe("CustomModelConfig extra body", () => {
       expect(
         screen.getByText(`Sent instead of the slider: ${keys}`),
       ).toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    {
+      name: "Ollama sends no Max output tokens of 0",
+      provider: PROVIDER_TYPE.OLLAMA,
+      sliders: { maxCompletionTokens: 0 },
+      customParameters: { max_tokens: 12 },
+      expected: null,
+    },
+    {
+      name: "Bedrock sends no Max output tokens of 0",
+      provider: PROVIDER_TYPE.BEDROCK,
+      sliders: { maxCompletionTokens: 0 },
+      customParameters: { max_completion_tokens: 40 },
+      expected: null,
+    },
+    {
+      name: "Bedrock sends no penalty of 0",
+      provider: PROVIDER_TYPE.BEDROCK,
+      sliders: { frequencyPenalty: 0, presencePenalty: 0 },
+      customParameters: { frequency_penalty: 0.3, presence_penalty: 0.4 },
+      expected: null,
+    },
+    {
+      name: "Bedrock sends a penalty that is not 0",
+      provider: PROVIDER_TYPE.BEDROCK,
+      sliders: { frequencyPenalty: 0.5, presencePenalty: 0 },
+      customParameters: { frequency_penalty: 0.3, presence_penalty: 0.4 },
+      expected: "frequency_penalty",
+    },
+    {
+      name: "Ollama sends a penalty of 0",
+      provider: PROVIDER_TYPE.OLLAMA,
+      sliders: { frequencyPenalty: 0 },
+      customParameters: { frequency_penalty: 0.3 },
+      expected: "frequency_penalty",
+    },
+    {
+      name: "a Custom LLM sends a Max output tokens of 0",
+      provider: PROVIDER_TYPE.CUSTOM,
+      sliders: { maxCompletionTokens: 0 },
+      customParameters: { max_tokens: 12 },
+      expected: "max_tokens",
+    },
+  ])(
+    "names only the sliders the request sends: $name",
+    ({ provider, sliders, customParameters, expected }) => {
+      renderPanel(customParameters, { provider, sliders });
+
+      expect(
+        screen.queryByText(/Sent instead of the slider/)?.textContent ?? null,
+      ).toBe(expected && `Sent instead of the slider: ${expected}`);
     },
   );
 

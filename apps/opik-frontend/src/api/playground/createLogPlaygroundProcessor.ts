@@ -3,7 +3,6 @@ import { v7 } from "uuid";
 import pick from "lodash/pick";
 import omit from "lodash/omit";
 import isPlainObject from "lodash/isPlainObject";
-import isNumber from "lodash/isNumber";
 
 import {
   LogExperiment,
@@ -39,6 +38,8 @@ import { parseCompletionError, parseCompletionOutput } from "@/lib/playground";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import { parseComposedProviderType } from "@/lib/provider";
 import {
+  isSentToProvider,
+  PENALTY_KEYS,
   TOKEN_LIMIT_KEY_SENT,
   TOKEN_LIMIT_KEYS,
 } from "@/lib/extraBodyParameters";
@@ -262,11 +263,9 @@ const getSpanFromRun = (
   };
 };
 
-const PENALTY_KEYS = ["frequency_penalty", "presence_penalty"];
-
 // Mirrors the backend (CustomLlmProvider.normalizeForProvider), which runs before the extra body is
 // applied: Ollama reads only max_tokens and Bedrock only max_completion_tokens, so each gets the limit
-// under its own name, and only a positive slider limit. Bedrock also gets no penalty of 0.
+// under its own name.
 const normalizeForProvider = (
   provider: PROVIDER_TYPE,
   parameters: Record<string, unknown>,
@@ -278,16 +277,15 @@ const normalizeForProvider = (
   const sliderLimit = [
     parameters.max_completion_tokens,
     parameters.max_tokens,
-  ].find((value) => isNumber(value) && value > 0);
-  const zeroPenalties =
-    provider === PROVIDER_TYPE.BEDROCK
-      ? PENALTY_KEYS.filter((key) => parameters[key] === 0)
-      : [];
+  ].find((value) => isSentToProvider(provider, limitKey, value));
+  const unsentPenalties = PENALTY_KEYS.filter(
+    (key) => !isSentToProvider(provider, key, parameters[key]),
+  );
   const otherLimitKey = TOKEN_LIMIT_KEYS.find((key) => key !== limitKey)!;
 
   return {
     parameters: {
-      ...omit(parameters, [...TOKEN_LIMIT_KEYS, ...zeroPenalties]),
+      ...omit(parameters, [...TOKEN_LIMIT_KEYS, ...unsentPenalties]),
       ...(sliderLimit !== undefined && { [limitKey]: sliderLimit }),
     },
     // The backend moves the limit with putIfAbsent, which also replaces a null, so a null under the
