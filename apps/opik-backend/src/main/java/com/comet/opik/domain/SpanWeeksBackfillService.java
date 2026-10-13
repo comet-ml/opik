@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.domain.SpanWeeksBackfillChunkDAO.Chunk;
-import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
 import com.comet.opik.infrastructure.SpanWeeksBackfillConfig;
 import com.google.common.base.Preconditions;
 import jakarta.inject.Inject;
@@ -35,9 +34,10 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * step backfills the oldest pending chunk; once none is pending, steps do nothing. Nothing here needs spans to be
  * partitioned: a span's week always comes from its id.
  *
- * <p>Correct only if span writes register their weeks ({@code spanWeeksWriteEnabled}) on every instance before the
- * plan is taken: the chunks cover the spans written until then, and live registration everything after. A chunk that
- * fails is retried by the next step; re-registering a week is harmless, as span_weeks collapses repeats.
+ * <p>The plan covers the spans written until it is taken; live registration ({@code spanWeeksWriteEnabled}) covers
+ * everything after. So the job ({@code spanWeeksBackfillEnabled}) must only be switched on once live registration is on
+ * for every instance: a rollout rule, not checked here, since no single instance can see the others' flags. A chunk
+ * that fails is retried by the next step; re-registering a week is harmless, as span_weeks collapses repeats.
  */
 @Singleton
 @Slf4j
@@ -45,18 +45,15 @@ public class SpanWeeksBackfillService {
 
     private final TransactionTemplate template;
     private final SpanWeeksDAO spanWeeksDAO;
-    private final DatabaseAnalyticsDataModelConfig dataModelConfig;
     private final SpanWeeksBackfillConfig config;
 
     @Inject
     public SpanWeeksBackfillService(
             @NonNull TransactionTemplate template,
             @NonNull SpanWeeksDAO spanWeeksDAO,
-            @NonNull @Config("databaseAnalyticsDataModel") DatabaseAnalyticsDataModelConfig dataModelConfig,
             @NonNull @Config("spanWeeksBackfill") SpanWeeksBackfillConfig config) {
         this.template = template;
         this.spanWeeksDAO = spanWeeksDAO;
-        this.dataModelConfig = dataModelConfig;
         this.config = config;
     }
 
@@ -71,10 +68,6 @@ public class SpanWeeksBackfillService {
     }
 
     public Mono<Void> runStep() {
-        if (!dataModelConfig.spanWeeksWriteEnabled()) {
-            log.warn("Span weeks backfill skipped: databaseAnalyticsDataModel.spanWeeksWriteEnabled is off");
-            return Mono.empty();
-        }
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
             var chunks = handle.attach(SpanWeeksBackfillChunkDAO.class);
             return new Progress(chunks.count() > 0, chunks.findNextPending());

@@ -12,8 +12,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Tuning of the span weeks backfill job (OPIK-8706): how often it runs, how many weeks of span ids each run covers, and
  * the threads and time each run's insert may use. Whether the job is scheduled at all is
- * {@code databaseAnalyticsDataModel.spanWeeksBackfillEnabled}; a scheduled run still does nothing while
- * {@code databaseAnalyticsDataModel.spanWeeksWriteEnabled} is off.
+ * {@code databaseAnalyticsDataModel.spanWeeksBackfillEnabled}.
  */
 @Data
 public class SpanWeeksBackfillConfig {

@@ -87,7 +87,7 @@ class SpanWeeksBackfillServiceTest {
         MigrationUtils.runMysqlDbMigration(MYSQL);
         MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
 
-        // Span writes register nothing here, so every week found afterwards is the backfill's. Validation off admits
+        // Live registration stays off here, so every week found afterwards is the backfill's. Validation off admits
         // the boundary ids that only historical rows carry.
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(MYSQL.getJdbcUrl())
@@ -103,24 +103,20 @@ class SpanWeeksBackfillServiceTest {
     private SpanResourceClient spanResourceClient;
     private ProjectResourceClient projectResourceClient;
     private SpanService spanService;
-    private SpanWeeksBackfillService writesOffBackfillService;
     private SpanWeeksBackfillService backfillService;
+    private SpanWeeksBackfillService otherInstance;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, SpanService spanService,
-            @Jit SpanWeeksBackfillService writesOffBackfillService, TransactionTemplate template,
-            @Jit SpanWeeksDAO spanWeeksDAO, OpikConfiguration configuration) {
+    void setUpAll(ClientSupport client, SpanService spanService, @Jit SpanWeeksBackfillService backfillService,
+            TransactionTemplate template, @Jit SpanWeeksDAO spanWeeksDAO, OpikConfiguration configuration) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.spanService = spanService;
-        this.writesOffBackfillService = writesOffBackfillService;
-
-        // The backfill as it runs once span writes register their weeks.
-        this.backfillService = new SpanWeeksBackfillService(template, spanWeeksDAO,
-                configuration.getDatabaseAnalyticsDataModel().toBuilder().spanWeeksWriteEnabled(true).build(),
-                configuration.getSpanWeeksBackfill());
+        this.backfillService = backfillService;
+        // A second instance of the service, as another backend instance in the cluster would hold.
+        this.otherInstance = new SpanWeeksBackfillService(template, spanWeeksDAO, configuration.getSpanWeeksBackfill());
     }
 
     @Test
@@ -156,10 +152,6 @@ class SpanWeeksBackfillServiceTest {
         var saturated = SpanWeek.builder().projectId(projectId).traceId(traceWithBoundaryIds).idWeek(SATURATED_WEEK)
                 .build();
 
-        // While span writes do not register weeks, the backfill must not run: its plan would miss what comes next.
-        writesOffBackfillService.runStep().block();
-        assertThat(weeks(traceIds, ws)).isEmpty();
-
         // No plan yet, then a plan with every range pending: not complete either way.
         assertThat(backfillService.isCompleted()).isFalse();
 
@@ -181,7 +173,7 @@ class SpanWeeksBackfillServiceTest {
         // Every range is done: the shared progress table reports the backfill complete to any instance, and a further
         // step changes nothing.
         assertThat(backfillService.isCompleted()).isTrue();
-        assertThat(writesOffBackfillService.isCompleted()).isTrue();
+        assertThat(otherInstance.isCompleted()).isTrue();
         backfillService.runStep().block();
         assertThat(weeks(traceIds, ws)).containsExactlyInAnyOrderElementsOf(all);
     }
