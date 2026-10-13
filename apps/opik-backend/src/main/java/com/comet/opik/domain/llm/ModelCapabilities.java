@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -133,12 +134,16 @@ public class ModelCapabilities {
      * The newest listed member of a family, which is what {@code claude-opus-latest} names.
      *
      * <p>A floating alias has to be read as the model it currently resolves to, not left unplaceable:
-     * {@code claude-haiku-latest} is Haiku 4.5, which does take sampling params, and classifying it
-     * by the unplaceable default would silently drop a temperature someone set — the same model under
-     * its own id keeps one.
+     * when that model takes sampling params, as Haiku 4.5 does, classifying the alias by the
+     * unplaceable default would silently drop a temperature someone set — the same model under its
+     * own id keeps one.
      */
     private Optional<String> newestInFamily(String familyPrefix) {
-        return AnthropicModelName.allModelIds().stream()
+        return newestInFamily(AnthropicModelName.allModelIds(), familyPrefix);
+    }
+
+    Optional<String> newestInFamily(Collection<String> modelIds, String familyPrefix) {
+        return modelIds.stream()
                 .filter(id -> id.startsWith(familyPrefix + "-"))
                 .max(Comparator.comparing(ModelCapabilities::versionKey));
     }
@@ -164,7 +169,7 @@ public class ModelCapabilities {
      * at the start rather than found anywhere in the string, and the longest match wins so a later
      * {@code claude-opus-4-9} reads as itself rather than as the {@code claude-opus-4} it begins with.
      */
-    private Optional<String> knownAnthropicId(String canonical) {
+    Optional<String> knownAnthropicId(String canonical) {
         if (canonical.endsWith(LATEST_ALIAS_SUFFIX)) {
             return newestInFamily(StringUtils.removeEnd(canonical, LATEST_ALIAS_SUFFIX));
         }
