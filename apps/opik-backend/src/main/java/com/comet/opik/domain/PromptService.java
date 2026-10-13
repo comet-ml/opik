@@ -22,7 +22,9 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -373,6 +375,14 @@ class PromptServiceImpl implements PromptService {
         }
 
         return withPromptVersionLock(workspaceId, prompt.id(), () -> {
+            PromptVersion unchanged = findUnchangedLatestVersion(workspaceId, prompt, createPromptVersion.version(),
+                    environments);
+            if (unchanged != null) {
+                log.info("Prompt version unchanged for prompt id '{}', returning latest version id '{}'",
+                        prompt.id(), unchanged.id());
+                return unchanged;
+            }
+
             // Minted under the lock so id order follows version_number order: "latest" is read as max id
             UUID id = createPromptVersion.version().id() == null
                     ? idGenerator.generateId()
@@ -413,6 +423,53 @@ class PromptServiceImpl implements PromptService {
                 });
             }
         });
+    }
+
+    // Same check as the SDKs' idempotent create, so a client whose own check misfires doesn't pile up identical
+    // versions. Only a plain content save qualifies: an explicit id, commit, environment, change description or tags
+    // asks for a new version, and masks are versioned on their own.
+    private PromptVersion findUnchangedLatestVersion(String workspaceId, Prompt prompt, PromptVersion request,
+            Set<String> environments) {
+        if (request.id() != null || request.commit() != null || request.versionType() == PromptVersionType.MASK
+                || !environments.isEmpty() || StringUtils.isNotBlank(request.changeDescription())
+                || CollectionUtils.isNotEmpty(request.tags())) {
+            return null;
+        }
+
+        PromptVersion latest = transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptVersionDAO dao = handle.attach(PromptVersionDAO.class);
+            return dao.findLatestVersionId(workspaceId, prompt.id())
+                    .map(id -> dao.findByIds(List.of(id), workspaceId).getFirst())
+                    .orElse(null);
+        });
+
+        if (latest == null
+                || latest.type() != request.type()
+                || !isSameTemplate(prompt.templateStructure(), latest.template(), request.template())
+                || !isSameMetadata(latest.metadata(), request.metadata())) {
+            return null;
+        }
+
+        return latest.toBuilder()
+                .variables(getVariables(latest.template(), latest.type()))
+                .build();
+    }
+
+    // Chat templates are JSON, so formatting differences alone don't make a new version
+    private static boolean isSameTemplate(TemplateStructure structure, String latest, String requested) {
+        if (structure == TemplateStructure.CHAT) {
+            return JsonUtils.getJsonNodeFromStringWithFallback(latest)
+                    .equals(JsonUtils.getJsonNodeFromStringWithFallback(requested));
+        }
+        return latest.equals(requested);
+    }
+
+    private static boolean isSameMetadata(JsonNode latest, JsonNode requested) {
+        return isEmptyMetadata(latest) ? isEmptyMetadata(requested) : latest.equals(requested);
+    }
+
+    private static boolean isEmptyMetadata(JsonNode metadata) {
+        return metadata == null || metadata.isNull() || (metadata.isObject() && metadata.isEmpty());
     }
 
     private PromptVersion createVersionWithEnvironment(String workspaceId, String workspaceName, String userName,
