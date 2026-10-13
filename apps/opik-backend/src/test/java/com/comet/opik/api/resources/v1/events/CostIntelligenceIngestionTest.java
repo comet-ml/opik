@@ -63,6 +63,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 import static org.awaitility.Awaitility.await;
 
@@ -482,6 +483,46 @@ class CostIntelligenceIngestionTest {
                 assertThat(envInfo.bdLane()).isEqualTo("static_overhead");
                 assertThat(envInfo.label()).isEqualTo("env_info");
                 assertThat(envInfo.isDefinition()).isEqualTo(1);
+            });
+        }
+
+        @Test
+        @DisplayName("MCP instructions and deferred listings land on their server's breakdown row")
+        void mcpSectionsLandOnTheirServerRow() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(mcpSectionsCipxMetadata("claude-opus-5-5", 400))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var rows = getCipxBlocks(span.id(), ws.workspaceId());
+                assertThat(rows).hasSize(5);
+
+                assertThat(rows).allSatisfy(row -> {
+                    assertThat(row.lane()).isEqualTo("mcp_servers");
+                    assertThat(row.isDefinition()).isEqualTo(1);
+                });
+                // Server-named blocks ride that server's row; one naming no server stays out of the
+                // breakdown rather than becoming a pseudo-server (OPIK-8721).
+                assertThat(rows).extracting(CipxBlockRow::category, CipxBlockRow::bdLane, CipxBlockRow::label)
+                        .containsExactly(
+                                tuple("mcp_tools_active", "mcp_servers", "GitHub"),
+                                tuple("mcp_server_instructions", "mcp_servers", "GitHub"),
+                                tuple("mcp_tools_deferred", "mcp_servers", "claude.ai Notion"),
+                                tuple("mcp_server_instructions", "", ""),
+                                tuple("mcp_tools_deferred", "", ""));
+
+                // The ticket's claim: the per-server rows sum to the lane, short only of what
+                // names no server.
+                double rowsTotal = rows.stream().filter(r -> r.bdLane().equals("mcp_servers"))
+                        .mapToDouble(CipxBlockRow::alloc).sum();
+                double namedTotal = rows.stream().filter(r -> !r.toolServer().isEmpty())
+                        .mapToDouble(CipxBlockRow::alloc).sum();
+                assertThat(rowsTotal).isPositive().isCloseTo(namedTotal, within(1e-6));
             });
         }
 
@@ -1398,6 +1439,33 @@ class CostIntelligenceIngestionTest {
                               {"category":"system_tools_deferred","side":"input","cache_status":"read","parent_category":"context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
                               {"category":"system_prompt","side":"input","cache_status":"read","parent_category":"context","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
                               {"category":"env_info","side":"input","cache_status":"read","parent_category":"context","chars":30,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
+                            ]
+                          }
+                        }
+                        """
+                        .formatted(model, cacheRead));
+    }
+
+    private static JsonNode mcpSectionsCipxMetadata(String model, long cacheRead) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "cipx": {
+                            "call": {
+                              "model": "%s",
+                              "usage": {
+                                "input_tokens": 0,
+                                "cache_read_input_tokens": %d,
+                                "cache_creation_input_tokens": 0,
+                                "output_tokens": 0
+                              }
+                            },
+                            "blocks": [
+                              {"category":"mcp_tools_active","side":"input","cache_status":"read","chars":200,"tool_name":"create_branch","tool_server":"GitHub","tool_use_id":"","resource":"","kind":"tool_schema"},
+                              {"category":"mcp_server_instructions","side":"input","cache_status":"read","parent_category":"mcp_server_instructions","chars":100,"tool_name":"","tool_server":"GitHub","tool_use_id":"","resource":"","kind":"system_text"},
+                              {"category":"mcp_tools_deferred","side":"input","cache_status":"read","parent_category":"mcp_tools_deferred","chars":60,"tool_name":"","tool_server":"claude.ai Notion","tool_use_id":"","resource":"","kind":"system_text"},
+                              {"category":"mcp_server_instructions","side":"input","cache_status":"read","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"system_text"},
+                              {"category":"mcp_tools_deferred","side":"input","cache_status":"read","chars":30,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
                             ]
                           }
                         }

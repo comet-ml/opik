@@ -42,11 +42,12 @@ public class PartitionMetricsConfig {
     @NotNull @JsonProperty
     private String lwdTables;
 
-    /** Derived: the parsed, stripped, blank-free list of LWD tables. */
+    /** Derived: the parsed, stripped, blank-free list of LWD tables, deduplicated so no table is scanned twice. */
     public List<String> getLwdTables() {
         return Arrays.stream(lwdTables.split(","))
                 .map(String::strip)
                 .filter(table -> !table.isEmpty())
+                .distinct()
                 .toList();
     }
 }
