@@ -3,6 +3,7 @@ import { v7 } from "uuid";
 import pick from "lodash/pick";
 import omit from "lodash/omit";
 import isPlainObject from "lodash/isPlainObject";
+import isNumber from "lodash/isNumber";
 
 import {
   LogExperiment,
@@ -36,6 +37,11 @@ import {
 import { ProviderMessageType } from "@/types/llm";
 import { parseCompletionError, parseCompletionOutput } from "@/lib/playground";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
+import { parseComposedProviderType } from "@/lib/provider";
+import {
+  TOKEN_LIMIT_KEY_SENT,
+  TOKEN_LIMIT_KEYS,
+} from "@/lib/extraBodyParameters";
 
 export interface LogQueueParams extends RunStreamingReturn {
   promptId: string;
@@ -256,27 +262,65 @@ const getSpanFromRun = (
   };
 };
 
-const TOKEN_LIMIT_KEYS = ["max_tokens", "max_completion_tokens"];
+const PENALTY_KEYS = ["frequency_penalty", "presence_penalty"];
+
+// Mirrors the backend (CustomLlmProvider.normalizeForProvider), which runs before the extra body is
+// applied: Ollama reads only max_tokens and Bedrock only max_completion_tokens, so each gets the limit
+// under its own name, and only a positive slider limit. Bedrock also gets no penalty of 0.
+const normalizeForProvider = (
+  provider: PROVIDER_TYPE,
+  parameters: Record<string, unknown>,
+  extraBody?: Record<string, unknown>,
+) => {
+  const limitKey = TOKEN_LIMIT_KEY_SENT[provider];
+  if (!limitKey) return { parameters, extraBody };
+
+  const sliderLimit = [
+    parameters.max_completion_tokens,
+    parameters.max_tokens,
+  ].find((value) => isNumber(value) && value > 0);
+  const zeroPenalties =
+    provider === PROVIDER_TYPE.BEDROCK
+      ? PENALTY_KEYS.filter((key) => parameters[key] === 0)
+      : [];
+  const otherLimitKey = TOKEN_LIMIT_KEYS.find((key) => key !== limitKey)!;
+
+  return {
+    parameters: {
+      ...omit(parameters, [...TOKEN_LIMIT_KEYS, ...zeroPenalties]),
+      ...(sliderLimit !== undefined && { [limitKey]: sliderLimit }),
+    },
+    extraBody:
+      extraBody && otherLimitKey in extraBody
+        ? {
+            [limitKey]: extraBody[otherLimitKey],
+            ...omit(extraBody, otherLimitKey),
+          }
+        : extraBody,
+  };
+};
 
 export const getLoggedParameters = (
-  run: Pick<LogQueueParams, "model" | "configs" | "openAiPipelineMode">,
+  run: Pick<LogQueueParams, "model" | "configs" | "openAiPipelineMode"> &
+    Partial<Pick<LogQueueParams, "provider">>,
 ): Record<string, unknown> => {
-  const { custom_parameters: extraBody, ...parameters } = getRequestParameters(
-    run.model,
-    run.configs,
-    run.openAiPipelineMode,
+  const { custom_parameters: customParameters, ...requestParameters } =
+    getRequestParameters(run.model, run.configs, run.openAiPipelineMode);
+  const { parameters, extraBody } = normalizeForProvider(
+    parseComposedProviderType(run.provider ?? ""),
+    requestParameters,
+    isPlainObject(customParameters)
+      ? (customParameters as Record<string, unknown>)
+      : undefined,
   );
-  if (!isPlainObject(extraBody)) return parameters;
+  if (!extraBody) return parameters;
 
   // Mirrors the backend (CustomParametersOverrides): it sends each extra body key at the top level
   // in place of the field of the same name, and treats the two token limit names as one limit.
-  const extraBodyParameters = extraBody as Record<string, unknown>;
-  const replacesTokenLimit = TOKEN_LIMIT_KEYS.some(
-    (key) => key in extraBodyParameters,
-  );
+  const replacesTokenLimit = TOKEN_LIMIT_KEYS.some((key) => key in extraBody);
   return {
     ...(replacesTokenLimit ? omit(parameters, TOKEN_LIMIT_KEYS) : parameters),
-    ...extraBodyParameters,
+    ...extraBody,
   };
 };
 

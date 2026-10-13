@@ -6,7 +6,11 @@ import omit from "lodash/omit";
 
 import { getLoggedParameters } from "./createLogPlaygroundProcessor";
 import useCompletionProxyStreaming from "./useCompletionProxyStreaming";
-import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  LLMPromptConfigsType,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
 
 dayjs.extend(utc);
@@ -181,6 +185,89 @@ describe("getLoggedParameters", () => {
           temperature: 0.2,
           maxCompletionTokens: 20,
           topP: 1,
+          custom_parameters: extraBody,
+        }),
+      }),
+    ).toEqual(expected);
+  });
+
+  it.each([
+    {
+      name: "Ollama gets the slider limit as max_tokens",
+      provider: `${PROVIDER_TYPE.OLLAMA}:local`,
+      model: "custom-llm/local/llama3.2",
+      sliders: {},
+      extraBody: null,
+      expected: { max_tokens: 20 },
+    },
+    {
+      name: "Ollama gets an extra body max_completion_tokens as max_tokens",
+      provider: `${PROVIDER_TYPE.OLLAMA}:local`,
+      model: "custom-llm/local/llama3.2",
+      sliders: {},
+      extraBody: { max_completion_tokens: 12 },
+      expected: { max_tokens: 12 },
+    },
+    {
+      name: "Ollama keeps the extra body max_tokens when both names are there",
+      provider: `${PROVIDER_TYPE.OLLAMA}:local`,
+      model: "custom-llm/local/llama3.2",
+      sliders: {},
+      extraBody: { max_tokens: 12, max_completion_tokens: 30 },
+      expected: { max_tokens: 12 },
+    },
+    {
+      name: "Ollama gets no slider limit of 0",
+      provider: `${PROVIDER_TYPE.OLLAMA}:local`,
+      model: "custom-llm/local/llama3.2",
+      sliders: { maxCompletionTokens: 0 },
+      extraBody: null,
+      expected: {},
+    },
+    {
+      name: "Bedrock gets an extra body max_tokens as max_completion_tokens",
+      provider: `${PROVIDER_TYPE.BEDROCK}:aws`,
+      model: "custom-llm/aws/openai.gpt-oss-120b-1:0",
+      sliders: {},
+      extraBody: { max_tokens: 40 },
+      expected: { max_completion_tokens: 40 },
+    },
+    {
+      name: "Bedrock keeps the extra body max_completion_tokens when both names are there",
+      provider: `${PROVIDER_TYPE.BEDROCK}:aws`,
+      model: "custom-llm/aws/openai.gpt-oss-120b-1:0",
+      sliders: {},
+      extraBody: { max_tokens: 40, max_completion_tokens: 30 },
+      expected: { max_completion_tokens: 30 },
+    },
+    {
+      name: "Bedrock gets no slider penalty of 0",
+      provider: `${PROVIDER_TYPE.BEDROCK}:aws`,
+      model: "custom-llm/aws/openai.gpt-oss-120b-1:0",
+      sliders: { frequencyPenalty: 0, presencePenalty: 0.5 },
+      extraBody: null,
+      expected: { max_completion_tokens: 20, presence_penalty: 0.5 },
+    },
+    {
+      name: "a Custom LLM gets both token limit names as typed",
+      provider: `${PROVIDER_TYPE.CUSTOM}:mock`,
+      model: MOCK_MODEL,
+      sliders: { frequencyPenalty: 0 },
+      extraBody: { max_tokens: 12, max_completion_tokens: 30 },
+      expected: {
+        max_tokens: 12,
+        max_completion_tokens: 30,
+        frequency_penalty: 0,
+      },
+    },
+  ])("$name", ({ provider, model, sliders, extraBody, expected }) => {
+    expect(
+      getLoggedParameters({
+        provider,
+        model: model as PROVIDER_MODEL_TYPE,
+        configs: configs({
+          maxCompletionTokens: 20,
+          ...sliders,
           custom_parameters: extraBody,
         }),
       }),
