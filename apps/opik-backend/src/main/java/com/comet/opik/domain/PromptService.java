@@ -473,11 +473,11 @@ class PromptServiceImpl implements PromptService {
     private static boolean isSameMetadata(JsonNode latest, JsonNode requested) {
         return isEmptyMetadata(latest)
                 ? isEmptyMetadata(requested)
-                : latest.equals(NUMERIC_VALUE_COMPARATOR, requested);
+                : latest.equals(METADATA_VALUE_COMPARATOR, requested);
     }
 
     // 1 and 1.0 are the same value to the SDKs' checks, while JsonNode.equals also compares the number's type
-    private static final Comparator<JsonNode> NUMERIC_VALUE_COMPARATOR = (a, b) -> a.isNumber() && b.isNumber()
+    private static final Comparator<JsonNode> METADATA_VALUE_COMPARATOR = (a, b) -> a.isNumber() && b.isNumber()
             ? a.decimalValue().compareTo(b.decimalValue())
             : a.equals(b) ? 0 : 1;
 

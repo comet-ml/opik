@@ -2626,14 +2626,47 @@ class PromptResourceTest {
                     .isEqualTo(requested);
             assertThat(actualVersion.id()).isNotEqualTo(latestVersion.id());
 
-            // Masks are not listed with the prompt's versions, and the list is ordered by id, newest first
-            var expectedVersions = requested.versionType() == PromptVersionType.MASK
-                    ? List.of(latestVersion)
-                    : Stream.of(actualVersion, latestVersion)
-                            .sorted(Comparator.comparing(PromptVersion::id).reversed())
-                            .toList();
-            findPromptVersionsAndAssertPage(expectedVersions, promptId, API_KEY, TEST_WORKSPACE, null, 1,
-                    expectedVersions.size());
+            // The list is ordered by id, newest first
+            var expectedVersions = Stream.of(actualVersion, latestVersion)
+                    .sorted(Comparator.comparing(PromptVersion::id).reversed())
+                    .toList();
+            findPromptVersionsAndAssertPage(expectedVersions, promptId, API_KEY, TEST_WORKSPACE, null, 1, 2);
+        }
+
+        @Test
+        @DisplayName("when a mask has the latest version's content, then create the mask")
+        void when__maskHasLatestVersionContent__thenCreateMask() {
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var latest = contentOnlyVersion("Hello {{name}} " + UUID.randomUUID(), randomMetadata());
+            var mask = latest.toBuilder().versionType(PromptVersionType.MASK).build();
+
+            PromptVersion latestVersion = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), latest, TemplateStructure.TEXT), API_KEY,
+                    TEST_WORKSPACE);
+
+            PromptVersion actualMask = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), mask, TemplateStructure.TEXT), API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(actualMask)
+                    .usingRecursiveComparison()
+                    .ignoringExpectedNullFields()
+                    .ignoringFields("promptId", "versionNumber", "variables", "templateStructure", "createdAt",
+                            "createdBy")
+                    .isEqualTo(mask);
+            assertThat(actualMask.id()).isNotEqualTo(latestVersion.id());
+
+            // Masks are not listed with the prompt's versions
+            findPromptVersionsAndAssertPage(List.of(latestVersion), promptId, API_KEY, TEST_WORKSPACE, null, 1, 1);
         }
 
         Stream<Arguments> when__contentChangesOrNewVersionIsRequested__thenCreateNewVersion() {
@@ -2658,8 +2691,6 @@ class PromptResourceTest {
                             text.toBuilder().commit(RandomStringUtils.secure().nextAlphanumeric(8)).build()),
                     arguments(TemplateStructure.TEXT, text, text.toBuilder()
                             .environments(Set.of("env_" + RandomStringUtils.secure().nextAlphanumeric(8))).build()),
-                    arguments(TemplateStructure.TEXT, text,
-                            text.toBuilder().versionType(PromptVersionType.MASK).build()),
                     // A plain-text chat template is not the JSON string with the same text
                     arguments(TemplateStructure.CHAT, chat,
                             chat.toBuilder().template("\"%s\"".formatted(chatTemplate)).build()));
