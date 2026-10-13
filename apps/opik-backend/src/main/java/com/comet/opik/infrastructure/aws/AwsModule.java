@@ -93,6 +93,8 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
                 .credentialsProvider(eventBridgeCredentialsProvider())
                 .overrideConfiguration(override -> override.retryStrategy(AwsRetryStrategy.doNotRetry())
                         .apiCallAttemptTimeout(EVENT_BRIDGE_CALL_ATTEMPT_TIMEOUT)
+                        // Backstop: bounds the whole call, including signing and credential resolution that happen
+                        // outside an attempt
                         .apiCallTimeout(EVENT_BRIDGE_CALL_TIMEOUT));
 
         eventBridgeRegion(config).ifPresent(builder::region);
