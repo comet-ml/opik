@@ -7,7 +7,8 @@ replace them with a new export instead.
 |---|---|
 | `widget-tokens.css` | The `--chart-*` tokens, light on `:root`, dark on `:root[data-theme="dark"]` (the theme provider sets `data-theme` next to the `.dark` class). Loaded after `main.scss`; it only references primitives `main.scss` defines. |
 | `chart-skeleton.css` | Loading-state animation for chart placeholders (`chart-skeleton-*` classes). |
-| `widget-tokens.resolved.json` | Every token resolved to its light and dark value: the colour fallback when the stylesheet is not available. |
+
+The export's `widget-tokens.resolved.json` is not vendored: tokens are read from the live CSS only.
 
 Consumers: the Vega theme in `src/lib/charts/vega.ts` (Ollie charts, in widgets and in the assistant panel).
 `--chart-tick-stroke` here supersedes the older value in `main.scss`, so Opik's own charts pick it up too.

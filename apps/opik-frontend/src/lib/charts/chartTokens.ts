@@ -1,14 +1,7 @@
-import resolvedTokens from "@/styles/widget-tokens/widget-tokens.resolved.json";
-
 /**
- * Reads the chart widget tokens (src/styles/widget-tokens) into the values a renderer needs. Live CSS wins; the
- * resolved export is the fallback for a token the document cannot resolve. Read again whenever the theme changes.
+ * Reads the chart widget tokens (src/styles/widget-tokens) from the live CSS into the values a renderer needs. Read
+ * again whenever the theme changes.
  */
-
-type ThemeMode = "light" | "dark";
-type ResolvedToken = { light: string | number; dark: string | number };
-
-const RESOLVED = resolvedTokens.tokens as Record<string, ResolvedToken>;
 
 export const SERIES_COUNT = 10;
 
@@ -64,13 +57,6 @@ export interface ChartTokens {
   };
 }
 
-const themeMode = (): ThemeMode => {
-  const root = document.documentElement;
-  return root.dataset.theme === "dark" || root.classList.contains("dark")
-    ? "dark"
-    : "light";
-};
-
 let colorContext: CanvasRenderingContext2D | null = null;
 
 // Any CSS colour (hex, `hsl(215 16% 47%)`, `var()`-free strings) as a value Vega and inline styles accept.
@@ -100,18 +86,12 @@ export const resolveCssColor = (color: string): string => {
   const match = /^var\((--[\w-]+)\)$/.exec(color.trim());
   if (!match) return normalizeColor(color);
   const styles = getComputedStyle(document.documentElement);
-  const raw =
-    styles.getPropertyValue(match[1]).trim() ||
-    String(RESOLVED[match[1]]?.[themeMode()] ?? "");
-  return normalizeColor(raw);
+  return normalizeColor(styles.getPropertyValue(match[1]).trim());
 };
 
 export const readChartTokens = (): ChartTokens => {
   const styles = getComputedStyle(document.documentElement);
-  const mode = themeMode();
-  const raw = (name: string) =>
-    styles.getPropertyValue(name).trim() ||
-    String(RESOLVED[name]?.[mode] ?? "");
+  const raw = (name: string) => styles.getPropertyValue(name).trim();
   const color = (name: string) => normalizeColor(raw(name));
   const number = (name: string) => toNumber(raw(name));
   // Opik's primitives are bare HSL channels.
