@@ -97,6 +97,8 @@ const OllieChartWidget: React.FunctionComponent<
     [dateRange, hasDateRange],
   );
 
+  // `live` also covers the moment before the dashboard id arrives (skeleton); only `canQuery` may hit the endpoint.
+  const canQuery = Boolean(query?.id && dashboardId && widgetId && !preview);
   const {
     data: rows,
     isPending,
@@ -114,13 +116,15 @@ const OllieChartWidget: React.FunctionComponent<
       intervalEnd,
     },
     // A preview has no saved widget to run, so it shows the rows the chart was made with.
-    { enabled: Boolean(query?.id && dashboardId && widgetId && !preview) },
+    { enabled: canQuery },
   );
   const live = Boolean(query?.id && !preview);
 
   if (!widget) {
     return null;
   }
+
+  const title = widget.title || widget.generatedTitle || "Ollie chart";
 
   // Editing goes through Ollie when it is on; without it the JSON editor stays as the fallback. The bridge is read
   // at click time: the sidebar attaches it after this widget first renders.
@@ -129,7 +133,7 @@ const OllieChartWidget: React.FunctionComponent<
       ? () =>
           window.opikBridge?.editChart?.({
             widgetId: widget.id,
-            title: widget.title || widget.generatedTitle || "Ollie chart",
+            title,
             description: config.description,
             spec,
             query: { id: query.id },
@@ -188,7 +192,7 @@ const OllieChartWidget: React.FunctionComponent<
           readOnly={readOnly}
           titleAdornment={<OllieBadge />}
           meta={
-            query?.id && dataUpdatedAt ? (
+            canQuery && dataUpdatedAt ? (
               <>
                 <ComputedAgo timestamp={dataUpdatedAt} />
                 <TooltipWrapper content="Refresh">
@@ -209,9 +213,9 @@ const OllieChartWidget: React.FunctionComponent<
             <OllieChartActionsMenu
               sectionId={sectionId!}
               widgetId={widgetId!}
-              widgetTitle={widget.title}
+              widgetTitle={title}
               onEditInOllie={editInOllie}
-              onRefresh={() => refetch()}
+              onRefresh={canQuery ? () => refetch() : undefined}
             />
           }
           dragHandle={<DashboardWidget.DragHandle />}

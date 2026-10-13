@@ -23,7 +23,8 @@ type OllieChartActionsMenuProps = {
   widgetTitle: string;
   // Edit in Ollie; without it (Ollie off) the item opens the widget editor instead.
   onEditInOllie?: () => void;
-  onRefresh: () => void;
+  // Absent until the widget's query can run.
+  onRefresh?: () => void;
   onOpenChange?: (open: boolean) => void;
 };
 
@@ -87,10 +88,12 @@ const OllieChartActionsMenu: React.FunctionComponent<
             <Pencil className="mr-2 size-4" />
             {onEditInOllie ? "Edit in Ollie" : "Edit"}
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={run(onRefresh)}>
-            <RefreshCw className="mr-2 size-4" />
-            Refresh
-          </DropdownMenuItem>
+          {onRefresh && (
+            <DropdownMenuItem onClick={run(onRefresh)}>
+              <RefreshCw className="mr-2 size-4" />
+              Refresh
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             onClick={run(() => duplicateWidget(sectionId, widgetId))}
           >
