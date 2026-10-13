@@ -63,6 +63,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 import static org.awaitility.Awaitility.await;
 
@@ -174,6 +175,8 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().contextManagement()).isEqualTo("clear_thinking_20251015");
                 // speed: selects the rate table, so it must survive ingestion
                 assertThat(row.get().speed()).isEqualTo("fast");
+                // session_mode: how the harness invoked the call
+                assertThat(row.get().sessionMode()).isEqualTo("background");
                 assertThat(row.get().aiuNano()).isNull();
                 assertThat(row.get().trigger()).isEqualTo("subagent");
                 assertThat(row.get().triggerDetail()).isEqualTo("code-reviewer");
@@ -484,6 +487,46 @@ class CostIntelligenceIngestionTest {
         }
 
         @Test
+        @DisplayName("MCP instructions and deferred listings land on their server's breakdown row")
+        void mcpSectionsLandOnTheirServerRow() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(mcpSectionsCipxMetadata("claude-opus-5-5", 400))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var rows = getCipxBlocks(span.id(), ws.workspaceId());
+                assertThat(rows).hasSize(5);
+
+                assertThat(rows).allSatisfy(row -> {
+                    assertThat(row.lane()).isEqualTo("mcp_servers");
+                    assertThat(row.isDefinition()).isEqualTo(1);
+                });
+                // Server-named blocks ride that server's row; one naming no server stays out of the
+                // breakdown rather than becoming a pseudo-server (OPIK-8721).
+                assertThat(rows).extracting(CipxBlockRow::category, CipxBlockRow::bdLane, CipxBlockRow::label)
+                        .containsExactly(
+                                tuple("mcp_tools_active", "mcp_servers", "GitHub"),
+                                tuple("mcp_server_instructions", "mcp_servers", "GitHub"),
+                                tuple("mcp_tools_deferred", "mcp_servers", "claude.ai Notion"),
+                                tuple("mcp_server_instructions", "", ""),
+                                tuple("mcp_tools_deferred", "", ""));
+
+                // The ticket's claim: the per-server rows sum to the lane, short only of what
+                // names no server.
+                double rowsTotal = rows.stream().filter(r -> r.bdLane().equals("mcp_servers"))
+                        .mapToDouble(CipxBlockRow::alloc).sum();
+                double namedTotal = rows.stream().filter(r -> !r.toolServer().isEmpty())
+                        .mapToDouble(CipxBlockRow::alloc).sum();
+                assertThat(rowsTotal).isPositive().isCloseTo(namedTotal, within(1e-6));
+            });
+        }
+
+        @Test
         @DisplayName("slash_command lands in user_prompts keyed by command name; identity_context framing lands in static_overhead")
         void slashCommandAndIdentityContextLanes() {
             var ws = newWorkspace();
@@ -541,6 +584,8 @@ class CostIntelligenceIngestionTest {
                 assertThat(row).isPresent();
                 assertThat(row.get().model()).isEqualTo("github_copilot:claude-sonnet-5");
                 assertThat(row.get().aiuNano()).isEqualTo(5_919_822_000L);
+                // this provider doesn't stamp session_mode, so it must read the '' default.
+                assertThat(row.get().sessionMode()).isEmpty();
 
                 // alloc x the tier's per-token rate: the read tier splits across its two blocks by
                 // chars, the write and output blocks absorb their tiers, input lands on a residual row.
@@ -942,6 +987,7 @@ class CostIntelligenceIngestionTest {
                 .maxTokens(base + 7)
                 .contextManagement("sentinel-" + n + "-context-management")
                 .speed("sentinel-" + n + "-speed")
+                .sessionMode("sentinel-" + n + "-session-mode")
                 .aiuNano(base + 8)
                 .trigger("sentinel-" + n + "-trigger")
                 .triggerDetail("sentinel-" + n + "-trigger-detail")
@@ -973,6 +1019,7 @@ class CostIntelligenceIngestionTest {
         assertThat(actual.maxTokens()).as("max_tokens").isEqualTo(expected.maxTokens());
         assertThat(actual.contextManagement()).as("context_management").isEqualTo(expected.contextManagement());
         assertThat(actual.speed()).as("speed").isEqualTo(expected.speed());
+        assertThat(actual.sessionMode()).as("session_mode").isEqualTo(expected.sessionMode());
         assertThat(actual.aiuNano()).as("aiu_nano").isEqualTo(expected.aiuNano());
         assertThat(actual.trigger()).as("trigger").isEqualTo(expected.trigger());
         assertThat(actual.triggerDetail()).as("trigger_detail").isEqualTo(expected.triggerDetail());
@@ -991,7 +1038,7 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management, speed, aiu_nano,
+                    effort, thinking_type, max_tokens, context_management, speed, session_mode, aiu_nano,
                     `trigger` AS trigger_kind, trigger_detail, turn_key, parent_tool_use_id,
                     link_failure_reason
                 FROM cipx_spends FINAL
@@ -1020,6 +1067,7 @@ class CostIntelligenceIngestionTest {
                             row.get("max_tokens", Long.class),
                             row.get("context_management", String.class),
                             row.get("speed", String.class),
+                            row.get("session_mode", String.class),
                             row.get("aiu_nano", Long.class),
                             row.get("trigger_kind", String.class),
                             row.get("trigger_detail", String.class),
@@ -1242,7 +1290,8 @@ class CostIntelligenceIngestionTest {
                               "trigger": "subagent",
                               "trigger_detail": "code-reviewer",
                               "turn_key": "abc123turnkey",
-                              "parent_tool_use_id": "toolu_parent_agent"
+                              "parent_tool_use_id": "toolu_parent_agent",
+                              "session_mode": "background"
                             },
                             "blocks": [
                               {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text","subcategory":"auto_memory","sha256":"a1b2c3"},
@@ -1397,6 +1446,33 @@ class CostIntelligenceIngestionTest {
                         .formatted(model, cacheRead));
     }
 
+    private static JsonNode mcpSectionsCipxMetadata(String model, long cacheRead) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "cipx": {
+                            "call": {
+                              "model": "%s",
+                              "usage": {
+                                "input_tokens": 0,
+                                "cache_read_input_tokens": %d,
+                                "cache_creation_input_tokens": 0,
+                                "output_tokens": 0
+                              }
+                            },
+                            "blocks": [
+                              {"category":"mcp_tools_active","side":"input","cache_status":"read","chars":200,"tool_name":"create_branch","tool_server":"GitHub","tool_use_id":"","resource":"","kind":"tool_schema"},
+                              {"category":"mcp_server_instructions","side":"input","cache_status":"read","parent_category":"mcp_server_instructions","chars":100,"tool_name":"","tool_server":"GitHub","tool_use_id":"","resource":"","kind":"system_text"},
+                              {"category":"mcp_tools_deferred","side":"input","cache_status":"read","parent_category":"mcp_tools_deferred","chars":60,"tool_name":"","tool_server":"claude.ai Notion","tool_use_id":"","resource":"","kind":"system_text"},
+                              {"category":"mcp_server_instructions","side":"input","cache_status":"read","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"system_text"},
+                              {"category":"mcp_tools_deferred","side":"input","cache_status":"read","chars":30,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
+                            ]
+                          }
+                        }
+                        """
+                        .formatted(model, cacheRead));
+    }
+
     private static JsonNode slashCommandCipxMetadata(String model, long cacheRead) {
         return JsonUtils.getJsonNodeFromString(
                 """
@@ -1514,7 +1590,7 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management, speed, aiu_nano,
+                    effort, thinking_type, max_tokens, context_management, speed, session_mode, aiu_nano,
                     `trigger` AS trigger_kind, trigger_detail, turn_key, parent_tool_use_id,
                     link_failure_reason
                 FROM cipx_spends FINAL
@@ -1540,6 +1616,7 @@ class CostIntelligenceIngestionTest {
                             row.get("max_tokens", Long.class),
                             row.get("context_management", String.class),
                             row.get("speed", String.class),
+                            row.get("session_mode", String.class),
                             row.get("aiu_nano", Long.class),
                             row.get("trigger_kind", String.class),
                             row.get("trigger_detail", String.class),
@@ -1679,7 +1756,8 @@ class CostIntelligenceIngestionTest {
 
     private record CipxSpendRow(String projectId, Long startMs, String model, Long uInput, Long uCacheRead,
             Long uCacheCreation, Long uCacheCreation5m, Long uCacheCreation1h, Long uOutput, String effort,
-            String thinkingType, Long maxTokens, String contextManagement, String speed, Long aiuNano,
+            String thinkingType, Long maxTokens, String contextManagement, String speed, String sessionMode,
+            Long aiuNano,
             String trigger, String triggerDetail, String turnKey, String parentToolUseId,
             String linkFailureReason) {
     }
@@ -1687,8 +1765,8 @@ class CostIntelligenceIngestionTest {
     private record SentinelSpendRow(String workspaceId, String projectId, String traceId, String spanId,
             Long startMs, String model, Long uInput, Long uCacheRead, Long uCacheCreation, Long uCacheCreation5m,
             Long uCacheCreation1h, Long uOutput, String effort, String thinkingType, Long maxTokens,
-            String contextManagement, String speed, Long aiuNano, String trigger, String triggerDetail,
-            String turnKey, String parentToolUseId, String linkFailureReason) {
+            String contextManagement, String speed, String sessionMode, Long aiuNano, String trigger,
+            String triggerDetail, String turnKey, String parentToolUseId, String linkFailureReason) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
