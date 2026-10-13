@@ -99,13 +99,15 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
   // fills with the registry from an effect. In the render where isRegistryFetched turns true that
   // store still holds the bundled list, which lacks hidden and newer ids, so an OpenRouter one would
   // be seeded as OpenAI. This flag turns true one render later, after the copy.
-  const [isRegistryInStore, setIsRegistryInStore] = useState(false);
+  const [isRegistryReadyForSeeding, setIsRegistryReadyForSeeding] =
+    useState(false);
   useEffect(() => {
-    if (isRegistryFetched) setIsRegistryInStore(true);
+    if (isRegistryFetched) setIsRegistryReadyForSeeding(true);
   }, [isRegistryFetched]);
 
   // A failed registry request is not an empty answer: every saved model would look unknown and be
-  // swapped for one the user never picked. As in the playground, a saved model then stays as it is.
+  // swapped for one the user never picked. As in the playground, a saved model then stays as it is,
+  // but its provider and key can't be checked, so it doesn't count as runnable.
   const isRegistryUnavailable = isRegistryFetched && !hasRegistryModels;
 
   const { data: providerKeysData } = useProviderKeys(
@@ -145,11 +147,12 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
       ),
     [seedSource],
   );
-  const availableModels = useMemo(() => {
+  const { availableModels, seedModels } = useMemo(() => {
     const models = pickerModels.map((option) => option.value);
-    const servedSavedModels = savedModels.filter((savedModel) => {
-      if (models.includes(savedModel)) return false;
-      if (isRegistryUnavailable) return true;
+    const unlistedSavedModels = savedModels.filter(
+      (savedModel) => !models.includes(savedModel),
+    );
+    const servedSavedModels = unlistedSavedModels.filter((savedModel) => {
       const provider = calculateModelProvider(
         savedModel as PROVIDER_MODEL_TYPE,
       );
@@ -161,7 +164,13 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
         configuredProvidersList.some((p) => p.ui_composed_provider === provider)
       );
     });
-    return [...models, ...servedSavedModels];
+    const runnableModels = [...models, ...servedSavedModels];
+    return {
+      availableModels: runnableModels,
+      seedModels: isRegistryUnavailable
+        ? [...models, ...unlistedSavedModels]
+        : runnableModels,
+    };
   }, [
     pickerModels,
     savedModels,
@@ -177,8 +186,8 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
   // too, or a saved model it alone knows would look gone.
   const providersReady =
     Boolean(providerKeysData) &&
-    isRegistryInStore &&
-    (configuredProvidersList.length === 0 || availableModels.length > 0);
+    isRegistryReadyForSeeding &&
+    (configuredProvidersList.length === 0 || seedModels.length > 0);
 
   // The converter mints fresh message ids on every call. The form below uses
   // `values` (not `defaultValues`), so it re-seeds once the model resolves
@@ -197,16 +206,16 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
     () => ({
       ...convertOptimizationStudioToFormData(
         seedSource,
-        providersReady ? availableModels : [],
+        providersReady ? seedModels : [],
       ),
       messages: stableMessages,
     }),
-    [seedSource, providersReady, availableModels, stableMessages],
+    [seedSource, providersReady, seedModels, stableMessages],
   );
 
   const rerunModel = rerunData?.studio_config?.llm_model?.model;
   const savedModelReplacement = useMemo(() => {
-    if (!providersReady || !rerunModel || availableModels.includes(rerunModel))
+    if (!providersReady || !rerunModel || seedModels.includes(rerunModel))
       return undefined;
 
     const replacementModel = defaultValues.modelName;
@@ -220,7 +229,7 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
   }, [
     providersReady,
     rerunModel,
-    availableModels,
+    seedModels,
     defaultValues.modelName,
     pickerModels,
   ]);

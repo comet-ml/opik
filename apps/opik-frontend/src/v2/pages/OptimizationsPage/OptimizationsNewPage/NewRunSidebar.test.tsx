@@ -408,7 +408,7 @@ describe("NewRunSidebar — re-run with the real model registry hook", () => {
     });
   });
 
-  it("keeps the saved models and their settings when the registry request failed", () => {
+  it("keeps the saved models and their settings when the registry request failed, but not as runnable", () => {
     mocks.providerKeysData = providerKeys([
       PROVIDER_TYPE.OPEN_AI,
       PROVIDER_TYPE.OPEN_ROUTER,
@@ -436,5 +436,6 @@ describe("NewRunSidebar — re-run with the real model registry hook", () => {
     expect(content.optimizerModel).toBe(
       PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH,
     );
+    expect(content.availableModels).toEqual(["mock-model"]);
   });
 });
