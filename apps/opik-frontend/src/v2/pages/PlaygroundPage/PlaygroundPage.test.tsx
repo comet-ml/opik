@@ -149,13 +149,13 @@ const OPEN_ROUTER_REGISTRY: LlmModelsByProvider = {
     {
       id: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
       label: "GPT-4o",
-      structuredOutput: true,
+      structured_output: true,
       reasoning: false,
     },
     {
       id: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_5,
       label: "Claude Sonnet 4.5",
-      structuredOutput: true,
+      structured_output: true,
       reasoning: true,
     },
   ],
@@ -174,13 +174,13 @@ const OPENAI_REGISTRY: LlmModelsByProvider = {
     {
       id: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
       label: "GPT 4o Mini",
-      structuredOutput: true,
+      structured_output: true,
       reasoning: false,
     },
     {
       id: PROVIDER_MODEL_TYPE.GPT_4_1_MINI,
       label: "GPT 4.1 Mini",
-      structuredOutput: true,
+      structured_output: true,
       reasoning: false,
     },
   ],

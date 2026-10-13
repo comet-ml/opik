@@ -1242,6 +1242,7 @@ export class OpikClient {
       const latestVersion = await fetchLatestPromptVersion(
         this.api.prompts,
         name,
+        projectName,
         this.api.requestOptions
       );
 

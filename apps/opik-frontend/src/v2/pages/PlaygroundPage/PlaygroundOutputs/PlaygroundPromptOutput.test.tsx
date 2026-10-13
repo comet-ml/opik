@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@/ui/tooltip";
 import { PlaygroundRunInputChange } from "@/types/playground";
 import PlaygroundPromptOutput from "./PlaygroundPromptOutput";
+import { RunFailureHint } from "@/lib/playground";
 
 const PROMPT_ID = "prompt-1";
 const STALE_NOTE =
@@ -13,6 +14,7 @@ type Output = {
   isLoading: boolean;
   value: string | null;
   error?: string;
+  errorHint?: RunFailureHint;
   stale: boolean;
   staleChanges?: PlaygroundRunInputChange[];
 };
@@ -83,6 +85,27 @@ describe("PlaygroundPromptOutput", () => {
       screen.queryByTestId("playground-output-error"),
     ).not.toBeInTheDocument();
     expect(queryStaleNote()).not.toBeInTheDocument();
+  });
+
+  it("should keep the provider's error on the tag and show the next step under it", () => {
+    const action =
+      "This model isn't available for your API key. Pick another model, or check which models your provider account can use.";
+    output = {
+      isLoading: false,
+      value: null,
+      error: "model: claude-mythos-5",
+      errorHint: { action },
+      stale: false,
+    };
+
+    renderOutput();
+
+    const tag = screen.getByTestId("playground-output-error");
+    expect(tag).toHaveTextContent("Run failed: model: claude-mythos-5");
+
+    const nextStep = screen.getByTestId("playground-output-error-action");
+    expect(nextStep).toHaveTextContent(action);
+    expect(tag).not.toContainElement(nextStep);
   });
 
   // Editing the prompt marks the previous output stale. The reason is most wanted
