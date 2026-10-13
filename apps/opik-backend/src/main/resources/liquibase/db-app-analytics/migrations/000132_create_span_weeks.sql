@@ -1,8 +1,8 @@
 --liquibase formatted sql
 --changeset thiagohora:000132_create_span_weeks
---comment: Create span_weeks, the per-trace index of the weekly spans partitions each trace's spans occupy
+--comment: Create span_weeks, the per-trace index of the weekly span partitions each trace's spans occupy
 
--- span_weeks records which weekly spans partitions hold each trace's spans, so a trace-keyed spans read can bind its
+-- span_weeks records which weekly span partitions hold each trace's spans, so a trace-keyed spans read can bind its
 -- partitions instead of considering every one. A span's week cannot be derived from its trace (span ids may sit in
 -- another week, or carry junk dates), so the weeks are taken from the spans themselves. An extra week only adds a
 -- partition to a read; a missing one makes it skip rows, so a read may bind the set only once it is complete.
