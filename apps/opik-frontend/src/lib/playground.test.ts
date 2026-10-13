@@ -195,8 +195,7 @@ describe("getDefaultConfigByProvider — OpenAI", () => {
 
 describe("getDefaultConfigByProvider — Anthropic thinking effort", () => {
   it.each([
-    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, "high"],
-    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, "medium"],
   ])("seeds %s with Anthropic's default effort, %s", (model, effort) => {
@@ -206,6 +205,19 @@ describe("getDefaultConfigByProvider — Anthropic thinking effort", () => {
     );
 
     expect(config).toMatchObject({ thinkingEffort: effort });
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+  ])("seeds %s, which thinks only when asked, with Off", (model) => {
+    const config = getDefaultConfigByProvider(
+      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+      model,
+    );
+
+    expect(config).toMatchObject({ thinkingEffort: "off" });
   });
 
   it("seeds no thinkingEffort for a model that takes none", () => {

@@ -15,6 +15,8 @@ class AnthropicEffort {
     static final String OUTPUT_CONFIG = "output_config";
     static final String EFFORT = "effort";
     static final String FORMAT = "format";
+    static final String THINKING = "thinking";
+    static final String ADAPTIVE = "adaptive";
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
@@ -27,7 +29,33 @@ class AnthropicEffort {
     }
 
     Optional<Map<String, Object>> toCustomParameters(String model, Map<String, Object> customParameters) {
-        return toOutputConfig(model, customParameters).map(outputConfig -> Map.of(OUTPUT_CONFIG, outputConfig));
+        return toOutputConfig(model, customParameters).map(outputConfig -> impliesAdaptiveThinking(model,
+                customParameters, outputConfig)
+                        ? Map.of(OUTPUT_CONFIG, outputConfig, THINKING, Map.of("type", ADAPTIVE))
+                        : Map.of(OUTPUT_CONFIG, outputConfig));
+    }
+
+    boolean impliesAdaptiveThinking(String model, JsonNode customParameters) {
+        if (customParameters == null || !customParameters.isObject()) {
+            return false;
+        }
+        return impliesAdaptiveThinking(model, JsonUtils.getMapper().convertValue(customParameters, MAP_TYPE));
+    }
+
+    boolean impliesAdaptiveThinking(String model, Map<String, Object> customParameters) {
+        return toOutputConfig(model, customParameters)
+                .map(outputConfig -> impliesAdaptiveThinking(model, customParameters, outputConfig))
+                .orElse(false);
+    }
+
+    // Opik calls the effort control "Thinking effort", but on these models a level alone only shortens or lengthens the
+    // answer: Anthropic runs a request that does not ask for thinking with none. A request that sets thinking itself,
+    // disabled included, is left as it is.
+    private boolean impliesAdaptiveThinking(String model, Map<String, Object> customParameters,
+            Map<?, ?> outputConfig) {
+        return AnthropicModelName.thinksOnlyWhenAsked(model)
+                && customParameters.get(THINKING) == null
+                && outputConfig.get(EFFORT) != null;
     }
 
     private Optional<Map<?, ?>> toOutputConfig(String model, Map<String, Object> customParameters) {
