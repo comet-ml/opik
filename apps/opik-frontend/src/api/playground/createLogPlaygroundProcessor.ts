@@ -290,11 +290,13 @@ const normalizeForProvider = (
       ...omit(parameters, [...TOKEN_LIMIT_KEYS, ...zeroPenalties]),
       ...(sliderLimit !== undefined && { [limitKey]: sliderLimit }),
     },
+    // The backend moves the limit with putIfAbsent, which also replaces a null, so a null under the
+    // provider's own name does not hide the value under the other name.
     extraBody:
       extraBody && otherLimitKey in extraBody
         ? {
-            [limitKey]: extraBody[otherLimitKey],
             ...omit(extraBody, otherLimitKey),
+            [limitKey]: extraBody[limitKey] ?? extraBody[otherLimitKey],
           }
         : extraBody,
   };

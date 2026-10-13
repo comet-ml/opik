@@ -217,6 +217,14 @@ describe("getLoggedParameters", () => {
       expected: { max_tokens: 12 },
     },
     {
+      name: "Ollama gets the extra body max_completion_tokens when max_tokens is null",
+      provider: `${PROVIDER_TYPE.OLLAMA}:local`,
+      model: "custom-llm/local/llama3.2",
+      sliders: {},
+      extraBody: { max_tokens: null, max_completion_tokens: 30 },
+      expected: { max_tokens: 30 },
+    },
+    {
       name: "Ollama gets no slider limit of 0",
       provider: `${PROVIDER_TYPE.OLLAMA}:local`,
       model: "custom-llm/local/llama3.2",
@@ -239,6 +247,14 @@ describe("getLoggedParameters", () => {
       sliders: {},
       extraBody: { max_tokens: 40, max_completion_tokens: 30 },
       expected: { max_completion_tokens: 30 },
+    },
+    {
+      name: "Bedrock gets the extra body max_tokens when max_completion_tokens is null",
+      provider: `${PROVIDER_TYPE.BEDROCK}:aws`,
+      model: "custom-llm/aws/openai.gpt-oss-120b-1:0",
+      sliders: {},
+      extraBody: { max_tokens: 40, max_completion_tokens: null },
+      expected: { max_completion_tokens: 40 },
     },
     {
       name: "Bedrock gets no slider penalty of 0",
