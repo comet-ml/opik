@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 import pydantic
 
@@ -91,6 +91,34 @@ class LangChainUsage(pydantic.BaseModel):
 
         return google_usage
 
+    def _cache_tokens(self) -> Tuple[Optional[int], Optional[int]]:
+        """Return (cache_read, cache_creation) as reported by LangChain."""
+        if self.input_token_details is None:
+            return None, None
+
+        cache_read = self.input_token_details.cache_read
+        cache_creation = self.input_token_details.cache_creation
+        if not cache_creation:
+            # langchain-anthropic and langchain-aws zero `cache_creation` when the
+            # response breaks cache writes down by TTL, and report them here.
+            ttl_tokens = [
+                getattr(self.input_token_details, key, None)
+                for key in ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens")
+            ]
+            if any(isinstance(tokens, int) and tokens > 0 for tokens in ttl_tokens):
+                cache_creation = sum(
+                    tokens for tokens in ttl_tokens if isinstance(tokens, int)
+                )
+
+        return cache_read, cache_creation
+
+    def _uncached_input_tokens(self) -> int:
+        # langchain-anthropic and the Converse path of langchain-aws add cache reads
+        # and writes into `input_tokens`. Anthropic's `input_tokens` and Bedrock's
+        # `inputTokens` exclude them, and get_billable_tokens() adds them back.
+        cache_read, cache_creation = self._cache_tokens()
+        return max(0, self.input_tokens - (cache_read or 0) - (cache_creation or 0))
+
     def map_to_anthropic_usage(self) -> Dict[str, Any]:
         anthropic_usage: Dict[str, Any] = {
             "input_tokens": self.input_tokens,
@@ -100,28 +128,36 @@ class LangChainUsage(pydantic.BaseModel):
         if self.input_token_details is None:
             return anthropic_usage
 
-        if self.input_token_details.cache_creation is not None:
-            anthropic_usage["cache_creation_input_tokens"] = (
-                self.input_token_details.cache_creation
-            )
-        if self.input_token_details.cache_read is not None:
-            anthropic_usage["cache_read_input_tokens"] = (
-                self.input_token_details.cache_read
-            )
+        cache_read, cache_creation = self._cache_tokens()
+        if cache_creation is not None:
+            anthropic_usage["cache_creation_input_tokens"] = cache_creation
+        if cache_read is not None:
+            anthropic_usage["cache_read_input_tokens"] = cache_read
+        anthropic_usage["input_tokens"] = self._uncached_input_tokens()
 
         return anthropic_usage
 
-    def map_to_bedrock_usage(self) -> Dict[str, Any]:
+    def map_to_bedrock_usage(
+        self, input_tokens_include_cache: bool = False
+    ) -> Dict[str, Any]:
+        """Map to Bedrock usage.
+
+        Args:
+            input_tokens_include_cache: True for Converse runs, where langchain-aws
+                adds the cache tokens into `input_tokens`. Legacy `ChatBedrock`
+                (invoke_model) reports the uncached count there already.
+        """
         bedrock_usage: Dict[str, Any] = {
             "inputTokens": self.input_tokens,
             "outputTokens": self.output_tokens,
         }
 
         if self.input_token_details is not None:
-            bedrock_usage["cacheReadInputTokens"] = self.input_token_details.cache_read
-            bedrock_usage["cacheWriteInputTokens"] = (
-                self.input_token_details.cache_creation
-            )
+            cache_read, cache_creation = self._cache_tokens()
+            bedrock_usage["cacheReadInputTokens"] = cache_read
+            bedrock_usage["cacheWriteInputTokens"] = cache_creation
+            if input_tokens_include_cache:
+                bedrock_usage["inputTokens"] = self._uncached_input_tokens()
 
         return bedrock_usage
 
