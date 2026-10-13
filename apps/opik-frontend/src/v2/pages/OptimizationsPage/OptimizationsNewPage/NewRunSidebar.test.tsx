@@ -288,7 +288,7 @@ describe("NewRunSidebar — re-run model resolution", () => {
 const registryModel = (id: string, label?: string) => ({
   id,
   ...(label && { label }),
-  structuredOutput: false,
+  structured_output: false,
   reasoning: false,
 });
 
@@ -393,7 +393,7 @@ describe("NewRunSidebar — re-run with the real model registry hook", () => {
         [PROVIDER_TYPE.VERTEX_AI]: [
           {
             ...registryModel(bareVertexId),
-            qualifiedName: `vertex_ai/${bareVertexId}`,
+            qualified_name: `vertex_ai/${bareVertexId}`,
           },
         ],
       },
