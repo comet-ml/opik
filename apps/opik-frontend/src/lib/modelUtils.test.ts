@@ -1461,11 +1461,18 @@ describe("updateProviderConfig — Gemini thinking level", () => {
       "medium",
     ],
     [
-      "does not carry Flash Lite's default minimal onto 3.5 Flash",
+      "does not carry Flash Lite's default off onto 3.5 Flash",
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+      "off",
+      PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
+      "medium",
+    ],
+    [
+      "keeps a minimal picked on Flash Lite, whose default is off",
       PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
       "minimal",
       PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
-      "medium",
+      "minimal",
     ],
     [
       "does not carry Flash Lite's default off onto 2.5 Flash",
