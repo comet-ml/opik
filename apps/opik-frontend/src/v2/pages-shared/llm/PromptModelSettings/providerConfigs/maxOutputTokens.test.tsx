@@ -118,6 +118,49 @@ describe("Anthropic max output tokens", () => {
   });
 });
 
+describe("OpenRouter max output tokens", () => {
+  const renderOpenRouter = (model: PROVIDER_MODEL_TYPE, maxTokens: number) =>
+    render(
+      <TooltipProvider>
+        <OpenRouterModelConfigs
+          configs={{
+            maxTokens,
+            temperature: 1,
+            topP: 1,
+            topK: 0,
+            frequencyPenalty: 0,
+            presencePenalty: 0,
+            repetitionPenalty: 1,
+            minP: 0,
+            topA: 0,
+          }}
+          model={model}
+          onChange={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+
+  it.each([
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT, 4000, "2048"],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT, 1000, "1000"],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT, 0, "0"],
+    [
+      PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B_FREE,
+      9000,
+      "7372",
+    ],
+    [PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE, 9000, "8192"],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI, 4000, "4000"],
+  ] as const)(
+    "on %s shows a stored %d as %s, never above OpenRouter's own limit for the model",
+    (model, stored, shown) => {
+      renderOpenRouter(model, stored);
+
+      expect(maxTokensInput("maxTokens")).toHaveValue(shown);
+    },
+  );
+});
+
 describe("max output tokens where 0 means no limit", () => {
   const PANELS = [
     {
