@@ -79,11 +79,20 @@ tests:
       - failedTemplate:
           errorPattern: "clickhouse.forceMerge.minAgeSeconds must be a number"
 
-  - it: fails on zero or negative values
+  - it: fails on a zero age
     set:
       clickhouse.forceMerge:
         enabled: true
         minAgeSeconds: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "clickhouse.forceMerge.minAgeSeconds must be an integer >= 1"
+
+  - it: fails on a negative age
+    set:
+      clickhouse.forceMerge:
+        enabled: true
+        minAgeSeconds: -604800
     asserts:
       - failedTemplate:
           errorPattern: "clickhouse.forceMerge.minAgeSeconds must be an integer >= 1"
