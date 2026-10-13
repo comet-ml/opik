@@ -66,8 +66,9 @@ import static org.mockito.Mockito.when;
 class WireBodyTableTest {
 
     private static final String JUDGE_PATH = "judge";
-    private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
     // Parsing would otherwise hide a duplicate key: Jackson keeps only the last of two.
+    private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory())
+            .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
     private static final ObjectMapper STRICT_MAPPER = JsonUtils.getMapper().copy()
             .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
 
