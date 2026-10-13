@@ -170,9 +170,14 @@ public class AgentInsightsJobService {
     public void markRunFailed(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull String code,
             String detail) {
         transactionTemplate.inTransaction(WRITE, handle -> {
+            boolean outOfCredits = AgentInsightsJob.FailureReason.OUT_OF_CREDITS.equals(code);
+            if (outOfCredits) {
+                // The job row is updated below too: lock it before report_failures
+                handle.attach(AgentInsightsJobDAO.class).lockByProject(workspaceId, projectId);
+            }
             handle.attach(ReportFailureDAO.class).insert(idGenerator.generateId(), workspaceId,
                     ReportFailureDAO.AGENT_INSIGHTS_TYPE, projectId, code, detail, RequestContext.SYSTEM_USER);
-            if (AgentInsightsJob.FailureReason.OUT_OF_CREDITS.equals(code)
+            if (outOfCredits
                     && handle.attach(AgentInsightsJobDAO.class)
                             .updateStatusIfCurrent(workspaceId, projectId, AgentInsightsJob.Status.ENABLED.getValue(),
                                     AgentInsightsJob.Status.DISABLED.getValue(), RequestContext.SYSTEM_USER) > 0) {
@@ -243,31 +248,11 @@ public class AgentInsightsJobService {
     // not restore spent retries: the reaper counts every timed_out row the project has had, so a project that
     // already used them up gets that single attempt, and another manual reset if it dies too.
     public AgentInsightsEnrollment.Response enrolInAutoFirstRun(boolean enrol, @NonNull List<UUID> projectIds) {
-        long runTimeoutSeconds = reportConfig.getAutoFirstRunTimeout().toJavaDuration().toSeconds();
+        if (!enrol) {
+            return clearAutoFirstRunEnrolment(projectIds);
+        }
         return transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AgentInsightsJobDAO.class);
-
-            if (!enrol) {
-                // Clearing also forgets an automatic run that never finished and is no longer live. Row by row in
-                // primary-key order (see findByProjectIds), so no other rows are locked and none in a deadlocking order.
-                Set<UUID> reset = new HashSet<>();
-                int cleared = 0;
-                for (var job : dao.findByProjectIds(projectIds)) {
-                    if (dao.clearUnfinishedAutoFirstRunClaim(job.workspaceId(), job.projectId(),
-                            runTimeoutSeconds, RequestContext.SYSTEM_USER) > 0) {
-                        reset.add(job.projectId());
-                    }
-                    cleared += dao.clearEnrolment(job.workspaceId(), job.projectId(), RequestContext.SYSTEM_USER);
-                }
-                log.info("Cleared Agent Insights enrolment for {} of {} projects (unfinished runs reset: {})",
-                        cleared, projectIds.size(), reset);
-                return AgentInsightsEnrollment.Response.builder()
-                        .cleared(cleared)
-                        .unknownProjectIds(Set.of())
-                        .alreadyRunProjectIds(Set.of())
-                        .resetProjectIds(reset)
-                        .build();
-            }
 
             Set<UUID> existing = dao.findExistingProjectIds(projectIds);
             Set<UUID> alreadyRun = dao.findProjectIdsAlreadyAutoRun(projectIds);
@@ -295,6 +280,45 @@ public class AgentInsightsJobService {
                     .resetProjectIds(Set.of())
                     .build();
         });
+    }
+
+    private record UnenrolOutcome(boolean reset, boolean cleared) {
+    }
+
+    // Un-enrols the given projects, also forgetting an automatic run that never finished and is no longer live. One
+    // transaction per project: un-enrolling is idempotent, so the batch doesn't need to be atomic, and each
+    // transaction holds only that project's job row and the report_failures locks its reset check takes, never
+    // several projects' at once.
+    private AgentInsightsEnrollment.Response clearAutoFirstRunEnrolment(List<UUID> projectIds) {
+        long runTimeoutSeconds = reportConfig.getAutoFirstRunTimeout().toJavaDuration().toSeconds();
+        List<EnabledJob> jobs = transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(AgentInsightsJobDAO.class).findByProjectIds(projectIds));
+        Set<UUID> reset = new HashSet<>();
+        int cleared = 0;
+        for (var job : jobs) {
+            UnenrolOutcome outcome = transactionTemplate.inTransaction(WRITE, handle -> {
+                var dao = handle.attach(AgentInsightsJobDAO.class);
+                boolean wasReset = dao.clearUnfinishedAutoFirstRunClaim(job.workspaceId(), job.projectId(),
+                        runTimeoutSeconds, RequestContext.SYSTEM_USER) > 0;
+                boolean wasCleared = dao.clearEnrolment(job.workspaceId(), job.projectId(),
+                        RequestContext.SYSTEM_USER) > 0;
+                return new UnenrolOutcome(wasReset, wasCleared);
+            });
+            if (outcome.reset()) {
+                reset.add(job.projectId());
+            }
+            if (outcome.cleared()) {
+                cleared++;
+            }
+        }
+        log.info("Cleared Agent Insights enrolment for {} of {} projects (unfinished runs reset: {})",
+                cleared, projectIds.size(), reset);
+        return AgentInsightsEnrollment.Response.builder()
+                .cleared(cleared)
+                .unknownProjectIds(Set.of())
+                .alreadyRunProjectIds(Set.of())
+                .resetProjectIds(reset)
+                .build();
     }
 
     // Called when the free-run budget is spent, with the project whose run was rejected. Projects still owed

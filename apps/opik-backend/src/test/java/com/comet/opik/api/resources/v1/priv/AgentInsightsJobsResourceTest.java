@@ -378,6 +378,24 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
+    @DisplayName("Clearing several projects at once resets only the runs that never finished")
+    void enrol__falseForSeveralProjects__resetsOnlyUnfinishedRuns() {
+        var failed = createProjectWithClaimedAutoFirstRun();
+        reportFailuresClient.create(agentInsightsFailure(failed, "out_of_credits", null),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
+        var live = createProjectWithClaimedAutoFirstRun();
+        var failedBefore = getJob(failed);
+        var liveBefore = getJob(live);
+
+        try (var response = jobsClient.enrolInAutoFirstRun(false, List.of(failed, live))) {
+            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class))
+                    .isEqualTo(enrolmentResult().cleared(2).resetProjectIds(Set.of(failed)).build());
+        }
+        assertJob(failed, failedBefore.toBuilder().autoFirstRunEnrolled(false).autoFirstRunAt(null).build());
+        assertJob(live, liveBefore.toBuilder().autoFirstRunEnrolled(false).build());
+    }
+
+    @Test
     @DisplayName("Clearing keeps the claim of a completed automatic run, even one past the run timeout")
     void enrol__falseAfterCompletedRun__keepsTheClaim() {
         var projectId = createProjectWithClaimedAutoFirstRun();

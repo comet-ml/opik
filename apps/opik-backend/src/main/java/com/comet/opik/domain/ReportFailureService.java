@@ -52,9 +52,14 @@ class ReportFailureServiceImpl implements ReportFailureService {
                 failure.type().getValue(), failure.projectId(), workspaceId, failure.reason());
 
         transactionTemplate.inTransaction(WRITE, handle -> {
+            boolean outOfCredits = AgentInsightsJob.FailureReason.OUT_OF_CREDITS.equals(failure.reason());
+            if (outOfCredits) {
+                // The job row is updated below too: lock it before report_failures
+                handle.attach(AgentInsightsJobDAO.class).lockByProject(workspaceId, failure.projectId());
+            }
             handle.attach(ReportFailureDAO.class).insert(id, workspaceId, failure.type().getValue(),
                     failure.projectId(), failure.reason(), failure.detail(), userName);
-            if (AgentInsightsJob.FailureReason.OUT_OF_CREDITS.equals(failure.reason())
+            if (outOfCredits
                     && handle.attach(AgentInsightsJobDAO.class)
                             .updateStatusIfCurrent(workspaceId, failure.projectId(),
                                     AgentInsightsJob.Status.ENABLED.getValue(),

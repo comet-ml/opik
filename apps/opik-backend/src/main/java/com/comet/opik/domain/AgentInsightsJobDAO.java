@@ -40,6 +40,15 @@ interface AgentInsightsJobDAO {
             @Bind("status") String status,
             @Bind("userName") String userName);
 
+    // Locks one job row by its unique key. A writer that records a failure and then updates the job row takes this
+    // first, so it locks the job row before report_failures, the same order as the reap and reset UPDATEs (job row,
+    // then their report_failures subquery). In the other order the two deadlock and the failure write is rolled back.
+    @SqlQuery("""
+            SELECT id FROM agent_insights_jobs WHERE workspace_id = :workspaceId AND project_id = :projectId
+            FOR UPDATE
+            """)
+    Optional<UUID> lockByProject(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
+
     @SqlUpdate("""
             UPDATE agent_insights_jobs SET status = :newStatus, last_updated_by = :userName
             WHERE workspace_id = :workspaceId AND project_id = :projectId AND status = :currentStatus
@@ -123,15 +132,12 @@ interface AgentInsightsJobDAO {
     Set<UUID> findExistingProjectIds(@BindList("projectIds") Collection<UUID> projectIds);
 
     // The job rows of the given projects, resolved through the projects primary key so callers can address each row
-    // by its (workspace_id, project_id) unique key rather than scanning on project_id. In primary-key order, so a
-    // caller updating them one by one takes row locks in the same order as cancelAutoFirstRunRollout's scan, and the
-    // two can wait on each other but not deadlock.
+    // by its (workspace_id, project_id) unique key rather than scanning on project_id.
     @SqlQuery("""
             SELECT j.id, j.workspace_id, j.project_id
             FROM projects p
             INNER JOIN agent_insights_jobs j ON j.workspace_id = p.workspace_id AND j.project_id = p.id
             WHERE p.id IN (<projectIds>)
-            ORDER BY j.id
             """)
     @RegisterConstructorMapper(EnabledJob.class)
     List<EnabledJob> findByProjectIds(@BindList("projectIds") Collection<UUID> projectIds);
@@ -156,7 +162,7 @@ interface AgentInsightsJobDAO {
             @Bind("status") String status,
             @Bind("userName") String userName);
 
-    // One row, by its unique key, so un-enrolling locks only the rows it changes.
+    // One row, by its unique key.
     @SqlUpdate("""
             UPDATE agent_insights_jobs SET auto_first_run_enrolled = FALSE, last_updated_by = :userName
             WHERE workspace_id = :workspaceId AND project_id = :projectId AND auto_first_run_enrolled
