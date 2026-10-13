@@ -7,8 +7,9 @@ sends one short prompt per new or changed model to /v1/private/chat/completions,
 a Markdown report. Report-only: a model that fails is a result, not an error. The exit code
 is non-zero only when the check itself could not run.
 
-When nothing changed, it calls one cheap model per provider instead, so a PR that touches
-only this script or its workflow still runs end to end.
+When nothing changed, it calls one cheap model per provider instead (from SMOKE_MODELS, when
+that model is in the registry), so a PR that touches only this script or its workflow still
+runs end to end.
 
 Usage:
   python scripts/check_new_models.py --base-ref origin/main --dry-run
@@ -84,7 +85,14 @@ class CheckResult(NamedTuple):
 
 def load_registry_from_text(text: str) -> dict[str, list[dict]]:
     data = yaml.safe_load(text) or {}
-    return {provider: list(models or []) for provider, models in data.items()}
+    registry = {provider: list(models or []) for provider, models in data.items()}
+    for provider, models in registry.items():
+        for model in models:
+            for field in ("id", "qualifiedName"):
+                value = model.get(field)
+                if (field == "id" or value is not None) and not (isinstance(value, str) and value.strip()):
+                    raise RuntimeError(f"{provider} entry {model!r} has no usable {field}")
+    return registry
 
 
 def load_registry_at_ref(ref: str) -> dict[str, list[dict]]:
@@ -320,13 +328,20 @@ def run(args: argparse.Namespace) -> int:
     return 0
 
 
+def non_negative_int(value: str) -> int:
+    number = int(value)
+    if number < 0:
+        raise argparse.ArgumentTypeError(f"must be 0 or more, got {number}")
+    return number
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--base-ref", required=True, help="Git ref to compare the YAML against")
     parser.add_argument("--head-ref", help="Git ref for the new YAML (default: the working tree)")
     parser.add_argument("--backend-url", default="http://localhost:8080")
     parser.add_argument("--output", help="Write the Markdown report here (default: stdout)")
-    parser.add_argument("--max-calls", type=int, default=60)
+    parser.add_argument("--max-calls", type=non_negative_int, default=60)
     parser.add_argument("--dry-run", action="store_true", help="List what would be called, make no calls")
     args = parser.parse_args()
     try:
