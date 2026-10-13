@@ -48,10 +48,12 @@ class WireBodyOpenAiGroupsTest {
         var registryOnly = group(groups, "registry-only");
         var enumOnly = group(groups, "enum-only");
 
+        assertThat(reasoning).doesNotContainAnyElementsOf(registryOnly);
         assertThat(union(reasoning, registryOnly)).containsExactlyInAnyOrderElementsOf(reasoningIds);
         assertThat(nonReasoning).containsExactlyInAnyOrderElementsOf(otherIds);
-        assertThat(registryOnly).doesNotContainAnyElementsOf(ENUM_IDS);
-        assertThat(enumOnly).isSubsetOf(ENUM_IDS)
+        assertThat(registryOnly).isNotEmpty().doesNotContainAnyElementsOf(ENUM_IDS);
+        assertThat(enumOnly).isNotEmpty()
+                .isSubsetOf(ENUM_IDS)
                 .doesNotContainAnyElementsOf(reasoningIds)
                 .doesNotContainAnyElementsOf(otherIds);
     }
