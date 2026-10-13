@@ -279,11 +279,17 @@ describe("ArrowScrollArea", () => {
     });
 
     it.each([
-      { when: "after the end was seen", isEndSeen: true },
-      { when: "before the end was seen", isEndSeen: false },
+      {
+        when: "after the end scroll event fired",
+        endScrollEventFired: true,
+      },
+      {
+        when: "when the end scroll event did not fire",
+        endScrollEventFired: false,
+      },
     ])(
       "resumes when the list grows under an arrow held at the end, $when",
-      ({ isEndSeen }) => {
+      ({ endScrollEventFired }) => {
         vi.useFakeTimers();
         const fireResize = stubResizeObserver();
         stubHeights(CONTENT_HEIGHT);
@@ -295,7 +301,7 @@ describe("ArrowScrollArea", () => {
         });
         // A browser fires this scroll event as the hold reaches the end, unless the list grows
         // first; happy-dom never fires it.
-        if (isEndSeen) fireEvent.scroll(viewport);
+        if (endScrollEventFired) fireEvent.scroll(viewport);
         const scrollTopAtEnd = viewport.scrollTop;
         stubHeights(2 * CONTENT_HEIGHT);
         act(() => fireResize());
