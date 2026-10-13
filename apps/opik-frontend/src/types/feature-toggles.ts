@@ -14,6 +14,7 @@ export enum FeatureToggleKeys {
   AGENT_INSIGHTS_ENABLED = "agent_insights_enabled",
   PROJECT_HOMEPAGE_ENABLED = "project_homepage_enabled",
   ANNOTATION_QUEUE_AUTOMATION_ENABLED = "annotation_queue_automation_enabled",
+  EVENT_BRIDGE_ALERTS_ENABLED = "event_bridge_alerts_enabled",
   SPAN_LLM_AS_JUDGE_ENABLED = "span_llm_as_judge_enabled",
   SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED = "span_user_defined_metric_python_enabled",
   COST_INTELLIGENCE_ENABLED = "cost_intelligence_enabled",
