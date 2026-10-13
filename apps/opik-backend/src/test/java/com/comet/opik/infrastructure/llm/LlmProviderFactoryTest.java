@@ -28,6 +28,7 @@ import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
+import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIClientGenerator;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
@@ -125,7 +126,8 @@ class LlmProviderFactoryTest {
         OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig);
         openRouterModule.llmServiceProvider(llmProviderFactory, openRouterClientGenerator);
 
-        VertexAIClientGenerator vertexAIClientGenerator = vertexAIModule.clientGenerator(llmProviderClientConfig);
+        VertexAIClientGenerator vertexAIClientGenerator = vertexAIModule.clientGenerator(llmProviderClientConfig,
+                registryService);
         vertexAIModule.llmServiceProvider(llmProviderFactory, vertexAIClientGenerator);
 
         LlmProviderService actual = llmProviderFactory.getService(workspaceId, model);
@@ -503,6 +505,32 @@ class LlmProviderFactoryTest {
                 registryService);
 
         assertThat(llmProviderFactory.isOpenAiReasoningModel(model)).isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("getService serves a Vertex AI model that only the registry knows")
+    void getServiceServesRegistryOnlyVertexAiModel() {
+        var model = "vertex_ai/gemini-9.9-flash";
+        assertThat(VertexAIModelName.byQualifiedName(model)).isEmpty();
+
+        var registry = mock(LlmModelRegistryService.class);
+        when(registry.findModel(model)).thenReturn(Optional.of(
+                new LlmModelRegistryService.ModelLookupResult(LlmProvider.VERTEX_AI,
+                        LlmModelDefinition.builder().id("gemini-9.9-flash").qualifiedName(model).build())));
+        var llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        var workspaceId = UUID.randomUUID().toString();
+        when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet()))
+                .thenReturn(List.of(ProviderApiKey.builder()
+                        .provider(LlmProvider.VERTEX_AI)
+                        .apiKey(EncryptionUtils.encrypt(UUID.randomUUID().toString()))
+                        .build()));
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registry);
+        var vertexAIModule = new VertexAIModule();
+        vertexAIModule.llmServiceProvider(llmProviderFactory,
+                vertexAIModule.clientGenerator(llmProviderClientConfig, registry));
+
+        assertThat(llmProviderFactory.getService(workspaceId, model)).isInstanceOf(LlmProviderVertexAI.class);
     }
 
     @Test

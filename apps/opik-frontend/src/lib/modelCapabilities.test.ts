@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { supportsAudioInput } from "@/lib/modelCapabilities";
+import {
+  getMaxOutputTokens,
+  supportsAudioInput,
+} from "@/lib/modelCapabilities";
 import { CUSTOM_PROVIDER_MODEL_PREFIX } from "@/constants/providers";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
@@ -63,4 +66,24 @@ describe("supportsAudioInput", () => {
   it.each(["", null, undefined])("returns false for %p", (model) => {
     expect(supportsAudioInput(model)).toBe(false);
   });
+});
+
+describe("getMaxOutputTokens", () => {
+  it.each([
+    [PROVIDER_MODEL_TYPE.GPT_4O_MINI, 16384],
+    [PROVIDER_MODEL_TYPE.GPT_4, 4096],
+    [PROVIDER_MODEL_TYPE.GPT_O3, 100000],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, 64000],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, 128000],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_6, 128000],
+  ])("reads the limit of %s from the pricing data", (model, limit) => {
+    expect(getMaxOutputTokens(model)).toBe(limit);
+  });
+
+  it.each([PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1, "", undefined])(
+    "knows no limit for %s",
+    (model) => {
+      expect(getMaxOutputTokens(model)).toBeUndefined();
+    },
+  );
 });

@@ -21,6 +21,7 @@ const renderTrigger = (
   provider: COMPOSED_PROVIDER_TYPE,
   model: PROVIDER_MODEL_TYPE | "" = PROVIDER_MODEL_TYPE.OPIK_FREE_MODEL,
   configs: Partial<LLMPromptConfigsType> = {},
+  onChange = vi.fn(),
 ) =>
   render(
     <TooltipProvider delayDuration={700}>
@@ -28,7 +29,7 @@ const renderTrigger = (
         provider={provider}
         model={model}
         configs={configs}
-        onChange={vi.fn()}
+        onChange={onChange}
       />
     </TooltipProvider>,
   );
@@ -82,5 +83,27 @@ describe("PromptModelConfigs for Ollama and Bedrock", () => {
     expect(screen.getByTestId("maxCompletionTokens-input")).toHaveValue("4000");
     expect(screen.getByTestId("topP-input")).toHaveValue("1");
     expect(screen.getByText("Extra body parameters (Optional)")).toBeVisible();
+  });
+});
+
+describe("PromptModelConfigs typed values", () => {
+  it("keeps a typed value when Escape closes the panel", () => {
+    const onChange = vi.fn();
+    renderTrigger(
+      PROVIDER_TYPE.OPEN_AI,
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      getDefaultConfigByProvider(
+        PROVIDER_TYPE.OPEN_AI,
+        PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      ),
+      onChange,
+    );
+
+    openPanel();
+    const input = screen.getByTestId("temperature-input");
+    fireEvent.change(input, { target: { value: "0.7" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    expect(onChange).toHaveBeenCalledWith({ temperature: 0.7 });
   });
 });
