@@ -296,7 +296,10 @@ class LlmModelRegistryServiceTest {
             "thinkingmachines/inkling:free",
             "thinkingmachines/inkling-small:free",
             "openai/gpt-5.2-chat",
-            "minimax/minimax-m1"
+            "minimax/minimax-m1",
+            "amazon/nova-premier-v1",
+            "inclusionai/ling-3.0-flash-fin",
+            "nousresearch/hermes-3-llama-3.1-70b"
     })
     void defaultResourceHidesOpenRouterModelsThatCannotRunButStillResolvesThem(String model) {
         var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
