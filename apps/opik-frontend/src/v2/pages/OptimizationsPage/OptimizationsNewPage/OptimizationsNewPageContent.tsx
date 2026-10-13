@@ -41,6 +41,7 @@ const OptimizationsNewPageContent: React.FC<
     metricType,
     model,
     config,
+    optimizerModel,
     datasetId,
     datasetSample,
     datasetVariables,
@@ -72,6 +73,10 @@ const OptimizationsNewPageContent: React.FC<
   // will fail server-side.
   const isMissingProviderKey =
     providerKeysReady && Boolean(model) && !availableModels.includes(model);
+  const isMissingOptimizerProviderKey =
+    providerKeysReady &&
+    Boolean(optimizerModel) &&
+    !availableModels.includes(optimizerModel);
 
   const { isSubmitting, dirtyFields } = form.formState;
   const replacementSettingsNote = dirtyFields.modelConfig
@@ -159,6 +164,12 @@ const OptimizationsNewPageContent: React.FC<
             will fail without it.
           </span>
         )}
+        {isMissingOptimizerProviderKey && (
+          <span className="comet-body-s text-destructive">
+            Add or check the API key for the algorithm model&apos;s provider
+            before starting — the run will fail without it.
+          </span>
+        )}
         <div className="flex items-center gap-2">
           <Button
             type="submit"
@@ -172,7 +183,8 @@ const OptimizationsNewPageContent: React.FC<
               !model ||
               !datasetId ||
               hasMissingVariables ||
-              isMissingProviderKey
+              isMissingProviderKey ||
+              isMissingOptimizerProviderKey
             }
           >
             {isSubmitting && (

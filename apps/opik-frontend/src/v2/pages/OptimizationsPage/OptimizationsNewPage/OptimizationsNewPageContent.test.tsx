@@ -25,6 +25,7 @@ const makeFormState = (overrides = {}) => ({
 
 type MockHandlers = {
   model: string;
+  optimizerModel?: string;
   isDatasetError: boolean;
   hasMissingVariables?: boolean;
   missingDatasetVariables?: string[];
@@ -48,6 +49,7 @@ const makeHandlers = (overrides: MockHandlers) => ({
   metricType: "equals",
   model: overrides.model,
   config: {},
+  optimizerModel: overrides.optimizerModel ?? "",
   datasetId: overrides.datasetId ?? "dataset-1",
   datasetSample: [],
   datasetVariables: [],
@@ -81,6 +83,7 @@ const renderContent = ({
   availableModels = ["openai/gpt-4o"],
   providerKeysReady = true,
   model = "openai/gpt-4o",
+  optimizerModel,
   isDatasetError = false,
   savedModelReplacement,
   dirtyFields,
@@ -88,6 +91,7 @@ const renderContent = ({
   availableModels?: string[];
   providerKeysReady?: boolean;
   model?: string;
+  optimizerModel?: string;
   isDatasetError?: boolean;
   savedModelReplacement?: ComponentProps<
     typeof OptimizationsNewPageContent
@@ -97,6 +101,7 @@ const renderContent = ({
   mockUseHandlers.mockReturnValue(
     makeHandlers({
       model,
+      optimizerModel,
       isDatasetError,
       dirtyFields,
     }) as unknown as ReturnType<typeof useOptimizationsNewFormHandlers>,
@@ -209,6 +214,57 @@ describe("OptimizationsNewPageContent — missing provider key (F1)", () => {
     const submitBtn = screen.getByRole("button", { name: /Optimize prompt/i });
     expect(submitBtn).not.toBeDisabled();
   });
+});
+
+describe("OptimizationsNewPageContent — algorithm model", () => {
+  const ALGORITHM_KEY_WARNING =
+    /Add or check the API key for the algorithm model's provider/;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it.each([
+    {
+      case: "an algorithm model no configured key backs",
+      optimizerModel: "anthropic/claude-3-5-sonnet",
+      providerKeysReady: true,
+      blocked: true,
+    },
+    {
+      case: "an algorithm model a configured key backs",
+      optimizerModel: "openai/gpt-4o",
+      providerKeysReady: true,
+      blocked: false,
+    },
+    {
+      case: "no algorithm model (same as prompt)",
+      optimizerModel: "",
+      providerKeysReady: true,
+      blocked: false,
+    },
+    {
+      case: "keys still loading",
+      optimizerModel: "anthropic/claude-3-5-sonnet",
+      providerKeysReady: false,
+      blocked: false,
+    },
+  ])(
+    "blocks Optimize: $blocked, for $case",
+    ({ optimizerModel, providerKeysReady, blocked }) => {
+      renderContent({
+        model: "openai/gpt-4o",
+        availableModels: ["openai/gpt-4o"],
+        optimizerModel,
+        providerKeysReady,
+      });
+
+      expect(screen.queryByText(ALGORITHM_KEY_WARNING) !== null).toBe(blocked);
+      expect(
+        screen.getByRole("button", { name: /Optimize prompt/i }),
+      ).toHaveProperty("disabled", blocked);
+    },
+  );
 });
 
 describe("OptimizationsNewPageContent — replaced saved model", () => {
