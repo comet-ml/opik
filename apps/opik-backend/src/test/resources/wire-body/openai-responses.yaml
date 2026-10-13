@@ -1,0 +1,244 @@
+# What OpenAI receives on a key set to the Responses API (openai_pipeline_mode RESPONSES_API), as main sends it on
+# 2026-10-13. See WireBodyTableTest for the format, and openai.yaml for the Chat Completions route.
+
+models:
+  # The same groups as openai.yaml.
+  reasoning:
+    - gpt-5-nano
+    - o3-mini
+  non-reasoning:
+    - gpt-4.1
+    - gpt-3.5-turbo
+  registry-only:
+    - gpt-7
+  enum-only:
+    - gpt-5
+
+defaults:
+  chat:
+    request:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content: Say hi.
+      max_completion_tokens: 512
+    body:
+      input:
+        - type: message
+          role: system
+          content: Be brief.
+        - type: message
+          role: user
+          content:
+            - type: input_text
+              text: Say hi.
+      max_output_tokens: 512
+      store: false
+  judge:
+    rule:
+      model: {}
+      messages:
+        - role: USER
+          content: Is Paris the capital of France?
+      variables: {}
+      schema:
+        - name: Correctness
+          type: INTEGER
+          description: 1 if correct
+    body:
+      input:
+        - type: message
+          role: user
+          content:
+            - type: input_text
+              text: Is Paris the capital of France?
+      store: false
+      text:
+        format:
+          type: json_schema
+          name: scoring_schema
+          strict: false
+          schema:
+            type: object
+            properties:
+              Correctness:
+                type: object
+                description: 1 if correct
+                properties:
+                  reason:
+                    type: string
+                    description: the reason for the score for Correctness
+                  score:
+                    type: integer
+                    description: the score for Correctness
+                required: [score, reason]
+            required: [Correctness]
+
+rows:
+  # Sampling params and penalties, chat path.
+  - name: sampling params are sent to a model that is not a reasoning model
+    models: [non-reasoning, enum-only]
+    request: {temperature: 0.3, top_p: 0.9}
+    body: {temperature: 0.3, top_p: 0.9}
+  - name: sampling params are dropped for a reasoning model
+    models: [reasoning, registry-only]
+    request: {temperature: 0.3, top_p: 0.9}
+  - name: penalties are dropped for every model
+    models: [non-reasoning, enum-only]
+    request: {frequency_penalty: 0.5, presence_penalty: 0.5}
+  - name: a temperature in custom_parameters reaches a reasoning model
+    models: [reasoning]
+    request: {custom_parameters: {temperature: 0.3}}
+    # The reasoning rule clears the typed fields only; the extra body is merged into the request last.
+    body: {temperature: 0.3}
+  - name: seed is not sent
+    model: gpt-4.1
+    request: {seed: 42}
+
+  # Effort, chat path.
+  - name: an effort is sent as reasoning.effort
+    models: [reasoning, registry-only, non-reasoning]
+    request: {reasoning_effort: low}
+    body: {reasoning: {effort: low}}
+  - name: max effort is sent as max
+    models: [reasoning, registry-only]
+    request: {reasoning_effort: max}
+    body: {reasoning: {effort: max}}
+  - name: an effort name OpenAI does not have is sent unchecked
+    models: [reasoning]
+    request: {reasoning_effort: ultra}
+    body: {reasoning: {effort: ultra}}
+
+  # Max tokens, chat path.
+  - name: no output cap sends none
+    model: gpt-4.1
+    request: {max_completion_tokens: null}
+    body: {max_output_tokens: null}
+  - name: max_tokens alone is sent as max_output_tokens
+    model: gpt-4.1
+    request: {max_completion_tokens: null, max_tokens: 300}
+    body: {max_output_tokens: 300}
+  - name: max_completion_tokens wins over max_tokens
+    model: gpt-4.1
+    request: {max_tokens: 300}
+
+  # Other request fields, chat path.
+  - name: stop is not sent
+    model: gpt-4.1
+    request: {stop: [END]}
+  - name: a streamed request sends stream true
+    model: gpt-4.1
+    request: {stream: true, temperature: 0.3}
+    body: {stream: true, temperature: 0.3}
+
+  # custom_parameters (the extra body), chat path.
+  - name: custom_parameters keys are added to the body as given
+    model: gpt-4.1
+    request: {custom_parameters: {service_tier: flex, metadata: {run: r1}}}
+    body: {service_tier: flex, metadata: {run: r1}}
+  - name: an extra body key replaces the typed setting of the same name
+    model: gpt-4.1
+    request: {temperature: 0.3, custom_parameters: {temperature: 1.2, max_output_tokens: 64}}
+    body: {temperature: 1.2, max_output_tokens: 64}
+  - name: custom_parameters max_tokens is sent as max_output_tokens
+    model: gpt-4.1
+    request: {custom_parameters: {max_tokens: 64}}
+    body: {max_output_tokens: 64}
+  - name: custom_parameters max_completion_tokens is sent as max_output_tokens
+    model: gpt-4.1
+    request: {custom_parameters: {max_completion_tokens: 64}}
+    body: {max_output_tokens: 64}
+  - name: custom_parameters reasoning_effort is sent as reasoning.effort
+    model: gpt-5-nano
+    request: {reasoning_effort: high, custom_parameters: {reasoning_effort: low}}
+    body: {reasoning: {effort: low}}
+  - name: custom_parameters response_format is sent as text.format
+    model: gpt-4.1
+    request:
+      custom_parameters:
+        response_format:
+          type: json_schema
+          json_schema: {name: answer, strict: true, schema: {type: object, properties: {label: {type: string}},
+            required: [label], additionalProperties: false}}
+    body:
+      text:
+        format: {type: json_schema, name: answer, strict: true, schema: {type: object,
+          properties: {label: {type: string}}, required: [label], additionalProperties: false}}
+  # These checks run inside the provider call, so ChatCompletionService answers them with a 500, not the 400 they
+  # raise, and with the root cause's message.
+  - name: custom_parameters model is rejected
+    model: gpt-4.1
+    request: {custom_parameters: {model: gpt-4o}}
+    rejected: custom_parameters.model is set by Opik from the request and cannot be replaced
+  - name: custom_parameters input is rejected
+    model: gpt-4.1
+    request: {custom_parameters: {input: hi}}
+    rejected: custom_parameters.input is set by Opik from the request and cannot be replaced
+  - name: custom_parameters stream is rejected
+    model: gpt-4.1
+    request: {custom_parameters: {stream: true}}
+    rejected: custom_parameters.stream is set by Opik from the request and cannot be replaced
+  - name: a custom_parameters max_tokens that is not a number is rejected
+    model: gpt-4.1
+    request: {custom_parameters: {max_tokens: lots}}
+    # The 400 says "Invalid custom_parameters.max_tokens for the OpenAI Responses API"; the caller sees its cause.
+    rejected: 'Cannot deserialize value of type `java.lang.Integer` from String "lots"'
+
+  # Judge path. gpt-3.5-turbo and o3-mini have no structuredOutput in the registry, so only the row about that
+  # uses them.
+  - name: a judge sends temperature to a model that is not a reasoning model
+    path: judge
+    models: [gpt-4.1, enum-only]
+    request: {temperature: 0.3}
+    body: {temperature: 0.3}
+  - name: a judge drops temperature for a reasoning model
+    path: judge
+    models: [gpt-5-nano, registry-only]
+    request: {temperature: 0.3}
+  - name: a judge on a model without structured output puts the output format in the prompt
+    path: judge
+    models: [gpt-3.5-turbo, o3-mini]
+    body:
+      text: null
+      input:
+        - type: message
+          role: user
+          content:
+            - type: input_text
+              text: |-
+                Is Paris the capital of France?
+
+                IMPORTANT:
+                You must respond with ONLY a single valid JSON object that conforms to the structure of the example below.
+                Pay attention to the field names and data types (boolean, integer, double).
+                Do NOT include any other text, explanation, or markdown formatting.
+                The JSON object should look like this:
+                {
+                  "Correctness" : {
+                    "score" : 1,
+                    "reason" : "A brief explanation for the score."
+                  }
+                }
+
+                Here are the descriptions for each field:
+                - Correctness: 1 if correct
+  - name: a judge does not send the seed
+    path: judge
+    model: gpt-4.1
+    request: {seed: 42}
+  - name: a judge sends custom_parameters max_tokens as max_output_tokens
+    path: judge
+    model: gpt-4.1
+    request: {custom_parameters: {max_tokens: 300}}
+    body: {max_output_tokens: 300}
+  - name: a judge sends custom_parameters reasoning_effort as reasoning.effort
+    path: judge
+    model: gpt-5-nano
+    request: {custom_parameters: {reasoning_effort: low}}
+    body: {reasoning: {effort: low}}
+  - name: a judge adds other custom_parameters keys to the body as given
+    path: judge
+    model: gpt-4.1
+    request: {custom_parameters: {service_tier: flex}}
+    body: {service_tier: flex}
