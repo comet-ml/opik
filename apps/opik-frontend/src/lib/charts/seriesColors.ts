@@ -1,7 +1,7 @@
 import { ChartTokens, SERIES_COUNT, resolveCssColor } from "./chartTokens";
 
 /**
- * Series colour assignment from the chart rules (src/styles/widget-tokens, docs/chart-rules.md):
+ * Series colour assignment from the chart rules (src/styles/widget-tokens):
  *   1. A user override (the workspace colour map) wins.
  *   2. A key of a known entity kind (model, tool, project…) keeps the palette slot it got the first time it was
  *      seen, in every widget; each kind has its own sequence from --chart-1.

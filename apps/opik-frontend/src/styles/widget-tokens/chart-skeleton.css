@@ -1,9 +1,5 @@
-/* Loading-state animation for the chart placeholders (from src/index.css). Uses --chart-skeleton-* tokens. */
-/*
- * Chart loading placeholders (charts/Skeletons.tsx). One sheen sweeps across every placeholder;
- * bars breathe (a slow ~8% stretch), points, cells and pins pulse, pies turn slowly. All timed
- * from --chart-skeleton-duration (one sweep) and switched off for reduced motion.
- */
+/* Loading-state animation for the chart placeholders: the chart-skeleton-* classes, driven by the --chart-skeleton-* tokens. */
+
 .chart-skeleton-sheen {
   position: absolute;
   inset: 0;
