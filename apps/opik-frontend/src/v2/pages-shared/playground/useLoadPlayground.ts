@@ -57,7 +57,7 @@ function useLoadPlayground() {
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
-  const { calculateModelProvider, calculateDefaultModel } =
+  const { calculateModelProvider, calculateDefaultModel, isDropdownModel } =
     useLLMProviderModelsData();
 
   const { data: providerKeysData, isPending: isPendingProviderKeys } =
@@ -109,6 +109,7 @@ function useLoadPlayground() {
         lastPickedModel,
         providerResolver: calculateModelProvider,
         modelResolver: calculateDefaultModel,
+        isDropdownModel,
       });
 
       if (templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
@@ -166,6 +167,7 @@ function useLoadPlayground() {
     [
       calculateDefaultModel,
       calculateModelProvider,
+      isDropdownModel,
       lastPickedModel,
       providerKeys,
     ],
