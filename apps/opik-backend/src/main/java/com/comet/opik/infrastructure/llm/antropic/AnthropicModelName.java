@@ -76,6 +76,26 @@ public enum AnthropicModelName implements StructuredOutputSupported {
             CLAUDE_SONNET_4_5_20250929.value,
             CLAUDE_SONNET_4_6.value);
 
+    // API ids of the models that run without thinking when a request omits `thinking`. From Sonnet 5, Opus 5
+    // and Fable 5 on, omitting it runs adaptive thinking (Anthropic's model migration guide). Named this way
+    // round for the reason given on SAMPLING_CAPABLE_MODEL_IDS: a newly synced model is assumed to think,
+    // which only gives it a larger max_tokens, rather than leaving it to spend the whole default on thinking.
+    private static final Set<String> THINKING_OFF_BY_DEFAULT_MODEL_IDS = Set.of(
+            CLAUDE_SONNET_3_7.value,
+            CLAUDE_HAIKU_4_5.value,
+            CLAUDE_OPUS_4_1.value,
+            CLAUDE_OPUS_4.value,
+            CLAUDE_OPUS_4_5.value,
+            CLAUDE_OPUS_4_6.value,
+            CLAUDE_OPUS_4_6_20260205.value,
+            CLAUDE_OPUS_4_7.value,
+            CLAUDE_OPUS_4_7_20260416.value,
+            CLAUDE_OPUS_4_8.value,
+            CLAUDE_SONNET_4.value,
+            CLAUDE_SONNET_4_5.value,
+            CLAUDE_SONNET_4_5_20250929.value,
+            CLAUDE_SONNET_4_6.value);
+
     static final List<String> ALL_EFFORT_LEVELS = List.of("low", "medium", "high", "xhigh", "max");
     private static final List<String> EFFORT_LEVELS_WITHOUT_XHIGH = List.of("low", "medium", "high", "max");
     private static final List<String> EFFORT_LEVELS_UP_TO_HIGH = List.of("low", "medium", "high");
@@ -114,6 +134,10 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     /** Exposed so a provider-neutral check can reuse these lists rather than copying them. */
     public static Set<String> samplingCapableModelIds() {
         return SAMPLING_CAPABLE_MODEL_IDS;
+    }
+
+    public static Set<String> thinkingOffByDefaultModelIds() {
+        return THINKING_OFF_BY_DEFAULT_MODEL_IDS;
     }
 
     public static Set<String> allModelIds() {

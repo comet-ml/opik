@@ -252,7 +252,7 @@ class LlmProviderOpenAiResponsesTest {
                 .build());
         var clientGenerator = Mockito.mock(OpenAIClientGenerator.class);
         var config = Mockito.mock(LlmProviderClientApiConfig.class);
-        Mockito.when(clientGenerator.newResponsesApiChatModel(any(), anyBoolean())).thenReturn(chatModel);
+        Mockito.when(clientGenerator.newResponsesApiChatModel(any(), anyBoolean(), any())).thenReturn(chatModel);
         var provider = new LlmProviderOpenAiResponses(clientGenerator, config);
 
         var request = ChatCompletionRequest.builder()
@@ -274,7 +274,7 @@ class LlmProviderOpenAiResponsesTest {
         provider.generate(request, "ws-1");
 
         var strictCaptor = ArgumentCaptor.forClass(Boolean.class);
-        Mockito.verify(clientGenerator).newResponsesApiChatModel(any(), strictCaptor.capture());
+        Mockito.verify(clientGenerator).newResponsesApiChatModel(any(), strictCaptor.capture(), any());
         assertThat(strictCaptor.getValue()).isTrue();
     }
 
@@ -290,7 +290,7 @@ class LlmProviderOpenAiResponsesTest {
                 .build());
         var clientGenerator = Mockito.mock(OpenAIClientGenerator.class);
         var config = Mockito.mock(LlmProviderClientApiConfig.class);
-        Mockito.when(clientGenerator.newResponsesApiChatModel(any(), anyBoolean())).thenReturn(chatModel);
+        Mockito.when(clientGenerator.newResponsesApiChatModel(any(), anyBoolean(), any())).thenReturn(chatModel);
         var provider = new LlmProviderOpenAiResponses(clientGenerator, config);
         var request = ChatCompletionRequest.builder()
                 .model("gpt-4o-mini")
@@ -300,7 +300,7 @@ class LlmProviderOpenAiResponsesTest {
         provider.generate(request, "ws-1");
 
         var strictCaptor = ArgumentCaptor.forClass(Boolean.class);
-        Mockito.verify(clientGenerator).newResponsesApiChatModel(any(), strictCaptor.capture());
+        Mockito.verify(clientGenerator).newResponsesApiChatModel(any(), strictCaptor.capture(), any());
         assertThat(strictCaptor.getValue()).isFalse();
     }
 
@@ -408,8 +408,9 @@ class LlmProviderOpenAiResponsesTest {
             StreamingChatModel streamingChatModel) {
         var generator = Mockito.mock(OpenAIClientGenerator.class);
         var config = Mockito.mock(LlmProviderClientApiConfig.class);
-        Mockito.when(generator.newResponsesApiChatModel(any(), anyBoolean())).thenReturn(chatModel);
-        Mockito.when(generator.newResponsesApiStreamingChatModel(any(), anyBoolean())).thenReturn(streamingChatModel);
+        Mockito.when(generator.newResponsesApiChatModel(any(), anyBoolean(), any())).thenReturn(chatModel);
+        Mockito.when(generator.newResponsesApiStreamingChatModel(any(), anyBoolean(), any()))
+                .thenReturn(streamingChatModel);
         return new LlmProviderOpenAiResponses(generator, config);
     }
 

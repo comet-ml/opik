@@ -63,7 +63,7 @@ describe("OpikClient - Chat Prompts", () => {
       expect(chatPrompt.type).toBe("mustache");
 
       expect(mockRetrievePromptVersion).toHaveBeenCalledWith(
-        { name: "test-chat-prompt" },
+        { name: "test-chat-prompt", projectName: "Default Project" },
         {}
       );
 
