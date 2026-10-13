@@ -779,11 +779,14 @@ describe("Gemini thinking level", () => {
   const MINIMAL_TO_HIGH = ["minimal", ...LOW_TO_HIGH];
   const AUTO_LOW_TO_HIGH = ["auto", ...LOW_TO_HIGH];
   const AUTO_OFF_LOW_TO_HIGH = ["auto", "off", ...LOW_TO_HIGH];
+  const OFF_MINIMAL_TO_HIGH = ["off", ...MINIMAL_TO_HIGH];
 
   // Row for row from Google's tables: https://ai.google.dev/gemini-api/docs/thinking and
   // https://cloud.google.com/vertex-ai/generative-ai/docs/thinking. On 2.5, "auto" is Opik's name
   // for the dynamic budget Google defaults to, and "off" for a zero budget. The two pages disagree on
-  // 2.5 Flash Lite (AI Studio: Off, Vertex: Auto); both rows follow AI Studio.
+  // 2.5 Flash Lite (AI Studio: Off, Vertex: Auto); both rows follow AI Studio. The 3.x Flash Lite rows
+  // add Off ahead of Google's levels and preselect it: Google lists minimal, which they spend no
+  // thinking tokens on.
   it.each([
     [PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH, LOW_TO_HIGH, "medium"],
     [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH, LOW_TO_HIGH, "medium"],
@@ -793,29 +796,29 @@ describe("Gemini thinking level", () => {
     [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH, MINIMAL_TO_HIGH, "medium"],
     [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH, MINIMAL_TO_HIGH, "medium"],
     [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH, MINIMAL_TO_HIGH, "medium"],
-    [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, MINIMAL_TO_HIGH, "minimal"],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, OFF_MINIMAL_TO_HIGH, "off"],
     [
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
-      MINIMAL_TO_HIGH,
-      "minimal",
+      OFF_MINIMAL_TO_HIGH,
+      "off",
     ],
     [PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO, LOW_TO_HIGH, "high"],
     [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO, LOW_TO_HIGH, "high"],
-    [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, MINIMAL_TO_HIGH, "minimal"],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, OFF_MINIMAL_TO_HIGH, "off"],
     [
       PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
-      MINIMAL_TO_HIGH,
-      "minimal",
+      OFF_MINIMAL_TO_HIGH,
+      "off",
     ],
     [
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
-      MINIMAL_TO_HIGH,
-      "minimal",
+      OFF_MINIMAL_TO_HIGH,
+      "off",
     ],
     [
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
-      MINIMAL_TO_HIGH,
-      "minimal",
+      OFF_MINIMAL_TO_HIGH,
+      "off",
     ],
     [PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, MINIMAL_TO_HIGH, "high"],
     [
@@ -1041,8 +1044,7 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     ).toEqual({ thinking: { level: "high" } });
   });
 
-  // The Flash Lite models' default Minimal must not reach the provider as an explicit level: Vertex
-  // rejects one in a multi-turn prompt without thought signatures.
+  // Off on a Flash Lite model is the model's own default, so it sends no thinking setting at all.
   const FLASH_LITE_MODELS = [
     PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
     PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
@@ -1053,12 +1055,9 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
   ];
 
   it.each(FLASH_LITE_MODELS)(
-    "sends no thinking block for %s at its default Minimal",
+    "sends no thinking block for %s at its default Off",
     (model) => {
-      for (const configs of [
-        { temperature: 0 },
-        { thinkingLevel: "minimal" },
-      ]) {
+      for (const configs of [{ temperature: 0 }, { thinkingLevel: "off" }]) {
         expect(
           sanitizeConfigForRequest(model, configs).custom_parameters,
         ).toBeUndefined();
@@ -1066,10 +1065,10 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     },
   );
 
-  it("drops a persisted level and budget under a Minimal left to the model, and keeps the rest", () => {
+  it("drops a persisted level and budget under an Off left to the model, and keeps the rest", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
-        thinkingLevel: "minimal",
+        thinkingLevel: "off",
         custom_parameters: {
           thinking: {
             level: "low",
@@ -1091,12 +1090,24 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     ).toBeUndefined();
   });
 
-  it("sends Minimal on a model whose default is another level", () => {
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+    PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+  ])("sends a picked Minimal on %s", (model) => {
     expect(
-      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, {
-        thinkingLevel: "minimal",
-      }).custom_parameters,
+      sanitizeConfigForRequest(model, { thinkingLevel: "minimal" })
+        .custom_parameters,
     ).toEqual({ thinking: { level: "minimal" } });
+  });
+
+  // Gemini 2.5 can turn thinking off, so there Off is an explicit zero budget and is sent.
+  it("sends Off on Gemini 2.5 Flash Lite", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, {
+        thinkingLevel: "off",
+      }).custom_parameters,
+    ).toEqual({ thinking: { level: "off" } });
   });
 
   // A budget set through the API outranks any level server-side, so keeping it under Auto would
@@ -1728,7 +1739,7 @@ describe("a model switch carries the thinking level the panel showed", () => {
       PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
       "minimal",
       PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
-      "minimal",
+      "off",
     ],
     [
       PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
@@ -1740,7 +1751,7 @@ describe("a model switch carries the thinking level the panel showed", () => {
       PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
       "off",
       PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
-      "minimal",
+      "off",
     ],
     [
       PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,

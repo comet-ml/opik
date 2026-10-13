@@ -147,14 +147,14 @@ describe("LLM judge thinking level round trip", () => {
     },
   );
 
-  // Minimal is the Flash Lite models' own default, so like auto it saves no level of its own.
+  // Off is the Flash Lite models' default, so like auto it saves no level of its own.
   it.each([
     PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
-  ])("saves no level for Minimal on %s, its default", (model) => {
+  ])("saves no level for Off on %s, its default", (model) => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
       asFormData(model, {
-        thinkingLevel: "minimal",
+        thinkingLevel: "off",
         custom_parameters: {
           thinking: { level: "low", include_thoughts: true },
           unrelated: "keep",
@@ -168,9 +168,12 @@ describe("LLM judge thinking level round trip", () => {
     });
   });
 
-  it("saves Minimal on a model whose default is another level", () => {
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+    PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+  ])("saves a picked Minimal on %s", (model) => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
-      asFormData(PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, {
+      asFormData(model, {
         thinkingLevel: "minimal",
       }),
     );

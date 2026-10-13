@@ -1127,7 +1127,8 @@ export interface LLMOpenRouterConfigsType {
 // "auto" and "off" are Opik's own, not Google levels. Both describe what we send rather than a value
 // the API accepts:
 //   auto — send no thinkingConfig, so a thinking-by-default model applies its own dynamic budget
-//   off  — send an explicit zero budget, for a pre-Gemini-3 model that thinks unless told not to
+//   off  — send an explicit zero budget, for a pre-Gemini-3 model that thinks unless told not to; on
+//          Gemini 3 and later, which cannot turn thinking off, send nothing (the Flash Lite models)
 export type GeminiThinkingLevel =
   | "auto"
   | "off"
