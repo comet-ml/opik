@@ -25,6 +25,10 @@ interface SpanWeeksBackfillChunkDAO {
     @SqlQuery("SELECT COUNT(*) FROM span_weeks_backfill_chunks")
     long count();
 
+    /** A plan exists and every one of its ranges is backfilled. */
+    @SqlQuery("SELECT COUNT(*) > 0 AND COUNT(backfilled_at) = COUNT(*) FROM span_weeks_backfill_chunks")
+    boolean isComplete();
+
     @SqlQuery("SELECT from_week, to_week FROM span_weeks_backfill_chunks"
             + " WHERE backfilled_at IS NULL ORDER BY from_week LIMIT 1")
     Optional<Chunk> findNextPending();

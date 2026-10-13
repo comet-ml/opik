@@ -22,7 +22,6 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -49,10 +48,6 @@ public class SpanWeeksBackfillService {
     private final DatabaseAnalyticsDataModelConfig dataModelConfig;
     private final SpanWeeksBackfillConfig config;
 
-    // Set once a step finds every planned range done: a finished plan never gains ranges, so later steps can return
-    // before touching any database. A restart re-learns it with one cheap check.
-    private final AtomicBoolean completed = new AtomicBoolean();
-
     @Inject
     public SpanWeeksBackfillService(
             @NonNull TransactionTemplate template,
@@ -65,15 +60,17 @@ public class SpanWeeksBackfillService {
         this.config = config;
     }
 
-    /** Whether a step already found every planned range backfilled, so further steps have nothing to do. */
+    /**
+     * Whether the backfill is done cluster-wide: a plan exists and every one of its ranges is backfilled. Read from
+     * the shared progress table, so any instance sees it as soon as another finishes; a finished plan never gains
+     * ranges, so it stays true.
+     */
     public boolean isCompleted() {
-        return completed.get();
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(SpanWeeksBackfillChunkDAO.class).isComplete());
     }
 
     public Mono<Void> runStep() {
-        if (completed.get()) {
-            return Mono.empty();
-        }
         if (!dataModelConfig.spanWeeksWriteEnabled()) {
             log.warn("Span weeks backfill skipped: databaseAnalyticsDataModel.spanWeeksWriteEnabled is off");
             return Mono.empty();
@@ -91,10 +88,8 @@ public class SpanWeeksBackfillService {
     }
 
     private Mono<Void> complete() {
-        if (completed.compareAndSet(false, true)) {
-            log.info("Span weeks backfill is complete; databaseAnalyticsDataModel.spanWeeksBackfillEnabled can be"
-                    + " turned off");
-        }
+        log.info(
+                "Span weeks backfill is complete; databaseAnalyticsDataModel.spanWeeksBackfillEnabled can be turned off");
         return Mono.empty();
     }
 

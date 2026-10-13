@@ -160,9 +160,13 @@ class SpanWeeksBackfillServiceTest {
         writesOffBackfillService.runStep().block();
         assertThat(weeks(traceIds, ws)).isEmpty();
 
+        // No plan yet, then a plan with every range pending: not complete either way.
+        assertThat(backfillService.isCompleted()).isFalse();
+
         // The first step only plans, reading no span week.
         backfillService.runStep().block();
         assertThat(weeks(traceIds, ws)).isEmpty();
+        assertThat(backfillService.isCompleted()).isFalse();
 
         // Oldest range first: the ids before the first span's week (2025 and the epoch) come in before the open-ended
         // last range, which holds the 2300 id.
@@ -174,11 +178,10 @@ class SpanWeeksBackfillServiceTest {
         all.add(saturated);
         assertThat(weeks(traceIds, ws)).containsExactlyInAnyOrderElementsOf(all);
 
-        // Every chunk is done: the next step finds nothing pending and marks the backfill complete, so later steps
-        // return without touching any database; none of them changes the index.
-        assertThat(backfillService.isCompleted()).isFalse();
-        backfillService.runStep().block();
+        // Every range is done: the shared progress table reports the backfill complete to any instance, and a further
+        // step changes nothing.
         assertThat(backfillService.isCompleted()).isTrue();
+        assertThat(writesOffBackfillService.isCompleted()).isTrue();
         backfillService.runStep().block();
         assertThat(weeks(traceIds, ws)).containsExactlyInAnyOrderElementsOf(all);
     }

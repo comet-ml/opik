@@ -52,7 +52,8 @@ public class SpanWeeksBackfillJob extends Job implements InterruptableJob {
             log.info("Span weeks backfill job interrupted before execution, skipping");
             return;
         }
-        // Once the backfill is complete, return before taking the lock: no Redis, MySQL or ClickHouse call per tick.
+        // Once the backfill is complete cluster-wide, return before taking the lock: one small MySQL read per tick,
+        // no Redis lock and no ClickHouse call.
         if (backfillService.isCompleted()) {
             return;
         }
