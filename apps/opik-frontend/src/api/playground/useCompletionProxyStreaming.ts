@@ -135,6 +135,7 @@ export interface RunStreamingReturn {
   endTime: string;
   usage: UsageType | null;
   choices: ChatCompletionMessageChoiceType[] | null;
+  finishReason: string | null;
   providerError: null | string;
   opikError: null | string;
   pythonProxyError: null | string;
@@ -164,6 +165,7 @@ const useCompletionProxyStreaming = ({
       let accumulatedValue = "";
       let usage = null;
       let choices: ChatCompletionMessageChoiceType[] = [];
+      let finishReason: string | null = null;
 
       // errors
       let pythonProxyError = null;
@@ -196,6 +198,11 @@ const useCompletionProxyStreaming = ({
         ) => {
           choices = parsed?.choices;
           const deltaContent = choices?.[0]?.delta?.content;
+
+          // OpenAI sends the finish reason one chunk before the usage chunk, whose choices are empty.
+          if (choices?.[0]?.finish_reason) {
+            finishReason = choices[0].finish_reason;
+          }
 
           if (parsed?.usage) {
             usage = parsed.usage as UsageType;
@@ -281,6 +288,7 @@ const useCompletionProxyStreaming = ({
           pythonProxyError,
           usage,
           choices,
+          finishReason,
           actualModel,
           actualProvider,
         };
@@ -301,6 +309,7 @@ const useCompletionProxyStreaming = ({
           pythonProxyError,
           usage: null,
           choices,
+          finishReason,
           actualModel,
           actualProvider,
         };
