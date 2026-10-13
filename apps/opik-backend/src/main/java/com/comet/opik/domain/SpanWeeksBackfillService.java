@@ -125,11 +125,11 @@ public class SpanWeeksBackfillService {
         List<Chunk> chunks = new ArrayList<>();
         long from = 0;
         for (LocalDate boundary = first; boundary.isBefore(last); boundary = boundary.plusWeeks(weeks)) {
-            chunks.add(Chunk.builder().fromWeek(from).toWeek(week(boundary)).build());
-            from = week(boundary);
+            chunks.add(Chunk.builder().fromWeek(from).toWeek(yyyymmdd(boundary)).build());
+            from = yyyymmdd(boundary);
         }
-        chunks.add(Chunk.builder().fromWeek(from).toWeek(week(last)).build());
-        chunks.add(Chunk.builder().fromWeek(week(last)).toWeek(null).build());
+        chunks.add(Chunk.builder().fromWeek(from).toWeek(yyyymmdd(last)).build());
+        chunks.add(Chunk.builder().fromWeek(yyyymmdd(last)).toWeek(null).build());
         return chunks;
     }
 
@@ -137,7 +137,8 @@ public class SpanWeeksBackfillService {
         return LocalDate.ofInstant(instant, ZoneOffset.UTC).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
     }
 
-    private static long week(LocalDate monday) {
+    /** A Monday as the YYYYMMDD number a range bound is stored as. */
+    private static long yyyymmdd(LocalDate monday) {
         return Long.parseLong(monday.format(DateTimeFormatter.BASIC_ISO_DATE));
     }
 }

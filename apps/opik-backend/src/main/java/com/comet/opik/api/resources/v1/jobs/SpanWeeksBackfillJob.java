@@ -52,12 +52,12 @@ public class SpanWeeksBackfillJob extends Job implements InterruptableJob {
             log.info("Span weeks backfill job interrupted before execution, skipping");
             return;
         }
-        // Once the backfill is complete cluster-wide, return before taking the lock: one small MySQL read per tick,
-        // no Redis lock and no ClickHouse call.
-        if (backfillService.isCompleted()) {
-            return;
-        }
         try {
+            // Once the backfill is complete cluster-wide, return before taking the lock: one small MySQL read per
+            // tick, no Redis lock and no ClickHouse call.
+            if (backfillService.isCompleted()) {
+                return;
+            }
             lockService.bestEffortLock(
                     RUN_LOCK,
                     Mono.defer(backfillService::runStep),

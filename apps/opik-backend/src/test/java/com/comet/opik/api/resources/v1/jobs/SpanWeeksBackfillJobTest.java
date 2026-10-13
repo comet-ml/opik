@@ -11,6 +11,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -55,6 +56,27 @@ class SpanWeeksBackfillJobTest {
         job.doJob(null);
 
         verify(lockService).bestEffortLock(any(), any(), any(), any(), any());
+        verify(backfillService).runStep();
+    }
+
+    @Test
+    void doJob__whenTheCompletionReadFails__thenDoesNotThrowAndTakesNoLock() {
+        when(backfillService.isCompleted()).thenThrow(new IllegalStateException("MySQL unavailable"));
+
+        assertDoesNotThrow(() -> job.doJob(null));
+
+        verifyNoInteractions(lockService);
+    }
+
+    @Test
+    void doJob__whenTheStepFails__thenDoesNotThrow() {
+        when(backfillService.isCompleted()).thenReturn(false);
+        when(backfillService.runStep()).thenReturn(Mono.error(new IllegalStateException("ClickHouse timeout")));
+        when(lockService.bestEffortLock(any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(1));
+
+        assertDoesNotThrow(() -> job.doJob(null));
+
         verify(backfillService).runStep();
     }
 }
