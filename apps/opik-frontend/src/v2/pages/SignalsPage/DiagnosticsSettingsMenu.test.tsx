@@ -30,7 +30,9 @@ describe("DiagnosticsSettingsMenu", () => {
   beforeEach(() => mutate.mockClear());
 
   it("turns automatic daily diagnostics on", () => {
-    render(<DiagnosticsSettingsMenu projectId="p1" enabled={false} />);
+    render(
+      <DiagnosticsSettingsMenu projectId="p1" enabled={false} canConfigure />,
+    );
 
     openMenu();
     const row = screen.getByRole("menuitemcheckbox", {
@@ -48,6 +50,7 @@ describe("DiagnosticsSettingsMenu", () => {
       <DiagnosticsSettingsMenu
         projectId="p1"
         enabled
+        canConfigure
         onEditGuidance={onEditGuidance}
       />,
     );
@@ -61,12 +64,34 @@ describe("DiagnosticsSettingsMenu", () => {
   });
 
   it("hides Edit project guidance when the guidance toggle is off", () => {
-    render(<DiagnosticsSettingsMenu projectId="p1" enabled />);
+    render(<DiagnosticsSettingsMenu projectId="p1" enabled canConfigure />);
 
     openMenu();
 
     expect(
       screen.queryByRole("menuitem", { name: "Edit project guidance" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows only Edit project guidance without configure permission", () => {
+    render(
+      <DiagnosticsSettingsMenu
+        projectId="p1"
+        enabled
+        canConfigure={false}
+        onEditGuidance={vi.fn()}
+      />,
+    );
+
+    openMenu();
+
+    expect(
+      screen.getByRole("menuitem", { name: "Edit project guidance" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitemcheckbox", {
+        name: /Automatic daily diagnostics/,
+      }),
     ).not.toBeInTheDocument();
   });
 });
