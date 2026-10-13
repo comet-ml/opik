@@ -18,9 +18,9 @@
 --   * last_updated_at is when the row was last registered, set by ClickHouse on insert (live writes and the backfill
 --     both leave it to the default). Every registration of a (trace, week) is a new insert, so it reads as "last seen",
 --     not "created".
---   * No TTL: the index must never forget a week. Partitioned by the year of id_week, not by week or month: every read
---     here is time-unbounded and pays per partition. Each spans partition maps to exactly one partition here, so
---     mirroring a spans cleanup is one partition operation.
+--   * No TTL: the index must never forget a week. Not partitioned: every read here is a lookup of weeks, never bound by
+--     week, so it pays for every partition, and span ids reach every year from 1969 to 2299 until the junk is cleaned.
+--     Mirroring a spans cleanup is a filtered delete, cheap on rows this narrow.
 --   * index_granularity is the default 8192, stated because it cannot change once the table exists; the wide-row
 --     index_granularity_bytes of spans/traces would never apply to rows this narrow.
 -- Codecs: ZSTD(3) for the short repetitive workspace_id, ZSTD(1) for the UUID ids, T64 + ZSTD(1) for the narrow id_week
@@ -40,9 +40,6 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.span_weeks ON CLUSTER '
 )
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/span_weeks', '{replica}',
     last_updated_at, is_deleted)
--- id_week is the spans partition id (the YYYYMMDD of its Monday), so this is its year:
--- each spans partition maps to exactly one partition here.
-PARTITION BY intDiv(id_week, 10000)
 ORDER BY (workspace_id, project_id, trace_id, id_week)
 SETTINGS index_granularity = 8192, deduplicate_merge_projection_mode = 'rebuild',
     lightweight_mutation_projection_mode = 'rebuild';
