@@ -93,6 +93,7 @@ def load_registry_at_ref(ref: str) -> dict[str, list[dict]]:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        check=False,
     )
     if completed.returncode != 0:
         raise RuntimeError(f"Cannot read {LLM_MODELS_YAML} at {ref}: {completed.stderr.strip()}")
@@ -177,9 +178,7 @@ class Backend:
             timeout=30,
         )
         if response.status_code not in (200, 201, 409):
-            raise RuntimeError(
-                f"Could not add the {provider} key: {sanitize(error_text(response), self.secrets)}"
-            )
+            raise RuntimeError(f"Could not add the {provider} key: {sanitize(error_text(response), self.secrets)}")
 
     def call(self, model: ModelToCheck) -> CheckResult:
         payload = {
