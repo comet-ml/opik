@@ -79,7 +79,7 @@ class WireBodyAnthropicGroupsTest {
 
     @Test
     void registryOnlyModelsAreNotInTheEnum() {
-        assertThat(group("registry-only")).doesNotContainAnyElementsOf(AnthropicModelName.allModelIds());
+        assertThat(group("registry-only")).isNotEmpty().doesNotContainAnyElementsOf(AnthropicModelName.allModelIds());
     }
 
     private String expectedEffortGroup(String id) {
