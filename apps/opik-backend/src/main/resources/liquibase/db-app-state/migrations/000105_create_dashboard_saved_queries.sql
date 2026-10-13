@@ -21,4 +21,4 @@ CREATE TABLE dashboard_saved_queries
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
---rollback DROP TABLE dashboard_saved_queries;
+--rollback DROP TABLE IF EXISTS dashboard_saved_queries;
