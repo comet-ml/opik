@@ -147,19 +147,37 @@ describe("LLM judge thinking level round trip", () => {
     },
   );
 
-  // "none" removes a persisted block; "auto" (above) drops only its level and budget.
-  it("clears a persisted thinking block when the level is none", () => {
+  // Minimal is the Flash Lite models' own default, so like auto it saves no level of its own.
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
+  ])("saves no level for Minimal on %s, its default", (model) => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
-      asFormData(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
-        thinkingLevel: "none",
+      asFormData(model, {
+        thinkingLevel: "minimal",
         custom_parameters: {
-          thinking: { level: "minimal" },
+          thinking: { level: "low", include_thoughts: true },
           unrelated: "keep",
         },
       }),
     );
 
-    expect(object.model.custom_parameters).toEqual({ unrelated: "keep" });
+    expect(object.model.custom_parameters).toEqual({
+      thinking: { include_thoughts: true },
+      unrelated: "keep",
+    });
+  });
+
+  it("saves Minimal on a model whose default is another level", () => {
+    const object = convertLLMJudgeDataToLLMJudgeObject(
+      asFormData(PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, {
+        thinkingLevel: "minimal",
+      }),
+    );
+
+    expect(object.model.custom_parameters).toEqual({
+      thinking: { level: "minimal" },
+    });
   });
 
   // "off" is the exception: a persisted budget would outrank it server-side and leave thinking on.

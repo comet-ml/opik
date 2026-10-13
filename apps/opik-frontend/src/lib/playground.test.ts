@@ -153,22 +153,25 @@ describe("getDefaultConfigByProvider — OpenAI", () => {
     ) as LLMOpenAIConfigsType;
 
   it.each([
-    PROVIDER_MODEL_TYPE.GPT_6_ASTRA,
-    PROVIDER_MODEL_TYPE.GPT_6_1_SOL,
-    PROVIDER_MODEL_TYPE.GPT_6_SOL,
-    PROVIDER_MODEL_TYPE.GPT_6_LUNA,
-    PROVIDER_MODEL_TYPE.GPT_5_6_LUNA,
-    PROVIDER_MODEL_TYPE.GPT_5_4,
-    PROVIDER_MODEL_TYPE.GPT_5,
-    PROVIDER_MODEL_TYPE.GPT_O1,
-  ])("seeds %s as a reasoning model with high effort", (model) => {
-    // Not 1: the request omits temperature for reasoning models anyway, and a seeded 1 would carry
-    // over to the next chat model the user picks.
-    expect(defaults(model)).toMatchObject({
-      temperature: 0,
-      reasoningEffort: "high",
-    });
-  });
+    [PROVIDER_MODEL_TYPE.GPT_6_ASTRA, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_6_1_SOL, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_6_SOL, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_6_LUNA, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_5_6_LUNA, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_5_4, "none"],
+    [PROVIDER_MODEL_TYPE.GPT_5, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_O1, "medium"],
+  ])(
+    "seeds %s as a reasoning model at OpenAI's default effort, %s",
+    (model, reasoningEffort) => {
+      // Not 1: the request omits temperature for reasoning models anyway, and a seeded 1 would carry
+      // over to the next chat model the user picks.
+      expect(defaults(model)).toMatchObject({
+        temperature: 0,
+        reasoningEffort,
+      });
+    },
+  );
 
   it("seeds o1-mini as a reasoning model without an effort", () => {
     const config = defaults(PROVIDER_MODEL_TYPE.GPT_O1_MINI);
