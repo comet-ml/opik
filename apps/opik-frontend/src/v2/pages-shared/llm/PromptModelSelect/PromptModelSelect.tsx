@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/ui/select";
 import { ChevronRight, Search, Settings2 } from "lucide-react";
+import { ArrowScrollArea } from "@/ui/arrow-scroll-area";
 import { ListAction } from "@/ui/list-action";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Input } from "@/ui/input";
@@ -352,7 +353,9 @@ const PromptModelSelect = ({
               />
             </div>
             <SelectSeparator />
-            <div className="flex-1 overflow-y-auto py-1">{renderOptions()}</div>
+            <ArrowScrollArea className="max-h-64 py-1">
+              {renderOptions()}
+            </ArrowScrollArea>
             {canUpdateAIProviders && (
               <>
                 <SelectSeparator />
