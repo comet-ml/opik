@@ -326,6 +326,43 @@ describe("pythonProxyErrorMessage", () => {
   });
 });
 
+describe("a run on a model the API key can't use", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("reports the 404 and Anthropic's own message", async () => {
+    const anthropicError = {
+      type: "error",
+      error: { type: "not_found_error", message: "model: claude-mythos-5" },
+      request_id: "req_011CfxbMhbsXYbQCVuBpCBKP",
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({
+          code: 404,
+          message: JSON.stringify(anthropicError),
+        })}\n\ndata: [DONE]\n`,
+        { status: 200 },
+      ),
+    );
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    const run = await result.current({
+      model: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: {} as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+    });
+
+    expect(run.errorStatus).toBe(404);
+    expect(run.providerError).toBe("model: claude-mythos-5");
+  });
+});
+
 describe("the reasoning effort a playground run sends", () => {
   afterEach(() => {
     vi.restoreAllMocks();
