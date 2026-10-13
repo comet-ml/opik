@@ -74,8 +74,6 @@ jobs:
           contents: read
           packages: write
         uses: ./.github/workflows/build_e2e_docker.yaml
-        with:
-          include_guardrails: true
 
     run-compatibility-v1-e2e:
         # No explicit if: needed here -- the default success() check skips this
@@ -113,10 +111,8 @@ jobs:
           run: |
             docker pull "ghcr.io/comet-ml/opik/opik-backend:$TAG"
             docker pull "ghcr.io/comet-ml/opik/opik-python-backend:$TAG"
-            docker pull "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG"
             docker tag "ghcr.io/comet-ml/opik/opik-backend:$TAG" ghcr.io/comet-ml/opik/opik-backend:latest
             docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
-            docker tag "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG" ghcr.io/comet-ml/opik/opik-guardrails-backend:latest
 
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v7
@@ -135,10 +131,9 @@ jobs:
             TOGGLE_AGENT_CONFIGURATION_ENABLED: "true"
             OPIK_BACKEND_PULL_POLICY: never
             PYTHON_BACKEND_PULL_POLICY: never
-            OPIK_GUARDRAILS_BACKEND_PULL_POLICY: never
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --backend --port-mapping --guardrails
+            ./opik.sh --backend --port-mapping
 
         - name: Check Opik server availability
           shell: bash
@@ -191,4 +186,4 @@ jobs:
           if: always()
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --stop --guardrails
+            ./opik.sh --stop

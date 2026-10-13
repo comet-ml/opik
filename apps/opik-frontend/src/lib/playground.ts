@@ -1,5 +1,6 @@
 import first from "lodash/first";
 import isNil from "lodash/isNil";
+import escapeRegExp from "lodash/escapeRegExp";
 import last from "lodash/last";
 import omitBy from "lodash/omitBy";
 import { PlaygroundPromptType } from "@/types/playground";
@@ -333,18 +334,25 @@ export const hasUnsupportedMedia = (
   );
 };
 
+// Kept short: the output cell shows one truncated line, with the full text only in a tooltip.
+export const OUTPUT_LIMIT_REACHED_MESSAGE =
+  "The model used up Max output tokens while thinking. Raise Max output tokens or lower the reasoning effort.";
+
 export const parseCompletionOutput = (run: RunStreamingReturn) => {
   return (
     run.result ||
     run.opikError ||
     run.providerError ||
     run.pythonProxyError ||
-    "The AI provider returned an empty response. Please, try again."
+    (run.finishReason === "length"
+      ? OUTPUT_LIMIT_REACHED_MESSAGE
+      : "The AI provider returned an empty response. Please, try again.")
   );
 };
 
 const HTTP_BAD_REQUEST = 400;
 const HTTP_PAYMENT_REQUIRED = 402;
+const HTTP_NOT_FOUND = 404;
 const HTTP_TOO_MANY_REQUESTS = 429;
 
 export type RunFailureHint = {
@@ -362,12 +370,19 @@ export type RunFailure = {
 type RunFailureContext = {
   canTuneRequestRate: boolean;
   sentMessages: LLMMessage[];
+  model: string;
 };
 
+// Matched as a whole id, so "llama-3" doesn't match "llama-3-70b", and a one-letter name doesn't
+// match inside "page".
+const mentionsModel = (text: string, modelName: string) =>
+  new RegExp(`(^|[^\\w-])${escapeRegExp(modelName)}([^\\w-]|$)`).test(text);
+
 const getRunFailureHint = (
-  errorStatus: number | null,
-  { canTuneRequestRate, sentMessages }: RunFailureContext,
+  run: RunStreamingReturn,
+  { canTuneRequestRate, sentMessages, model }: RunFailureContext,
 ): RunFailureHint | undefined => {
+  const { errorStatus } = run;
   if (errorStatus === HTTP_TOO_MANY_REQUESTS) {
     return {
       title: "Rate limit reached",
@@ -382,6 +397,22 @@ const getRunFailureHint = (
       title: "Out of credits",
       action:
         "Add credits or raise your quota with the provider, then run again.",
+    };
+  }
+  const providerMessage =
+    run.opikError || run.providerError || run.pythonProxyError;
+  const modelName = last(model.split("/"));
+  // Providers answer a model the key can't use with a 404 that names it. A 404 that doesn't name it
+  // has another cause, such as a custom provider's wrong URL ("Not Found").
+  if (
+    errorStatus === HTTP_NOT_FOUND &&
+    modelName &&
+    providerMessage &&
+    mentionsModel(providerMessage, modelName)
+  ) {
+    return {
+      action:
+        "This model isn't available for your API key. Pick another model, or check which models your provider account can use.",
     };
   }
   if (errorStatus !== HTTP_BAD_REQUEST) return undefined;
@@ -407,7 +438,7 @@ export const describeRunFailure = (
   run: RunStreamingReturn,
   context: RunFailureContext,
 ): RunFailure => {
-  const hint = getRunFailureHint(run.errorStatus, context);
+  const hint = getRunFailureHint(run, context);
   if (!hint) return { message: parseCompletionOutput(run) };
   if (!hint.title) return { message: parseCompletionOutput(run), hint };
 

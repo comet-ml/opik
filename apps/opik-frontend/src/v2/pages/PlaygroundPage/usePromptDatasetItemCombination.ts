@@ -325,6 +325,7 @@ const usePromptDatasetItemCombination = ({
                 prompt.configs,
               ),
               sentMessages: messagesToSend,
+              model: prompt.model,
             }),
           );
         }
