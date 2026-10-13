@@ -101,15 +101,14 @@ rows:
     models: [reasoning]
     request: {reasoning_effort: ultra}
     body: {reasoning_effort: ultra}
-  - name: max effort is sent as high
+  # Combined with #8915: Chat Completions rejects max, so it is left out and the model runs at its own default.
+  - name: max effort is left out
     models: [reasoning, registry-only]
     request: {reasoning_effort: max}
-    body: {reasoning_effort: high}
-    # #8915 leaves the effort out here and on the next row, so the model runs at its own default.
-  - name: max effort is sent as high on a streamed request too
+  - name: max effort is left out on a streamed request too
     model: gpt-5-nano
     request: {stream: true, reasoning_effort: max}
-    body: {stream: true, reasoning_effort: high}
+    body: {stream: true}
 
   # Max tokens, chat path.
   - name: no output cap sends none
@@ -179,8 +178,9 @@ rows:
     model: gpt-4.1
     request: {seed: 42}
     body: {seed: 42}
-  - name: a judge does not send custom_parameters
+  # Combined with #8844 (and #8889 in it): a judge's custom_parameters are sent as top-level fields.
+  - name: a judge sends custom_parameters as top-level fields
     path: judge
     model: gpt-4.1
     request: {custom_parameters: {max_completion_tokens: 300, reasoning_effort: low, service_tier: flex}}
-    # #8844 (with #8889, merged into it) sends a judge's custom_parameters here.
+    body: {max_completion_tokens: 300, reasoning_effort: low, service_tier: flex}
