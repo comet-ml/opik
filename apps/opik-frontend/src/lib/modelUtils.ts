@@ -202,7 +202,8 @@ export const getThinkingLevelOptions = (
 
 // Each model's own default thinking level, as Google's two tables state it. Preselecting it keeps
 // the control from silently changing a model's behaviour just by being shown: 2.5 Flash Lite ships
-// with thinking off, 2.5 Pro/Flash default to a dynamic budget ("auto"), 3.8/3.7/3.6/3.5 Flash to
+// with thinking off (AI Studio's table; Vertex's says Auto), 2.5 Pro/Flash default to a dynamic
+// budget ("auto"), 3.8/3.7/3.6/3.5 Flash to
 // medium, and the 3.x Flash Lite models to minimal — none of which is "high". Models absent here
 // default to "high", which is what the Gemini 3 Pro and 3 Flash rows document.
 const DEFAULT_THINKING_LEVEL_BY_MODEL: ReadonlyMap<
@@ -669,7 +670,8 @@ export const updateProviderConfig = <
     // model never changed.
     // An unknown mode (keys still loading) is checked against the Responses
     // API list, a superset of the Chat Completions one, so a stored max is
-    // kept: assuming Chat Completions here would rewrite it to high for good.
+    // kept: assuming Chat Completions here would rewrite it to the model's
+    // default for good.
     const effortOptions = getOpenAIReasoningEffortOptions(
       params.model,
       params.openAiPipelineMode ?? "responses_api",
@@ -1145,12 +1147,13 @@ export const sanitizeConfigForRequest = (
     // Both stale cases resolve the same way, to the model's default: a config with no level (persisted
     // before the control existed) and a config holding a level this model does not offer (carried over
     // from another model outside the reconciler). Either way the dropdown displays the default, so the
-    // request has to send it rather than nothing.
+    // request has to send it rather than nothing, unless that default is a level left to the model.
     // A level already nested under custom_parameters counts as stored. Callers that persist the
     // sanitized output and feed it back — the optimizer form reloads a saved run's `parameters`
     // blob wholesale — have no flat thinkingLevel to offer, and substituting the model default
     // there would silently reset the user's saved choice on every re-run.
-    // A nested level the model still offers is a real past choice and is honoured.
+    // A nested level the model still offers is a real past choice and is honoured, except one left to
+    // the model: a saved Minimal on Flash Lite is sent as nothing, the same request by Google's tables.
     const level = resolveThinkingLevel(model, sanitized as ThinkingLevelParams);
 
     // Dropped unconditionally: the field is Opik's own, and no provider accepts it at the top
