@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.openai;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.ModelCapabilities;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
@@ -47,6 +48,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     }
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull LlmModelRegistryService registryService;
 
     public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
         var openAiClientBuilder = OpenAiClient.builder()
@@ -147,7 +149,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
         // gate has to be here too, or an evaluator rule on one fails every scoring run with a 400.
         // OpenAI reasoning models lose their temperature earlier, in ChatCompletionService.scoreTrace,
         // because that check needs the model registry and must skip OPEN_ROUTER.
-        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name())) {
+        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name(), registryService)) {
             Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         }
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
@@ -201,7 +203,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .modelName(modelParameters.name())
                 .strictJsonSchema(strictJsonSchema);
 
-        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name())) {
+        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name(), registryService)) {
             Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         }
 

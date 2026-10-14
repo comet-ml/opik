@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -72,7 +73,7 @@ public class AnthropicMappersTest {
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
 
             AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
-                    .toCreateMessageRequest(request);
+                    .toCreateMessageRequest(request, bundledRegistry());
 
             assertThat(actual).isNotNull();
             assertThat(actual.model).isEqualTo(request.model());
@@ -108,7 +109,7 @@ public class AnthropicMappersTest {
                     .build();
 
             AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
-                    .toCreateMessageRequest(request);
+                    .toCreateMessageRequest(request, bundledRegistry());
 
             assertThat(actual.maxTokens).isEqualTo(expected);
         }
@@ -131,7 +132,7 @@ public class AnthropicMappersTest {
                     .build();
 
             AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
-                    .toCreateMessageRequest(request);
+                    .toCreateMessageRequest(request, bundledRegistry());
 
             assertThat(actual.stream).isEqualTo(expected);
         }
@@ -153,7 +154,7 @@ public class AnthropicMappersTest {
         @MethodSource("samplingGatingCases")
         void gatesSamplingParams(String description, ChatCompletionRequest request, Double expectedTemperature,
                 Double expectedTopP) {
-            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request, bundledRegistry());
 
             // Build the expected payload independently of the mapper (not by re-calling it), so a regression in
             // any collateral field — model, messages, max_tokens, etc. — can't hide by changing actual and
@@ -237,7 +238,8 @@ public class AnthropicMappersTest {
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ValidateRequest {
-        private final LlmProviderAnthropic provider = new LlmProviderAnthropic(Mockito.mock(AnthropicClient.class));
+        private final LlmProviderAnthropic provider = new LlmProviderAnthropic(Mockito.mock(AnthropicClient.class),
+                bundledRegistry());
 
         @Test
         void acceptsNullMaxCompletionTokens() {
@@ -346,7 +348,8 @@ public class AnthropicMappersTest {
                 "claude-sonnet-5, xhigh",
                 "claude-opus-5-5, medium"})
         void sendsTheEffortAsTheTopLevelOutputConfig(String model, String effort) {
-            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(requestWithEffort(model, effort));
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(requestWithEffort(model, effort),
+                    bundledRegistry());
 
             // Serialised by the same codec AnthropicClient puts on the wire, so this is the body Anthropic reads.
             var wireBody = Json.toJson(actual);
@@ -366,7 +369,8 @@ public class AnthropicMappersTest {
                     .customParameters(Map.of("output_config", outputConfig))
                     .build();
 
-            var wireBody = Json.toJson(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request));
+            var wireBody = Json
+                    .toJson(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request, bundledRegistry()));
 
             assertThat(StringUtils.countMatches(wireBody, "\"output_config\"")).isEqualTo(1);
             assertThat(JsonUtils.getJsonNodeFromString(wireBody).path("output_config"))
@@ -388,7 +392,7 @@ public class AnthropicMappersTest {
                     .customParameters(customParameters)
                     .build();
 
-            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request, bundledRegistry());
 
             assertThat(actual.customParameters).isNull();
             assertThat(Json.toJson(actual)).doesNotContain("output_config");

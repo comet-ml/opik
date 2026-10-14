@@ -4,6 +4,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.ModelCapabilities;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.AnthropicClientConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
@@ -27,6 +28,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     static final int THINKING_JUDGE_MAX_TOKENS = 5_000;
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull LlmModelRegistryService registryService;
 
     private AnthropicClient newAnthropicClient(@NonNull LlmProviderClientApiConfig config) {
         var anthropicClientBuilder = AnthropicClient.builder();
@@ -57,7 +59,8 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
 
     private ChatModel newChatLanguageModel(LlmProviderClientApiConfig config,
             LlmAsJudgeModelParameters modelParameters) {
-        var outputConfig = AnthropicEffort.toOutputConfig(modelParameters.name(), modelParameters.customParameters());
+        var outputConfig = AnthropicEffort.toOutputConfig(modelParameters.name(), modelParameters.customParameters(),
+                registryService);
         if (outputConfig.isEmpty()) {
             return newChatModelBuilder(config, modelParameters).build();
         }
@@ -94,7 +97,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
         // (claude-sonnet-5, claude-opus-4-7/4-8) that report no sampling-param support, and (2) any model
         // once extended thinking is enabled per-rule via custom_parameters. Gate on both server-side so
         // API-created rules (which bypass the FE sanitizer) don't fail.
-        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name()) && !thinking.enabled()) {
+        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name(), registryService) && !thinking.enabled()) {
             Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         }
 
@@ -186,7 +189,9 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     }
 
     private boolean willThink(ThinkingParams thinking, String modelName) {
-        return thinking.type() != null ? thinking.enabled() : ModelCapabilities.thinksByDefault(modelName);
+        return thinking.type() != null
+                ? thinking.enabled()
+                : ModelCapabilities.thinksByDefault(modelName, registryService);
     }
 
     private record ThinkingParams(boolean enabled, String type, Integer budgetTokens) {

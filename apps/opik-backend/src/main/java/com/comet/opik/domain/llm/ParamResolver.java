@@ -3,6 +3,7 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.ModelParams.NumberParam;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ public class ParamResolver {
     }
 
     private final @NonNull LlmProviderFactory llmProviderFactory;
+    private final @NonNull LlmModelRegistryService registryService;
 
     public Resolution<ChatCompletionRequest> resolve(@NonNull ChatCompletionRequest request) {
         var changes = new ArrayList<String>();
@@ -35,7 +37,7 @@ public class ParamResolver {
         // Some Claude models refuse both outright rather than refusing them together, and extended thinking
         // refuses them on any Claude: "temperature may only be set to 1 when thinking is enabled", "top_p must be
         // greater than or equal to 0.95 or unset when thinking is enabled".
-        var samplingParamsDisabledReason = ModelCapabilities.rejectsSamplingParams(model)
+        var samplingParamsDisabledReason = ModelCapabilities.rejectsSamplingParams(model, registryService)
                 ? "%s does not take it".formatted(model)
                 : SamplingParamsNormalizer.thinkingEnabled(request) ? "thinking is on" : null;
         var temperature = request.temperature();

@@ -53,6 +53,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -98,7 +99,8 @@ class ChatCompletionServiceTest {
         when(llmProviderClientConfig.getJitterScale()).thenReturn(null);
         when(llmProviderClientConfig.getBackoffExp()).thenReturn(null);
 
-        chatCompletionService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+        chatCompletionService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
+                bundledRegistry());
     }
 
     @Nested
@@ -430,7 +432,8 @@ class ChatCompletionServiceTest {
             var workspaceId = "test-workspace-id";
 
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
-            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
+                    bundledRegistry());
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
             when(llmProviderService.generate(any(), anyString()))
@@ -453,7 +456,8 @@ class ChatCompletionServiceTest {
             var workspaceId = "test-workspace-id";
 
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
-            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
+                    bundledRegistry());
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
             when(llmProviderService.generate(any(), anyString())).thenThrow(new RuntimeException("transient"));
@@ -987,7 +991,8 @@ class ChatCompletionServiceTest {
          */
         private Throwable scoreTraceWithBudget(int maxRetries, RuntimeException providerFailure) {
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(maxRetries);
-            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
+                    bundledRegistry());
             var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
             var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
 

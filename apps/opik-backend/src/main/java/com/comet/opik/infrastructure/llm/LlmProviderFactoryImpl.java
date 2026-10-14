@@ -138,10 +138,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     public Optional<ModelParams> openAiParams(@NonNull String model) {
         return registryService.findModel(model)
                 .filter(result -> result.provider() == LlmProvider.OPEN_AI)
-                // A deployment that turns the curated layer off still keeps a reasoning model's drops.
-                .map(result -> ObjectUtils.getIfNull(result.model().params(), () -> LlmModelRegistryService
-                        .bundledParams(LlmProvider.OPEN_AI.getValue(), result.model().id(),
-                                result.model().reasoning())));
+                .map(result -> ObjectUtils.getIfNull(result.model().params(),
+                        () -> registryService.paramsOf(LlmProvider.OPEN_AI.getValue(), result.model().id())));
     }
 
     private LlmProvider getLlmProviderFromEnums(@NonNull String model) {

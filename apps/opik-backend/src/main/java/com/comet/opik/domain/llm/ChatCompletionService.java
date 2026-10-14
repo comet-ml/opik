@@ -2,6 +2,7 @@ package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.HttpStatusRetryability;
@@ -62,10 +63,11 @@ public class ChatCompletionService {
     @Inject
     public ChatCompletionService(
             @NonNull @Config LlmProviderClientConfig llmProviderClientConfig,
-            @NonNull LlmProviderFactory llmProviderFactory) {
+            @NonNull LlmProviderFactory llmProviderFactory,
+            @NonNull LlmModelRegistryService registryService) {
         this.llmProviderClientConfig = llmProviderClientConfig;
         this.llmProviderFactory = llmProviderFactory;
-        this.paramResolver = new ParamResolver(llmProviderFactory);
+        this.paramResolver = new ParamResolver(llmProviderFactory, registryService);
         this.retryPolicy = newRetryPolicy();
     }
 

@@ -56,6 +56,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.TestUtils.waitForMillis;
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.awaitility.Awaitility.await;
@@ -461,7 +462,7 @@ class BaseRedisSubscriberTest {
             var providerFactory = mock(LlmProviderFactory.class);
             when(providerFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
 
-            var service = new ChatCompletionService(clientConfig, providerFactory);
+            var service = new ChatCompletionService(clientConfig, providerFactory, bundledRegistry());
             var request = ChatRequest.builder().messages(UserMessage.from("seam")).build();
             var parameters = LlmAsJudgeModelParameters.builder().name("seam-test-model").build();
 

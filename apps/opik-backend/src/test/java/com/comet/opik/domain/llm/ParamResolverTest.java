@@ -3,15 +3,22 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.ModelParams.NumberParam;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.infrastructure.LlmModelRegistryConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -23,12 +30,12 @@ class ParamResolverTest {
     private static final ModelParams OPENAI_REASONING = ModelParams.builder()
             .temperature(REFUSED).topP(REFUSED).frequencyPenalty(REFUSED).presencePenalty(REFUSED).build();
 
-    private static final ParamResolver RESOLVER = new ParamResolver(mock(LlmProviderFactory.class));
+    private static final ParamResolver RESOLVER = new ParamResolver(mock(LlmProviderFactory.class), bundledRegistry());
 
     private static ParamResolver resolverWithOpenAiParams(ModelParams params) {
         var factory = mock(LlmProviderFactory.class);
         when(factory.openAiParams(anyString())).thenReturn(Optional.of(params));
-        return new ParamResolver(factory);
+        return new ParamResolver(factory, bundledRegistry());
     }
 
     private static ChatCompletionRequest resolve(ChatCompletionRequest request) {
@@ -264,6 +271,27 @@ class ParamResolverTest {
         var original = request(null, 0.7, 0.9);
 
         assertThat(resolve(original)).isSameAs(original);
+    }
+
+    @Test
+    void followsALocalOverrideOfTheShippedCatalog(@TempDir Path tempDir) throws IOException {
+        var request = request("claude-opus-4-6", 0.7, null);
+        assertThat(resolve(request).temperature()).isEqualTo(0.7);
+
+        var overridePath = tempDir.resolve("override.yaml");
+        try (var override = getClass().getClassLoader()
+                .getResourceAsStream("llm-models-override-claude-no-sampling.yaml")) {
+            Files.copy(override, overridePath);
+        }
+        var registryConfig = new LlmModelRegistryConfig();
+        registryConfig.setLocalOverridePath(overridePath.toString());
+        var resolver = new ParamResolver(mock(LlmProviderFactory.class),
+                LlmModelRegistryTestUtils.registry(registryConfig));
+
+        var resolution = resolver.resolve(request);
+
+        assertThat(resolution.request().temperature()).isNull();
+        assertThat(resolution.changes()).containsExactly("temperature not sent: claude-opus-4-6 does not take it");
     }
 
     @Test

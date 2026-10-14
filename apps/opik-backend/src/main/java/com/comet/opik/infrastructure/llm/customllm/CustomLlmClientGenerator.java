@@ -4,6 +4,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.ModelCapabilities;
 import com.comet.opik.domain.llm.langchain4j.OpikOpenAiChatModel;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import dev.langchain4j.http.client.HttpClientBuilder;
@@ -28,6 +29,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
     private final @NonNull AuthTokenProvider authTokenProvider;
+    private final @NonNull LlmModelRegistryService registryService;
 
     public OpenAiClient newCustomLlmClient(@NonNull LlmProviderClientApiConfig config) {
         var baseUrl = Optional.ofNullable(config.baseUrl())
@@ -92,7 +94,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         // too: this generator serves CUSTOM_LLM and BEDROCK, which is how a Claude model that takes
         // no sampling params arrives without the Anthropic provider's own gate. An evaluator rule on
         // one of those otherwise fails every scoring run with a 400.
-        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name())) {
+        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name(), registryService)) {
             Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         }
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
