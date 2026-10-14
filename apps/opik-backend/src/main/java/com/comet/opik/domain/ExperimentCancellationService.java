@@ -134,6 +134,27 @@ public class ExperimentCancellationService {
     }
 
     /**
+     * Forgets what a run put on the queue, once it has drained. The ids exist so that cancelling can
+     * delete what no consumer has taken; a run with nothing left to take has no use for them, and
+     * only a cancel deletes them otherwise.
+     */
+    public Mono<Void> discardQueued(@NonNull String workspaceId, @NonNull UUID experimentId) {
+        return queuedIds(workspaceId, experimentId)
+                .delete()
+                .doOnNext(deleted -> {
+                    if (deleted) {
+                        log.debug("Discarded the queued ids of drained experiment '{}'", experimentId);
+                    }
+                })
+                .onErrorResume(error -> {
+                    // The TTL clears them in the end; the run has drained either way
+                    log.warn("Failed to discard the queued ids of experiment '{}'", experimentId, error);
+                    return Mono.just(false);
+                })
+                .then();
+    }
+
+    /**
      * Subtracts the purged messages from the experiment's own counter. What remains is what a
      * consumer still holds, and at zero there is none of it left.
      */

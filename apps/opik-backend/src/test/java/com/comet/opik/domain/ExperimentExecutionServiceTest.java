@@ -51,6 +51,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -1258,6 +1259,82 @@ class ExperimentExecutionServiceTest {
     class DatasetItemStreaming {
 
         private static final int STREAM_PAGE_SIZE = 2000;
+
+        // The policy was read from the latest version while the items streamed from whatever the
+        // dataset held at the time, so the two could describe different versions - and a dataset
+        // changing mid-run could move items between pages. One read now answers both.
+        @Test
+        void createAndExecuteStreamsTheVersionItTookThePolicyFrom() {
+            var datasetId = UUID.randomUUID();
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(datasetVersionService.getLatestVersion(datasetId, WORKSPACE_ID))
+                    .thenReturn(Optional.of(DatasetVersion.builder()
+                            .versionHash("the-latest-hash")
+                            .executionPolicy(new ExecutionPolicy(1, 1))
+                            .build()));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(datasetId)
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build());
+
+            var captor = ArgumentCaptor.forClass(DatasetItemStreamRequest.class);
+            verify(datasetItemService, atLeastOnce()).getItems(captor.capture(), any());
+            assertThat(captor.getAllValues())
+                    .allSatisfy(streamed -> assertThat(streamed.datasetVersion()).isEqualTo("the-latest-hash"));
+        }
+
+        @Test
+        void createAndExecuteStreamsThePinnedVersionWhenOneWasAskedFor() {
+            var datasetId = UUID.randomUUID();
+            var versionId = UUID.randomUUID();
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(datasetVersionService.resolveVersionId(WORKSPACE_ID, datasetId, "pinned-hash"))
+                    .thenReturn(versionId);
+            when(datasetVersionService.getVersionById(WORKSPACE_ID, datasetId, versionId))
+                    .thenReturn(DatasetVersion.builder().executionPolicy(new ExecutionPolicy(1, 1)).build());
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(datasetId)
+                    .versionHash("pinned-hash")
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build());
+
+            var captor = ArgumentCaptor.forClass(DatasetItemStreamRequest.class);
+            verify(datasetItemService, atLeastOnce()).getItems(captor.capture(), any());
+            assertThat(captor.getAllValues())
+                    .allSatisfy(streamed -> assertThat(streamed.datasetVersion()).isEqualTo("pinned-hash"));
+            verify(datasetVersionService, never()).getLatestVersion(any(UUID.class), any());
+        }
+
+        // A dataset with no versions at all has nothing to pin to, and streams live as it always did.
+        @Test
+        void createAndExecuteStreamsLiveWhenTheDatasetHasNoVersion() {
+            var datasetId = UUID.randomUUID();
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(datasetVersionService.getLatestVersion(datasetId, WORKSPACE_ID)).thenReturn(Optional.empty());
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(datasetId)
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build());
+
+            var captor = ArgumentCaptor.forClass(DatasetItemStreamRequest.class);
+            verify(datasetItemService, atLeastOnce()).getItems(captor.capture(), any());
+            assertThat(captor.getValue().datasetVersion()).isNull();
+        }
 
         private ExperimentExecutionRequest buildRequest(List<UUID> selectedRuleIds, String filters) {
             return ExperimentExecutionRequest.builder()
