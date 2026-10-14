@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { StringParam, useQueryParam } from "use-query-params";
 import {
+  ArrowUpRight,
   ChevronDown,
   Clock,
   Inbox,
@@ -70,36 +71,55 @@ const DETAIL_SUBTITLE =
   "You'll see a summary, affected traces, and Ollie's suggested fix.";
 
 const ListColumn: React.FC<{
-  title: React.ReactNode;
+  title?: React.ReactNode;
   actions?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }> = ({ title, actions, children, className }) => (
   <div
     className={cn(
-      "flex h-full w-[360px] shrink-0 flex-col overflow-hidden rounded-md border bg-background",
+      "flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-md border bg-background",
       className,
     )}
   >
-    <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-soft-background px-3">
-      {title}
-      {actions}
-    </div>
+    {title && (
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-soft-background px-3">
+        {title}
+        {actions}
+      </div>
+    )}
     {children}
   </div>
+);
+
+const ClosedIssuesButton: React.FC<{ count: number; onClick: () => void }> = ({
+  count,
+  onClick,
+}) => (
+  <Button
+    variant="outline"
+    size="2xs"
+    className="h-7 w-full shrink-0 justify-between rounded px-2"
+    onClick={onClick}
+  >
+    Closed issues{count > 0 && ` (${count})`}
+    <ArrowUpRight className="size-3" />
+  </Button>
 );
 
 const DetailColumn: React.FC<{
   issue?: AgentInsightsIssue;
   projectId: string;
   canConfigure: boolean;
-}> = ({ issue, projectId, canConfigure }) => (
+  canCloseAsNotUseful: boolean;
+}> = ({ issue, projectId, canConfigure, canCloseAsNotUseful }) => (
   <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border bg-background">
     {issue ? (
       <IssueDetail
         issue={issue}
         projectId={projectId}
         canConfigure={canConfigure}
+        canCloseAsNotUseful={canCloseAsNotUseful}
       />
     ) : (
       <DetailPlaceholder />
@@ -278,7 +298,10 @@ const DetailPlaceholder: React.FC = () => {
 
 type IssuesTabProps = {
   projectId: string;
-  showResolved?: boolean;
+  // Open issues, or one of the Closed issues tabs (resolved / closed as not useful).
+  status?: AGENT_INSIGHTS_ISSUE_STATUS;
+  // Closed issues tabs, shown above the list.
+  tabs?: React.ReactNode;
   isRunning?: boolean;
   failedReason?: string;
   failedDetail?: string;
@@ -286,15 +309,19 @@ type IssuesTabProps = {
   staleTraceCount?: number;
   staleDays?: number;
   canConfigure?: boolean;
+  canCloseAsNotUseful?: boolean;
+  closedCount?: number;
   onRunDiagnostic?: () => void;
   onShowOpenIssues?: () => void;
+  onShowClosedIssues?: () => void;
 };
 
 export const ISSUES_LIST_ATTRIBUTE = "data-issues-list";
 
 const IssuesTab: React.FC<IssuesTabProps> = ({
   projectId,
-  showResolved = false,
+  status = AGENT_INSIGHTS_ISSUE_STATUS.open,
+  tabs,
   isRunning = false,
   failedReason,
   failedDetail,
@@ -302,12 +329,13 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   staleTraceCount = 0,
   staleDays = 0,
   canConfigure = false,
+  canCloseAsNotUseful = false,
+  closedCount = 0,
   onRunDiagnostic,
   onShowOpenIssues,
+  onShowClosedIssues,
 }) => {
-  const status = showResolved
-    ? AGENT_INSIGHTS_ISSUE_STATUS.resolved
-    : AGENT_INSIGHTS_ISSUE_STATUS.open;
+  const showClosed = status !== AGENT_INSIGHTS_ISSUE_STATUS.open;
   const handleTryAgain = () => {
     trackEvent(OpikEvent.DIAGNOSTICS_TRY_AGAIN_CLICKED, {
       project_id: projectId,
@@ -338,7 +366,14 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
       page: 1,
       size: PAGE_SIZE,
     },
-    { placeholderData: keepPreviousData },
+    {
+      // Keep the list while re-sorting, but not across a status change (tabs).
+      placeholderData: (previous, previousQuery) =>
+        (previousQuery?.queryKey[1] as { status?: string } | undefined)
+          ?.status === status
+          ? keepPreviousData(previous)
+          : undefined,
+    },
   );
 
   const issues = useMemo(() => data?.content ?? [], [data]);
@@ -396,9 +431,9 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   const hasIssues = issues.length > 0;
   // Run status shows only on the open-issues view, never on Resolved.
   // Precedence: running/failed take over; stale is a softer nudge.
-  const running = isRunning && !showResolved;
-  const isFailed = !showResolved && Boolean(failedReason) && !isRunning;
-  const stale = isStale && !showResolved && !running && !isFailed;
+  const running = isRunning && !showClosed;
+  const isFailed = !showClosed && Boolean(failedReason) && !isRunning;
+  const stale = isStale && !showClosed && !running && !isFailed;
 
   const renderListBody = () => {
     if (hasIssues) {
@@ -487,7 +522,8 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
       );
     }
 
-    if (showResolved) {
+    if (showClosed) {
+      const isNotUseful = status === AGENT_INSIGHTS_ISSUE_STATUS.closed;
       return (
         <ListEmptyState
           className="bg-[#89DEFF1A]"
@@ -496,8 +532,16 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
               <Inbox className="size-3.5 text-black dark:text-white" />
             </IconTile>
           }
-          title="Nothing resolved yet"
-          description="Issues you resolve will show up here. You can reopen them anytime."
+          title={
+            isNotUseful
+              ? "Nothing closed as Not useful yet"
+              : "Nothing resolved yet"
+          }
+          description={
+            isNotUseful
+              ? "Issues you close as Not useful will show up here. You can reopen them anytime."
+              : "Issues you resolve will show up here. You can reopen them anytime."
+          }
         >
           {onShowOpenIssues && (
             <Button
@@ -545,22 +589,31 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
       issue={activeIssue}
       projectId={projectId}
       canConfigure={canConfigure}
+      canCloseAsNotUseful={canCloseAsNotUseful}
     />
   );
+
+  // The Closed issues tabs carry the counts, so the closed list has no header.
+  const listTitle = showClosed ? undefined : titleNode;
+  const closedIssuesButton =
+    !showClosed && onShowClosedIssues ? (
+      <ClosedIssuesButton count={closedCount} onClick={onShowClosedIssues} />
+    ) : null;
 
   if (!isWide) {
     if (!hasIssues) {
       return (
-        <div className="flex min-h-0 flex-1">
-          <ListColumn className="w-full" title={titleNode}>
-            {renderListBody()}
-          </ListColumn>
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
+          {tabs}
+          <ListColumn title={listTitle}>{renderListBody()}</ListColumn>
+          {closedIssuesButton}
         </div>
       );
     }
 
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-2">
+        {tabs}
         {isFailed && (
           <div className="shrink-0 overflow-hidden rounded-md border bg-background">
             <FailedBanner
@@ -607,7 +660,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
               }
             }}
           >
-            {!showResolved && (
+            {!showClosed && (
               <div className="sticky top-0 z-10 flex h-10 items-center justify-between gap-2 border-b border-border bg-soft-background pl-3 pr-2">
                 {titleNode}
                 {sortSelect}
@@ -627,18 +680,23 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
           </DropdownMenuContent>
         </DropdownMenu>
         {detail}
+        {closedIssuesButton}
       </div>
     );
   }
 
   return (
     <div className="flex min-h-0 flex-1 gap-2">
-      <ListColumn
-        title={titleNode}
-        actions={hasIssues && !showResolved ? sortSelect : undefined}
-      >
-        {renderListBody()}
-      </ListColumn>
+      <div className="flex h-full w-[360px] shrink-0 flex-col gap-2">
+        {tabs}
+        <ListColumn
+          title={listTitle}
+          actions={hasIssues && !showClosed ? sortSelect : undefined}
+        >
+          {renderListBody()}
+        </ListColumn>
+        {closedIssuesButton}
+      </div>
       {detail}
     </div>
   );
