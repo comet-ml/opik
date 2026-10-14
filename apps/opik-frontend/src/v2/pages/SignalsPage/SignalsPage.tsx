@@ -50,6 +50,7 @@ import SignalsPageSkeleton from "@/v2/pages/SignalsPage/SignalsPageSkeleton";
 import useColumnsOverflow from "@/v2/pages/SignalsPage/useColumnsOverflow";
 import {
   countAffectedTraces,
+  getGuidanceCalloutAction,
   getHeaderControls,
   isGuidanceOutdated,
 } from "@/v2/pages/SignalsPage/helpers";
@@ -370,6 +371,11 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
   });
 
   const canRun = !showRunning && !isOutOfCredits && !triggerMutation.isPending;
+  const calloutAction = getGuidanceCalloutAction({
+    canConfigure,
+    canRun,
+    isOutOfCredits,
+  });
 
   // Closing an issue as not useful doesn't change the guidance version.
   const showGuidanceChanged =
@@ -448,8 +454,8 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
 
         {!showClosed && showGuidanceChanged && (
           <GuidanceChangedCallout
-            onRun={canConfigure && canRun ? handleRunDiagnostic : undefined}
-            outOfCredits={canConfigure && isOutOfCredits && !showRunning}
+            onRun={calloutAction === "run" ? handleRunDiagnostic : undefined}
+            outOfCredits={calloutAction === "outOfCredits"}
           />
         )}
 

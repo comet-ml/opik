@@ -64,7 +64,8 @@ const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
     AGENT_INSIGHTS_ISSUE_STATUS.resolved,
   );
   const [note, setNote] = useState("");
-  const selectedRef = useRef<HTMLButtonElement>(null);
+  // Every open starts on Resolved, so focus goes there by value, not by whatever was selected last.
+  const resolvedRef = useRef<HTMLButtonElement>(null);
 
   // Before paint, so a reopened dialog never flashes the previous choice.
   useLayoutEffect(() => {
@@ -111,7 +112,7 @@ const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
         // Start on the selected option (not Cancel), so Enter right away closes the issue.
         onOpenAutoFocus={(event) => {
           event.preventDefault();
-          selectedRef.current?.focus();
+          resolvedRef.current?.focus();
         }}
       >
         <DialogHeader className="pb-0">
@@ -143,7 +144,11 @@ const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
                 )}
               >
                 <RadioGroupPrimitive.Item
-                  ref={selected ? selectedRef : undefined}
+                  ref={
+                    value === AGENT_INSIGHTS_ISSUE_STATUS.resolved
+                      ? resolvedRef
+                      : undefined
+                  }
                   value={value}
                   className="flex flex-col items-start gap-0.5 text-left focus:outline-none focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring"
                 >

@@ -4,6 +4,7 @@ import {
   render as renderComponent,
   screen,
   fireEvent,
+  within,
 } from "@testing-library/react";
 import { TooltipProvider } from "@/ui/tooltip";
 import {
@@ -86,7 +87,9 @@ describe("IssueDetail status actions", () => {
     );
 
   const dialogCloseButton = () =>
-    screen.getAllByRole("button", { name: "Close issue" }).at(-1)!;
+    within(screen.getByRole("dialog")).getByRole("button", {
+      name: "Close issue",
+    });
 
   it("closes as resolved from the dialog, Resolved preselected", () => {
     renderWithToggle();
@@ -210,6 +213,62 @@ describe("IssueDetail status actions", () => {
       { issueId: "i1", projectId: "p1", status: "resolved" },
       expect.anything(),
     );
+  });
+
+  it("starts again on Resolved after a cancelled Not useful choice", () => {
+    renderWithToggle();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close issue" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Not useful/ }));
+    fireEvent.change(screen.getByLabelText("Why isn't it useful? (Optional)"), {
+      target: { value: "Draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close issue" }));
+
+    const resolved = screen.getByRole("radio", { name: /Resolved/ });
+    expect(resolved).toBeChecked();
+    expect(resolved).toHaveFocus();
+    expect(
+      screen.queryByLabelText("Why isn't it useful? (Optional)"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("selects an option from anywhere on its card", () => {
+    renderWithToggle();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close issue" }));
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Not useful/ }).parentElement!,
+    );
+
+    expect(screen.getByRole("radio", { name: /Not useful/ })).toBeChecked();
+  });
+
+  it("doesn't submit on Enter on the dialog's X", () => {
+    renderWithToggle();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close issue" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Close" }), {
+      key: "Enter",
+    });
+
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it("keeps the dialog when resolving fails", () => {
+    mutate.mockImplementation(() => undefined);
+    renderWithToggle();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close issue" }));
+    fireEvent.click(dialogCloseButton());
+
+    expect(mutate).toHaveBeenCalledWith(
+      { issueId: "i1", projectId: "p1", status: "resolved" },
+      expect.anything(),
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(toast).not.toHaveBeenCalled();
   });
 
   it("resolves in one click with a toast when the guidance toggle is off", () => {

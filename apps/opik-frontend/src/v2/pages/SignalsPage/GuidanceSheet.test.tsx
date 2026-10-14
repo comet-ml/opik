@@ -72,6 +72,23 @@ describe("GuidanceSheet", () => {
     expect(onRun).toHaveBeenCalledTimes(1);
   });
 
+  it("doesn't run a diagnostic when saving fails", () => {
+    mutate.mockImplementation(() => undefined);
+    const setOpen = vi.fn();
+    const onRun = vi.fn();
+    renderSheet({ setOpen, onRun });
+
+    fireEvent.change(screen.getByLabelText("About this project"), {
+      target: { value: "Draft" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save and run diagnostic" }),
+    );
+
+    expect(onRun).not.toHaveBeenCalled();
+    expect(setOpen).not.toHaveBeenCalled();
+  });
+
   it("saves without running from the split menu", () => {
     const onRun = vi.fn();
     renderSheet({ onRun });
