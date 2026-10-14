@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
+import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -137,25 +138,30 @@ class SpansTraceScopedReadPrimaryKeyTest {
     @Test
     void findSpansByTraceIdReadsSpansThroughTheTraceIdPrefix() {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
-        var traceId = createSpans(projectName, 3);
-        createSpans(projectName, 3); // a second trace in the same project
+        var spans = createSpans(projectName, 3);
+        var otherTraceSpans = createSpans(projectName, 3);
+        var traceId = spans.getFirst().traceId();
 
         var page = spanResourceClient.getByTraceIdAndProject(traceId, projectName, WORKSPACE_NAME, API_KEY);
 
-        assertThat(page.content()).hasSize(3).allMatch(span -> traceId.equals(span.traceId()));
+        // Pages are returned newest id first.
+        SpanAssertions.assertPage(page, 1, spans.size(), spans.size());
+        SpanAssertions.assertSpan(page.content(), spans.reversed(), otherTraceSpans, USER);
         assertEverySpansReadUsesTraceId(FIND_SPANS, traceId);
     }
 
     @Test
     void searchSpansByTraceIdReadsSpansThroughTheTraceIdPrefix() {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
-        var traceId = createSpans(projectName, 3);
-        createSpans(projectName, 3); // a second trace in the same project
+        var spans = createSpans(projectName, 3);
+        var otherTraceSpans = createSpans(projectName, 3);
+        var traceId = spans.getFirst().traceId();
 
-        var spans = spanResourceClient.getStreamAndAssertContent(API_KEY, WORKSPACE_NAME,
+        var streamed = spanResourceClient.getStreamAndAssertContent(API_KEY, WORKSPACE_NAME,
                 SpanSearchStreamRequest.builder().projectName(projectName).traceId(traceId).build());
 
-        assertThat(spans).hasSize(3).allMatch(span -> traceId.equals(span.traceId()));
+        // The stream is ordered newest id first, like the page.
+        SpanAssertions.assertSpan(streamed, spans.reversed(), otherTraceSpans, USER);
         assertEverySpansReadUsesTraceId(FIND_SPAN_STREAM, traceId);
     }
 
@@ -180,11 +186,12 @@ class SpansTraceScopedReadPrimaryKeyTest {
                 .toList();
     }
 
-    /** Creates {@code count} spans in a new trace and returns its id. */
-    private UUID createSpans(String projectName, int count) {
+    /** Creates {@code count} spans in a new trace and returns them in creation (ascending id) order. */
+    private List<Span> createSpans(String projectName, int count) {
         var traceId = UUID.randomUUID();
         var spans = IntStream.range(0, count)
                 .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                        .projectId(null)
                         .projectName(projectName)
                         .traceId(traceId)
                         .parentSpanId(null)
@@ -192,7 +199,7 @@ class SpansTraceScopedReadPrimaryKeyTest {
                         .build())
                 .toList();
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
-        return traceId;
+        return spans;
     }
 
     /** Polled: a query's {@code query_log} row is written asynchronously, flushed every 200 ms here. */
