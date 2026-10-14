@@ -43,6 +43,7 @@ class ServiceTogglesConfig(UniversalBaseModel):
     annotation_queue_automation_enabled: typing_extensions.Annotated[
         bool, FieldMetadata(alias="annotationQueueAutomationEnabled")
     ]
+    event_bridge_alerts_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="eventBridgeAlertsEnabled")]
     default_page_size: typing_extensions.Annotated[typing.Optional[int], FieldMetadata(alias="defaultPageSize")] = None
 
     if IS_PYDANTIC_V2:

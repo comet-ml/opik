@@ -37,9 +37,6 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormExtendedSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty
-    private BulkInsertConfig bulkInsert = BulkInsertConfig.builder().build();
-
-    @Valid @NotNull @JsonProperty
     private CustomChartsConfig customCharts = new CustomChartsConfig();
 
     @Valid @NotNull @JsonProperty

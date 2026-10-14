@@ -15,6 +15,7 @@ import com.comet.opik.infrastructure.UuidValidationConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TestUuidV7TimestampValidatorFactory;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.common.eventbus.EventBus;
 import io.dropwizard.util.Duration;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -23,18 +24,24 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +53,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -83,6 +91,9 @@ class SpanServiceImplTest {
     @Mock
     private DeletionEventDAO deletionEventDAO;
 
+    @Mock
+    private SpanWeeksDAO spanWeeksDAO;
+
     private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     private SpanService newSpanService(DatabaseAnalyticsDataModelConfig databaseAnalyticsDataModelConfig) {
@@ -105,6 +116,7 @@ class SpanServiceImplTest {
                 attachmentReinjectorService,
                 eventBus,
                 deletionEventDAO,
+                spanWeeksDAO,
                 opikConfiguration);
     }
 
@@ -484,6 +496,72 @@ class SpanServiceImplTest {
 
         private long randomCount() {
             return RandomUtils.secure().randomLong(1, 1_000);
+        }
+    }
+
+    @Nested
+    class RegisterWeeks {
+
+        private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
+
+        @Test
+        void registerWeeks__whenWriteDisabled__thenWritesNothing() {
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(idGenerator.generateId())
+                    .traceId(idGenerator.generateId())
+                    .projectId(idGenerator.generateId())
+                    .build();
+
+            StepVerifier.create(newSpanService(DatabaseAnalyticsDataModelConfig.builder().build())
+                    .registerWeeks(List.of(span)))
+                    .verifyComplete();
+
+            verifyNoInteractions(spanWeeksDAO);
+        }
+
+        @ParameterizedTest(name = "a span without {0} registers nothing")
+        @MethodSource
+        void registerWeeks__whenASpanLacksARequiredField__thenRegistersOnlyTheCompleteOne(String field,
+                UnaryOperator<Span> strip) {
+            var projectId = idGenerator.generateId();
+            var traceId = idGenerator.generateId();
+            // An id on Monday 2025-03-03, so its week is the literal below rather than one computed here.
+            var id = new UUID((Instant.parse("2025-03-03T00:00:00Z").toEpochMilli() << 16) | 0x7000L,
+                    0x8000_0000_0000_0000L);
+            var complete = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(id)
+                    .traceId(traceId)
+                    .projectId(projectId)
+                    .build();
+            when(spanWeeksDAO.insert(any())).thenReturn(Mono.just(1L));
+
+            StepVerifier.create(newSpanService(DatabaseAnalyticsDataModelConfig.builder()
+                    .spanWeeksWriteEnabled(true)
+                    .build())
+                    .registerWeeks(List.of(complete, strip.apply(complete))))
+                    .verifyComplete();
+
+            verify(spanWeeksDAO).insert(List.of(
+                    SpanWeek.builder().projectId(projectId).traceId(traceId).idWeek(20250303L).build()));
+            verifyNoMoreInteractions(spanWeeksDAO);
+        }
+
+        static Stream<Arguments> registerWeeks__whenASpanLacksARequiredField__thenRegistersOnlyTheCompleteOne() {
+            return Stream.of(
+                    Arguments.of("an id", (UnaryOperator<Span>) span -> span.toBuilder().id(null).build()),
+                    Arguments.of("a trace id", (UnaryOperator<Span>) span -> span.toBuilder().traceId(null).build()),
+                    Arguments.of("a project id",
+                            (UnaryOperator<Span>) span -> span.toBuilder().projectId(null).build()));
+        }
+
+        @Test
+        void getWeeksByTraceIds__whenNoTraceIds__thenReturnsEmptyWithoutQuerying() {
+            StepVerifier.create(newSpanService(DatabaseAnalyticsDataModelConfig.builder().build())
+                    .getWeeksByTraceIds(List.of()))
+                    .expectNext(List.of())
+                    .verifyComplete();
+
+            verifyNoInteractions(spanWeeksDAO);
         }
     }
 }
