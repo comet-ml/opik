@@ -22,6 +22,7 @@ import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -260,6 +261,17 @@ interface PromptVersionDAO {
             AND version_number IS NOT NULL
             """)
     int findMaxVersionNumber(@Bind("workspace_id") String workspaceId, @Bind("prompt_id") UUID promptId);
+
+    // MAX is answered from the index end, while ORDER BY id DESC LIMIT 1 can be planned as a reverse primary key scan
+    // that reads the whole table's newer rows before reaching an old prompt's latest version.
+    @SqlQuery("""
+            SELECT MAX(id)
+            FROM prompt_versions
+            WHERE workspace_id = :workspace_id
+            AND prompt_id = :prompt_id
+            AND version_type = 'prompt_version'
+            """)
+    Optional<UUID> findLatestVersionId(@Bind("workspace_id") String workspaceId, @Bind("prompt_id") UUID promptId);
 
     /**
      * Batch update for multiple prompt versions in a single database operation.
