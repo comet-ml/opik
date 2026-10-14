@@ -26,6 +26,11 @@ import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.metrics.BreakdownConfig;
+import com.comet.opik.api.metrics.BreakdownField;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.metrics.MetricType;
@@ -52,6 +57,7 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -247,7 +253,10 @@ class SpansReadPathPartitionPruningTest {
                                 // Lets the filler and past-ceiling ids through ingestion, as in production.
                                 new CustomConfig("uuidValidation.enabled", "false"),
                                 // The successor's columns are non-nullable, as the cutover flips this with it.
-                                new CustomConfig("databaseAnalyticsDataModel.spanColumnsNonNullable", "true")),
+                                new CustomConfig("databaseAnalyticsDataModel.spanColumnsNonNullable", "true"),
+                                // Finished experiments aggregate after this delay; the aggregates cases wait for it. Its
+                                // bucket lives twice as long, so at the job's 5s interval a tick always finds it.
+                                new CustomConfig("experimentDenormalization.debounceDelay", "5s")),
                                 extraConfigs().stream()).toList())
                         .build());
     }
@@ -391,6 +400,74 @@ class SpansReadPathPartitionPruningTest {
                 .getTraceThread(trace.threadId(), trace.projectId(), API_KEY, WORKSPACE_NAME).totalEstimatedCost())
                 .isEqualByComparingTo(FarFutureTrace.COST));
         assertSpanWeeksRead("find_thread_by_id", trace.projectId());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"getSpanAggregations", "getSpansData"})
+    void experimentAggregatesCountAFarFutureSpanOfItsTrace(String queryName) {
+        var trace = createFarFutureTrace();
+        var experimentId = createExperiment(trace.traceId(), null,
+                "dataset-" + RandomStringUtils.secure().nextAlphanumeric(16));
+
+        experimentResourceClient.finishExperiments(Set.of(experimentId), API_KEY, WORKSPACE_NAME);
+        // Finishing publishes the aggregation; the statement in query_log shows it ran.
+        spansPartitionsRead(queryName, experimentId);
+
+        var actual = experimentResourceClient.getExperiment(experimentId, API_KEY, WORKSPACE_NAME);
+
+        assertThat(actual.totalEstimatedCost()).isEqualByComparingTo(FarFutureTrace.COST);
+        assertSpanWeeksRead(queryName, experimentId);
+    }
+
+    @ParameterizedTest(name = "breakdown: {0}")
+    @ValueSource(booleans = {false, true})
+    void costChartCountsAFarFutureSpanOfATraceInTheWindow(boolean breakdown) {
+        var trace = createFarFutureTrace();
+        var request = ProjectMetricRequest.builder()
+                .metricType(MetricType.COST)
+                .interval(TimeInterval.HOURLY)
+                .intervalStart(Instant.now().minus(Duration.ofHours(1)))
+                .breakdown(breakdown ? BreakdownConfig.builder().field(BreakdownField.NAME).build() : null)
+                .build();
+
+        var response = projectMetricsResourceClient.getProjectMetrics(trace.projectId(), request, BigDecimal.class,
+                API_KEY, WORKSPACE_NAME);
+
+        var cost = response.results().stream()
+                .flatMap(result -> result.data().stream())
+                .map(DataPoint::value)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(cost).isEqualByComparingTo(FarFutureTrace.COST);
+        assertSpanWeeksRead("ProjectMetrics_cost", trace.projectId());
+    }
+
+    @ParameterizedTest(name = "breakdown: {0}")
+    @ValueSource(booleans = {false, true})
+    void tokenUsageChartCountsAFarFutureSpanOfATraceInTheWindow(boolean breakdown) {
+        var trace = createFarFutureTrace();
+        var expected = totalUsage(trace.spans());
+        var subMetric = expected.keySet().iterator().next();
+        var request = ProjectMetricRequest.builder()
+                .metricType(MetricType.TOKEN_USAGE)
+                .interval(TimeInterval.HOURLY)
+                .intervalStart(Instant.now().minus(Duration.ofHours(1)))
+                .breakdown(breakdown
+                        ? BreakdownConfig.builder().field(BreakdownField.NAME).subMetric(subMetric).build()
+                        : null)
+                .build();
+
+        var response = projectMetricsResourceClient.getProjectMetrics(trace.projectId(), request, Long.class,
+                API_KEY, WORKSPACE_NAME);
+
+        // Per usage key without a breakdown; one sub-metric, under the trace's name, with it.
+        var actual = response.results().stream()
+                .flatMap(result -> result.data().stream()
+                        .filter(point -> point.value() != null)
+                        .map(point -> Map.entry(breakdown ? subMetric : result.name(), point.value())))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
+        assertThat(actual).isEqualTo(breakdown ? Map.of(subMetric, expected.get(subMetric)) : expected);
+        assertSpanWeeksRead("ProjectMetrics_token usage", trace.projectId());
     }
 
     /** Asserts the latest statement of {@code op} naming {@code id} read the span_weeks index; off here. */
@@ -633,6 +710,7 @@ class SpansReadPathPartitionPruningTest {
                 .ignoringCollectionOrder()
                 .withComparatorForType((a, b) -> Math.abs(a - b) <= 1e-6 ? 0 : Double.compare(a, b), Double.class)
                 .isEqualTo(expected);
+        assertSpanWeeksRead("KpiCards_getTraceKpiCards", projectId);
     }
 
     @ParameterizedTest(name = "open-ended: {0}")
@@ -657,6 +735,7 @@ class SpansReadPathPartitionPruningTest {
         assertThat(cost).isEqualByComparingTo(openEnded ? "3.75" : "1.25");
         assertThat(spansPartitionsRead("ProjectMetrics_threadCost", seeded.projectId()))
                 .containsExactlyInAnyOrderElementsOf(seeded.weeksRead(intervalStart, intervalEnd));
+        assertSpanWeeksRead("ProjectMetrics_threadCost", seeded.projectId());
     }
 
     @ParameterizedTest(name = "open-ended: {0}")
@@ -690,6 +769,7 @@ class SpansReadPathPartitionPruningTest {
                         within(1e-6)));
         assertThat(spansPartitionsRead("KpiCards_getThreadKpiCards", seeded.projectId()))
                 .isIn(expectedWeekSets);
+        assertSpanWeeksRead("KpiCards_getThreadKpiCards", seeded.projectId());
     }
 
     private record SeededThread(UUID projectId, Instant now, Set<String> spanWeeks) {
@@ -755,6 +835,7 @@ class SpansReadPathPartitionPruningTest {
         var actual = fireTraceCostAlert(projectId);
 
         assertThat(new BigDecimal(actual.metricValue())).isEqualByComparingTo(expected);
+        assertSpanWeeksRead("AlertMetrics_getTotalCost", projectId);
     }
 
     /** Each read takes the project name and the trace id, and returns the traces it read. */
@@ -792,6 +873,55 @@ class SpansReadPathPartitionPruningTest {
                         .build())
                 .containsExactly(expected);
         assertSpanWeeksRead(queryName, projectId);
+    }
+
+    @Test
+    void traceCountFilteredOnSpanCostCountsAFarFutureSpanOfItsTrace() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var created = createTraceWithAFarFutureSpan(projectName, Instant.now());
+        var filters = fullCostFilter(created.spans());
+
+        var actual = traceResourceClient.getTraces(projectName, null, API_KEY, WORKSPACE_NAME, filters, null, 10,
+                Map.of());
+
+        var expectedTrace = created.trace().toBuilder().usage(totalUsage(created.spans())).build();
+        TraceAssertions.assertTraces(actual.content(), List.of(expectedTrace), USER);
+        assertThat(actual.total()).isEqualTo(1);
+        assertSpanWeeksRead("count_traces_by_project", projectId);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"get_trace_stats_traces_spans", "get_trace_stats_feedback_scores"})
+    void traceStatsCountAFarFutureSpanOfTheTrace(String queryName) {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var created = createTraceWithAFarFutureSpan(projectName, Instant.now());
+        var expectedTrace = created.trace().toBuilder()
+                .usage(totalUsage(created.spans()))
+                .totalEstimatedCost(totalCost(created.spans()))
+                .spanCount(created.spans().size())
+                .llmSpanCount((int) created.spans().stream().filter(span -> span.type() == SpanType.llm).count())
+                // Generated on the fixture but never written, so the stats have none.
+                .spanFeedbackScores(null)
+                .guardrailsValidations(null)
+                .build();
+
+        // The filter is what makes both stats statements read spans, and it keeps the trace only at its full cost.
+        var stats = traceResourceClient.getTraceStats(projectName, null, API_KEY, WORKSPACE_NAME,
+                fullCostFilter(created.spans()), Map.of());
+
+        TraceAssertions.assertStats(stats.stats(), StatsUtils.getProjectTraceStatItems(List.of(expectedTrace)));
+        assertSpanWeeksRead(queryName, projectId);
+    }
+
+    /** Keeps a trace only if its cost includes every given span; the far-future one is the one at stake. */
+    private static List<TraceFilter> fullCostFilter(List<Span> spans) {
+        return List.of(TraceFilter.builder()
+                .field(TraceField.TOTAL_ESTIMATED_COST)
+                .operator(Operator.GREATER_THAN_EQUAL)
+                .value(totalCost(spans).toPlainString())
+                .build());
     }
 
     /** The span count and total cost reported by a trace read. */
