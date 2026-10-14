@@ -14,12 +14,14 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 )
 from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 
+import opik
 from opik.integrations.adk import OpikTracer
 from opik.integrations.adk.patchers import patchers
 from opik.integrations.adk.patchers.adk_otel_tracer.opik_adk_otel_tracer import (
     OpikADKOtelTracer,
 )
 from . import helpers
+from ...testlib import ANY_BUT_NONE, ANY_STRING, TraceModel, assert_equal
 
 
 pytestmark = helpers.pytest_skip_for_adk_older_than_1_3_0
@@ -126,3 +128,92 @@ def test_adk_otel_patching__nested_spans__parent_child_relationship_preserved(
 
     exported_names = sorted(s.name for s in otel_exporter.get_finished_spans())
     assert exported_names == ["child_span", "parent_span"]
+
+
+def test_adk_otel_patching__start_span_then_end__opik_trace_logged_and_otel_span_exported(
+    opik_tracer_with_otel, otel_exporter, fake_backend
+):
+    """google-adk >= 2.12.0 opens `invoke_agent ...` with start_span and ends it
+    explicitly, so the Opik trace has to follow that lifecycle."""
+    span = adk_telemetry.tracer.start_span("invoke_agent weather_agent")
+    assert span.is_recording()
+    assert opik.context_storage.get_trace_data() is not None
+    span.end()
+    opik_tracer_with_otel.flush()
+
+    assert opik.context_storage.get_trace_data() is None
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(
+        TraceModel(
+            id=ANY_BUT_NONE,
+            name="invoke_agent weather_agent",
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
+            spans=[],
+        ),
+        fake_backend.trace_trees[0],
+    )
+    exported_names = [s.name for s in otel_exporter.get_finished_spans()]
+    assert "invoke_agent weather_agent" in exported_names
+
+
+def test_adk_otel_patching__start_span__child_span_parented_to_returned_span(
+    opik_tracer_with_otel, fake_backend
+):
+    """ADK puts the span returned by start_span into the OTel context, so OTel
+    children must parent to the real span and Opik children must nest under
+    the Opik trace."""
+    parent = adk_telemetry.tracer.start_span("invoke_agent weather_agent")
+    with adk_telemetry.tracer.start_as_current_span(
+        "execute_tool get_weather",
+        context=trace.set_span_in_context(parent),
+    ) as child:
+        assert child.parent.span_id == parent.get_span_context().span_id
+    parent.end()
+    opik_tracer_with_otel.flush()
+
+    assert len(fake_backend.trace_trees) == 1
+    assert [s.name for s in fake_backend.trace_trees[0].spans] == [
+        "execute_tool get_weather"
+    ]
+
+
+def test_adk_otel_patching__start_span__recorded_exception__logged_as_error_info(
+    opik_tracer_with_otel, fake_backend
+):
+    span = adk_telemetry.tracer.start_span("invoke_agent weather_agent")
+    span.record_exception(ZeroDivisionError("boom"))
+    span.end()
+    opik_tracer_with_otel.flush()
+
+    assert len(fake_backend.trace_trees) == 1
+    assert fake_backend.trace_trees[0].error_info == {
+        "exception_type": "ZeroDivisionError",
+        "message": ANY_STRING,
+        "traceback": ANY_STRING,
+    }
+
+
+def test_adk_otel_patching__start_span__ended_twice__opik_trace_logged_once(
+    opik_tracer_with_otel, fake_backend
+):
+    span = adk_telemetry.tracer.start_span("invoke_agent weather_agent")
+    span.end()
+    span.end()
+    opik_tracer_with_otel.flush()
+
+    assert len(fake_backend.trace_trees) == 1
+
+
+def test_adk_otel_patching__start_span_skip_listed_name__no_opik_bookkeeping(
+    opik_tracer_with_otel, otel_exporter, fake_backend
+):
+    span = adk_telemetry.tracer.start_span("invocation")
+    assert opik.context_storage.get_trace_data() is None
+    span.end()
+    opik_tracer_with_otel.flush()
+
+    assert fake_backend.trace_trees == []
+    exported_names = [s.name for s in otel_exporter.get_finished_spans()]
+    assert "invocation" in exported_names
