@@ -1,6 +1,7 @@
 package com.comet.opik.utils;
 
 import com.clickhouse.client.api.ClickHouseException;
+import com.clickhouse.client.api.ServerException;
 import jakarta.ws.rs.ProcessingException;
 import lombok.Getter;
 import lombok.experimental.UtilityClass;
@@ -80,8 +81,18 @@ public class RetryUtils {
     }
 
     /**
-     * Retry specification for ClickHouse writes: the transient errors {@link #handleHttpErrors} retries, plus any
-     * failure the v2 client flags as retryable, anywhere in the cause chain.
+     * Retry specification for ClickHouse writes, for callers whose write is idempotent: a retry may repeat a write
+     * that already landed, so only use it where a repeat collapses (e.g. a ReplacingMergeTree key).
+     * <p>
+     * Retried, when found anywhere in the cause chain: the transient errors {@link #handleHttpErrors} retries
+     * ({@code SocketException}, {@code TimeoutException}, {@code InterruptedIOException},
+     * {@code NoHttpResponseException}) and a {@code ClickHouseException} the v2 client flags
+     * {@code isRetryable()}. Anything else, server errors the client does not flag included, fails at once. Walking
+     * the chain is deliberate: the client wraps transport failures, so the top-level type alone would miss them.
+     * Widening the set retries permanent failures through every backoff before they surface.
+     * <p>
+     * Retries log only the exception type and, for a server error, its code: ClickHouse messages can quote the
+     * offending values.
      *
      * @param maxAttempts Maximum number of retry attempts.
      * @param minBackoff  Minimum backoff duration between retries.
@@ -91,7 +102,8 @@ public class RetryUtils {
     public static RetryBackoffSpec handleClickHouseErrors(int maxAttempts, Duration minBackoff, Duration maxBackoff) {
         return Retry.backoff(maxAttempts, minBackoff)
                 .maxBackoff(maxBackoff)
-                .doBeforeRetry(retrySignal -> log.warn("Retrying due to: {}", retrySignal.failure().getMessage()))
+                .doBeforeRetry(retrySignal -> log.warn("Retrying ClickHouse write, attempt '{}', after '{}'",
+                        retrySignal.totalRetries() + 1, describe(retrySignal.failure())))
                 .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> retrySignal.failure())
                 .filter(RetryUtils::isTransientClickHouseError);
     }
@@ -104,6 +116,12 @@ public class RetryUtils {
             }
         }
         return false;
+    }
+
+    private static String describe(Throwable throwable) {
+        return throwable instanceof ServerException serverError
+                ? "%s(code=%d)".formatted(serverError.getClass().getSimpleName(), serverError.getCode())
+                : throwable.getClass().getSimpleName();
     }
 
     private static boolean isDatabaseDeadlock(Throwable throwable) {

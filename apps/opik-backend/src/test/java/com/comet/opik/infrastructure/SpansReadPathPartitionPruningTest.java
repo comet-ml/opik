@@ -59,8 +59,10 @@ import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -265,6 +267,7 @@ class SpansReadPathPartitionPruningTest {
     private DatasetResourceClient datasetResourceClient;
     private ExperimentResourceClient experimentResourceClient;
     private OptimizationResourceClient optimizationResourceClient;
+    private ExperimentAggregatesService experimentAggregatesService;
     private ProjectResourceClient projectResourceClient;
     private ProjectMetricsResourceClient projectMetricsResourceClient;
     protected TraceResourceClient traceResourceClient;
@@ -272,7 +275,9 @@ class SpansReadPathPartitionPruningTest {
     private AlertResourceClient alertResourceClient;
 
     @BeforeAll
-    void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template) {
+    void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template,
+            ExperimentAggregatesService experimentAggregatesService) {
+        this.experimentAggregatesService = experimentAggregatesService;
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
@@ -292,10 +297,10 @@ class SpansReadPathPartitionPruningTest {
                 .toList(), API_KEY, WORKSPACE_NAME);
     }
 
-    /** A trace with one span this week and one in 2201, whose costs every trace-keyed read must both count. */
+    /** A trace with a 1.25 span this week and a 2.5 one in 2201: every trace-keyed read must count both. */
     @Builder
     private record FarFutureTrace(String projectName, UUID projectId, UUID traceId, String threadId, List<Span> spans) {
-        static final BigDecimal COST = new BigDecimal("3.75");
+        static final BigDecimal TOTAL_COST = new BigDecimal("3.75");
     }
 
     private FarFutureTrace createFarFutureTrace() {
@@ -372,7 +377,7 @@ class SpansReadPathPartitionPruningTest {
 
         var actual = experimentResourceClient.getExperiment(experimentId, API_KEY, WORKSPACE_NAME);
 
-        assertThat(actual.totalEstimatedCost()).isEqualByComparingTo(FarFutureTrace.COST);
+        assertThat(actual.totalEstimatedCost()).isEqualByComparingTo(FarFutureTrace.TOTAL_COST);
         assertSpanWeeksRead("get_experiment_by_id", experimentId);
     }
 
@@ -387,7 +392,7 @@ class SpansReadPathPartitionPruningTest {
 
         var actual = optimizationResourceClient.get(optimizationId, API_KEY, WORKSPACE_NAME, HttpStatus.SC_OK);
 
-        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(FarFutureTrace.COST);
+        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(FarFutureTrace.TOTAL_COST);
         assertSpanWeeksRead("get_optimization_by_id", optimizationId);
     }
 
@@ -398,7 +403,7 @@ class SpansReadPathPartitionPruningTest {
         // Threads are materialised from their traces asynchronously.
         Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(traceResourceClient
                 .getTraceThread(trace.threadId(), trace.projectId(), API_KEY, WORKSPACE_NAME).totalEstimatedCost())
-                .isEqualByComparingTo(FarFutureTrace.COST));
+                .isEqualByComparingTo(FarFutureTrace.TOTAL_COST));
         assertSpanWeeksRead("find_thread_by_id", trace.projectId());
     }
 
@@ -411,13 +416,19 @@ class SpansReadPathPartitionPruningTest {
 
         experimentResourceClient.finishExperiments(Set.of(experimentId), API_KEY, WORKSPACE_NAME);
         // Finishing publishes the aggregation after the debounce; the statement in query_log shows it ran, and the
-        // aggregate row it writes may land a moment later, so the read waits for it too.
+        // aggregate row it writes may land a moment later.
         spansPartitionsRead(queryName, experimentId);
 
+        // The aggregate row itself: the API falls back to raw span sums while it is missing, which would hide a
+        // dropped span.
         Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
-                .untilAsserted(() -> assertThat(experimentResourceClient
-                        .getExperiment(experimentId, API_KEY, WORKSPACE_NAME).totalEstimatedCost())
-                        .isEqualByComparingTo(FarFutureTrace.COST));
+                .untilAsserted(() -> assertThat(experimentAggregatesService.getExperimentFromAggregates(experimentId)
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.USER_NAME, USER)
+                                .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                        .blockOptional())
+                        .hasValueSatisfying(experiment -> assertThat(experiment.totalEstimatedCost())
+                                .isEqualByComparingTo(FarFutureTrace.TOTAL_COST)));
         assertSpanWeeksRead(queryName, experimentId);
     }
 
@@ -440,7 +451,7 @@ class SpansReadPathPartitionPruningTest {
                 .map(DataPoint::value)
                 .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        assertThat(cost).isEqualByComparingTo(FarFutureTrace.COST);
+        assertThat(cost).isEqualByComparingTo(FarFutureTrace.TOTAL_COST);
         assertSpanWeeksRead("ProjectMetrics_cost", trace.projectId());
     }
 
