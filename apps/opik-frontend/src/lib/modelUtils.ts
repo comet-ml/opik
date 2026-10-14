@@ -344,10 +344,10 @@ export const withoutThinkingAmount = (
 // can only mean the model's own default, and it is left off the request like "auto". Sending the
 // documented MINIMAL instead is not harmless: Vertex answers it in a multi-turn prompt without
 // thought signatures with a 400, and a hand-written assistant message has none.
-const GEMINI_MAJOR_VERSION = /gemini-(\d{1,3})(?=[.-])/;
+const GEMINI_MAJOR_VERSION_PATTERN = /gemini-(\d{1,3})(?=[.-])/;
 
 const cannotTurnThinkingOff = (model: PROVIDER_MODEL_TYPE | ""): boolean => {
-  const match = GEMINI_MAJOR_VERSION.exec(model);
+  const match = GEMINI_MAJOR_VERSION_PATTERN.exec(model);
   return !!match && Number(match[1]) >= 3;
 };
 
