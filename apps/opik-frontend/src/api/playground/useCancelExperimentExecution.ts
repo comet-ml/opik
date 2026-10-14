@@ -12,7 +12,7 @@ interface UseCancelExperimentExecutionParams {
 const cancelExperimentExecution = async ({
   experimentIds,
 }: UseCancelExperimentExecutionParams) => {
-  await api.post(`${EXPERIMENTS_REST_ENDPOINT}cancel`, { ids: experimentIds });
+  await api.put(`${EXPERIMENTS_REST_ENDPOINT}cancel`, { ids: experimentIds });
 };
 
 export default function useCancelExperimentExecution() {

@@ -222,6 +222,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 type,
                 evaluation_method,
                 status,
+                finished_at,
                 optimization_id,
                 dataset_version_id,
                 prompt_versions,
@@ -267,6 +268,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 type,
                 evaluation_method,
                 status,
+                finished_at,
                 experiment_scores
             FROM experiments
             WHERE workspace_id = :workspace_id
@@ -657,6 +659,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 type,
                 evaluation_method,
                 status,
+                finished_at,
                 experiment_scores,
                 trace_count,
                 experiment_items_count,
@@ -693,6 +696,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 :type,
                 :evaluation_method,
                 :status,
+                :finished_at,
                 mapFromArrays(:experiment_scores_keys, :experiment_scores_values),
                 :trace_count,
                 :experiment_items_count,
@@ -1976,6 +1980,12 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             statement.bind("assertion_scores_avg_keys", assertionScoresAvgArrays.keys())
                     .bind("assertion_scores_avg_values", assertionScoresAvgArrays.values());
 
+            if (experimentData.finishedAt() == null) {
+                statement.bindNull("finished_at", String.class);
+            } else {
+                statement.bind("finished_at", experimentData.finishedAt());
+            }
+
             return makeMonoContextAware((userName, workspaceId) -> Mono.from(statement.execute()).then());
         });
     }
@@ -2286,6 +2296,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 .type(row.get("type", String.class))
                 .evaluationMethod(row.get("evaluation_method", String.class))
                 .status(row.get("status", String.class))
+                .finishedAt(row.get("finished_at", String.class))
                 .experimentScores(parseExperimentScoresFromString(row.get("experiment_scores", String.class)))
                 .build();
     }
@@ -2537,7 +2548,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 createdBy,
                 lastUpdatedBy,
                 status,
-                null, // finishedAt - not in aggregates table
+                row.get("finished_at", Instant.class),
                 experimentScores,
                 null, // promptVersion (singular) - not in DB
                 promptVersions,

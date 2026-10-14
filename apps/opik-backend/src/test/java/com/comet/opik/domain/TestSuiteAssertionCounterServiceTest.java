@@ -55,7 +55,8 @@ class TestSuiteAssertionCounterServiceTest {
 
         service = new TestSuiteAssertionCounterService(redisClient, config, experimentService,
                 cancellationService);
-        lenient().when(cancellationService.isCancelled(anyString(), any())).thenReturn(Mono.just(false));
+        // Nothing else has written an ending in most of these, so the assertions win the claim.
+        lenient().when(cancellationService.claimFinish(anyString(), any())).thenReturn(Mono.just(true));
         when(redisClient.getAtomicLong(anyString())).thenReturn(atomicLong);
     }
 
@@ -160,6 +161,28 @@ class TestSuiteAssertionCounterServiceTest {
         assertThatThrownBy(() -> service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block())
                 .isInstanceOf(RuntimeException.class)
                 .hasMessage("update failed");
+    }
+
+    // A batch that drained with failures already wrote FAILED and holds the claim for it. The
+    // assertions landing afterwards are not the run completing, and used to overwrite that status
+    // because this path only checked whether the run had been stopped.
+    @Test
+    void decrementAndFinishIfCompleteLeavesAnEndingSomethingElseAlreadyWrote() {
+        var experimentId = UUID.randomUUID();
+
+        when(atomicLong.isExists()).thenReturn(Mono.just(true));
+        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
+        when(atomicLong.expire(any(java.time.Duration.class))).thenReturn(Mono.just(true));
+        when(cancellationService.claimFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        // Stubbed so that writing anyway fails the verify below rather than a null dereference
+        lenient().when(experimentService.update(any(UUID.class), any(ExperimentUpdate.class)))
+                .thenReturn(Mono.empty());
+        lenient().when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
+
+        service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block();
+
+        verify(experimentService, never()).update(any(UUID.class), any(ExperimentUpdate.class));
+        verify(experimentService, never()).finishExperiments(any());
     }
 
     @Test

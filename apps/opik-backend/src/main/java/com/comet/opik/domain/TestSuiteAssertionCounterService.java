@@ -99,14 +99,17 @@ public class TestSuiteAssertionCounterService {
                 .status(ExperimentStatus.COMPLETED)
                 .build();
 
-        // A cancelled experiment stays cancelled: its assertions draining is not it completing.
-        return cancellationService.isCancelled(workspaceId, experimentId)
-                .flatMap(cancelled -> cancelled
-                        ? Mono.<Void>empty()
-                        : experimentService.update(experimentId, statusUpdate)
-                                .then(experimentService.finishExperiments(Set.of(experimentId)))
-                                .doOnSuccess(unused -> log.info(
-                                        "Finished experiment '{}' after all assertions completed", experimentId)));
+        return cancellationService.claimFinish(workspaceId, experimentId)
+                .flatMap(won -> {
+                    if (!won) {
+                        log.info("Experiment '{}' already has its ending written, leaving it alone", experimentId);
+                        return Mono.<Void>empty();
+                    }
+                    return experimentService.update(experimentId, statusUpdate)
+                            .then(experimentService.finishExperiments(Set.of(experimentId)))
+                            .doOnSuccess(unused -> log.info(
+                                    "Finished experiment '{}' after all assertions completed", experimentId));
+                });
     }
 
     private static String counterKey(String workspaceId, UUID experimentId) {
