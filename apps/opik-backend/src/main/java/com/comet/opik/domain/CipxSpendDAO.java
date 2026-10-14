@@ -106,7 +106,7 @@ public class CipxSpendDAO {
         }
     }
 
-    // One tuple per row (mirrors SpanDAO.BULK_INSERT). start_time is bound from Java (the source
+    // One tuple per row. start_time is bound from Java (the source
     // span's stored start).
     private static final String INSERT = """
             INSERT INTO cipx_spends
