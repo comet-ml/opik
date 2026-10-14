@@ -102,6 +102,24 @@ class LlmModelCatalogTest {
         }
 
         @Test
+        void aModelsRepeatedCuratedRowsKeepTheFieldsOfBoth() {
+            var generated = Map.of("anthropic", List.of(ModelEntry.builder().id("claude-x").build()));
+            var curated = Map.of("anthropic", List.of(
+                    ModelEntry.builder().id("claude-x").label("from the first row")
+                            .params(ModelParams.builder().temperature(range(true, 0, 1, 0)).build()).build(),
+                    ModelEntry.builder().id("claude-x")
+                            .params(ModelParams.builder().effort(new EffortParam(true, List.of("low"), "low")).build())
+                            .build()));
+
+            var merged = LlmModelRegistryService.applyCurated(generated, curated).get("anthropic");
+
+            assertThat(merged).hasSize(1);
+            assertThat(merged.getFirst().label()).isEqualTo("from the first row");
+            assertThat(merged.getFirst().params().temperature()).isEqualTo(range(true, 0, 1, 0));
+            assertThat(merged.getFirst().params().effort()).isEqualTo(new EffortParam(true, List.of("low"), "low"));
+        }
+
+        @Test
         void aCuratedRowNeverAddsAModel() {
             assertThat(service(null).getRegistry().get("anthropic"))
                     .extracting(LlmModelDefinition::id)
