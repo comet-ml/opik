@@ -8,6 +8,7 @@ import {
   getRoutableProviderModelValue,
   getOpenAIReasoningEffortOptions,
   getOpenRouterReasoningEffortOptions,
+  getThinkingLevelDescription,
   getThinkingLevelOptions,
   isAnthropicThinkingRequested,
   isReasoningModel,
@@ -969,6 +970,28 @@ describe("Gemini thinking level", () => {
         levels,
       );
       expect(getDefaultThinkingLevel(model)).toBe(defaultLevel);
+    },
+  );
+
+  it.each([
+    [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, true],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE, true],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, true],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE, true],
+    [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, false],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH, false],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO, false],
+  ])(
+    "the %s thinking tooltip says Off sends nothing: %s",
+    (model, explainsOff) => {
+      const description = getThinkingLevelDescription(model);
+
+      expect(description).toMatch(/^Controls the depth of reasoning/);
+      expect(
+        description.endsWith(
+          " Off sends no thinking setting: Google lists this model's default as minimal, and it spends almost no thinking tokens on it.",
+        ),
+      ).toBe(explainsOff);
     },
   );
 
