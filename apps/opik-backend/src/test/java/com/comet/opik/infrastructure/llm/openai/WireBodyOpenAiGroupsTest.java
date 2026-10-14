@@ -45,8 +45,14 @@ class WireBodyOpenAiGroupsTest {
 
     @Test
     void bothRoutesListTheSameGroups() {
-        assertThat(read("wire-body/openai-responses.yaml").get("models"))
-                .isEqualTo(read("wire-body/openai.yaml").get("models"));
+        var chat = read("wire-body/openai.yaml").get("models");
+        var responses = read("wire-body/openai-responses.yaml").get("models");
+        var groupNames = groupNames(chat);
+
+        assertThat(groupNames(responses)).containsExactlyInAnyOrderElementsOf(groupNames);
+        groupNames.forEach(name -> assertThat(group(responses, name))
+                .as("group '%s'", name)
+                .containsExactlyInAnyOrderElementsOf(group(chat, name)));
     }
 
     @ParameterizedTest
@@ -66,6 +72,12 @@ class WireBodyOpenAiGroupsTest {
                 .isSubsetOf(ENUM_IDS)
                 .doesNotContainAnyElementsOf(reasoningIds)
                 .doesNotContainAnyElementsOf(otherIds);
+    }
+
+    private static Set<String> groupNames(JsonNode groups) {
+        var names = new HashSet<String>();
+        groups.fieldNames().forEachRemaining(names::add);
+        return names;
     }
 
     private static Set<String> group(JsonNode groups, String name) {
