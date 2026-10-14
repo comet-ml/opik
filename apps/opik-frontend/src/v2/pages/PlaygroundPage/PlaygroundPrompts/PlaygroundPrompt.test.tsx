@@ -30,7 +30,7 @@ const REGISTRY: LlmModelsByProvider = {
     {
       id: "gpt-4o-mini",
       label: "GPT-4o mini",
-      structuredOutput: true,
+      structured_output: true,
       reasoning: false,
     },
   ],
