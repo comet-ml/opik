@@ -206,6 +206,36 @@ def test_adk_otel_patching__start_span__ended_twice__opik_trace_logged_once(
     assert len(fake_backend.trace_trees) == 1
 
 
+def test_adk_otel_patching__real_sdk_tracer__each_span_tracked_once(
+    opik_tracer_with_otel, fake_backend
+):
+    """Under `adk api_server`, google-adk >= 2.12.0 imports its tracing module
+    lazily, after the server installs a TracerProvider, so ADK's tracer is a real
+    SDK Tracer rather than a ProxyTracer. The SDK Tracer implements
+    start_as_current_span by calling self.start_span, which is the patched
+    method, so each span must still get Opik bookkeeping only once."""
+    sdk_tracer = TracerProvider(sampler=ALWAYS_ON).get_tracer("adk-sdk-tracer-test")
+    wrapper = OpikADKOtelTracer(
+        inner_start_as_current_span=sdk_tracer.start_as_current_span,
+        inner_start_span=sdk_tracer.start_span,
+        distributed_headers=None,
+    )
+    sdk_tracer.start_as_current_span = wrapper.start_as_current_span
+    sdk_tracer.start_span = wrapper.start_span
+
+    agent_span = sdk_tracer.start_span("invoke_agent weather_agent")
+    with sdk_tracer.start_as_current_span("execute_tool get_weather"):
+        pass
+    agent_span.end()
+    opik_tracer_with_otel.flush()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+    assert trace_tree.name == "invoke_agent weather_agent"
+    assert [s.name for s in trace_tree.spans] == ["execute_tool get_weather"]
+    assert trace_tree.spans[0].spans == []
+
+
 def test_adk_otel_patching__start_span_skip_listed_name__no_opik_bookkeeping(
     opik_tracer_with_otel, otel_exporter, fake_backend
 ):

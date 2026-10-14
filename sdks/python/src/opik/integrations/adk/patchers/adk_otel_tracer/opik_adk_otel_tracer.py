@@ -1,3 +1,5 @@
+import contextlib
+import contextvars
 import logging
 from typing import (
     Any,
@@ -26,6 +28,16 @@ from . import llm_span_helpers
 
 
 LOGGER = logging.getLogger(__name__)
+
+# The OTel SDK Tracer implements start_as_current_span by calling
+# self.start_span, which is patched to OpikADKOtelTracer.start_span. Without this
+# flag, every span delegated to a real SDK Tracer (as ADK's tracer is under
+# `adk api_server`) would get Opik bookkeeping twice.
+_ENTERING_INNER_START_AS_CURRENT_SPAN: contextvars.ContextVar[bool] = (
+    contextvars.ContextVar(
+        "opik_adk_entering_inner_start_as_current_span", default=False
+    )
+)
 
 
 class OpikADKOtelTracer:
@@ -101,7 +113,10 @@ class OpikADKOtelTracer:
         # spans with start_span + an explicit span.end() instead of
         # start_as_current_span, so the Opik trace/span has to be opened here
         # and closed when ADK ends the returned span.
-        if name in self._ADK_INTERNAL_SPAN_NAME_SKIP_LIST:
+        if (
+            name in self._ADK_INTERNAL_SPAN_NAME_SKIP_LIST
+            or _ENTERING_INNER_START_AS_CURRENT_SPAN.get()
+        ):
             return self._inner_start_span(
                 name,
                 context=context,
@@ -170,17 +185,21 @@ class OpikADKOtelTracer:
         exited_normally = False
 
         try:
-            with self._inner_start_as_current_span(
-                name,
-                context=context,
-                kind=kind,
-                attributes=attributes,
-                links=links,
-                start_time=start_time,
-                record_exception=record_exception,
-                set_status_on_exception=set_status_on_exception,
-                end_on_exit=end_on_exit,
-            ) as inner_span:
+            with contextlib.ExitStack() as exit_stack:
+                inner_span = _enter_without_start_span_bookkeeping(
+                    exit_stack,
+                    self._inner_start_as_current_span(
+                        name,
+                        context=context,
+                        kind=kind,
+                        attributes=attributes,
+                        links=links,
+                        start_time=start_time,
+                        record_exception=record_exception,
+                        set_status_on_exception=set_status_on_exception,
+                        end_on_exit=end_on_exit,
+                    ),
+                )
                 yield inner_span
             exited_normally = True
         except Exception as exception:
@@ -309,6 +328,17 @@ class OpikADKOtelTracer:
             span_data.init_end_time()
             if opik.is_tracing_active():
                 self.opik_client.__internal_api__span__(**span_data.as_parameters)
+
+
+def _enter_without_start_span_bookkeeping(
+    exit_stack: contextlib.ExitStack,
+    span_context_manager: ContextManager[opentelemetry.trace.Span],
+) -> opentelemetry.trace.Span:
+    token = _ENTERING_INNER_START_AS_CURRENT_SPAN.set(True)
+    try:
+        return exit_stack.enter_context(span_context_manager)
+    finally:
+        _ENTERING_INNER_START_AS_CURRENT_SPAN.reset(token)
 
 
 def _record_error_info(
