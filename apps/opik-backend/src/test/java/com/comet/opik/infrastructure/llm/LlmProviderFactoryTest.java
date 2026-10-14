@@ -547,8 +547,12 @@ class LlmProviderFactoryTest {
         var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
                 registry);
 
-        assertThat(llmProviderFactory.openAiParams("gpt-5-mini"))
-                .hasValueSatisfying(params -> assertThat(params.temperature().accepted()).isFalse());
+        assertThat(llmProviderFactory.openAiParams("gpt-5-mini")).hasValueSatisfying(params -> {
+            assertThat(params.temperature().accepted()).isFalse();
+            assertThat(params.topP().accepted()).isFalse();
+            assertThat(params.frequencyPenalty().accepted()).isFalse();
+            assertThat(params.presencePenalty().accepted()).isFalse();
+        });
     }
 
     @Test
