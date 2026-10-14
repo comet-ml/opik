@@ -377,7 +377,6 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
         <CloseIssueDialog
           open={closeDialogOpen}
           setOpen={setCloseDialogOpen}
-          issueName={issue.name}
           onConfirm={handleCloseConfirm}
           isPending={updateMutation.isPending}
         />

@@ -47,7 +47,6 @@ const OPTIONS: {
 type CloseIssueDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
-  issueName: string;
   // closeNote is only sent with Not useful.
   onConfirm: (status: CloseIssueStatus, closeNote?: string) => void;
   isPending?: boolean;
@@ -56,7 +55,6 @@ type CloseIssueDialogProps = {
 const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
   open,
   setOpen,
-  issueName,
   onConfirm,
   isPending = false,
 }) => {
@@ -118,8 +116,7 @@ const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
         <DialogHeader className="pb-0">
           <DialogTitle className="text-base leading-5">Close issue</DialogTitle>
           <DialogDescription className="text-muted-slate">
-            {issueName} will move to Closed issues. You can reopen it at any
-            time.
+            The issue will move to Closed issues. You can reopen it at any time.
           </DialogDescription>
         </DialogHeader>
         <RadioGroupPrimitive.Root

@@ -8,7 +8,6 @@ const renderDialog = (isPending: boolean) => {
     <CloseIssueDialog
       open
       setOpen={setOpen}
-      issueName="Agent tool loop"
       onConfirm={vi.fn()}
       isPending={isPending}
     />,
