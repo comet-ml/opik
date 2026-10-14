@@ -16,7 +16,7 @@ import {
 import { OPTIMIZATION_DEMO_TEMPLATES } from "@/constants/optimizations";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 import { useModelOptions } from "@/v2/pages-shared/llm/PromptModelSelect/useModelOptions";
 import { X } from "lucide-react";
@@ -159,10 +159,13 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
       // A Vertex run saved with the bare id resolves here only by suffix, but the backend and
       // getProviderFromModel know it only as vertex_ai/<id>, so it could not run under that name.
       // OpenRouter serves a `:batch` id only through its batch API, so every request of the run
-      // would fail with a 404.
+      // would fail with a 404. Elsewhere the suffix is just a name, e.g. an Ollama tag.
       return (
         provider !== "" &&
-        !savedModel.endsWith(":batch") &&
+        !(
+          provider === PROVIDER_TYPE.OPEN_ROUTER &&
+          savedModel.endsWith(":batch")
+        ) &&
         getRoutableProviderModelValue(provider, savedModel) === savedModel &&
         configuredProvidersList.some((p) => p.ui_composed_provider === provider)
       );

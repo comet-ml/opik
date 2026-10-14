@@ -31,11 +31,14 @@ const PICKER_MODELS: ProviderModelsMap = {
   ],
 };
 
+const OLLAMA_BATCH_TAG_MODEL = "llama3.2:batch";
+
 const HIDDEN_REGISTRY_MODELS: Record<string, PROVIDER_TYPE> = {
   [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH]: PROVIDER_TYPE.OPEN_ROUTER,
   [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU]: PROVIDER_TYPE.OPEN_ROUTER,
   [PROVIDER_MODEL_TYPE.GPT_LIVE_1]: PROVIDER_TYPE.OPEN_AI,
   [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5]: PROVIDER_TYPE.ANTHROPIC,
+  [OLLAMA_BATCH_TAG_MODEL]: PROVIDER_TYPE.OLLAMA,
 };
 
 const CUSTOM_PROVIDER = "custom-llm:mock" as COMPOSED_PROVIDER_TYPE;
@@ -232,6 +235,20 @@ describe("NewRunSidebar — re-run model resolution", () => {
       expect(content.savedModelReplacement).toBeNull();
     },
   );
+
+  it("keeps an Ollama model tagged batch, since only OpenRouter serves :batch ids through a batch API", () => {
+    mocks.providerKeysData = providerKeys([
+      PROVIDER_TYPE.OPEN_AI,
+      PROVIDER_TYPE.OPEN_ROUTER,
+      PROVIDER_TYPE.OLLAMA,
+    ]);
+
+    const content = renderRerun(OLLAMA_BATCH_TAG_MODEL);
+
+    expect(content.modelName).toBe(OLLAMA_BATCH_TAG_MODEL);
+    expect(content.availableModels).toContain(OLLAMA_BATCH_TAG_MODEL);
+    expect(content.savedModelReplacement).toBeNull();
+  });
 
   it("keeps a kept OpenRouter model's saved settings", () => {
     const content = renderRerun(PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU);
