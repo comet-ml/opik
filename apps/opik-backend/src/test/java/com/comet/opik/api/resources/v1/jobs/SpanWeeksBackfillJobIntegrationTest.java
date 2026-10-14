@@ -86,8 +86,8 @@ class SpanWeeksBackfillJobIntegrationTest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouse, DATABASE_NAME);
         MigrationUtils.runMysqlDbMigration(mysql);
         MigrationUtils.runClickhouseDbMigration(clickHouse);
-        // The job on and live registration off, so every week found is the backfill's. The interval is long, so only
-        // the startup tick (which plans) and the ticks below run.
+        // The job on and live registration off, so every week found is the backfill's. Each tick holds the lock for the
+        // whole interval, so the interval is short: the startup tick plans, and one chunk follows per interval.
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(mysql.getJdbcUrl())
                 .databaseAnalyticsFactory(databaseAnalyticsFactory)
@@ -96,7 +96,8 @@ class SpanWeeksBackfillJobIntegrationTest {
                 .customConfigs(List.of(
                         new CustomConfig("uuidValidation.enabled", "false"),
                         new CustomConfig("databaseAnalyticsDataModel.spanWeeksBackfillEnabled", "true"),
-                        new CustomConfig("spanWeeksBackfill.interval", "1h")))
+                        new CustomConfig("spanWeeksBackfill.interval", "10s"),
+                        new CustomConfig("spanWeeksBackfill.queryTimeout", "5s")))
                 .build());
     }
 
@@ -138,8 +139,8 @@ class SpanWeeksBackfillJobIntegrationTest {
                 SpanWeek.builder().projectId(projectId).traceId(traceId).idWeek(yyyymmdd(pastMonday)).build(),
                 SpanWeek.builder().projectId(projectId).traceId(traceId).idWeek(yyyymmdd(thisMonday)).build());
 
-        // One chunk per tick; a tick that finds the lock held by the startup tick skips.
-        Awaitility.await().atMost(Duration.ofSeconds(60)).pollInterval(Duration.ofMillis(500))
+        // One chunk per interval; a tick that finds the lock still held skips. Plan plus two chunks: three intervals.
+        Awaitility.await().atMost(Duration.ofSeconds(90)).pollInterval(Duration.ofMillis(500))
                 .untilAsserted(() -> {
                     job.doJob(null);
                     assertThat(weeks(Set.of(traceId))).containsExactlyInAnyOrderElementsOf(expected);

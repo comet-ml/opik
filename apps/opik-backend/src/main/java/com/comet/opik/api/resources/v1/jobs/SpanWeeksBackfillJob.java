@@ -25,8 +25,9 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 /**
  * Runs one step of the span weeks backfill per tick (see {@link SpanWeeksBackfillService}). A distributed lock ensures
  * only one instance runs a step at a time, so two instances never plan or backfill the same chunk at once. The lock is
- * released when the step ends, so in a replicated deployment the next instance to tick runs the next chunk: up to one
- * chunk per instance per interval, which speeds the backfill up, as for the Opik V2 migration jobs.
+ * held for a whole interval and not released when the step ends, so the cluster runs at most one chunk per interval
+ * however many instances tick: a steady load on ClickHouse. The interval exceeds the query timeout (validated), so a
+ * step always ends inside its lease.
  * <p>
  * The step runs asynchronously: the tick subscribes and returns, so Quartz threads are never blocked, and
  * {@link #interrupt()} disposes the running step.
@@ -60,8 +61,9 @@ public class SpanWeeksBackfillJob extends Job implements InterruptableJob {
                         RUN_LOCK,
                         Mono.defer(() -> interrupted.get() ? Mono.empty() : backfillService.runStep()),
                         Mono.fromRunnable(() -> log.debug("Span weeks backfill: another instance holds the lock")),
-                        config.queryTimeout().toJavaDuration(),
-                        config.lockWaitTime().toJavaDuration()))
+                        config.interval().toJavaDuration(),
+                        config.lockWaitTime().toJavaDuration(),
+                        true)) // holdUntilExpiry: at most one chunk per interval across the cluster
                 .subscribe(
                         null,
                         error -> {

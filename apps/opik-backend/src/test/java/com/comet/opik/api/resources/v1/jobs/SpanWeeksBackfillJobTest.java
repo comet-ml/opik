@@ -41,7 +41,7 @@ class SpanWeeksBackfillJobTest {
     @BeforeEach
     void setUp() {
         config = SpanWeeksBackfillConfig.builder()
-                .interval(Duration.minutes(RandomUtils.secure().randomInt(1, 60)))
+                .interval(Duration.minutes(RandomUtils.secure().randomInt(31, 61)))
                 .weeksPerChunk(RandomUtils.secure().randomInt(1, 53))
                 .maxThreads(RandomUtils.secure().randomInt(1, 17))
                 .queryTimeout(Duration.minutes(RandomUtils.secure().randomInt(1, 31)))
@@ -56,8 +56,8 @@ class SpanWeeksBackfillJobTest {
     }
 
     private void lockRunsTheAction() {
-        when(lockService.bestEffortLock(eq(RUN_LOCK), any(), any(), eq(config.queryTimeout().toJavaDuration()),
-                eq(config.lockWaitTime().toJavaDuration())))
+        when(lockService.bestEffortLock(eq(RUN_LOCK), any(), any(), eq(config.interval().toJavaDuration()),
+                eq(config.lockWaitTime().toJavaDuration()), eq(true)))
                 .thenAnswer(invocation -> invocation.getArgument(1));
     }
 
@@ -79,15 +79,15 @@ class SpanWeeksBackfillJobTest {
     }
 
     @Test
-    void doJob__whenBackfillPending__thenRunsOneStepUnderTheConfiguredLock() {
+    void doJob__whenBackfillPending__thenRunsOneStepHoldingTheLockForTheInterval() {
         when(backfillService.isCompleted()).thenReturn(Mono.just(false));
         when(backfillService.runStep()).thenReturn(Mono.empty());
         lockRunsTheAction();
 
         job.doJob(null);
 
-        verify(lockService).bestEffortLock(eq(RUN_LOCK), any(), any(), eq(config.queryTimeout().toJavaDuration()),
-                eq(config.lockWaitTime().toJavaDuration()));
+        verify(lockService).bestEffortLock(eq(RUN_LOCK), any(), any(), eq(config.interval().toJavaDuration()),
+                eq(config.lockWaitTime().toJavaDuration()), eq(true));
         verify(backfillService).runStep();
     }
 
