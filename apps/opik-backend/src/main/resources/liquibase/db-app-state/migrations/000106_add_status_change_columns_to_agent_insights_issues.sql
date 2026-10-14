@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset yaroslavb:000105_add_status_change_columns_to_agent_insights_issues
+--changeset yaroslavb:000106_add_status_change_columns_to_agent_insights_issues
 --comment: Add close_note, status_changed_by and status_changed_at to agent_insights_issues
 
 -- close_note is the team's reason for closing an issue as not useful. It is kept only while the issue is closed:
