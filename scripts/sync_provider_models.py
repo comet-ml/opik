@@ -1089,12 +1089,15 @@ def openrouter_model_params(model: dict) -> dict:
         params["maxOutputTokens"]["max"] = max_output
 
     reasoning = model.get("reasoning") or {}
-    efforts = reasoning.get("supported_efforts")
-    if params["effort"]["accepted"] and isinstance(efforts, list) and efforts:
-        params["effort"]["levels"] = _ordered_efforts([e for e in efforts if isinstance(e, str)])
+    efforts = [e for e in reasoning.get("supported_efforts") or [] if isinstance(e, str)]
+    if params["effort"]["accepted"] and efforts:
+        params["effort"]["levels"] = _ordered_efforts(efforts)
         default = reasoning.get("default_effort")
         if isinstance(default, str) and default in params["effort"]["levels"]:
             params["effort"]["default"] = default
+    elif params["effort"]["accepted"]:
+        # Reasoning with no levels to pick from is an on/off switch, which an effort can't express.
+        del params["effort"]
     return params
 
 
@@ -1177,8 +1180,10 @@ def build_params_lines(
     """
     Each model's params line for llm-models-default.yaml, and the params behind each line.
 
-    A model a source says nothing about keeps the line it has, the same add-only rule the model lists follow, so
-    a source that drops a model or fails (openrouter_params is None) leaves its params as they were.
+    A model a source says nothing about keeps the line it has, the same add-only rule the model lists follow: a
+    failed OpenRouter fetch (openrouter_params is None), an OpenRouter model missing from the fetched list, or a
+    model LiteLLM has no entry for. An OpenRouter model the list includes with no parameters is an answer, not a
+    gap, so it loses its line.
     """
     previous = _yaml_params_lines(existing_yaml_content)
     max_output_defaults = _profile_max_output_defaults(curated_catalog or {})
