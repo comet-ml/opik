@@ -50,6 +50,22 @@ export const countAffectedTraces = (issues: AgentInsightsIssue[]): number =>
 // Settings is there from the start, even before the first run: auto-run for
 // configurers, guidance for everyone on the project. Run waits until the job has
 // something to show.
+// What the guidance-changed callout offers: run, the out-of-credits popover, or nothing
+// (no permission to run, or a run that can't start right now).
+export const getGuidanceCalloutAction = ({
+  canConfigure,
+  canRun,
+  isOutOfCredits,
+}: {
+  canConfigure: boolean;
+  canRun: boolean;
+  isOutOfCredits: boolean;
+}): "run" | "outOfCredits" | null => {
+  if (!canConfigure) return null;
+  if (isOutOfCredits) return "outOfCredits";
+  return canRun ? "run" : null;
+};
+
 export const getHeaderControls = ({
   showClosed,
   canConfigure,
