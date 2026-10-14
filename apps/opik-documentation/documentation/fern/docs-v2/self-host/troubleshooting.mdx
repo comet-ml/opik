@@ -689,7 +689,7 @@ Work from least to most invasive: the threshold bump (step 1) and diagnosis (ste
 ### MinIO Fails to Start After Upgrading: Root-Owned Data Volume
 
 <Callout intent="info">
-This section applies to **Docker Compose** deployments. Helm and Kubernetes deployments use a different MinIO image and store data in a PVC rather than a Docker volume, so neither the symptom nor the commands below apply to them.
+This section applies to **Docker Compose** deployments. Helm and Kubernetes deployments are not affected: the Helm chart has always run MinIO as `1001:1001` (with `fsGroup: 1001`), so its PVCs never held root-owned data.
 </Callout>
 
 #### Problem Description
@@ -718,26 +718,19 @@ Upgrade to Opik 2.2.101 or later and start it as usual — `minio-init` repairs 
 If you cannot upgrade, re-own the volume by hand:
 
 <Steps>
-  <Step title="Find the MinIO container">
-    ```bash
-    docker ps -a --filter name=minio-1 --format '{{.Names}}\t{{.Status}}'
-    ```
-
-    Do this before stopping the stack, which removes the container. If more than one is listed (for example from both `opik.sh` and a plain `docker compose` run), pick the one from the stack you run — the one showing `Exited (1)`. The next step calls it `<container>`.
-  </Step>
-  <Step title="Find the volume it mounts">
-    ```bash
-    docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' <container>
-    ```
-
-    A default `opik.sh` installation prints `opik-opik_minio-data`. The steps below call it `<volume>`.
-  </Step>
   <Step title="Stop the stack">
     ```bash
     ./opik.sh --stop
     ```
 
-    On Windows, use `.\opik.ps1 --stop`. The `docker` commands on this page are identical on both platforms.
+    On Windows, use `.\opik.ps1 --stop`. If you run Opik with plain `docker compose`, stop it the way you normally do, e.g. `docker compose -p <project> -f deployment/docker-compose/docker-compose.yaml down`. The `docker` commands on this page are identical on all platforms.
+  </Step>
+  <Step title="Find the volume name">
+    ```bash
+    docker volume ls --filter label=com.docker.compose.volume=minio-data --format '{{.Name}}\t{{.Label "com.docker.compose.project"}}'
+    ```
+
+    This lists every Opik MinIO volume with the Compose project it belongs to, whether or not the stack is running. Pick the one for the stack you run: `opik.sh` names its project `opik-<checkout directory>`, so a default installation in `opik/` gives `opik-opik_minio-data`. The next step calls it `<volume>`.
   </Step>
   <Step title="Re-own the volume">
     ```bash
@@ -750,6 +743,8 @@ If you cannot upgrade, re-own the volume by hand:
     ```bash
     ./opik.sh
     ```
+
+    Or `.\opik.ps1` on Windows, or the same `docker compose -p <project> … up -d` you use to run it.
   </Step>
 </Steps>
 

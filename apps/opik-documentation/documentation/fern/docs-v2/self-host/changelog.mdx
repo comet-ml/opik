@@ -21,7 +21,7 @@ This page only lists breaking and critical changes that affect self-hosted Opik 
 
 The Compose stack now includes a `minio-init` service that re-owns the volume before MinIO starts, so upgrading to this release repairs it automatically. Do not delete the volume to clear the error: it holds your attachments. See "MinIO Fails to Start After Upgrading: Root-Owned Data Volume" in the [troubleshooting guide](/self-host/troubleshooting) for the manual fix if you cannot upgrade.
 
-Helm and Kubernetes deployments use a different MinIO image and a PVC rather than a Docker volume, and are not affected.
+Helm and Kubernetes deployments are not affected: the Helm chart has always run MinIO as `1001:1001`, so its PVCs never held root-owned data.
 
 ## Release 2.0.3 (Opik 2.0), 2026-04-20
 
