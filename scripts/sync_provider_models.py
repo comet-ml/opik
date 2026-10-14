@@ -1045,10 +1045,11 @@ def litellm_params(provider_key: str, model_id: str, info: dict, default_max_out
         if default_max_output is not None and max_output < default_max_output:
             params["maxOutputTokens"]["default"] = max_output
 
-    sampling = info.get("supports_sampling_params")
-    if isinstance(sampling, bool):
+    # Only a refusal is taken from LiteLLM: a wrong "yes" sends a param the provider answers with a 400, so taking
+    # one needs a curated row, and a model without one keeps its profile's safe default.
+    if info.get("supports_sampling_params") is False:
         for field in SAMPLING_FIELDS if provider_key == "anthropic" else ("temperature", "topP"):
-            params[field] = {"accepted": sampling}
+            params[field] = {"accepted": False}
 
     if provider_key == "openai" and info.get("supports_reasoning") and model_id not in OPENAI_NON_REASONING_MODELS:
         levels = (
