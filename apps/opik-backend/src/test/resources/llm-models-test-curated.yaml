@@ -1,5 +1,5 @@
 defaults:
-  openai: {profile: openai, reasoning: openai-reasoning}
+  openai: {profile: openai, reasoningProfile: openai-reasoning}
   anthropic: {profile: anthropic}
 profiles:
   openai:

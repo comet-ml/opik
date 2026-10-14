@@ -2,7 +2,7 @@
 # A model takes its provider's profile, then the reasoning profile when the registry flags it, then
 # its own profile, then its own params; each layer sets only what it changes.
 defaults:
-  openai: {profile: openai, reasoning: openai-reasoning}
+  openai: {profile: openai, reasoningProfile: openai-reasoning}
   anthropic: {profile: anthropic}
   gemini: {profile: gemini}
   vertex-ai: {profile: gemini}
