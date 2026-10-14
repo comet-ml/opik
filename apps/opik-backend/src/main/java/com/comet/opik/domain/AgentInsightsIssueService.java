@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -79,6 +80,11 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
                 report.projectId(), report.reportDay(), workspaceId,
                 report.issues().isEmpty() ? "all clear" : report.issues().size());
 
+        // Serialized before the transaction so it holds the connection only for the writes.
+        List<String> allMetadata = report.issues().stream()
+                .map(issue -> issue.metadata() == null ? null : JsonUtils.writeValueAsString(issue.metadata()))
+                .toList();
+
         int stored = transactionTemplate.inTransaction(WRITE, handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
@@ -90,9 +96,12 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
                 log.warn("Skipping '{}' reported agent insights issues that belong to another workspace or project, "
                         + "project '{}', workspace '{}'", foreignIds.size(), report.projectId(), workspaceId);
             }
-            List<AgentInsightsReport.ReportedIssue> issues = report.issues().stream()
-                    .filter(issue -> issue.id() == null || !foreignIds.contains(issue.id()))
+            List<Integer> kept = IntStream.range(0, report.issues().size())
+                    .filter(i -> report.issues().get(i).id() == null
+                            || !foreignIds.contains(report.issues().get(i).id()))
+                    .boxed()
                     .toList();
+            List<AgentInsightsReport.ReportedIssue> issues = kept.stream().map(report.issues()::get).toList();
 
             if (!issues.isEmpty()) {
                 List<UUID> issueIds = issues.stream()
@@ -101,11 +110,7 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
                 List<UUID> detailIds = issues.stream()
                         .map(issue -> idGenerator.generateId())
                         .toList();
-                List<String> metadata = issues.stream()
-                        .map(issue -> issue.metadata() == null
-                                ? null
-                                : JsonUtils.writeValueAsString(issue.metadata()))
-                        .toList();
+                List<String> metadata = kept.stream().map(allMetadata::get).toList();
                 dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, issues);
                 dao.upsertDetails(workspaceId, report.projectId(), report.reportDay(), userName,
                         detailIds, issueIds, issues, metadata);
