@@ -14,6 +14,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -66,6 +67,42 @@ public class ExperimentItemPublisher {
                         messages.getFirst().workspaceId(), idsByExperiment))
                 .doOnSuccess(v -> log.info("Published '{}' experiment item messages for batch '{}'",
                         messages.size(), batchId));
+    }
+
+    /**
+     * How much is already queued, across every run and every workspace. The stream is shared and
+     * trimmed by length, so what another tenant has in flight decides whether this run fits.
+     */
+    public Mono<Long> queuedMessageCount() {
+        return redisClient.getStream(config.getStreamName(), config.getCodec()).size();
+    }
+
+    /**
+     * Whether this service is still counting a run down. Experiments logged by an SDK never had a
+     * counter, and one whose counter has expired has no consumer left to tell either — stopping
+     * those writes a status nothing will ever stamp finished, which reads as a run still going.
+     */
+    public Mono<Boolean> isTracked(@NonNull UUID experimentId) {
+        return redisClient.getAtomicLong(ExperimentExecutionConfig.itemCounterKey(experimentId)).isExists();
+    }
+
+    /**
+     * Removes what a run was counting itself down against. A launch that failed partway leaves its
+     * counters holding a total no one will ever reach, and an item that arrives late then decrements
+     * one that should not exist.
+     */
+    public Mono<Void> discardCounters(@NonNull Collection<UUID> experimentIds) {
+        return Flux.fromIterable(experimentIds)
+                .flatMap(experimentId -> Flux.just(
+                        ExperimentExecutionConfig.itemCounterKey(experimentId),
+                        ExperimentExecutionConfig.itemFailureCounterKey(experimentId))
+                        .flatMap(key -> redisClient.getAtomicLong(key).delete()))
+                .then()
+                .onErrorResume(error -> {
+                    // The TTL still clears them; failing the abort over it would lose the status write
+                    log.warn("Failed to discard counters for '{}' experiments", experimentIds.size(), error);
+                    return Mono.empty();
+                });
     }
 
     /**

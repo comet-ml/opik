@@ -10,17 +10,14 @@ import java.util.Arrays;
 @Getter
 @RequiredArgsConstructor
 public enum ExperimentStatus {
-    RUNNING("running"),
-    COMPLETED("completed"),
-    CANCELLED("cancelled"),
-    FAILED("failed");
+    RUNNING("running", false),
+    COMPLETED("completed", true),
+    CANCELLED("cancelled", true),
+    FAILED("failed", true);
 
     @JsonValue
     private final String value;
-
-    public boolean isTerminal() {
-        return this != RUNNING;
-    }
+    private final boolean terminal;
 
     @JsonCreator
     public static ExperimentStatus fromString(String value) {

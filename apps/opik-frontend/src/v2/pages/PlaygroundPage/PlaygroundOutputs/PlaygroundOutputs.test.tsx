@@ -60,6 +60,7 @@ const renderOutputs = () =>
       datasetId={null}
       runSingle={runSingle}
       stopSingle={stopSingle}
+      checkAgain={vi.fn()}
     />,
   );
 

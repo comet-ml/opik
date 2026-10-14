@@ -600,7 +600,7 @@ public class ExperimentsResource {
         return Response.ok(feedbackScoreNames).build();
     }
 
-    @POST
+    @PUT
     @Path("/cancel")
     @Operation(operationId = "cancelExperiments", summary = "Cancel running experiments", description = "Stops the given experiments: queued items are skipped and the experiments are marked cancelled", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),

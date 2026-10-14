@@ -4,7 +4,7 @@ import { renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { EXPERIMENT_POLL_INTERVAL_MS } from "@/constants/experiments";
-import { EXPERIMENT_STATUS } from "@/types/datasets";
+import { EXPERIMENT_STATUS, DATASET_TYPE } from "@/types/datasets";
 import usePlaygroundStore from "@/store/PlaygroundStore";
 import useActionButtonActions from "./useActionButtonActions";
 
@@ -87,10 +87,13 @@ beforeEach(() => {
   cancelExperimentRun.mockClear();
   usePlaygroundStore.setState({
     promptIds: [],
+    promptMap: {},
     isRunningMap: {},
     isRunInFlight: false,
     isResumingRun: false,
     experimentByPromptId: {},
+    runTotalItemsByPromptId: {},
+    watchPaused: false,
   });
 });
 
@@ -133,6 +136,87 @@ describe("useActionButtonActions lifecycle", () => {
 
       expect(usePlaygroundStore.getState().isRunInFlight).toBe(false);
       expect(usePlaygroundStore.getState().isRunningMap).toEqual({});
+    });
+  });
+
+  // Keyed by prompt and taken per variant. Keying by experiment id instead leaves every lookup in
+  // the resume missing, and dividing the batch total assumes every variant ran the same items.
+  describe("recording what a run dispatched", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      usePlaygroundStore.setState({
+        promptIds: [PROMPT_A, PROMPT_B],
+        promptMap: {
+          [PROMPT_A]: { id: PROMPT_A, name: "A", messages: [], configs: {} },
+          [PROMPT_B]: { id: PROMPT_B, name: "B", messages: [], configs: {} },
+        },
+      } as unknown as Parameters<typeof usePlaygroundStore.setState>[0]);
+      getExperimentById.mockResolvedValue({
+        id: EXPERIMENT_A,
+        status: "running",
+        trace_count: 0,
+      });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("should store each variant's own total against its prompt", async () => {
+      runExperimentExecution.mockResolvedValue({
+        experiments: [
+          { experiment_id: EXPERIMENT_A, prompt_index: 0, total_items: 300 },
+          { experiment_id: EXPERIMENT_B, prompt_index: 1, total_items: 300 },
+        ],
+        total_items: 600,
+      });
+
+      const { result } = renderActions("dataset-1");
+      await act(async () => {
+        await result.current.runAll();
+      });
+
+      expect(usePlaygroundStore.getState().runTotalItemsByPromptId).toEqual({
+        [PROMPT_A]: 300,
+        [PROMPT_B]: 300,
+      });
+    });
+  });
+
+  describe("resuming after a reload", () => {
+    beforeEach(() => {
+      usePlaygroundStore.setState({
+        promptIds: [PROMPT_A, PROMPT_B],
+        experimentByPromptId: {
+          [PROMPT_A]: EXPERIMENT_A,
+          [PROMPT_B]: EXPERIMENT_B,
+        },
+        runTotalItemsByPromptId: { [PROMPT_A]: 1_000, [PROMPT_B]: 1_000 },
+      });
+    });
+
+    it("should measure progress against only the prompts it is resuming", async () => {
+      // A finished, B still going: B's own total is what is left to do.
+      getExperimentById.mockImplementation((_ctx, { experimentId }) =>
+        Promise.resolve(
+          experimentId === EXPERIMENT_A
+            ? { id: EXPERIMENT_A, status: "completed", trace_count: 1_000 }
+            : { id: EXPERIMENT_B, status: "running", trace_count: 400 },
+        ),
+      );
+
+      await act(async () => {
+        renderActions("dataset-1");
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(usePlaygroundStore.getState().progressTotal).toBe(1_000);
+      expect(usePlaygroundStore.getState().progressCompleted).toBe(400);
+      expect(usePlaygroundStore.getState().isRunningMap).toEqual({
+        [PROMPT_B]: true,
+      });
     });
   });
 
@@ -281,6 +365,163 @@ describe("useActionButtonActions lifecycle", () => {
       await runScoped(result.current.runSingle, PROMPT_B, EXPERIMENT_B);
 
       expect(usePlaygroundStore.getState().isRunInFlight).toBe(false);
+    });
+  });
+
+  // The run outlives the window this tab is willing to watch it for. Settling it here would say the
+  // run ended when it had not, which costs real money: Run comes back and the next click dispatches
+  // the whole dataset a second time alongside the first.
+  describe("a run that outlives the watch window", () => {
+    // Past the five minutes the poll is willing to follow a run for.
+    const PAST_THE_WATCH_WINDOW = 6 * 60 * 1000;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      getExperimentById.mockReset();
+      getExperimentById.mockResolvedValue({
+        status: EXPERIMENT_STATUS.RUNNING,
+        trace_count: 0,
+      });
+      startBackendRun();
+      usePlaygroundStore.setState({
+        runTotalItemsByPromptId: { [PROMPT_A]: 10, [PROMPT_B]: 10 },
+      });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const watchUntilItGivesUp = async () => {
+      let rendered!: ReturnType<typeof renderActions>;
+      // Mounting picks the run back up on its own, which is a state update of its own.
+      await act(async () => {
+        rendered = renderActions("dataset-1");
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PAST_THE_WATCH_WINDOW);
+      });
+      return rendered;
+    };
+
+    // Giving up is decided per poll, against the clock that poll started on, but it stops the whole
+    // page watching. A poll started later is not past its own window yet, so without being told the
+    // round is over it carries on polling behind a page that says it is not following anything —
+    // and survives into the next round, leaving two polls on one run.
+    it("should leave one poll on the run however often it is picked back up", async () => {
+      const { result } = await watchUntilItGivesUp();
+
+      // Twice, as an impatient second press would. Each one starts a poll of its own, and the
+      // second has to end the first: aborting only ends the request in flight, so the chain behind
+      // it would otherwise wake up on its own timer and follow the run alongside the new one.
+      await act(async () => {
+        result.current.checkAgain();
+      });
+      await act(async () => {
+        result.current.checkAgain();
+      });
+      const afterPickingBackUp = getExperimentById.mock.calls.length;
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(EXPERIMENT_POLL_INTERVAL_MS * 3);
+      });
+
+      // Three ticks of one poll over the two experiments. Two polls would read them twice over.
+      expect(getExperimentById.mock.calls.length - afterPickingBackUp).toBe(6);
+    });
+
+    // The resume effect depends on a callback whose identity changes as the page settles — the
+    // dataset type arriving flips isTestSuite, which rebuilds the poll. Picking the run up a second
+    // time would leave two poll chains following it.
+    it("should pick the run up once, however often its dependencies change", async () => {
+      await act(async () => {
+        renderActions("dataset-1");
+      });
+      const afterMount = getExperimentById.mock.calls.length;
+
+      await act(async () => {
+        usePlaygroundStore.setState({ datasetType: DATASET_TYPE.TEST_SUITE });
+      });
+
+      expect(getExperimentById.mock.calls.length).toBe(afterMount);
+    });
+
+    it("should keep the run running so Run cannot start a second one on top of it", async () => {
+      await watchUntilItGivesUp();
+
+      expect(usePlaygroundStore.getState().isRunningMap).toEqual({
+        [PROMPT_A]: true,
+        [PROMPT_B]: true,
+      });
+      expect(usePlaygroundStore.getState().isRunInFlight).toBe(true);
+    });
+
+    it("should say it stopped following, which is what it actually did", async () => {
+      await watchUntilItGivesUp();
+
+      expect(usePlaygroundStore.getState().watchPaused).toBe(true);
+    });
+
+    it("should pick the run back up and settle it when asked to check again", async () => {
+      const { result } = await watchUntilItGivesUp();
+      expect(usePlaygroundStore.getState().watchPaused).toBe(true);
+
+      getExperimentById.mockResolvedValue({
+        status: EXPERIMENT_STATUS.COMPLETED,
+        trace_count: 10,
+      });
+
+      await act(async () => {
+        result.current.checkAgain();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(EXPERIMENT_POLL_INTERVAL_MS);
+      });
+
+      expect(usePlaygroundStore.getState().watchPaused).toBe(false);
+      expect(usePlaygroundStore.getState().isRunningMap).toEqual({});
+    });
+  });
+  // Reload: the persisted half of a run survives, the live half does not.
+  describe("the page being reloaded mid-run", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      getExperimentById.mockReset();
+      getExperimentById.mockResolvedValue({
+        status: EXPERIMENT_STATUS.RUNNING,
+        trace_count: 3,
+      });
+      // What partialize keeps, and what it drops.
+      usePlaygroundStore.setState({
+        promptIds: [PROMPT_A, PROMPT_B],
+        experimentByPromptId: {
+          [PROMPT_A]: EXPERIMENT_A,
+          [PROMPT_B]: EXPERIMENT_B,
+        },
+        runTotalItemsByPromptId: { [PROMPT_A]: 10, [PROMPT_B]: 10 },
+        isRunningMap: {},
+        isRunInFlight: false,
+        progressTotal: 0,
+        progressCompleted: 0,
+        progressPhase: null,
+      });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("should put the progress bar back", async () => {
+      await act(async () => {
+        renderActions("dataset-1");
+      });
+
+      expect(usePlaygroundStore.getState().progressTotal).toBe(20);
+      expect(usePlaygroundStore.getState().progressPhase).toBe("running");
+      expect(usePlaygroundStore.getState().isRunningMap).toEqual({
+        [PROMPT_A]: true,
+        [PROMPT_B]: true,
+      });
     });
   });
 });
