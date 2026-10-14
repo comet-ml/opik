@@ -86,6 +86,15 @@ const OllieChartWidget: React.FunctionComponent<
     }),
   );
 
+  // Editing a widget previews it under its saved id, so the preview can run the same query; a new one has no id yet.
+  const savedPreviewId = useDashboardStore((state) => {
+    const id = preview ? state.previewWidget?.id : undefined;
+    return id && state.sections.some((s) => s.widgets.some((w) => w.id === id))
+      ? id
+      : undefined;
+  });
+  const queryWidgetId = preview ? savedPreviewId : widgetId;
+
   const config = (widget?.config ?? {}) as OllieChartWidgetType["config"];
   const { spec, query, rows: snapshotRows } = config;
 
@@ -98,7 +107,7 @@ const OllieChartWidget: React.FunctionComponent<
   );
 
   // `live` also covers the moment before the dashboard id arrives (skeleton); only `canQuery` may hit the endpoint.
-  const canQuery = Boolean(query?.id && dashboardId && widgetId && !preview);
+  const canQuery = Boolean(query?.id && dashboardId && queryWidgetId);
   const {
     data: rows,
     isPending,
@@ -110,15 +119,15 @@ const OllieChartWidget: React.FunctionComponent<
     {
       dashboardId: dashboardId ?? "",
       scope: dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE,
-      widgetId: widgetId ?? "",
+      widgetId: queryWidgetId ?? "",
       queryId: query?.id ?? "",
       intervalStart,
       intervalEnd,
     },
-    // A preview has no saved widget to run, so it shows the rows the chart was made with.
+    // Only an unsaved widget falls back to the rows the chart was made with.
     { enabled: canQuery },
   );
-  const live = Boolean(query?.id && !preview);
+  const live = Boolean(query?.id && queryWidgetId);
 
   if (!widget) {
     return null;

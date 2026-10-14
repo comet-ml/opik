@@ -1,5 +1,5 @@
 /**
- * Reads the chart widget tokens (src/styles/widget-tokens) from the live CSS into the values a renderer needs. Read
+ * Reads the chart widget tokens (src/styles/chart-tokens) from the live CSS into the values a renderer needs. Read
  * again whenever the theme changes.
  */
 

@@ -87,6 +87,8 @@ export const useDashboardPersistence = ({
   const [resolvedConfig, setResolvedConfig] = useState<DashboardState | null>(
     null,
   );
+  const resolvedConfigRef = useRef(resolvedConfig);
+  resolvedConfigRef.current = resolvedConfig;
 
   useEffect(() => {
     const currentDashboard = dashboardRef.current;
@@ -137,6 +139,8 @@ export const useDashboardPersistence = ({
       refetch().then(({ data }) => {
         if (!data?.config) return;
         lastSavedConfigRef.current = data.config;
+        // Unchanged data keeps its reference, so setting it again re-renders nothing and no cleanup would clear the flag.
+        if (data.config === resolvedConfigRef.current) return;
         // The store still holds the pre-update state; don't let the autosave cleanup flush it over the server copy.
         externalReloadRef.current = true;
         setResolvedConfig(data.config);

@@ -42,18 +42,14 @@
   ); /* slate-500 was too close to Charts Gray */
   --chart-good-fill: var(--chart-good);
   --chart-warning-fill: var(--chart-warning);
-  --chart-bad-fill: var(
-    --chart-bad
-  ); /* Text on white (≥ 4.5:1): the -800 steps. */
+  --chart-bad-fill: var(--chart-bad);
 
   /* Tints */
   --chart-good-tint: #e0f7e4;
   --chart-bad-tint: #ffebe8;
-  --chart-neutral-tint: hsl(
-    210 40% 96.1%
-  ); /* Diverging (deltas): bad · bad tint · neutral tint · good tint · good. The middle is the neutral tint (not the dark neutral), so the scale is lightest at zero change. */
+  --chart-neutral-tint: hsl(210 40% 96.1%);
 
-  /* Diverging (deltas) */
+  /* Diverging (deltas): bad · bad tint · neutral tint · good tint · good. The middle is the neutral tint (not the dark neutral), so the scale is lightest at zero change. */
   --chart-div-3: var(--chart-neutral-tint);
 
   /* Type */
@@ -90,7 +86,7 @@
   --chart-bubble-min: 4px;
   --chart-bubble-max: 13px;
   --chart-pin-min: 3px;
-  --chart-pin-max: 18px; /* Opacity */
+  --chart-pin-max: 18px;
 
   /* Opacity */
   --chart-opacity-subtle: 0.2; /* single area fill, box fill */
@@ -106,7 +102,7 @@
   --chart-radius-xs: 1px; /* bullet measure bar */
   --chart-radius-sm: 2px; /* heatmap cells, box, treemap leaves, swatches, delta chips */
   --chart-radius-mark: 3px; /* bars, gantt spans */
-  --chart-tooltip-radius: var(--radius); /* Bar and mark sizing */
+  --chart-tooltip-radius: var(--radius);
 
   /* Bar and mark sizing */
   --chart-bar-size-sm: 18px; /* horizontal bars */
@@ -141,7 +137,7 @@
   --chart-tick-offset: 7px; /* hand-built SVG axes: from the axis line to the top of the tick labels' capitals */
   --chart-label-min-gap: 0.25rem; /* closest two placed labels may come (bubble, pin) */
   --chart-label-column-min: 6rem; /* bullet and gantt name columns: the widest name + padding, clamped */
-  --chart-label-column-max: 150px; /* Axes */
+  --chart-label-column-max: 150px;
   --chart-funnel-label-min: 96px; /* room right of the funnel: the widest stage label + padding, clamped */
   --chart-funnel-label-max: 160px;
   --chart-bullet-value-room: 52px; /* room right of the bullet bands for the value */
@@ -160,7 +156,7 @@
   --chart-axis-letter-spacing: var(--chart-letter-spacing-axis);
   --chart-axis-category-height: 1.5rem;
   --chart-axis-min: 1.5rem;
-  --chart-axis-max: 120px; /* Grid, baseline, hover cursor */
+  --chart-axis-max: 120px;
 
   /* Grid, baseline, hover cursor */
   --chart-grid: hsl(
@@ -170,22 +166,20 @@
     var(--slate-300)
   ); /* value-from-zero charts only (bars, areas, histogram, funnel) */
   --chart-cursor: hsl(var(--muted));
-  --chart-cursor-opacity: var(
-    --chart-opacity-inactive
-  ); /* Legacy (Opik charts): Opik's own line, bar and grouped charts keep their original geometry */
+  --chart-cursor-opacity: var(--chart-opacity-inactive);
 
-  /* Legacy (Opik charts) */
+  /* Legacy (Opik charts): Opik's own line, bar and grouped charts keep their original geometry */
   --chart-margin-opik-left: -8px;
   --chart-margin-opik-right: 0.5rem;
   --chart-tick-offset-opik: 0px; /* Opik's tick labels sit with their capitals at Recharts' tick position */
   --chart-axis-value-width-opik: 3rem;
-  --chart-axis-category-width-opik: 72px; /* Plot area */
+  --chart-axis-category-width-opik: 72px;
 
   /* Plot area */
   --chart-margin-top: 0.5rem;
   --chart-margin-right: 0.75rem;
   --chart-margin-bottom: 0px;
-  --chart-margin-left: 0px; /* Aliases kept for the theme's existing names */
+  --chart-margin-left: 0px;
 
   /* Aliases kept for the theme's existing names */
   --chart-stroke-width: var(--chart-stroke-default);
@@ -193,21 +187,19 @@
   --chart-active-dot-ring: var(--chart-stroke-default);
   --chart-static-dot-r: var(--chart-marker-sm);
   --chart-bar-max: var(--chart-bar-size-md);
-  --chart-bar-radius: var(
-    --chart-radius-mark
-  ); /* ===== Chart component tokens (--chart-<component>-*) ===== */
-  --chart-kpi-font-size: var(--chart-font-size-kpi); /* Legend */
+  --chart-bar-radius: var(--chart-radius-mark);
+
+  /* ===== Chart component tokens (--chart-<component>-*) ===== */
+  --chart-kpi-font-size: var(--chart-font-size-kpi);
 
   /* Legend */
   --chart-legend-swatch: 8px;
   --chart-legend-max-height: 48px;
   --chart-legend-gap-x: 12px;
   --chart-legend-gap-y: 4px;
-  --chart-legend-font-size: var(
-    --chart-font-size-md
-  ); /* Tooltip: Opik's white card */
+  --chart-legend-font-size: var(--chart-font-size-md);
 
-  /* Tooltip */
+  /* Tooltip: Opik's white card */
   --chart-tooltip-bg: hsl(var(--background));
   --chart-tooltip-fg: hsl(var(--foreground));
   --chart-tooltip-muted: hsl(var(--muted-slate));
@@ -217,9 +209,9 @@
   --chart-tooltip-font-size: var(--chart-font-size-md);
   --chart-tooltip-padding-x: 10px;
   --chart-tooltip-padding-y: 6px;
-  --chart-tooltip-min-width: 128px; /* Per-type overrides (chartTheme.types): references, never numbers of their own */
+  --chart-tooltip-min-width: 128px;
 
-  /* Per-type overrides (chartTheme.types) */
+  /* Per-type overrides (chartTheme.types): references, never numbers of their own */
   --chart-hbar-margin-right: 48px;
   --chart-hbar-category-gap: var(--chart-bar-category-gap-loose);
   --chart-hbar-bar-max: var(--chart-bar-size-sm);
@@ -229,7 +221,7 @@
   --chart-histogram-category-gap: var(--chart-bar-category-gap-none);
   --chart-map-land: hsl(var(--muted));
   --chart-map-border: hsl(var(--background));
-  --chart-bullet-mark: hsl(var(--background)); /* Loading skeletons */
+  --chart-bullet-mark: hsl(var(--background));
 
   /* Loading skeletons */
   --chart-skeleton-fill: hsl(var(--muted));

@@ -18,7 +18,10 @@ import {
 } from "@/lib/dashboard/dashboardLocalDb";
 import { keepaliveSaveDashboard } from "@/api/dashboards/dashboardKeepaliveSave";
 import { useDashboardStore } from "@/store/DashboardStore";
-import { isDashboardChanged } from "@/lib/dashboard/utils";
+import {
+  DASHBOARD_EXTERNAL_UPDATE_EVENT,
+  isDashboardChanged,
+} from "@/lib/dashboard/utils";
 
 vi.mock("@/api/dashboards/useDashboardById");
 vi.mock("@/api/dashboards/useDashboardUpdateMutation");
@@ -345,6 +348,48 @@ describe("useDashboardPersistence", () => {
       });
 
       expect(autoSaveMutate).not.toHaveBeenCalled();
+
+      unmount();
+
+      expect(autoSaveMutate).toHaveBeenCalledWith(
+        { dashboard: { id: "dash-1", config: changedConfig } },
+        expect.anything(),
+      );
+    });
+  });
+
+  describe("external update", () => {
+    it("still flushes on cleanup after a reload that returned the same config", async () => {
+      const dashboard = makeDashboard();
+      setupMocks(dashboard);
+      // An unchanged refetch hands back the same config object, as react-query's structural sharing does.
+      const refetch = vi.fn().mockResolvedValue({ data: dashboard });
+      vi.mocked(useDashboardById).mockReturnValue({
+        data: dashboard,
+        isPending: false,
+        refetch,
+      } as unknown as ReturnType<typeof useDashboardById>);
+
+      const { unmount } = renderHook(() =>
+        useDashboardPersistence({ dashboardId: "dash-1" }),
+      );
+      await flushPromises();
+
+      await act(async () => {
+        window.dispatchEvent(
+          new CustomEvent(DASHBOARD_EXTERNAL_UPDATE_EVENT, {
+            detail: { id: "dash-1" },
+          }),
+        );
+      });
+      expect(refetch).toHaveBeenCalled();
+
+      vi.mocked(isDashboardChanged).mockReturnValue(true);
+      const changedConfig = makeConfig({ lastModified: 7000 });
+      (useDashboardStore.getState as Mock).mockReturnValue({
+        lastModified: 3,
+        getDashboard: () => changedConfig,
+      });
 
       unmount();
 

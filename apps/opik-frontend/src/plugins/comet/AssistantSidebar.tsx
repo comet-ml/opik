@@ -168,10 +168,11 @@ function useBridgeContext(
   const charts = useMemo<BridgeCharts>(
     () => ({
       renderVega: (el, input, options) =>
+        // The console's options go first: the colour scope stays this workspace's.
         renderVegaChart(el, input, {
+          ...options,
           colorOverride: (label) => colorMap?.[label],
           registryScope: workspaceName,
-          ...options,
         }),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps

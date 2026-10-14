@@ -45,7 +45,7 @@ const THIN_MARKS = new Set([
 const DISCRETE = new Set(["nominal", "ordinal"]);
 
 /**
- * The Vega-Lite config for a chart widget, every value a chart widget token (src/styles/widget-tokens). Read from
+ * The Vega-Lite config for a chart widget, every value a chart widget token (src/styles/chart-tokens). Read from
  * the live stylesheet, so it follows the active theme: rebuild it when the theme changes.
  */
 export const buildOpikVegaConfig = (
