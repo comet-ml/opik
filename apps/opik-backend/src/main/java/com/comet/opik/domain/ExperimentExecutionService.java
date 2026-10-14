@@ -22,6 +22,7 @@ import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -133,8 +134,9 @@ public class ExperimentExecutionService {
 
                                     return streamDatasetItems(request, datasetName, filters, versionHash)
                                             .flatMapIterable(item -> buildMessages(
-                                                    item, request, experimentIds, datasetExecutionPolicy,
-                                                    projectName, workspaceId, workspaceName, userName, batchId,
+                                                    item, request, versionHash, experimentIds,
+                                                    datasetExecutionPolicy, projectName, workspaceId,
+                                                    workspaceName, userName, batchId,
                                                     opikPromptsByVariant, testSuite))
                                             // One past the cap is already too many
                                             .take(experimentExecutionConfig.getStreamMaxLen() + 1L)
@@ -487,11 +489,15 @@ public class ExperimentExecutionService {
                         .concatMap(id -> cancellationService.claimFinish(workspaceId, id)
                                 .flatMap(won -> won
                                         ? experimentService.update(id, statusUpdate)
+                                                .retryWhen(RetryUtils.handleConnectionError())
                                         : Mono.<Void>empty())
                                 .onErrorResume(error -> {
-                                    // One record failing must not strand the others, nor replace the
-                                    // error the caller is owed with whatever persistence threw
-                                    log.error("Failed to mark aborted experiment '{}' as failed", id, error);
+                                    // One record failing must not strand the others. The claim is
+                                    // kept rather than handed back: the counters are discarded just
+                                    // below, and a counter that is gone reads as a run that drained,
+                                    // so releasing it invites a consumer to record COMPLETED.
+                                    log.error("Failed to mark aborted experiment '{}' as failed, leaving the"
+                                            + " finish claimed so nothing records it as completed", id, error);
                                     return Mono.empty();
                                 })))
                 .then(itemPublisher.discardCounters(experimentIds));
@@ -566,6 +572,7 @@ public class ExperimentExecutionService {
     private List<ExperimentItemToProcess> buildMessages(
             DatasetItem item,
             ExperimentExecutionRequest request,
+            String versionHash,
             List<UUID> experimentIds,
             ExecutionPolicy datasetExecutionPolicy,
             String projectName,
@@ -591,7 +598,7 @@ public class ExperimentExecutionService {
                         .datasetItemId(item.id())
                         .experimentId(experimentId)
                         .datasetId(request.datasetId())
-                        .versionHash(request.versionHash())
+                        .versionHash(versionHash)
                         .projectName(projectName)
                         .workspaceId(workspaceId)
                         .workspaceName(workspaceName)

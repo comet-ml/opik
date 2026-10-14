@@ -404,6 +404,39 @@ describe("useActionButtonActions lifecycle", () => {
       return rendered;
     };
 
+    // Starting a run ends the one before it. A poll waiting on its own timer belongs to no abort
+    // controller, so forgetting the controllers leaves it to wake into the new run and report the
+    // old one's progress against it.
+    it("should stop the previous run's poll when a new run starts", async () => {
+      const { result } = await watchUntilItGivesUp();
+      await act(async () => {
+        result.current.checkAgain();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(EXPERIMENT_POLL_INTERVAL_MS);
+      });
+
+      const readsOfTheOldRun = () =>
+        getExperimentById.mock.calls.filter(
+          (call) => call[1]?.experimentId === EXPERIMENT_A,
+        ).length;
+      const before = readsOfTheOldRun();
+      expect(before).toBeGreaterThan(0);
+
+      runExperimentExecution.mockResolvedValue({
+        experiments: [{ experiment_id: "experiment-of-the-new-run" }],
+        total_items: 1,
+      });
+      await act(async () => {
+        await result.current.runAll();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(EXPERIMENT_POLL_INTERVAL_MS * 3);
+      });
+
+      expect(readsOfTheOldRun()).toBe(before);
+    });
+
     // Giving up is decided per poll, against the clock that poll started on, but it stops the whole
     // page watching. A poll started later is not past its own window yet, so without being told the
     // round is over it carries on polling behind a page that says it is not following anything —

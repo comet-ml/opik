@@ -218,11 +218,17 @@ const useActionButtonActions = ({
 
   const resetState = useCallback(() => {
     resetOutputMap();
-    abortControllersRef.current.clear();
+    stopPolling();
     settleRun();
     clearCreatedExperiments();
     resetProgress();
-  }, [resetOutputMap, clearCreatedExperiments, settleRun, resetProgress]);
+  }, [
+    resetOutputMap,
+    stopPolling,
+    clearCreatedExperiments,
+    settleRun,
+    resetProgress,
+  ]);
 
   // isRunInFlight is shared by every prompt, and the sidebar watches the run through it. An action
   // scoped to one prompt may only clear it once no sibling is left running.
