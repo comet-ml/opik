@@ -82,12 +82,20 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
       },
     );
 
+  // Cmd/Ctrl+Enter does what the primary button does, like the other forms with a text area.
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+    event.preventDefault();
+    if (isDirty && !isPending) save(Boolean(onRun));
+  };
+
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         side="right"
         className="flex w-full max-w-none flex-col gap-0 p-0 sm:max-w-[560px]"
         onPointerDownOutside={handlePointerDownOutside}
+        onKeyDown={handleKeyDown}
         header={
           <SheetTopBar
             variant="info"
