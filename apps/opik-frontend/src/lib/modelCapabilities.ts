@@ -187,6 +187,22 @@ export const getMaxOutputTokens = (
   return undefined;
 };
 
+// OpenRouter's own rows only: getMaxOutputTokens falls back to the bare id, which finds another provider's
+// limit (computer-use-preview's 1024 for openai/computer-use-preview, which OpenRouter does not list).
+// Many routing variants (`:free`, `:batch`) have no row, so they read the base model's; a variant's own
+// row comes first because its limit can differ from the base model's.
+export const getOpenRouterMaxOutputTokens = (
+  model?: string | null,
+): number | undefined => {
+  if (!model) {
+    return undefined;
+  }
+  return (
+    MAX_OUTPUT_TOKENS.get(`openrouter/${model}`) ??
+    MAX_OUTPUT_TOKENS.get(`openrouter/${model.split(":")[0]}`)
+  );
+};
+
 const SNAPSHOT_DATE_SUFFIX = /-\d{4}-\d{2}-\d{2}$/;
 
 const baseModelName = (modelName: string) => {
