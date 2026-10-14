@@ -283,12 +283,13 @@ class SpansReadPathPartitionPruningTest {
                 .toList(), API_KEY, WORKSPACE_NAME);
     }
 
-    /**
-     * A trace's spans in this week and in 2201 reach every trace-keyed read that sums them. The subclass reruns this
-     * with the {@code span_weeks} bound on, where it also shows each statement read the index.
-     */
-    @Test
-    void traceKeyedReadsCountAFarFutureSpanOfTheTrace() {
+    /** A trace with one span this week and one in 2201, whose costs every trace-keyed read must both count. */
+    @Builder
+    private record FarFutureTrace(String projectName, UUID projectId, UUID traceId, String threadId, List<Span> spans) {
+        static final BigDecimal COST = new BigDecimal("3.75");
+    }
+
+    private FarFutureTrace createFarFutureTrace() {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         var now = Instant.now();
@@ -308,9 +309,17 @@ class SpansReadPathPartitionPruningTest {
                 newSpan(Instant.parse("2201-08-30T03:18:08Z"), traceId).toBuilder().projectName(projectName)
                         .totalEstimatedCost(new BigDecimal("2.5")).build());
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
-        var expectedCost = new BigDecimal("3.75");
+        return FarFutureTrace.builder()
+                .projectName(projectName)
+                .projectId(projectId)
+                .traceId(traceId)
+                .threadId(threadId)
+                .spans(spans)
+                .build();
+    }
 
-        var datasetName = "dataset-" + RandomStringUtils.secure().nextAlphanumeric(16);
+    /** Creates an experiment over the trace, optionally under an optimization. */
+    private UUID createExperiment(UUID traceId, UUID optimizationId, String datasetName) {
         var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
                 .source(DatasetItemSource.SDK)
                 .traceId(null)
@@ -321,9 +330,6 @@ class SpansReadPathPartitionPruningTest {
                 .datasetName(datasetName)
                 .items(List.of(datasetItem))
                 .build(), WORKSPACE_NAME, API_KEY);
-        var optimizationId = optimizationResourceClient.create(optimizationResourceClient.createPartialOptimization()
-                .datasetName(datasetName)
-                .build(), API_KEY, WORKSPACE_NAME);
         var experimentId = experimentResourceClient.create(experimentResourceClient.createPartialExperiment()
                 .datasetName(datasetName)
                 .optimizationId(optimizationId)
@@ -333,26 +339,58 @@ class SpansReadPathPartitionPruningTest {
                 .datasetItemId(datasetItem.id())
                 .traceId(traceId)
                 .build()), API_KEY, WORKSPACE_NAME);
+        return experimentId;
+    }
 
-        assertThat(spanResourceClient.findSpans(WORKSPACE_NAME, API_KEY, projectName, null, 1, 10, traceId, null,
-                null, null, null).content())
-                .extracting(Span::id)
-                .containsExactlyInAnyOrderElementsOf(spans.stream().map(Span::id).toList());
-        assertSpanWeeksRead("find_spans_by_project_id", traceId);
+    // The subclass reruns these with the span_weeks bound on, where they also show each statement read the index.
+    @Test
+    void spansOfATraceIncludeItsFarFutureSpan() {
+        var trace = createFarFutureTrace();
 
-        assertThat(experimentResourceClient.getExperiment(experimentId, API_KEY, WORKSPACE_NAME)
-                .totalEstimatedCost()).isEqualByComparingTo(expectedCost);
+        var actual = spanResourceClient.findSpans(WORKSPACE_NAME, API_KEY, trace.projectName(), null, 1, 10,
+                trace.traceId(), null, null, null, null);
+
+        assertThat(actual.content()).extracting(Span::id)
+                .containsExactlyInAnyOrderElementsOf(trace.spans().stream().map(Span::id).toList());
+        assertSpanWeeksRead("find_spans_by_project_id", trace.traceId());
+    }
+
+    @Test
+    void experimentCostCountsAFarFutureSpanOfItsTrace() {
+        var trace = createFarFutureTrace();
+        var experimentId = createExperiment(trace.traceId(), null,
+                "dataset-" + RandomStringUtils.secure().nextAlphanumeric(16));
+
+        var actual = experimentResourceClient.getExperiment(experimentId, API_KEY, WORKSPACE_NAME);
+
+        assertThat(actual.totalEstimatedCost()).isEqualByComparingTo(FarFutureTrace.COST);
         assertSpanWeeksRead("get_experiment_by_id", experimentId);
+    }
 
-        assertThat(optimizationResourceClient.get(optimizationId, API_KEY, WORKSPACE_NAME, HttpStatus.SC_OK)
-                .totalOptimizationCost()).isEqualByComparingTo(expectedCost);
+    @Test
+    void optimizationCostCountsAFarFutureSpanOfItsTrace() {
+        var trace = createFarFutureTrace();
+        var datasetName = "dataset-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var optimizationId = optimizationResourceClient.create(optimizationResourceClient.createPartialOptimization()
+                .datasetName(datasetName)
+                .build(), API_KEY, WORKSPACE_NAME);
+        createExperiment(trace.traceId(), optimizationId, datasetName);
+
+        var actual = optimizationResourceClient.get(optimizationId, API_KEY, WORKSPACE_NAME, HttpStatus.SC_OK);
+
+        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(FarFutureTrace.COST);
         assertSpanWeeksRead("get_optimization_by_id", optimizationId);
+    }
+
+    @Test
+    void threadCostCountsAFarFutureSpanOfItsTrace() {
+        var trace = createFarFutureTrace();
 
         // Threads are materialised from their traces asynchronously.
         Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(traceResourceClient
-                .getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).totalEstimatedCost())
-                .isEqualByComparingTo(expectedCost));
-        assertSpanWeeksRead("find_thread_by_id", projectId);
+                .getTraceThread(trace.threadId(), trace.projectId(), API_KEY, WORKSPACE_NAME).totalEstimatedCost())
+                .isEqualByComparingTo(FarFutureTrace.COST));
+        assertSpanWeeksRead("find_thread_by_id", trace.projectId());
     }
 
     /** Asserts the latest statement of {@code op} naming {@code id} read the span_weeks index; off here. */

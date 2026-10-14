@@ -5,7 +5,6 @@ import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
-import com.comet.opik.utils.WeeklyPartitions;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
@@ -13,8 +12,13 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -99,8 +103,15 @@ class SpansReadPathSpanWeeksBoundTest extends SpansReadPathPartitionPruningTest 
         assertThat(tablesRead(op, id)).as("tables read by %s", op).contains("%s.span_weeks".formatted(DATABASE_NAME));
     }
 
+    /** Where ids past 2300 are stored, as the parent's past-ceiling cases also expect. */
+    private static final long PAST_CEILING_WEEK = 22991225L;
+
+    /** The span's week from its own v7 timestamp, independently of the production week calculation. */
     private static String traceWeek(UUID traceId, UUID spanId) {
-        return "%s:%d".formatted(traceId, WeeklyPartitions.storedPartitionOf(spanId));
+        var monday = LocalDate.ofInstant(Instant.ofEpochMilli(spanId.getMostSignificantBits() >>> 16), ZoneOffset.UTC)
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        var week = Math.min(Long.parseLong(monday.format(DateTimeFormatter.BASIC_ISO_DATE)), PAST_CEILING_WEEK);
+        return "%s:%d".formatted(traceId, week);
     }
 
     private void awaitIndexed(Collection<String> traceWeeks) {

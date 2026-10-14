@@ -216,6 +216,19 @@ databaseAnalyticsDataModel:
   #   is asynchronous, so a read right after a write can miss the new spans until their week is indexed.
   spanWeeksReadEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_READ_ENABLED:-false}
 
+# Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
+# switched on by databaseAnalyticsDataModel.spanWeeksWriteEnabled.
+spanWeeksRegistration:
+  #  Default: 3
+  #  Description: Retries after the first attempt; a repeat registration collapses in span_weeks
+  maxRetries: ${SPAN_WEEKS_REGISTRATION_MAX_RETRIES:-3}
+  #  Default: 200ms
+  #  Description: First backoff; it doubles on each retry, with jitter, up to maxBackoff
+  minBackoff: ${SPAN_WEEKS_REGISTRATION_MIN_BACKOFF:-200ms}
+  #  Default: 2s
+  #  Description: Upper bound of the exponential backoff
+  maxBackoff: ${SPAN_WEEKS_REGISTRATION_MAX_BACKOFF:-2s}
+
 # Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
 # It tiles the span ids into ranges of weeks, from the install week (the first project's created_at) to the plan's own
 # week, open at both ends, and backfills one range per run. Progress is kept in the span_weeks_backfill_chunks state
