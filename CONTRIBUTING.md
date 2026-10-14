@@ -81,6 +81,9 @@ Dockerfiles are linted with [hadolint](https://github.com/hadolint/hadolint), wh
 ## SQL query construction (Java backend)
 Production Java under `apps/opik-backend/src/main/java/` is scanned with [semgrep](https://semgrep.dev/) for SQL assembled by string formatting, as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit). The rules live in [`.semgrep/`](.semgrep/), with the conventions they enforce documented in [`.agents/rules/security.mdc`](.agents/rules/security.mdc) and the backend skill.
 
+## OpenAPI spec resolution (Java backend)
+Changes to the backend's main sources, resources or `pom.xml` run `swagger:resolve` (via `mvn compile`) as a hook in the unified `🐙 Code Quality` workflow, so a change that breaks OpenAPI spec generation fails the PR. It needs a full backend compile, so it is a CI-only hook (`stages: [manual]`) and does not run on `git commit`. To run it locally: `pre-commit run swagger-resolve --hook-stage manual --all-files`.
+
 ## Generated files (do not edit manually)
 - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json`
 - `apps/opik-frontend/src/data/model_prices_and_context_window.json`

@@ -173,6 +173,8 @@ jobs:
       # the one scope that matched; sibling hooks report "no files to check".
       # Capture the verbose log and exit code, then filter the log to this
       # hook's own result lines so the summary table shows one row per linter.
+      # --hook-stage manual also runs CI-only hooks (stages: [manual]); hooks
+      # without `stages:` run in every stage, so they are unaffected.
       - name: Run hook
         id: hook
         env:
@@ -182,7 +184,7 @@ jobs:
           set -o pipefail
           set +e
           # shellcheck disable=SC2086  # HOOK_FILES is an intentional word-split list
-          uvx pre-commit run "$HOOK_ID" --files $HOOK_FILES --show-diff-on-failure --verbose 2>&1 \
+          uvx pre-commit run "$HOOK_ID" --hook-stage manual --files $HOOK_FILES --show-diff-on-failure --verbose 2>&1 \
             | tee /tmp/leg-raw.log
           echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
           set -e
