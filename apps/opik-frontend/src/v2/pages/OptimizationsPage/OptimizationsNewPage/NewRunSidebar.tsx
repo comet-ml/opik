@@ -158,8 +158,11 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
       );
       // A Vertex run saved with the bare id resolves here only by suffix, but the backend and
       // getProviderFromModel know it only as vertex_ai/<id>, so it could not run under that name.
+      // OpenRouter serves a `:batch` id only through its batch API, so every request of the run
+      // would fail with a 404.
       return (
         provider !== "" &&
+        !savedModel.endsWith(":batch") &&
         getRoutableProviderModelValue(provider, savedModel) === savedModel &&
         configuredProvidersList.some((p) => p.ui_composed_provider === provider)
       );

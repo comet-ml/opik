@@ -33,6 +33,7 @@ const PICKER_MODELS: ProviderModelsMap = {
 
 const HIDDEN_REGISTRY_MODELS: Record<string, PROVIDER_TYPE> = {
   [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH]: PROVIDER_TYPE.OPEN_ROUTER,
+  [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU]: PROVIDER_TYPE.OPEN_ROUTER,
   [PROVIDER_MODEL_TYPE.GPT_LIVE_1]: PROVIDER_TYPE.OPEN_AI,
   [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5]: PROVIDER_TYPE.ANTHROPIC,
 };
@@ -206,6 +207,10 @@ describe("NewRunSidebar — re-run model resolution", () => {
           value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH,
           label: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH,
         },
+        {
+          value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU,
+          label: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU,
+        },
       ],
     });
   });
@@ -215,7 +220,7 @@ describe("NewRunSidebar — re-run model resolution", () => {
   });
 
   it.each([
-    PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH,
+    PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU,
     PROVIDER_MODEL_TYPE.GPT_LIVE_1,
   ])(
     "keeps %s, which the registry knows and a configured provider serves",
@@ -229,7 +234,7 @@ describe("NewRunSidebar — re-run model resolution", () => {
   );
 
   it("keeps a kept OpenRouter model's saved settings", () => {
-    const content = renderRerun(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH);
+    const content = renderRerun(PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU);
 
     expect(content.modelConfig).toMatchObject({
       maxTokens: 300,
@@ -242,6 +247,10 @@ describe("NewRunSidebar — re-run model resolution", () => {
     {
       model: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
       why: "no configured provider serves",
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH,
+      why: "only OpenRouter's batch API serves",
     },
   ])("replaces $model, which $why, and says so", ({ model }) => {
     const content = renderRerun(model);
@@ -312,6 +321,7 @@ const REGISTRY: LlmModelsByProvider = {
   [PROVIDER_TYPE.OPEN_ROUTER]: [
     registryModel(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI, "openai/gpt-4o-mini"),
     registryModel(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH),
+    registryModel(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_IMAGE),
     registryModel(PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU),
   ],
 };
@@ -352,7 +362,7 @@ describe("NewRunSidebar — re-run with the real model registry hook", () => {
   // Neither id is in the bundled model list, so only the registry says they are OpenRouter's.
   it.each([
     {
-      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH,
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_IMAGE,
       parameters: SAVED_PARAMETERS,
       expected: { maxTokens: 300, reasoningEffort: "low" },
     },

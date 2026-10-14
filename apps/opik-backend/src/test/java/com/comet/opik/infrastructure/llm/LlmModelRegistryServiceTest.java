@@ -204,7 +204,7 @@ class LlmModelRegistryServiceTest {
     }
 
     @Test
-    void mergeKeepsOpenRouterCapabilitiesOnlyWhenTheOverrideLacksThem() {
+    void mergeUsesTheOverrideCapabilitiesEvenEmptyAndKeepsTheDefaultsWhenUnset() {
         var defaults = Map.of(
                 "openrouter", List.of(
                         ModelEntry.builder().id("openai/gpt-5-nano")
