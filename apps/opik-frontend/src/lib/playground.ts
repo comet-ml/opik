@@ -16,6 +16,7 @@ import {
 import {
   getDefaultThinkingEffort,
   getDefaultThinkingLevel,
+  getOpenRouterDefaultMaxTokens,
   isClaudeModel,
   supportsAnthropicThinkingEffort,
   supportsGeminiThinkingLevel,
@@ -48,6 +49,7 @@ import {
   supportsVideoInput,
 } from "@/lib/modelCapabilities";
 import {
+  DropdownModelCheck,
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
@@ -168,7 +170,7 @@ export const getDefaultConfigByProvider = (
 
   if (providerType === PROVIDER_TYPE.OPEN_ROUTER) {
     return {
-      maxTokens: DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS,
+      maxTokens: getOpenRouterDefaultMaxTokens(model),
       temperature: DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE,
       topP: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P,
       topK: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_K,
@@ -237,6 +239,7 @@ interface GenerateDefaultPromptParams {
   lastPickedModel?: PROVIDER_MODEL_TYPE | "";
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
+  isDropdownModel: DropdownModelCheck;
 }
 
 export const generateDefaultPrompt = ({
@@ -245,8 +248,17 @@ export const generateDefaultPrompt = ({
   lastPickedModel,
   providerResolver,
   modelResolver,
+  isDropdownModel,
 }: GenerateDefaultPromptParams): PlaygroundPromptType => {
-  const modelByDefault = modelResolver(lastPickedModel || "", setupProviders);
+  // The model resolver keeps any model it can resolve, so a stored prompt on a
+  // model later taken out of the picker keeps it. A new prompt only starts on
+  // a remembered pick the picker still offers.
+  const rememberedModel =
+    lastPickedModel &&
+    isDropdownModel(lastPickedModel, providerResolver(lastPickedModel))
+      ? lastPickedModel
+      : "";
+  const modelByDefault = modelResolver(rememberedModel, setupProviders);
   // The model resolver can pick the first set-up provider's static default model before the model
   // registry loads, but mapping that model back to a provider needs the registry. A picked model
   // that maps to no provider can only be that default, so it belongs to the first set-up provider.
