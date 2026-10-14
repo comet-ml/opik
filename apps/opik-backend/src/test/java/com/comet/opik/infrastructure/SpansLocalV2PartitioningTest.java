@@ -7,6 +7,7 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanWeek;
 import com.comet.opik.domain.SpanWeeksDAO;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
@@ -38,6 +39,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -164,10 +166,13 @@ class SpansLocalV2PartitioningTest {
     {
         Startables.deepStart(zookeeperContainer, clickHouseContainer).join();
         MigrationUtils.runClickhouseDbMigration(clickHouseContainer);
-        var connectionFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouseContainer, DATABASE_NAME)
-                .build();
+        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouseContainer,
+                DATABASE_NAME);
+        var connectionFactory = databaseAnalyticsFactory.build();
         transactionTemplateAsync = TransactionTemplateAsync.create(connectionFactory);
-        spanWeeksDAO = new SpanWeeksDAO(connectionFactory, new InstantToUUIDMapper());
+        spanWeeksDAO = new SpanWeeksDAO(connectionFactory,
+                new JsonEachRowBulkInsert(databaseAnalyticsFactory.buildClient(), JsonUtils.getMapper()),
+                new InstantToUUIDMapper());
     }
 
     /**
@@ -665,7 +670,7 @@ class SpansLocalV2PartitioningTest {
         spanWeeksDAO.backfill(20250303L, 20250310L, 4, 600).block();
         spanWeeksDAO.backfill(20250310L, null, 4, 600).block();
 
-        assertThat(spanWeeksDAO.findByTraceIds(traceIdBySpanId.values())
+        assertThat(spanWeeksDAO.findByTraceIds(Set.copyOf(traceIdBySpanId.values()))
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, "user", workspaceId))
                 .block())
                 .containsExactlyInAnyOrderElementsOf(expected);

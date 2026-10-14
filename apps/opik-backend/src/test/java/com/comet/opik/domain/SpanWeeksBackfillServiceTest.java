@@ -43,6 +43,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -129,7 +130,7 @@ class SpanWeeksBackfillServiceTest {
         var otherProjectId = projectResourceClient.createProject(otherProjectName, ws.apiKey(), ws.workspaceName());
         var traceAcrossWeeks = uuidV7(System.currentTimeMillis());
         var traceWithBoundaryIds = uuidV7(System.currentTimeMillis());
-        var traceIds = List.of(traceAcrossWeeks, traceWithBoundaryIds);
+        var traceIds = Set.of(traceAcrossWeeks, traceWithBoundaryIds);
         var spans = List.of(
                 span(uuidV7(MONDAY.toEpochMilli()), traceAcrossWeeks, projectName),
                 span(uuidV7(MONDAY.toEpochMilli() - 1), traceAcrossWeeks, projectName),
@@ -206,13 +207,13 @@ class SpanWeeksBackfillServiceTest {
         return SpanWeeksBackfillChunkDAO.Chunk.builder().fromWeek(fromWeek).toWeek(toWeek).build();
     }
 
-    private void runStepsUntil(List<UUID> traceIds, WorkspaceContext ws, int expectedRowCount) {
+    private void runStepsUntil(Set<UUID> traceIds, WorkspaceContext ws, int expectedRowCount) {
         for (int step = 0; step < MAX_STEPS && weeks(traceIds, ws).size() < expectedRowCount; step++) {
             backfillService.runStep().block();
         }
     }
 
-    private List<SpanWeek> weeks(List<UUID> traceIds, WorkspaceContext ws) {
+    private List<SpanWeek> weeks(Set<UUID> traceIds, WorkspaceContext ws) {
         return spanService.getWeeksByTraceIds(traceIds)
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, USER, ws.workspaceId()))
                 .block();
