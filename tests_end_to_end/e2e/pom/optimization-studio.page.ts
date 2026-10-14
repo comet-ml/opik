@@ -2,6 +2,7 @@ import type { Page, Locator } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TraceLogsSidebarPage } from './trace-logs-sidebar.page';
+import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
 
 export type OptimizerName = 'GEPA optimizer' | 'Hierarchical Reflective';
 
@@ -121,6 +122,7 @@ export class OptimizationStudioPage {
   }
 
   async selectModel(displayName: string): Promise<void> {
+    assertAllowedModelDisplayName(displayName);
     return test.step(`Select model "${displayName}"`, async () => {
       const search = this.page.getByRole('textbox', { name: 'Search model' });
       // The trigger occasionally swallows the first click as a hover, so retry

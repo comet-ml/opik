@@ -141,7 +141,7 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
           },
           defaultOperator: "=" as FilterOperator,
           operators: [{ label: "=", value: "=" as FilterOperator }],
-          sortingMessage: "Last experiment created",
+          sortingMessage: "Sorted by last experiment created",
         },
         [COLUMN_METADATA_ID]: {
           keyComponent:

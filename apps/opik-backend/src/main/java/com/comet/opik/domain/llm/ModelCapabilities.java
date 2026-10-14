@@ -108,12 +108,24 @@ public class ModelCapabilities {
      * <p>A name that is not an Anthropic id at all is left alone — see {@link #canonicalAnthropicId}.
      */
     public boolean rejectsSamplingParams(String modelName) {
+        return isAnthropicIdOutside(modelName, AnthropicModelName.samplingCapableModelIds());
+    }
+
+    /**
+     * Whether the model thinks when a request does not mention thinking. An Anthropic id we cannot place is
+     * assumed to, for the reason given on {@link #rejectsSamplingParams}.
+     */
+    public boolean thinksByDefault(String modelName) {
+        return isAnthropicIdOutside(modelName, AnthropicModelName.thinkingOffByDefaultModelIds());
+    }
+
+    private boolean isAnthropicIdOutside(String modelName, Set<String> earlierBehaviourModelIds) {
         var canonical = canonicalAnthropicId(modelName);
         if (canonical.isEmpty() || isLegacyGeneration(canonical)) {
             return false;
         }
         return knownAnthropicId(canonical)
-                .map(id -> !AnthropicModelName.samplingCapableModelIds().contains(id))
+                .map(id -> !earlierBehaviourModelIds.contains(id))
                 .orElse(true);
     }
 
@@ -155,6 +167,11 @@ public class ModelCapabilities {
     private Optional<String> knownAnthropicId(String canonical) {
         if (canonical.endsWith(LATEST_ALIAS_SUFFIX)) {
             return newestInFamily(StringUtils.removeEnd(canonical, LATEST_ALIAS_SUFFIX));
+        }
+        // A listed id is itself, even once a dated build of it is listed too — otherwise the longer
+        // dated id would win and a sync adding it would silently reclassify the undated model.
+        if (AnthropicModelName.allModelIds().contains(canonical)) {
+            return Optional.of(canonical);
         }
         return AnthropicModelName.allModelIds().stream()
                 .filter(id -> namesModel(canonical, id))

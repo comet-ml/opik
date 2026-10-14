@@ -110,7 +110,7 @@ export class AgentInsightsJobsClient {
     }
 
     /**
-     * Creates the Agent Insights job for a project. 409 if one already exists.
+     * Creates the Agent Insights job for a project, disabled: the daily schedule stays off until the job is enabled with PATCH. 409 if one already exists.
      *
      * @param {string} projectId
      * @param {OpikApi.CreateAgentInsightsJobRequest} request

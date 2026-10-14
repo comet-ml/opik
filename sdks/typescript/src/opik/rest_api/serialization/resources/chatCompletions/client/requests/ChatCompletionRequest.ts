@@ -6,6 +6,7 @@ import type * as serializers from "../../../../index.js";
 import { Function } from "../../../../types/Function.js";
 import { FunctionCall } from "../../../../types/FunctionCall.js";
 import { Message } from "../../../../types/Message.js";
+import { PromptCacheOptions } from "../../../../types/PromptCacheOptions.js";
 import { ResponseFormat } from "../../../../types/ResponseFormat.js";
 import { StreamOptions } from "../../../../types/StreamOptions.js";
 import { Tool } from "../../../../types/Tool.js";
@@ -37,6 +38,8 @@ export const ChatCompletionRequest: core.serialization.Schema<
     metadata: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
     reasoningEffort: core.serialization.string().optional(),
     serviceTier: core.serialization.string().optional(),
+    promptCacheKey: core.serialization.string().optional(),
+    promptCacheOptions: PromptCacheOptions.optional(),
     logprobs: core.serialization.boolean().optional(),
     topLogprobs: core.serialization.number().optional(),
     functions: core.serialization.list(Function).optional(),
@@ -68,6 +71,8 @@ export declare namespace ChatCompletionRequest {
         metadata?: Record<string, string> | null;
         reasoningEffort?: string | null;
         serviceTier?: string | null;
+        promptCacheKey?: string | null;
+        promptCacheOptions?: PromptCacheOptions.Raw | null;
         logprobs?: boolean | null;
         topLogprobs?: number | null;
         functions?: Function.Raw[] | null;

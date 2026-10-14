@@ -3,8 +3,9 @@ import { TestSuitesPage } from '@e2e/pom/test-suites.page';
 import { TestSuiteItemsPage } from '@e2e/pom/test-suite-items.page';
 import { ensureModelAvailable } from '@e2e/pom/model-availability';
 import { anthropicKeyUsable } from '@e2e/core/llm-key-preflight';
+import { assertAllowedModelId } from '@e2e/core/llm-model-policy';
 
-test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@area:test-suites'] }, () => {
+test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@llm-daily', '@area:test-suites'] }, () => {
   /**
    * Test A — SDK-create + SDK-run + UI-verify.
    *
@@ -46,6 +47,9 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@area:test-suites']
     const judgeModel = anthropicKeyUsable()
       ? 'anthropic/claude-haiku-4-5'
       : 'openai/gpt-5-mini';
+    // This id goes to the SDK, not a UI picker, so the picker guard cannot see
+    // it — assert it here against the same allowlist.
+    assertAllowedModelId(judgeModel);
 
     await test.step('SDK-trigger a run against the seeded suite', async () => {
       const result = await sdkClient.python.runTestSuite({

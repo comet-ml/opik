@@ -1,14 +1,17 @@
 package com.comet.opik.infrastructure;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.client.JerseyClientConfiguration;
 import io.dropwizard.db.DataSourceFactory;
 import io.dropwizard.jobs.JobConfiguration;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
+import org.apache.commons.lang3.StringUtils;
 
 @Getter
 @Setter
@@ -31,7 +34,13 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty
-    private BulkInsertConfig bulkInsert = BulkInsertConfig.builder().build();
+    private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormExtendedSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
+
+    @Valid @NotNull @JsonProperty
+    private CustomChartsConfig customCharts = new CustomChartsConfig();
+
+    @Valid @NotNull @JsonProperty
+    private FreeFormSqlPostRunCheckConfig freeFormSqlPostRunCheck = new FreeFormSqlPostRunCheckConfig();
 
     @Valid @NotNull @JsonProperty
     private UuidValidationConfig uuidValidation = UuidValidationConfig.builder().build();
@@ -133,6 +142,9 @@ public class OpikConfiguration extends JobConfiguration {
     @Valid @NotNull @JsonProperty
     private WebhookConfig webhook = new WebhookConfig();
 
+    @Valid @NotNull @JsonProperty
+    private AlertsEventBridgeConfig alertsEventBridge = new AlertsEventBridgeConfig();
+
     @Valid @JsonProperty
     private QueuesConfig queues = new QueuesConfig();
 
@@ -202,4 +214,10 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private RedactionConfig redaction = new RedactionConfig();
+
+    @JsonIgnore
+    @AssertTrue(message = "alertsEventBridge.eventBus (ALERTS_EVENTBRIDGE_EVENT_BUS) must be set when serviceToggles.eventBridgeAlertsEnabled (ALERTS_EVENTBRIDGE_ENABLED) is true")
+    public boolean isAlertsEventBridgeBusConfigured() {
+        return !serviceToggles.isEventBridgeAlertsEnabled() || StringUtils.isNotBlank(alertsEventBridge.getEventBus());
+    }
 }

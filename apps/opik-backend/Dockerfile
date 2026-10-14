@@ -2,8 +2,10 @@ FROM maven:3.9.16-amazoncorretto-25-al2023 AS build
 
 WORKDIR /opt/opik-backend
 
-# Copy parent POM first for dependency caching
-COPY pom.xml spotless.xml ./
+# Copy parent POM first for dependency caching. lombok.config belongs here, where the code compiles: without it
+# Lombok drops copyable annotations such as @Config from generated @Inject constructors, and Guice injects an empty
+# config object instead of the configured one.
+COPY pom.xml spotless.xml lombok.config ./
 RUN mvn dependency:go-offline
 
 # Copy source code
@@ -20,7 +22,7 @@ RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
     mvn clean package -Dmaven.test.skip=true -Dmaven.source.skip=true -Dmaven.javadoc.skip=true -Dspotless.skip=true
 
 ###############################
-FROM amazoncorretto:25.0.3-al2023
+FROM amazoncorretto:25.0.4-al2023
 
 # Add metadata labels
 LABEL org.opencontainers.image.title="Opik Backend"
@@ -30,7 +32,7 @@ LABEL org.opencontainers.image.vendor="Comet ML"
 # Install dependencies, download and verify AWS RDS certificate bundle
 # SHA256 checksum must match the official AWS RDS global bundle
 # Update this checksum when AWS updates the bundle: https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
-ARG RDS_CERT_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
+ARG RDS_CERT_SHA256=fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c
 # Not a secret: `changeit` is the stock JDK truststore password, and this truststore holds only
 # public AWS RDS CA certificates. Flagged because the variable name matches hadolint's heuristic.
 # hadolint ignore=DL3064

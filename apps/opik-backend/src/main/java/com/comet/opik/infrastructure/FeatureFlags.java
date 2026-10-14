@@ -28,6 +28,17 @@ public class FeatureFlags {
     }
 
     /**
+     * Checks if automatic annotation queue population is enabled: the score listener, the buffer flush job
+     * and the routing consumer all stay dormant while it is off, and the UI hides the automation controls.
+     *
+     * @return true if annotation queue automation is enabled, false otherwise
+     */
+    public boolean isAnnotationQueueAutomationEnabled() {
+        return config.getServiceToggles() != null
+                && config.getServiceToggles().isAnnotationQueueAutomationEnabled();
+    }
+
+    /**
      * Checks if dataset versioning feature is enabled and throws ForbiddenException if not.
      *
      * @throws ForbiddenException if dataset versioning is not enabled

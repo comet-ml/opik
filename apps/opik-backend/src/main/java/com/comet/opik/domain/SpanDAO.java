@@ -26,7 +26,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.UsageUtils;
 import com.comet.opik.utils.WeeklyPartitions;
-import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -52,6 +51,7 @@ import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -77,6 +77,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.SentinelTranslation.emptyUuidToNullableUuid;
 import static com.comet.opik.utils.SentinelTranslation.epochToNull;
 import static com.comet.opik.utils.SentinelTranslation.nanToNull;
 import static com.comet.opik.utils.SentinelTranslation.nullToEpoch;
@@ -111,80 +112,12 @@ public class SpanDAO {
             OR ilike(model, :search_text)
             OR ilike(provider, :search_text))""";
 
-    private static final String BULK_INSERT = """
-            INSERT INTO spans(
-                id,
-                project_id,
-                workspace_id,
-                trace_id,
-                parent_span_id,
-                name,
-                type,
-                start_time,
-                end_time,
-                input,
-                output,
-                metadata,
-                model,
-                provider,
-                total_estimated_cost,
-                total_estimated_cost_version,
-                tags,
-                usage,
-                last_updated_at,
-                error_info,
-                created_by,
-                last_updated_by,
-                truncation_threshold,
-                input_slim,
-                output_slim,
-                ttft,
-                source,
-                environment
-            )
-            SETTINGS log_comment = '<log_comment>'
-            FORMAT Values
-                <items:{item |
-                    (
-                        :id<item.index>,
-                        :project_id<item.index>,
-                        :workspace_id,
-                        :trace_id<item.index>,
-                        :parent_span_id<item.index>,
-                        :name<item.index>,
-                        :type<item.index>,
-                        :start_time<item.index>,
-                        :end_time<item.index>,
-                        :input<item.index>,
-                        :output<item.index>,
-                        :metadata<item.index>,
-                        :model<item.index>,
-                        :provider<item.index>,
-                        :total_estimated_cost<item.index>,
-                        :total_estimated_cost_version<item.index>,
-                        :tags<item.index>,
-                        :usage<item.index>,
-                        :last_updated_at<item.index>,
-                        :error_info<item.index>,
-                        :created_by<item.index>,
-                        :last_updated_by<item.index>,
-                        :truncation_threshold<item.index>,
-                        :input_slim<item.index>,
-                        :output_slim<item.index>,
-                        :ttft<item.index>,
-                        :source<item.index>,
-                        :environment<item.index>
-                    )
-                    <if(item.hasNext)>,<endif>
-                }>
-            ;
-            """;
-
     /**
      * This query handles the insertion of a new span into the database in two cases:
      * 1. When the span does not exist in the database.
      * 2. When the span exists in the database but the provided span has different values for the fields such as end_time, input, output, metadata and tags.
      **/
+    // The old_span read carries the <id_weeks> bound, see SELECT_TARGET_PROJECTS_FOR_SPANS.
     private static final String INSERT = """
             INSERT INTO spans (
                 id,
@@ -357,6 +290,7 @@ public class SpanDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND id = :id
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_span
@@ -369,6 +303,7 @@ public class SpanDAO {
      * Handles the update of a span when the span already exists in the database.
      ***/
     //TODO: refactor to implement proper conflict resolution
+    // The spans read carries the <id_weeks> bound, see SELECT_TARGET_PROJECTS_FOR_SPANS.
     private static final String UPDATE = """
             INSERT INTO spans (
             	id,
@@ -432,6 +367,7 @@ public class SpanDAO {
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
@@ -448,6 +384,7 @@ public class SpanDAO {
      * The remaining fields will be updated/inserted once the POST arrives with the all mandatory fields to create the trace.
      */
     //TODO: refactor to implement proper conflict resolution
+    // The old_span read carries the <id_weeks> bound, see SELECT_TARGET_PROJECTS_FOR_SPANS.
     private static final String PARTIAL_INSERT = """
             INSERT INTO spans (
                 id, project_id, workspace_id, trace_id, parent_span_id, name, type,
@@ -611,6 +548,7 @@ public class SpanDAO {
                 FROM spans
                 WHERE id = :id
                 AND workspace_id = :workspace_id
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_span
@@ -619,16 +557,27 @@ public class SpanDAO {
             ;
             """;
 
-    // Query to get target project_ids from spans (executed separately to reduce table scans)
+    /**
+     * Query to get target project_ids from spans (executed separately to reduce table scans).
+     * <p>
+     * <b>The {@code <id_weeks>} slot is the week bound the span-id reads carry (OPIK-8361); the others point here.</b>
+     * The same bound {@code TraceDAO.SELECT_TARGET_PROJECTS_FOR_TRACES} documents (OPIK-8332), for the same reason:
+     * the {@code spans_local_v2} partition key verbatim, since an id predicate alone prunes no weekly partition.
+     * Single-id reads use it too, rather than a week-start equality: {@link WeeklyPartitions#weeksOf} also names the
+     * wrapped week the legacy 32-bit {@code id_at} files a far-future id under, where an equality on the honest week
+     * matches nothing. Absent when the ids cannot be derived exactly (at or past 2300), leaving the read unbounded.
+     */
     private static final String SELECT_TARGET_PROJECTS_FOR_SPANS = """
             SELECT DISTINCT project_id
             FROM spans
             WHERE workspace_id = :workspace_id
             AND id IN :ids
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
+    /** The {@code spans} access carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}. */
     private static final String SELECT_BY_IDS = """
             WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -735,6 +684,7 @@ public class SpanDAO {
                 WHERE id IN :ids
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 <if(has_target_projects)>LIMIT 1 BY workspace_id, project_id, id<else>LIMIT 1 BY id<endif>
             ) AS s
@@ -781,6 +731,7 @@ public class SpanDAO {
             ;
             """;
 
+    /** Carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}. */
     private static final String SELECT_ONLY_SPAN_BY_ID = """
             SELECT
                 *,
@@ -789,18 +740,21 @@ public class SpanDAO {
             WHERE id = :id
             AND project_id = :project_id
             AND workspace_id = :workspace_id
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
+    /** Carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}. */
     private static final String SELECT_PARTIAL_BY_ID = """
             SELECT
                 start_time
             FROM spans
             WHERE workspace_id = :workspace_id
             AND id = :id
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
@@ -922,6 +876,16 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(last_received_span_id)> AND id \\< :last_received_span_id<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
             ), <endif>comments_final AS (
               SELECT
                    entity_id,
@@ -1103,6 +1067,16 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(last_received_span_id)> AND id \\< :last_received_span_id<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                   SELECT
@@ -1143,7 +1117,7 @@ public class SpanDAO {
                 FROM spans s
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND id IN (SELECT id FROM page_ids)
+                AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
                 <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -1214,6 +1188,15 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
             ), <endif>feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -1301,6 +1284,15 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                     SELECT
@@ -1460,21 +1452,25 @@ public class SpanDAO {
             ;
             """;
 
+    /** Carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}. */
     private static final String SELECT_SPAN_ID_AND_WORKSPACE = """
             SELECT
                 DISTINCT id, workspace_id
             FROM spans
             WHERE id IN :spanIds
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
+    /** Carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}. */
     public static final String SELECT_PROJECT_ID_FROM_SPAN = """
             SELECT
                   DISTINCT project_id
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1604,6 +1600,15 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                     SELECT
@@ -1750,6 +1755,15 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(spans_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM spans
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                     SELECT entity_id
@@ -1873,6 +1887,7 @@ public class SpanDAO {
             ;
             """;
 
+    /** The {@code spans} read carries the {@code <id_weeks>} bound — see {@link #SELECT_TARGET_PROJECTS_FOR_SPANS}. */
     private static final String BULK_UPDATE = """
             INSERT INTO spans (
                 id,
@@ -1938,6 +1953,7 @@ public class SpanDAO {
                         <if(environment)> :environment <else> s.environment <endif> as environment
                     FROM spans s
                     WHERE s.id IN :ids AND s.workspace_id = :workspace_id
+                    <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
                     ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.id) DESC, s.last_updated_at DESC
                     LIMIT 1 BY s.id
                     SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable'
@@ -1976,19 +1992,12 @@ public class SpanDAO {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(spans), "Spans list must not be empty");
 
-        if (configuration.getBulkInsert().v2ClientEnabled()) {
-            return insertJsonEachRow(spans);
-        }
-
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> insert(spans, connection))
-                .flatMap(Result::getRowsUpdated)
-                .reduce(0L, Long::sum);
+        return insertJsonEachRow(spans);
     }
 
     /**
-     * The {@link #BULK_INSERT} rows streamed as JSONEachRow through the v2 client rather than bound as 27
-     * named parameters per row. See {@link SpanJsonRowMapper} for the per-column parity notes.
+     * Span rows streamed as JSONEachRow through the v2 client. Replaced an R2DBC insert that bound 27
+     * named parameters per row. See {@link SpanJsonRowMapper} for the per-column notes.
      */
     private Mono<Long> insertJsonEachRow(List<Span> spans) {
         return makeMonoContextAware((userName, workspaceId) -> {
@@ -2019,93 +2028,11 @@ public class SpanDAO {
         });
     }
 
-    private Publisher<? extends Result> insert(List<Span> spans, Connection connection) {
-
-        return makeMonoContextAware((userName, workspaceId) -> {
-            List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(spans.size());
-
-            var template = getSTWithLogComment(BULK_INSERT, "batch_insert_spans", workspaceId, userName, spans.size())
-                    .add("items", queryItems);
-
-            Statement statement = connection.createStatement(template.render());
-
-            // Captured once per batch so every row whose client did not provide lastUpdatedAt gets
-            // the same timestamp — matches the prior server-side now64(6) semantics.
-            Instant nowForBatch = Instant.now();
-
-            int i = 0;
-            for (Span span : spans) {
-                String inputValue = TruncationUtils.toJsonString(span.input());
-                String outputValue = TruncationUtils.toJsonString(span.output());
-
-                statement.bind("id" + i, span.id())
-                        .bind("project_id" + i, span.projectId())
-                        .bind("trace_id" + i, span.traceId())
-                        .bind("name" + i, StringUtils.defaultIfBlank(span.name(), ""))
-                        .bind("type" + i, Objects.toString(span.type(), SpanType.UNKNOWN_VALUE))
-                        .bind("start_time" + i, ClickHouseDateTimeFormat.formatNanos(span.startTime()))
-                        .bind("parent_span_id" + i, span.parentSpanId() != null ? span.parentSpanId() : "")
-                        .bind("input" + i, inputValue)
-                        .bind("output" + i, outputValue)
-                        .bind("metadata" + i, span.metadata() != null ? span.metadata().toString() : "")
-                        .bind("model" + i, StringUtils.defaultIfBlank(span.model(), ""))
-                        .bind("provider" + i, StringUtils.defaultIfBlank(span.provider(), ""))
-                        .bind("tags" + i, span.tags() != null ? span.tags().toArray(String[]::new) : new String[]{})
-                        .bind("error_info" + i,
-                                span.errorInfo() != null ? JsonUtils.readTree(span.errorInfo()).toString() : "")
-                        .bind("created_by" + i, userName)
-                        .bind("last_updated_by" + i, userName)
-                        .bind("input_slim" + i, TruncationUtils.createSlimJsonString(inputValue))
-                        .bind("output_slim" + i, TruncationUtils.createSlimJsonString(outputValue));
-
-                bindEpochSentinel(statement, "end_time" + i, span.endTime());
-
-                statement.bind("usage" + i, UsageUtils.sanitizeUsage(span.usage()));
-
-                // Format the timestamp client-side so the SQL contains a plain string literal in the
-                // last_updated_at cell. Fall back to "now" when the client did not provide a value —
-                // matches the column's DEFAULT now64(6) but avoids the function call in the tuple
-                // that would trip the FORMAT Values fast-path. See OPIK-5694.
-                statement.bind("last_updated_at" + i, ClickHouseDateTimeFormat.formatMicros(
-                        span.lastUpdatedAt() != null ? span.lastUpdatedAt() : nowForBatch));
-
-                TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
-
-                // BULK_INSERT writes the cost cell directly into Decimal128(12) (no toDecimal128
-                // wrap), so the driver must emit an unquoted numeric literal — bind the
-                // BigDecimal itself rather than its String form. See OPIK-5694.
-                BigDecimal cost = span.totalEstimatedCost() != null ? span.totalEstimatedCost() : calculateCost(span);
-                statement.bind("total_estimated_cost" + i, cost);
-                statement.bind("total_estimated_cost_version" + i,
-                        span.totalEstimatedCost() == null && cost.compareTo(BigDecimal.ZERO) > 0
-                                ? ESTIMATED_COST_VERSION
-                                : "");
-
-                bindNanSentinel(statement, "ttft" + i, span.ttft());
-
-                if (span.source() != null) {
-                    statement.bind("source" + i, span.source().getValue());
-                } else {
-                    statement.bindNull("source" + i, String.class);
-                }
-
-                statement.bind("environment" + i, StringUtils.defaultString(span.environment()));
-
-                i++;
-            }
-
-            statement.bind("workspace_id", workspaceId);
-
-            Segment segment = startSegment("spans", "Clickhouse", "batch_insert");
-
-            return Mono.from(statement.execute())
-                    .doFinally(signalType -> endSegment(segment));
-        });
-    }
-
     private Publisher<? extends Result> insert(Span span, Connection connection) {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newInsertTemplate(workspaceId, userName);
+            var idWeeks = idWeeks(Set.of(span.id()));
+            idWeeks.ifPresent(_ -> template.add("id_weeks", true));
             String inputValue = TruncationUtils.toJsonString(span.input());
             String outputValue = TruncationUtils.toJsonString(span.output());
             var statement = connection.createStatement(template.render())
@@ -2127,6 +2054,7 @@ public class SpanDAO {
             } else {
                 statement.bind("parent_span_id", "");
             }
+            idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
             bindEpochSentinel(statement, "end_time", span.endTime());
 
             if (span.tags() != null) {
@@ -2165,11 +2093,9 @@ public class SpanDAO {
 
             bindNanSentinel(statement, "ttft", span.ttft());
 
-            if (span.source() != null) {
-                statement.bind("source", span.source().getValue());
-            } else {
-                statement.bindNull("source", String.class);
-            }
+            statement.bind("source", span.source() == null
+                    ? Source.UNKNOWN_VALUE
+                    : span.source().getValue());
 
             statement.bind("environment", StringUtils.defaultString(span.environment()));
 
@@ -2285,10 +2211,13 @@ public class SpanDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT, false, "partial_insert_span",
                             workspaceId, userName);
+                    var idWeeks = idWeeks(Set.of(id));
+                    idWeeks.ifPresent(_ -> template.add("id_weeks", true));
 
                     var statement = connection.createStatement(template.render());
 
                     statement.bind("id", id);
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
                     statement.bind("project_id", projectId);
                     statement.bind("trace_id", spanUpdate.traceId());
 
@@ -2306,11 +2235,10 @@ public class SpanDAO {
                     bindEpochSentinel(statement, "end_time", spanUpdate.endTime());
                     bindNanSentinel(statement, "ttft", spanUpdate.ttft());
 
-                    if (spanUpdate.source() != null) {
-                        statement.bind("source", spanUpdate.source().getValue());
-                    } else {
-                        statement.bindNull("source", String.class);
-                    }
+                    // 'unknown' is also what the merge above treats as "no source supplied".
+                    statement.bind("source", spanUpdate.source() == null
+                            ? Source.UNKNOWN_VALUE
+                            : spanUpdate.source().getValue());
 
                     bindUserNameAndWorkspace(statement, userName, workspaceId);
 
@@ -2336,8 +2264,11 @@ public class SpanDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newUpdateTemplate(finalUpdate, UPDATE, isManualCost(existingSpan), "update_span",
                     workspaceId, userName);
+            var idWeeks = idWeeks(Set.of(id));
+            idWeeks.ifPresent(_ -> template.add("id_weeks", true));
             var statement = connection.createStatement(template.render());
             statement.bind("id", id);
+            idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
             bindUpdateParams(finalUpdate, statement, isManualCost(existingSpan));
 
@@ -2468,10 +2399,13 @@ public class SpanDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(SELECT_ONLY_SPAN_BY_ID, "get_only_span_by_id", workspaceId,
                             userName, "");
+                    var idWeeks = idWeeks(Set.of(id));
+                    idWeeks.ifPresent(_ -> template.add("id_weeks", true));
                     var statement = connection.createStatement(template.render())
                             .bind("id", id)
                             .bind("project_id", projectId)
                             .bind("workspace_id", workspaceId);
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                     Segment segment = startSegment("spans", "Clickhouse", "select_only_span_by_id");
 
@@ -2495,9 +2429,12 @@ public class SpanDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_PARTIAL_BY_ID, "get_partial_span_by_id", workspaceId, userName,
                     "");
+            var idWeeks = idWeeks(Set.of(id));
+            idWeeks.ifPresent(_ -> template.add("id_weeks", true));
             var statement = connection.createStatement(template.render())
                     .bind("id", id)
                     .bind("workspace_id", workspaceId);
+            idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
             var segment = startSegment("spans", "Clickhouse", "get_partial_by_id");
             return Flux.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment));
@@ -2571,8 +2508,13 @@ public class SpanDAO {
                         var template = getSTWithLogComment(SELECT_TARGET_PROJECTS_FOR_SPANS,
                                 "get_target_project_ids_for_spans", workspaceId, userName, ids.size());
 
+                        var idWeeks = idWeeks(ids);
+                        idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
                         var statement = connection.createStatement(template.render())
                                 .bind("ids", ids.toArray(UUID[]::new));
+
+                        idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                         return makeMonoContextAware(bindWorkspaceIdToMono(statement));
                     })
@@ -2582,8 +2524,8 @@ public class SpanDAO {
     }
 
     @WithSpan
-    public Flux<Span> getByIds(@NonNull Set<UUID> ids) {
-        if (ids.isEmpty()) {
+    public Flux<Span> getByIds(Set<UUID> ids) {
+        if (CollectionUtils.isEmpty(ids)) {
             return Flux.empty();
         }
 
@@ -2604,12 +2546,17 @@ public class SpanDAO {
                                     template.add("has_target_projects", true);
                                 }
 
+                                var idWeeks = idWeeks(ids);
+                                idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
                                 var statement = connection.createStatement(template.render())
                                         .bind("ids", ids.toArray(new UUID[0]));
 
                                 if (CollectionUtils.isNotEmpty(targetProjectIds)) {
                                     statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
                                 }
+
+                                idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                                 Segment segment = startSegment("spans", "Clickhouse", "get_by_ids");
 
@@ -2753,10 +2700,10 @@ public class SpanDAO {
                 .id(row.get("id", UUID.class))
                 .projectId(row.get("project_id", UUID.class))
                 .traceId(row.get("trace_id", UUID.class))
-                .parentSpanId(Optional.ofNullable(row.get("parent_span_id", String.class))
-                        .filter(str -> !str.isBlank())
-                        .map(UUID::fromString)
-                        .orElse(null))
+                // Not an isBlank guard: on the partitioned successor the column is FixedString(36), whose empty
+                // (root-span) value reaches Java NUL-padded, and NUL is not whitespace. See
+                // SentinelTranslation#emptyUuidToNullableUuid.
+                .parentSpanId(emptyUuidToNullableUuid(row.get("parent_span_id", String.class)))
                 .name(StringUtils.defaultIfBlank(getValue(exclude, SpanField.NAME, row, "name", String.class),
                         null))
                 .type(SpanType.fromString(getValue(exclude, SpanField.TYPE, row, "type", String.class)))
@@ -2797,7 +2744,7 @@ public class SpanDAO {
                         .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
                         .filter(set -> !set.isEmpty())
                         .orElse(null))
-                .usage(getValue(exclude, SpanField.USAGE, row, "usage", Map.class))
+                .usage(UsageUtils.toIntegerUsage(getValue(exclude, SpanField.USAGE, row, "usage", Map.class)))
                 .comments(Optional
                         .ofNullable(getValue(exclude, SpanField.COMMENTS, row, "comments", List[].class))
                         .map(CommentResultMapper::getComments)
@@ -3088,6 +3035,10 @@ public class SpanDAO {
                 .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
         Optional.ofNullable(spanSearchCriteria.searchText())
                 .ifPresent(searchText -> template.add("search_text", SPAN_SEARCH_CLAUSE));
+        // Bounds a search scan to the weeks of the project's own spans; pure cost on the unpartitioned legacy table.
+        if (spanColumnsNonNullable()) {
+            template.add("spans_partitioned", true);
+        }
         return template;
     }
 
@@ -3188,12 +3139,15 @@ public class SpanDAO {
         }
 
         var template = getSTWithLogComment(SELECT_SPAN_ID_AND_WORKSPACE, "get_span_workspace", "", "", spanIds.size());
+        var idWeeks = idWeeks(spanIds);
+        idWeeks.ifPresent(_ -> template.add("id_weeks", true));
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
 
                     var statement = connection.createStatement(template.render())
                             .bind("spanIds", spanIds.toArray(UUID[]::new));
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                     return Mono.from(statement.execute());
                 })
@@ -3201,6 +3155,14 @@ public class SpanDAO {
                         row.get("workspace_id", String.class),
                         row.get("id", UUID.class))))
                 .collectList();
+    }
+
+    /**
+     * The values for the {@code <id_weeks>} bound, or empty when the query must run unbounded. An array because the
+     * driver renders a {@code Collection} as a tuple, and the bound is an {@code IN} over a set.
+     */
+    private Optional<Long[]> idWeeks(Collection<UUID> ids) {
+        return WeeklyPartitions.weeksOf(ids).map(weeks -> weeks.toArray(Long[]::new));
     }
 
     @WithSpan
@@ -3212,9 +3174,14 @@ public class SpanDAO {
                     var template = getSTWithLogComment(SELECT_PROJECT_ID_FROM_SPAN, "get_project_id_from_span",
                             workspaceId, userName, "");
 
+                    var idWeeks = idWeeks(Set.of(spanId));
+                    idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
                     var statement = connection.createStatement(template.render())
                             .bind("id", spanId)
                             .bind("workspace_id", workspaceId);
+
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                     return Flux.from(statement.execute());
                 }))
@@ -3403,10 +3370,13 @@ public class SpanDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags, workspaceId, userName);
+                    var idWeeks = idWeeks(ids);
+                    idWeeks.ifPresent(_ -> template.add("id_weeks", true));
                     var query = template.render();
 
                     var statement = connection.createStatement(query)
                             .bind("ids", ids);
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                     bindUserNameAndWorkspace(statement, userName, workspaceId);
                     bindBulkUpdateParams(update, statement);

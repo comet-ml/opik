@@ -20,10 +20,9 @@ import java.util.UUID;
 /**
  * Puts routing work on the stream: one XADD and nothing else.
  *
- * <p>Called straight from the event listener, so one message is one score event — which already carries a
- * whole batch of entity ids, so a bulk score call costs one XADD rather than one per entity. Repeated
- * scores on the same entity are folded by the consumer when it reads a batch, not here: the stream is the
- * buffer, and collapsing on the read side keeps the write path to a single Redis command.
+ * <p>Called by the buffer flush, so one message is one (workspace, scope) batch of everything scored in the
+ * buffer window, already deduplicated. The consumer processes it as a unit: one automation lookup and one
+ * score read for every entity in it.
  */
 @Slf4j
 @Singleton
@@ -39,9 +38,8 @@ public class AnnotationQueueRoutingPublisher {
         this.config = config;
     }
 
-    public Mono<Void> enqueue(@NonNull String workspaceId, @NonNull String userName,
-            @NonNull AnnotationQueue.AnnotationScope scope, Set<UUID> entityIds,
-            @NonNull Set<String> scoreNames) {
+    public Mono<Void> enqueue(@NonNull String workspaceId, @NonNull AnnotationQueue.AnnotationScope scope,
+            Set<UUID> entityIds) {
 
         if (CollectionUtils.isEmpty(entityIds)) {
             return Mono.empty();
@@ -49,13 +47,11 @@ public class AnnotationQueueRoutingPublisher {
 
         var message = AnnotationQueueRoutingMessage.builder()
                 .workspaceId(workspaceId)
-                .userName(userName)
                 .scope(scope)
                 .entityIds(entityIds)
-                .scoreNames(scoreNames)
                 .build();
 
-        // DEBUG: one of these per score event on an automated workspace, so INFO would be noise.
+        // DEBUG: one of these per flushed batch on an automated workspace, so INFO would be noise.
         log.debug("Publishing annotation queue routing message, entities '{}', scope '{}', workspace '{}'",
                 entityIds.size(), scope, workspaceId);
 

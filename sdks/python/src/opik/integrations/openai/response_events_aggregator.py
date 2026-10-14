@@ -25,6 +25,16 @@ def aggregate(
             )
         ]
 
+        if not completed_event:
+            # The stream was abandoned before its terminal event (a `break`, a
+            # cancelled task, a client disconnect): there is no response to log.
+            LOGGER.debug(
+                "No terminal event among %d OpenAI Responses stream items, "
+                "stream output is not recorded",
+                len(items),
+            )
+            return None
+
         response = completed_event[0].response
         return response
     except Exception as exception:

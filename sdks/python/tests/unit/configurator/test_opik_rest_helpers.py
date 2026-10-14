@@ -11,21 +11,31 @@ from opik.configurator import opik_rest_helpers
 
 class TestIsInstanceActive:
     @pytest.mark.parametrize(
-        "status_code, expected_result",
+        "status_code, body, expected_result",
         [
-            (200, True),
-            (404, False),
-            (500, False),
+            (200, {"message": "Healthy Server", "healthy": True}, True),
+            # Vite, or Opik's nginx outside /api/: every path is the HTML page.
+            (200, ValueError("Expecting value"), False),
+            (200, ["not", "an", "object"], False),
+            (404, ValueError("Expecting value"), False),
+            (500, {"message": "Not Healthy", "healthy": False}, False),
         ],
     )
     @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
-    def test_is_instance_active(self, mock_httpx_client, status_code, expected_result):
+    def test_is_instance_active(
+        self, mock_httpx_client, status_code, body, expected_result
+    ):
         """
-        Test various HTTP status code responses to check if the instance is active.
+        Only the Opik backend's own healthy answer counts, so a dev server on the
+        same port is not taken for Opik.
         """
         mock_client_instance = MagicMock()
         mock_response = Mock()
         mock_response.status_code = status_code
+        if isinstance(body, Exception):
+            mock_response.json.side_effect = body
+        else:
+            mock_response.json.return_value = body
 
         mock_client_instance.__enter__.return_value = mock_client_instance
         mock_client_instance.__exit__.return_value = False
@@ -36,6 +46,33 @@ class TestIsInstanceActive:
         result = opik_rest_helpers.is_instance_active(url)
 
         assert result == expected_result
+        # Under api/ first, where Opik's nginx serves the backend.
+        assert (
+            mock_client_instance.get.call_args_list[0].kwargs["url"]
+            == "http://example.com/api/is-alive/ping"
+        )
+
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
+    def test_is_instance_active__backend_run_on_its_own__answers_at_the_root(
+        self, mock_httpx_client
+    ):
+        """`scripts/dev-runner.sh` has `opik configure` pointed at the backend's
+        own port, which has no `/api/` prefix."""
+        not_found = Mock(status_code=404)
+        healthy = Mock(status_code=200)
+        healthy.json.return_value = {"message": "Healthy Server", "healthy": True}
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__.return_value = mock_client_instance
+        mock_client_instance.get.side_effect = [not_found, healthy]
+        mock_httpx_client.return_value = mock_client_instance
+
+        assert opik_rest_helpers.is_instance_active("http://localhost:8080") is True
+        assert [
+            call.kwargs["url"] for call in mock_client_instance.get.call_args_list
+        ] == [
+            "http://localhost:8080/api/is-alive/ping",
+            "http://localhost:8080/is-alive/ping",
+        ]
 
     @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
     def test_is_instance_active_timeout(self, mock_httpx_client):
@@ -317,3 +354,63 @@ class TestIsApiKeyCorrect:
 
         with pytest.raises(ConnectionError):
             opik_rest_helpers.is_api_key_correct(api_key, url="https://some-url.com")
+
+
+class TestListProjects:
+    """Callers only pick wording or a link from it, so it must never raise."""
+
+    @staticmethod
+    def _respond(monkeypatch, response):
+        client = MagicMock()
+        client.__enter__.return_value.get.side_effect = (
+            response if isinstance(response, Exception) else lambda **kw: response
+        )
+        monkeypatch.setattr(
+            opik_rest_helpers, "_get_httpx_client", lambda **kwargs: client
+        )
+
+    def _list(self):
+        return opik_rest_helpers.list_projects(
+            api_key=None,
+            workspace=None,
+            api_url="https://opik/api/",
+            params={},
+            timeout=1.0,
+        )
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            httpx.ConnectError("no route"),
+            httpx.ReadTimeout("too slow"),
+            OSError("closed"),
+        ],
+    )
+    def test_an_unreachable_deployment__answers_none(self, monkeypatch, failure):
+        self._respond(monkeypatch, failure)
+
+        assert self._list() is None
+
+    def test_a_rejected_request__answers_none(self, monkeypatch):
+        self._respond(monkeypatch, httpx.Response(403, json={}))
+
+        assert self._list() is None
+
+    def test_a_body_that_is_not_json__answers_none(self, monkeypatch):
+        self._respond(monkeypatch, httpx.Response(200, text="<html>nope</html>"))
+
+        assert self._list() is None
+
+    @pytest.mark.parametrize("body", [[], {"content": "nope"}, {"content": None}])
+    def test_a_body_of_the_wrong_shape__answers_none(self, monkeypatch, body):
+        self._respond(monkeypatch, httpx.Response(200, json=body))
+
+        assert self._list() is None
+
+    def test_a_listing__keeps_only_project_objects(self, monkeypatch):
+        self._respond(
+            monkeypatch,
+            httpx.Response(200, json={"content": [{"name": "my-app"}, "junk"]}),
+        )
+
+        assert self._list() == [{"name": "my-app"}]

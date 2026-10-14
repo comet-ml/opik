@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import first from "lodash/first";
+import isEmpty from "lodash/isEmpty";
+import some from "lodash/some";
 import {
   COMPOSED_PROVIDER_TYPE,
   PROVIDER_MODEL_TYPE,
@@ -18,6 +20,7 @@ import {
   setLatestProviderModelsSnapshot,
 } from "@/lib/modelRegistryStore";
 import { getRoutableProviderModelValue } from "@/lib/modelUtils";
+import { DECISION_MODELS } from "@/constants/decisionModels";
 
 export type ProviderResolver = (
   modelName?: PROVIDER_MODEL_TYPE | "",
@@ -76,7 +79,7 @@ const transformFetched = (
     out[provider] = filtered.map((m) => ({
       value: getRoutableProviderModelValue(
         provider as COMPOSED_PROVIDER_TYPE,
-        m.qualifiedName ?? m.id,
+        m.qualified_name || m.id,
       ),
       label: m.label ?? m.id,
     }));
@@ -84,34 +87,60 @@ const transformFetched = (
   return out;
 };
 
+// Decisions models (Jev) aren't in the registry, but persisted rules on them must still resolve to
+// OpenRouter. Added to the resolution map only: the dropdowns never list them unless a caller opts in.
+const withDecisionModels = (models: ProviderModelsMap): ProviderModelsMap => {
+  const openRouterModels = models[PROVIDER_TYPE.OPEN_ROUTER] ?? [];
+  const missing = DECISION_MODELS.filter(
+    (dm) => !openRouterModels.some((m) => m.value === dm.value),
+  );
+  return missing.length
+    ? {
+        ...models,
+        [PROVIDER_TYPE.OPEN_ROUTER]: [...openRouterModels, ...missing],
+      }
+    : models;
+};
+
 const buildFlagsIndex = (
   fetched: LlmModelsByProvider,
 ): Map<string, ModelFlags> => {
   const index = new Map<string, ModelFlags>();
   for (const [provider, models] of Object.entries(fetched)) {
+    if (!KNOWN_PROVIDER_TYPES.has(provider)) {
+      continue;
+    }
     for (const m of models) {
       const flags: ModelFlags = {
         reasoning: m.reasoning,
-        structuredOutput: m.structuredOutput,
+        structuredOutput: m.structured_output,
       };
-      index.set(m.id, flags);
-      if (m.qualifiedName) {
-        index.set(m.qualifiedName, flags);
-      }
       index.set(
         getRoutableProviderModelValue(
           provider as COMPOSED_PROVIDER_TYPE,
-          m.qualifiedName ?? m.id,
+          m.qualified_name || m.id,
         ),
         flags,
       );
+      // A Vertex AI entry shares its bare id with the Gemini entry of the same name, and the
+      // backend's provider order changes between restarts. The bare id only fills a gap (old
+      // prompts saved a bare Vertex AI id), so it never replaces another entry's own value.
+      if (!index.has(m.id)) {
+        index.set(m.id, flags);
+      }
     }
   }
   return index;
 };
 
 const useLLMProviderModelsData = () => {
-  const { data: fetched, isPending, isError, error } = useLlmModels();
+  const {
+    data: fetched,
+    isPending,
+    isFetched,
+    isError,
+    error,
+  } = useLlmModels();
   const openAICompatibleModels = useOpenAICompatibleModels();
 
   // Dropdown-facing map: only entries that are flagged as visible (i.e.
@@ -135,11 +164,11 @@ const useLLMProviderModelsData = () => {
     const fromApi = fetched
       ? transformFetched(fetched, { onlyVisible: false })
       : {};
-    return {
+    return withDecisionModels({
       ...MINIMAL_FALLBACK,
       ...fromApi,
       ...openAICompatibleModels,
-    } as ProviderModelsMap;
+    } as ProviderModelsMap);
   }, [fetched, openAICompatibleModels]);
 
   // Compat wrapper for callers that still expect a factory. Returns the
@@ -173,10 +202,12 @@ const useLLMProviderModelsData = () => {
           ...transformFetched(fetched, { onlyVisible: false }),
         }
       : getLatestProviderModelsSnapshot();
-    setLatestProviderModelsSnapshot({
-      ...base,
-      ...openAICompatibleModels,
-    });
+    setLatestProviderModelsSnapshot(
+      withDecisionModels({
+        ...base,
+        ...openAICompatibleModels,
+      }),
+    );
     if (fetched) {
       setLatestModelFlags(buildFlagsIndex(fetched));
     }
@@ -294,8 +325,14 @@ const useLLMProviderModelsData = () => {
     calculateModelProvider,
     calculateDefaultModel,
     isPending,
+    isFetched,
     isError,
     error,
+    hasRegistryModels: some(
+      fetched,
+      (models, provider) =>
+        KNOWN_PROVIDER_TYPES.has(provider) && !isEmpty(models),
+    ),
   };
 };
 

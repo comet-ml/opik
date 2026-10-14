@@ -12,6 +12,7 @@ import com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorSearchCriteria;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
+import com.comet.opik.domain.evaluators.DecisionModelRuleValidator;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
@@ -69,6 +70,7 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 public class AutomationRuleEvaluatorsResource {
 
     private final @NonNull AutomationRuleEvaluatorService service;
+    private final @NonNull DecisionModelRuleValidator decisionModelRuleValidator;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull AutomationRuleEvaluatorSortingFactory sortingFactory;
@@ -173,6 +175,7 @@ public class AutomationRuleEvaluatorsResource {
         String userName = requestContext.get().getUserName();
 
         Set<UUID> projectIds = extractAndValidateProjectIds(evaluator.getProjectIds(), evaluator.getProjectId());
+        decisionModelRuleValidator.validate(evaluator);
 
         log.info("Creating {} evaluator for '{}' projects on workspace_id '{}'", evaluator.getType(),
                 projectIds.size(), workspaceId);
@@ -202,6 +205,7 @@ public class AutomationRuleEvaluatorsResource {
 
         Set<UUID> projectIds = extractAndValidateProjectIds(evaluatorUpdate.getProjectIds(),
                 evaluatorUpdate.getProjectId());
+        decisionModelRuleValidator.validate(evaluatorUpdate);
 
         log.info("Updating automation rule evaluator by id '{}' and project_ids '{}' on workspace_id '{}'", id,
                 projectIds, workspaceId);

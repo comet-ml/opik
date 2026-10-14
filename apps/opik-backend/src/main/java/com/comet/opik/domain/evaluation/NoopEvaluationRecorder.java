@@ -1,6 +1,8 @@
 package com.comet.opik.domain.evaluation;
 
 import com.comet.opik.api.FeedbackScoreItem;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import reactor.core.publisher.Mono;
@@ -15,6 +17,11 @@ final class NoopEvaluationRecorder implements EvaluationRecorder {
 
     @Override
     public Mono<ChatResponse> recordLlmCall(ChatRequest request, Mono<ChatResponse> call) {
+        return call;
+    }
+
+    @Override
+    public Mono<DecisionsResponse> recordDecisionCall(DecisionsRequest request, Mono<DecisionsResponse> call) {
         return call;
     }
 

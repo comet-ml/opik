@@ -13,6 +13,7 @@ from ..types.chat_completion_response import ChatCompletionResponse
 from ..types.function import Function
 from ..types.function_call import FunctionCall
 from ..types.message import Message
+from ..types.prompt_cache_options import PromptCacheOptions
 from ..types.response_format import ResponseFormat
 from ..types.stream_options import StreamOptions
 from ..types.tool import Tool
@@ -51,6 +52,8 @@ class RawChatCompletionsClient:
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         reasoning_effort: typing.Optional[str] = OMIT,
         service_tier: typing.Optional[str] = OMIT,
+        prompt_cache_key: typing.Optional[str] = OMIT,
+        prompt_cache_options: typing.Optional[PromptCacheOptions] = OMIT,
         logprobs: typing.Optional[bool] = OMIT,
         top_logprobs: typing.Optional[int] = OMIT,
         functions: typing.Optional[typing.Sequence[Function]] = OMIT,
@@ -108,6 +111,10 @@ class RawChatCompletionsClient:
 
         service_tier : typing.Optional[str]
 
+        prompt_cache_key : typing.Optional[str]
+
+        prompt_cache_options : typing.Optional[PromptCacheOptions]
+
         logprobs : typing.Optional[bool]
 
         top_logprobs : typing.Optional[int]
@@ -159,6 +166,10 @@ class RawChatCompletionsClient:
                 "metadata": metadata,
                 "reasoningEffort": reasoning_effort,
                 "serviceTier": service_tier,
+                "promptCacheKey": prompt_cache_key,
+                "promptCacheOptions": convert_and_respect_annotation_metadata(
+                    object_=prompt_cache_options, annotation=PromptCacheOptions, direction="write"
+                ),
                 "logprobs": logprobs,
                 "topLogprobs": top_logprobs,
                 "functions": convert_and_respect_annotation_metadata(
@@ -220,6 +231,8 @@ class AsyncRawChatCompletionsClient:
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         reasoning_effort: typing.Optional[str] = OMIT,
         service_tier: typing.Optional[str] = OMIT,
+        prompt_cache_key: typing.Optional[str] = OMIT,
+        prompt_cache_options: typing.Optional[PromptCacheOptions] = OMIT,
         logprobs: typing.Optional[bool] = OMIT,
         top_logprobs: typing.Optional[int] = OMIT,
         functions: typing.Optional[typing.Sequence[Function]] = OMIT,
@@ -277,6 +290,10 @@ class AsyncRawChatCompletionsClient:
 
         service_tier : typing.Optional[str]
 
+        prompt_cache_key : typing.Optional[str]
+
+        prompt_cache_options : typing.Optional[PromptCacheOptions]
+
         logprobs : typing.Optional[bool]
 
         top_logprobs : typing.Optional[int]
@@ -328,6 +345,10 @@ class AsyncRawChatCompletionsClient:
                 "metadata": metadata,
                 "reasoningEffort": reasoning_effort,
                 "serviceTier": service_tier,
+                "promptCacheKey": prompt_cache_key,
+                "promptCacheOptions": convert_and_respect_annotation_metadata(
+                    object_=prompt_cache_options, annotation=PromptCacheOptions, direction="write"
+                ),
                 "logprobs": logprobs,
                 "topLogprobs": top_logprobs,
                 "functions": convert_and_respect_annotation_metadata(

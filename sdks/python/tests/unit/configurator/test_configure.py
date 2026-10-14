@@ -17,6 +17,7 @@ from opik.configurator.configure import (
     OPIK_BASE_URL_LOCAL,
     OpikConfigurator,
 )
+from opik.configurator import configure as configure_module
 from opik.exceptions import ConfigurationError
 
 
@@ -754,7 +755,7 @@ class TestSmartProjectDefault:
         assert result is True
         assert configurator.project_name == "My Onboarding Agent"
         mock_ask_approval.assert_called_once_with(
-            'Do you want to use "My Onboarding Agent" project name? (Y/n)'
+            'Use "My Onboarding Agent" as the project name?'
         )
 
     @patch(
@@ -1098,7 +1099,7 @@ class TestGetWorkspace:
         assert needs_update is True
         mock_get_default_workspace.assert_called_once_with()
         mock_ask_user_for_approval.assert_called_once_with(
-            'Do you want to use "default_workspace" workspace? (Y/n)'
+            'Use the "default_workspace" workspace?'
         )
 
     @patch("opik.configurator.configure.opik.config.OpikConfig")
@@ -1164,7 +1165,7 @@ class TestGetWorkspace:
         assert needs_update is True
         mock_get_default_workspace.assert_called_once_with()
         mock_ask_user_for_approval.assert_called_once_with(
-            'Do you want to use "default_workspace" workspace? (Y/n)'
+            'Use the "default_workspace" workspace?'
         )
         mock_ask_for_workspace.assert_called_once_with()
 
@@ -1267,15 +1268,18 @@ class TestConfigureCloud:
         # Check config file wasn't overwritten, but session updated
         mock_update_config.assert_called_once_with(save_to_file=False)
 
-        # Check the logging messages - should be called twice
+        # Both go through `_announce`, which defaults to this logger and which
+        # the CLI replaces so these land in the same styling as everything
+        # around them rather than as `OPIK:` lines amid it.
         expected_calls = [
             (
-                "Opik is already configured. You can check the settings by viewing the config file at %s",
-                Path("/some/path/.opik.config"),
+                "Opik is already configured. You can check the settings by viewing "
+                "the config file at /some/path/.opik.config",
             ),
             (
-                "Configuration completed successfully. Traces will be logged to 'valid_project_name' project. "
-                "To change the destination project, see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name",
+                "Configuration completed successfully. Traces will be logged to "
+                "'valid_project_name' project. To change the destination project, "
+                "see: https://www.comet.com/docs/opik/tracing/advanced/log_traces#logging-to-a-specific-project",
             ),
         ]
         assert mock_logger_info.call_count == 2
@@ -1573,7 +1577,7 @@ class TestConfigureLocal:
             ),
             (
                 "Configuration completed successfully. Traces will be logged to 'test_project' project. "
-                "To change the destination project, see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name",
+                "To change the destination project, see: https://www.comet.com/docs/opik/tracing/advanced/log_traces#logging-to-a-specific-project",
             ),
         ]
         assert mock_logger_info.call_count == 2
@@ -1607,7 +1611,7 @@ class TestConfigureLocal:
         configurator._configure_local()
 
         mock_ask_user_for_approval.assert_called_once_with(
-            f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
+            f"Found a local Opik instance at {OPIK_BASE_URL_LOCAL}. Use it?"
         )
         mock_update_config.assert_called_once_with(save_to_file=True)
 
@@ -1727,7 +1731,7 @@ class TestConfigureLocal:
         configurator._configure_local()
 
         mock_ask_user_for_approval.assert_called_once_with(
-            f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
+            f"Found a local Opik instance at {OPIK_BASE_URL_LOCAL}. Use it?"
         )
         mock_ask_for_url.assert_called_once()
         mock_update_config.assert_called_once()
@@ -2514,3 +2518,96 @@ class TestTheLibraryPathDoesNotTouchAiClients:
             "_skills_host_keys",
         ):
             assert not hasattr(OpikConfigurator, name), name
+
+
+class TestTheEndingIsReported:
+    """`opik configure` draws its own closing block; `opik.configure()` logs.
+
+    The CLI passes `report_configured` and gets the facts to render. Without one,
+    the library keeps the log lines it has always written.
+    """
+
+    @patch("opik.configurator.configure.opik.config.OpikConfig")
+    @patch("opik.configurator.configure.opik.config.update_session_config")
+    def test_with_a_reporter__it_gets_what_was_saved_and_nothing_is_logged(
+        self, mock_update_session_config, mock_opik_config
+    ):
+        report = Mock()
+        announce = Mock()
+        configurator = OpikConfigurator(
+            api_key="key",
+            workspace="acme-ai",
+            url="http://example.com",
+            project_name="checkout-bot",
+            announce=announce,
+            report_configured=report,
+        )
+
+        with patch("opik.configurator.configure.LOGGER.info") as log_info:
+            configurator._update_config(save_to_file=True)
+            configurator._log_project_configuration_message()
+
+        report.assert_called_once_with(
+            configure_module.Configured(
+                saved=True,
+                config_file=str(configurator.current_config.config_file_fullpath),
+                url="http://example.com/",
+                workspace="acme-ai",
+                project_name="checkout-bot",
+            )
+        )
+        log_info.assert_not_called()
+        announce.assert_not_called()
+
+    def test_with_a_reporter__cloud_is_left_out_and_the_workspace_kept(self):
+        """Cloud is the default and needs no reminding; the workspace is always true."""
+        report = Mock()
+        configurator = OpikConfigurator(
+            workspace=OPIK_WORKSPACE_DEFAULT_NAME,
+            project_name="checkout-bot",
+            report_configured=report,
+        )
+
+        configurator._log_project_configuration_message()
+
+        configured = report.call_args.args[0]
+        assert configured.saved is False
+        assert configured.url is None
+        assert configured.workspace == OPIK_WORKSPACE_DEFAULT_NAME
+
+    @patch("opik.configurator.configure.opik.config.OpikConfig")
+    @patch("opik.configurator.configure.opik.config.update_session_config")
+    def test_reused__a_run_that_writes_nothing_does_not_report_a_write(
+        self, mock_update_session_config, mock_opik_config
+    ):
+        report = Mock()
+        configurator = OpikConfigurator(
+            api_key="key", project_name="checkout-bot", report_configured=report
+        )
+        configurator._update_config(save_to_file=True)
+
+        with patch.object(configurator, "_configure_cloud"):
+            configurator.configure()
+        configurator._log_project_configuration_message()
+
+        assert report.call_args.args[0].saved is False
+
+    @patch("opik.configurator.configure.opik.config.OpikConfig")
+    @patch("opik.configurator.configure.opik.config.update_session_config")
+    def test_without_a_reporter__the_library_logs_as_it_always_has(
+        self, mock_update_session_config, mock_opik_config
+    ):
+        announce = Mock()
+        configurator = OpikConfigurator(
+            api_key="key", project_name="checkout-bot", announce=announce
+        )
+
+        with patch("opik.configurator.configure.LOGGER.info") as log_info:
+            configurator._update_config(save_to_file=True)
+            configurator._log_project_configuration_message()
+
+        assert log_info.call_args.args[0] == "Configuration saved to file: %s"
+        assert (
+            "Traces will be logged to 'checkout-bot' project"
+            in (announce.call_args.args[0])
+        )

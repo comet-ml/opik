@@ -63,6 +63,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
     return {
       canFilter: (path) => api.canFilter(quickFilterSection, path),
       onFilter: (path, value) => api.filter(quickFilterSection, path, value),
+      hint: api.hint,
     };
   }, [api, quickFilterSection]);
 

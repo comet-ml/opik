@@ -1,5 +1,6 @@
 import logging
-from typing import Final, List, Optional
+import urllib.parse
+from typing import Any, Dict, Final, List, Optional
 
 import httpx
 
@@ -30,24 +31,34 @@ def _get_httpx_client(
 
 def is_instance_active(url: str) -> bool:
     """
-    Returns True if the given Opik URL responds to an HTTP GET request.
+    Returns True if an Opik backend answers at the given Opik URL.
+
+    Pinged under ``api/``, where Opik's nginx serves the backend, then at the
+    root, where a backend run on its own answers (``scripts/dev-runner.sh``). Only
+    a ``"healthy": true`` answer counts: Opik's nginx outside ``/api/``, and a
+    frontend dev server such as Vite on the same port, answer every path with a
+    200 and an HTML page.
 
     Args:
         url (str): The base URL of the instance to check.
 
     Returns:
-        bool: True if the instance responds with HTTP status 200, otherwise False.
+        bool: True if the backend answers its ping with HTTP 200 and
+        ``"healthy": true``, otherwise False.
     """
-    try:
-        with _get_httpx_client() as http_client:
-            response = http_client.get(
-                url=url_helpers.get_is_alive_ping_url(url), timeout=HEALTH_CHECK_TIMEOUT
-            )
-        return response.status_code == 200
-    except httpx.ConnectTimeout:
-        return False
-    except Exception:
-        return False
+    base_url = url_helpers.ensure_ending_slash(url)
+    for api_url in (urllib.parse.urljoin(base_url, "api/"), base_url):
+        try:
+            with _get_httpx_client() as http_client:
+                response = http_client.get(
+                    url=url_helpers.get_is_alive_ping_url(api_url),
+                    timeout=HEALTH_CHECK_TIMEOUT,
+                )
+            if response.status_code == 200 and response.json().get("healthy") is True:
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def is_api_key_correct(api_key: str, url: str) -> bool:
@@ -142,3 +153,33 @@ def get_most_recent_project_name(
     except Exception:
         LOGGER.debug("Failed to fetch projects from %s", api_url, exc_info=True)
         return None
+
+
+def list_projects(
+    api_key: Optional[str],
+    workspace: Optional[str],
+    api_url: str,
+    params: Dict[str, Any],
+    timeout: float,
+) -> Optional[List[Dict[str, Any]]]:
+    """One page of the workspace's projects, or None when it cannot be read.
+
+    Best-effort for callers that only use it to pick wording or a link: any
+    failure, including a body of an unexpected shape, answers None.
+    """
+    try:
+        with _get_httpx_client(api_key=api_key, workspace=workspace) as client:
+            response = client.get(
+                url=f"{url_helpers.ensure_ending_slash(api_url)}v1/private/projects",
+                params=params,
+                timeout=timeout,
+            )
+        body = response.json() if response.status_code == 200 else None
+    except (httpx.HTTPError, OSError, ValueError):
+        LOGGER.debug("Could not list projects at %s", api_url, exc_info=True)
+        return None
+
+    content = body.get("content") if isinstance(body, dict) else None
+    if not isinstance(content, list):
+        return None
+    return [project for project in content if isinstance(project, dict)]

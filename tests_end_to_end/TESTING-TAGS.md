@@ -50,6 +50,7 @@ be `@t2-cuj` *and* `@t1-stsaas`: t2 depth, but also part of the STSaaS sanity se
 |---|---|
 | `@t1-stsaas` | include in the STSaaS customer-env sanity run (`test:t1-stsaas`) |
 | `@provider-sanity` | LLM-provider matrix; own cadence, no deploy gating |
+| `@llm-daily` | makes a real LLM provider call; runs once a day via `test:llm-daily` and is excluded from every tier (`--grep-invert @llm-daily`), so post-merge and nightly spend nothing |
 
 Worked example — `optimization-studio.spec.ts`:
 

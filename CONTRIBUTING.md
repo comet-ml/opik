@@ -47,6 +47,16 @@ Please review the CLA before contributing:
 5. Open a draft PR with GitHub CLI: `gh pr create --draft`.
 6. Fill `.github/pull_request_template.md` completely.
 
+## Pull request policy for external contributors
+These rules apply to contributors without write access to this repository. They help us review every pull request with care.
+
+- **Up to 3 open pull requests at a time.** If you open more, we reserve the right to close them. A pull request that you open (or reopen) while you already have 3 open is closed automatically.
+- **Respond within 2 weeks of a review.** If a pull request has no update (new commits or replies) for 2 weeks after our latest review, it is closed automatically. Reviews from maintainers and from the Baz review bot both count. We post a reminder comment a few days before we close it. An approved pull request is not affected.
+
+When you are ready to continue, open a new pull request or ask a maintainer to reopen the closed one.
+
+Both rules are enforced by [`.github/workflows/external_pr_policy.yml`](.github/workflows/external_pr_policy.yml). Maintainers can add the `keep-open` label to a pull request to exclude it from the 2-week rule.
+
 ## GitHub Actions workflows
 Workflow files in `.github/workflows/` are validated with [actionlint](https://github.com/rhysd/actionlint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed workflow files. The pre-commit framework builds the pinned actionlint from source automatically — no manual install needed. Run `make hooks` once per clone to enable it locally.
 

@@ -8,6 +8,7 @@ from ..types.chat_completion_response import ChatCompletionResponse
 from ..types.function import Function
 from ..types.function_call import FunctionCall
 from ..types.message import Message
+from ..types.prompt_cache_options import PromptCacheOptions
 from ..types.response_format import ResponseFormat
 from ..types.stream_options import StreamOptions
 from ..types.tool import Tool
@@ -58,6 +59,8 @@ class ChatCompletionsClient:
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         reasoning_effort: typing.Optional[str] = OMIT,
         service_tier: typing.Optional[str] = OMIT,
+        prompt_cache_key: typing.Optional[str] = OMIT,
+        prompt_cache_options: typing.Optional[PromptCacheOptions] = OMIT,
         logprobs: typing.Optional[bool] = OMIT,
         top_logprobs: typing.Optional[int] = OMIT,
         functions: typing.Optional[typing.Sequence[Function]] = OMIT,
@@ -115,6 +118,10 @@ class ChatCompletionsClient:
 
         service_tier : typing.Optional[str]
 
+        prompt_cache_key : typing.Optional[str]
+
+        prompt_cache_options : typing.Optional[PromptCacheOptions]
+
         logprobs : typing.Optional[bool]
 
         top_logprobs : typing.Optional[int]
@@ -161,6 +168,8 @@ class ChatCompletionsClient:
             metadata=metadata,
             reasoning_effort=reasoning_effort,
             service_tier=service_tier,
+            prompt_cache_key=prompt_cache_key,
+            prompt_cache_options=prompt_cache_options,
             logprobs=logprobs,
             top_logprobs=top_logprobs,
             functions=functions,
@@ -211,6 +220,8 @@ class AsyncChatCompletionsClient:
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         reasoning_effort: typing.Optional[str] = OMIT,
         service_tier: typing.Optional[str] = OMIT,
+        prompt_cache_key: typing.Optional[str] = OMIT,
+        prompt_cache_options: typing.Optional[PromptCacheOptions] = OMIT,
         logprobs: typing.Optional[bool] = OMIT,
         top_logprobs: typing.Optional[int] = OMIT,
         functions: typing.Optional[typing.Sequence[Function]] = OMIT,
@@ -268,6 +279,10 @@ class AsyncChatCompletionsClient:
 
         service_tier : typing.Optional[str]
 
+        prompt_cache_key : typing.Optional[str]
+
+        prompt_cache_options : typing.Optional[PromptCacheOptions]
+
         logprobs : typing.Optional[bool]
 
         top_logprobs : typing.Optional[int]
@@ -317,6 +332,8 @@ class AsyncChatCompletionsClient:
             metadata=metadata,
             reasoning_effort=reasoning_effort,
             service_tier=service_tier,
+            prompt_cache_key=prompt_cache_key,
+            prompt_cache_options=prompt_cache_options,
             logprobs=logprobs,
             top_logprobs=top_logprobs,
             functions=functions,

@@ -2,6 +2,7 @@ package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.HttpStatusRetryability;
 import com.google.api.gax.rpc.ApiException;
@@ -68,7 +69,8 @@ public class ChatCompletionService {
 
     public ChatCompletionResponse create(@NonNull ChatCompletionRequest rawRequest, @NonNull String workspaceId) {
         // must be final or effectively final for lambda
-        var request = SamplingParamsNormalizer.normalizeRequest(MessageContentNormalizer.normalizeRequest(rawRequest));
+        var request = normalizeRequest(rawRequest);
+        rejectDecisionModel(request.model());
 
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
         llmProviderClient.validateRequest(request);
@@ -100,7 +102,8 @@ public class ChatCompletionService {
             @NonNull ChatCompletionRequest rawRequest,
             @NonNull String workspaceId,
             @NonNull ChunkedOutputHandlers handlers) {
-        var request = SamplingParamsNormalizer.normalizeRequest(MessageContentNormalizer.normalizeRequest(rawRequest));
+        var request = normalizeRequest(rawRequest);
+        rejectDecisionModel(request.model());
 
         log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
 
@@ -134,7 +137,8 @@ public class ChatCompletionService {
     public ChatResponse scoreTrace(@NonNull ChatRequest chatRequest,
             @NonNull LlmAsJudgeModelParameters modelParameters,
             @NonNull String workspaceId) {
-        var languageModelClient = llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
+        var languageModelClient = llmProviderFactory.getLanguageModel(workspaceId,
+                dropOpenAiReasoningModelTemperature(modelParameters));
 
         ChatResponse chatResponse;
         try {
@@ -246,6 +250,34 @@ public class ChatCompletionService {
                 throw new NonRetriableException(runtimeException);
             }
             throw runtimeException;
+        }
+    }
+
+    private ChatCompletionRequest normalizeRequest(ChatCompletionRequest rawRequest) {
+        var request = SamplingParamsNormalizer.normalizeRequest(MessageContentNormalizer.normalizeRequest(rawRequest));
+        return request.model() != null && llmProviderFactory.isOpenAiReasoningModel(request.model())
+                ? SamplingParamsNormalizer.dropOpenAiReasoningModelParams(request)
+                : request;
+    }
+
+    // Saved judge rules keep the temperature they were created with, and the frontend strips it only on save.
+    private LlmAsJudgeModelParameters dropOpenAiReasoningModelTemperature(
+            LlmAsJudgeModelParameters modelParameters) {
+        return modelParameters.temperature() != null
+                && llmProviderFactory.isOpenAiReasoningModel(modelParameters.name())
+                        ? modelParameters.toBuilder().temperature(null).build()
+                        : modelParameters;
+    }
+
+    /**
+     * Decisions models (TypeSafe Jev) resolve to OpenRouter so online scoring finds the workspace key, but they
+     * only answer through the Decisions API: OpenRouter rejects them on chat completions. Fail here with a 400
+     * instead of spending a provider round trip on a call that can't succeed.
+     */
+    private void rejectDecisionModel(String model) {
+        if (OpenRouterDecisionModel.isDecisionModel(model)) {
+            throw new BadRequestException(
+                    "Decisions models can't be used for chat completions, model '%s'".formatted(model));
         }
     }
 

@@ -739,6 +739,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
             sections={columnSections}
+            layout="labeled"
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>

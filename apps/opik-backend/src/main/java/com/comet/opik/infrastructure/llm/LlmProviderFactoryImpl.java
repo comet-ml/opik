@@ -14,6 +14,7 @@ import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import dev.langchain4j.model.chat.ChatModel;
@@ -62,6 +63,11 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                         "LLM provider not supported: %s".formatted(llmProvider)));
     }
 
+    public LlmProviderClientApiConfig getClientApiConfig(@NonNull String workspaceId, @NonNull String model) {
+        var llmProvider = getLlmProvider(model);
+        return buildConfig(getProviderApiKey(workspaceId, llmProvider, model), workspaceId);
+    }
+
     private static final Set<LlmProvider> NAMED_PROVIDERS = Arrays.stream(LlmProvider.values())
             .filter(LlmProvider::supportsProviderName)
             .collect(Collectors.toUnmodifiableSet());
@@ -84,6 +90,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                 .providerId(providerConfig.id())
                 .workspaceId(workspaceId)
                 .authConfig(providerConfig.authConfig())
+                .provider(providerConfig.provider())
                 .build();
     }
 
@@ -125,6 +132,14 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         return StructuredOutputStrategy.getStrategy(provider, model);
     }
 
+    @Override
+    public boolean isOpenAiReasoningModel(@NonNull String model) {
+        return registryService.findModel(model)
+                .filter(result -> result.provider() == LlmProvider.OPEN_AI)
+                .map(result -> result.model().reasoning())
+                .orElse(false);
+    }
+
     private LlmProvider getLlmProviderFromEnums(@NonNull String model) {
         var freeModelConfig = configuration.getFreeModel();
         if (freeModelConfig.isEnabled() && model.equals(freeModelConfig.getModel())) {
@@ -141,7 +156,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             return LlmProvider.GEMINI;
         }
         if (model.startsWith("openrouter/")
-                || isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)) {
+                || isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)
+                || OpenRouterDecisionModel.isDecisionModel(model)) {
             return LlmProvider.OPEN_ROUTER;
         }
 

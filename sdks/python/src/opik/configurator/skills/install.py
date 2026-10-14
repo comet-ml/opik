@@ -47,7 +47,6 @@ class InstallResult:
     linked: Dict[str, List[str]] = dataclasses.field(default_factory=dict)
     link_errors: Dict[str, str] = dataclasses.field(default_factory=dict)
     error: Optional[str] = None
-    plugin_overlap: bool = False
 
 
 def setup_skills(
@@ -69,7 +68,7 @@ def setup_skills(
         return InstallResult(
             succeeded=False,
             error=(
-                f"none of the requested assistants ({', '.join(host_keys) or 'none'}) "
+                f"none of the requested AI clients ({', '.join(host_keys) or 'none'}) "
                 "have a known skills location"
             ),
         )
@@ -113,7 +112,6 @@ def setup_skills(
         shared_dir=shared_dir,
         linked=linked,
         link_errors=link_errors,
-        plugin_overlap=_claude_code_plugin_ships_its_own_skill(supported),
     )
 
 
@@ -163,25 +161,3 @@ def _replace_with_link(link_path: pathlib.Path, target: pathlib.Path) -> None:
         link_path.symlink_to(target, target_is_directory=True)
     except (OSError, NotImplementedError):
         shutil.copytree(target, link_path)
-
-
-def _claude_code_plugin_ships_its_own_skill(host_keys: List[str]) -> bool:
-    """Whether Claude Code will now carry two overlapping ``opik`` skills.
-
-    ``opik-claude-code-plugin`` bundles a skill also called ``opik`` whose content
-    has drifted from the one in the pack. Claude Code namespaces plugin skills, so
-    both can coexist without breaking — but the assistant then carries two similar
-    Opik skills, and the user should be told which is which, by whoever is doing
-    the telling.
-    """
-    if "claude-code" not in host_keys:
-        return False
-    return (
-        pathlib.Path.home()
-        / ".claude"
-        / "plugins"
-        / "marketplaces"
-        / "opik"
-        / "skills"
-        / "opik"
-    ).exists()

@@ -75,7 +75,7 @@ class RawAgentInsightsJobsClient:
         self, project_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[AgentInsightsJob]:
         """
-        Creates the Agent Insights job for a project. 409 if one already exists.
+        Creates the Agent Insights job for a project, disabled: the daily schedule stays off until the job is enabled with PATCH. 409 if one already exists.
 
         Parameters
         ----------
@@ -293,7 +293,7 @@ class AsyncRawAgentInsightsJobsClient:
         self, project_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[AgentInsightsJob]:
         """
-        Creates the Agent Insights job for a project. 409 if one already exists.
+        Creates the Agent Insights job for a project, disabled: the daily schedule stays off until the job is enabled with PATCH. 409 if one already exists.
 
         Parameters
         ----------

@@ -6,9 +6,16 @@ set -euo pipefail
 # Two deliberately separate accounts, each behind its own flag:
 #   - Agent Insights (TOGGLE_OLLIE_ENABLED) - traces/spans/authored_feedback_scores, all bound to workspace AND project.
 #   - Extended free-form SQL (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED, also requires
-#     TOGGLE_OLLIE_ENABLED) - the same three tables plus experiments, experiment_items, dataset_items, feedback_scores and trace_threads.
+#     TOGGLE_OLLIE_ENABLED) - the same three tables plus experiments, experiment_items, dataset_items, dataset_item_versions,
+#     feedback_scores and trace_threads.
 #     traces/spans keep a project bound but an optional one; everything else is workspace-bound only,
 #     authored_feedback_scores included.
+#
+# Isolation is the row policies. Each table read through a Distributed wrapper gets the same policy, and the grant, on
+# its local table as well (traces_local, spans_local): a distributed read evaluates the initial user's policies on the
+# shard against the local table, so a policy on the wrapper alone does not scope it. Both are created by name ahead of
+# the wrap, so the table the cutover renames into place is covered from its first read. A policy always precedes its
+# grant: a granted table with no policy for the user is readable in full.
 #
 # Opt-in: only runs when TOGGLE_OLLIE_ENABLED=true; otherwise it's a no-op so default installs are untouched.
 # This is the single local copy of the DDL, shared by docker-compose (backend container, between run_db_migrations.sh
@@ -45,31 +52,61 @@ ro_extended_user="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER:-comet_rea
 ro_extended_pass="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS:-opik}"
 ch_url="http://${ch_host}:${ch_port}/?user=${ch_admin_user}&password=${ch_admin_pass}"
 
+# Settings pinned CONST on the profile: each one can, on some version or configuration, stop row policies applying
+# or let one account's reads affect another's, so a cluster-wide default or version change must not reach these
+# accounts. The two count shortcuts are off, and a single-shard Distributed read stays on the initiator, so every
+# read shows as a policy-filtered read in the query plan, where its scope can be verified. Re-test them on every ClickHouse upgrade (FreeFormSqlRowPolicyConformanceTest).
+pinned_settings="readonly = 1 CONST, allow_ddl = 0 CONST, serialize_query_plan = 0 CONST, make_distributed_plan = 0 CONST, enable_parallel_replicas = 0 CONST, max_parallel_replicas = 1 CONST, use_query_cache = 0 CONST, query_cache_share_between_users = 0 CONST, use_query_condition_cache = 0 CONST, enable_analyzer = 1 CONST, apply_row_policy_after_final = 1 CONST, allow_introspection_functions = 0 CONST, optimize_trivial_count_query = 0 CONST, optimize_use_implicit_projections = 0 CONST, prefer_localhost_replica = 1 CONST"
+profile_settings="${pinned_settings}, max_execution_time = 180, max_memory_usage = 8589934592, max_result_rows = 100000, result_overflow_mode = 'throw', max_rows_to_read = 100000000, read_overflow_mode = 'throw', max_concurrent_queries_for_user = 5, use_skip_indexes_if_final = 1, SQL_workspace_id = '' CHANGEABLE_IN_READONLY, SQL_project_id = '' CHANGEABLE_IN_READONLY"
+
 echo "Provisioning Agent Insights read-only ClickHouse user '${ro_user}' on ${ch_host}:${ch_port}/${ch_db}..."
 
 statements=(
     "CREATE USER IF NOT EXISTS ${ro_user} IDENTIFIED BY '${ro_pass}'"
-    "CREATE SETTINGS PROFILE IF NOT EXISTS comet_llm_readonly_freeform_sql_profile SETTINGS readonly = 1, max_execution_time = 180, max_memory_usage = 8589934592, max_result_rows = 100000, result_overflow_mode = 'throw', max_rows_to_read = 100000000, read_overflow_mode = 'throw', max_concurrent_queries_for_user = 5, use_skip_indexes_if_final = 1, SQL_workspace_id = '' CHANGEABLE_IN_READONLY, SQL_project_id = '' CHANGEABLE_IN_READONLY TO ${ro_user}"
+    "CREATE SETTINGS PROFILE IF NOT EXISTS comet_llm_readonly_freeform_sql_profile SETTINGS ${profile_settings} TO ${ro_user}"
+    # ALTER replaces the whole settings list, so an existing profile picks up the pins without being re-created.
+    "ALTER SETTINGS PROFILE comet_llm_readonly_freeform_sql_profile SETTINGS ${profile_settings}"
+    # Likewise for the user: its settings become just the profile, dropping any user-level setting left by an earlier
+    # provisioning (a user-level additional_table_filters on a table with a policy fails every query).
+    "ALTER USER ${ro_user} SETTINGS PROFILE 'comet_llm_readonly_freeform_sql_profile'"
 )
+
+# policy_statements USER SUFFIX PREDICATE TABLE...: one RESTRICTIVE policy per table, then its grant, plus the same
+# pair on the local table behind traces and spans. Each (user, table) pair is recorded for the checks below.
+local_tables="traces spans"
+expected_user_table_pairs=()
+policy_statements() {
+    local user=$1 suffix=$2 predicate=$3 table
+    shift 3
+    for table in "$@"; do
+        local names="${table}"
+        if [[ " ${local_tables} " == *" ${table} "* ]]; then
+            names="${table} ${table}_local"
+        fi
+        for name in ${names}; do
+            statements+=(
+                "CREATE ROW POLICY IF NOT EXISTS ${name}_${suffix} ON ${ch_db}.${name} FOR SELECT USING ${predicate} AS RESTRICTIVE TO ${user}"
+                "GRANT SELECT ON ${ch_db}.${name} TO ${user}"
+            )
+            expected_user_table_pairs+=("${user}"$'\t'"${name}")
+        done
+    done
+}
+workspace="workspace_id = getSetting('SQL_workspace_id')"
+workspace_project="${workspace} AND project_id = getSetting('SQL_project_id')"
+workspace_optional_project="${workspace} AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))"
 
 # Agent Insights: three tables, every one bound to workspace AND project.
-statements+=(
-    "GRANT SELECT ON ${ch_db}.spans TO ${ro_user}"
-    "GRANT SELECT ON ${ch_db}.traces TO ${ro_user}"
-    "GRANT SELECT ON ${ch_db}.authored_feedback_scores TO ${ro_user}"
-    "CREATE ROW POLICY IF NOT EXISTS spans_workspace_project_isolation ON ${ch_db}.spans FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id') AS RESTRICTIVE TO ${ro_user}"
-    "CREATE ROW POLICY IF NOT EXISTS traces_workspace_project_isolation ON ${ch_db}.traces FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id') AS RESTRICTIVE TO ${ro_user}"
-    "CREATE ROW POLICY IF NOT EXISTS authored_feedback_scores_workspace_project_isolation ON ${ch_db}.authored_feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id') AS RESTRICTIVE TO ${ro_user}"
-)
+policy_statements "${ro_user}" workspace_project_isolation "${workspace_project}" spans traces authored_feedback_scores
 
-# Extended account: its own policies on all eight tables it reads.
+# Extended account: its own policies on all nine tables it reads, as production declares them.
 #
 # Every table carrying project_id in its primary key keeps a project bound, but an optional one: '*' means every
 # project in the workspace, so the caller picks the scope per request. The sentinel is '*' rather than '' because
 # the profile defaults the setting to '': an empty value matches neither branch and returns nothing, so a dropped
 # setting fails closed instead of widening to the whole workspace.
 #
-# experiments, experiment_items and dataset_items key off the workspace instead, so they stay workspace-only:
+# experiments, experiment_items, dataset_items and dataset_item_versions key off the workspace instead, so they stay workspace-only:
 # an experiment or a dataset can span projects, and binding one to a project would drop the rows living
 # elsewhere and under-report silently rather than erroring.
 if is_true "${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED:-false}"; then
@@ -77,23 +114,11 @@ if is_true "${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED:-false}"
     statements+=(
         "CREATE USER IF NOT EXISTS ${ro_extended_user} IDENTIFIED BY '${ro_extended_pass}'"
         "ALTER USER ${ro_extended_user} SETTINGS PROFILE 'comet_llm_readonly_freeform_sql_profile'"
-        "GRANT SELECT ON ${ch_db}.spans TO ${ro_extended_user}"
-        "GRANT SELECT ON ${ch_db}.traces TO ${ro_extended_user}"
-        "GRANT SELECT ON ${ch_db}.authored_feedback_scores TO ${ro_extended_user}"
-        "GRANT SELECT ON ${ch_db}.feedback_scores TO ${ro_extended_user}"
-        "GRANT SELECT ON ${ch_db}.experiments TO ${ro_extended_user}"
-        "GRANT SELECT ON ${ch_db}.experiment_items TO ${ro_extended_user}"
-        "GRANT SELECT ON ${ch_db}.dataset_items TO ${ro_extended_user}"
-        "GRANT SELECT ON ${ch_db}.trace_threads TO ${ro_extended_user}"
-        "CREATE ROW POLICY IF NOT EXISTS spans_freeform_extended_sql_isolation ON ${ch_db}.spans FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_extended_user}"
-        "CREATE ROW POLICY IF NOT EXISTS traces_freeform_extended_sql_isolation ON ${ch_db}.traces FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_extended_user}"
-        "CREATE ROW POLICY IF NOT EXISTS authored_feedback_scores_freeform_extended_sql_isolation ON ${ch_db}.authored_feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_extended_user}"
-        "CREATE ROW POLICY IF NOT EXISTS feedback_scores_freeform_extended_sql_isolation ON ${ch_db}.feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_extended_user}"
-        "CREATE ROW POLICY IF NOT EXISTS experiments_freeform_extended_sql_isolation ON ${ch_db}.experiments FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
-        "CREATE ROW POLICY IF NOT EXISTS experiment_items_freeform_extended_sql_isolation ON ${ch_db}.experiment_items FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
-        "CREATE ROW POLICY IF NOT EXISTS dataset_items_freeform_extended_sql_isolation ON ${ch_db}.dataset_items FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
-        "CREATE ROW POLICY IF NOT EXISTS trace_threads_freeform_extended_sql_isolation ON ${ch_db}.trace_threads FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_extended_user}"
     )
+    policy_statements "${ro_extended_user}" freeform_extended_sql_isolation "${workspace_optional_project}" \
+        spans traces authored_feedback_scores feedback_scores trace_threads
+    policy_statements "${ro_extended_user}" freeform_extended_sql_isolation "${workspace}" \
+        experiments experiment_items dataset_items dataset_item_versions
 fi
 
 for stmt in "${statements[@]}"; do
@@ -106,4 +131,50 @@ for stmt in "${statements[@]}"; do
     fi
 done
 
-echo "Read-only ClickHouse user(s) provisioned."
+# query URL SQL: runs SQL at URL, prints the body, fails the provisioning on any error.
+query() {
+    local response http_code
+    response=$(curl -sS -w $'\n%{http_code}' "$1" --data-binary "$2")
+    http_code="${response##*$'\n'}"
+    if [ "$http_code" != "200" ]; then
+        echo "Read-only CH user check failed (query starting '${2:0:60}...'): ${response%$'\n'*}" >&2
+        exit 1
+    fi
+    printf '%s' "${response%$'\n'*}"
+}
+
+# Check 1: every table each account can SELECT has a RESTRICTIVE policy for it, and every expected policy exists.
+# A granted table without one is readable in full, so this is checked from the grants side as well.
+for pair in "${expected_user_table_pairs[@]}"; do
+    user="${pair%%$'\t'*}" table="${pair#*$'\t'}"
+    found=$(query "$ch_url" "SELECT count() FROM system.row_policies WHERE database = '${ch_db}' AND table = '${table}' AND is_restrictive AND has(apply_to_list, '${user}')")
+    if [ "$found" != "1" ]; then
+        echo "Read-only CH user check failed: no row policy for '${user}' on ${ch_db}.${table}" >&2
+        exit 1
+    fi
+done
+for user in ${ro_user} $(is_true "${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED:-false}" && echo "${ro_extended_user}"); do
+    unpoliced=$(query "$ch_url" "SELECT arrayStringConcat(groupArray(table), ', ') FROM system.grants WHERE user_name = '${user}' AND access_type = 'SELECT' AND database = '${ch_db}' AND table NOT IN (SELECT table FROM system.row_policies WHERE database = '${ch_db}' AND has(apply_to_list, '${user}'))")
+    if [ -n "$unpoliced" ]; then
+        echo "Read-only CH user check failed: '${user}' can SELECT ${unpoliced} with no row policy" >&2
+        exit 1
+    fi
+done
+
+# Check 2: as each account, a workspace and project no one has must see no row in any existing table it reads, so
+# a policy that exists but does not take effect fails here. Reads through the Distributed tables take the account's
+# own read path. An empty table passes trivially: it has nothing to expose.
+probe_scope="SQL_workspace_id = 'opik-scope-probe-no-workspace', SQL_project_id = 'opik-scope-probe-no-project'"
+for pair in "${expected_user_table_pairs[@]}"; do
+    user="${pair%%$'\t'*}" table="${pair#*$'\t'}"
+    [ "$(query "$ch_url" "EXISTS TABLE ${ch_db}.${table}")" = "1" ] || continue
+    pass="${ro_pass}"
+    [ "$user" = "${ro_extended_user}" ] && pass="${ro_extended_pass}"
+    visible=$(query "http://${ch_host}:${ch_port}/?user=${user}&password=${pass}" "SELECT count() FROM ${ch_db}.${table} SETTINGS ${probe_scope}")
+    if [ "$visible" != "0" ]; then
+        echo "Read-only CH user check failed: '${user}' sees ${visible} rows of ${ch_db}.${table} outside any workspace" >&2
+        exit 1
+    fi
+done
+
+echo "Read-only ClickHouse user(s) provisioned and checked."

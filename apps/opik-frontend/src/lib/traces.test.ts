@@ -39,6 +39,20 @@ describe("prettifyMessage", () => {
     expect(result).toEqual({ message: "I'm fine", prettified: true });
   });
 
+  it("returns the last assistant message of a conversation logged as output", () => {
+    const message = {
+      model: "llama3.1:8b",
+      messages: [
+        { id: "m-1", role: "user", content: "What is the capital of France?" },
+        { id: "m-2", role: "assistant", content: "Paris." },
+        { id: "m-3", role: "user", content: "And of Spain?" },
+        { id: "m-4", role: "assistant", content: "Madrid." },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "output" });
+    expect(result).toEqual({ message: "Madrid.", prettified: true });
+  });
+
   it("unwraps a single key object to get its string value", () => {
     const message = { question: "What is your name?" };
     const result = prettifyMessage(message, { type: "input" });

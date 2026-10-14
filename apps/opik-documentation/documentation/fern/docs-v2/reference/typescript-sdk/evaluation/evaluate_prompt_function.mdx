@@ -85,7 +85,7 @@ messages: [
 - **Type**: `SupportedModelId | LanguageModel | OpikBaseModel`
 - **Default**: `"gpt-5-nano"`
 - **Description**: The language model to use for generation. Can be:
-  - Model ID string (e.g., `"gpt-5-nano"`, `"claude-3-5-sonnet-latest"`, `"gemini-2.0-flash"`)
+  - Model ID string (e.g., `"gpt-5-nano"`, `"claude-sonnet-4-6"`, `"gemini-2.0-flash"`)
   - Pre-configured `LanguageModel` instance from Vercel AI SDK
   - Custom `OpikBaseModel` implementation
 
@@ -316,14 +316,14 @@ The function supports models from multiple providers:
 model: "gpt-5-nano";
 
 // Anthropic
-model: "claude-3-5-sonnet-latest";
+model: "claude-sonnet-4-6";
 
 // Google Gemini
 model: "gemini-2.0-flash";
 
 // Or use provider-specific LanguageModel instances
 import { anthropic } from "@ai-sdk/anthropic";
-const claude = anthropic("claude-3-5-sonnet-latest");
+const claude = anthropic("claude-sonnet-4-6");
 model: claude;
 ```
 
