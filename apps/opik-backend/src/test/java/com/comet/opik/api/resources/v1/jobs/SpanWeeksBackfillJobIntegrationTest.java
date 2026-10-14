@@ -126,10 +126,13 @@ class SpanWeeksBackfillJobIntegrationTest {
         var traceId = ID_GENERATOR.generateId();
         // A random past Monday, before the install week, and the current week: the plan's two ends.
         var pastMonday = LocalDate.of(2020, 1, 6).plusWeeks(RandomUtils.secure().randomInt(0, 260));
-        var thisMonday = LocalDate.now(ZoneOffset.UTC).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        // One instant for the span and its expected week, so a run across Monday midnight cannot split them.
+        var now = Instant.now();
+        var thisMonday = LocalDate.ofInstant(now, ZoneOffset.UTC)
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         var spans = List.of(
                 span(pastMonday.atStartOfDay(ZoneOffset.UTC).toInstant(), traceId, projectName),
-                span(Instant.now(), traceId, projectName));
+                span(now, traceId, projectName));
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
         var expected = List.of(
                 SpanWeek.builder().projectId(projectId).traceId(traceId).idWeek(yyyymmdd(pastMonday)).build(),
