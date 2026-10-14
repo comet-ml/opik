@@ -94,6 +94,8 @@ public interface TraceService {
 
     Mono<Void> delete(Set<UUID> ids, UUID projectId);
 
+    Mono<Void> deleteByProjectId(UUID projectId);
+
     Mono<TracePage> find(int page, int size, TraceSearchCriteria criteria);
 
     Mono<Boolean> existsByProjectId(TraceSearchCriteria criteria, boolean threadScoped);
@@ -135,6 +137,10 @@ public interface TraceService {
 class TraceServiceImpl implements TraceService {
 
     public static final String TRACE_KEY = "Trace";
+
+    // Same as the batch delete endpoint's max, so each TracesDeleted cascade posted per page is no larger than one a
+    // user's batch delete can post.
+    static final int DELETE_BY_PROJECT_ID_PAGE_SIZE = 1_000;
 
     private final @NonNull TraceDAO dao;
     private final @NonNull DeletionEventDAO deletionEventDAO;
@@ -545,6 +551,36 @@ class TraceServiceImpl implements TraceService {
                             ? Mono.empty()
                             : template.nonTransaction(connection -> delete(pairs, connection));
                 });
+    }
+
+    /**
+     * Deletes every trace of the project page by page, each page through {@link #delete(Set, UUID)}, so it gets the
+     * same deletion-events capture and {@code TracesDeleted} cascade as a user's delete. Pages are id-ordered, which
+     * keeps each page's ids within few weekly partitions, and the next page is read only after the previous one is
+     * deleted.
+     */
+    @Override
+    @WithSpan
+    public Mono<Void> deleteByProjectId(@NonNull UUID projectId) {
+        log.info("Deleting all traces of a project, project id '{}'", projectId);
+
+        return deleteTracesPage(projectId, null)
+                .expand(page -> page.size() < DELETE_BY_PROJECT_ID_PAGE_SIZE
+                        ? Mono.empty()
+                        : deleteTracesPage(projectId, page.getLast()))
+                .map(List::size)
+                .reduce(0, Integer::sum)
+                .doOnSuccess(total -> log.info("Deleted all traces of a project, project id '{}', count '{}'",
+                        projectId, total))
+                .then();
+    }
+
+    private Mono<List<UUID>> deleteTracesPage(UUID projectId, UUID lastId) {
+        return template.nonTransaction(connection -> dao.getTraceIdsByProjectId(projectId, lastId,
+                DELETE_BY_PROJECT_ID_PAGE_SIZE, connection))
+                .flatMap(page -> page.isEmpty()
+                        ? Mono.just(page)
+                        : delete(Set.copyOf(page), projectId).thenReturn(page));
     }
 
     /**
