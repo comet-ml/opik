@@ -292,6 +292,9 @@ class ParamResolverTest {
 
         assertThat(resolution.request().temperature()).isNull();
         assertThat(resolution.changes()).containsExactly("temperature not sent: claude-opus-4-6 does not take it");
+        assertThat(resolver.resolve(request("claude-sonnet-4-6", 0.7, null)).request().temperature()).isEqualTo(0.7);
+        assertThat(resolver.resolve(request("claude-sonnet-4-6", null, 0.9)).changes())
+                .containsExactly("top_p not sent: claude-sonnet-4-6 does not take it");
     }
 
     @Test

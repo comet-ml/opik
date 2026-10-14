@@ -1,7 +1,10 @@
-# A self-hoster's local override: claude-opus-4-6 takes no temperature or top_p here, though the shipped catalog
-# says it does.
+# A self-hoster's local override, against the shipped catalog: claude-opus-4-6 takes no temperature or top_p
+# here, and claude-sonnet-4-6 takes temperature but not top_p.
 anthropic:
   - id: "claude-opus-4-6"
     params:
       temperature: {accepted: false}
+      topP: {accepted: false}
+  - id: "claude-sonnet-4-6"
+    params:
       topP: {accepted: false}

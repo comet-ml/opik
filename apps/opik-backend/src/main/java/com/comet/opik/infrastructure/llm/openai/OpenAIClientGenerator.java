@@ -149,7 +149,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
         // gate has to be here too, or an evaluator rule on one fails every scoring run with a 400.
         // OpenAI reasoning models lose their temperature earlier, in ChatCompletionService.scoreTrace,
         // because that check needs the model registry and must skip OPEN_ROUTER.
-        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name(), registryService)) {
+        if (!ModelCapabilities.rejectsTemperature(modelParameters.name(), registryService)) {
             Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         }
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
@@ -203,7 +203,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .modelName(modelParameters.name())
                 .strictJsonSchema(strictJsonSchema);
 
-        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name(), registryService)) {
+        if (!ModelCapabilities.rejectsTemperature(modelParameters.name(), registryService)) {
             Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         }
 

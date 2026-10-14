@@ -5,6 +5,8 @@ import com.comet.opik.api.ModelParams.NumberParam;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
@@ -20,7 +22,8 @@ import java.util.Optional;
  * Bedrock answers a request carrying both temperature and top_p with "temperature and top_p cannot both be specified
  * for this model".
  */
-@RequiredArgsConstructor
+@Singleton
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class ParamResolver {
 
     public record Resolution<T>(@NonNull T request, @NonNull List<String> changes) {
@@ -37,23 +40,27 @@ public class ParamResolver {
         // Some Claude models refuse both outright rather than refusing them together, and extended thinking
         // refuses them on any Claude: "temperature may only be set to 1 when thinking is enabled", "top_p must be
         // greater than or equal to 0.95 or unset when thinking is enabled".
-        var samplingParamsDisabledReason = ModelCapabilities.rejectsSamplingParams(model, registryService)
-                ? "%s does not take it".formatted(model)
-                : SamplingParamsNormalizer.thinkingEnabled(request) ? "thinking is on" : null;
+        var refusedReason = "%s does not take it".formatted(model);
+        var thinkingReason = SamplingParamsNormalizer.thinkingEnabled(request) ? "thinking is on" : null;
         var temperature = request.temperature();
         var topP = request.topP();
-        if (samplingParamsDisabledReason != null) {
-            if (temperature != null) {
+        if (temperature != null) {
+            var reason = ModelCapabilities.rejectsTemperature(model, registryService) ? refusedReason : thinkingReason;
+            if (reason != null) {
                 builder.temperature(null);
                 temperature = null;
-                changes.add("temperature not sent: " + samplingParamsDisabledReason);
+                changes.add("temperature not sent: " + reason);
             }
-            if (topP != null) {
+        }
+        if (topP != null) {
+            var reason = ModelCapabilities.rejectsTopP(model, registryService) ? refusedReason : thinkingReason;
+            if (reason != null) {
                 builder.topP(null);
                 topP = null;
-                changes.add("top_p not sent: " + samplingParamsDisabledReason);
+                changes.add("top_p not sent: " + reason);
             }
-        } else if (temperature != null && topP != null && ModelCapabilities.requiresExclusiveSamplingParams(model)) {
+        }
+        if (temperature != null && topP != null && ModelCapabilities.requiresExclusiveSamplingParams(model)) {
             // Temperature wins, matching LlmProviderAnthropicMapper and Anthropic's own guidance.
             builder.topP(null);
             topP = null;
@@ -62,7 +69,6 @@ public class ParamResolver {
 
         var params = openAiParams(model);
         if (params.isPresent()) {
-            var refusedReason = "%s does not take it".formatted(model);
             if (temperature != null && isRefused(params.get().temperature())) {
                 builder.temperature(null);
                 changes.add("temperature not sent: " + refusedReason);

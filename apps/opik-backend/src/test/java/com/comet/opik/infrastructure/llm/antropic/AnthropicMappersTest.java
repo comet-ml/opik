@@ -1,5 +1,8 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
+import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.ModelParams;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
@@ -311,6 +314,17 @@ public class AnthropicMappersTest {
                     Arguments.of("claude-sonnet-4-6", 1,
                             "custom_parameters.output_config.effort must be a string, "
                                     + "model 'claude-sonnet-4-6', effort '1'"));
+        }
+
+        @Test
+        void leavesAnEffortWithoutNamedLevelsToAnthropic() {
+            var registry = Mockito.mock(LlmModelRegistryService.class);
+            Mockito.when(registry.paramsOf(LlmProvider.ANTHROPIC.getValue(), "claude-opus-4-6"))
+                    .thenReturn(ModelParams.builder().effort(new ModelParams.EffortParam(true, null, null)).build());
+            var withUnnamedLevels = new LlmProviderAnthropic(Mockito.mock(AnthropicClient.class), registry);
+
+            assertThatCode(() -> withUnnamedLevels.validateRequest(requestWithEffort("claude-opus-4-6", "xhigh")))
+                    .doesNotThrowAnyException();
         }
 
         @Test

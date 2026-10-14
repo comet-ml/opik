@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.annotation.Nullable;
 import jakarta.ws.rs.BadRequestException;
 import lombok.experimental.UtilityClass;
 
@@ -61,8 +62,12 @@ class AnthropicEffort {
                             .formatted(model, effort));
         }
         // A model without a row, such as one the model sync just added, gets the provider profile, which names
-        // every level. Anthropic has the final word on it, so a stale catalog never blocks a new model.
+        // every level. Anthropic has the final word on it, so a stale catalog never blocks a new model; for the same
+        // reason an accepted effort that names no levels is left to Anthropic to check.
         var supported = effortLevels(registryService.paramsOf(LlmProvider.ANTHROPIC.getValue(), model));
+        if (supported == null) {
+            return;
+        }
         if (supported.isEmpty()) {
             throw new BadRequestException(
                     "The model does not support custom_parameters.output_config.effort, model '%s', effort '%s'"
@@ -75,7 +80,8 @@ class AnthropicEffort {
         }
     }
 
-    private List<String> effortLevels(ModelParams params) {
+    /** Null when the model takes effort at levels the catalog doesn't name. */
+    private @Nullable List<String> effortLevels(@Nullable ModelParams params) {
         var effort = params == null ? null : params.effort();
         return effort != null && Boolean.TRUE.equals(effort.accepted()) ? effort.levels() : List.of();
     }

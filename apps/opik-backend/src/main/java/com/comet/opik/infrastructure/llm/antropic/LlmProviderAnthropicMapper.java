@@ -76,17 +76,17 @@ interface LlmProviderAnthropicMapper {
     @Named("resolveTemperature")
     default Double resolveTemperature(@NonNull ChatCompletionRequest request,
             @Context LlmModelRegistryService registryService) {
-        return samplingParamsAllowed(request, registryService) ? request.temperature() : null;
+        return temperatureAllowed(request, registryService) ? request.temperature() : null;
     }
 
     @Named("resolveTopP")
     default Double resolveTopP(@NonNull ChatCompletionRequest request,
             @Context LlmModelRegistryService registryService) {
-        if (!samplingParamsAllowed(request, registryService)) {
+        if (!topPAllowed(request, registryService)) {
             return null;
         }
-        // Anthropic recommends against sending temperature and top_p together; temperature wins when both are set.
-        return request.temperature() != null ? null : request.topP();
+        // Anthropic recommends against sending temperature and top_p together; temperature wins when both are sent.
+        return request.temperature() != null && temperatureAllowed(request, registryService) ? null : request.topP();
     }
 
     /**
@@ -95,8 +95,13 @@ interface LlmProviderAnthropicMapper {
      * Gate them server-side so API-created requests — which bypass the FE sanitizer from OPIK-6244 — don't
      * fail. Mirrors the judge-path logic in {@code AnthropicClientGenerator}.
      */
-    private boolean samplingParamsAllowed(ChatCompletionRequest request, LlmModelRegistryService registryService) {
-        return !ModelCapabilities.rejectsSamplingParams(request.model(), registryService)
+    private boolean temperatureAllowed(ChatCompletionRequest request, LlmModelRegistryService registryService) {
+        return !ModelCapabilities.rejectsTemperature(request.model(), registryService)
+                && !SamplingParamsNormalizer.thinkingEnabled(request);
+    }
+
+    private boolean topPAllowed(ChatCompletionRequest request, LlmModelRegistryService registryService) {
+        return !ModelCapabilities.rejectsTopP(request.model(), registryService)
                 && !SamplingParamsNormalizer.thinkingEnabled(request);
     }
 

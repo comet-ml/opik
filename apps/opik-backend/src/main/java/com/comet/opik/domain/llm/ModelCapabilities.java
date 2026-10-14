@@ -101,8 +101,8 @@ public class ModelCapabilities {
     }
 
     /**
-     * Whether the model refuses temperature and top_p outright, rather than merely refusing them
-     * together. Anthropic's adaptive-thinking models answer a request carrying either with a 400.
+     * Whether the model refuses temperature outright, rather than merely refusing it next to top_p.
+     * Anthropic's adaptive-thinking models answer a request carrying either with a 400.
      *
      * <p>An Anthropic id we cannot place is assumed to take none. Taking none is where the family is
      * heading, so the unplaceable id is far more often a model newer than the catalog than an older one
@@ -112,14 +112,22 @@ public class ModelCapabilities {
      *
      * <p>A name that is not an Anthropic id at all is left alone — see {@link #canonicalAnthropicId}.
      */
-    public boolean rejectsSamplingParams(String modelName, @NonNull LlmModelRegistryService registryService) {
-        return isAnthropicModelWithout(modelName, registryService,
-                params -> params.temperature() != null && Boolean.TRUE.equals(params.temperature().accepted()));
+    public boolean rejectsTemperature(String modelName, @NonNull LlmModelRegistryService registryService) {
+        return isAnthropicModelWithout(modelName, registryService, params -> isAccepted(params.temperature()));
+    }
+
+    /** Whether the model refuses top_p outright, for the reasons given on {@link #rejectsTemperature}. */
+    public boolean rejectsTopP(String modelName, @NonNull LlmModelRegistryService registryService) {
+        return isAnthropicModelWithout(modelName, registryService, params -> isAccepted(params.topP()));
+    }
+
+    private boolean isAccepted(ModelParams.NumberParam param) {
+        return param != null && Boolean.TRUE.equals(param.accepted());
     }
 
     /**
      * Whether the model thinks when a request does not mention thinking. An Anthropic id we cannot place is
-     * assumed to, for the reason given on {@link #rejectsSamplingParams}.
+     * assumed to, for the reason given on {@link #rejectsTemperature}.
      */
     public boolean thinksByDefault(String modelName, @NonNull LlmModelRegistryService registryService) {
         return isAnthropicModelWithout(modelName, registryService,

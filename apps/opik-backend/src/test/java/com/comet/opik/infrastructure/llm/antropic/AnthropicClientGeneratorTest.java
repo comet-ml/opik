@@ -68,15 +68,15 @@ class AnthropicClientGeneratorTest {
         @ParameterizedTest
         @ValueSource(strings = {"claude-sonnet-5", "claude-opus-4-7", "claude-opus-4-8", "claude-opus-5",
                 "claude-fable-5", "claude-fable-5-1"})
-        void rejectsSamplingParamsForModelsNotMarkedCapable(String modelName) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName, bundledRegistry())).isTrue();
+        void rejectsTemperatureForModelsNotMarkedCapable(String modelName) {
+            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isTrue();
         }
 
         @ParameterizedTest
         @ValueSource(strings = {"claude-3-7-sonnet-20250219", "claude-haiku-4-5-20251001", "claude-sonnet-4-5",
                 "claude-opus-4-6", "claude-opus-4-6-20260205"})
         void acceptsSamplingParamsForTheModelsNamedCapable(String modelName) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName, bundledRegistry())).isFalse();
+            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isFalse();
         }
 
         /**
@@ -91,7 +91,7 @@ class AnthropicClientGeneratorTest {
                 "custom-llm/gw/claude-prod", "custom-llm/gw/claude-internal-v3", "claude-future-99",
                 "claude-30-future"})
         void staysPermissiveForNamesThatAreNotAnthropicIds(String modelName) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName, bundledRegistry())).isFalse();
+            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isFalse();
         }
 
         /**
@@ -106,7 +106,7 @@ class AnthropicClientGeneratorTest {
                 "~anthropic/claude-sonnet-latest, true",
                 "~anthropic/claude-fable-latest, true"})
         void readsAFloatingAliasAsTheFamilysNewestMember(String modelName, boolean rejects) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName, bundledRegistry())).isEqualTo(rejects);
+            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isEqualTo(rejects);
         }
 
         /**
@@ -120,7 +120,7 @@ class AnthropicClientGeneratorTest {
                 // must not inherit claude-sonnet-4-6's capability.
                 "claude-sonnet-4-6-1"})
         void assumesAnUnplaceableAnthropicIdTakesNone(String modelName) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName, bundledRegistry())).isTrue();
+            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isTrue();
         }
 
         /** Claude 3 predates the constraint, and is recognised by shape rather than being listed. */
@@ -131,14 +131,14 @@ class AnthropicClientGeneratorTest {
                 // rather than collapsing to the bare family word.
                 "anthropic.claude-v2:1", "anthropic.claude-instant-v1", "claude-2-1"})
         void staysPermissiveForTheGenerationThatPredatesTheConstraint(String modelName) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName, bundledRegistry())).isFalse();
+            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isFalse();
         }
 
         @ParameterizedTest
         @NullAndEmptySource
         @ValueSource(strings = {"   "})
         void staysPermissiveForNullOrBlankModel(String modelName) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName, bundledRegistry())).isFalse();
+            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isFalse();
         }
 
         /**
@@ -158,7 +158,7 @@ class AnthropicClientGeneratorTest {
                 "CLAUDE_OPUS_4_8", "CLAUDE_OPUS_5", "CLAUDE_FABLE_5",
                 "CLAUDE_FABLE_5_1"}, mode = EnumSource.Mode.INCLUDE)
         void modelsTakingNoSamplingParamsRejectThem(AnthropicModelName model) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(model.getValue(), bundledRegistry())).isTrue();
+            assertThat(ModelCapabilities.rejectsTemperature(model.getValue(), bundledRegistry())).isTrue();
         }
     }
 

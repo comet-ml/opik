@@ -100,7 +100,7 @@ class ChatCompletionServiceTest {
         when(llmProviderClientConfig.getBackoffExp()).thenReturn(null);
 
         chatCompletionService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
-                bundledRegistry());
+                new ParamResolver(llmProviderFactory, bundledRegistry()));
     }
 
     @Nested
@@ -433,7 +433,7 @@ class ChatCompletionServiceTest {
 
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
             var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
-                    bundledRegistry());
+                    new ParamResolver(llmProviderFactory, bundledRegistry()));
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
             when(llmProviderService.generate(any(), anyString()))
@@ -457,7 +457,7 @@ class ChatCompletionServiceTest {
 
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
             var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
-                    bundledRegistry());
+                    new ParamResolver(llmProviderFactory, bundledRegistry()));
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
             when(llmProviderService.generate(any(), anyString())).thenThrow(new RuntimeException("transient"));
@@ -992,7 +992,7 @@ class ChatCompletionServiceTest {
         private Throwable scoreTraceWithBudget(int maxRetries, RuntimeException providerFailure) {
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(maxRetries);
             var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
-                    bundledRegistry());
+                    new ParamResolver(llmProviderFactory, bundledRegistry()));
             var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
             var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
 

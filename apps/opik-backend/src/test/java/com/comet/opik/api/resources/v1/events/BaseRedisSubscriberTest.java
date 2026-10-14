@@ -4,6 +4,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ParamResolver;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -462,7 +463,8 @@ class BaseRedisSubscriberTest {
             var providerFactory = mock(LlmProviderFactory.class);
             when(providerFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
 
-            var service = new ChatCompletionService(clientConfig, providerFactory, bundledRegistry());
+            var service = new ChatCompletionService(clientConfig, providerFactory,
+                    new ParamResolver(providerFactory, bundledRegistry()));
             var request = ChatRequest.builder().messages(UserMessage.from("seam")).build();
             var parameters = LlmAsJudgeModelParameters.builder().name("seam-test-model").build();
 

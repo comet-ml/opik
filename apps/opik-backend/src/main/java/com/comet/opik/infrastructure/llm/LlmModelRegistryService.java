@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.google.common.base.Suppliers;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -32,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -45,7 +47,8 @@ public class LlmModelRegistryService {
 
     private final LlmModelRegistryConfig config;
     private final Client httpClient;
-    private final CuratedCatalog shippedCatalog = readCuratedCatalog(new LlmModelRegistryConfig().getCuratedResource());
+    private final Supplier<CuratedCatalog> shippedCatalog = Suppliers.memoize(
+            () -> readCuratedCatalog(new LlmModelRegistryConfig().getCuratedResource()));
     // volatile: reload() is called from the scheduled job thread
     private volatile Snapshot snapshot;
     private volatile Map<String, List<ModelEntry>> lastGoodRemote;
@@ -279,12 +282,13 @@ public class LlmModelRegistryService {
 
     /**
      * The params the registry serves for a model id, the same ones the API lists; an unlisted or null id gets its
-     * provider's profile.
+     * provider's profile. Null when no layer and no profile says anything about the model, as for a provider the
+     * catalog has no profile for.
      *
      * <p>A deployment that turns the curated layer off still gets the shipped rules for a model no layer gives
      * params, so turning it off cannot make a reasoning or Claude model fail with a 400.
      */
-    public ModelParams paramsOf(@NonNull String provider, @Nullable String modelId) {
+    public @Nullable ModelParams paramsOf(@NonNull String provider, @Nullable String modelId) {
         var current = snapshot;
         var listed = current.registry().getOrDefault(provider, List.of()).stream()
                 .filter(model -> model.id() != null && model.id().equals(modelId))
@@ -300,12 +304,13 @@ public class LlmModelRegistryService {
     }
 
     private ModelParams shippedParams(String provider, ModelEntry row) {
-        var shippedRow = shippedCatalog.models().getOrDefault(provider, List.of()).stream()
+        var shipped = shippedCatalog.get();
+        var shippedRow = shipped.models().getOrDefault(provider, List.of()).stream()
                 .filter(m -> m.id() != null && m.id().equals(row.id()))
                 .findFirst()
                 .map(m -> m.toBuilder().reasoning(row.reasoning()).build())
                 .orElse(row);
-        return shippedCatalog.resolve(provider, shippedRow);
+        return shipped.resolve(provider, shippedRow);
     }
 
     private CuratedCatalog loadCuratedCatalog() {
