@@ -33,6 +33,8 @@ import {
   RunFailedError,
   RunFailure,
 } from "@/lib/playground";
+import { hasVisibleControls } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
+import { parseComposedProviderType } from "@/lib/provider";
 import { useHydrateDatasetItemData } from "@/v2/pages/PlaygroundPage/useHydrateDatasetItemData";
 import { useHydratePromptMetadata } from "@/v2/pages/PlaygroundPage/useHydratePromptMetadata";
 import { collectPromptVersionRefs } from "@/api/playground/promptLinkage";
@@ -316,7 +318,15 @@ const usePromptDatasetItemCombination = ({
           !run.result
         ) {
           throw new RunFailedError(
-            describeRunFailure(run, { model: prompt.model }),
+            describeRunFailure(run, {
+              canTuneRequestRate: hasVisibleControls(
+                parseComposedProviderType(prompt.provider),
+                prompt.model,
+                prompt.configs,
+              ),
+              sentMessages: messagesToSend,
+              model: prompt.model,
+            }),
           );
         }
       } catch (error) {
