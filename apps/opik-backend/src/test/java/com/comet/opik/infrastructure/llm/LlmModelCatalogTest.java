@@ -11,6 +11,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import org.apache.commons.collections4.CollectionUtils;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -284,14 +285,17 @@ class LlmModelCatalogTest {
                     .map(ModelEntry::id)
                     .collect(Collectors.toSet());
 
-            registry.getOrDefault("openai", List.of()).stream()
+            var withoutLevels = registry.getOrDefault("openai", List.of()).stream()
                     .filter(LlmModelDefinition::reasoning)
                     .filter(model -> !refusedByARow.contains(model.id()))
-                    .forEach(model -> assertThat(model.params().effort().levels())
-                            .as("openai/%s is a reasoning model without effort levels; give it a curated row with"
-                                    + " them, or effort: {accepted: false} if it refuses reasoning_effort",
-                                    model.id())
-                            .isNotEmpty());
+                    .filter(model -> CollectionUtils.isEmpty(model.params().effort().levels()))
+                    .map(LlmModelDefinition::id)
+                    .toList();
+
+            assertThat(withoutLevels)
+                    .as("OpenAI reasoning models without effort levels; give each a curated row with them, or"
+                            + " effort: {accepted: false} if it refuses reasoning_effort")
+                    .isEmpty();
         }
 
         private static Stream<ModelParams> allVariants(ModelParams params) {

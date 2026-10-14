@@ -8,6 +8,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -55,9 +56,9 @@ class AnthropicCatalogDriftTest {
         var effort = params(id).effort();
 
         assertThat(effort.accepted()).as("%s: effort accepted", id).isEqualTo(!levels.isEmpty());
-        if (!levels.isEmpty()) {
-            assertThat(effort.levels()).as("%s: effort levels", id).containsExactlyElementsOf(levels);
-        }
+        assertThat(Objects.requireNonNullElse(effort.levels(), List.of()))
+                .as("%s: effort levels", id)
+                .containsExactlyElementsOf(levels);
     }
 
     private static ModelParams params(String id) {
