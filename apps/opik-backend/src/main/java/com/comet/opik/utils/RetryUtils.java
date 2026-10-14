@@ -1,5 +1,6 @@
 package com.comet.opik.utils;
 
+import com.clickhouse.client.api.ClickHouseException;
 import jakarta.ws.rs.ProcessingException;
 import lombok.Getter;
 import lombok.experimental.UtilityClass;
@@ -76,6 +77,33 @@ public class RetryUtils {
                     log.debug("Filtering for retry: {}", throwable.getMessage());
                     return isRetriableException(throwable);
                 });
+    }
+
+    /**
+     * Retry specification for ClickHouse writes: the transient errors {@link #handleHttpErrors} retries, plus any
+     * failure the v2 client flags as retryable, anywhere in the cause chain.
+     *
+     * @param maxAttempts Maximum number of retry attempts.
+     * @param minBackoff  Minimum backoff duration between retries.
+     * @param maxBackoff  Maximum backoff duration between retries.
+     * @return Configured RetryBackoffSpec instance.
+     */
+    public static RetryBackoffSpec handleClickHouseErrors(int maxAttempts, Duration minBackoff, Duration maxBackoff) {
+        return Retry.backoff(maxAttempts, minBackoff)
+                .maxBackoff(maxBackoff)
+                .doBeforeRetry(retrySignal -> log.warn("Retrying due to: {}", retrySignal.failure().getMessage()))
+                .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> retrySignal.failure())
+                .filter(RetryUtils::isTransientClickHouseError);
+    }
+
+    private static boolean isTransientClickHouseError(Throwable throwable) {
+        for (var cause = throwable; cause != null; cause = cause.getCause()) {
+            if ((cause instanceof ClickHouseException clickHouseError && clickHouseError.isRetryable())
+                    || isRetriableException(cause)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isDatabaseDeadlock(Throwable throwable) {
