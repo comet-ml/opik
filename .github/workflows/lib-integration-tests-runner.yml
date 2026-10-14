@@ -169,7 +169,6 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["together", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-together-tests.yml
-    secrets: inherit
 
   aisuite_tests:
     needs: [init_environment]
