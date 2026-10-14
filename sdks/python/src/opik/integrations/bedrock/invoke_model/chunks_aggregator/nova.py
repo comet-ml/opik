@@ -5,7 +5,7 @@ import logging
 from typing import Any, Dict, List
 
 from .. import usage_converters
-from .base import ChunkAggregator
+from .base import ChunkAggregator, updated_token_count
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,6 +32,8 @@ class NovaAggregator(ChunkAggregator):
         stop_reason = None
         input_tokens = 0
         output_tokens = 0
+        reported_usage: Dict[str, Any] = {}
+        metrics_cache_counts: Dict[str, int] = {}
 
         for item in items:
             if "chunk" not in item:
@@ -53,9 +55,13 @@ class NovaAggregator(ChunkAggregator):
 
                 elif "metadata" in chunk_data:
                     if "usage" in chunk_data["metadata"]:
-                        metadata_usage = chunk_data["metadata"]["usage"]
-                        input_tokens = metadata_usage.get("inputTokens", 0)
-                        output_tokens = metadata_usage.get("outputTokens", 0)
+                        reported_usage = chunk_data["metadata"]["usage"]
+                        input_tokens = updated_token_count(
+                            reported_usage.get("inputTokens"), input_tokens
+                        )
+                        output_tokens = updated_token_count(
+                            reported_usage.get("outputTokens"), output_tokens
+                        )
                         LOGGER.debug(
                             "Nova metadata usage: input=%d, output=%d",
                             input_tokens,
@@ -65,8 +71,22 @@ class NovaAggregator(ChunkAggregator):
                     # Use bedrock invocation metrics as authoritative source
                     metrics = chunk_data.get("amazon-bedrock-invocationMetrics", {})
                     if metrics:
-                        input_tokens = metrics.get("inputTokenCount", input_tokens)
-                        output_tokens = metrics.get("outputTokenCount", output_tokens)
+                        input_tokens = updated_token_count(
+                            metrics.get("inputTokenCount"), input_tokens
+                        )
+                        output_tokens = updated_token_count(
+                            metrics.get("outputTokenCount"), output_tokens
+                        )
+                        # Only integers are taken. A field reported as null would
+                        # otherwise replace a real count from metadata.usage and then
+                        # be dropped, since the backend usage dict keeps only integers.
+                        for metrics_key, usage_key in (
+                            ("cacheWriteInputTokenCount", "cacheWriteInputTokens"),
+                            ("cacheReadInputTokenCount", "cacheReadInputTokens"),
+                        ):
+                            metrics_value = metrics.get(metrics_key)
+                            if isinstance(metrics_value, int):
+                                metrics_cache_counts[usage_key] = metrics_value
                         LOGGER.debug(
                             "Nova bedrock metrics: input=%d, output=%d",
                             input_tokens,
@@ -86,7 +106,12 @@ class NovaAggregator(ChunkAggregator):
 
         # Convert to Bedrock usage format using shared converter
         bedrock_usage = usage_converters.nova_to_bedrock_usage(
-            {"inputTokens": input_tokens, "outputTokens": output_tokens}
+            {
+                **reported_usage,
+                **metrics_cache_counts,
+                "inputTokens": input_tokens,
+                "outputTokens": output_tokens,
+            }
         )
 
         # Return Nova's native output format with Bedrock usage

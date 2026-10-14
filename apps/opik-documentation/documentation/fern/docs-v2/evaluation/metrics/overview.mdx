@@ -91,7 +91,7 @@ By default, Opik uses GPT-5-nano from OpenAI as the LLM to evaluate the output o
 ```python title="Python" language="python"
 from opik.evaluation.metrics import Hallucination
 
-metric = Hallucination(model="bedrock/anthropic.claude-3-sonnet-20240229-v1:0")
+metric = Hallucination(model="bedrock/us.anthropic.claude-sonnet-4-6")
 
 metric.score(
 input="What is the capital of France?",
@@ -106,7 +106,7 @@ import { openai } from '@ai-sdk/openai';
 
 // Using model ID string (simplest approach)
 const metric1 = new Hallucination({ model: 'gpt-4o' });
-const metric2 = new Hallucination({ model: 'claude-3-5-sonnet-latest' });
+const metric2 = new Hallucination({ model: 'claude-sonnet-4-6' });
 const metric3 = new Hallucination({ model: 'gemini-2.0-flash' });
 
 // With generation parameters (temperature, seed, maxTokens)

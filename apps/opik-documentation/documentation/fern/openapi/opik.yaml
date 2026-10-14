@@ -39,7 +39,9 @@ tags:
 - name: Agent Insights enrollment
   description: Internal auto-first-run rollout enrollment
 - name: System analytics queries
-  description: Internal endpoint to run Agent Insights free-form SQL
+  description: Internal endpoints to run free-form analytics SQL
+- name: Dashboard saved queries
+  description: Internal endpoints for the queries Ollie chart widgets run
 - name: System usage
   description: System usage related resource
 - name: Agent Configs
@@ -394,6 +396,130 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "501":
           description: Agent Insights queries are not enabled
+  /v1/internal/analytics-queries:
+    post:
+      tags:
+      - System analytics queries
+      summary: Execute free-form analytics SQL
+      description: "Runs read-only SQL bounded to the caller's workspace. Supply project_id\
+        \ to restrict traces, spans, feedback scores and trace threads to one project,\
+        \ or omit it to cover the whole workspace. Experiments, experiment items and\
+        \ dataset items always cover the whole workspace."
+      operationId: executeScopedAnalyticsQuery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScopedAnalyticsQueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsQueryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: "Agent Insights is disabled, or Custom Charts is not enabled\
+            \ for this workspace"
+  /v1/internal/dashboard-saved-queries:
+    post:
+      tags:
+      - Dashboard saved queries
+      summary: Save a chart query
+      description: Saves the query of an Ollie chart so a dashboard widget can reference
+        it by id.
+      operationId: createDashboardSavedQuery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardSavedQuery"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/internal/dashboard-saved-queries/{id}"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSavedQuery"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Ollie or Custom Charts is not enabled for this workspace
+  /v1/internal/dashboard-saved-queries/{id}:
+    get:
+      tags:
+      - Dashboard saved queries
+      summary: Get a chart query
+      description: Gets a dashboard saved query by id.
+      operationId: getDashboardSavedQuery
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Dashboard saved query
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSavedQuery"
+        "404":
+          description: Not found
+        "501":
+          description: Ollie or Custom Charts is not enabled for this workspace
+  /v1/internal/usage/projects:
+    post:
+      tags:
+      - System usage
+      summary: Find projects across workspaces by ids or name
+      description: "Find projects across the given workspaces, optionally narrowed\
+        \ by project ids or a case-insensitive name substring. Unknown or deleted\
+        \ projects are omitted."
+      operationId: findUsageProjects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UsageProjectsRequest"
+      responses:
+        "200":
+          description: UsageProjectsResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageProjectsResponse"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/internal/usage/bi-datasets:
     get:
       tags:
@@ -2522,6 +2648,63 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/dashboards/{dashboardId}/widgets/{widgetId}/query:
+    post:
+      tags:
+      - Dashboards
+      summary: Run a saved widget query
+      description: Runs the query saved on an Ollie chart widget of this dashboard
+        over the given date range and returns its rows. The query is read from the
+        saved widget; the request carries no SQL. Returns 501 when Ollie or Custom
+        Charts is not enabled for the workspace.
+      operationId: runDashboardWidgetQuery
+      parameters:
+      - name: dashboardId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: widgetId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardWidgetQueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsQueryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: "Dashboard not found, or the widget has no dashboard saved\
+            \ query"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many queries are running; retry after the Retry-After delay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Ollie or Custom Charts is not enabled for this workspace
   /v1/private/datasets/{id}/items/changes:
     post:
       tags:
@@ -4548,6 +4731,63 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/insights-views/{insightsViewId}/widgets/{widgetId}/query:
+    post:
+      tags:
+      - Insights Views
+      summary: Run a saved widget query
+      description: Runs the query saved on an Ollie chart widget of this insights
+        view over the given date range and returns its rows. The query is read from
+        the saved widget; the request carries no SQL. Returns 501 when Ollie or Custom
+        Charts is not enabled for the workspace.
+      operationId: runInsightsViewWidgetQuery
+      parameters:
+      - name: insightsViewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: widgetId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardWidgetQueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsQueryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: "Insights view not found, or the widget has no dashboard saved\
+            \ query"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many queries are running; retry after the Retry-After delay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Ollie or Custom Charts is not enabled for this workspace
   /v1/private/llm/models:
     get:
       tags:
@@ -8707,6 +8947,13 @@ paths:
           description: "Filter traces created up to this time (ISO-8601 format). If\
             \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
+      - name: annotation_queue_id
+        in: query
+        schema:
+          type: string
+          description: Compute stats over the traces belonging to this annotation
+            queue and scope feedback scores to it
+          format: uuid
       responses:
         "200":
           description: Trace stats resource
@@ -8903,6 +9150,12 @@ paths:
         in: query
         schema:
           type: string
+      - name: exclude
+        in: query
+        schema:
+          type: string
+          description: "Enrichment fields to leave out of each thread, e.g. [\"annotation_queues\"\
+            ]"
       - name: search
         in: query
         schema:
@@ -9875,6 +10128,92 @@ components:
           type: string
           description: Read-only ClickHouse SQL. Must return exactly one column named
             `result` produced via toJSONString(...)
+    ScopedAnalyticsQueryRequest:
+      required:
+      - query
+      type: object
+      properties:
+        query:
+          minLength: 1
+          type: string
+          description: Read-only ClickHouse SQL. Must return exactly one column named
+            `result` produced via toJSONString(...)
+        project_id:
+          type: string
+          description: Restrict query to this project. Omit to query the whole workspace.
+          format: uuid
+    DashboardSavedQuery:
+      required:
+      - sql
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          description: Project the query is bounded to. Omit for every project in
+            the workspace.
+          format: uuid
+        sql:
+          maxLength: 65536
+          minLength: 0
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+    UsageProjectsResponse:
+      type: object
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceProjectName"
+    WorkspaceProjectName:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    UsageProjectsRequest:
+      required:
+      - workspace_ids
+      type: object
+      properties:
+        workspace_ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
+        project_ids:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+        name:
+          maxLength: 150
+          minLength: 0
+          type: string
+        limit:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
     BiInformation:
       type: object
       properties:
@@ -9907,6 +10246,8 @@ components:
         project_id:
           type: string
           format: uuid
+        project_name:
+          type: string
         user:
           type: string
         count:
@@ -11166,6 +11507,10 @@ components:
         max_items_in_queue:
           type: integer
           format: int32
+        clear_max_items_in_queue:
+          type: boolean
+          description: "When true, removes the item ceiling so automation adds without\
+            \ bound"
     AnnotationQueueReviewer:
       type: object
       properties:
@@ -11238,6 +11583,10 @@ components:
         max_items_in_queue:
           type: integer
           format: int32
+        clear_max_items_in_queue:
+          type: boolean
+          description: "When true, removes the item ceiling so automation adds without\
+            \ bound"
     AnnotationQueue_Write:
       required:
       - name
@@ -13662,6 +14011,9 @@ components:
         cachedTokens:
           type: integer
           format: int32
+        cacheWriteTokens:
+          type: integer
+          format: int32
     ToolCall:
       type: object
       properties:
@@ -13760,6 +14112,10 @@ components:
           type: string
         serviceTier:
           type: string
+        promptCacheKey:
+          type: string
+        promptCacheOptions:
+          $ref: "#/components/schemas/PromptCacheOptions"
         logprobs:
           type: boolean
         topLogprobs:
@@ -13806,6 +14162,13 @@ components:
           type: string
         content:
           $ref: "#/components/schemas/JsonNode"
+    PromptCacheOptions:
+      type: object
+      properties:
+        mode:
+          type: string
+        ttl:
+          type: string
     ResponseFormat:
       type: object
       properties:
@@ -13940,6 +14303,19 @@ components:
           type: array
           items:
             type: string
+    DashboardWidgetQueryRequest:
+      type: object
+      properties:
+        interval_start:
+          type: string
+          description: "Start of the date range, bound to {{window_start}} in the\
+            \ dashboard saved query. Omit for all time."
+          format: date-time
+        interval_end:
+          type: string
+          description: "End of the date range, bound to {{window_end}} in the dashboard\
+            \ saved query. Omit for now."
+          format: date-time
     DashboardUpdate_Public:
       type: object
       properties:
@@ -16756,6 +17132,21 @@ components:
         experiment_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+    AnnotationQueueReference:
+      required:
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Annotation queue ID
+          format: uuid
+        name:
+          type: string
+          description: Annotation queue name
+      description: Annotation queue reference with ID and name
+      readOnly: true
     Check:
       type: object
       properties:
@@ -17113,6 +17504,12 @@ components:
             readOnly: true
         experiment:
           $ref: "#/components/schemas/ExperimentItemReference"
+        annotation_queues:
+          type: array
+          description: Annotation queues this trace is currently an item of
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AnnotationQueueReference"
         source:
           type: string
           enum:
@@ -21607,7 +22004,9 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
+      - agentInsightsEnabled
       - alertsEnabled
+      - annotationQueueAutomationEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
       - costIntelligenceEnabled
@@ -21615,6 +22014,7 @@ components:
       - datasetExportEnabled
       - datasetVersioningEnabled
       - demoDataEnabled
+      - eventBridgeAlertsEnabled
       - exportEnabled
       - geminiProviderEnabled
       - guardrailsEnabled
@@ -21677,9 +22077,15 @@ components:
           type: boolean
         ollieEnabled:
           type: boolean
+        agentInsightsEnabled:
+          type: boolean
         projectHomepageEnabled:
           type: boolean
         onlineScoringTracingEnabled:
+          type: boolean
+        annotationQueueAutomationEnabled:
+          type: boolean
+        eventBridgeAlertsEnabled:
           type: boolean
         defaultPageSize:
           maximum: 100
@@ -22582,6 +22988,21 @@ components:
             \ is deleted under its full key, so a trace can be deleted without knowing\
             \ its project."
           format: uuid
+    AnnotationQueueReference_Public:
+      required:
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Annotation queue ID
+          format: uuid
+        name:
+          type: string
+          description: Annotation queue name
+      description: Annotation queue reference with ID and name
+      readOnly: true
     Check_Public:
       type: object
       properties:
@@ -22754,6 +23175,12 @@ components:
             readOnly: true
         experiment:
           $ref: "#/components/schemas/ExperimentItemReference_Public"
+        annotation_queues:
+          type: array
+          description: Annotation queues this trace is currently an item of
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AnnotationQueueReference_Public"
         source:
           type: string
           enum:
@@ -22818,6 +23245,12 @@ components:
           type: array
           items:
             type: string
+        annotation_queues:
+          type: array
+          description: Annotation queues this thread is currently an item of
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/AnnotationQueueReference"
         last_updated_at:
           type: string
           format: date-time
@@ -23043,6 +23476,7 @@ components:
             - visibility_mode
             - providers
             - experiment
+            - annotation_queues
             - source
             - environment
         from_time:

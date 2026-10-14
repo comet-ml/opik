@@ -10,12 +10,12 @@ import { anthropicKeyUsable } from '@e2e/core/llm-key-preflight';
  * is silent by construction — neither surface can catch it alone:
  *
  *   - **API-only** cannot: a request carrying `temperature` when the panel is
- *     set to Top P, or carrying no `thinking_effort` at all, is a perfectly
- *     well-formed request. There is nothing wrong with it except that it is not
- *     what the user asked for.
+ *     set to Top P, or carrying no effort at all, is a perfectly well-formed
+ *     request. There is nothing wrong with it except that it is not what the
+ *     user asked for.
  *   - **UI-only** cannot either: the panel renders whatever its own config says,
- *     so a control showing "High (Default)" over a config the request builder
- *     then strips looks entirely correct on screen.
+ *     so a control showing "High" over a config the request builder then strips
+ *     looks entirely correct on screen.
  *
  * So the assertion is the panel's own displayed values compared against the
  * outbound `POST /v1/private/chat/completions` body. It costs money at the wrong
@@ -30,6 +30,11 @@ import { anthropicKeyUsable } from '@e2e/core/llm-key-preflight';
  * picked because it is the model that offers BOTH halves under test — a thinking
  * effort AND the sampling toggle. Its newer siblings (Sonnet 5, the Opus 4.7+
  * line) set `supportsSamplingParams: false` and render no toggle at all.
+ *
+ * The effort travels as `custom_parameters.output_config.effort`, the slot the
+ * backend proxy forwards to Anthropic's `output_config.effort`. A flat
+ * `thinking_effort` is what the proxy used to drop without a trace, so the body
+ * must not carry one.
  */
 
 const MODEL_DISPLAY_NAME = 'Claude Sonnet 4.6';
@@ -37,21 +42,20 @@ const MODEL_DISPLAY_NAME = 'Claude Sonnet 4.6';
 /**
  * The effort this test switches the dropdown to. Deliberately NOT the default:
  * a request that carried the default would also pass on a build that ignored
- * the control entirely and let `resolveEffort` substitute "high".
+ * the control entirely and let `resolveEffort` substitute the model default.
  */
 const CHOSEN_EFFORT_LABEL = 'Low';
 
 /**
  * How the dropdown's labels map onto the values the request carries. Written out
  * rather than lower-cased from the label because the mapping is not mechanical —
- * "High (Default)" is `high` and "xHigh" is `xhigh` — and because an unknown
- * label must fail this test rather than quietly resolve to something.
+ * "xHigh" is `xhigh` — and because an unknown label must fail this test rather
+ * than quietly resolve to something.
  */
 const THINKING_EFFORT_VALUE_BY_LABEL: Record<string, string> = {
-  Adaptive: 'adaptive',
   Low: 'low',
   Medium: 'medium',
-  'High (Default)': 'high',
+  High: 'high',
   xHigh: 'xhigh',
   Max: 'max',
 };
@@ -168,10 +172,24 @@ test.describe(
 
         await test.step('Close the panel and run a one-line prompt', async () => {
           await playground.closeModelParameters();
-          await playground.fillFirstMessage('Reply with the single word OK.');
+          await playground.fillUserMessage('Reply with the single word OK.');
         });
 
         const request = await test.step('Capture the outbound completion request', async () => {
+          // Short-circuit the request at the browser so it never reaches the
+          // backend proxy — every assertion below is on the request body, and
+          // letting it through would have Anthropic generate (and bill) a full
+          // completion with thinking that nothing reads.
+          await page.route(
+            (url) => isChatCompletion(url.toString()),
+            (route) =>
+              route.fulfill({
+                status: 200,
+                contentType: 'text/event-stream',
+                body: 'data: [DONE]\n\n',
+              }),
+          );
+
           // Armed before the click: the POST is in flight the moment Run is
           // pressed, so subscribing afterwards would race it.
           const sent = page.waitForRequest(
@@ -197,9 +215,14 @@ test.describe(
             'no temperature alongside top_p — Anthropic refuses a request holding both',
           ).not.toContain('temperature');
           expect(
-            body.thinking_effort,
-            'the effort the dropdown displays is the effort the provider is asked for',
-          ).toBe(expectedEffort);
+            body.custom_parameters,
+            'the effort the dropdown displays is the effort the provider is asked for, in the ' +
+              'slot the backend forwards as output_config.effort',
+          ).toMatchObject({ output_config: { effort: expectedEffort } });
+          expect(
+            Object.keys(body),
+            'no flat thinking_effort — the backend proxy drops unknown top-level fields',
+          ).not.toContain('thinking_effort');
         });
       },
     );

@@ -85,6 +85,36 @@ export class ThreadPanelPage {
     return this.root.getByText(formatted, { exact: true });
   }
 
+  /**
+   * The header's "N messages" chip, matched on the string it must show.
+   *
+   * Same shape and same caveat as `durationChip`: an unlabelled `<div>` holding
+   * a hash icon and `` `${thread.number_of_messages} messages` ``, whose only
+   * accessible name is a portal-rendered tooltip ("Number of messages in the
+   * thread"). There is no role, label or testid to select it by, and this spec
+   * ships into a repo where the frontend cannot be touched in the same change,
+   * so the exact text scoped to the panel is the most stable handle available.
+   * The FE should grow a `data-testid="thread-message-count"` here.
+   *
+   * Exact, so "4 messages" cannot be satisfied by "14 messages" — the
+   * substring match is precisely the one that would hide a leaked aggregate.
+   */
+  messagesChip(count: number): Locator {
+    return this.root.getByText(`${count} messages`, { exact: true });
+  }
+
+  /**
+   * The header's estimated-cost chip.
+   *
+   * `formatCost` floors to two decimals and renders anything under $0.01 as the
+   * literal "<$0.01", so a caller asserting a real number has to seed a thread
+   * above that floor — below it every thread in the project renders the same
+   * string and the chip can no longer tell them apart.
+   */
+  costChip(formatted: string): Locator {
+    return this.root.getByText(formatted, { exact: true });
+  }
+
   // --- Feedback scores tab ---
   //
   // The panel's second tab. It renders the same ConfigurableFeedbackScoreTable

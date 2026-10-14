@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
+import { JSON_PATH_FORMAT } from "@/lib/utils";
 import Autocomplete from "@/shared/Autocomplete/Autocomplete";
 import {
   TRACE_AUTOCOMPLETE_ROOT_KEY,
@@ -18,6 +19,7 @@ type TracesOrSpansPathsAutocompleteProps = {
   excludeRoot?: boolean;
   datasetColumnNames?: string[];
   includeIntermediateNodes?: boolean;
+  pathFormat?: JSON_PATH_FORMAT;
 };
 
 const TracesOrSpansPathsAutocomplete: React.FC<
@@ -33,6 +35,7 @@ const TracesOrSpansPathsAutocomplete: React.FC<
   excludeRoot = false,
   datasetColumnNames,
   includeIntermediateNodes = false,
+  pathFormat,
 }) => {
   const defaultPlaceholder =
     type === TRACE_DATA_TYPE.spans
@@ -47,6 +50,7 @@ const TracesOrSpansPathsAutocomplete: React.FC<
     excludeRoot,
     includeIntermediateNodes,
     datasetColumnNames,
+    pathFormat,
   });
 
   const items = useMemo(

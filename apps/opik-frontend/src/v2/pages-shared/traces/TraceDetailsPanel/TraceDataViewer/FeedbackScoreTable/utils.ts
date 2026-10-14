@@ -307,3 +307,20 @@ export const getIsParentFeedbackScoreRow = (
     !row.author
   );
 };
+
+export const getIsDeletableFeedbackScoreRow = (
+  row: ExpandingFeedbackScoreRow,
+  userName: string,
+): boolean =>
+  !getIsParentFeedbackScoreRow(row) &&
+  (row.author ?? row.created_by) === userName;
+
+export const getHasDeletableFeedbackScoreRow = (
+  rows: ExpandingFeedbackScoreRow[],
+  userName: string,
+): boolean =>
+  rows.some(
+    (row) =>
+      getIsDeletableFeedbackScoreRow(row, userName) ||
+      getHasDeletableFeedbackScoreRow(row.subRows ?? [], userName),
+  );

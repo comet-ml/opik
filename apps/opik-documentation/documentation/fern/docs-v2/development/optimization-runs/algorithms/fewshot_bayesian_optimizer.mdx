@@ -114,12 +114,12 @@ There are two models to consider when using the `FewShotBayesianOptimizer`:
 - `ChatPrompt.model`: The model used to evaluate the prompt.
 
 The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o"`, `"azure/gpt-4"`,
-`"anthropic/claude-3-opus"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
+`"anthropic/claude-opus-4-7"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
 using the `model_parameters` parameter:
 
 ```python
 optimizer = FewShotBayesianOptimizer(
-    model="anthropic/claude-3-opus-20240229",
+    model="anthropic/claude-sonnet-4-6",
     model_parameters={
         "temperature": 0.7,
         "max_tokens": 4096

@@ -42,6 +42,8 @@ interface LLMJudgeScoreProps {
   score: LLMJudgeSchema;
   onRemoveScore?: () => void;
   onChangeScore: (changes: Partial<LLMJudgeSchema>) => void;
+  // Restricts the type selector; all types when omitted.
+  allowedTypes?: LLM_SCHEMA_TYPE[];
 }
 
 /**
@@ -56,6 +58,7 @@ const LLMJudgeScore = ({
   score,
   onChangeScore,
   onRemoveScore,
+  allowedTypes,
 }: LLMJudgeScoreProps) => {
   const nameErrorText = get(error, ["name", "message"]);
 
@@ -105,7 +108,13 @@ const LLMJudgeScore = ({
           onChange={(value) =>
             onChangeScore({ type: value as LLM_SCHEMA_TYPE, unsaved: false })
           }
-          options={SCORE_TYPE_OPTIONS}
+          options={
+            allowedTypes
+              ? SCORE_TYPE_OPTIONS.filter((option) =>
+                  allowedTypes.includes(option.value),
+                )
+              : SCORE_TYPE_OPTIONS
+          }
           className={cn("h-8", showName ? "w-36 shrink-0" : "w-full")}
         />
       </div>

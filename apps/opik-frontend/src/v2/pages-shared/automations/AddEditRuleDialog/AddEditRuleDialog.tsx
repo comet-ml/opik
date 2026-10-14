@@ -34,6 +34,8 @@ import { Filter } from "@/types/filters";
 import { ColumnData } from "@/types/shared";
 import { LLM_JUDGE, LLM_MESSAGE_ROLE, LLMJudgeSchema } from "@/types/llm";
 import { isPythonCodeRule, isLLMJudgeRule } from "@/lib/rules";
+import { isDecisionModel } from "@/lib/modelCapabilities";
+import { DECISION_MODEL_SCORE_TYPES } from "@/v2/pages-shared/automations/AddEditRuleDialog/decisionModelRule";
 import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
@@ -219,6 +221,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
+  // A decisions model (Jev) answers yes/no per score and never runs the agentic loop.
+  const isDecision =
+    isLLMJudge && isDecisionModel(form.watch("llmJudgeDetails.model"));
 
   const formProjectIds = form.watch("projectIds");
 
@@ -602,12 +607,17 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                             scores={field.value}
                             onChange={field.onChange}
                             showMainScoreName={!isMainScoreLinked}
+                            allowedTypes={
+                              isDecision
+                                ? DECISION_MODEL_SCORE_TYPES
+                                : undefined
+                            }
                           />
                         )}
                       />
                     )}
                     {/* A cost cap only applies where the judge may loop with tools — trace and thread scope. */}
-                    {isLLMJudge && !isSpanScope && (
+                    {isLLMJudge && !isSpanScope && !isDecision && (
                       <LLMJudgeMaxCostField form={form} />
                     )}
                   </div>

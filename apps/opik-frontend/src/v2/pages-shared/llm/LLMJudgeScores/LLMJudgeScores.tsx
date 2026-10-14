@@ -15,6 +15,8 @@ interface LLMJudgeScoresProps {
   onChange: (scores: LLMJudgeSchema[]) => void;
   /** Main score normally mirrors the rule name; show its name field when it doesn't. */
   showMainScoreName?: boolean;
+  // Restricts the score types offered; all types when omitted. New scores get the first allowed type.
+  allowedTypes?: LLM_SCHEMA_TYPE[];
 }
 
 /**
@@ -27,6 +29,7 @@ const LLMJudgeScores = ({
   scores,
   onChange,
   showMainScoreName = false,
+  allowedTypes,
 }: LLMJudgeScoresProps) => {
   const generalError = get(validationErrors, "message");
 
@@ -36,11 +39,11 @@ const LLMJudgeScores = ({
       {
         name: "",
         description: "",
-        type: LLM_SCHEMA_TYPE.BOOLEAN,
+        type: allowedTypes?.[0] ?? LLM_SCHEMA_TYPE.BOOLEAN,
         unsaved: false,
       },
     ]);
-  }, [onChange, scores]);
+  }, [allowedTypes, onChange, scores]);
 
   const handleRemoveScore = useCallback(
     (index: number) => {
@@ -84,6 +87,7 @@ const LLMJudgeScores = ({
             }
             onChangeScore={(changes) => handleChangeScore(index, changes)}
             score={score}
+            allowedTypes={allowedTypes}
           />
         ))}
         {generalError && <FormErrorSkeleton>{generalError}</FormErrorSkeleton>}

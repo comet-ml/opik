@@ -36,6 +36,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.ProjectStats.AvgValueStat;
 import static com.comet.opik.api.ProjectStats.CountValueStat;
 import static com.comet.opik.api.ProjectStats.PercentageValueStat;
@@ -530,5 +531,138 @@ public class StatsUtils {
                 .stream()
                 .map(e -> Map.entry(e.getKey(), avgFromList(e.getValue())))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    /** The thread stats a project returns for these traces, their spans and thread feedback scores. */
+    public static List<ProjectStatItem<?>> getProjectThreadStatItems(
+            List<Trace> traces,
+            List<Span> spans,
+            List<FeedbackScoreBatchItemThread> feedbackScores) {
+        var expectedStats = new ArrayList<ProjectStats.ProjectStatItem<?>>();
+
+        // Thread count
+        long threadCount = traces.stream()
+                .map(Trace::threadId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .count();
+        expectedStats.add(new ProjectStats.CountValueStat("thread_count", threadCount));
+
+        // Duration percentiles across threads
+        var durationPercentiles = getThreadDurationQuantiles(traces);
+        if (!durationPercentiles.isEmpty()) {
+            expectedStats.add(new ProjectStats.PercentageValueStat("duration",
+                    new PercentageValues(
+                            durationPercentiles.get(0),
+                            durationPercentiles.get(1),
+                            durationPercentiles.get(2))));
+        }
+
+        // Input, output, metadata counts (not applicable for threads)
+        expectedStats.add(new ProjectStats.CountValueStat("input", 0L));
+        expectedStats.add(new ProjectStats.CountValueStat("output", 0L));
+        expectedStats.add(new ProjectStats.CountValueStat("metadata", 0L));
+
+        // Tags (not applicable for thread stats aggregation)
+        expectedStats.add(new ProjectStats.AvgValueStat("tags", 0.0));
+
+        // Calculate total cost across all threads
+        var totalCost = threadSpansCost(spans);
+        var avgCostPerThread = threadCount > 0
+                ? totalCost.divide(BigDecimal.valueOf(threadCount), RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+        expectedStats.add(new ProjectStats.AvgValueStat("total_estimated_cost", avgCostPerThread.doubleValue()));
+        expectedStats.add(new ProjectStats.AvgValueStat("total_estimated_cost_sum", totalCost.doubleValue()));
+
+        // Calculate usage (tokens) - average across threads
+        var threadUsage = threadSpansUsage(spans);
+        if (threadUsage != null) {
+            threadUsage.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> {
+                        double avgUsagePerThread = threadCount > 0
+                                ? entry.getValue().doubleValue() / threadCount
+                                : 0.0;
+                        expectedStats.add(new ProjectStats.AvgValueStat("usage." + entry.getKey(),
+                                avgUsagePerThread));
+                    });
+            threadUsage.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> expectedStats.add(
+                            ProjectStats.AvgValueStat.builder()
+                                    .name("usage_sum." + entry.getKey())
+                                    .value(entry.getValue().doubleValue())
+                                    .type(ProjectStats.StatsType.AVG)
+                                    .build()));
+        }
+
+        // Calculate feedback scores - average across threads
+        if (feedbackScores != null && !feedbackScores.isEmpty()) {
+            feedbackScores.stream()
+                    .collect(Collectors.groupingBy(FeedbackScoreBatchItemThread::name))
+                    .entrySet()
+                    .stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> {
+                        var avgScore = entry.getValue().stream()
+                                .map(FeedbackScoreBatchItemThread::value)
+                                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                                .divide(BigDecimal.valueOf(entry.getValue().size()),
+                                        RoundingMode.HALF_UP);
+                        expectedStats.add(new ProjectStats.AvgValueStat("feedback_scores." + entry.getKey(),
+                                avgScore.doubleValue()));
+                    });
+        }
+
+        // Guardrails and errors (not tracked in thread stats)
+        expectedStats.add(new ProjectStats.CountValueStat("guardrails_failed_count", 0L));
+        expectedStats.add(new ProjectStats.CountValueStat("error_count", 0L));
+
+        return expectedStats;
+    }
+
+    private static List<BigDecimal> getThreadDurationQuantiles(List<Trace> traces) {
+        // Group traces by thread_id and calculate duration per thread
+        var threadDurations = traces.stream()
+                .collect(Collectors.groupingBy(Trace::threadId))
+                .values()
+                .stream()
+                .map(threadTraces -> {
+                    var minStartTime = threadTraces.stream()
+                            .map(Trace::startTime)
+                            .min(Comparator.naturalOrder())
+                            .orElseThrow();
+                    var maxEndTime = threadTraces.stream()
+                            .map(Trace::endTime)
+                            .filter(Objects::nonNull)
+                            .max(Comparator.naturalOrder())
+                            .orElse(null);
+                    if (maxEndTime == null) {
+                        return null;
+                    }
+                    return minStartTime.until(maxEndTime, ChronoUnit.MICROS) / 1_000.0;
+                })
+                .filter(Objects::nonNull)
+                .toList();
+
+        return StatsUtils.calculateQuantiles(
+                threadDurations,
+                List.of(0.50, 0.90, 0.99));
+    }
+
+    private static BigDecimal threadSpansCost(List<Span> spans) {
+        return spans.stream()
+                .map(span -> CostService.calculateCost(span.model(), span.provider(), span.usage(), null))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private static Map<String, Long> threadSpansUsage(List<Span> spans) {
+        if (CollectionUtils.isEmpty(spans)) {
+            return null;
+        }
+        return spans.stream()
+                .filter(span -> span.usage() != null)
+                .flatMap(span -> span.usage().entrySet().stream())
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> Long.valueOf(entry.getValue()), Long::sum));
     }
 }

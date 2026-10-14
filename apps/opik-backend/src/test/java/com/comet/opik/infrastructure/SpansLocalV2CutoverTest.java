@@ -24,6 +24,7 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -33,6 +34,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -149,6 +151,22 @@ class SpansLocalV2CutoverTest {
      * {@code now}-derived so it never lands on Feb 29 and cannot drift.
      */
     private static final Instant FAR_FUTURE = LocalDate.of(2201, 6, 1).atStartOfDay().toInstant(ZoneOffset.UTC);
+
+    /**
+     * The two weekly partitions {@link #FAR_FUTURE} resolves to: the honest one the {@code DateTime64} successor
+     * stores it in, and the one the legacy 32-bit {@code id_at} wraps it into ({@code epochSecond % 2^32}). Asserted
+     * as literals rather than against whatever the derivation returned — comparing a derivation with itself passes
+     * for any pair of the right size. {@code SpansLocalV2PartitioningTest} pins the same pair.
+     */
+    private static final long FAR_FUTURE_HONEST_WEEK = 22010601L;
+    private static final long FAR_FUTURE_LEGACY_WRAP_WEEK = 20650420L;
+
+    /**
+     * A UUIDv7 whose embedded millisecond count is the 48-bit maximum — far past {@code DateTime64}'s 2300-01-01
+     * ceiling, where the column saturates rather than wrapping, so the row's stored week is not one the partition
+     * scope can reproduce. Written as a literal because {@code IdGenerator} cannot mint one.
+     */
+    private static final String PAST_CEILING_ID = "ffffffff-ffff-7fff-8000-03b8d2a8d5e2";
 
     /** Rows spread across three consecutive weekly partitions, so the backfill runs as three weekly batches. */
     private static final int SEED_WEEKS = 3;
@@ -1133,6 +1151,204 @@ class SpansLocalV2CutoverTest {
         assertThat(liveCount("spans", lateDeleted, workspaceId))
                 .as("the final pre-swap replay masks it, so it does not leak live across the EXCHANGE")
                 .isZero();
+    }
+
+    // --- the deletion replays' partition scope (OPIK-8607) -------------------------------------------------------
+
+    /**
+     * The scope is one partition per week the bridged ids fall in — not one per partition of the table, which is what
+     * an unbounded mutation locks and what makes the replay unrunnable once the successor has accumulated enough
+     * weeks. Every other deletion case in this suite already runs through the scoped statements and asserts unchanged
+     * outcomes; this one asserts the scope itself, so a derivation that silently collapsed or widened the set fails
+     * here rather than merely costing extra mutations.
+     */
+    @Test
+    void theReplayIsScopedToTheWeeksItsBridgedIdsFallIn() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        var spans = mintIds(1); // one span in each of SEED_WEEKS consecutive weeks
+        seedSpans(spans, workspaceId, projectId);
+        var backfillStart = nowMicros();
+        recordDeletionEvents(idStrings(spans), workspaceId, projectId.toString(), "cascade");
+
+        var scope = deletePartitionScope(backfillStart);
+
+        assertThat(scope.bridged()).isEqualTo(spans.size());
+        assertThat(scope.underivable()).isZero();
+        // Against a Java oracle over the suite's fixed anchor, not against the derivation's own output: comparing the
+        // rendered scopes with the partitions they were rendered from passes for any set of the right size, so it
+        // would miss a derivation that named the wrong weeks entirely.
+        var expectedWeeks = IntStream.range(0, SEED_WEEKS)
+                .mapToObj(
+                        week -> Long.parseLong(ANCHOR_MONDAY.plusWeeks(week).format(DateTimeFormatter.BASIC_ISO_DATE)))
+                .toList();
+        assertThat(scope.derivedPartitions())
+                .as("the Monday of each seeded week, and nothing else")
+                .containsExactlyElementsOf(expectedWeeks);
+        assertThat(scope.statementScopes())
+                .as("one statement per derived partition, each naming its own")
+                .containsExactlyElementsOf(expectedWeeks.stream().map("IN PARTITION %d"::formatted).toList());
+    }
+
+    /**
+     * A far-future id resolves to TWO partitions: its honest week on the {@code DateTime64} successor, and the week
+     * the legacy 32-bit {@code id_at} wraps it into. Both must be named — a scope carrying only one is correct against
+     * one shape of the table and, against the other, a predicate that matches nothing, which is a delete that reports
+     * success and removes no rows. The mask is asserted as well as the scope, so this covers the whole path rather
+     * than the arithmetic alone.
+     */
+    @Test
+    void aFarFutureIdIsScopedToBothItsHonestWeekAndItsLegacyWrap() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        var farFuture = spansWithIdAt(1, weekInstant(0, 7), FAR_FUTURE);
+        seedSpans(farFuture, workspaceId, projectId);
+        var backfillStart = nowMicros();
+        backfillWeek(0);
+        var deleted = idStrings(farFuture);
+        recordDeletionEvents(deleted, workspaceId, projectId.toString(), "cascade");
+        lightweightDeleteScoped(deleted, workspaceId, projectId);
+
+        assertThat(deletePartitionScope(backfillStart).derivedPartitions())
+                .as("both weeks exactly: the honest one and the one the 32-bit column wraps it into. A size check "
+                        + "alone leaves the wrap unconstrained, and it is the half no table here can falsify")
+                .containsExactly(FAR_FUTURE_LEGACY_WRAP_WEEK, FAR_FUTURE_HONEST_WEEK)
+                .as("and the honest one is the partition ClickHouse actually stored the row in, which is what ties "
+                        + "the literal above to this server rather than to a comment")
+                .contains(Long.parseLong(destinationPartitionId(farFuture.getFirst().id(), workspaceId)));
+
+        replayDeletions(backfillStart);
+
+        assertThat(liveCount("spans_local_v2", deleted, workspaceId))
+                .as("and the scoped replay masks it, so the union is not merely wider but correct")
+                .isZero();
+    }
+
+    /**
+     * An id at or past the {@code DateTime64} ceiling has no partition this can derive exactly — the column saturates
+     * rather than wrapping — so the WHOLE batch falls back to a single unbounded statement. All-or-nothing, never per
+     * id: a scope covering only the derivable ids is a scope the rest of the batch's rows are not in.
+     * <p>
+     * The past-ceiling span is really seeded and really replayed, so the final assertion covers the fallback WORKING
+     * and not merely being chosen. It has to be, because saturation makes the two sides disagree: the stored week
+     * comes from the instant the id itself clamps to, the derivation's from the instant its raw SECOND count clamps
+     * to, and those are different points inside the last representable day. They land in the same week here only by
+     * where this server happens to clamp — which is what "the value stops being a function of the id" means, and why
+     * an underivable id is refused rather than approximated.
+     */
+    @Test
+    void anIdPastTheDateTime64CeilingSendsTheWholeBatchToOneUnboundedStatement() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        var spans = new ArrayList<>(mintIdsInWeek(0, 2));
+        spans.add(SeededSpan.builder()
+                .id(UUID.fromString(PAST_CEILING_ID))
+                .traceId(ID_GENERATOR.generateId(weekInstant(0, 1)))
+                .createdAt(weekInstant(0, 1))
+                .build());
+        seedSpans(spans, workspaceId, projectId);
+        var backfillStart = nowMicros();
+        backfillWeek(0);
+        var deleted = idStrings(spans);
+
+        assertThat(liveCount("spans_local_v2", deleted, workspaceId))
+                .as("the backfill really carried the past-ceiling row across; without it the post-replay assertion "
+                        + "below would hold for a row that was never there")
+                .isEqualTo(spans.size());
+
+        recordDeletionEvents(deleted, workspaceId, projectId.toString(), "cascade");
+        lightweightDeleteScoped(deleted, workspaceId, projectId);
+
+        var scope = deletePartitionScope(backfillStart);
+        assertThat(scope.underivable()).isEqualTo(1L);
+        assertThat(scope.statementScopes())
+                .as("exactly one statement, and unbounded")
+                .containsExactly("");
+
+        replayDeletions(backfillStart);
+
+        assertThat(liveCount("spans_local_v2", deleted, workspaceId))
+                .as("every id the batch carried is masked, the past-ceiling one included — the fallback is the "
+                        + "correct form, not merely the single one")
+                .isZero();
+    }
+
+    /**
+     * Nothing bridged emits NO statement. Not an optimisation: an unbounded {@code DELETE} that deletes nothing still
+     * allocates a block number in every partition, so without this branch "there is nothing to replay" would be the
+     * cheapest way to reach the ZooKeeper failure the scope exists to avoid.
+     */
+    @Test
+    void anEmptyBridgeWindowEmitsNoReplayStatementAtAll() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        seedSpans(mintIdsInWeek(0, 2), workspaceId, projectId);
+        var backfillStart = nowMicros();
+        backfillWeek(0);
+
+        assertThat(deletePartitionScope(backfillStart).statementScopes()).isEmpty();
+    }
+
+    /**
+     * The predicate the drivers branch on, against the real schema: the successor is partitioned by {@code id_at} and
+     * the legacy table is not partitioned at all. That is what decides whether a replay is scoped, and it is why
+     * {@code 000004_rollback_reverse_replay.sql} renders unbounded — its target is the restored ORIGINAL
+     * {@code spans}, where {@code IN PARTITION} is rejected outright rather than ignored, so scoping it
+     * unconditionally would turn the rollback into a hard failure.
+     * <p>
+     * A migration that partitioned {@code spans} would fail here, which is the prompt to re-read that file: the
+     * drivers would start scoping its replay, correctly, but the reasoning in its header would no longer hold.
+     */
+    /**
+     * The window is an INPUT, and re-running over the same one answers about the same set of ids. Both halves matter,
+     * and they are what the drivers' post-replay check rests on.
+     * <p>
+     * A delete bridged AFTER the bound must not appear, or the replay — whose own match carries that same bound —
+     * would be asked to cover a partition it has no reason to touch. A delete bridged INSIDE the bound must appear on
+     * a re-run, because that is how a driver detects one it could not see the first time: the scope is derived from
+     * what one replica can see at one instant, while the replay's subquery is re-evaluated by each replica when it
+     * runs the mutation, so a row written on another replica just before the bound can surface here only afterwards —
+     * inside the replayed window, outside the scope, silently unmasked. Re-deriving over the fixed window is what
+     * turns that into a reported partition instead of a lost delete.
+     */
+    @Test
+    void reDerivingOverTheSameWindowSeesInsideItAndIgnoresWhatFollowsIt() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        var early = mintIdsInWeek(0, 2);
+        var lateVisible = mintIdsInWeek(1, 1);
+        seedSpans(early, workspaceId, projectId);
+        seedSpans(lateVisible, workspaceId, projectId);
+        var backfillStart = nowMicros();
+        backfillWeek(0);
+        backfillWeek(1);
+
+        recordDeletionEvents(idStrings(early), workspaceId, projectId.toString(), "cascade");
+        var windowEnd = nowMicros();
+        var scoped = deletePartitionScope(backfillStart, windowEnd);
+
+        assertThat(scoped.derivedPartitions()).hasSize(1);
+
+        // Bridged after the bound: the next pass's tail, not this one's.
+        recordDeletionEvents(idStrings(lateVisible), workspaceId, projectId.toString(), "cascade");
+
+        assertThat(deletePartitionScope(backfillStart, windowEnd))
+                .as("the bound is honoured on a re-run, so a delete bridged after it cannot widen this pass's scope")
+                .isEqualTo(scoped);
+        assertThat(deletePartitionScope(backfillStart, nowMicros()).derivedPartitions())
+                .as("and a later bound does pick it up, which is what makes re-running the driver the remedy")
+                .hasSize(2);
+    }
+
+    @Test
+    void onlyTheSuccessorIsPartitionedByIdAt() {
+        assertThat(partitionKeyOf("spans_local_v2")).contains("id_at");
+        assertThat(partitionKeyOf("spans")).isEmpty();
     }
 
     // --- post-swap reconciliation (OPIK-8238) --------------------------------------------------------------------
@@ -2148,47 +2364,59 @@ class SpansLocalV2CutoverTest {
     }
 
     /**
-     * Reads the bridge for the cutover window and removes the captured deletes from the destination in a single
-     * mutation (mirrors 000002). Single full-key branch on the BRIDGE's key {@code (workspace_id, project_id, id)} —
-     * which on this table is not a primary-key prefix, since {@code trace_id} sits between {@code project_id} and
-     * {@code id}, and the bridge records no {@code trace_id}. The branch also requires the id is NOT currently live on
-     * the source (the resurrection guard), so a deleted-then-recreated id is not dropped. Returns the wall time.
+     * Reads the bridge for the cutover window and removes the captured deletes from the destination (mirrors 000002).
+     * Single full-key branch on the BRIDGE's key {@code (workspace_id, project_id, id)} — which on this table is not a
+     * primary-key prefix, since {@code trace_id} sits between {@code project_id} and {@code id}, and the bridge records
+     * no {@code trace_id}. The branch also requires the id is NOT currently live on the source (the resurrection
+     * guard), so a deleted-then-recreated id is not dropped. Returns the wall time.
+     * <p>
+     * Emitted ONCE PER PARTITION the bridged ids resolve to (OPIK-8607), as the drivers emit it. Every deletion case in
+     * this suite therefore runs through the scoped form and asserts the same outcomes as before, which is what pins
+     * that {@code IN PARTITION} changes which PARTS the mutation is registered against and never which rows match.
      */
     private long replayDeletions(String backfillStart) {
         var start = System.nanoTime();
-        execute("""
-                DELETE FROM spans_local_v2
-                WHERE (
-                    (workspace_id, project_id, id) IN (
-                        SELECT
-                            workspace_id,
-                            toFixedString(project_id, 36),
-                            toFixedString(deleted_id, 36)
-                        FROM deletion_events_local
-                        WHERE source_table = 'spans'
-                          AND event_time >= toDateTime64(:backfill_start, 6, 'UTC')
-                          AND project_id != ''
-                          AND length(project_id) = 36
-                          AND length(deleted_id) = 36
-                    )
-                    AND (workspace_id, project_id, id) NOT IN (
-                        SELECT
-                            workspace_id,
-                            project_id,
-                            id
-                        FROM spans
-                        WHERE id IN (
-                            SELECT toFixedString(deleted_id, 36)
+        var scope = deletePartitionScope(backfillStart);
+        for (var partitionScope : scope.statementScopes()) {
+            execute("""
+                    DELETE FROM spans_local_v2
+                    ${PARTITION_SCOPE}
+                    WHERE (
+                        (workspace_id, project_id, id) IN (
+                            SELECT
+                                workspace_id,
+                                toFixedString(project_id, 36),
+                                toFixedString(deleted_id, 36)
                             FROM deletion_events_local
                             WHERE source_table = 'spans'
                               AND event_time >= toDateTime64(:backfill_start, 6, 'UTC')
+                              ${BRIDGE_WINDOW_END}
+                              AND project_id != ''
+                              AND length(project_id) = 36
                               AND length(deleted_id) = 36
                         )
+                        AND (workspace_id, project_id, id) NOT IN (
+                            SELECT
+                                workspace_id,
+                                project_id,
+                                id
+                            FROM spans
+                            WHERE id IN (
+                                SELECT toFixedString(deleted_id, 36)
+                                FROM deletion_events_local
+                                WHERE source_table = 'spans'
+                                  AND event_time >= toDateTime64(:backfill_start, 6, 'UTC')
+                                  AND length(deleted_id) = 36
+                            )
+                        )
                     )
-                )
-                SETTINGS allow_nondeterministic_mutations = 1,
-                         lightweight_deletes_sync = 2
-                """, statement -> statement.bind("backfill_start", backfillStart));
+                    SETTINGS allow_nondeterministic_mutations = 1,
+                             lightweight_deletes_sync = 2
+                        """
+                    .replace("${PARTITION_SCOPE}", partitionScope)
+                    .replace("${BRIDGE_WINDOW_END}", scope.bridgeWindowBound()),
+                    statement -> statement.bind("backfill_start", backfillStart));
+        }
         return (System.nanoTime() - start) / 1_000_000L;
     }
 
@@ -2237,42 +2465,54 @@ class SpansLocalV2CutoverTest {
      * bridged deletes win over what it re-inserted. A separate statement from {@link #replayDeletions(String)}: it
      * masks rows on the LIVE table and reads its resurrection guard from the FROZEN backup, which is race-free where a
      * live source cannot be — and it carries a third arm, the staleness scope, that has no pre-swap counterpart.
+     * <p>
+     * Scoped per partition like {@link #replayDeletions(String)}, and from ARM 1's bridge window alone: arms 2 and 3
+     * only ever remove rows from what arm 1 admits, so that scope is a superset of the partitions this can delete
+     * from. A superset is the safe direction; a subset would be a silently skipped delete.
      */
     private void postSwapDeletionReplay(String liveTable, String gapStart, String swapDone) {
-        execute("""
-                DELETE FROM %s
-                WHERE created_at      <  toDateTime64(:swap_done, 6, 'UTC')
-                  AND last_updated_at <  toDateTime64(:swap_done, 6, 'UTC')
-                  AND (workspace_id, project_id, id) IN (
-                      SELECT
-                          workspace_id,
-                          toFixedString(project_id, 36),
-                          toFixedString(deleted_id, 36)
-                      FROM deletion_events_local
-                      WHERE source_table = 'spans'
-                        AND event_time >= toDateTime64(:gap_start, 6, 'UTC')
-                        AND project_id != ''
-                        AND length(project_id) = 36
-                        AND length(deleted_id) = 36
-                  )
-                  AND (workspace_id, project_id, id) NOT IN (
-                      SELECT
-                          workspace_id,
-                          project_id,
-                          id
-                      FROM spans_pre_cutover_backup
-                      WHERE id IN (
-                          SELECT toFixedString(deleted_id, 36)
+        var scope = deletePartitionScope(gapStart);
+        for (var partitionScope : scope.statementScopes()) {
+            execute("""
+                    DELETE FROM ${LIVE_TABLE}
+                    ${PARTITION_SCOPE}
+                    WHERE created_at      <  toDateTime64(:swap_done, 6, 'UTC')
+                      AND last_updated_at <  toDateTime64(:swap_done, 6, 'UTC')
+                      AND (workspace_id, project_id, id) IN (
+                          SELECT
+                              workspace_id,
+                              toFixedString(project_id, 36),
+                              toFixedString(deleted_id, 36)
                           FROM deletion_events_local
                           WHERE source_table = 'spans'
                             AND event_time >= toDateTime64(:gap_start, 6, 'UTC')
+                            ${BRIDGE_WINDOW_END}
+                            AND project_id != ''
+                            AND length(project_id) = 36
                             AND length(deleted_id) = 36
                       )
-                  )
-                SETTINGS allow_nondeterministic_mutations = 1,
-                         lightweight_deletes_sync = 2
-                """.formatted(liveTable),
-                statement -> statement.bind("gap_start", gapStart).bind("swap_done", swapDone));
+                      AND (workspace_id, project_id, id) NOT IN (
+                          SELECT
+                              workspace_id,
+                              project_id,
+                              id
+                          FROM spans_pre_cutover_backup
+                          WHERE id IN (
+                              SELECT toFixedString(deleted_id, 36)
+                              FROM deletion_events_local
+                              WHERE source_table = 'spans'
+                                AND event_time >= toDateTime64(:gap_start, 6, 'UTC')
+                                AND length(deleted_id) = 36
+                          )
+                      )
+                    SETTINGS allow_nondeterministic_mutations = 1,
+                             lightweight_deletes_sync = 2
+                        """
+                    .replace("${LIVE_TABLE}", liveTable)
+                    .replace("${PARTITION_SCOPE}", partitionScope)
+                    .replace("${BRIDGE_WINDOW_END}", scope.bridgeWindowBound()),
+                    statement -> statement.bind("gap_start", gapStart).bind("swap_done", swapDone));
+        }
     }
 
     /**
@@ -3302,6 +3542,108 @@ class SpansLocalV2CutoverTest {
                 .block();
     }
 
+    /**
+     * The partition scope every deletion replay is expanded with (mirrors 000002_delete_partition_scope).
+     *
+     * <p>An unbounded mutation on a {@code ReplicatedMergeTree} allocates a block number in EVERY partition, as
+     * ephemeral znodes written in a single atomic ZooKeeper {@code tryMulti}; past {@code jute.maxbuffer} ZK drops the
+     * connection and the session expires, so the replay — a mandatory step — cannot run at all, and a weekly partition
+     * key grows that count every week. Deriving the partitions the bridged ids resolve to makes the request
+     * proportional to the work instead (OPIK-8607).
+     *
+     * <p><b>An id can contribute two weeks.</b> {@code id_at} is MATERIALIZED from the id, and the legacy {@code spans}
+     * declares it 32-bit (storing {@code epochSecond % 2^32}) where {@code spans_local_v2} declares it
+     * {@code DateTime64(0)}. A far-future id therefore partitions differently on each, and naming only one of the two
+     * is a predicate that matches nothing on the other. Widening is safe in the only direction that matters: a
+     * statement scoped to a partition the row is not in is a no-op there.
+     *
+     * <p><b>One rejection.</b> An id at or past 2300-01-01 is past {@code DateTime64}'s range, where the column
+     * SATURATES: every such id lands in the same final partition whatever its real week, so the stored value stops
+     * being a function of the id. Reproducing it would mean reproducing ClickHouse's saturation exactly, through a
+     * conversion chain that is not the column's, to buy pruning for ids no clock produces — so the batch falls back
+     * to one unbounded statement instead. {@code toUnixTimestamp64Milli} is what makes such an id recognisable: it
+     * returns the RAW embedded milliseconds rather than the saturated rendering.
+     *
+     * <p>Nothing checks the id is a UUIDv7: {@code SpanService} validates every client-supplied span id through
+     * {@code IdGenerator.validateId}, which rejects any other version at ingestion, and this reproduces the column's
+     * own {@code UUIDv7ToDateTime} anyway — so even an id that was not one would be derived to exactly the epoch
+     * partition ClickHouse stored it in.
+     */
+    private DeleteScope deletePartitionScope(String anchor) {
+        return deletePartitionScope(anchor, nowMicros());
+    }
+
+    /**
+     * The same derivation over an explicit window, which is how the drivers always run it: the bound is read from the
+     * server once and passed IN, so the replay's own match can be rendered with the identical value and so the
+     * statement can be re-run over an IDENTICAL window afterwards to check what the scope missed.
+     */
+    private DeleteScope deletePartitionScope(String anchor, String windowEnd) {
+        return template.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                WITH toDateTime64(:window_end, 6, 'UTC') AS bridge_window_end,
+                     10413792000000 AS id_at_ceiling_ms,
+                     4294967296 AS id_at_legacy_modulus
+                SELECT
+                    count() AS bridged,
+                    countIf(NOT derivable) AS underivable,
+                    arrayStringConcat(arrayMap(p -> toString(p),
+                        arraySort(arrayDistinct(arrayFlatten(groupArray(weeks))))), ' ') AS partitions
+                FROM (
+                    SELECT
+                        derivable,
+                        arrayMap(s -> toYYYYMMDD(toDate32(toDateTime64(s, 0, 'UTC'))
+                                                 - toIntervalDay(toDayOfWeek(toDateTime64(s, 0, 'UTC'), 1))),
+                                 if(NOT derivable,
+                                    [],
+                                    if(id_at_seconds >= id_at_legacy_modulus,
+                                       [id_at_seconds, modulo(id_at_seconds, id_at_legacy_modulus)],
+                                       [id_at_seconds]))) AS weeks
+                    FROM (
+                        SELECT
+                            toUnixTimestamp64Milli(UUIDv7ToDateTime(toUUIDOrZero(deleted_id)))
+                                < id_at_ceiling_ms AS derivable,
+                            intDiv(toUnixTimestamp64Milli(UUIDv7ToDateTime(toUUIDOrZero(deleted_id))), 1000)
+                                AS id_at_seconds
+                        FROM (
+                            SELECT DISTINCT deleted_id
+                            FROM deletion_events_local
+                            WHERE source_table = 'spans'
+                              AND event_time >= toDateTime64(:anchor, 6, 'UTC')
+                              AND event_time < bridge_window_end
+                              AND project_id != ''
+                              AND length(project_id) = 36
+                              AND length(deleted_id) = 36
+                        )
+                    )
+                )
+                """)
+                .bind("anchor", anchor)
+                .bind("window_end", windowEnd)
+                .execute())
+                .flatMap(result -> Mono.from(result.map((row, ignored) -> DeleteScope.builder()
+                        .bridged(row.get("bridged", Long.class))
+                        .underivable(row.get("underivable", Long.class))
+                        .partitions(row.get("partitions", String.class))
+                        .windowEnd(windowEnd)
+                        .build()))))
+                .block();
+    }
+
+    /**
+     * How the drivers tell a weekly-partitioned target from the legacy one before scoping a replay — matched on the
+     * column the key is built on rather than on the whole expression, since {@code system.tables.partition_key} is a
+     * re-serialised AST and its exact spelling is a ClickHouse implementation detail.
+     */
+    private String partitionKeyOf(String table) {
+        return template.nonTransaction(connection -> Mono.from(connection.createStatement(
+                "SELECT partition_key FROM system.tables WHERE database = :db AND name = :t")
+                .bind("db", DATABASE_NAME)
+                .bind("t", table)
+                .execute())
+                .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("partition_key", String.class)))))
+                .block();
+    }
+
     private String columnType(String table, String column) {
         return template.nonTransaction(connection -> Mono.from(connection.createStatement(
                 "SELECT type FROM system.columns WHERE database = :db AND table = :t AND name = :c")
@@ -3535,6 +3877,53 @@ class SpansLocalV2CutoverTest {
     }
 
     // --- value types ---------------------------------------------------------------------------------------------
+
+    /**
+     * What the derivation returned, and the decision the drivers make from it.
+     */
+    @Builder(toBuilder = true)
+    private record DeleteScope(long bridged, long underivable, String partitions, String windowEnd) {
+
+        /**
+         * The {@code IN PARTITION} clause of each statement the replay is emitted as: one per derived partition,
+         * a single empty one (the unbounded fallback), or none at all.
+         *
+         * <p>Nothing bridged emits NOTHING, because the replay's predicate is an {@code AND} over the bridge set and
+         * so can match no row — and an unbounded {@code DELETE} that deletes nothing still locks every partition, which
+         * would make "nothing to replay" the cheapest way to hit the failure being avoided. An underivable id sends the
+         * whole batch to the unbounded form, all-or-nothing: a partially derived scope is a scope the remaining ids'
+         * rows are not in, i.e. a delete that reports success and silently skips them.
+         */
+        List<String> statementScopes() {
+            if (bridged == 0) {
+                return List.of();
+            }
+            if (underivable > 0) {
+                return List.of("");
+            }
+            return derivedPartitions().stream().map("IN PARTITION %d"::formatted).toList();
+        }
+
+        List<Long> derivedPartitions() {
+            return partitions.isBlank()
+                    ? List.of()
+                    : Arrays.stream(partitions.split(" ")).map(Long::parseLong).toList();
+        }
+
+        /**
+         * The upper bound the replay's own bridge match is rendered with, closing it at the instant the derivation
+         * read the bridge. That is what makes "the scope names every partition this statement can match" true by
+         * construction rather than by timing: without it an id bridged between the two reads would be matched by the
+         * predicate while its partition was absent from the scope, and a scoped statement cannot mask a row outside
+         * the partitions it names. Empty for the unbounded form, which needs no such bound — with no partition
+         * predicate it is correct over the whole open-ended window.
+         */
+        String bridgeWindowBound() {
+            return underivable > 0 || bridged == 0
+                    ? ""
+                    : "AND event_time < toDateTime64('%s', 6, 'UTC')".formatted(windowEnd);
+        }
+    }
 
     /**
      * A migration schema shape. OLD is the source layout (Nullable end_time/ttft, nanosecond timestamps,

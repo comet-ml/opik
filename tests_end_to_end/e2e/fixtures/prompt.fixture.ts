@@ -1,4 +1,6 @@
-import { test as baseTest } from './project.fixture';
+// The full chain, for `providerKeys`: a Playground spec must seed a provider before the page
+// mounts. Importing provider-key.fixture directly enters the chain mid-way and cycles via bystander.
+import { test as baseTest } from './index';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 
 const TEXT_TEMPLATE = 'You are a helpful assistant. Answer the following: {{question}}';

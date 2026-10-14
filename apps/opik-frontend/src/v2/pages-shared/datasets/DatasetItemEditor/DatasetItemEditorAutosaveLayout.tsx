@@ -12,6 +12,8 @@ import ImagesListWrapper from "@/shared/attachments/ImagesListWrapper/ImagesList
 import { useDatasetItemEditorAutosaveContext } from "./DatasetItemEditorAutosaveContext";
 import DatasetItemEditorForm from "./DatasetItemEditorForm";
 import DatasetItemActionsDropdown from "@/v2/pages-shared/datasets/DatasetItemActionsDropdown/DatasetItemActionsDropdown";
+import ViewInExperimentButton from "@/v2/pages-shared/datasets/ViewInExperimentButton/ViewInExperimentButton";
+import { useAddedDatasetItemById } from "@/store/TestSuiteDraftStore";
 
 interface DatasetItemEditorAutosaveLayoutProps {
   datasetItemId: string;
@@ -41,6 +43,7 @@ const DatasetItemEditorAutosaveLayout: React.FC<
   } = useDatasetItemEditorAutosaveContext();
 
   const { toast } = useToast();
+  const isNewItem = Boolean(useAddedDatasetItemById(datasetItemId));
 
   const { media } = useMemo(
     () => processInputData(datasetItem?.data),
@@ -100,6 +103,9 @@ const DatasetItemEditorAutosaveLayout: React.FC<
           <ResizableSidePanelArrowNavigation
             horizontalNavigation={horizontalNavigation}
           />
+          {!isNewItem && (
+            <ViewInExperimentButton datasetItemId={datasetItemId} />
+          )}
         </ResizableSidePanelTopBar>
       }
       onClose={handleClose}

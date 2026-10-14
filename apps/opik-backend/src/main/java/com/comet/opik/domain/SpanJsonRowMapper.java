@@ -18,12 +18,11 @@ import static com.comet.opik.utils.SentinelTranslation.nullToEpoch;
 import static com.comet.opik.utils.SentinelTranslation.nullToNaN;
 
 /**
- * Builds the {@code JSONEachRow} row for a span, for the write path behind
- * {@code bulkInsert.v2ClientEnabled}.
+ * Builds the {@code JSONEachRow} row for a span.
  *
- * <p>The counterpart of {@code BULK_INSERT}'s parameter binding in {@code SpanDAO}: the two must produce
- * identical cells, since the toggle is meant to be safe to flip either way on a running install. At 28
- * columns this is the widest of the trace/span pair, so it is where the driver's per-name linear scan
+ * <p>Replaced the parameter binding of {@code SpanDAO}'s former R2DBC insert, and must write the same
+ * cells it did. At 28 columns this is the widest of the trace/span pair, so it is where the driver's
+ * per-name linear scan
  * costs most.
  *
  * <p>Three places where matching the binder matters more than looking tidy:

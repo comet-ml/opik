@@ -3,8 +3,10 @@ import time
 
 import pytest
 
-from opik.message_processing.batching import batchers
+from opik.message_processing.batching import batchers, sequence_splitter
 from opik.message_processing import messages
+
+from ....testlib import fake_message_factory
 
 NOT_USED = None
 
@@ -163,3 +165,67 @@ def test_add_feedback_scores_batch_message_batcher__ready_to_flush_returns_True_
     assert not batcher.is_ready_to_flush()
     time.sleep(0.1)
     assert batcher.is_ready_to_flush()
+
+
+@pytest.mark.parametrize(
+    "message_batcher_class, batch_message_class, score_message_class",
+    [
+        (
+            batchers.AddSpanFeedbackScoresBatchMessageBatcher,
+            messages.AddSpanFeedbackScoresBatchMessage,
+            messages.FeedbackScoreMessage,
+        ),
+        (
+            batchers.AddTraceFeedbackScoresBatchMessageBatcher,
+            messages.AddTraceFeedbackScoresBatchMessage,
+            messages.FeedbackScoreMessage,
+        ),
+        (
+            batchers.AddThreadsFeedbackScoresBatchMessageBatcher,
+            messages.AddThreadsFeedbackScoresBatchMessage,
+            messages.ThreadsFeedbackScoreMessage,
+        ),
+    ],
+)
+def test_add_feedback_scores_batch_message_batcher__accumulated_scores_exceed_memory_limit__split_into_batches(
+    message_batcher_class,
+    batch_message_class,
+    score_message_class,
+):
+    collected_messages = []
+
+    MEMORY_LIMIT_MB = 3
+
+    batcher = message_batcher_class(
+        max_batch_size=1000,
+        flush_callback=collected_messages.append,
+        flush_interval_seconds=NOT_USED,
+        batch_memory_limit_mb=MEMORY_LIMIT_MB,
+    )
+
+    scores = [
+        score_message_class(
+            id=f"id-{i}",
+            project_name="project",
+            name="relevance",
+            value=1.0,
+            source="sdk",
+            reason="r" * fake_message_factory.ONE_MEGABYTE,
+        )
+        for i in range(4)
+    ]
+
+    for score in scores:
+        batcher.add(batch_message_class(batch=[score]))
+
+    batcher.flush()
+
+    assert len(collected_messages) == 2
+    for message in collected_messages:
+        assert isinstance(message, batch_message_class)
+        assert sequence_splitter.get_payload_size_MB(message.batch) <= MEMORY_LIMIT_MB
+
+    flushed_scores = [
+        score for message in collected_messages for score in message.batch
+    ]
+    assert flushed_scores == scores

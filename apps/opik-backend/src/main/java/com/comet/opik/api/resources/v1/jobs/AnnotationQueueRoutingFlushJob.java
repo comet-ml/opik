@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.domain.AnnotationQueueRoutingBufferService;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
 import jakarta.inject.Inject;
@@ -40,22 +41,25 @@ public class AnnotationQueueRoutingFlushJob extends Job implements Interruptable
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
     private final AtomicReference<Disposable> subscription = new AtomicReference<>();
     private final AnnotationQueueRoutingConfig config;
+    private final FeatureFlags featureFlags;
     private final AnnotationQueueRoutingBufferService bufferService;
     private final LockService lockService;
 
     @Inject
     public AnnotationQueueRoutingFlushJob(
             @NonNull @Config("annotationQueueRouting") AnnotationQueueRoutingConfig config,
+            @NonNull FeatureFlags featureFlags,
             @NonNull AnnotationQueueRoutingBufferService bufferService,
             @NonNull LockService lockService) {
         this.config = config;
+        this.featureFlags = featureFlags;
         this.bufferService = bufferService;
         this.lockService = lockService;
     }
 
     @Override
     public void doJob(JobExecutionContext context) {
-        if (!config.isEnabled() || interrupted.get()) {
+        if (!featureFlags.isAnnotationQueueAutomationEnabled() || interrupted.get()) {
             return;
         }
 
@@ -64,7 +68,7 @@ public class AnnotationQueueRoutingFlushJob extends Job implements Interruptable
                 bufferService.flush()
                         .doOnNext(published -> {
                             if (published > 0) {
-                                log.info("Annotation queue routing flush published '{}' messages", published);
+                                log.info("Annotation queue routing flush published messages, count '{}'", published);
                             }
                         })
                         .then(),

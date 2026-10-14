@@ -74,7 +74,7 @@
 #   --skip-audits              print only the headroom verdict and the ETA. The audits below read every id in the table
 #                              (a full scan of the id column), so on a busy production cluster they are worth
 #                              scheduling rather than running casually. Do NOT skip them before the window:
-#                              two of the Go/No-Go items are exactly their output.
+#                              four of the Go/No-Go items are exactly their output.
 
 set -euo pipefail
 
@@ -300,6 +300,109 @@ if [[ "$SKIP_AUDITS" != "1" ]]; then
         FORMAT Vertical"
     echo "  normalized_to_root > 0 is expected on an estate that has ever patched a span's parent. Those rows are"
     echo "  copied with parent_span_id = '' (the root sentinel). Record the number; it is a Go/No-Go line item."
+
+    # --- Audit 3: ids the deletion replay's partition scope cannot derive ------------------------------------------
+    #
+    # Every deletion replay is emitted once per partition its bridged ids resolve to (OPIK-8607). An id at or past
+    # 2300-01-01 has no partition the derivation can reproduce -- past that instant `id_at` SATURATES, so every such id
+    # lands in the same final partition whatever its real week -- and the derivation refuses the whole batch rather
+    # than guess, falling back to ONE UNBOUNDED statement.
+    #
+    # THAT FALLBACK IS CORRECT AND, ON A LARGE ESTATE, UNRUNNABLE. The unbounded form is the statement OPIK-8607
+    # exists to avoid: it allocates a block number in every partition inside a single atomic ZooKeeper request, and
+    # past `jute.maxbuffer` the session dies. So a single such id reaching the bridge during the window stops the
+    # replay -- with the exact symptom the fix was written to remove, at the moment it is hardest to diagnose.
+    #
+    # Which is why it is asked HERE, before the window, and read from two places. `source_spans_past_ceiling` is the
+    # latent population: spans that would trigger the fallback IF one of them were cascade-deleted while the cutover
+    # runs. `bridged_ids_past_ceiling` counts such an id ANYWHERE IN THE BRIDGE'S RETAINED HISTORY -- deliberately
+    # unbounded, because this runs before backfill.sh mints the anchor a replay would be bounded by, so there is no
+    # run-specific window to apply yet. Read it as reachability, NOT as a verdict on the next replay: an event older
+    # than that anchor proves the cascade has reached this population on this estate, while the next replay would not
+    # see it. The run-specific answer is the `underivable` count each driver derives and prints before it runs.
+    #
+    # The ids are read from `id` via UUIDv7ToDateTime and compared in RAW milliseconds, the same rule
+    # 000002_delete_partition_scope.sql applies -- `toUnixTimestamp64Milli` returns the embedded count rather than the
+    # saturated rendering, which is the only way such an id is recognisable at all.
+    echo
+    echo "=== Audit 3: ids the deletion replay cannot derive a partition for ==="
+    ch "SELECT
+            (SELECT count() FROM spans
+                WHERE toUnixTimestamp64Milli(UUIDv7ToDateTime(toUUID(id))) >= 10413792000000)
+                                                                             AS source_spans_past_ceiling,
+            (SELECT uniqExact(deleted_id) FROM deletion_events_local
+                WHERE source_table = 'spans' AND length(deleted_id) = 36
+                  AND toUnixTimestamp64Milli(UUIDv7ToDateTime(toUUIDOrZero(deleted_id))) >= 10413792000000)
+                                                                             AS bridged_ids_past_ceiling
+        FORMAT Vertical"
+    echo "  Both at 0 means nothing on this estate can send a replay to its unbounded fallback today."
+    echo "  bridged_ids_past_ceiling counts the bridge's WHOLE retained history, not the next replay's window -- this"
+    echo "  runs before backfill.sh mints that anchor -- so read it as 'the cascade has reached this population here',"
+    echo "  not as 'the next replay falls back'. source_spans_past_ceiling is the same signal from the source side; it"
+    echo "  cannot be resolved, only known, and it is why the runbook asks to QUIESCE USER TRACE DELETES across the"
+    echo "  whole window rather than merely across the swap."
+    echo "  The run-specific verdict is the driver's own: each prints which form it chose before it runs, and"
+    echo "  'runs UNBOUNDED' on a large estate is the warning."
+
+    # --- Audit 4: the partition keys the replays' scope is derived against -----------------------------------------
+    #
+    # The drivers scope a replay only against a table whose partition key is the one the derivation reproduces, and
+    # REFUSE anything else -- because against a different key the derived values are still UInt32, so ClickHouse
+    # registers the mutation against zero matching parts and returns success: a run of N statements that deletes
+    # nothing and reports clean. An empty key is the third, legitimate answer: the rollback's restored original is
+    # unpartitioned, its replay renders unbounded, and on a single-partition table that is also what ZooKeeper sees.
+    #
+    # `spans_local` is surveyed too, for the one state where `spans` is not the table a driver mutates. This runbook's
+    # own wrap is what creates it, so pre-cutover there is no such row; afterwards `spans` is a Distributed routing
+    # definition -- no parts, no key of its own -- and reconcile.sh resolves the shard behind it. BOTH exemptions below
+    # name `spans` explicitly, because neither is a property of the engine or of the empty key alone:
+    #
+    #   - Distributed is N/A only for `spans`, the one name this runbook ever wraps. A Distributed `spans_local` or
+    #     `spans_local_v2` is a topology nothing here produces, so it is flagged rather than waved through.
+    #   - An empty key is legitimate only for `spans`, the rollback's restored original. On `spans_local` it is the
+    #     silent case worth the most: reconcile.sh resolves the wrapped live table to it, and derive_delete_scope reads
+    #     an empty key as `unbounded` and RETURNS -- no refusal -- so the forward replay would run the very statement
+    #     this scope exists to remove. Post-wrap that shard IS the successor and carries the weekly key; after a stage-C
+    #     rollback it is parked under another name and absent here. There is no state where it is legitimately
+    #     unpartitioned, so the survey says so rather than reporting a healthy estate.
+    #
+    # Asked here because a MISMATCH is a refusal issued mid-window, and this is a one-line read that moves it to the
+    # survey. The likeliest cause is not a schema change but a ClickHouse version serialising the expression
+    # differently -- system.tables.partition_key is a re-serialised AST. Spaces are ignored on both sides, as the
+    # drivers ignore them.
+    echo
+    echo "=== Audit 4: partition keys the deletion replays scope against ==="
+    # `declared_key`, not `partition_key`: a SELECT alias is visible to every other expression in the same SELECT, so
+    # aliasing the display form back onto the column name would make the verdict below read '<none>' instead of the
+    # empty string and report the unpartitioned original as a MISMATCH.
+    ch "SELECT
+            name,
+            engine,
+            if(partition_key = '', '<none>', partition_key) AS declared_key,
+            multiIf(
+                engine = 'Distributed' AND name = 'spans',
+                    'N/A: the wrapper holds no parts; the drivers derive against the shard it fronts',
+                engine = 'Distributed',
+                    'MISMATCH: only the spans name is ever wrapped here, and a Distributed table REJECTS mutations',
+                replaceAll(partition_key, ' ', '')
+                    = replaceAll('toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))', ' ', ''),
+                    'OK: the replays scope to values this key produces',
+                partition_key = '' AND name = 'spans',
+                    'OK: unpartitioned, so its replay renders unbounded (one block number)',
+                partition_key = '' AND name = 'spans_local',
+                    'MISMATCH: the wrapped live shard is unpartitioned, so the forward replay runs UNBOUNDED UNREFUSED',
+                'MISMATCH: the drivers REFUSE rather than scope to a key they cannot reproduce') AS verdict
+        FROM system.tables
+        WHERE database = currentDatabase() AND name IN ('spans', 'spans_local', 'spans_local_v2')
+        ORDER BY name
+        FORMAT Vertical"
+    echo "  Expected before the cutover: spans_local_v2 OK on the weekly key, spans OK as <none>. A MISMATCH on a"
+    echo "  WRONG key means a driver will refuse mid-window -- reconcile the derivation in"
+    echo "  000002_delete_partition_scope.sql with the table's actual key BEFORE opening it. A missing spans_local_v2"
+    echo "  row means the EXCHANGE has already run, so this audit belongs to a pre-cutover survey only."
+    echo "  Re-run on an estate this runbook has already wrapped, spans reads N/A and spans_local carries the key"
+    echo "  that matters -- it is the shard reconcile.sh resolves and mutates. A MISMATCH there is the worse kind:"
+    echo "  an unpartitioned shard is not refused, it is replayed UNBOUNDED -- fix the shard before opening a window."
 fi
 
 # Effective COPY throughput. If the caller measured a real one, use it as-is. Otherwise probe READ throughput with an

@@ -53,6 +53,7 @@ import usePromptDatasetItemCombination, {
   DatasetItemPromptCombination,
 } from "@/v2/pages/PlaygroundPage/usePromptDatasetItemCombination";
 import useRunCompletionToast from "@/v2/pages/PlaygroundPage/useRunCompletionToast";
+import useOpenAiPipelineMode from "@/hooks/useOpenAiPipelineMode";
 
 const DEFAULT_MAX_CONCURRENT_REQUESTS = 5;
 const MAX_POLL_DURATION_MS = 5 * 60 * 1000; // 5 minutes
@@ -72,6 +73,14 @@ interface UseActionButtonActionsArguments {
   versionHash?: string;
   projectName?: string;
 }
+
+// datasetType is persisted and can outlive the dataset it was set for (for
+// example after switching projects). The backend run path silently returns
+// without a dataset, so a stale type alone must not route runs there.
+export const isTestSuiteRun = (
+  datasetId: string | undefined,
+  datasetType: DATASET_TYPE | null,
+) => !!datasetId && datasetType === DATASET_TYPE.TEST_SUITE;
 
 const useActionButtonActions = ({
   datasetItems,
@@ -106,11 +115,12 @@ const useActionButtonActions = ({
     new Map<string, { controller: AbortController; promptId: string }>(),
   );
   const runExperimentExecution = useRunExperimentExecution();
+  const openAiPipelineMode = useOpenAiPipelineMode(workspaceName);
   const announceRunComplete = useRunCompletionToast(datasetId);
   const announcePendingRef = useRef(false);
   const scopedAnnounceRef = useRef(new Set<string>());
 
-  const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
+  const isTestSuite = isTestSuiteRun(datasetId, datasetType);
 
   // Get the minimum maxConcurrentRequests from all prompts
   const maxConcurrentRequests = useMemo(() => {
@@ -257,6 +267,7 @@ const useActionButtonActions = ({
       addAbortController,
       deleteAbortController,
       throttlingSeconds,
+      openAiPipelineMode,
     });
 
   const handlePollTimeout = useCallback(
@@ -573,6 +584,7 @@ const useActionButtonActions = ({
         prompts,
         projectName,
         experimentNames,
+        openAiPipelineMode,
       });
 
       // Build experiment-to-prompt mapping from BE response
@@ -616,6 +628,7 @@ const useActionButtonActions = ({
     promptIds,
     promptMap,
     runExperimentExecution,
+    openAiPipelineMode,
     storeExperiments,
     setExperimentByPromptId,
     setProgress,
@@ -799,6 +812,7 @@ const useActionButtonActions = ({
           prompts: [prompt],
           projectName,
           experimentNames: { [prompt.id]: experimentName },
+          openAiPipelineMode,
         });
 
         const experiment = response.experiments[0];
@@ -849,6 +863,7 @@ const useActionButtonActions = ({
       versionHash,
       projectName,
       runExperimentExecution,
+      openAiPipelineMode,
       setPromptRunning,
       setExperimentByPromptId,
       queryClient,

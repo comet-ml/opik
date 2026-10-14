@@ -8,6 +8,7 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import RunExperimentControl from "@/v2/pages/PlaygroundPage/RunExperimentControl";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
 import { LOGS_SOURCE } from "@/types/traces";
 import { useActiveProjectId } from "@/store/AppStore";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
@@ -34,11 +35,6 @@ import {
   useSetDatasetFilters,
 } from "@/store/PlaygroundStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import {
-  supportsImageInput,
-  supportsVideoInput,
-} from "@/lib/modelCapabilities";
-import { hasImagesInContent, hasVideosInContent } from "@/lib/llm";
 
 interface PlaygroundHeaderProps {
   workspaceName: string;
@@ -129,47 +125,32 @@ const PlaygroundHeader = ({
     [datasetItemsForColumns?.columns],
   );
 
-  const hasMediaCompatibilityIssues = useMemo(() => {
-    return Object.values(promptMap).some((prompt) => {
-      if (!prompt.model) return false;
-      const modelSupportsImages = supportsImageInput(prompt.model);
-      const modelSupportsVideos = supportsVideoInput(prompt.model);
-      const hasImages = prompt.messages.some((message) =>
-        hasImagesInContent(message.content),
-      );
-      const hasVideos = prompt.messages.some((message) =>
-        hasVideosInContent(message.content),
-      );
-      return (
-        (hasImages && !modelSupportsImages) ||
-        (hasVideos && !modelSupportsVideos)
-      );
-    });
-  }, [promptMap]);
+  const hasMediaCompatibilityIssues = useMemo(
+    () =>
+      Object.values(promptMap).some((prompt) => hasUnsupportedMedia(prompt)),
+    [promptMap],
+  );
 
   const allPromptsHaveModels = useMemo(
     () => Object.values(promptMap).every((p) => !!p.model),
     [promptMap],
   );
 
-  const allMessagesNotEmpty = useMemo(
-    () =>
-      Object.values(promptMap).every((p) =>
-        p.messages.every((m) => m.content?.length > 0),
-      ),
+  const allMessagesRunnable = useMemo(
+    () => Object.values(promptMap).every((p) => canRunMessages(p.messages)),
     [promptMap],
   );
 
   const isRunDisabled =
     !allPromptsHaveModels ||
-    !allMessagesNotEmpty ||
+    !allMessagesRunnable ||
     hasMediaCompatibilityIssues ||
     (isExperimentMode && !datasetName);
 
   const runDisabledReason = useMemo(() => {
     if (!allPromptsHaveModels)
       return "Please select an LLM model for your prompts";
-    if (!allMessagesNotEmpty)
+    if (!allMessagesRunnable)
       return "Some messages are empty. Please add some text to proceed";
     if (hasMediaCompatibilityIssues)
       return "Some prompts contain media but the selected model doesn't support media input";
@@ -178,7 +159,7 @@ const PlaygroundHeader = ({
     return null;
   }, [
     allPromptsHaveModels,
-    allMessagesNotEmpty,
+    allMessagesRunnable,
     hasMediaCompatibilityIssues,
     isExperimentMode,
     datasetName,

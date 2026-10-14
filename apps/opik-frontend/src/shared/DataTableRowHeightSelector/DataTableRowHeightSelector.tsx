@@ -35,7 +35,7 @@ const DataTableRowHeightSelector: React.FunctionComponent<
 
   return (
     <DropdownMenu>
-      <TooltipWrapper content="Row size">
+      <TooltipWrapper content={layout === "icon" ? "Row size" : undefined}>
         <DropdownMenuTrigger asChild>
           {layout === "labeled" ? (
             <Button variant="outline" size={size}>

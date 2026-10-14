@@ -30,8 +30,11 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     customllmProviderEnabled: core.serialization.boolean(),
     ollamaProviderEnabled: core.serialization.boolean(),
     ollieEnabled: core.serialization.boolean(),
+    agentInsightsEnabled: core.serialization.boolean(),
     projectHomepageEnabled: core.serialization.boolean(),
     onlineScoringTracingEnabled: core.serialization.boolean(),
+    annotationQueueAutomationEnabled: core.serialization.boolean(),
+    eventBridgeAlertsEnabled: core.serialization.boolean(),
     defaultPageSize: core.serialization.number().optional(),
 });
 
@@ -59,8 +62,11 @@ export declare namespace ServiceTogglesConfig {
         customllmProviderEnabled: boolean;
         ollamaProviderEnabled: boolean;
         ollieEnabled: boolean;
+        agentInsightsEnabled: boolean;
         projectHomepageEnabled: boolean;
         onlineScoringTracingEnabled: boolean;
+        annotationQueueAutomationEnabled: boolean;
+        eventBridgeAlertsEnabled: boolean;
         defaultPageSize?: number | null;
     }
 }

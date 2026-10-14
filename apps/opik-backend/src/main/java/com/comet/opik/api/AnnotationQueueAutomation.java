@@ -1,12 +1,15 @@
 package com.comet.opik.api;
 
 import com.comet.opik.api.annotationqueue.Conditions;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Positive;
 import lombok.Builder;
 
@@ -41,14 +44,25 @@ public record AnnotationQueueAutomation(
 
         /**
          * Queue size at which automation stops adding: once the queue holds this many items, however they
-         * got there, automation adds no more. Items added by hand are never refused. Absent means no
-         * ceiling. Nullable for the same reason as conditions — a toggle-only request must not silently
-         * drop it.
+         * got there, automation adds no more. Items added by hand are never refused.
+         *
+         * <p>Null means "leave the stored ceiling alone", as everywhere else on this resource. To remove
+         * one, send {@code clear_max_items_in_queue}.
          */
         @JsonView({AnnotationQueue.View.Public.class,
-                AnnotationQueue.View.Write.class}) @Nullable @Positive Integer maxItemsInQueue) {
+                AnnotationQueue.View.Write.class}) @Nullable @Positive Integer maxItemsInQueue,
+        /**
+         * Removes the stored ceiling. Write-only, and the only way to say so: null everywhere on this
+         * resource means "leave what is stored alone", so a removal has to be stated rather than implied
+         * by an absent field. Follows {@code DatasetItemUpdate.clearExecutionPolicy}.
+         */
+        @JsonView(AnnotationQueue.View.Write.class) @Nullable @Schema(description = "When true, removes the item ceiling so automation adds without bound") Boolean clearMaxItemsInQueue) {
 
     public static final int MAX_GROUPS = 5;
     public static final int MAX_CONDITIONS_PER_GROUP = 5;
 
+    @JsonIgnore
+    @AssertTrue(message = "max_items_in_queue and clear_max_items_in_queue are mutually exclusive") public boolean isCeilingEitherSetOrCleared() {
+        return !Boolean.TRUE.equals(clearMaxItemsInQueue) || maxItemsInQueue == null;
+    }
 }

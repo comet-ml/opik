@@ -8,7 +8,6 @@ import subprocess
 import sys
 from typing import Any, Callable, Dict, Final, List, Optional
 
-from opik.configurator import interactive_helpers
 from opik.configurator.mcp import json_config
 from opik.configurator.mcp import spec as mcp_spec
 from opik.configurator.mcp.spec import SERVER_NAME
@@ -23,6 +22,10 @@ class InstallResult:
     # "Updated"). Falls back to `detail`, which spells the path out in full and is
     # what a log line or a failure needs.
     summary: Optional[str] = None
+    # Added, but the client's sign-in failed: no tools until the user signs in.
+    sign_in_failed: bool = False
+    # Separates "signed in" from "nothing to sign in to".
+    sign_in_attempted: bool = False
 
 
 @dataclasses.dataclass
@@ -37,6 +40,10 @@ class HostTarget:
     # ``top_level_key`` (Codex uses TOML) supply their own reader; see
     # ``read_registered_block``.
     read_block: Optional[Callable[[], Optional[Dict[str, Any]]]] = None
+    # For the hosts with a CLI, its sign-in to the hosted server and its list of
+    # servers with their status, named where a run leaves them to the user.
+    sign_in_command: Optional[str] = None
+    status_command: Optional[str] = None
 
 
 def _home() -> pathlib.Path:
@@ -158,6 +165,10 @@ class _CliUnavailable(Exception):
     """A client's CLI could not be run to completion."""
 
 
+class _CliTimedOut(_CliUnavailable):
+    """A client's CLI ran past the timeout, possibly waiting on the user."""
+
+
 def _run_client_cli(command: List[str], label: str) -> "subprocess.CompletedProcess":
     """Run a client's own CLI, or raise :class:`_CliUnavailable`.
 
@@ -185,7 +196,7 @@ def _run_client_cli(command: List[str], label: str) -> "subprocess.CompletedProc
             timeout=CLIENT_CLI_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
-        raise _CliUnavailable(
+        raise _CliTimedOut(
             f"`{label}` did not finish within {CLIENT_CLI_TIMEOUT_SECONDS}s and was "
             "stopped. It may be waiting for input, or asking you to log in — try "
             f"running `{label}` yourself to see."
@@ -242,7 +253,6 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
             target_display_name="Claude Code", succeeded=False, detail=str(error)
         )
     if result.returncode == 0:
-        _sign_in_claude_code(claude_executable, server_spec)
         return InstallResult(
             target_display_name="Claude Code",
             succeeded=True,
@@ -292,47 +302,25 @@ def _claude_supports_mcp_login(claude_executable: str) -> bool:
     )
 
 
-def _sign_in_claude_code(
-    claude_executable: str, server_spec: mcp_spec.McpServerSpec
-) -> None:
-    """Start the browser sign-in for a freshly registered hosted server.
+def sign_in_command(
+    target_key: str, server_spec: mcp_spec.McpServerSpec
+) -> Optional[List[str]]:
+    """The client's own browser sign-in, when this run should start one.
 
-    The hosted server carries no credentials; the client signs in over OAuth. For
-    Codex that is already handled: `codex mcp add --url` performs the login as
-    part of the add, which is why configuring Codex ends in the browser. Claude
-    Code's `mcp add` only records the server, so it sits unauthorized afterwards
-    — and an unauthorized server contributes no tools at all rather than an
-    error, so nothing tells the user to go and finish the job.
-
-    One more call to the client's own CLI, in the same place and with the same
-    guards as the `add` above, closes that gap.
-
-    Best effort throughout: the server is registered by the time this runs, and
-    an old client, a failed login or a user who walks away all leave a working
-    registration plus the sign-in hint the closing block already prints.
+    Only Claude Code: Codex signs in inside `codex mcp add`, and the GUI clients
+    prompt on first use. Only for the hosted server — a local one carries the API
+    key — with a terminal or without, since a coding agent's machine has a browser.
+    Run separately from the install so the caller can show progress for the
+    install and hand the terminal over for the sign-in.
     """
+    if target_key != "claude-code":
+        return None
     if not isinstance(server_spec, mcp_spec.RemoteServerSpec):
-        # A local uvx server authenticates with the API key already written into
-        # the config. There is nothing to sign in to.
-        return
-
-    if not interactive_helpers.is_interactive():
-        # A run with no terminal is a coding agent or CI, and a browser there is
-        # at best ignored. Unlike the Codex path — where the login is inside
-        # `codex mcp add` and cannot be separated from it — this one is ours to
-        # not start. The closing block's sign-in hint still covers these runs.
-        return
-
-    if not _claude_supports_mcp_login(claude_executable):
-        return
-
-    try:
-        _run_client_cli(
-            [claude_executable, "mcp", "login", SERVER_NAME],
-            label="claude mcp login",
-        )
-    except _CliUnavailable:
-        return
+        return None
+    claude_executable = shutil.which("claude")
+    if claude_executable is None or not _claude_supports_mcp_login(claude_executable):
+        return None
+    return [claude_executable, "mcp", "login", SERVER_NAME]
 
 
 def _install_cursor(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
@@ -403,6 +391,22 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         )
         result = _run_client_cli(command, label="codex mcp add")
     except _CliUnavailable as error:
+        # For the hosted server `codex mcp add` writes the entry, then waits for the
+        # browser sign-in. If nobody finishes it in time, the server is still
+        # registered and `codex mcp login` completes it: not a failed install.
+        if (
+            isinstance(error, _CliTimedOut)
+            and isinstance(server_spec, mcp_spec.RemoteServerSpec)
+            and (_read_codex_block() or {}).get("url") == server_spec.url
+        ):
+            return InstallResult(
+                target_display_name="Codex",
+                succeeded=True,
+                sign_in_attempted=True,
+                sign_in_failed=True,
+                detail=f"Added '{SERVER_NAME}' via `codex mcp add`; not signed in",
+                summary="Updated" if was_registered else "Added",
+            )
         return InstallResult(
             target_display_name="Codex", succeeded=False, detail=str(error)
         )
@@ -410,6 +414,8 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         return InstallResult(
             target_display_name="Codex",
             succeeded=True,
+            # The sign-in is part of `codex mcp add`, for the hosted server only.
+            sign_in_attempted=isinstance(server_spec, mcp_spec.RemoteServerSpec),
             detail=(
                 f"{'Updated' if was_registered else 'Added'} '{SERVER_NAME}' via "
                 f"`codex mcp add`"
@@ -525,6 +531,8 @@ HOST_TARGETS: List[HostTarget] = [
         is_detected=lambda: shutil.which("claude") is not None
         or _claude_config_path().exists(),
         install=_install_claude_code,
+        sign_in_command=f"claude mcp login {SERVER_NAME}",
+        status_command="claude mcp list",
     ),
     HostTarget(
         key="codex",
@@ -536,6 +544,9 @@ HOST_TARGETS: List[HostTarget] = [
         or _codex_config_path().exists(),
         install=_install_codex,
         read_block=_read_codex_block,
+        sign_in_command=f"codex mcp login {SERVER_NAME}",
+        # Masks env values, unlike `codex mcp get`.
+        status_command="codex mcp list",
     ),
     HostTarget(
         key="cursor",
@@ -561,6 +572,8 @@ HOST_TARGETS: List[HostTarget] = [
         is_detected=lambda: shutil.which("opencode") is not None
         or _opencode_config_dir().exists(),
         install=_install_opencode,
+        sign_in_command=f"opencode mcp auth {SERVER_NAME}",
+        status_command="opencode mcp list",
     ),
 ]
 

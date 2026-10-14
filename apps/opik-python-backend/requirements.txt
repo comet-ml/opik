@@ -24,7 +24,10 @@ opentelemetry-instrumentation-requests==0.57b0
 opentelemetry-instrumentation-system-metrics==0.57b0
 opentelemetry-instrumentation-logging==0.57b0
 schedule==1.2.1
-tiktoken==0.9.0
+# Transitive via litellm, which only requires >=0.8.0 at this version, so the floor
+# below is the guard: 0.9.0 vendors PyO3 0.22.6, which refuses to build against the
+# Alpine image's Python 3.14, and 0.12.0 is the first release with cp314 musllinux wheels.
+tiktoken==0.14.0
 redis==6.4.0
 rq==2.6.0
 opik-optimizer==3.2.0
@@ -34,9 +37,9 @@ opik-optimizer==3.2.0
 # <curr_param>/<side_info> template markers and the reflection_prompt_template
 # kwarg, neither of which exists on 0.0.x. See OPIK-7510 / OPIK-7639.
 gepa==0.1.4
-# Transitive via opik-optimizer, pinned because this image builds it from source: litellm
-# publishes no musllinux or pure-python wheel, and 1.95.0 raised its Rust dependencies to
-# aws-* crates requiring rustc 1.94.1, while the Alpine builder ships rustc 1.91.1.
-litellm==1.94.1
+# Transitive via opik-optimizer, pinned for reproducibility. No longer built from source:
+# 1.94.2 was the first release publishing musllinux wheels, so the Alpine builder installs
+# a prebuilt abi3 wheel and the Rust toolchain no longer has to compile it.
+litellm==1.103.0
 pyrate-limiter>=3.0.0,<4.0.0
 python-jsonpath>=2.0.0,<3.0.0

@@ -296,7 +296,7 @@ public class ProjectsResource {
                 .entityType(request.entityType())
                 .filters(filters)
                 .intervalStart(request.intervalStart())
-                .intervalEnd(request.intervalEnd() != null ? request.intervalEnd() : Instant.now())
+                .intervalEnd(request.intervalEnd())
                 .build();
 
         KpiCardResponse response = kpiCardService.getKpiCards(criteria)

@@ -11,37 +11,48 @@ export type ExperimentCommentsViewerProps = {
   comments?: CommentItems;
   traceId: string;
   sectionIdx: number;
+  onChangeApplied?: () => void;
 };
 
 const ExperimentCommentsViewer: React.FC<ExperimentCommentsViewerProps> = ({
   comments = [],
   traceId,
   sectionIdx,
+  onChangeApplied,
 }) => {
   const traceDeleteMutation = useTraceCommentsBatchDeleteMutation();
   const createTraceMutation = useCreateTraceCommentMutation();
   const updateTraceMutation = useUpdateTraceCommentMutation();
 
   const onSubmit = (text: string) => {
-    createTraceMutation.mutate({
-      text,
-      traceId,
-    });
+    createTraceMutation.mutate(
+      {
+        text,
+        traceId,
+      },
+      { onSuccess: onChangeApplied },
+    );
   };
 
   const onEditSubmit = (commentId: string, text: string) => {
-    updateTraceMutation.mutate({
-      text,
-      commentId,
-      traceId,
-    });
+    updateTraceMutation.mutate(
+      {
+        text,
+        commentId,
+        traceId,
+      },
+      { onSuccess: onChangeApplied },
+    );
   };
 
   const onDelete = (commentId: string) => {
-    traceDeleteMutation.mutate({
-      ids: [commentId],
-      traceId,
-    });
+    traceDeleteMutation.mutate(
+      {
+        ids: [commentId],
+        traceId,
+      },
+      { onSuccess: onChangeApplied },
+    );
   };
 
   return (
