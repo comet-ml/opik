@@ -16,12 +16,10 @@ import static com.comet.opik.utils.SentinelTranslation.nullToEpoch;
 import static com.comet.opik.utils.SentinelTranslation.nullToNaN;
 
 /**
- * Builds the {@code JSONEachRow} row for a trace, for the write path behind
- * {@code bulkInsert.v2ClientEnabled}.
+ * Builds the {@code JSONEachRow} row for a trace.
  *
- * <p>The counterpart of {@code BATCH_INSERT}'s parameter binding in {@code TraceDAO}: the two must
- * produce identical cells, since the toggle is meant to be safe to flip either way on a running
- * install. 22 columns, 20 of them bound per row by the binder.
+ * <p>Replaced the parameter binding of {@code TraceDAO}'s former R2DBC insert, and must write the same
+ * cells it did. 22 columns, 20 of them bound per row by that binder.
  *
  * <p>The sentinel columns are the reason this one is not a straight field-for-field copy. {@code
  * end_time} and {@code ttft} are mid-migration: {@code Nullable} until {@code traceColumnsNonNullable}

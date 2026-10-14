@@ -16,6 +16,7 @@ from .chat_completions.client import AsyncChatCompletionsClient, ChatCompletions
 from .check.client import AsyncCheckClient, CheckClient
 from .core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from .core.request_options import RequestOptions
+from .dashboard_saved_queries.client import AsyncDashboardSavedQueriesClient, DashboardSavedQueriesClient
 from .dashboards.client import AsyncDashboardsClient, DashboardsClient
 from .datasets.client import AsyncDatasetsClient, DatasetsClient
 from .environment import OpikApiEnvironment
@@ -113,6 +114,7 @@ class OpikApi:
         self.mcp_o_auth = McpOAuthClient(client_wrapper=self._client_wrapper)
         self.agent_insights_enrollment = AgentInsightsEnrollmentClient(client_wrapper=self._client_wrapper)
         self.system_analytics_queries = SystemAnalyticsQueriesClient(client_wrapper=self._client_wrapper)
+        self.dashboard_saved_queries = DashboardSavedQueriesClient(client_wrapper=self._client_wrapper)
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AgentConfigsClient(client_wrapper=self._client_wrapper)
         self.agent_insights_jobs = AgentInsightsJobsClient(client_wrapper=self._client_wrapper)
@@ -269,6 +271,7 @@ class AsyncOpikApi:
         self.mcp_o_auth = AsyncMcpOAuthClient(client_wrapper=self._client_wrapper)
         self.agent_insights_enrollment = AsyncAgentInsightsEnrollmentClient(client_wrapper=self._client_wrapper)
         self.system_analytics_queries = AsyncSystemAnalyticsQueriesClient(client_wrapper=self._client_wrapper)
+        self.dashboard_saved_queries = AsyncDashboardSavedQueriesClient(client_wrapper=self._client_wrapper)
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AsyncAgentConfigsClient(client_wrapper=self._client_wrapper)
         self.agent_insights_jobs = AsyncAgentInsightsJobsClient(client_wrapper=self._client_wrapper)

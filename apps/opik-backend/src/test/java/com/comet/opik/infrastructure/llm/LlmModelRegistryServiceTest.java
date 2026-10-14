@@ -3,6 +3,8 @@ package com.comet.opik.infrastructure.llm;
 import com.comet.opik.api.LlmModelDefinition;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService.ModelEntry;
+import com.comet.opik.utils.JsonUtils;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.client.WebTarget;
@@ -26,6 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class LlmModelRegistryServiceTest {
@@ -178,15 +182,15 @@ class LlmModelRegistryServiceTest {
     void mergeOverridesExistingAndAddsNew() {
         var defaults = Map.of(
                 "openai", List.of(
-                        LlmModelDefinition.builder().id("gpt-4o").structuredOutput(true).build(),
-                        LlmModelDefinition.builder().id("gpt-3.5-turbo").build()));
+                        ModelEntry.builder().id("gpt-4o").structuredOutput(true).build(),
+                        ModelEntry.builder().id("gpt-3.5-turbo").build()));
 
         var overrides = Map.of(
                 "openai", List.of(
-                        LlmModelDefinition.builder().id("gpt-4o").structuredOutput(false).build(),
-                        LlmModelDefinition.builder().id("new-model").structuredOutput(true).build()),
+                        ModelEntry.builder().id("gpt-4o").structuredOutput(false).build(),
+                        ModelEntry.builder().id("new-model").structuredOutput(true).build()),
                 "anthropic", List.of(
-                        LlmModelDefinition.builder().id("claude-4").build()));
+                        ModelEntry.builder().id("claude-4").build()));
 
         var merged = LlmModelRegistryService.merge(defaults, overrides);
 
@@ -203,25 +207,25 @@ class LlmModelRegistryServiceTest {
     void mergeKeepsOpenRouterCapabilitiesOnlyWhenTheOverrideLacksThem() {
         var defaults = Map.of(
                 "openrouter", List.of(
-                        LlmModelDefinition.builder().id("openai/gpt-5-nano")
+                        ModelEntry.builder().id("openai/gpt-5-nano")
                                 .supportedParameters(List.of("max_tokens", "reasoning_effort"))
                                 .reasoningEfforts(List.of("high", "low"))
                                 .build(),
-                        LlmModelDefinition.builder().id("openai/gpt-4o-mini")
+                        ModelEntry.builder().id("openai/gpt-4o-mini")
                                 .supportedParameters(List.of("temperature"))
                                 .build(),
-                        LlmModelDefinition.builder().id("openai/o3")
+                        ModelEntry.builder().id("openai/o3")
                                 .supportedParameters(List.of("max_tokens", "reasoning"))
                                 .reasoningEfforts(List.of("high"))
                                 .build()));
 
         var overrides = Map.of(
                 "openrouter", List.of(
-                        LlmModelDefinition.builder().id("openai/gpt-5-nano").label("openai/gpt-5-nano").build(),
-                        LlmModelDefinition.builder().id("openai/gpt-4o-mini")
+                        ModelEntry.builder().id("openai/gpt-5-nano").label("openai/gpt-5-nano").build(),
+                        ModelEntry.builder().id("openai/gpt-4o-mini")
                                 .supportedParameters(List.of("temperature", "top_p"))
                                 .build(),
-                        LlmModelDefinition.builder().id("openai/o3")
+                        ModelEntry.builder().id("openai/o3")
                                 .supportedParameters(List.of())
                                 .reasoningEfforts(List.of())
                                 .build()));
@@ -229,14 +233,14 @@ class LlmModelRegistryServiceTest {
         var merged = LlmModelRegistryService.merge(defaults, overrides);
 
         assertThat(merged.get("openrouter")).containsExactly(
-                LlmModelDefinition.builder().id("openai/gpt-5-nano").label("openai/gpt-5-nano")
+                ModelEntry.builder().id("openai/gpt-5-nano").label("openai/gpt-5-nano")
                         .supportedParameters(List.of("max_tokens", "reasoning_effort"))
                         .reasoningEfforts(List.of("high", "low"))
                         .build(),
-                LlmModelDefinition.builder().id("openai/gpt-4o-mini")
+                ModelEntry.builder().id("openai/gpt-4o-mini")
                         .supportedParameters(List.of("temperature", "top_p"))
                         .build(),
-                LlmModelDefinition.builder().id("openai/o3")
+                ModelEntry.builder().id("openai/o3")
                         .supportedParameters(List.of())
                         .reasoningEfforts(List.of())
                         .build());
@@ -308,6 +312,87 @@ class LlmModelRegistryServiceTest {
         assertThat(service.findModel(model)).get()
                 .extracting(result -> result.model().reasoning())
                 .isEqualTo(expectedReasoning);
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "gpt-4o        | label: GPT 4o from override | true",
+            "gpt-4o        | structuredOutput: false     | false",
+            "gpt-3.5-turbo | structuredOutput: true      | true",
+            "gpt-3.5-turbo | label: GPT 3.5              | false"
+    })
+    void localOverrideChangesStructuredOutputFlagOnlyWhenItSetsIt(String model, String overrideField,
+            boolean expectedStructuredOutput, @TempDir Path tempDir) throws IOException {
+        var overridePath = tempDir.resolve("override.yaml");
+        Files.writeString(overridePath, """
+                openai:
+                  - id: "%s"
+                    %s
+                """.formatted(model, overrideField));
+
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        config.setLocalOverridePath(overridePath.toString());
+
+        var service = new LlmModelRegistryService(config);
+
+        assertThat(service.findModel(model)).get()
+                .extracting(result -> result.model().structuredOutput())
+                .isEqualTo(expectedStructuredOutput);
+    }
+
+    @Test
+    void mergeKeepsTheLabelAndQualifiedNameAnOverrideLeavesOut() {
+        var defaults = Map.of(
+                "vertex-ai", List.of(ModelEntry.builder()
+                        .id("gemini-2.0-flash-001")
+                        .qualifiedName("vertex_ai/gemini-2.0-flash-001")
+                        .label("Gemini 2.0 Flash")
+                        .build()));
+
+        var overrides = Map.of(
+                "vertex-ai", List.of(ModelEntry.builder()
+                        .id("gemini-2.0-flash-001")
+                        .structuredOutput(true)
+                        .build()));
+
+        var merged = LlmModelRegistryService.merge(defaults, overrides);
+
+        assertThat(merged.get("vertex-ai")).containsExactly(ModelEntry.builder()
+                .id("gemini-2.0-flash-001")
+                .qualifiedName("vertex_ai/gemini-2.0-flash-001")
+                .label("Gemini 2.0 Flash")
+                .structuredOutput(true)
+                .build());
+    }
+
+    @Test
+    void registryKeepsTheClasspathProviderOrderAndAppendsOverrideProviders(@TempDir Path tempDir)
+            throws IOException {
+        var overridePath = tempDir.resolve("override.yaml");
+        try (InputStream is = getClass().getClassLoader().getResourceAsStream("llm-models-override.yaml")) {
+            Files.copy(is, overridePath);
+        }
+
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        config.setLocalOverridePath(overridePath.toString());
+
+        var service = new LlmModelRegistryService(config);
+
+        assertThat(service.getRegistry().keySet()).containsExactly("openai", "anthropic", "vertex-ai", "gemini");
+    }
+
+    @Test
+    void registryJsonHasBothFlagsWhenTheYamlLeavesThemOut() {
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+
+        var service = new LlmModelRegistryService(config);
+
+        assertThat(JsonUtils.valueToTree(service.getRegistry().get("openai").get(1)))
+                .isEqualTo(JsonUtils.getJsonNodeFromString("""
+                        {"id": "gpt-3.5-turbo", "structured_output": false, "reasoning": false}"""));
     }
 
     @Test
@@ -428,7 +513,8 @@ class LlmModelRegistryServiceTest {
 
         assertThat(service.findModel("o3")).get()
                 .extracting(LlmModelRegistryService.ModelLookupResult::model)
-                .isEqualTo(LlmModelDefinition.builder().id("o3").label("O3 from remote").reasoning(true).build());
+                .isEqualTo(LlmModelDefinition.builder().id("o3").label("O3 from remote").structuredOutput(true)
+                        .reasoning(true).build());
         assertThat(service.findModel("gpt-4o")).get()
                 .extracting(result -> result.model().reasoning())
                 .isEqualTo(true);
@@ -448,6 +534,25 @@ class LlmModelRegistryServiceTest {
         // Should still have classpath defaults
         assertThat(service.getRegistry()).containsKeys("openai", "anthropic", "vertex-ai");
         assertThat(service.getRegistry().get("openai")).hasSize(3);
+    }
+
+    @Test
+    void failedRemoteFetchKeepsTheLastGoodRemoteCopy() {
+        var client = mockHttpClient(
+                mockResponse(200, "openai:\n  - id: \"remote-new-model\"\n"),
+                mockResponse(503, "Service Unavailable"));
+
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        config.setRemoteEnabled(true);
+        config.setRemoteUrl("https://cdn.example.com/models.yaml");
+
+        var service = new LlmModelRegistryService(config, client);
+        service.reload();
+
+        verify(client, times(2)).target(any(java.net.URI.class));
+        assertThat(service.findModel("remote-new-model")).isPresent();
+        assertThat(service.getRegistry().get("openai")).hasSize(4);
     }
 
     @Test
@@ -481,18 +586,26 @@ class LlmModelRegistryServiceTest {
     }
 
     private static Client mockHttpClient(int statusCode, String responseBody) {
+        return mockHttpClient(mockResponse(statusCode, responseBody));
+    }
+
+    private static Client mockHttpClient(Response first, Response... next) {
         var client = mock(Client.class);
         var webTarget = mock(WebTarget.class);
         var builder = mock(Invocation.Builder.class);
-        var response = mock(Response.class);
 
         when(client.target(any(java.net.URI.class))).thenReturn(webTarget);
         when(webTarget.request()).thenReturn(builder);
-        when(builder.get()).thenReturn(response);
+        when(builder.get()).thenReturn(first, next);
+
+        return client;
+    }
+
+    private static Response mockResponse(int statusCode, String responseBody) {
+        var response = mock(Response.class);
         when(response.getStatus()).thenReturn(statusCode);
         when(response.readEntity(InputStream.class))
                 .thenReturn(new ByteArrayInputStream(responseBody.getBytes(StandardCharsets.UTF_8)));
-
-        return client;
+        return response;
     }
 }
