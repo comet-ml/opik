@@ -114,7 +114,9 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
         return trackFailure.then(counter.decrementAndGet())
                 .flatMap(remaining -> {
                     if (remaining <= 0) {
-                        return failureCounter.get()
+                        return cancellationService
+                                .discardQueued(message.workspaceId(), message.experimentId())
+                                .then(failureCounter.get())
                                 .flatMap(failures -> {
                                     if (failures > 0) {
                                         log.warn("Experiment '{}' complete with '{}' failures, marking as FAILED",
