@@ -60,7 +60,7 @@ models:
       effort:
         accepted: true
         levels: [low, medium, high]
-        default: high
+        default: medium
   - id: o3
     params:
       effort:
@@ -120,19 +120,19 @@ models:
       effort:
         accepted: true
         levels: [medium, high, xhigh]
-        default: high
+        default: medium
   - id: gpt-5.2-codex
     params:
       effort:
         accepted: true
         levels: [low, medium, high, xhigh]
-        default: high
+        default: medium
   - id: gpt-5.3-codex
     params:
       effort:
         accepted: true
         levels: [low, medium, high, xhigh]
-        default: high
+        default: medium
   - id: gpt-5.4
     params:
       effort:
@@ -156,7 +156,7 @@ models:
       effort:
         accepted: true
         levels: [medium, high, xhigh]
-        default: high
+        default: medium
   - id: gpt-5.5
     params:
       effort:
