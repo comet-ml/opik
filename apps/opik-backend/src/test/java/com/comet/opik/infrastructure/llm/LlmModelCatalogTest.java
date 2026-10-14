@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -271,6 +272,26 @@ class LlmModelCatalogTest {
                         assertThat(model.params()).as(label).isNotNull();
                         allVariants(model.params()).forEach(params -> assertConsistent(label, params));
                     }));
+        }
+
+        // The consistency check can't catch a reasoning model served with no effort control, since refusing
+        // effort is consistent; a row has to say so on purpose.
+        @Test
+        void everyOpenAiReasoningModelOffersEffortUnlessARowRefusesIt() {
+            var refusedByARow = catalog.models().getOrDefault("openai", List.of()).stream()
+                    .filter(row -> row.params() != null && row.params().effort() != null
+                            && Boolean.FALSE.equals(row.params().effort().accepted()))
+                    .map(ModelEntry::id)
+                    .collect(Collectors.toSet());
+
+            registry.getOrDefault("openai", List.of()).stream()
+                    .filter(LlmModelDefinition::reasoning)
+                    .filter(model -> !refusedByARow.contains(model.id()))
+                    .forEach(model -> assertThat(model.params().effort().levels())
+                            .as("openai/%s is a reasoning model without effort levels; give it a curated row with"
+                                    + " them, or effort: {accepted: false} if it refuses reasoning_effort",
+                                    model.id())
+                            .isNotEmpty());
         }
 
         private static Stream<ModelParams> allVariants(ModelParams params) {
