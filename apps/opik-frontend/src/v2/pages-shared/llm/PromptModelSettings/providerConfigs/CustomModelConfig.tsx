@@ -7,9 +7,11 @@ import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import {
   LLMCustomConfigsType,
+  LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
+import { getRequestParameters } from "@/api/playground/useCompletionProxyStreaming";
 import { DEFAULT_CUSTOM_CONFIGS } from "@/constants/llm";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import useJsonInput from "@/hooks/useJsonInput";
@@ -64,6 +66,12 @@ const CustomModelConfig = ({
       value: configs.custom_parameters,
       onChange: handleExtraBodyParametersChange,
     });
+  const requestParameters = getRequestParameters(
+    model ?? "",
+    configs as LLMPromptConfigsType,
+  );
+  const isSentToRequest = (key: string) =>
+    isSentToProvider(provider, key, requestParameters[key]);
   const {
     sliderKeysInExtraBody,
     sliderKeyNextToExtraBody,
@@ -73,25 +81,13 @@ const CustomModelConfig = ({
     provider,
     exclusiveSampling: sampling === "exclusive",
     sentSliders: {
-      temperature: !isUndefined(temperature),
-      top_p: supports("topP") && !isUndefined(topP),
+      temperature: isSentToRequest("temperature"),
+      top_p: supports("topP") && isSentToRequest("top_p"),
       max_completion_tokens:
         supports("maxCompletionTokens") &&
-        isSentToProvider(
-          provider,
-          "max_completion_tokens",
-          configs.maxCompletionTokens,
-        ),
-      frequency_penalty: isSentToProvider(
-        provider,
-        "frequency_penalty",
-        configs.frequencyPenalty,
-      ),
-      presence_penalty: isSentToProvider(
-        provider,
-        "presence_penalty",
-        configs.presencePenalty,
-      ),
+        isSentToRequest("max_completion_tokens"),
+      frequency_penalty: isSentToRequest("frequency_penalty"),
+      presence_penalty: isSentToRequest("presence_penalty"),
     },
   });
 

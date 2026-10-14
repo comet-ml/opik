@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import jakarta.annotation.Nullable;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
@@ -62,11 +63,12 @@ public class CustomParametersOverrides {
         return builder.build();
     }
 
-    public void rejectOpikManagedKeys(Map<String, Object> customParameters) {
+    public void rejectOpikManagedKeys(@Nullable Map<String, Object> customParameters) {
         rejectOpikManagedKeys(OPIK_MANAGED_KEYS, customParameters);
     }
 
-    public void rejectOpikManagedKeys(@NonNull List<String> opikManagedKeys, Map<String, Object> customParameters) {
+    public void rejectOpikManagedKeys(@NonNull List<String> opikManagedKeys,
+            @Nullable Map<String, Object> customParameters) {
         if (MapUtils.isEmpty(customParameters)) {
             return;
         }
@@ -80,7 +82,8 @@ public class CustomParametersOverrides {
                 });
     }
 
-    public Map<String, Object> withTokenLimitUnder(@NonNull String limitKey, Map<String, Object> customParameters) {
+    public Map<String, Object> withTokenLimitUnder(@NonNull String limitKey,
+            @Nullable Map<String, Object> customParameters) {
         var otherKey = MAX_TOKENS.equals(limitKey) ? MAX_COMPLETION_TOKENS : MAX_TOKENS;
         if (MapUtils.isEmpty(customParameters) || !customParameters.containsKey(otherKey)) {
             return customParameters;
