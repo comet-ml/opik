@@ -175,6 +175,8 @@ class ThreadDAOImpl implements ThreadDAO {
             """;
 
     @VisibleForTesting
+    // The span_weeks lookup repeats the read's groupArray(traces_final_ids) form on purpose: ClickHouse caches that
+    // scalar subquery, so the lookup costs no extra read, whereas IN (SELECT id FROM traces_final_ids) re-reads the set.
     static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
                 SELECT item_id AS thread_model_id, groupUniqArray(queue_id) AS annotation_queue_ids
@@ -328,7 +330,7 @@ class ThreadDAOImpl implements ThreadDAO {
                           AND trace_id IN (SELECT id FROM traces_final)
                       <else>
                           <if(traces_final_ids)>
-                              AND trace_id IN (SELECT id FROM traces_final_ids)
+                              AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
                           <else>
                               <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                               <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
@@ -1272,6 +1274,8 @@ class ThreadDAOImpl implements ThreadDAO {
     // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
     // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
     @VisibleForTesting
+    // The span_weeks lookup repeats the read's groupArray(traces_final_ids) form on purpose: ClickHouse caches that
+    // scalar subquery, so the lookup costs no extra read, whereas IN (SELECT id FROM traces_final_ids) re-reads the set.
     static final String SELECT_TRACE_THREADS_STATS = """
             SELECT
                 threads.workspace_id as workspace_id,
@@ -1403,7 +1407,7 @@ class ThreadDAOImpl implements ThreadDAO {
                           WHERE workspace_id = :workspace_id
                           AND project_id = :project_id
                           <if(traces_final_ids)>
-                              AND trace_id IN (SELECT id FROM traces_final_ids)
+                              AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
                           <else>
                               <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                               <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
