@@ -41,12 +41,12 @@ const VegaSpecChart: React.FunctionComponent<VegaChartProps> = ({
   const [rendered, setRendered] = useState(false);
 
   useEffect(() => {
+    setError(null);
     const el = containerRef.current;
     if (!el) return;
 
     let cancelled = false;
     let finalize: (() => void) | null = null;
-    setError(null);
 
     renderVegaChart(
       el,
@@ -77,27 +77,35 @@ const VegaSpecChart: React.FunctionComponent<VegaChartProps> = ({
     // themeMode: the config is read from CSS variables, so a theme switch needs a re-render.
   }, [spec, rows, height, colorMap, workspaceName, themeMode]);
 
-  if (error) {
+  // The container stays mounted under the error, so the next spec or rows can draw into it again.
+  const renderError = () => {
+    if (!error) return null;
     // The data is still worth showing when the spec can't be drawn.
     if (rows?.length) {
       return (
-        <RowsTable
-          rows={rows}
-          note="Couldn't draw the chart; showing the data."
-        />
+        <div className="absolute inset-0">
+          <RowsTable
+            rows={rows}
+            note="Couldn't draw the chart; showing the data."
+          />
+        </div>
       );
     }
     return (
-      <div className="comet-body-s flex size-full items-center justify-center p-2 text-center text-muted-slate">
+      <div className="comet-body-s absolute inset-0 flex items-center justify-center p-2 text-center text-muted-slate">
         {error}
       </div>
     );
-  }
+  };
 
   return (
     <div className={cn("relative size-full", className)}>
-      {!rendered && <ChartSkeleton className="absolute inset-0" />}
-      <div ref={containerRef} className="size-full" />
+      {!rendered && !error && <ChartSkeleton className="absolute inset-0" />}
+      <div
+        ref={containerRef}
+        className={cn("size-full", error && "invisible")}
+      />
+      {renderError()}
     </div>
   );
 };

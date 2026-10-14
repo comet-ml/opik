@@ -239,7 +239,6 @@
 }
 
 :root[data-theme="dark"] {
-  color-scheme: dark;
   /* Categorical (Opik chart colours) */
   --chart-1: var(--chart-purple);
   --chart-2: var(--chart-teal);
@@ -317,5 +316,10 @@
   /* Loading skeletons */
   --chart-skeleton-fill: hsl(var(--muted));
   --chart-skeleton-mark: hsl(var(--secondary));
-  --chart-skeleton-sheen: hsl(var(--background) / 0.35);
+  /* Dark primitives are comma-separated, which the slash alpha syntax rejects. */
+  --chart-skeleton-sheen: color-mix(
+    in srgb,
+    hsl(var(--background)) 35%,
+    transparent
+  );
 }
