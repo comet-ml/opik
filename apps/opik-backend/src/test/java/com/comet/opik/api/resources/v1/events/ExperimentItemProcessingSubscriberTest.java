@@ -78,6 +78,8 @@ class ExperimentItemProcessingSubscriberTest {
         // The drain hands the finish to one caller; these tests are always that caller.
         lenient().when(cancellationService.claimFinish(anyString(), any(UUID.class)))
                 .thenReturn(Mono.just(true));
+        lenient().when(cancellationService.discardQueued(anyString(), any(UUID.class)))
+                .thenReturn(Mono.empty());
     }
 
     private ExperimentItemToProcess buildMessage(UUID experimentId) {
@@ -292,6 +294,39 @@ class ExperimentItemProcessingSubscriberTest {
         subscriber.processEvent(buildMessage(experimentId)).block();
 
         verify(cancellationService, never()).releaseFinish(any(), any());
+    }
+
+    // Only a stop deleted them, so a run that simply finished left one id per item behind for the
+    // whole of its TTL — on a large dataset, the entire run's worth, for a day, for nothing.
+    @Test
+    @DisplayName("should forget what it queued once the run has drained")
+    void discardQueuedIdsOnDrain() {
+        var experimentId = UUID.randomUUID();
+
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(any())).thenReturn(Mono.empty());
+        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
+        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+        when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
+
+        subscriber.processEvent(buildMessage(experimentId)).block();
+
+        verify(cancellationService).discardQueued(WORKSPACE_ID, experimentId);
+    }
+
+    @Test
+    @DisplayName("should keep what it queued while items are still to come")
+    void keepQueuedIdsWhileItemsRemain() {
+        var experimentId = UUID.randomUUID();
+
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(any())).thenReturn(Mono.empty());
+
+        // The default: one of a larger batch, so a stop still has items to purge.
+        subscriber.processEvent(buildMessage(experimentId)).block();
+
+        verify(cancellationService, never()).discardQueued(any(), any());
     }
 
     // A cancelled test suite never reaches its assertions, so stamping only there would leave its
