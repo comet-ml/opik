@@ -73,7 +73,7 @@ const PlaygroundPage = () => {
     { enabled: !!activeProjectId },
   );
   const {
-    permissions: { canViewDatasets },
+    permissions: { canViewDatasets, canCreateExperiments },
   } = usePermissions();
   const [setupDialogOpen, setSetupDialogOpen] = useState(false);
   const [hasCheckedInitialProviders, setHasCheckedInitialProviders] =
@@ -204,17 +204,20 @@ const PlaygroundPage = () => {
   );
   const datasetName = selectedDataset?.name || null;
 
-  const { runAll, stopAll, stopWatching, runSingle, stopSingle } =
+  const isExperimentMode =
+    !!datasetId && canViewDatasets && canCreateExperiments;
+  const experimentDatasetId = isExperimentMode ? datasetId : null;
+
+  const { runAll, stopAll, stopWatching, runSingle, stopSingle, checkAgain } =
     useActionButtonActions({
       workspaceName,
       datasetName,
       datasetVersionId: parsedVersionId || undefined,
-      datasetId: plainDatasetId || undefined,
+      datasetId: (isExperimentMode && plainDatasetId) || undefined,
       versionHash: versionHash || undefined,
       projectName: activeProject?.name,
+      projectId: activeProjectId,
     });
-
-  const isExperimentMode = !!datasetId && canViewDatasets;
 
   // Through a ref, with no dependencies: this must run when the page goes away and at no other
   // time. Depending on the callback re-runs the cleanup whenever its identity changes — which it
@@ -244,7 +247,7 @@ const PlaygroundPage = () => {
         <div className="bg-gray-100">
           <PlaygroundHeader
             workspaceName={workspaceName}
-            datasetId={datasetId}
+            datasetId={experimentDatasetId}
             datasetName={datasetName}
             versionName={versionName}
             onChangeDatasetId={setDatasetId}
@@ -283,10 +286,11 @@ const PlaygroundPage = () => {
             </div>
 
             <PlaygroundOutputs
-              datasetId={datasetId}
+              datasetId={experimentDatasetId}
               versionHash={versionHash}
               runSingle={runSingle}
               stopSingle={stopSingle}
+              checkAgain={checkAgain}
             />
           </>
         ) : (
@@ -309,10 +313,11 @@ const PlaygroundPage = () => {
 
               <div className="flex flex-1">
                 <PlaygroundOutputs
-                  datasetId={datasetId}
+                  datasetId={experimentDatasetId}
                   versionHash={versionHash}
                   runSingle={runSingle}
                   stopSingle={stopSingle}
+                  checkAgain={checkAgain}
                 />
               </div>
             </div>

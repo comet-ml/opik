@@ -34,6 +34,13 @@ import {
 const PROJECT_ID = "project-1";
 
 const lastPicked = vi.hoisted(() => ({ model: "" }));
+const permissionState = vi.hoisted(() => ({
+  permissions: {} as Record<string, boolean>,
+}));
+const datasetState = vi.hoisted(() => ({ datasetId: null as string | null }));
+const actionArgs = vi.hoisted(() => ({
+  last: null as Record<string, unknown> | null,
+}));
 
 vi.mock("@/hooks/useLastPickedModel", () => ({
   default: () => [lastPicked.model, vi.fn()],
@@ -44,10 +51,13 @@ vi.mock("@/store/AppStore", () => ({
   useActiveProjectId: () => PROJECT_ID,
 }));
 vi.mock("@/contexts/PermissionsContext", () => ({
-  usePermissions: () => ({ permissions: {} }),
+  usePermissions: () => ({ permissions: permissionState.permissions }),
 }));
 vi.mock("@/hooks/usePlaygroundDataset", () => ({
-  usePlaygroundDataset: () => ({ datasetId: null, setDatasetId: vi.fn() }),
+  usePlaygroundDataset: () => ({
+    datasetId: datasetState.datasetId,
+    setDatasetId: vi.fn(),
+  }),
 }));
 vi.mock("@/api/projects/useProjectById", () => ({
   default: () => ({ data: undefined }),
@@ -73,7 +83,12 @@ vi.mock("@/v2/pages/PlaygroundPage/useActionButtonActions", () => {
     runSingle: vi.fn(),
     stopSingle: vi.fn(),
   };
-  return { default: () => actions };
+  return {
+    default: (args: Record<string, unknown>) => {
+      actionArgs.last = args;
+      return actions;
+    },
+  };
 });
 vi.mock("@/v2/pages/PlaygroundPage/PlaygroundScrollContainer", () => ({
   default: ({ children }: { children: React.ReactNode }) => (
@@ -285,6 +300,9 @@ beforeEach(() => {
   backend.providerKeys = reply(OPEN_ROUTER_KEYS);
   backend.registry = reply(OPEN_ROUTER_REGISTRY);
   lastPicked.model = "";
+  permissionState.permissions = {};
+  datasetState.datasetId = null;
+  actionArgs.last = null;
   apiGet = vi.spyOn(api, "get").mockImplementation(((url: string) => {
     if (url === PROVIDER_KEYS_REST_ENDPOINT) return backend.providerKeys();
     if (url === LLM_MODELS_REST_ENDPOINT) return backend.registry();
@@ -586,5 +604,42 @@ describe("PlaygroundPage setup provider dialog", () => {
     await advance();
 
     expect(setupDialog()).not.toBeNull();
+  });
+});
+
+// The dataset selection is stored, so it outlives the permission that allowed it to be made. The
+// control that would clear it is hidden by that same permission, which leaves a run whose only
+// route is the server, refusing it.
+describe("PlaygroundPage dataset run without experiment-create", () => {
+  const DATASET_ID = "dataset-1";
+
+  it("withholds the stored dataset, so the run stays in the browser", async () => {
+    permissionState.permissions = {
+      canViewDatasets: true,
+      canCreateExperiments: false,
+    };
+    datasetState.datasetId = DATASET_ID;
+
+    renderPage();
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync();
+    });
+
+    expect(actionArgs.last?.datasetId).toBeUndefined();
+  });
+
+  it("passes the stored dataset through once the permission is there", async () => {
+    permissionState.permissions = {
+      canViewDatasets: true,
+      canCreateExperiments: true,
+    };
+    datasetState.datasetId = DATASET_ID;
+
+    renderPage();
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync();
+    });
+
+    expect(actionArgs.last?.datasetId).toBe(DATASET_ID);
   });
 });

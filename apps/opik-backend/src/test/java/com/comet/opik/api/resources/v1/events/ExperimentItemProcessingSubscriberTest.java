@@ -170,6 +170,8 @@ class ExperimentItemProcessingSubscriberTest {
         var experimentId = UUID.randomUUID();
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
+        // The stop reached the finish first and owns the outcome, so this loses the claim for it.
+        when(cancellationService.claimFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
         // The cancelled item is skipped rather than run, and draining it is what reaches the finish.
         when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
         when(atomicLong.get()).thenReturn(Mono.just(1L));
@@ -216,6 +218,7 @@ class ExperimentItemProcessingSubscriberTest {
         var experimentId = UUID.randomUUID();
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
+        when(cancellationService.claimFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
         when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
         when(atomicLong.get()).thenReturn(Mono.just(0L));
         when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());

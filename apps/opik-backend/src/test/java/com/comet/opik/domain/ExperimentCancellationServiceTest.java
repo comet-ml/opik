@@ -96,6 +96,25 @@ class ExperimentCancellationServiceTest {
         assertThat(remainingExperimentIds()).containsOnly(sibling);
     }
 
+    // Recorded in chunks, because a run's ids are otherwise one RPUSH of up to streamMaxLen
+    // arguments. Chunking is only correct if every chunk lands: one dropped leaves its messages
+    // unpurgeable, which reads as a cancel that freed less of the queue than it should have.
+    @Test
+    @DisplayName("should record and purge a run whose ids span several chunks")
+    void purgeQueuedCoversIdsBeyondASingleChunk() {
+        var cancelled = UUID.randomUUID();
+        var spanningChunks = 1_200;
+
+        publish(messages(cancelled, spanningChunks));
+
+        var drained = service.purgeQueued(WORKSPACE_ID, cancelled).block();
+
+        assertThat(drained)
+                .as("every chunk was recorded, so the purge accounts for all of them")
+                .isTrue();
+        assertThat(remainingExperimentIds()).isEmpty();
+    }
+
     // Each prompt variant of a run counts its own work. Cancelling one used to strand a counter the
     // others shared, so a variant nobody stopped could never be reported finished.
     @Test

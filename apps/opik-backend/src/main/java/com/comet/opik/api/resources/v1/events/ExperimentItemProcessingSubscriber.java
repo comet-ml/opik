@@ -114,12 +114,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
         return trackFailure.then(counter.decrementAndGet())
                 .flatMap(remaining -> {
                     if (remaining <= 0) {
-                        // Claimed, not just observed: a cancel purging the queue can reach the finish at
-                        // the same moment, and a counter past zero would re-finish it per item.
-                        return cancellationService
-                                .claimFinish(message.workspaceId(), message.experimentId())
-                                .filter(Boolean::booleanValue)
-                                .flatMap(claimed -> failureCounter.get())
+                        return failureCounter.get()
                                 .flatMap(failures -> {
                                     if (failures > 0) {
                                         log.warn("Experiment '{}' complete with '{}' failures, marking as FAILED",
@@ -160,17 +155,25 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
     }
 
     /**
-     * Writes how the run ended. A run someone stopped keeps CANCELLED however its items turned out —
-     * the stamp is what says no more are coming, which its status cannot, being written when the stop
-     * was asked for. Reports whether it was stopped, which is what decides the rest of the ending.
+     * Writes how the run ended, for the one caller that wins the right to. Two things are separate here
+     * and were not before: the stamp says no more items are coming, and every observer of the drain
+     * writes it; the status says how it ended, and only the claim holder writes it. A stop that got
+     * there first owns CANCELLED, and this still records that the items stopped — which is what the
+     * page waits on, and what a status alone cannot say, being written when the stop was asked for.
      */
-    private Mono<Boolean> settle(ExperimentItemToProcess message, ExperimentStatus earned) {
-        return cancellationService.isCancelled(message.workspaceId(), message.experimentId())
-                .flatMap(cancelled -> experimentService
-                        .update(message.experimentId(), cancelled
-                                ? ExperimentUpdate.builder().finished(true).build()
-                                : ExperimentUpdate.builder().status(earned).finished(true).build())
-                        .thenReturn(cancelled));
+    private Mono<Void> settle(ExperimentItemToProcess message, ExperimentStatus earned, Mono<Void> onWon) {
+        return cancellationService.claimFinish(message.workspaceId(), message.experimentId())
+                .flatMap(won -> {
+                    if (!won) {
+                        log.info("Experiment '{}' already has its ending written, recording the drain only",
+                                message.experimentId());
+                        return stampFinished(message);
+                    }
+                    return experimentService
+                            .update(message.experimentId(),
+                                    ExperimentUpdate.builder().status(earned).finished(true).build())
+                            .then(onWon);
+                });
     }
 
     // TODO: deduplicate with TestSuiteAssertionCounterService.finishExperiment — extract into
@@ -179,10 +182,9 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
         var reactorContext = buildReactorContext(message);
         var experimentId = message.experimentId();
 
-        return settle(message, ExperimentStatus.COMPLETED)
-                .flatMap(cancelled -> cancelled
-                        ? Mono.<Void>empty()
-                        : experimentService.finishExperiments(Set.of(experimentId)))
+        // Aggregates describe a run that ran, so they are built only by the caller that completed it
+        return settle(message, ExperimentStatus.COMPLETED,
+                Mono.defer(() -> experimentService.finishExperiments(Set.of(experimentId))))
                 .contextWrite(reactorContext)
                 .onErrorResume(error -> {
                     log.error("Failed to finish experiment '{}', marking as FAILED", experimentId, error);
@@ -216,8 +218,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
     }
 
     private Mono<Void> markExperimentFailed(ExperimentItemToProcess message, Context reactorContext) {
-        return settle(message, ExperimentStatus.FAILED)
-                .then()
+        return settle(message, ExperimentStatus.FAILED, Mono.empty())
                 .onErrorResume(e -> {
                     // The last writer of a terminal state: past here nothing records how this ended
                     log.error("Failed to mark experiment '{}' as FAILED", message.experimentId(), e);

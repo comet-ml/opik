@@ -65,7 +65,7 @@ public class ExperimentExecutionConfig implements StreamConfiguration {
     private Duration longPollingDuration = Duration.seconds(5);
 
     @JsonProperty
-    @Min(1000) @Max(10_000_000) private int streamMaxLen = 50_000;
+    @Min(1000) @Max(10_000_000) private int streamMaxLen = 10_000;
 
     @JsonProperty
     @Min(0) @Max(10_000) private int streamTrimLimit = 100;

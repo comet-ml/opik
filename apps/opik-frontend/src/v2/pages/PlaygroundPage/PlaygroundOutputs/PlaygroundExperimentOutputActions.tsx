@@ -13,6 +13,7 @@ interface PlaygroundExperimentOutputActionsProps {
   onChangeSize: (size: number) => void;
   total: number;
   isLoadingTotal?: boolean;
+  checkAgain: () => void;
 }
 
 const PlaygroundExperimentOutputActions = ({
@@ -23,6 +24,7 @@ const PlaygroundExperimentOutputActions = ({
   onChangeSize,
   total,
   isLoadingTotal,
+  checkAgain,
 }: PlaygroundExperimentOutputActionsProps) => {
   const isRunning = useIsRunning();
 
@@ -34,7 +36,7 @@ const PlaygroundExperimentOutputActions = ({
     <div className="border-y">
       {isRunning ? (
         <div className="px-4 pb-3 pt-2">
-          <PlaygroundProgressIndicator />
+          <PlaygroundProgressIndicator onCheckAgain={checkAgain} />
         </div>
       ) : (
         <div className="flex items-center justify-between bg-gray-100 py-3 pl-2 pr-4">
