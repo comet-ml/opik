@@ -134,6 +134,9 @@ jobs:
           # matrix value, not a git diff here), so it needs the worktree content
           # at HEAD, not history. Avoids a full clone on every one of N legs.
           fetch-depth: 1
+          # Java legs run mvn with the PR's own pom.xml (and its plugins); don't
+          # leave the token in .git/config for that code. Legs never push.
+          persist-credentials: false
 
       - name: Set up JDK 25
         if: matrix.leg.toolchain == 'java'
