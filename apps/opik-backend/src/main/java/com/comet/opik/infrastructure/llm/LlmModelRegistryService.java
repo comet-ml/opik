@@ -31,6 +31,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -47,6 +49,7 @@ public class LlmModelRegistryService {
     // volatile: reload() is called from the scheduled job thread
     private volatile Map<String, List<LlmModelDefinition>> registry;
     private volatile Map<String, List<ModelEntry>> lastGoodRemote;
+    private final Set<String> reportedAwaitingSyncRows = ConcurrentHashMap.newKeySet();
 
     @Inject
     public LlmModelRegistryService(@NonNull @Config OpikConfiguration configuration,
@@ -240,6 +243,7 @@ public class LlmModelRegistryService {
         }
 
         result = applyCurated(result, catalog.foldProfiles(catalog.models()));
+        reportAwaitingSyncRowsTheSyncLists(result, catalog.models());
 
         var overridePath = config.getLocalOverridePath();
         if (overridePath == null || overridePath.isBlank()) {
@@ -306,13 +310,33 @@ public class LlmModelRegistryService {
             result.put(provider, existing.stream()
                     .map(m -> byId.containsKey(m.id()) ? inheritUnsetFields(m, byId.get(m.id())) : m)
                     .toList());
-            var listed = existing.stream().map(ModelEntry::id).collect(Collectors.toSet());
-            byId.values().stream()
-                    .filter(row -> BooleanUtils.isTrue(row.awaitingSync()) && listed.contains(row.id()))
-                    .forEach(row -> log.info("Curated row '{}' of provider '{}' waits for the sync, which now"
-                            + " lists the model; its awaitingSync can be removed", row.id(), provider));
         });
         return result;
+    }
+
+    // The registry reloads every few minutes and a release's curated file never changes, so once the CDN lists the
+    // model this would otherwise repeat at INFO until the deployment upgrades.
+    private void reportAwaitingSyncRowsTheSyncLists(Map<String, List<ModelEntry>> merged,
+            Map<String, List<ModelEntry>> curated) {
+        curated.forEach((provider, rows) -> {
+            if (rows == null) {
+                return;
+            }
+            var listed = merged.getOrDefault(provider, List.of()).stream()
+                    .map(ModelEntry::id)
+                    .collect(Collectors.toSet());
+            rows.stream()
+                    .filter(row -> row != null && BooleanUtils.isTrue(row.awaitingSync()) && listed.contains(row.id()))
+                    .forEach(row -> {
+                        var message = "Curated row '{}' of provider '{}' waits for the sync, which now lists the"
+                                + " model; its awaitingSync can be removed";
+                        if (reportedAwaitingSyncRows.add(provider + "/" + row.id())) {
+                            log.info(message, row.id(), provider);
+                        } else {
+                            log.debug(message, row.id(), provider);
+                        }
+                    });
+        });
     }
 
     private Map<String, List<ModelEntry>> loadClasspathResource(String resourceName) {
