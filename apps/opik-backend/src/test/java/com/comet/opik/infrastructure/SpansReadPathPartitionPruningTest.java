@@ -773,7 +773,7 @@ class SpansReadPathPartitionPruningTest {
     @MethodSource("traceReads")
     void traceAggregatesAFarFutureSpanOfItsTrace(String queryName, BiFunction<String, UUID, List<Trace>> read) {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
-        projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         // The spans reads are keyed by trace id, so the far-future week must come from the span-weeks pre-pass.
         var created = createTraceWithAFarFutureSpan(projectName, Instant.now());
         var expected = SpanAggregates.builder().spanCount(created.spans().size())
@@ -791,6 +791,7 @@ class SpansReadPathPartitionPruningTest {
                         .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
                         .build())
                 .containsExactly(expected);
+        assertSpanWeeksRead(queryName, projectId);
     }
 
     /** The span count and total cost reported by a trace read. */

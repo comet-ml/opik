@@ -2,12 +2,9 @@ package com.comet.opik.infrastructure;
 
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanUpdate;
-import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
-import org.apache.commons.lang3.RandomStringUtils;
 import org.awaitility.Awaitility;
-import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -82,20 +79,6 @@ class SpansReadPathSpanWeeksBoundTest extends SpansReadPathPartitionPruningTest 
                 awaitIndexed(List.of(traceWeek(spanUpdate.traceId(), spanId)));
             }
         };
-    }
-
-    @Test
-    void traceByIdReadsItsSpansThroughTheIndex() {
-        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
-        var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
-                .projectName(projectName)
-                .build(), API_KEY, WORKSPACE_NAME);
-        spanResourceClient.batchCreateSpans(List.of(newSpan(Instant.now(), traceId).toBuilder()
-                .projectName(projectName).build()), API_KEY, WORKSPACE_NAME);
-
-        traceResourceClient.getById(traceId, WORKSPACE_NAME, API_KEY);
-
-        assertSpanWeeksRead("find_traces_by_ids", traceId);
     }
 
     @Override
