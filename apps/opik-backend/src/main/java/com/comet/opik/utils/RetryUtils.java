@@ -81,8 +81,8 @@ public class RetryUtils {
     }
 
     /**
-     * Retry specification for ClickHouse writes, for callers whose write is idempotent: a retry may repeat a write
-     * that already landed, so only use it where a repeat collapses (e.g. a ReplacingMergeTree key).
+     * Retry specification for ClickHouse operations. A retry reruns the whole operation, so for a write it may repeat
+     * one that already landed: use it for writes only where a repeat collapses (e.g. a ReplacingMergeTree key).
      * <p>
      * Retried, when found anywhere in the cause chain: the transient errors {@link #handleHttpErrors} retries
      * ({@code SocketException}, {@code TimeoutException}, {@code InterruptedIOException},
@@ -102,7 +102,7 @@ public class RetryUtils {
     public static RetryBackoffSpec handleClickHouseErrors(int maxAttempts, Duration minBackoff, Duration maxBackoff) {
         return Retry.backoff(maxAttempts, minBackoff)
                 .maxBackoff(maxBackoff)
-                .doBeforeRetry(retrySignal -> log.warn("Retrying ClickHouse write, attempt '{}', after '{}'",
+                .doBeforeRetry(retrySignal -> log.warn("Retrying ClickHouse operation, attempt '{}', after '{}'",
                         retrySignal.totalRetries() + 1, describe(retrySignal.failure())))
                 .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> retrySignal.failure())
                 .filter(RetryUtils::isTransientClickHouseError);
