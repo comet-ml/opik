@@ -29,6 +29,8 @@ import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.TraceThreadField;
+import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.metrics.BreakdownConfig;
 import com.comet.opik.api.metrics.BreakdownField;
 import com.comet.opik.api.metrics.KpiCardRequest;
@@ -56,6 +58,9 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.TestIdGeneratorFactory;
@@ -481,6 +486,53 @@ class SpansReadPathPartitionPruningTest {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
         assertThat(actual).isEqualTo(breakdown ? Map.of(subMetric, expected.get(subMetric)) : expected);
         assertSpanWeeksRead("ProjectMetrics_token usage", trace.projectId());
+    }
+
+    /** The thread list's three span reads: the page pushdown, the trace-set prefilter, and the plain window. */
+    @ParameterizedTest
+    @ValueSource(strings = {"page pushdown", "trace set", "window"})
+    void threadListCountsAFarFutureSpanOfItsTrace(String variant) {
+        var trace = createFarFutureTrace();
+        // A thread id filter activates the trace-set prefilter; a cost sort disqualifies the page pushdown.
+        var filters = variant.equals("trace set") ? threadIdFilter(trace.threadId()) : null;
+        var sorting = variant.equals("window")
+                ? List.of(SortingField.builder().field(SortableFields.TOTAL_ESTIMATED_COST)
+                        .direction(Direction.DESC).build())
+                : null;
+
+        // Threads are materialised from their traces asynchronously.
+        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(traceResourceClient
+                .getTraceThreads(trace.projectId(), null, API_KEY, WORKSPACE_NAME, filters, sorting, Map.of())
+                .content())
+                .singleElement()
+                .satisfies(thread -> assertThat(thread.totalEstimatedCost())
+                        .isEqualByComparingTo(FarFutureTrace.TOTAL_COST)));
+        assertSpanWeeksRead("find_threads_by_project", trace.projectId());
+    }
+
+    @ParameterizedTest(name = "trace set: {0}")
+    @ValueSource(booleans = {false, true})
+    void threadStatsCountAFarFutureSpanOfItsTrace(boolean traceSet) {
+        var trace = createFarFutureTrace();
+        var filters = traceSet ? threadIdFilter(trace.threadId()) : null;
+
+        // One thread, so its cost is the average the stats report.
+        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(traceResourceClient
+                .getTraceThreadStats(null, trace.projectId(), API_KEY, WORKSPACE_NAME, filters, Map.of())
+                .stats())
+                .filteredOn(stat -> stat.getName().equals("total_estimated_cost"))
+                .singleElement()
+                .satisfies(stat -> assertThat(((ProjectStats.AvgValueStat) stat).getValue())
+                        .isCloseTo(FarFutureTrace.TOTAL_COST.doubleValue(), within(1e-9))));
+        assertSpanWeeksRead("thread_stats", trace.projectId());
+    }
+
+    private static List<TraceThreadFilter> threadIdFilter(String threadId) {
+        return List.of(TraceThreadFilter.builder()
+                .field(TraceThreadField.ID)
+                .operator(Operator.EQUAL)
+                .value(threadId)
+                .build());
     }
 
     /** Asserts the latest statement of {@code op} naming {@code id} read the span_weeks index; off here. */
