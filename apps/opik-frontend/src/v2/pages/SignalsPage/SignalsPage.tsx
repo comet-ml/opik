@@ -40,9 +40,7 @@ import SignalsStatsCards from "@/v2/pages/SignalsPage/SignalsStatsCards";
 import IssuesTab from "@/v2/pages/SignalsPage/IssuesTab/IssuesTab";
 import DiagnosticsEmptyState from "@/v2/pages/SignalsPage/DiagnosticsEmptyState";
 import AutoRunToggle from "@/v2/pages/SignalsPage/AutoRunToggle";
-import OutOfCreditsButton, {
-  OUT_OF_CREDITS_RUN_DESCRIPTION,
-} from "@/v2/pages/SignalsPage/OutOfCreditsButton";
+import OutOfCreditsButton from "@/v2/pages/SignalsPage/OutOfCreditsButton";
 import DiagnosticsSettingsMenu from "@/v2/pages/SignalsPage/DiagnosticsSettingsMenu";
 import GuidanceSheet from "@/v2/pages/SignalsPage/GuidanceSheet";
 import GuidanceChangedCallout from "@/v2/pages/SignalsPage/GuidanceChangedCallout";
@@ -545,7 +543,7 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
               (isOutOfCredits && !showRunning ? (
                 <OutOfCreditsButton
                   label="Out of Ollie credits"
-                  description={OUT_OF_CREDITS_RUN_DESCRIPTION}
+                  description="Diagnostics run on your organization's Ollie credits, and there aren't enough left for another run. Issues already found stay available."
                 />
               ) : (
                 <Button
