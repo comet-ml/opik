@@ -174,7 +174,7 @@ public class OpikConfiguration extends JobConfiguration {
     private SpanWeeksBackfillConfig spanWeeksBackfill = SpanWeeksBackfillConfig.builder().build();
 
     @Valid @NotNull @JsonProperty
-    private SpanWeeksRegistrationConfig spanWeeksRegistration = new SpanWeeksRegistrationConfig();
+    private SpanWeeksRegistrationConfig spanWeeksRegistration = SpanWeeksRegistrationConfig.builder().build();
 
     @Valid @NotNull @JsonProperty
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();

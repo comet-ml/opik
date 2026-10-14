@@ -10,6 +10,7 @@ import com.comet.opik.utils.RetryUtils;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -26,18 +27,11 @@ import java.util.List;
  */
 @EagerSingleton
 @Slf4j
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class SpanWeeksListener {
 
-    private final SpanService spanService;
-    private final SpanWeeksRegistrationConfig config;
-
-    @Inject
-    public SpanWeeksListener(
-            @NonNull SpanService spanService,
-            @NonNull @Config("spanWeeksRegistration") SpanWeeksRegistrationConfig config) {
-        this.spanService = spanService;
-        this.config = config;
-    }
+    private final @NonNull SpanService spanService;
+    private final @NonNull @Config("spanWeeksRegistration") SpanWeeksRegistrationConfig config;
 
     @Subscribe
     public void onSpansCreated(@NonNull SpansCreated event) {
@@ -56,8 +50,8 @@ public class SpanWeeksListener {
 
     private void register(List<Span> spans, String workspaceId, String userName) {
         spanService.registerWeeks(spans)
-                .retryWhen(RetryUtils.handleClickHouseErrors(config.getMaxRetries(),
-                        config.getMinBackoff().toJavaDuration(), config.getMaxBackoff().toJavaDuration()))
+                .retryWhen(RetryUtils.handleClickHouseErrors(config.maxRetries(),
+                        config.minBackoff().toJavaDuration(), config.maxBackoff().toJavaDuration()))
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                 .subscribe(
                         null,
