@@ -13,9 +13,9 @@ import {
   ChatCompletionOpikErrorMessageType,
   ChatCompletionPythonProxyErrorMessageType,
 } from "@/types/playground";
-import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
+import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
-import { sanitizeConfigForRequest } from "@/lib/modelUtils";
+import { getRequestParameters } from "@/lib/modelUtils";
 import {
   LLMPromptConfigsType,
   OpenAiPipelineMode,
@@ -107,12 +107,6 @@ const getCompletionProxyStream = async ({
   workspaceName,
   openAiPipelineMode,
 }: GetCompletionProxyStreamParams) => {
-  const configsRecord = sanitizeConfigForRequest(
-    model,
-    configs as unknown as Record<string, unknown>,
-    openAiPipelineMode,
-  );
-
   return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {
     method: "POST",
     headers: {
@@ -124,7 +118,7 @@ const getCompletionProxyStream = async ({
       messages,
       stream: true,
       stream_options: { include_usage: true },
-      ...snakeCaseObj(configsRecord),
+      ...getRequestParameters(model, configs, openAiPipelineMode),
     }),
     credentials: "include",
     signal,

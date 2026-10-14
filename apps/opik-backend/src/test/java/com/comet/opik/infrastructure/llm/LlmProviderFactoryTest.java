@@ -11,6 +11,7 @@ import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.FreeModelConfig;
+import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicClientGenerator;
@@ -114,16 +115,19 @@ class LlmProviderFactoryTest {
         OpenRouterModule openRouterModule = new OpenRouterModule();
         VertexAIModule vertexAIModule = new VertexAIModule();
 
-        AnthropicClientGenerator anthropicClientGenerator = anthropicModule.clientGenerator(llmProviderClientConfig);
-        anthropicModule.llmServiceProvider(llmProviderFactory, anthropicClientGenerator);
+        AnthropicClientGenerator anthropicClientGenerator = anthropicModule.clientGenerator(llmProviderClientConfig,
+                registryService);
+        anthropicModule.llmServiceProvider(llmProviderFactory, anthropicClientGenerator, registryService);
 
         GeminiClientGenerator geminiClientGenerator = geminiModule.clientGenerator(llmProviderClientConfig);
         geminiModule.llmServiceProvider(llmProviderFactory, geminiClientGenerator);
 
-        OpenAIClientGenerator openAIClientGenerator = openAIModule.clientGenerator(llmProviderClientConfig);
+        OpenAIClientGenerator openAIClientGenerator = openAIModule.clientGenerator(llmProviderClientConfig,
+                registryService);
         openAIModule.llmServiceProvider(llmProviderFactory, openAIClientGenerator);
 
-        OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig);
+        OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig,
+                registryService);
         openRouterModule.llmServiceProvider(llmProviderFactory, openRouterClientGenerator);
 
         VertexAIClientGenerator vertexAIClientGenerator = vertexAIModule.clientGenerator(llmProviderClientConfig,
@@ -185,7 +189,7 @@ class LlmProviderFactoryTest {
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
-                mock(AuthTokenProvider.class));
+                mock(AuthTokenProvider.class), registryService);
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should successfully get the service
@@ -222,7 +226,7 @@ class LlmProviderFactoryTest {
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
-                mock(AuthTokenProvider.class));
+                mock(AuthTokenProvider.class), registryService);
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should throw BadRequestException
@@ -498,13 +502,16 @@ class LlmProviderFactoryTest {
 
     @ParameterizedTest
     @CsvSource({"o3, true", "gpt-4o, false", "claude-sonnet-4-6, false", "unknown-model, false"})
-    @DisplayName("isOpenAiReasoningModel follows the registry's reasoning flag")
-    void isOpenAiReasoningModelFollowsRegistryFlag(String model, boolean expected) {
+    @DisplayName("openAiParams refuse temperature for the models the registry flags as reasoning")
+    void openAiParamsRefuseTemperatureForRegistryReasoningModels(String model, boolean expected) {
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
         var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
                 registryService);
 
-        assertThat(llmProviderFactory.isOpenAiReasoningModel(model)).isEqualTo(expected);
+        assertThat(llmProviderFactory.openAiParams(model)
+                .map(params -> Boolean.FALSE.equals(params.temperature().accepted()))
+                .orElse(false))
+                .isEqualTo(expected);
     }
 
     @Test
@@ -534,8 +541,26 @@ class LlmProviderFactoryTest {
     }
 
     @Test
-    @DisplayName("isOpenAiReasoningModel ignores a reasoning flag on another provider's model")
-    void isOpenAiReasoningModelIgnoresOtherProviders() {
+    @DisplayName("openAiParams keep a reasoning model's drops when the curated layer is turned off")
+    void openAiParamsKeepTheShippedRulesWithoutACuratedLayer() {
+        var registryConfig = new LlmModelRegistryConfig();
+        registryConfig.setDefaultResource("llm-models-test.yaml");
+        registryConfig.setCuratedResource("");
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
+                new LlmModelRegistryService(registryConfig));
+
+        assertThat(llmProviderFactory.openAiParams("o3")).hasValueSatisfying(params -> {
+            assertThat(params.temperature().accepted()).isFalse();
+            assertThat(params.topP().accepted()).isFalse();
+            assertThat(params.frequencyPenalty().accepted()).isFalse();
+            assertThat(params.presencePenalty().accepted()).isFalse();
+        });
+    }
+
+    @Test
+    @DisplayName("openAiParams ignores another provider's model")
+    void openAiParamsIgnoresOtherProviders() {
         var registry = mock(LlmModelRegistryService.class);
         when(registry.findModel("openai/gpt-5-mini")).thenReturn(Optional.of(
                 new LlmModelRegistryService.ModelLookupResult(LlmProvider.OPEN_ROUTER,
@@ -544,6 +569,6 @@ class LlmProviderFactoryTest {
         var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
                 registry);
 
-        assertThat(llmProviderFactory.isOpenAiReasoningModel("openai/gpt-5-mini")).isFalse();
+        assertThat(llmProviderFactory.openAiParams("openai/gpt-5-mini")).isEmpty();
     }
 }

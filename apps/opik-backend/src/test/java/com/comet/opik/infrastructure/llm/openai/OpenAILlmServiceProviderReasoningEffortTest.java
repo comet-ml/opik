@@ -26,6 +26,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -82,7 +83,7 @@ class OpenAILlmServiceProviderReasoningEffortTest {
         stubChatCompletions();
         stubResponses();
         serviceProvider = new OpenAILlmServiceProvider(
-                new OpenAIClientGenerator(new LlmProviderClientConfig()),
+                new OpenAIClientGenerator(new LlmProviderClientConfig(), bundledRegistry()),
                 Mockito.mock(LlmProviderFactory.class));
     }
 
@@ -92,13 +93,13 @@ class OpenAILlmServiceProviderReasoningEffortTest {
     }
 
     @Test
-    void chatCompletionsSendsAStoredMaxAsHigh() {
+    void chatCompletionsLeavesOutAStoredMax() {
         var service = serviceFor(Map.of(PIPELINE_MODE_KEY, "chat_completions_api"));
 
         sendBlockingAndStreaming(service, requestWithEffort("max"));
 
         openAi.verify(2, chatCompletionsRequest()
-                .withRequestBody(matchingJsonPath("$.reasoning_effort", equalTo("high"))));
+                .withRequestBody(not(matchingJsonPath("$.reasoning_effort"))));
     }
 
     @ParameterizedTest
@@ -124,14 +125,14 @@ class OpenAILlmServiceProviderReasoningEffortTest {
 
     @ParameterizedTest
     @MethodSource("keysWithoutAValidPipelineMode")
-    void keyWithoutAValidPipelineModeUsesChatCompletionsAndSendsAStoredMaxAsHigh(
+    void keyWithoutAValidPipelineModeUsesChatCompletionsAndLeavesOutAStoredMax(
             Map<String, String> configuration) {
         var service = serviceFor(configuration);
 
         sendBlockingAndStreaming(service, requestWithEffort("max"));
 
         openAi.verify(2, chatCompletionsRequest()
-                .withRequestBody(matchingJsonPath("$.reasoning_effort", equalTo("high"))));
+                .withRequestBody(not(matchingJsonPath("$.reasoning_effort"))));
         openAi.verify(0, postRequestedFor(urlPathEqualTo(RESPONSES_PATH)));
     }
 

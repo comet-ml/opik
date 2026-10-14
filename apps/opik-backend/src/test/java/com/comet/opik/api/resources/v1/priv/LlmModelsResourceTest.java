@@ -53,4 +53,22 @@ class LlmModelsResourceTest {
                     "reasoning", true));
         }
     }
+
+    @Test
+    void servesFlagsTheRegistryLeavesOutAsFalse() {
+        when(REGISTRY_SERVICE.getRegistry()).thenReturn(Map.of(
+                "openai", List.of(LlmModelDefinition.builder().id("gpt-4.1").build())));
+
+        try (Response response = EXT.target("/v1/private/llm/models").request().get()) {
+            assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+
+            var registry = response.readEntity(new GenericType<Map<String, List<Map<String, Object>>>>() {
+            });
+
+            assertThat(registry.get("openai")).containsExactly(Map.of(
+                    "id", "gpt-4.1",
+                    "structured_output", false,
+                    "reasoning", false));
+        }
+    }
 }

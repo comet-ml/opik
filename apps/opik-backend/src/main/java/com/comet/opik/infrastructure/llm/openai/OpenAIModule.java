@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
@@ -14,8 +15,9 @@ public class OpenAIModule extends AbstractModule {
     @Provides
     @Singleton
     @Named("openaiGenerator")
-    public OpenAIClientGenerator clientGenerator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
-        return new OpenAIClientGenerator(config);
+    public OpenAIClientGenerator clientGenerator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
+            @NonNull LlmModelRegistryService registryService) {
+        return new OpenAIClientGenerator(config, registryService);
     }
 
     @Provides

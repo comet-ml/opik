@@ -1,0 +1,475 @@
+# Written by people and reviewed in PRs; wins over llm-models-default.yaml, which the sync writes.
+# A model takes its provider's profile, then the reasoning profile when the registry flags it, then
+# its own profile, then its own params; each layer sets only what it changes.
+defaults:
+  openai: {profile: openai, reasoningProfile: openai-reasoning}
+  anthropic: {profile: anthropic}
+  gemini: {profile: gemini}
+  vertex-ai: {profile: gemini}
+profiles:
+  openai:
+    temperature: {min: 0, max: 2, default: 0}
+    topP: {min: 0, max: 1, default: 1}
+    frequencyPenalty: {min: -2, max: 2, default: 0}
+    presencePenalty: {min: -2, max: 2, default: 0}
+    maxOutputTokens: {min: 1, max: 128000, default: 4000}
+    effort: {accepted: false}
+    routes:
+      responses_api:
+        frequencyPenalty: {accepted: false}
+        presencePenalty: {accepted: false}
+        stop: {accepted: false}
+        maxOutputTokens: {min: 16}
+  openai-reasoning:
+    temperature: {accepted: false}
+    topP: {accepted: false}
+    frequencyPenalty: {accepted: false}
+    presencePenalty: {accepted: false}
+  # A Claude id without a row takes no sampling params and thinks: newer models increasingly refuse sampling, and
+  # omitting a param beats the 400 a refused one gets. So the rows below name the models that do take them.
+  anthropic:
+    temperature: {accepted: false, min: 0, max: 1, default: 0}
+    topP: {accepted: false, min: 0, max: 1, default: 1}
+    topK: {accepted: false}
+    samplingExclusive: true
+    thinksByDefault: true
+    maxOutputTokens: {min: 1, max: 64000, default: 4000}
+    effort:
+      levels: [low, medium, high, xhigh, max]
+      default: high
+  anthropic-sampling:
+    temperature: {accepted: true}
+    topP: {accepted: true}
+    topK: {accepted: true}
+  gemini:
+    temperature: {min: 0, max: 2, default: 0}
+    topP: {min: 0, max: 1, default: 1}
+    maxOutputTokens: {min: 0, max: 65535, default: 4000}
+    effort: {accepted: false}
+  gemini-no-sampling:
+    temperature: {accepted: false}
+    topP: {accepted: false}
+models:
+  openai:
+  - id: o1
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high]
+        default: high
+  - id: o3
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high]
+        default: high
+  - id: o3-mini
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high]
+        default: high
+  - id: o4-mini
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high]
+        default: high
+  - id: gpt-5
+    params:
+      effort:
+        accepted: true
+        levels: [minimal, low, medium, high]
+        default: high
+  - id: gpt-5-mini
+    params:
+      effort:
+        accepted: true
+        levels: [minimal, low, medium, high]
+        default: high
+  - id: gpt-5-nano
+    params:
+      effort:
+        accepted: true
+        levels: [minimal, low, medium, high]
+        default: high
+  - id: gpt-5.1
+    params:
+      effort:
+        accepted: true
+        levels: [none, low, medium, high]
+        default: high
+  - id: gpt-5.2
+    params:
+      effort:
+        accepted: true
+        levels: [none, low, medium, high, xhigh]
+        default: high
+  - id: gpt-5.4
+    params:
+      effort:
+        accepted: true
+        levels: [none, low, medium, high, xhigh]
+        default: high
+  - id: gpt-5.4-mini
+    params:
+      effort:
+        accepted: true
+        levels: [none, low, medium, high, xhigh]
+        default: high
+  - id: gpt-5.4-nano
+    params:
+      effort:
+        accepted: true
+        levels: [none, low, medium, high, xhigh]
+        default: high
+  - id: gpt-5.5
+    params:
+      effort:
+        accepted: true
+        levels: [none, low, medium, high, xhigh]
+        default: high
+  - id: gpt-5.6-luna
+    params:
+      effort:
+        accepted: true
+        levels: [none, low, medium, high, xhigh]
+        default: high
+      routes:
+        responses_api:
+          effort:
+            levels: [none, low, medium, high, xhigh, max]
+  - id: gpt-5.6-sol
+    params:
+      effort:
+        accepted: true
+        levels: [none, low, medium, high, xhigh]
+        default: high
+      routes:
+        responses_api:
+          effort:
+            levels: [none, low, medium, high, xhigh, max]
+  - id: gpt-5.6-terra
+    params:
+      effort:
+        accepted: true
+        levels: [none, low, medium, high, xhigh]
+        default: high
+      routes:
+        responses_api:
+          effort:
+            levels: [none, low, medium, high, xhigh, max]
+  - id: gpt-6-astra
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high, xhigh]
+        default: high
+      routes:
+        responses_api:
+          effort:
+            levels: [low, medium, high, xhigh, max]
+  - id: gpt-6-luna
+    params:
+      effort:
+        accepted: true
+        levels: [none, low, medium, high, xhigh]
+        default: high
+      routes:
+        responses_api:
+          effort:
+            levels: [none, low, medium, high, xhigh, max]
+  - id: gpt-6-sol
+    params:
+      effort:
+        accepted: true
+        levels: [none, low, medium, high, xhigh]
+        default: high
+      routes:
+        responses_api:
+          effort:
+            levels: [none, low, medium, high, xhigh, max]
+  - id: gpt-6.1-sol
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high, xhigh]
+        default: high
+  anthropic:
+  - id: claude-opus-5-5
+    params:
+      effort:
+        levels: [low, medium, high, xhigh, max]
+        default: medium
+  - id: claude-opus-4-8
+    params: {thinksByDefault: false}
+  - id: claude-opus-4-7
+    params: {thinksByDefault: false}
+  - id: claude-opus-4-6
+    profile: anthropic-sampling
+    params:
+      thinksByDefault: false
+      effort:
+        levels: [low, medium, high, max]
+  - id: claude-sonnet-4-6
+    profile: anthropic-sampling
+    params:
+      thinksByDefault: false
+      effort:
+        levels: [low, medium, high, max]
+  - id: claude-opus-4-5-20251101
+    profile: anthropic-sampling
+    params:
+      thinksByDefault: false
+      effort:
+        levels: [low, medium, high]
+  - id: claude-sonnet-4-5-20250929
+    profile: anthropic-sampling
+    params:
+      thinksByDefault: false
+      effort: {accepted: false}
+  - id: claude-haiku-4-5-20251001
+    profile: anthropic-sampling
+    params:
+      thinksByDefault: false
+      effort: {accepted: false}
+  - id: claude-mythos-preview
+    params:
+      effort:
+        levels: [low, medium, high, max]
+  - id: claude-3-7-sonnet-20250219
+    profile: anthropic-sampling
+    params:
+      thinksByDefault: false
+      effort: {accepted: false}
+  - id: claude-opus-4-1-20250805
+    profile: anthropic-sampling
+    params:
+      thinksByDefault: false
+      effort: {accepted: false}
+  - id: claude-opus-4-20250514
+    profile: anthropic-sampling
+    params:
+      thinksByDefault: false
+      effort: {accepted: false}
+  - id: claude-opus-4-6-20260205
+    profile: anthropic-sampling
+    params:
+      thinksByDefault: false
+      effort:
+        levels: [low, medium, high, max]
+  - id: claude-opus-4-7-20260416
+    params: {thinksByDefault: false}
+  - id: claude-sonnet-4-20250514
+    profile: anthropic-sampling
+    params:
+      thinksByDefault: false
+      effort: {accepted: false}
+  - id: claude-sonnet-4-5
+    profile: anthropic-sampling
+    params:
+      thinksByDefault: false
+      effort: {accepted: false}
+  - id: claude-sonnet-5-5
+    awaitingSync: true
+    params:
+      maxOutputTokens: {max: 128000}
+  - id: claude-haiku-5-5
+    awaitingSync: true
+    params:
+      maxOutputTokens: {max: 128000}
+      effort:
+        levels: [low, medium, high, xhigh, max]
+        default: medium
+  gemini:
+  - id: gemini-3.8-flash
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high]
+        default: medium
+  - id: gemini-3.7-flash
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high]
+        default: medium
+  - id: gemini-3.6-flash
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [minimal, low, medium, high]
+        default: medium
+  - id: gemini-3.5-flash
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [minimal, low, medium, high]
+        default: medium
+  - id: gemini-3.5-flash-lite
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [none, minimal, low, medium, high]
+        default: none
+  - {id: gemini-3.5-transcribe, profile: gemini-no-sampling}
+  - id: gemini-3.1-pro-preview
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high]
+        default: high
+  - id: gemini-3.1-flash-lite
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [none, minimal, low, medium, high]
+        default: none
+  - id: gemini-3-flash-preview
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [minimal, low, medium, high]
+        default: high
+  - id: gemini-2.5-pro
+    params:
+      effort:
+        accepted: true
+        levels: [auto, low, medium, high]
+        default: auto
+  - id: gemini-2.5-flash
+    params:
+      effort:
+        accepted: true
+        levels: [auto, low, medium, high]
+        default: auto
+  - id: gemini-2.5-flash-lite
+    params:
+      effort:
+        accepted: true
+        levels: [auto, 'off', low, medium, high]
+        default: 'off'
+  - {id: gemini-flash-latest-high-res-exp, profile: gemini-no-sampling}
+  - {id: gemini-omni-1.1-flash, profile: gemini-no-sampling}
+  - {id: gemini-3-pro-image, profile: gemini-no-sampling}
+  - {id: gemini-3-pro-image-preview, profile: gemini-no-sampling}
+  - id: gemini-3-pro-preview
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [low, high]
+        default: high
+  - {id: gemini-3.1-flash-image, profile: gemini-no-sampling}
+  - {id: gemini-3.1-flash-image-preview, profile: gemini-no-sampling}
+  - {id: gemini-3.1-flash-lite-image, profile: gemini-no-sampling}
+  - id: gemini-3.1-flash-lite-preview
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [none, minimal, low, medium, high]
+        default: none
+  - {id: gemini-3.1-flash-tts-preview, profile: gemini-no-sampling}
+  - {id: gemini-3.8-flash-lite-tts, profile: gemini-no-sampling}
+  - {id: gemini-3.8-flash-tts, profile: gemini-no-sampling}
+  - {id: gemini-omni-flash-preview, profile: gemini-no-sampling}
+  vertex-ai:
+  - id: gemini-3.8-flash
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high]
+        default: medium
+  - id: gemini-3.7-flash
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high]
+        default: medium
+  - id: gemini-3.6-flash
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [minimal, low, medium, high]
+        default: medium
+  - id: gemini-3.5-flash
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [minimal, low, medium, high]
+        default: medium
+  - id: gemini-3.5-flash-lite
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [none, minimal, low, medium, high]
+        default: none
+  - id: gemini-3.1-pro-preview
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high]
+        default: high
+  - id: gemini-3.1-flash-lite
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [none, minimal, low, medium, high]
+        default: none
+  - id: gemini-3.1-flash-lite-preview
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [none, minimal, low, medium, high]
+        default: none
+  - id: gemini-3-pro-preview
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [low, high]
+        default: high
+  - id: gemini-3-flash-preview
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [minimal, low, medium, high]
+        default: high
+  - id: gemini-2.5-pro
+    params:
+      effort:
+        accepted: true
+        levels: [auto, low, medium, high]
+        default: auto
+  - id: gemini-2.5-flash
+    params:
+      effort:
+        accepted: true
+        levels: [auto, low, medium, high]
+        default: auto
+  - {id: gemini-omni-1.1-flash, profile: gemini-no-sampling}
+  - {id: gemini-robotics-er-2, profile: gemini-no-sampling}
+  - id: gemini-2.5-flash-lite-preview-06-17
+    params:
+      effort:
+        accepted: true
+        levels: [auto, 'off', low, medium, high]
+        default: 'off'
