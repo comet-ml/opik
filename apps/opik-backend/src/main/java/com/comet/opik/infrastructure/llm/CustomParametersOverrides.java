@@ -82,7 +82,7 @@ public class CustomParametersOverrides {
                 });
     }
 
-    public Map<String, Object> moveTokenLimitTo(@NonNull String limitKey,
+    public @Nullable Map<String, Object> moveTokenLimitTo(@NonNull String limitKey,
             @Nullable Map<String, Object> customParameters) {
         var otherKey = MAX_TOKENS.equals(limitKey) ? MAX_COMPLETION_TOKENS : MAX_TOKENS;
         if (MapUtils.isEmpty(customParameters) || !customParameters.containsKey(otherKey)) {

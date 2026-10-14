@@ -96,12 +96,8 @@ class CustomParametersOverridesTest {
                         Map.of("max_tokens", 12, "max_completion_tokens", 30), Map.of("max_tokens", 12)),
                 arguments("a limit under the name stays", "max_tokens",
                         Map.of("max_tokens", 12), Map.of("max_tokens", 12)),
-                arguments("other keys stay", "max_tokens", Map.of("top_k", 7), Map.of("top_k", 7)));
-    }
-
-    @Test
-    void moveTokenLimitToLeavesNoCustomParametersAsIs() {
-        assertThat(CustomParametersOverrides.moveTokenLimitTo("max_tokens", null)).isNull();
+                arguments("other keys stay", "max_tokens", Map.of("top_k", 7), Map.of("top_k", 7)),
+                arguments("no custom parameters stay null", "max_tokens", null, null));
     }
 
     @Test
