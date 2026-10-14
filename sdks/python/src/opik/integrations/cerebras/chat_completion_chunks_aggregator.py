@@ -51,8 +51,11 @@ def aggregate(
 
                 # Cerebras streams reasoning separately from content; without this the
                 # aggregated span would show an empty answer for reasoning models.
-                if delta.reasoning:
-                    reasoning_chunks.append(delta.reasoning)
+                # getattr because the SDK is unpinned and older versions have no
+                # `reasoning` attribute on the delta.
+                reasoning = getattr(delta, "reasoning", None)
+                if reasoning:
+                    reasoning_chunks.append(reasoning)
 
             if chunk.choices and chunk.choices[0].finish_reason:
                 aggregated_response["choices"][0]["finish_reason"] = chunk.choices[
