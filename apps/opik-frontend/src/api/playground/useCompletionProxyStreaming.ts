@@ -252,6 +252,29 @@ const useCompletionProxyStreaming = ({
           pythonProxyError = pythonProxyErrorMessage(parsedMessage.detail);
         };
 
+        const handleLine = (line: string) => {
+          const JSONData = line.startsWith(DATA_PREFIX)
+            ? line.split(DATA_PREFIX)[1]
+            : line;
+
+          if (JSONData.trim() === "[DONE]") {
+            return;
+          }
+
+          const parsed = safelyParseJSON(JSONData) as ChatCompletionResponse;
+
+          // handle different message types
+          if (isPythonProxyError(parsed)) {
+            handlePythonProxyErrorMessage(parsed);
+          } else if (isOpikError(parsed)) {
+            handleOpikErrorMessage(parsed);
+          } else if (isProviderError(parsed)) {
+            handleAIPlatformErrorMessage(parsed);
+          } else {
+            handleSuccessMessage(parsed);
+          }
+        };
+
         // buffer to hold incomplete lines across chunks
         let lineBuffer = "";
 
@@ -268,28 +291,14 @@ const useCompletionProxyStreaming = ({
           const { lines, newBuffer } = processSSEChunk(chunk, lineBuffer);
           lineBuffer = newBuffer;
 
-          for (const line of lines) {
-            const JSONData = line.startsWith(DATA_PREFIX)
-              ? line.split(DATA_PREFIX)[1]
-              : line;
+          lines.forEach(handleLine);
+        }
 
-            if (JSONData.trim() === "[DONE]") {
-              continue;
-            }
-
-            const parsed = safelyParseJSON(JSONData) as ChatCompletionResponse;
-
-            // handle different message types
-            if (isPythonProxyError(parsed)) {
-              handlePythonProxyErrorMessage(parsed);
-            } else if (isOpikError(parsed)) {
-              handleOpikErrorMessage(parsed);
-            } else if (isProviderError(parsed)) {
-              handleAIPlatformErrorMessage(parsed);
-            } else {
-              handleSuccessMessage(parsed);
-            }
-          }
+        // A request the backend rejects before streaming (such as a custom parameter Opik sets itself)
+        // gets a plain JSON 400 with no trailing newline, which is still in the buffer when the stream ends.
+        const lastLine = (lineBuffer + decoder.decode()).trim();
+        if (lastLine && !opikError && !pythonProxyError && !providerError) {
+          handleLine(lastLine);
         }
 
         return {
