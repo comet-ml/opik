@@ -328,7 +328,7 @@ class ThreadDAOImpl implements ThreadDAO {
                           AND trace_id IN (SELECT id FROM traces_final)
                       <else>
                           <if(traces_final_ids)>
-                              AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
+                              AND trace_id IN (SELECT id FROM traces_final_ids)
                           <else>
                               <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                               <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
@@ -1403,7 +1403,7 @@ class ThreadDAOImpl implements ThreadDAO {
                           WHERE workspace_id = :workspace_id
                           AND project_id = :project_id
                           <if(traces_final_ids)>
-                              AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
+                              AND trace_id IN (SELECT id FROM traces_final_ids)
                           <else>
                               <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                               <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
