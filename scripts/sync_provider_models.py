@@ -1239,19 +1239,33 @@ def _leaves(value, prefix: str = "") -> dict[str, object]:
 _DERIVED_LITELLM_FIELDS = {"effort.default", "maxOutputTokens.default"}
 
 
+def _yaml_model_ids(yaml_content: str) -> dict[str, set[str]]:
+    ids: dict[str, set[str]] = {}
+    for section, lines in _yaml_sections(yaml_content).items():
+        for line in lines:
+            id_match = re.match(r'^\s+- id:\s+"([^"]+)"', line)
+            if id_match:
+                ids.setdefault(section, set()).add(id_match.group(1))
+    return ids
+
+
 def curated_drift(
-    catalog: dict, generated: dict[str, dict[str, dict]],
-) -> tuple[list[str], list[str]]:
+    catalog: dict, generated: dict[str, dict[str, dict]], listed_ids: dict[str, set[str]] | None = None,
+) -> tuple[list[str], list[str], list[str]]:
     """
-    Curated facts the generated params now state the same way (the curated value can go), and curated facts they
-    contradict (someone should check which is right). Only a model's own curated row and profile count: the
-    provider defaults are fallbacks, so generated facts are meant to differ from them.
+    Curated facts the generated params now state the same way (the curated value can go), curated facts they
+    contradict (someone should check which is right), and rows written ahead of the sync (awaitingSync) for a model
+    it now lists. Only a model's own curated row and profile count: the provider defaults are fallbacks, so generated
+    facts are meant to differ from them.
     """
     profiles = catalog.get("profiles") or {}
-    agree, disagree = [], []
+    listed_ids = listed_ids or {}
+    agree, disagree, arrived = [], [], []
     for yaml_key, rows in (catalog.get("models") or {}).items():
         for row in rows or []:
             model_id = row.get("id")
+            if row.get("awaitingSync") is True and model_id in listed_ids.get(yaml_key, set()):
+                arrived.append(f"{yaml_key}/{model_id}")
             facts = generated.get(yaml_key, {}).get(model_id)
             if not facts:
                 continue
@@ -1268,7 +1282,7 @@ def curated_drift(
                 agree.append(f"{yaml_key}/{model_id}: {', '.join(same)}")
             if different:
                 disagree.append(f"{yaml_key}/{model_id}: {'; '.join(different)}")
-    return agree, disagree
+    return agree, disagree, arrived
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1756,9 +1770,15 @@ def main():
             print(f"- {yaml_key}: {gained} model(s) gain params, {changed} change, {lost} lose them")
         print()
 
-    drift_agree, drift_disagree = curated_drift(curated_catalog, generated_params)
-    if drift_agree or drift_disagree:
+    drift_agree, drift_disagree, drift_arrived = curated_drift(
+        curated_catalog, generated_params, _yaml_model_ids(new_llm_models_yaml),
+    )
+    if drift_agree or drift_disagree or drift_arrived:
         print("### Curated drift")
+    if drift_arrived:
+        print(f"- {len(drift_arrived)} curated row(s) wait for a model the sync now lists; their awaitingSync can go:")
+        for note in drift_arrived:
+            print(f"  + {note}")
     if drift_disagree:
         print(f"- {len(drift_disagree)} curated row(s) disagree with the generated params; check which is right:")
         for note in drift_disagree:
@@ -1767,7 +1787,7 @@ def main():
         print(f"- {len(drift_agree)} curated row(s) repeat what the generated params now say; those fields can go:")
         for note in drift_agree:
             print(f"  = {note}")
-    if drift_agree or drift_disagree:
+    if drift_agree or drift_disagree or drift_arrived:
         print()
 
     if not _should_write_files(
