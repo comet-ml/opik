@@ -262,6 +262,7 @@ jobs:
       # - mistral_tests  # disabled: Mistral API rejects the test traffic with 429
       - groq_tests
       - cerebras_tests
+      - ollama_tests
       - aisuite_tests
       - haystack_tests
       # - guardrails_tests  # disabled: guardrails-ai is on PyPI quarantine
@@ -311,6 +312,7 @@ jobs:
               "Anthropic": "${{ needs.anthropic_tests.result }}",
               "Groq": "${{ needs.groq_tests.result }}",
               "Cerebras": "${{ needs.cerebras_tests.result }}",
+              "Ollama": "${{ needs.ollama_tests.result }}",
               "AISuite": "${{ needs.aisuite_tests.result }}",
               "Haystack": "${{ needs.haystack_tests.result }}",
               "DSPy": "${{ needs.dspy_tests.result }}",
