@@ -410,12 +410,14 @@ class SpansReadPathPartitionPruningTest {
                 "dataset-" + RandomStringUtils.secure().nextAlphanumeric(16));
 
         experimentResourceClient.finishExperiments(Set.of(experimentId), API_KEY, WORKSPACE_NAME);
-        // Finishing publishes the aggregation; the statement in query_log shows it ran.
+        // Finishing publishes the aggregation after the debounce; the statement in query_log shows it ran, and the
+        // aggregate row it writes may land a moment later, so the read waits for it too.
         spansPartitionsRead(queryName, experimentId);
 
-        var actual = experimentResourceClient.getExperiment(experimentId, API_KEY, WORKSPACE_NAME);
-
-        assertThat(actual.totalEstimatedCost()).isEqualByComparingTo(FarFutureTrace.COST);
+        Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
+                .untilAsserted(() -> assertThat(experimentResourceClient
+                        .getExperiment(experimentId, API_KEY, WORKSPACE_NAME).totalEstimatedCost())
+                        .isEqualByComparingTo(FarFutureTrace.COST));
         assertSpanWeeksRead(queryName, experimentId);
     }
 
