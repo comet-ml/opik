@@ -476,7 +476,8 @@ public class AnthropicMappersTest {
                     .build();
 
             var wireBody = JsonUtils.getJsonNodeFromString(
-                    Json.toJson(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request)));
+                    Json.toJson(
+                            LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request, bundledRegistry())));
 
             assertThat(wireBody.path("thinking"))
                     .isEqualTo(JsonUtils.getJsonNodeFromString("{\"type\": \"adaptive\"}"));
@@ -495,7 +496,8 @@ public class AnthropicMappersTest {
                     "custom_parameters": {"output_config": {"effort": "high"}}}""", ChatCompletionRequest.class);
 
             var wireBody = JsonUtils.getJsonNodeFromString(
-                    Json.toJson(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request)));
+                    Json.toJson(
+                            LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request, bundledRegistry())));
 
             assertThat(wireBody.path("max_tokens").asInt()).isEqualTo(8192);
             assertThat(wireBody.path("thinking"))
@@ -514,7 +516,7 @@ public class AnthropicMappersTest {
                     .customParameters(customParameters)
                     .build();
 
-            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request, bundledRegistry());
 
             assertThat(JsonUtils.getJsonNodeFromString(Json.toJson(actual)).has("thinking")).isFalse();
             assertThat(actual.temperature).isEqualTo(expectedTemperature);

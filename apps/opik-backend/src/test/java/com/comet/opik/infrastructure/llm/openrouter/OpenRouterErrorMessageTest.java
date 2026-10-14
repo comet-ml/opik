@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
@@ -67,7 +68,7 @@ class OpenRouterErrorMessageTest {
         clientConfig.setLogResponses(false);
         clientConfig.setOpenRouterUrl(wireMock.baseUrl() + "/api/v1");
 
-        var clientGenerator = new OpenRouterModule().clientGenerator(clientConfig);
+        var clientGenerator = new OpenRouterModule().clientGenerator(clientConfig, bundledRegistry());
         provider = new OpenRouterLlmServiceProvider(clientGenerator, mock(LlmProviderFactory.class))
                 .getService(LlmProviderClientApiConfig.builder().apiKey("test-key").build());
     }
