@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
@@ -51,7 +52,8 @@ class AnthropicClientGeneratorTest {
     private static final int DEFAULT_MAX_TOKENS = LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS;
     private static final int THINKING_MAX_TOKENS = AnthropicClientGenerator.THINKING_JUDGE_MAX_TOKENS;
 
-    private final AnthropicClientGenerator generator = new AnthropicClientGenerator(new LlmProviderClientConfig());
+    private final AnthropicClientGenerator generator = new AnthropicClientGenerator(new LlmProviderClientConfig(),
+            bundledRegistry());
 
     private AnthropicChatRequestParameters generateChatParameters(LlmAsJudgeModelParameters modelParameters) {
         var config = LlmProviderClientApiConfig.builder().apiKey("test-key").build();
@@ -66,15 +68,15 @@ class AnthropicClientGeneratorTest {
         @ParameterizedTest
         @ValueSource(strings = {"claude-sonnet-5", "claude-opus-4-7", "claude-opus-4-8", "claude-opus-5",
                 "claude-fable-5", "claude-fable-5-1"})
-        void rejectsSamplingParamsForModelsNotMarkedCapable(String modelName) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isTrue();
+        void rejectsTemperatureForModelsNotMarkedCapable(String modelName) {
+            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isTrue();
         }
 
         @ParameterizedTest
         @ValueSource(strings = {"claude-3-7-sonnet-20250219", "claude-haiku-4-5-20251001", "claude-sonnet-4-5",
                 "claude-opus-4-6", "claude-opus-4-6-20260205"})
         void acceptsSamplingParamsForTheModelsNamedCapable(String modelName) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
+            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isFalse();
         }
 
         /**
@@ -89,7 +91,7 @@ class AnthropicClientGeneratorTest {
                 "custom-llm/gw/claude-prod", "custom-llm/gw/claude-internal-v3", "claude-future-99",
                 "claude-30-future"})
         void staysPermissiveForNamesThatAreNotAnthropicIds(String modelName) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
+            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isFalse();
         }
 
         /**
@@ -104,7 +106,7 @@ class AnthropicClientGeneratorTest {
                 "~anthropic/claude-sonnet-latest, true",
                 "~anthropic/claude-fable-latest, true"})
         void readsAFloatingAliasAsTheFamilysNewestMember(String modelName, boolean rejects) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isEqualTo(rejects);
+            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isEqualTo(rejects);
         }
 
         /**
@@ -118,7 +120,7 @@ class AnthropicClientGeneratorTest {
                 // must not inherit claude-sonnet-4-6's capability.
                 "claude-sonnet-4-6-1"})
         void assumesAnUnplaceableAnthropicIdTakesNone(String modelName) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isTrue();
+            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isTrue();
         }
 
         /** Claude 3 predates the constraint, and is recognised by shape rather than being listed. */
@@ -129,14 +131,14 @@ class AnthropicClientGeneratorTest {
                 // rather than collapsing to the bare family word.
                 "anthropic.claude-v2:1", "anthropic.claude-instant-v1", "claude-2-1"})
         void staysPermissiveForTheGenerationThatPredatesTheConstraint(String modelName) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
+            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isFalse();
         }
 
         @ParameterizedTest
         @NullAndEmptySource
         @ValueSource(strings = {"   "})
         void staysPermissiveForNullOrBlankModel(String modelName) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
+            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isFalse();
         }
 
         /**
@@ -156,7 +158,7 @@ class AnthropicClientGeneratorTest {
                 "CLAUDE_OPUS_4_8", "CLAUDE_OPUS_5", "CLAUDE_FABLE_5",
                 "CLAUDE_FABLE_5_1"}, mode = EnumSource.Mode.INCLUDE)
         void modelsTakingNoSamplingParamsRejectThem(AnthropicModelName model) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(model.getValue())).isTrue();
+            assertThat(ModelCapabilities.rejectsTemperature(model.getValue(), bundledRegistry())).isTrue();
         }
     }
 
@@ -168,7 +170,7 @@ class AnthropicClientGeneratorTest {
         @EnumSource(value = AnthropicModelName.class, names = {"CLAUDE_SONNET_5", "CLAUDE_OPUS_5", "CLAUDE_OPUS_5_5",
                 "CLAUDE_FABLE_5", "CLAUDE_FABLE_5_1", "CLAUDE_MYTHOS_5", "CLAUDE_MYTHOS_5_1"})
         void modelsThatThinkWhenTheRequestOmitsThinking(AnthropicModelName model) {
-            assertThat(ModelCapabilities.thinksByDefault(model.getValue())).isTrue();
+            assertThat(ModelCapabilities.thinksByDefault(model.getValue(), bundledRegistry())).isTrue();
         }
 
         @ParameterizedTest
@@ -177,7 +179,7 @@ class AnthropicClientGeneratorTest {
                 "CLAUDE_OPUS_4_7", "CLAUDE_OPUS_4_7_20260416", "CLAUDE_OPUS_4_8", "CLAUDE_SONNET_4",
                 "CLAUDE_SONNET_4_5", "CLAUDE_SONNET_4_5_20250929", "CLAUDE_SONNET_4_6"})
         void modelsThatThinkOnlyWhenAsked(AnthropicModelName model) {
-            assertThat(ModelCapabilities.thinksByDefault(model.getValue())).isFalse();
+            assertThat(ModelCapabilities.thinksByDefault(model.getValue(), bundledRegistry())).isFalse();
         }
 
         @ParameterizedTest
@@ -189,7 +191,7 @@ class AnthropicClientGeneratorTest {
                 "custom-llm/gw/claude-prod, false",
                 "gpt-5, false"})
         void placesIdsTheEnumDoesNotList(String modelName, boolean thinks) {
-            assertThat(ModelCapabilities.thinksByDefault(modelName)).isEqualTo(thinks);
+            assertThat(ModelCapabilities.thinksByDefault(modelName, bundledRegistry())).isEqualTo(thinks);
         }
     }
 
