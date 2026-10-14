@@ -89,6 +89,39 @@ describe("GuidanceSheet", () => {
     expect(setOpen).not.toHaveBeenCalled();
   });
 
+  it("does what the primary button does on Cmd/Ctrl+Enter", () => {
+    const onRun = vi.fn();
+    renderSheet({ onRun });
+    const field = screen.getByLabelText("About this project");
+
+    fireEvent.keyDown(field, { key: "Enter", metaKey: true });
+    expect(mutate).not.toHaveBeenCalled();
+
+    fireEvent.change(field, { target: { value: "Draft" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(mutate).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(field, { key: "Enter", ctrlKey: true });
+    expect(mutate).toHaveBeenCalledWith(
+      { projectId: "p1", guidance: "Draft" },
+      expect.anything(),
+    );
+    expect(onRun).toHaveBeenCalledTimes(1);
+  });
+
+  it("only saves on Cmd/Ctrl+Enter when a run can't start", () => {
+    renderSheet({ onRun: undefined });
+    const field = screen.getByLabelText("About this project");
+
+    fireEvent.change(field, { target: { value: "Draft" } });
+    fireEvent.keyDown(field, { key: "Enter", metaKey: true });
+
+    expect(mutate).toHaveBeenCalledWith(
+      { projectId: "p1", guidance: "Draft" },
+      expect.anything(),
+    );
+  });
+
   it("saves without running from the split menu", () => {
     const onRun = vi.fn();
     renderSheet({ onRun });
