@@ -211,9 +211,9 @@ databaseAnalyticsDataModel:
   spanWeeksBackfillEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED:-false}
 
 # Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
-# It tiles the span ids into ranges of weeks, from the first span's created_at week to the plan's own week, open at both
-# ends, and backfills one range per run. Progress is kept in the span_weeks_backfill_chunks state table, so it resumes
-# across restarts.
+# It tiles the span ids into ranges of weeks, from the install week (the first project's created_at) to the plan's own
+# week, open at both ends, and backfills one range per run. Progress is kept in the span_weeks_backfill_chunks state
+# table, so it resumes across restarts.
 spanWeeksBackfill:
   #  Default: 5m
   #  Description: How often a run starts, and how long it holds the job lock: at most one chunk per interval across

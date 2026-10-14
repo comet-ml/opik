@@ -86,7 +86,7 @@ class SpanWeeksBackfillJobIntegrationTest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouse, DATABASE_NAME);
         MigrationUtils.runMysqlDbMigration(mysql);
         MigrationUtils.runClickhouseDbMigration(clickHouse);
-        // The job on and live registration off, so every week found is the backfill's. Each tick holds the lock for the
+        // The job is on and live registration is off, so every week found is the backfill's. Each tick holds the lock for the
         // whole interval, so the interval is short: the startup tick plans, and one chunk follows per interval.
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(mysql.getJdbcUrl())
