@@ -1046,7 +1046,7 @@ def litellm_params(provider_key: str, model_id: str, info: dict, default_max_out
             params["maxOutputTokens"]["default"] = max_output
 
     sampling = info.get("supports_sampling_params")
-    if isinstance(sampling, bool) and provider_key in ("openai", "anthropic"):
+    if isinstance(sampling, bool):
         for field in SAMPLING_FIELDS if provider_key == "anthropic" else ("temperature", "topP"):
             params[field] = {"accepted": sampling}
 
@@ -1109,6 +1109,8 @@ def fetch_openrouter_params() -> dict[str, dict]:
 
 
 def _flow_scalar(value) -> str:
+    if value is None:
+        return "null"
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (int, float)):
@@ -1187,7 +1189,13 @@ def build_params_lines(
         for entry in entries:
             model_id = entry.value.removeprefix("vertex_ai/") if provider_key == "vertexai" else entry.value
             if provider_key == "openrouter":
-                params = (openrouter_params or {}).get(model_id, {})
+                if openrouter_params is not None and model_id in openrouter_params:
+                    params = openrouter_params[model_id]
+                    # OpenRouter lists the model but no parameters: its old params no longer hold.
+                    if not params:
+                        continue
+                else:
+                    params = {}
             else:
                 info = _litellm_info(prices, provider_key, entry.value)
                 params = litellm_params(provider_key, model_id, info, max_output_defaults.get(yaml_key)) if info else {}
