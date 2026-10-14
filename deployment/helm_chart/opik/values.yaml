@@ -822,6 +822,8 @@ databaseAnalyticsDataModel:
   # Register each written span's weekly partition in the span_weeks index. Turn true before the span weeks
   # backfill starts.
   spanWeeksWriteEnabled: false
+  # Run the span weeks backfill job. Turn true only once spanWeeksWriteEnabled is live on every backend instance.
+  spanWeeksBackfillEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
 # lightweight-delete mask and publishes opik.clickhouse.partition.* gauges; a distributed lock keeps

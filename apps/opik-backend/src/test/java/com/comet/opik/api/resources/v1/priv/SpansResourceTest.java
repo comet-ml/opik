@@ -2413,7 +2413,7 @@ class SpansResourceTest {
             long illegalArgBefore = readClickHouseErrorCount(templateAsync, 43);
             long parseQuotedBefore = readClickHouseErrorCount(templateAsync, 26);
 
-            // Cover every null/non-null branch of the fields this PR touches in BULK_INSERT:
+            // Cover every null/non-null branch of the fields this PR touches in the span bulk insert:
             // - endTime: null (row A) + non-null (row B)
             // - lastUpdatedAt: null (row A) + non-null (row B)
             // - usage: null (row A) + non-empty Map (row B)
@@ -2434,8 +2434,9 @@ class SpansResourceTest {
 
             spanResourceClient.batchCreateSpans(List.of(rowA, rowB), API_KEY, workspaceName);
 
-            // After the fix, the spans BULK_INSERT must not increment any of the FORMAT Values
-            // fast-path counters. See OPIK-5694.
+            // The spans batch path writes JSONEachRow and so cannot reach the FORMAT Values
+            // fast-path at all. These counters stay as a guard against it regressing back to a
+            // Values-bound insert, which is what tripped them. See OPIK-5694.
             assertThat(readClickHouseErrorCount(templateAsync, 70) - convertTypeBefore)
                     .as("CANNOT_CONVERT_TYPE (70): NULL bound to non-nullable last_updated_at")
                     .isZero();
