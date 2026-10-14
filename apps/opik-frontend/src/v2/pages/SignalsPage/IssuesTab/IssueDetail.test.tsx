@@ -94,6 +94,7 @@ describe("IssueDetail status actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close issue" }));
 
     expect(screen.getByRole("radio", { name: /Resolved/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Resolved/ })).toHaveFocus();
     expect(
       screen.queryByLabelText("Why isn't it useful? (Optional)"),
     ).not.toBeInTheDocument();
@@ -168,6 +169,47 @@ describe("IssueDetail status actions", () => {
       screen.getByLabelText("Why isn't it useful? (Optional)"),
     ).toHaveValue("Expected");
     expect(toast).not.toHaveBeenCalled();
+  });
+
+  it("submits with Enter; in the reason field Enter is a new line and Cmd+Enter submits", () => {
+    renderWithToggle();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close issue" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Not useful/ }));
+    const reason = screen.getByLabelText("Why isn't it useful? (Optional)");
+    fireEvent.change(reason, { target: { value: "Expected" } });
+
+    fireEvent.keyDown(reason, { key: "Enter" });
+    expect(mutate).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(reason, { key: "Enter", metaKey: true });
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        issueId: "i1",
+        projectId: "p1",
+        status: "closed",
+        closeNote: "Expected",
+      },
+      expect.anything(),
+    );
+  });
+
+  it("submits the preselected Resolved with Enter, but Enter on Cancel only cancels", () => {
+    renderWithToggle();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close issue" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Cancel" }), {
+      key: "Enter",
+    });
+    expect(mutate).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(screen.getByRole("radio", { name: /Resolved/ }), {
+      key: "Enter",
+    });
+    expect(mutate).toHaveBeenCalledWith(
+      { issueId: "i1", projectId: "p1", status: "resolved" },
+      expect.anything(),
+    );
   });
 
   it("resolves in one click with a toast when the guidance toggle is off", () => {

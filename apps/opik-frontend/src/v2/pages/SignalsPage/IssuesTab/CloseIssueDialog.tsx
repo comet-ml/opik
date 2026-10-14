@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 import { CircleCheck, LucideIcon, ThumbsDown } from "lucide-react";
 import { Button } from "@/ui/button";
@@ -64,6 +64,7 @@ const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
     AGENT_INSIGHTS_ISSUE_STATUS.resolved,
   );
   const [note, setNote] = useState("");
+  const selectedRef = useRef<HTMLButtonElement>(null);
 
   // Before paint, so a reopened dialog never flashes the previous choice.
   useLayoutEffect(() => {
@@ -75,9 +76,40 @@ const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
 
   const isNotUseful = status === AGENT_INSIGHTS_ISSUE_STATUS.closed;
 
+  const submit = () => {
+    if (isPending) return;
+    onConfirm(status, isNotUseful ? note.trim() : undefined);
+  };
+
+  // Enter submits; inside the reason field Enter is a new line and Cmd/Ctrl+Enter
+  // submits, like the other forms with a text area. Enter on Cancel or the close
+  // button keeps its own action.
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    const target = event.target as HTMLElement;
+    if (target instanceof HTMLTextAreaElement) {
+      if (!event.metaKey && !event.ctrlKey) return;
+    } else if (
+      target instanceof HTMLButtonElement &&
+      target.getAttribute("role") !== "radio"
+    ) {
+      return;
+    }
+    event.preventDefault();
+    submit();
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-lg gap-1.5 p-5 sm:max-w-screen-sm">
+      <DialogContent
+        className="max-w-lg gap-1.5 p-5 sm:max-w-screen-sm"
+        onKeyDown={handleKeyDown}
+        // Start on the selected option (not Cancel), so Enter right away closes the issue.
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          selectedRef.current?.focus();
+        }}
+      >
         <DialogHeader className="pb-0">
           <DialogTitle className="text-base leading-5">Close issue</DialogTitle>
           <DialogDescription className="text-muted-slate">
@@ -107,6 +139,7 @@ const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
                 )}
               >
                 <RadioGroupPrimitive.Item
+                  ref={selected ? selectedRef : undefined}
                   value={value}
                   className="flex flex-col items-start gap-0.5 text-left focus:outline-none focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring"
                 >
@@ -159,13 +192,7 @@ const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
           >
             Cancel
           </Button>
-          <Button
-            size="sm"
-            disabled={isPending}
-            onClick={() =>
-              onConfirm(status, isNotUseful ? note.trim() : undefined)
-            }
-          >
+          <Button size="sm" disabled={isPending} onClick={submit}>
             Close issue
           </Button>
         </DialogFooter>
