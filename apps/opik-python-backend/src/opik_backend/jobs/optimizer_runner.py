@@ -192,10 +192,11 @@ def route_litellm_calls_through_gateway(workspace_name):
 
 def _gateway_model(model: str) -> str:
     """Prefix with ``openai/`` so LiteLLM uses its OpenAI handler — the only one
-    that honors ``OPENAI_API_BASE`` (the gateway). LiteLLM strips the prefix, so
-    the gateway still receives the provider-qualified model and routes it (e.g.
-    ``vertex_ai/gemini-2.5-flash``)."""
-    return model if model.startswith("openai/") else f"openai/{model}"
+    that honors ``OPENAI_API_BASE`` (the gateway). LiteLLM strips exactly one
+    prefix, so the gateway gets the stored id unchanged. Always prefix, even ids
+    that already start with ``openai/``: those are OpenRouter ids, and skipping
+    the prefix would send ``gpt-5-nano`` to native OpenAI."""
+    return f"openai/{model}"
 
 
 def _with_stream(params):
