@@ -10,6 +10,7 @@ import {
   useSetExperimentName,
 } from "@/store/PlaygroundStore";
 import { generateDefaultPrompt, isEmptyMessage } from "@/lib/playground";
+import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 import { DATASET_TYPE } from "@/types/datasets";
 import {
   generateDefaultLLMPromptMessage,
@@ -25,6 +26,7 @@ import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { MessageContent } from "@/types/llm";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { formatDatasetVersionKey } from "@/utils/datasetVersionStorage";
 
 interface NamedPromptContent {
@@ -42,6 +44,9 @@ interface LoadPlaygroundOptions {
   datasetType?: DATASET_TYPE | null;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   namedPrompts?: NamedPromptContent[];
+  // Used instead of the last picked model when a configured provider serves it,
+  // e.g. the model a logged LLM span ran on.
+  preferredModel?: PROVIDER_MODEL_TYPE;
 }
 
 function useLoadPlayground() {
@@ -57,8 +62,11 @@ function useLoadPlayground() {
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
-  const { calculateModelProvider, calculateDefaultModel } =
-    useLLMProviderModelsData();
+  const {
+    calculateModelProvider,
+    calculateDefaultModel,
+    isPending: isPendingModels,
+  } = useLLMProviderModelsData();
 
   const { data: providerKeysData, isPending: isPendingProviderKeys } =
     useProviderKeys({
@@ -93,6 +101,7 @@ function useLoadPlayground() {
         autoImprove?: boolean;
         templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
         initPrompt?: Partial<ReturnType<typeof generateDefaultPrompt>>;
+        preferredModel?: PROVIDER_MODEL_TYPE;
       } = {},
     ) => {
       const {
@@ -101,14 +110,32 @@ function useLoadPlayground() {
         autoImprove = false,
         templateStructure,
         initPrompt,
+        preferredModel,
       } = options;
+
+      // A bare model id can be listed under more than one provider (Gemini and
+      // Vertex AI), so look for a configured provider that serves it and
+      // resolve the model against that provider.
+      const preferredModelProvider = preferredModel
+        ? providerKeys.find(
+            (key) => calculateModelProvider(preferredModel, key) === key,
+          )
+        : undefined;
 
       const newPrompt = generateDefaultPrompt({
         initPrompt,
         setupProviders: providerKeys,
-        lastPickedModel,
-        providerResolver: calculateModelProvider,
-        modelResolver: calculateDefaultModel,
+        lastPickedModel:
+          preferredModel && preferredModelProvider
+            ? getRoutableProviderModelValue(
+                preferredModelProvider,
+                preferredModel,
+              )
+            : lastPickedModel,
+        providerResolver: (model) =>
+          calculateModelProvider(model, preferredModelProvider),
+        modelResolver: (model, setupProviders) =>
+          calculateDefaultModel(model, setupProviders, preferredModelProvider),
       });
 
       if (templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
@@ -183,6 +210,7 @@ function useLoadPlayground() {
         datasetType,
         templateStructure,
         namedPrompts,
+        preferredModel,
       } = options;
 
       let promptIds: string[];
@@ -203,6 +231,7 @@ function useLoadPlayground() {
           promptVersionId,
           autoImprove,
           templateStructure,
+          preferredModel,
         });
         promptIds = [newPrompt.id];
         promptMap = { [newPrompt.id]: newPrompt };
@@ -246,6 +275,7 @@ function useLoadPlayground() {
     loadPlayground,
     isPlaygroundEmpty,
     isPendingProviderKeys,
+    isPendingModels,
   };
 }
 
