@@ -48,6 +48,38 @@ export function createHostListeners(): HostListeners {
   };
 }
 
+/** A request made before the console subscribed (sidebar closed or still loading), delivered once it does. */
+export interface PendingRequest<T> {
+  data: T;
+  // The dashboard open when it was made; it is dropped on any other.
+  dashboardId?: string;
+  at: number;
+}
+
+// Older requests are dropped instead of firing long after the click, out of context.
+export const PENDING_REQUEST_TTL_MS = 30_000;
+
+const isPendingCurrent = (
+  pending: PendingRequest<unknown>,
+  dashboardId: string | undefined,
+) =>
+  Date.now() - pending.at <= PENDING_REQUEST_TTL_MS &&
+  (!pending.dashboardId || pending.dashboardId === dashboardId);
+
+/** Drops parked requests that no longer belong to the open dashboard. */
+export function dropStalePending(
+  pending: MutableRefObject<PendingRequest<unknown> | null>[],
+  dashboardId: string | undefined,
+) {
+  pending.forEach((ref) => {
+    if (ref.current && !isPendingCurrent(ref.current, dashboardId)) {
+      ref.current = null;
+    }
+  });
+}
+
+type ParkableEvent = "conversation:start" | "chart:edit";
+
 /** The live values `createBridge` reads through (kept current by the component). */
 export interface BridgeRefs {
   navigate: MutableRefObject<
@@ -67,8 +99,39 @@ export interface BridgeRefs {
     (data: SidebarEventMap["dashboard:updated"]) => void
   >;
   lastRunnerState: MutableRefObject<RunnerBridgeState | null>;
-  pendingChartEdit?: MutableRefObject<ChartEditRequest | null>;
+  pendingChartEdit?: MutableRefObject<PendingRequest<ChartEditRequest> | null>;
+  pendingConversation?: MutableRefObject<PendingRequest<
+    HostEventMap["conversation:start"]
+  > | null>;
 }
+
+const pendingRefFor = <E extends ParkableEvent>(refs: BridgeRefs, event: E) =>
+  (event === "chart:edit"
+    ? refs.pendingChartEdit
+    : refs.pendingConversation) as
+    | MutableRefObject<PendingRequest<HostEventMap[E]> | null>
+    | undefined;
+
+/** Opens the sidebar and delivers the request, or parks it until the console subscribes. */
+const sendOrPark = <E extends ParkableEvent>(
+  refs: BridgeRefs,
+  event: E,
+  data: HostEventMap[E],
+) => {
+  refs.onRequestVisibility.current(true);
+  if (refs.listeners.current[event].size > 0) {
+    emitHostEvent(refs.listeners, event, data);
+    return;
+  }
+  const pending = pendingRefFor(refs, event);
+  if (pending) {
+    pending.current = {
+      data,
+      dashboardId: refs.context.current.dashboard?.id,
+      at: Date.now(),
+    };
+  }
+};
 
 /**
  * Host→shell events handled by exactly ONE live console subscriber. A second
@@ -125,11 +188,16 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
       );
     }
 
-    // An edit requested before the console subscribed (sidebar was closed or still loading) is delivered now.
-    if (event === "chart:edit" && refs.pendingChartEdit?.current) {
-      const pending = refs.pendingChartEdit.current;
-      refs.pendingChartEdit.current = null;
-      (callback as (data: ChartEditRequest) => void)(pending);
+    // A request made before the console subscribed (sidebar was closed or still loading) is delivered now.
+    if (event === "chart:edit" || event === "conversation:start") {
+      const pendingRef = pendingRefFor(refs, event);
+      const pending = pendingRef?.current;
+      if (pendingRef && pending) {
+        pendingRef.current = null;
+        if (isPendingCurrent(pending, refs.context.current.dashboard?.id)) {
+          (callback as (data: unknown) => void)(pending.data);
+        }
+      }
     }
 
     return () => {
@@ -179,15 +247,10 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
     }
   },
   startConversation: (message: string) => {
-    emitHostEvent(refs.listeners, "conversation:start", { message });
+    sendOrPark(refs, "conversation:start", { message });
   },
   editChart: (request: ChartEditRequest) => {
-    refs.onRequestVisibility.current(true);
-    if (refs.listeners.current["chart:edit"].size > 0) {
-      emitHostEvent(refs.listeners, "chart:edit", request);
-    } else if (refs.pendingChartEdit) {
-      refs.pendingChartEdit.current = request;
-    }
+    sendOrPark(refs, "chart:edit", request);
   },
 });
 

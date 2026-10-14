@@ -84,3 +84,44 @@ describe("OllieChartWidget preview", () => {
     expect(screen.getByText("No data")).toBeTruthy();
   });
 });
+
+describe("OllieChartWidget saved widget", () => {
+  const renderSaved = (savedWidgetIds: string[] | null, error?: unknown) => {
+    setStore(ollieWidget("preview"));
+    useDashboardStore.setState({ savedWidgetIds });
+    queryMock.mockReset();
+    queryMock.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isFetching: false,
+      error: error ?? null,
+      refetch: vi.fn(),
+      dataUpdatedAt: 0,
+    } as never);
+    render(<OllieChartWidget sectionId="s1" widgetId="w-1" />);
+  };
+
+  it.each([
+    [403, "Data is masked"],
+    [404, "Query not found"],
+    [501, "Charts unavailable"],
+    [500, "Query failed"],
+  ])("explains a %s from the query", (status, title) => {
+    renderSaved(
+      ["w-1"],
+      Object.assign(new Error("backend message"), { status }),
+    );
+
+    expect(screen.getByText(title)).toBeTruthy();
+  });
+
+  it.each([
+    ["the server has the widget", ["w-1"], false],
+    ["the widget isn't saved yet", ["w-2"], true],
+    ["the dashboard isn't loaded", null, true],
+  ])("retries a 404 only when %s", (_, savedWidgetIds, retryNotFound) => {
+    renderSaved(savedWidgetIds);
+
+    expect(queryMock.mock.calls.at(-1)![1]?.retryNotFound).toBe(retryNotFound);
+  });
+});

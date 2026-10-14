@@ -14,6 +14,7 @@ import {
   ChartEditRequest,
   BridgeContext,
   BridgeSurface,
+  HostEventMap,
   RunnerBridgeState,
   SidebarEventMap,
 } from "@/types/assistant-sidebar";
@@ -52,10 +53,12 @@ import useExplainStore from "@/plugins/comet/explain/explainStore";
 import {
   createBridge,
   createHostListeners,
+  dropStalePending,
   emitHostEvent,
   useLatestRef,
   useRegisterExplainEmitter,
   type HostListeners,
+  type PendingRequest,
 } from "@/plugins/comet/assistantBridge";
 
 interface AssistantSidebarLoaderProps {
@@ -253,7 +256,12 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   const onWidthChangeRef = useLatestRef(onWidthChange);
   const listenersRef = useRef<HostListeners>(createHostListeners());
   const lastRunnerStateRef = useRef<RunnerBridgeState | null>(null);
-  const pendingChartEditRef = useRef<ChartEditRequest | null>(null);
+  const pendingChartEditRef = useRef<PendingRequest<ChartEditRequest> | null>(
+    null,
+  );
+  const pendingConversationRef = useRef<PendingRequest<
+    HostEventMap["conversation:start"]
+  > | null>(null);
 
   const { handleRequestPair } = useRunnerBridgeSync({
     projectId: context.projectId,
@@ -343,6 +351,7 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
       listeners: listenersRef,
       lastRunnerState: lastRunnerStateRef,
       pendingChartEdit: pendingChartEditRef,
+      pendingConversation: pendingConversationRef,
     }),
   );
 
@@ -386,6 +395,10 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
 
   // Emit context changes to sidebar listeners
   useEffect(() => {
+    dropStalePending(
+      [pendingChartEditRef, pendingConversationRef],
+      context.dashboard?.id,
+    );
     emitHostEvent(listenersRef, "context:changed", context);
   }, [context]);
 

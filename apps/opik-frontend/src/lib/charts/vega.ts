@@ -219,6 +219,36 @@ const setChannelProperty = (
 const distinctCount = (rows: VegaRows, field: unknown) =>
   typeof field === "string" ? new Set(rows.map((row) => row[field])).size : 0;
 
+// Transforms that neither drop nor invent rows, so the raw rows still hold every value a field ends up with.
+const ROW_PRESERVING_TRANSFORMS = [
+  "aggregate",
+  "bin",
+  "calculate",
+  "joinaggregate",
+  "stack",
+  "timeUnit",
+  "window",
+];
+
+const toArray = (value: unknown): unknown[] =>
+  Array.isArray(value) ? value : value === undefined ? [] : [value];
+
+const transformOutputs = (transform: Unit) => [
+  ...toArray(transform.as),
+  ...["aggregate", "joinaggregate", "window"].flatMap((key) =>
+    toArray(transform[key]).map((op) => (op as Unit | undefined)?.as),
+  ),
+];
+
+/** True when the transforms can't leave `field` with a value the raw rows lack, or drop one they have. */
+const keepsFieldValues = (transforms: unknown[], field: string) =>
+  transforms.every((item) => {
+    const transform = item as Unit;
+    const kind = ROW_PRESERVING_TRANSFORMS.find((key) => key in transform);
+    if (!kind || transformOutputs(transform).includes(field)) return false;
+    return kind !== "aggregate" || toArray(transform.groupby).includes(field);
+  });
+
 /** Colour and shape rules a config cannot express, because they depend on the mark and the data. */
 const applyChartRules = (
   unit: Unit,
@@ -226,17 +256,15 @@ const applyChartRules = (
   tokens: ChartTokens,
   {
     colorOverride,
-    parentTransformed = false,
+    parentTransforms = [],
   }: Pick<VegaRenderOptions, "colorOverride"> & {
-    parentTransformed?: boolean;
+    parentTransforms?: unknown[];
   },
 ) => {
   const encoding = unit.encoding as Record<string, Channel> | undefined;
   const mark = markType(unit);
   if (!encoding || !mark) return;
-  const transformed =
-    parentTransformed ||
-    (Array.isArray(unit.transform) && unit.transform.length > 0);
+  const transforms = [...parentTransforms, ...toArray(unit.transform)];
   const { color, x, y, xOffset } = encoding;
 
   TITLED_CHANNELS.forEach((name) => {
@@ -268,7 +296,7 @@ const applyChartRules = (
     color &&
     typeof color.field === "string" &&
     !color.scale &&
-    !transformed &&
+    keepsFieldValues(transforms, color.field) &&
     (color.type === undefined || DISCRETE.has(color.type as string))
   ) {
     const field = color.field;
@@ -355,12 +383,11 @@ export const prepareVegaSpec = (
   const ruleOptions = { colorOverride };
   applyChartRules(prepared, values, tokens, ruleOptions);
   if (Array.isArray(prepared.layer)) {
-    const parentTransformed =
-      Array.isArray(prepared.transform) && prepared.transform.length > 0;
+    const parentTransforms = toArray(prepared.transform);
     prepared.layer.forEach((layer: Unit) =>
       applyChartRules(layer, values, tokens, {
         ...ruleOptions,
-        parentTransformed,
+        parentTransforms,
       }),
     );
   }

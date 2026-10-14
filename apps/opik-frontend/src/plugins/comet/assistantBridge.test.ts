@@ -1,9 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MutableRefObject } from "react";
 import {
   createBridge,
   createHostListeners,
+  dropStalePending,
   emitHostEvent,
+  PENDING_REQUEST_TTL_MS,
   type BridgeRefs,
   type HostListeners,
 } from "./assistantBridge";
@@ -82,5 +84,81 @@ describe("assistantBridge — single-subscriber invariant", () => {
 
     unsub();
     expect(listeners["explain:run"].size).toBe(0);
+  });
+});
+
+describe("assistantBridge — requests made before the console subscribes", () => {
+  const setup = (dashboardId?: string) => {
+    const refs: BridgeRefs = {
+      ...makeRefs(createHostListeners()),
+      onRequestVisibility: ref(vi.fn()),
+      context: ref({
+        dashboard: dashboardId ? { id: dashboardId, kind: "dashboard" } : null,
+      } as BridgeRefs["context"]["current"]),
+      pendingChartEdit: ref(null),
+      pendingConversation: ref(null),
+    };
+    return { refs, bridge: createBridge(refs) };
+  };
+
+  const openDashboard = (refs: BridgeRefs, id: string) => {
+    refs.context.current = {
+      ...refs.context.current,
+      dashboard: { id, kind: "dashboard" },
+    };
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("opens the sidebar and delivers a conversation once the console subscribes", () => {
+    const { refs, bridge } = setup("dash-a");
+
+    bridge.startConversation("hello");
+    expect(refs.onRequestVisibility.current).toHaveBeenCalledWith(true);
+
+    const listener = vi.fn();
+    bridge.subscribe("conversation:start", listener);
+    expect(listener).toHaveBeenCalledWith({ message: "hello" });
+  });
+
+  it("drops a request that waited longer than the expiry", () => {
+    vi.useFakeTimers();
+    const { bridge } = setup("dash-a");
+
+    bridge.startConversation("hello");
+    vi.advanceTimersByTime(PENDING_REQUEST_TTL_MS + 1);
+
+    const listener = vi.fn();
+    bridge.subscribe("conversation:start", listener);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("drops a chart edit parked on another dashboard", () => {
+    const { refs, bridge } = setup("dash-a");
+
+    bridge.editChart!({
+      widgetId: "w-1",
+      title: "Cost",
+      spec: {},
+      query: { id: "q-1" },
+    });
+    openDashboard(refs, "dash-b");
+
+    const listener = vi.fn();
+    bridge.subscribe("chart:edit", listener);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("clears parked requests when another dashboard opens", () => {
+    const { refs, bridge } = setup("dash-a");
+
+    bridge.startConversation("hello");
+    dropStalePending([refs.pendingConversation!], "dash-a");
+    expect(refs.pendingConversation!.current).not.toBeNull();
+
+    dropStalePending([refs.pendingConversation!], "dash-b");
+    expect(refs.pendingConversation!.current).toBeNull();
   });
 });

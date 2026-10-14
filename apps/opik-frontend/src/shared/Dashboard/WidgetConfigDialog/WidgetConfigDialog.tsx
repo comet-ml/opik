@@ -17,6 +17,7 @@ import {
 import WidgetTypeSelector from "./WidgetTypeSelector";
 import OllieIcon from "@/icons/ollie-owl.svg?react";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import usePluginsStore from "@/store/PluginsStore";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import WidgetConfigPreview from "./WidgetConfigPreview";
 import {
@@ -108,7 +109,12 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
     onOpenChange(false);
   };
 
-  const ollieEnabled = useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED);
+  // The sidebar plugin is what answers the bridge; without it the request would go nowhere.
+  const assistantAvailable = usePluginsStore((state) =>
+    Boolean(state.AssistantSidebar),
+  );
+  const ollieEnabled =
+    useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED) && assistantAvailable;
   // Hands the request to Ollie, which draws it and offers "Add to <this dashboard>" on the chart.
   const handleDescribeToOllie = () => {
     onOpenChange(false);

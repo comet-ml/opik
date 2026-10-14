@@ -22,8 +22,9 @@ type AnalyticsQueryResponse = {
 
 type ErrorBody = { message?: string; errors?: string[] };
 
-// Retried, with react-query's backoff: a widget added or duplicated in this browser 404s until the next autosave,
-// and a dashboard loading many widgets at once can hit the account's concurrent-query cap (429).
+// Retried, with react-query's backoff: a widget added or duplicated in this browser 404s until the next autosave
+// (only retried while the widget isn't saved), and a dashboard loading many widgets at once can hit the account's
+// concurrent-query cap (429).
 const RETRIES_BY_STATUS: Record<number, number> = { 404: 3, 429: 4 };
 
 const getDashboardWidgetQuery = async (
@@ -65,7 +66,10 @@ const getDashboardWidgetQuery = async (
 
 export default function useDashboardWidgetQuery(
   params: UseDashboardWidgetQueryParams,
-  options?: QueryConfig<Record<string, unknown>[]>,
+  {
+    retryNotFound = true,
+    ...options
+  }: QueryConfig<Record<string, unknown>[]> & { retryNotFound?: boolean } = {},
 ) {
   return useQuery({
     queryKey: ["dashboard-widget-query", params],
@@ -74,6 +78,7 @@ export default function useDashboardWidgetQuery(
       const status =
         (error as { status?: number }).status ??
         (error as AxiosError).response?.status;
+      if (status === 404 && !retryNotFound) return false;
       return failureCount < (RETRIES_BY_STATUS[status ?? 0] ?? 0);
     },
     ...options,

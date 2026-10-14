@@ -13,6 +13,7 @@ import {
   useDashboardStore,
   selectRuntimeConfig,
   selectReadOnly,
+  selectSavedWidgetIds,
 } from "@/store/DashboardStore";
 import {
   DASHBOARD_SCOPE,
@@ -27,6 +28,32 @@ import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const MINUTE = 60_000;
+
+// The statuses the widget query endpoint uses on purpose; anything else shows the backend's message.
+const QUERY_ERRORS: Record<number, { title: string; message: string }> = {
+  403: {
+    title: "Data is masked",
+    message:
+      "Charts from custom queries can't be shown while your data is masked",
+  },
+  404: {
+    title: "Query not found",
+    message:
+      "The saved query for this chart no longer exists. Ask Ollie to create it again",
+  },
+  501: {
+    title: "Charts unavailable",
+    message: "Ollie charts are turned off for this workspace",
+  },
+};
+
+type QueryError = Error & { status?: number; response?: { status?: number } };
+
+const describeQueryError = (error: QueryError) =>
+  QUERY_ERRORS[error.status ?? error.response?.status ?? 0] ?? {
+    title: "Query failed",
+    message: error.message,
+  };
 
 const formatComputedAgo = (timestamp: number, now: number) => {
   const minutes = Math.floor((now - timestamp) / MINUTE);
@@ -94,6 +121,12 @@ const OllieChartWidget: React.FunctionComponent<
       : undefined;
   });
   const queryWidgetId = preview ? savedPreviewId : widgetId;
+  // A 404 is worth retrying only until the next autosave stores the widget; once saved, the query is really gone.
+  const savedWidgetIds = useDashboardStore(selectSavedWidgetIds);
+  const retryNotFound =
+    !savedWidgetIds ||
+    !queryWidgetId ||
+    !savedWidgetIds.includes(queryWidgetId);
 
   const config = (widget?.config ?? {}) as OllieChartWidgetType["config"];
   const { spec, query, rows: snapshotRows } = config;
@@ -125,7 +158,7 @@ const OllieChartWidget: React.FunctionComponent<
       intervalEnd,
     },
     // Only an unsaved widget falls back to the rows the chart was made with.
-    { enabled: canQuery },
+    { enabled: canQuery, retryNotFound },
   );
   const live = Boolean(query?.id && queryWidgetId);
 
@@ -165,12 +198,7 @@ const OllieChartWidget: React.FunctionComponent<
     }
 
     if (live && error) {
-      return (
-        <DashboardWidget.EmptyState
-          title="Query failed"
-          message={error.message}
-        />
-      );
+      return <DashboardWidget.EmptyState {...describeQueryError(error)} />;
     }
 
     const chartRows = live ? rows : snapshotRows;

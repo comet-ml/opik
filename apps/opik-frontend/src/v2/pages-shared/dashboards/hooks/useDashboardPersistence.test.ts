@@ -31,6 +31,7 @@ vi.mock("@/store/DashboardStore", () => {
   const subscribe = vi.fn(() => vi.fn());
   const getState = vi.fn(() => ({
     lastModified: 0,
+    setSavedWidgetIds: vi.fn(),
     getDashboard: () => ({
       version: 4,
       sections: [{ id: "s1", title: "Section", widgets: [], layout: [] }],
@@ -73,6 +74,16 @@ let storeListener:
     }) => void)
   | null;
 let storeUnsubscribe: Mock;
+let setSavedWidgetIds: Mock;
+
+const mockStoreState = (state: {
+  lastModified: number;
+  getDashboard: () => DashboardState;
+}) =>
+  (useDashboardStore.getState as Mock).mockReturnValue({
+    ...state,
+    setSavedWidgetIds,
+  });
 
 const setupMocks = (dashboard?: Dashboard) => {
   syncToServerMutate = vi.fn();
@@ -109,9 +120,11 @@ const setupMocks = (dashboard?: Dashboard) => {
     return storeUnsubscribe;
   });
 
+  setSavedWidgetIds = vi.fn();
   const mockGetState = vi.fn(() => ({
     lastModified: 0,
     getDashboard: () => makeConfig(),
+    setSavedWidgetIds,
   }));
 
   vi.mocked(useDashboardStore).subscribe = mockSubscribe as never;
@@ -335,7 +348,7 @@ describe("useDashboardPersistence", () => {
 
       const changedConfig = makeConfig({ lastModified: 5000 });
 
-      (useDashboardStore.getState as Mock).mockReturnValue({
+      mockStoreState({
         lastModified: 2,
         getDashboard: () => changedConfig,
       });
@@ -386,7 +399,7 @@ describe("useDashboardPersistence", () => {
 
       vi.mocked(isDashboardChanged).mockReturnValue(true);
       const changedConfig = makeConfig({ lastModified: 7000 });
-      (useDashboardStore.getState as Mock).mockReturnValue({
+      mockStoreState({
         lastModified: 3,
         getDashboard: () => changedConfig,
       });
@@ -395,6 +408,84 @@ describe("useDashboardPersistence", () => {
 
       expect(autoSaveMutate).toHaveBeenCalledWith(
         { dashboard: { id: "dash-1", config: changedConfig } },
+        expect.anything(),
+      );
+    });
+
+    const renderWithReload = async (reloaded: Dashboard) => {
+      const dashboard = makeDashboard();
+      setupMocks(dashboard);
+      const refetch = vi.fn().mockResolvedValue({ data: reloaded });
+      vi.mocked(useDashboardById).mockReturnValue({
+        data: dashboard,
+        isPending: false,
+        refetch,
+      } as unknown as ReturnType<typeof useDashboardById>);
+
+      renderHook(() => useDashboardPersistence({ dashboardId: "dash-1" }));
+      await flushPromises();
+    };
+
+    const dispatchExternalUpdate = () =>
+      act(async () => {
+        window.dispatchEvent(
+          new CustomEvent(DASHBOARD_EXTERNAL_UPDATE_EVENT, {
+            detail: { id: "dash-1" },
+          }),
+        );
+      });
+
+    it("drops the local copy and publishes the server's widgets when the reload brings a new config", async () => {
+      const widget = {
+        id: "w-9",
+      } as DashboardState["sections"][number]["widgets"][number];
+      await renderWithReload(
+        makeDashboard({
+          config: makeConfig({
+            lastModified: 8000,
+            sections: [
+              { id: "s1", title: "Section", widgets: [widget], layout: [] },
+            ],
+          }),
+        }),
+      );
+
+      await dispatchExternalUpdate();
+
+      expect(clearLocal).toHaveBeenCalledWith("dash-1");
+      expect(setSavedWidgetIds).toHaveBeenLastCalledWith(["w-9"]);
+    });
+
+    it("saves the reloaded state again when a save sent before the reload lands after it", async () => {
+      const reloadedConfig = makeConfig({ lastModified: 9000 });
+      await renderWithReload(makeDashboard({ config: reloadedConfig }));
+
+      act(() => {
+        storeListener!({ lastModified: 1, getDashboard: () => makeConfig() });
+      });
+      vi.mocked(isDashboardChanged).mockReturnValue(true);
+      const staleConfig = makeConfig({ lastModified: 2000 });
+      act(() => {
+        storeListener!({ lastModified: 2, getDashboard: () => staleConfig });
+      });
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(autoSaveMutate).toHaveBeenCalledTimes(1);
+
+      await dispatchExternalUpdate();
+      mockStoreState({
+        lastModified: 0,
+        getDashboard: () => reloadedConfig,
+      });
+
+      act(() => {
+        autoSaveMutate.mock.calls[0][1].onSuccess();
+      });
+
+      expect(autoSaveMutate).toHaveBeenCalledTimes(2);
+      expect(autoSaveMutate).toHaveBeenLastCalledWith(
+        { dashboard: { id: "dash-1", config: reloadedConfig } },
         expect.anything(),
       );
     });
@@ -485,7 +576,7 @@ describe("useDashboardPersistence", () => {
 
       const unsavedConfig = makeConfig({ lastModified: 9999 });
       vi.mocked(isDashboardChanged).mockReturnValue(true);
-      (useDashboardStore.getState as Mock).mockReturnValue({
+      mockStoreState({
         lastModified: 2,
         getDashboard: () => unsavedConfig,
       });

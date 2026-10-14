@@ -21,7 +21,7 @@ const httpError = (status: number) =>
     data: { errors: ["Too many queries are running; retry shortly"] },
   } as AxiosResponse);
 
-const renderWidgetQuery = () => {
+const renderWidgetQuery = (retryNotFound?: boolean) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -37,7 +37,7 @@ const renderWidgetQuery = () => {
           widgetId: "w1",
           queryId: "q1",
         },
-        { retryDelay: 0 },
+        { retryDelay: 0, retryNotFound },
       ),
     { wrapper },
   );
@@ -53,6 +53,21 @@ describe("useDashboardWidgetQuery", () => {
 
     await waitFor(() => expect(result.current.data).toEqual([{ n: 1 }]));
     expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["an unsaved widget", true, 2],
+    ["a saved widget", false, 1],
+  ])("retries a 404 only for %s", async (_, retryNotFound, calls) => {
+    post
+      .mockReset()
+      .mockRejectedValueOnce(httpError(404))
+      .mockResolvedValueOnce({ data: { results: [] } });
+
+    const { result } = renderWidgetQuery(retryNotFound);
+
+    await waitFor(() => expect(result.current.isFetching).toBe(false));
+    expect(post).toHaveBeenCalledTimes(calls);
   });
 
   it("does not retry a 400", async () => {

@@ -44,6 +44,18 @@ const INSIGHTS_API_CONFIG: ApiConfig = {
   keepaliveSaveFn: keepaliveSaveInsightsView,
 };
 
+// Widgets can tell a query that 404s because it isn't saved yet from one whose widget is gone.
+const publishSavedWidgets = (config: DashboardState | null) =>
+  useDashboardStore
+    .getState()
+    .setSavedWidgetIds(
+      config
+        ? config.sections.flatMap((section) =>
+            section.widgets.map((widget) => widget.id),
+          )
+        : null,
+    );
+
 const getApiConfig = (scope?: DASHBOARD_SCOPE): ApiConfig => {
   if (scope === DASHBOARD_SCOPE.INSIGHTS) {
     return INSIGHTS_API_CONFIG;
@@ -98,6 +110,7 @@ export const useDashboardPersistence = ({
 
     loadLocal(currentDashboard.id).then((localEntry) => {
       if (cancelled) return;
+      publishSavedWidgets(currentDashboard.config);
 
       if (
         localEntry &&
@@ -113,7 +126,10 @@ export const useDashboardPersistence = ({
               config: localEntry.config,
             },
           },
-          { onSettled: () => clearLocal(currentDashboard.id) },
+          {
+            onSuccess: () => publishSavedWidgets(localEntry.config),
+            onSettled: () => clearLocal(currentDashboard.id),
+          },
         );
       } else {
         setResolvedConfig(currentDashboard.config);
@@ -126,6 +142,7 @@ export const useDashboardPersistence = ({
     return () => {
       cancelled = true;
       setResolvedConfig(null);
+      publishSavedWidgets(null);
     };
   }, [dashboard?.id, syncToServer]);
 
@@ -143,6 +160,10 @@ export const useDashboardPersistence = ({
         if (data.config === resolvedConfigRef.current) return;
         // The store still holds the pre-update state; don't let the autosave cleanup flush it over the server copy.
         externalReloadRef.current = true;
+        reloadEpochRef.current += 1;
+        publishSavedWidgets(data.config);
+        // A local copy of edits made before the reload would otherwise win on the next mount and drop the update.
+        clearLocal(id);
         setResolvedConfig(data.config);
       });
     };
@@ -156,6 +177,7 @@ export const useDashboardPersistence = ({
 
   const lastSavedConfigRef = useRef<DashboardState | null>(null);
   const externalReloadRef = useRef(false);
+  const reloadEpochRef = useRef(0);
   const [saveStatus, setSaveStatus] = useState<DashboardSaveStatus>("idle");
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -166,10 +188,11 @@ export const useDashboardPersistence = ({
   });
 
   const performSave = useCallback(
-    (targetDashboardId: string, config: DashboardState) => {
+    function save(targetDashboardId: string, config: DashboardState) {
       if (!isDashboardChanged(config, lastSavedConfigRef.current)) return;
 
       setSaveStatus("saving");
+      const epoch = reloadEpochRef.current;
 
       updateDashboard(
         {
@@ -181,6 +204,22 @@ export const useDashboardPersistence = ({
         {
           onSuccess: () => {
             lastSavedConfigRef.current = config;
+            // Sent before an external reload, so it may have landed after the other writer's update and overwritten it.
+            // Save the reloaded state again: whichever order the server applied the two in, it ends with that state.
+            if (
+              epoch !== reloadEpochRef.current &&
+              dashboardRef.current?.id === targetDashboardId
+            ) {
+              save(
+                targetDashboardId,
+                useDashboardStore.getState().getDashboard(),
+              );
+              return;
+            }
+            // A flush on leaving a dashboard can land after the next one loaded.
+            if (dashboardRef.current?.id === targetDashboardId) {
+              publishSavedWidgets(config);
+            }
             clearLocal(targetDashboardId);
             setSaveStatus("saved");
             clearTimeout(savedTimerRef.current);

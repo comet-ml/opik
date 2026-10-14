@@ -101,6 +101,66 @@ describe("prepareVegaSpec", () => {
     },
   );
 
+  it.each([
+    [
+      "aggregates by the colour field",
+      {
+        aggregate: [{ op: "sum", field: "n", as: "total" }],
+        groupby: ["code"],
+      },
+    ],
+    ["adds a computed field", { calculate: "datum.n * 2", as: "double" }],
+    ["buckets time", { timeUnit: "yearmonth", field: "t", as: "month" }],
+  ])("keeps the hashed colours when the transform %s", (_, transform) => {
+    const prepared = prepareVegaSpec(
+      {
+        spec: {
+          mark: "bar",
+          data: { name: "rows" },
+          transform: [transform],
+          encoding: { color: { field: "code", type: "nominal" } },
+        },
+        rows: [
+          { code: "a", n: "1", t: "2026-01-01" },
+          { code: "b", n: "2", t: "2026-02-01" },
+        ],
+      },
+      {},
+    );
+
+    expect(colorScale(prepared)?.domain).toEqual(["a", "b"]);
+  });
+
+  it.each([
+    [
+      "aggregates the colour field away",
+      { aggregate: [{ op: "sum", field: "n", as: "total" }], groupby: ["t"] },
+    ],
+    [
+      "rewrites the colour field",
+      { calculate: "upper(datum.code)", as: "code" },
+    ],
+    ["reshapes rows", { fold: ["n", "t"] }],
+  ])(
+    "leaves the colour domain to Vega when the transform %s",
+    (_, transform) => {
+      const prepared = prepareVegaSpec(
+        {
+          spec: {
+            mark: "bar",
+            data: { name: "rows" },
+            transform: [transform],
+            encoding: { color: { field: "code", type: "nominal" } },
+          },
+          rows: [{ code: "a", n: "1", t: "2026-01-01" }],
+        },
+        {},
+      );
+
+      expect(colorScale(prepared)).toBeUndefined();
+    },
+  );
+
   it("binds live rows even when the spec carries its own values", () => {
     const prepared = prepareVegaSpec(
       {
