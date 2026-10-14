@@ -1209,18 +1209,20 @@ def build_params_lines(
 
 def params_changes(
     existing_yaml_content: str, params_lines: dict[str, dict[str, str]], kept_yaml_keys: set[str],
-) -> dict[str, tuple[int, int]]:
-    """Per YAML section: (models that gain params, models whose params change)."""
+) -> dict[str, tuple[int, int, int]]:
+    """Per YAML section: (models that gain params, models whose params change, models that lose them)."""
     previous = _yaml_params_lines(existing_yaml_content)
     changes = {}
-    for yaml_key, by_id in params_lines.items():
+    for yaml_key in sorted(params_lines.keys() | previous.keys()):
         if yaml_key in kept_yaml_keys:
             continue
         before = previous.get(yaml_key, {})
-        gained = sum(1 for model_id in by_id if model_id not in before)
-        changed = sum(1 for model_id, line in by_id.items() if model_id in before and before[model_id] != line)
-        if gained or changed:
-            changes[yaml_key] = (gained, changed)
+        after = params_lines.get(yaml_key, {})
+        gained = sum(1 for model_id in after if model_id not in before)
+        changed = sum(1 for model_id, line in after.items() if model_id in before and before[model_id] != line)
+        lost = sum(1 for model_id in before if model_id not in after)
+        if gained or changed or lost:
+            changes[yaml_key] = (gained, changed, lost)
     return changes
 
 
@@ -1516,7 +1518,7 @@ def _should_write_files(
     seeded_reasoning_ids: list[str],
     cleared_reasoning_ids: list[str],
     force_regen: bool,
-    changed_params: dict[str, tuple[int, int]] | None = None,
+    changed_params: dict[str, tuple[int, int, int]] | None = None,
 ) -> bool:
     if force_regen:
         return True
@@ -1750,8 +1752,8 @@ def main():
 
     if changed_params:
         print("### Params")
-        for yaml_key, (gained, changed) in changed_params.items():
-            print(f"- {yaml_key}: {gained} model(s) gain params, {changed} change")
+        for yaml_key, (gained, changed, lost) in changed_params.items():
+            print(f"- {yaml_key}: {gained} model(s) gain params, {changed} change, {lost} lose them")
         print()
 
     drift_agree, drift_disagree = curated_drift(curated_catalog, generated_params)
