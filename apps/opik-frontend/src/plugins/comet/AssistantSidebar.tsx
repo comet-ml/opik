@@ -395,10 +395,7 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
 
   // Emit context changes to sidebar listeners
   useEffect(() => {
-    dropStalePending(
-      [pendingChartEditRef, pendingConversationRef],
-      context.dashboard?.id,
-    );
+    dropStalePending([pendingChartEditRef, pendingConversationRef], context);
     emitHostEvent(listenersRef, "context:changed", context);
   }, [context]);
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDashboardStore } from "@/store/DashboardStore";
 import useDashboardWidgetQuery from "@/api/dashboards/useDashboardWidgetQuery";
@@ -89,17 +89,45 @@ describe("OllieChartWidget saved widget", () => {
   const renderSaved = (savedWidgetIds: string[] | null, error?: unknown) => {
     setStore(ollieWidget("preview"));
     useDashboardStore.setState({ savedWidgetIds });
+    const refetch = vi.fn();
     queryMock.mockReset();
     queryMock.mockReturnValue({
       data: undefined,
       isPending: false,
       isFetching: false,
       error: error ?? null,
-      refetch: vi.fn(),
+      refetch,
       dataUpdatedAt: 0,
     } as never);
     render(<OllieChartWidget sectionId="s1" widgetId="w-1" />);
+    return refetch;
   };
+
+  const notFound = () => Object.assign(new Error("not found"), { status: 404 });
+
+  it("runs the query again once a widget whose retries ran out gets saved", () => {
+    const refetch = renderSaved(["w-2"], notFound());
+    expect(refetch).not.toHaveBeenCalled();
+
+    act(() => {
+      useDashboardStore.setState({ savedWidgetIds: ["w-1", "w-2"] });
+    });
+    expect(refetch).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      useDashboardStore.setState({ savedWidgetIds: ["w-1"] });
+    });
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not run a saved widget's 404 again", () => {
+    const refetch = renderSaved(["w-1"], notFound());
+
+    act(() => {
+      useDashboardStore.setState({ savedWidgetIds: ["w-1", "w-3"] });
+    });
+    expect(refetch).not.toHaveBeenCalled();
+  });
 
   it.each([
     [403, "Data is masked"],

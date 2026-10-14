@@ -156,11 +156,24 @@ describe("assistantBridge — requests made before the console subscribes", () =
     const { refs, bridge } = setup("dash-a");
 
     bridge.startConversation("hello");
-    dropStalePending([refs.pendingConversation!], "dash-a");
+    dropStalePending([refs.pendingConversation!], refs.context.current);
     expect(refs.pendingConversation!.current).not.toBeNull();
 
-    dropStalePending([refs.pendingConversation!], "dash-b");
+    openDashboard(refs, "dash-b");
+    dropStalePending([refs.pendingConversation!], refs.context.current);
     expect(refs.pendingConversation!.current).toBeNull();
+  });
+
+  it("drops a conversation started outside a dashboard once another project opens", () => {
+    const { refs, bridge } = setup();
+    refs.context.current = { ...refs.context.current, projectId: "p-1" };
+
+    bridge.startConversation("fix this issue");
+    refs.context.current = { ...refs.context.current, projectId: "p-2" };
+
+    const listener = vi.fn();
+    bridge.subscribe("conversation:start", listener);
+    expect(listener).not.toHaveBeenCalled();
   });
 });
 

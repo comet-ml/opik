@@ -127,7 +127,11 @@ export const useDashboardPersistence = ({
             },
           },
           {
-            onSuccess: () => publishSavedWidgets(localEntry.config),
+            onSuccess: () => {
+              if (dashboardRef.current?.id === currentDashboard.id) {
+                publishSavedWidgets(localEntry.config);
+              }
+            },
             onSettled: () => clearLocal(currentDashboard.id),
           },
         );
@@ -161,6 +165,7 @@ export const useDashboardPersistence = ({
         // The store still holds the pre-update state; don't let the autosave cleanup flush it over the server copy.
         externalReloadRef.current = true;
         reloadEpochRef.current += 1;
+        reloadedConfigRef.current = data.config;
         publishSavedWidgets(data.config);
         // A local copy of edits made before the reload would otherwise win on the next mount and drop the update.
         clearLocal(id);
@@ -178,6 +183,7 @@ export const useDashboardPersistence = ({
   const lastSavedConfigRef = useRef<DashboardState | null>(null);
   const externalReloadRef = useRef(false);
   const reloadEpochRef = useRef(0);
+  const reloadedConfigRef = useRef<DashboardState | null>(null);
   const [saveStatus, setSaveStatus] = useState<DashboardSaveStatus>("idle");
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -188,7 +194,11 @@ export const useDashboardPersistence = ({
   });
 
   const performSave = useCallback(
-    function save(targetDashboardId: string, config: DashboardState) {
+    function save(
+      targetDashboardId: string,
+      config: DashboardState,
+      onSaved?: () => void,
+    ) {
       if (!isDashboardChanged(config, lastSavedConfigRef.current)) return;
 
       setSaveStatus("saving");
@@ -205,14 +215,17 @@ export const useDashboardPersistence = ({
           onSuccess: () => {
             lastSavedConfigRef.current = config;
             // Sent before an external reload, so it may have landed after the other writer's update and overwritten it.
-            // Save the reloaded state again: whichever order the server applied the two in, it ends with that state.
+            // Save the reloaded config again (the store may not hold it yet), then anything edited since.
             if (
               epoch !== reloadEpochRef.current &&
+              reloadedConfigRef.current &&
               dashboardRef.current?.id === targetDashboardId
             ) {
-              save(
-                targetDashboardId,
-                useDashboardStore.getState().getDashboard(),
+              save(targetDashboardId, reloadedConfigRef.current, () =>
+                save(
+                  targetDashboardId,
+                  useDashboardStore.getState().getDashboard(),
+                ),
               );
               return;
             }
@@ -226,6 +239,7 @@ export const useDashboardPersistence = ({
             savedTimerRef.current = setTimeout(() => {
               setSaveStatus("idle");
             }, SAVED_STATUS_DISPLAY_MS);
+            onSaved?.();
           },
           onError: () => {
             setSaveStatus("error");

@@ -51,28 +51,35 @@ export function createHostListeners(): HostListeners {
 /** A request made before the console subscribed (sidebar closed or still loading), delivered once it does. */
 export interface PendingRequest<T> {
   data: T;
-  // The dashboard open when it was made; it is dropped on any other.
-  dashboardId?: string;
+  // Where it was made (workspace, project, dashboard); it is dropped anywhere else.
+  scope: string;
   at: number;
 }
 
 // Older requests are dropped instead of firing long after the click, out of context.
 export const PENDING_REQUEST_TTL_MS = 30_000;
 
+const scopeOf = (context: BridgeContext) =>
+  JSON.stringify([
+    context.workspaceName ?? null,
+    context.projectId ?? null,
+    context.dashboard?.id ?? null,
+  ]);
+
 const isPendingCurrent = (
   pending: PendingRequest<unknown>,
-  dashboardId: string | undefined,
+  context: BridgeContext,
 ) =>
   Date.now() - pending.at <= PENDING_REQUEST_TTL_MS &&
-  (!pending.dashboardId || pending.dashboardId === dashboardId);
+  pending.scope === scopeOf(context);
 
-/** Drops parked requests that no longer belong to the open dashboard. */
+/** Drops parked requests made in another workspace, project or dashboard. */
 export function dropStalePending(
   pending: MutableRefObject<PendingRequest<unknown> | null>[],
-  dashboardId: string | undefined,
+  context: BridgeContext,
 ) {
   pending.forEach((ref) => {
-    if (ref.current && !isPendingCurrent(ref.current, dashboardId)) {
+    if (ref.current && !isPendingCurrent(ref.current, context)) {
       ref.current = null;
     }
   });
@@ -127,7 +134,7 @@ const sendOrPark = <E extends ParkableEvent>(
   if (pending) {
     pending.current = {
       data,
-      dashboardId: refs.context.current.dashboard?.id,
+      scope: scopeOf(refs.context.current),
       at: Date.now(),
     };
   }
@@ -194,7 +201,7 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
       const pending = pendingRef?.current;
       if (pendingRef && pending) {
         pendingRef.current = null;
-        if (isPendingCurrent(pending, refs.context.current.dashboard?.id)) {
+        if (isPendingCurrent(pending, refs.context.current)) {
           (callback as (data: unknown) => void)(pending.data);
         }
       }

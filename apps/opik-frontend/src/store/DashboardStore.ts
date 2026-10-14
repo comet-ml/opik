@@ -38,7 +38,8 @@ interface DashboardStoreState {
   widgetResolver: WidgetResolver | null;
   previewWidget: DashboardWidget | null;
   readOnly: boolean;
-  // Widget ids the server has; null until the dashboard is loaded.
+  // Widget ids the server has; null until the dashboard is loaded. Owned by the persistence hook, so clearing the
+  // dashboard on a reload keeps them.
   savedWidgetIds: string[] | null;
 }
 
@@ -446,7 +447,6 @@ export const useDashboardStore = create<DashboardStore>()(
               version: emptyDashboard.version,
               lastModified: 0,
               readOnly: false,
-              savedWidgetIds: null,
             },
             false,
             "clearDashboard",

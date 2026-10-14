@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useState } from "react";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { RefreshCw } from "lucide-react";
 import OllieOwl from "@/icons/ollie-owl.svg?react";
@@ -49,8 +49,11 @@ const QUERY_ERRORS: Record<number, { title: string; message: string }> = {
 
 type QueryError = Error & { status?: number; response?: { status?: number } };
 
+const queryErrorStatus = (error: QueryError) =>
+  error.status ?? error.response?.status;
+
 const describeQueryError = (error: QueryError) =>
-  QUERY_ERRORS[error.status ?? error.response?.status ?? 0] ?? {
+  QUERY_ERRORS[queryErrorStatus(error) ?? 0] ?? {
     title: "Query failed",
     message: error.message,
   };
@@ -161,6 +164,21 @@ const OllieChartWidget: React.FunctionComponent<
     { enabled: canQuery, retryNotFound },
   );
   const live = Boolean(query?.id && queryWidgetId);
+
+  // An autosave slower than the 404 retries saves the widget after its query already gave up; run it once more then.
+  const wasSavedRef = useRef(!retryNotFound);
+  useEffect(() => {
+    const saved = !retryNotFound;
+    if (
+      saved &&
+      !wasSavedRef.current &&
+      error &&
+      queryErrorStatus(error) === 404
+    ) {
+      refetch();
+    }
+    wasSavedRef.current = saved;
+  }, [retryNotFound, error, refetch]);
 
   if (!widget) {
     return null;
