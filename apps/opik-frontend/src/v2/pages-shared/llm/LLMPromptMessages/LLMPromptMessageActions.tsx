@@ -238,7 +238,11 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     !saveDisabled &&
       promptId &&
       promptData?.id === promptId &&
-      !isEqual(message.content, parsePromptVersionContent(baselineVersion)),
+      !isEqual(
+        message.content,
+        toContentForRole(parsePromptVersionContent(baselineVersion), role)
+          .content,
+      ),
   );
   const saveTooltip = saveWarning
     ? !datasetId
