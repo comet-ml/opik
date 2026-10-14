@@ -5,6 +5,7 @@ import com.comet.opik.domain.llm.ModelCapabilities;
 import com.comet.opik.domain.llm.SamplingParamsNormalizer;
 import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
@@ -27,6 +28,7 @@ import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.mapstruct.Context;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
@@ -68,20 +70,23 @@ interface LlmProviderAnthropicMapper {
     @Mapping(source = "request", target = "messages", qualifiedByName = "mapToMessages")
     @Mapping(source = "request", target = "system", qualifiedByName = "mapToSystemMessages")
     @Mapping(source = "request", target = "customParameters", qualifiedByName = "resolveCustomParameters")
-    AnthropicCreateMessageRequest toCreateMessageRequest(@NonNull ChatCompletionRequest request);
+    AnthropicCreateMessageRequest toCreateMessageRequest(@NonNull ChatCompletionRequest request,
+            @Context LlmModelRegistryService registryService);
 
     @Named("resolveTemperature")
-    default Double resolveTemperature(@NonNull ChatCompletionRequest request) {
-        return samplingParamsAllowed(request) ? request.temperature() : null;
+    default Double resolveTemperature(@NonNull ChatCompletionRequest request,
+            @Context LlmModelRegistryService registryService) {
+        return temperatureAllowed(request, registryService) ? request.temperature() : null;
     }
 
     @Named("resolveTopP")
-    default Double resolveTopP(@NonNull ChatCompletionRequest request) {
-        if (!samplingParamsAllowed(request)) {
+    default Double resolveTopP(@NonNull ChatCompletionRequest request,
+            @Context LlmModelRegistryService registryService) {
+        if (!topPAllowed(request, registryService)) {
             return null;
         }
-        // Anthropic recommends against sending temperature and top_p together; temperature wins when both are set.
-        return request.temperature() != null ? null : request.topP();
+        // Anthropic recommends against sending temperature and top_p together; temperature wins when both are sent.
+        return request.temperature() != null && temperatureAllowed(request, registryService) ? null : request.topP();
     }
 
     /**
@@ -91,18 +96,28 @@ interface LlmProviderAnthropicMapper {
      * requests — which bypass the FE sanitizer from OPIK-6244 — don't fail. Mirrors the judge-path logic
      * in {@code AnthropicClientGenerator}.
      */
-    private boolean samplingParamsAllowed(ChatCompletionRequest request) {
-        return !ModelCapabilities.rejectsSamplingParams(request.model())
+    private boolean temperatureAllowed(ChatCompletionRequest request, LlmModelRegistryService registryService) {
+        return !ModelCapabilities.rejectsTemperature(request.model(), registryService)
                 && !SamplingParamsNormalizer.thinkingEnabled(request)
-                && !AnthropicEffort.impliesAdaptiveThinking(request.model(), request.customParameters());
+                && !AnthropicEffort.impliesAdaptiveThinking(request.model(), request.customParameters(),
+                        registryService);
+    }
+
+    private boolean topPAllowed(ChatCompletionRequest request, LlmModelRegistryService registryService) {
+        return !ModelCapabilities.rejectsTopP(request.model(), registryService)
+                && !SamplingParamsNormalizer.thinkingEnabled(request)
+                && !AnthropicEffort.impliesAdaptiveThinking(request.model(), request.customParameters(),
+                        registryService);
     }
 
     // langchain4j's AnthropicOutputConfig has no effort field, so the whole output_config rides customParameters,
     // which AnthropicCreateMessageRequest flattens into the top level of the body. Mapping outputConfig as well
     // would put a second output_config key on the wire. The thinking an effort level turns on rides along with it.
     @Named("resolveCustomParameters")
-    default Map<String, Object> resolveCustomParameters(@NonNull ChatCompletionRequest request) {
-        return AnthropicEffort.toCustomParameters(request.model(), request.customParameters()).orElse(null);
+    default Map<String, Object> resolveCustomParameters(@NonNull ChatCompletionRequest request,
+            @Context LlmModelRegistryService registryService) {
+        return AnthropicEffort.toCustomParameters(request.model(), request.customParameters(), registryService)
+                .orElse(null);
     }
 
     @Named("resolveMaxTokens")

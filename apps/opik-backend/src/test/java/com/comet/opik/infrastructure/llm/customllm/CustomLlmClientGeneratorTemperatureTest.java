@@ -11,6 +11,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Map;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
@@ -26,7 +27,8 @@ class CustomLlmClientGeneratorTemperatureTest {
     private static final String PROVIDER_NAME = "gw";
 
     private ChatRequestParameters judgeParametersFor(String modelName, Double temperature) {
-        var generator = new CustomLlmClientGenerator(new LlmProviderClientConfig(), mock(AuthTokenProvider.class));
+        var generator = new CustomLlmClientGenerator(new LlmProviderClientConfig(), mock(AuthTokenProvider.class),
+                bundledRegistry());
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
                 .baseUrl("https://gateway.example.com/v1")

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -21,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OpenAIClientGeneratorTemperatureTest {
 
     private ChatRequestParameters judgeParametersFor(String modelName) {
-        var generator = new OpenAIClientGenerator(new LlmProviderClientConfig());
+        var generator = new OpenAIClientGenerator(new LlmProviderClientConfig(), bundledRegistry());
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
                 .baseUrl("https://openrouter.ai/api/v1")
@@ -46,7 +47,7 @@ class OpenAIClientGeneratorTemperatureTest {
     }
 
     private ChatRequestParameters responsesJudgeParametersFor(String modelName) {
-        var generator = new OpenAIClientGenerator(new LlmProviderClientConfig());
+        var generator = new OpenAIClientGenerator(new LlmProviderClientConfig(), bundledRegistry());
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
                 .baseUrl("https://openrouter.ai/api/v1")
