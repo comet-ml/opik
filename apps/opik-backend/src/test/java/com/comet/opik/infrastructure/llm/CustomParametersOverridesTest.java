@@ -80,13 +80,13 @@ class CustomParametersOverridesTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource
-    void withTokenLimitUnderLeavesTheLimitOnceUnderTheGivenName(String name, String limitKey,
+    void moveTokenLimitToLeavesTheLimitOnceUnderTheGivenName(String name, String limitKey,
             Map<String, Object> customParameters, Map<String, Object> expected) {
-        assertThat(CustomParametersOverrides.withTokenLimitUnder(limitKey, customParameters))
+        assertThat(CustomParametersOverrides.moveTokenLimitTo(limitKey, customParameters))
                 .isEqualTo(expected);
     }
 
-    private static Stream<Arguments> withTokenLimitUnderLeavesTheLimitOnceUnderTheGivenName() {
+    private static Stream<Arguments> moveTokenLimitToLeavesTheLimitOnceUnderTheGivenName() {
         return Stream.of(
                 arguments("max_completion_tokens moves to max_tokens", "max_tokens",
                         Map.of("max_completion_tokens", 12, "top_k", 7), Map.of("max_tokens", 12, "top_k", 7)),
@@ -100,8 +100,8 @@ class CustomParametersOverridesTest {
     }
 
     @Test
-    void withTokenLimitUnderLeavesNoCustomParametersAsIs() {
-        assertThat(CustomParametersOverrides.withTokenLimitUnder("max_tokens", null)).isNull();
+    void moveTokenLimitToLeavesNoCustomParametersAsIs() {
+        assertThat(CustomParametersOverrides.moveTokenLimitTo("max_tokens", null)).isNull();
     }
 
     @Test

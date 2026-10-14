@@ -22,10 +22,8 @@ import api, {
 } from "@/api/api";
 import { snakeCaseObj } from "@/lib/utils";
 import { createBatchProcessor } from "@/lib/batches";
-import {
-  getRequestParameters,
-  RunStreamingReturn,
-} from "@/api/playground/useCompletionProxyStreaming";
+import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
+import { getRequestParameters } from "@/lib/modelUtils";
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,

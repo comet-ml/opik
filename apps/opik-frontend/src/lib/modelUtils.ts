@@ -3,6 +3,7 @@ import {
   AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
+  LLMPromptConfigsType,
   OpenAiPipelineMode,
   OpenAIReasoningEffort,
   PROVIDER_MODEL_TYPE,
@@ -30,6 +31,7 @@ import {
   getLatestProviderModelsSnapshot,
 } from "@/lib/modelRegistryStore";
 import { PROVIDER_MODELS } from "@/constants/providerModels";
+import { snakeCaseObj } from "@/lib/utils";
 
 export const getRoutableProviderModelValue = (
   composedProviderType: COMPOSED_PROVIDER_TYPE,
@@ -1212,3 +1214,21 @@ export const sanitizeConfigForRequest = (
 
   return sanitized;
 };
+
+const RUNNER_SETTINGS = ["throttling", "maxConcurrentRequests"];
+
+export const getRequestParameters = (
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: LLMPromptConfigsType,
+  openAiPipelineMode?: OpenAiPipelineMode,
+): Record<string, unknown> =>
+  snakeCaseObj(
+    omit(
+      sanitizeConfigForRequest(
+        model,
+        configs as unknown as Record<string, unknown>,
+        openAiPipelineMode,
+      ),
+      RUNNER_SETTINGS,
+    ),
+  );

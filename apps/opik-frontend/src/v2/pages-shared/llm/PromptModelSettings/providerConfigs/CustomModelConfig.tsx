@@ -11,14 +11,13 @@ import {
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
-import { getRequestParameters } from "@/api/playground/useCompletionProxyStreaming";
 import { DEFAULT_CUSTOM_CONFIGS } from "@/constants/llm";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import useJsonInput from "@/hooks/useJsonInput";
 import { Label } from "@/ui/label";
 import { FormErrorSkeleton } from "@/ui/form";
 import isUndefined from "lodash/isUndefined";
-import { resolveSamplingParams } from "@/lib/modelUtils";
+import { getRequestParameters, resolveSamplingParams } from "@/lib/modelUtils";
 import {
   getExtraBodySliderOverlap,
   isSentToProvider,

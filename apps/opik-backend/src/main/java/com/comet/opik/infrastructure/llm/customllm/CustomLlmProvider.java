@@ -96,7 +96,7 @@ public class CustomLlmProvider implements LlmProviderService {
                     .from(request)
                     .maxTokens(firstPositiveTokenLimit(request))
                     .maxCompletionTokens(null)
-                    .customParameters(CustomParametersOverrides.withTokenLimitUnder(
+                    .customParameters(CustomParametersOverrides.moveTokenLimitTo(
                             CustomParametersOverrides.MAX_TOKENS, request.customParameters()))
                     .build();
         }
@@ -105,7 +105,7 @@ public class CustomLlmProvider implements LlmProviderService {
                     .from(request)
                     .maxCompletionTokens(firstPositiveTokenLimit(request))
                     .maxTokens(null)
-                    .customParameters(CustomParametersOverrides.withTokenLimitUnder(
+                    .customParameters(CustomParametersOverrides.moveTokenLimitTo(
                             CustomParametersOverrides.MAX_COMPLETION_TOKENS, request.customParameters()))
                     .frequencyPenalty(nonZeroOrNull(request.frequencyPenalty()))
                     .presencePenalty(nonZeroOrNull(request.presencePenalty()))

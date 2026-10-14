@@ -3,7 +3,6 @@ import dayjs from "dayjs";
 import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import isString from "lodash/isString";
-import omit from "lodash/omit";
 
 import { UsageType } from "@/types/shared";
 import {
@@ -14,9 +13,9 @@ import {
   ChatCompletionOpikErrorMessageType,
   ChatCompletionPythonProxyErrorMessageType,
 } from "@/types/playground";
-import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
+import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
-import { sanitizeConfigForRequest } from "@/lib/modelUtils";
+import { getRequestParameters } from "@/lib/modelUtils";
 import {
   LLMPromptConfigsType,
   OpenAiPipelineMode,
@@ -89,24 +88,6 @@ const isProviderError = (
 ): response is ChatCompletionProviderErrorMessageType => {
   return "code" in response && isValidJsonObject(response.message);
 };
-
-const RUNNER_SETTINGS = ["throttling", "maxConcurrentRequests"];
-
-export const getRequestParameters = (
-  model: PROVIDER_MODEL_TYPE | "",
-  configs: LLMPromptConfigsType,
-  openAiPipelineMode?: OpenAiPipelineMode,
-): Record<string, unknown> =>
-  snakeCaseObj(
-    omit(
-      sanitizeConfigForRequest(
-        model,
-        configs as unknown as Record<string, unknown>,
-        openAiPipelineMode,
-      ),
-      RUNNER_SETTINGS,
-    ),
-  );
 
 const toHttpErrorStatus = (code: unknown): number | null => {
   const status = isString(code) && /^\d{3}$/.test(code) ? Number(code) : code;
