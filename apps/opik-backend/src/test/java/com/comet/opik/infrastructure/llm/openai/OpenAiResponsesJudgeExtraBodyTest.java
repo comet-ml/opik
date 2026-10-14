@@ -26,6 +26,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
@@ -79,7 +80,7 @@ class OpenAiResponsesJudgeExtraBodyTest {
                 .withStatus(400)
                 .withHeader("Content-Type", "application/json")
                 .withBody("{\"error\":{\"message\":\"stub\",\"type\":\"invalid_request_error\"}}")));
-        generator = new OpenAIClientGenerator(new LlmProviderClientConfig());
+        generator = new OpenAIClientGenerator(new LlmProviderClientConfig(), bundledRegistry());
     }
 
     @AfterEach

@@ -1,10 +1,14 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ModelCostData;
+import com.comet.opik.api.ModelParams;
 import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
@@ -21,6 +25,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -96,37 +101,49 @@ public class ModelCapabilities {
     }
 
     /**
-     * Whether the model refuses temperature and top_p outright, rather than merely refusing them
-     * together. Anthropic's adaptive-thinking models answer a request carrying either with a 400.
+     * Whether the model refuses temperature outright, rather than merely refusing it next to top_p.
+     * Anthropic's adaptive-thinking models answer a request carrying either with a 400.
      *
      * <p>An Anthropic id we cannot place is assumed to take none. Taking none is where the family is
-     * heading, so the unplaceable id is far more often a model newer than this list than an older one
+     * heading, so the unplaceable id is far more often a model newer than the catalog than an older one
      * missing from it — and the two failures are not equal: assuming it takes none omits a parameter,
      * while assuming it takes them fails the whole request. The floating {@code claude-opus-latest}
      * aliases are the case that settles it, since they follow the newest model by definition.
      *
      * <p>A name that is not an Anthropic id at all is left alone — see {@link #canonicalAnthropicId}.
      */
-    public boolean rejectsSamplingParams(String modelName) {
-        return isAnthropicIdOutside(modelName, AnthropicModelName.samplingCapableModelIds());
+    public boolean rejectsTemperature(String modelName, @NonNull LlmModelRegistryService registryService) {
+        return isAnthropicModelWithout(modelName, registryService, params -> isAccepted(params.temperature()));
+    }
+
+    /** Whether the model refuses top_p outright, for the reasons given on {@link #rejectsTemperature}. */
+    public boolean rejectsTopP(String modelName, @NonNull LlmModelRegistryService registryService) {
+        return isAnthropicModelWithout(modelName, registryService, params -> isAccepted(params.topP()));
+    }
+
+    private boolean isAccepted(ModelParams.NumberParam param) {
+        return param != null && Boolean.TRUE.equals(param.accepted());
     }
 
     /**
      * Whether the model thinks when a request does not mention thinking. An Anthropic id we cannot place is
-     * assumed to, for the reason given on {@link #rejectsSamplingParams}.
+     * assumed to, for the reason given on {@link #rejectsTemperature}.
      */
-    public boolean thinksByDefault(String modelName) {
-        return isAnthropicIdOutside(modelName, AnthropicModelName.thinkingOffByDefaultModelIds());
+    public boolean thinksByDefault(String modelName, @NonNull LlmModelRegistryService registryService) {
+        return isAnthropicModelWithout(modelName, registryService,
+                params -> Boolean.FALSE.equals(params.thinksByDefault()));
     }
 
-    private boolean isAnthropicIdOutside(String modelName, Set<String> earlierBehaviourModelIds) {
+    private boolean isAnthropicModelWithout(String modelName, LlmModelRegistryService registryService,
+            Predicate<ModelParams> earlierBehaviour) {
         var canonical = canonicalAnthropicId(modelName);
         if (canonical.isEmpty() || isLegacyGeneration(canonical)) {
             return false;
         }
-        return knownAnthropicId(canonical)
-                .map(id -> !earlierBehaviourModelIds.contains(id))
-                .orElse(true);
+        // An id we cannot place gets its own row when the registry lists one, and the provider profile otherwise.
+        var params = registryService.paramsOf(LlmProvider.ANTHROPIC.getValue(),
+                knownAnthropicId(canonical).orElse(canonical));
+        return params == null || !earlierBehaviour.test(params);
     }
 
     /**

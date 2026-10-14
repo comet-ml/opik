@@ -25,6 +25,8 @@ profiles:
     topP: {accepted: false}
     frequencyPenalty: {accepted: false}
     presencePenalty: {accepted: false}
+  # A Claude id without a row takes no sampling params and thinks: newer models increasingly refuse sampling, and
+  # omitting a param beats the 400 a refused one gets. So the rows below name the models that do take them.
   anthropic:
     temperature: {accepted: false, min: 0, max: 1, default: 0}
     topP: {accepted: false, min: 0, max: 1, default: 1}

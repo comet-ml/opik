@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
@@ -74,7 +75,7 @@ class LlmProviderOpenAiResponsesExtraBodyTest {
                 .withHeader("Content-Type", "application/json")
                 .withBody("{\"error\":{\"message\":\"stub\",\"type\":\"invalid_request_error\"}}")));
         provider = new LlmProviderOpenAiResponses(
-                new OpenAIClientGenerator(new LlmProviderClientConfig()),
+                new OpenAIClientGenerator(new LlmProviderClientConfig(), bundledRegistry()),
                 LlmProviderClientApiConfig.builder()
                         .apiKey("test-key")
                         .baseUrl(openAi.baseUrl())

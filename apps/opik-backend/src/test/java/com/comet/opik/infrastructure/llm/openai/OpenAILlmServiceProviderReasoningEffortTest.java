@@ -26,6 +26,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -82,7 +83,7 @@ class OpenAILlmServiceProviderReasoningEffortTest {
         stubChatCompletions();
         stubResponses();
         serviceProvider = new OpenAILlmServiceProvider(
-                new OpenAIClientGenerator(new LlmProviderClientConfig()),
+                new OpenAIClientGenerator(new LlmProviderClientConfig(), bundledRegistry()),
                 Mockito.mock(LlmProviderFactory.class));
     }
 

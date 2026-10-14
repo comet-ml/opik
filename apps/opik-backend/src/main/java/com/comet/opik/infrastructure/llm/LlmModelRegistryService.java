@@ -9,6 +9,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.google.common.base.Suppliers;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
@@ -33,6 +35,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -46,8 +49,10 @@ public class LlmModelRegistryService {
 
     private final LlmModelRegistryConfig config;
     private final Client httpClient;
+    private final Supplier<CuratedCatalog> shippedCatalog = Suppliers.memoize(
+            () -> readCuratedCatalog(new LlmModelRegistryConfig().getCuratedResource()));
     // volatile: reload() is called from the scheduled job thread
-    private volatile Map<String, List<LlmModelDefinition>> registry;
+    private volatile Snapshot snapshot;
     private volatile Map<String, List<ModelEntry>> lastGoodRemote;
     private final Set<String> reportedAwaitingSyncRows = ConcurrentHashMap.newKeySet();
 
@@ -61,17 +66,21 @@ public class LlmModelRegistryService {
     LlmModelRegistryService(@NonNull LlmModelRegistryConfig config, @NonNull Client httpClient) {
         this.config = config;
         this.httpClient = httpClient;
-        this.registry = load();
+        this.snapshot = load();
     }
 
     // visible for testing (no remote fetch)
     LlmModelRegistryService(@NonNull LlmModelRegistryConfig config) {
         this.config = config;
         this.httpClient = null;
-        this.registry = load();
+        this.snapshot = load();
     }
 
     public record ModelLookupResult(@NonNull LlmProvider provider, @NonNull LlmModelDefinition model) {
+    }
+
+    // One reference, so a reload swaps the models and the defaults they were resolved with together.
+    private record Snapshot(Map<String, List<LlmModelDefinition>> registry, CuratedCatalog catalog) {
     }
 
     // Separate from LlmModelDefinition because merge needs nullable flags: a primitive can't tell a flag a YAML
@@ -163,14 +172,14 @@ public class LlmModelRegistryService {
     }
 
     public Map<String, List<LlmModelDefinition>> getRegistry() {
-        return registry;
+        return snapshot.registry();
     }
 
     public Optional<ModelLookupResult> findModel(@NonNull String model) {
-        var snapshot = this.registry;
+        var registry = snapshot.registry();
 
         // Pass 1: match by qualifiedName (e.g., "vertex_ai/gemini-2.5-flash")
-        for (var entry : snapshot.entrySet()) {
+        for (var entry : registry.entrySet()) {
             for (var m : entry.getValue()) {
                 if (model.equals(m.qualifiedName())) {
                     var resolved = resolve(entry.getKey(), m);
@@ -182,7 +191,7 @@ public class LlmModelRegistryService {
         }
         // Pass 2: match by id, skipping models that have a qualifiedName to avoid ambiguity
         // (e.g., "gemini-2.5-flash" exists in both gemini and vertex-ai; only gemini should match by bare id)
-        for (var entry : snapshot.entrySet()) {
+        for (var entry : registry.entrySet()) {
             for (var m : entry.getValue()) {
                 if (m.qualifiedName() == null && model.equals(m.id())) {
                     var resolved = resolve(entry.getKey(), m);
@@ -207,7 +216,7 @@ public class LlmModelRegistryService {
 
     public void reload() {
         try {
-            registry = load();
+            snapshot = load();
             log.info("LLM model registry reloaded successfully");
         } catch (Exception e) {
             log.error("Failed to reload LLM model registry, keeping previous version", e);
@@ -220,7 +229,7 @@ public class LlmModelRegistryService {
                 && !config.getRemoteUrl().isBlank();
     }
 
-    private Map<String, List<LlmModelDefinition>> load() {
+    private Snapshot load() {
         var catalog = loadCuratedCatalog();
         var result = catalog.foldProfiles(loadClasspathResource(config.getDefaultResource()));
 
@@ -247,22 +256,22 @@ public class LlmModelRegistryService {
 
         var overridePath = config.getLocalOverridePath();
         if (overridePath == null || overridePath.isBlank()) {
-            return toRegistry(result, catalog);
+            return new Snapshot(toRegistry(result, catalog), catalog);
         }
 
         var path = Path.of(overridePath);
         if (!Files.exists(path)) {
             log.debug("Local override file not found at '{}', using defaults only", overridePath);
-            return toRegistry(result, catalog);
+            return new Snapshot(toRegistry(result, catalog), catalog);
         }
 
         try {
             var overrides = catalog.foldProfiles(loadFileResource(path));
-            return toRegistry(merge(result, overrides), catalog);
+            return new Snapshot(toRegistry(merge(result, overrides), catalog), catalog);
         } catch (Exception e) {
             log.error("Failed to load local override registry from '{}', falling back to defaults",
                     overridePath, e);
-            return toRegistry(result, catalog);
+            return new Snapshot(toRegistry(result, catalog), catalog);
         }
     }
 
@@ -275,8 +284,44 @@ public class LlmModelRegistryService {
         return Collections.unmodifiableMap(copy);
     }
 
+    /**
+     * The params the registry serves for a model id, the same ones the API lists; an unlisted or null id gets its
+     * provider's profile. Null when no layer and no profile says anything about the model, as for a provider the
+     * catalog has no profile for.
+     *
+     * <p>A deployment that turns the curated layer off still gets the shipped rules for a model no layer gives
+     * params, so turning it off cannot make a reasoning or Claude model fail with a 400.
+     */
+    public @Nullable ModelParams paramsOf(@NonNull String provider, @Nullable String modelId) {
+        var current = snapshot;
+        var listed = current.registry().getOrDefault(provider, List.of()).stream()
+                .filter(model -> model.id() != null && model.id().equals(modelId))
+                .findFirst();
+        if (listed.isPresent() && listed.get().params() != null) {
+            return listed.get().params();
+        }
+        var row = ModelEntry.builder()
+                .id(modelId)
+                .reasoning(listed.map(LlmModelDefinition::reasoning).orElse(false))
+                .build();
+        return ObjectUtils.getIfNull(current.catalog().resolve(provider, row), () -> shippedParams(provider, row));
+    }
+
+    private ModelParams shippedParams(String provider, ModelEntry row) {
+        var shipped = shippedCatalog.get();
+        var shippedRow = shipped.models().getOrDefault(provider, List.of()).stream()
+                .filter(m -> m.id() != null && m.id().equals(row.id()))
+                .findFirst()
+                .map(m -> m.toBuilder().reasoning(row.reasoning()).build())
+                .orElse(row);
+        return shipped.resolve(provider, shippedRow);
+    }
+
     private CuratedCatalog loadCuratedCatalog() {
-        var resourceName = config.getCuratedResource();
+        return readCuratedCatalog(config.getCuratedResource());
+    }
+
+    private static CuratedCatalog readCuratedCatalog(String resourceName) {
         if (resourceName == null || resourceName.isBlank()) {
             return NO_CATALOG;
         }
