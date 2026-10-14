@@ -7,6 +7,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.google.common.eventbus.EventBus;
 import jakarta.inject.Provider;
 import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.Nested;
@@ -51,9 +52,10 @@ class ProjectServiceImplTest {
     private final SortingFactoryProjects sortingFactory = mock(SortingFactoryProjects.class);
     private final SortingQueryBuilder sortingQueryBuilder = mock(SortingQueryBuilder.class);
     private final AnalyticsService analyticsService = mock(AnalyticsService.class);
+    private final EventBus eventBus = mock(EventBus.class);
 
     private final ProjectService projectService = new ProjectServiceImpl(template, ID_GENERATOR, requestContext,
-            traceDAO, sortingFactory, sortingQueryBuilder, analyticsService);
+            traceDAO, sortingFactory, sortingQueryBuilder, analyticsService, eventBus);
 
     /**
      * The bounded demo-project lookup, which replaced fetching every demo project in the installation for the daily

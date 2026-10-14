@@ -90,6 +90,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -2989,6 +2990,15 @@ class ProjectsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class DeleteProject {
 
+        private static final String COUNT_TRACES_BY_PROJECT = """
+                SELECT count(DISTINCT id) AS count FROM traces
+                WHERE workspace_id = :workspace_id AND project_id = :project_id
+                """;
+        private static final String COUNT_SPANS_BY_PROJECT = """
+                SELECT count(DISTINCT id) AS count FROM spans
+                WHERE workspace_id = :workspace_id AND project_id = :project_id
+                """;
+
         @ParameterizedTest
         @MethodSource
         @DisplayName("Success")
@@ -3066,6 +3076,88 @@ class ProjectsResourceTest {
                     .usingRecursiveComparison()
                     .ignoringCollectionOrder()
                     .isEqualTo(notDeletedIds);
+        }
+
+        @ParameterizedTest(name = "batch delete: {0}")
+        @ValueSource(booleans = {false, true})
+        void deleteProject__whenProjectHasTraces__thenDeletesItsTracesAndSpans(boolean batchDelete,
+                TransactionTemplateAsync templateAsync) {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var deletedProject = factory.manufacturePojo(Project.class);
+            var deletedProjectId = createProject(deletedProject, apiKey, workspaceName);
+            var keptProject = factory.manufacturePojo(Project.class);
+            var keptProjectId = createProject(keptProject, apiKey, workspaceName);
+
+            var deletedTraces = createTraces(deletedProject.name(), apiKey, workspaceName);
+            var deletedSpans = createSpans(deletedTraces, apiKey, workspaceName);
+            var keptTraces = createTraces(keptProject.name(), apiKey, workspaceName);
+            var keptSpans = createSpans(keptTraces, apiKey, workspaceName);
+
+            // Read straight from ClickHouse: the trace and span endpoints 404 once the project is gone, whether or not
+            // its rows are.
+            assertThat(countByProject(COUNT_TRACES_BY_PROJECT, workspaceId, deletedProjectId, templateAsync))
+                    .isEqualTo(deletedTraces.size());
+            assertThat(countByProject(COUNT_SPANS_BY_PROJECT, workspaceId, deletedProjectId, templateAsync))
+                    .isEqualTo(deletedSpans.size());
+
+            if (batchDelete) {
+                try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                        .path("delete")
+                        .request()
+                        .header(HttpHeaders.AUTHORIZATION, apiKey)
+                        .header(WORKSPACE_HEADER, workspaceName)
+                        .post(Entity.json(new BatchDelete(Set.of(deletedProjectId))))) {
+                    assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                }
+            } else {
+                projectResourceClient.deleteProject(deletedProjectId, apiKey, workspaceName);
+            }
+
+            Awaitility.await().untilAsserted(() -> {
+                assertThat(countByProject(COUNT_TRACES_BY_PROJECT, workspaceId, deletedProjectId, templateAsync))
+                        .isZero();
+                assertThat(countByProject(COUNT_SPANS_BY_PROJECT, workspaceId, deletedProjectId, templateAsync))
+                        .isZero();
+            });
+            assertThat(countByProject(COUNT_TRACES_BY_PROJECT, workspaceId, keptProjectId, templateAsync))
+                    .isEqualTo(keptTraces.size());
+            assertThat(countByProject(COUNT_SPANS_BY_PROJECT, workspaceId, keptProjectId, templateAsync))
+                    .isEqualTo(keptSpans.size());
+        }
+
+        private List<Trace> createTraces(String projectName, String apiKey, String workspaceName) {
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder().projectName(projectName).build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            return traces;
+        }
+
+        private List<Span> createSpans(List<Trace> traces, String apiKey, String workspaceName) {
+            var spans = traces.stream()
+                    .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                            .map(span -> span.toBuilder()
+                                    .projectName(trace.projectName())
+                                    .traceId(trace.id())
+                                    .build()))
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            return spans;
+        }
+
+        private long countByProject(String query, String workspaceId, UUID projectId,
+                TransactionTemplateAsync templateAsync) {
+            return templateAsync.nonTransaction(connection -> {
+                var statement = connection.createStatement(query)
+                        .bind("workspace_id", workspaceId)
+                        .bind("project_id", projectId);
+                return Mono.from(statement.execute())
+                        .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("count", Long.class))));
+            }).block();
         }
     }
 
