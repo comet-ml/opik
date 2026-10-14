@@ -1,5 +1,6 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
@@ -1405,8 +1406,17 @@ class ChatCompletionServiceTest {
                     .build();
         }
 
+        private static Optional<ModelParams> openAiParams(boolean reasoning) {
+            if (!reasoning) {
+                return Optional.of(ModelParams.builder().build());
+            }
+            var refused = new ModelParams.NumberParam(false, null, null, null);
+            return Optional.of(ModelParams.builder()
+                    .temperature(refused).topP(refused).frequencyPenalty(refused).presencePenalty(refused).build());
+        }
+
         private ChatCompletionRequest requestSentByCreate(String model, boolean reasoning) {
-            when(llmProviderFactory.isOpenAiReasoningModel(model)).thenReturn(reasoning);
+            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(reasoning));
             when(llmProviderFactory.getService(WORKSPACE_ID, model)).thenReturn(llmProviderService);
             var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
             when(llmProviderService.generate(captor.capture(), anyString()))
@@ -1445,7 +1455,7 @@ class ChatCompletionServiceTest {
         @DisplayName("createAndStreamResponse: a reasoning model reaches the provider without sampling params or penalties")
         void stream__whenReasoningModel__thenDropSamplingParamsAndPenalties() {
             var model = "o3";
-            when(llmProviderFactory.isOpenAiReasoningModel(model)).thenReturn(true);
+            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(true));
             when(llmProviderFactory.getService(WORKSPACE_ID, model)).thenReturn(llmProviderService);
             var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
 
@@ -1461,7 +1471,7 @@ class ChatCompletionServiceTest {
         }
 
         private LlmAsJudgeModelParameters judgeParametersSentByScoreTrace(String model, boolean reasoning) {
-            when(llmProviderFactory.isOpenAiReasoningModel(model)).thenReturn(reasoning);
+            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(reasoning));
             var captor = ArgumentCaptor.forClass(LlmAsJudgeModelParameters.class);
             when(llmProviderFactory.getLanguageModel(anyString(), captor.capture())).thenReturn(chatModel);
             when(chatModel.chat(any(ChatRequest.class))).thenReturn(mock(ChatResponse.class));

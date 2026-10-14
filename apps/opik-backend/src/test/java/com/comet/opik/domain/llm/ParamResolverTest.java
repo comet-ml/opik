@@ -1,15 +1,39 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.api.ModelParams;
+import com.comet.opik.api.ModelParams.NumberParam;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
-class SamplingParamsNormalizerTest {
+class ParamResolverTest {
+
+    private static final NumberParam REFUSED = new NumberParam(false, null, null, null);
+    private static final ModelParams OPENAI_REASONING = ModelParams.builder()
+            .temperature(REFUSED).topP(REFUSED).frequencyPenalty(REFUSED).presencePenalty(REFUSED).build();
+
+    private static final ParamResolver RESOLVER = new ParamResolver(mock(LlmProviderFactory.class));
+
+    private static ParamResolver resolverWithOpenAiParams(ModelParams params) {
+        var factory = mock(LlmProviderFactory.class);
+        when(factory.openAiParams(anyString())).thenReturn(Optional.of(params));
+        return new ParamResolver(factory);
+    }
+
+    private static ChatCompletionRequest resolve(ChatCompletionRequest request) {
+        return RESOLVER.resolve(request).request();
+    }
 
     private static ChatCompletionRequest request(String model, Double temperature, Double topP) {
         return ChatCompletionRequest.builder()
@@ -35,7 +59,7 @@ class SamplingParamsNormalizerTest {
             "CLAUDE-HAIKU-4-5-20251001"
     })
     void dropsTopPForClaudeWhateverServesIt(String model) {
-        var normalized = SamplingParamsNormalizer.normalizeRequest(request(model, 0.7, 0.9));
+        var normalized = resolve(request(model, 0.7, 0.9));
 
         assertThat(normalized.temperature()).isEqualTo(0.7);
         assertThat(normalized.topP()).isNull();
@@ -52,7 +76,7 @@ class SamplingParamsNormalizerTest {
             "claude-router/gpt-4o"
     })
     void doesNotTreatAGatewayNamedAfterClaudeAsClaude(String model) {
-        var normalized = SamplingParamsNormalizer.normalizeRequest(request(model, 0.7, 0.9));
+        var normalized = resolve(request(model, 0.7, 0.9));
 
         assertThat(normalized.topP()).isEqualTo(0.9);
     }
@@ -64,16 +88,14 @@ class SamplingParamsNormalizerTest {
      */
     @Test
     void doesNotClassifyAnIdWithNoModelSegment() {
-        var normalized = SamplingParamsNormalizer
-                .normalizeRequest(request("custom-llm/claude-gw/", 0.7, 0.9));
+        var normalized = resolve(request("custom-llm/claude-gw/", 0.7, 0.9));
 
         assertThat(normalized.topP()).isEqualTo(0.9);
     }
 
     @Test
     void stillMatchesClaudeBehindSuchAGateway() {
-        var normalized = SamplingParamsNormalizer
-                .normalizeRequest(request("custom-llm/claude-gw/claude-opus-4-6", 0.7, 0.9));
+        var normalized = resolve(request("custom-llm/claude-gw/claude-opus-4-6", 0.7, 0.9));
 
         assertThat(normalized.topP()).isNull();
     }
@@ -96,7 +118,7 @@ class SamplingParamsNormalizerTest {
             "anthropic/claude-opus-4.8"
     })
     void dropsBothForModelsThatTakeNeither(String model) {
-        var normalized = SamplingParamsNormalizer.normalizeRequest(request(model, 0.7, 0.9));
+        var normalized = resolve(request(model, 0.7, 0.9));
 
         assertThat(normalized.temperature()).isNull();
         assertThat(normalized.topP()).isNull();
@@ -117,7 +139,7 @@ class SamplingParamsNormalizerTest {
             "anthropic/claude-fable-5.1:batch"
     })
     void dropsBothForARecognisedClaudeNotMarkedCapable(String model) {
-        var normalized = SamplingParamsNormalizer.normalizeRequest(request(model, 0.7, 0.9));
+        var normalized = resolve(request(model, 0.7, 0.9));
 
         assertThat(normalized.temperature()).isNull();
         assertThat(normalized.topP()).isNull();
@@ -130,16 +152,14 @@ class SamplingParamsNormalizerTest {
      */
     @Test
     void leavesAnUnrecognisedClaudeItsTemperature() {
-        var normalized = SamplingParamsNormalizer
-                .normalizeRequest(request("custom-llm/gw/my-claude-deployment", 0.7, null));
+        var normalized = resolve(request("custom-llm/gw/my-claude-deployment", 0.7, null));
 
         assertThat(normalized.temperature()).isEqualTo(0.7);
     }
 
     @Test
     void dropsALoneTemperatureForAModelThatTakesNeither() {
-        var normalized = SamplingParamsNormalizer
-                .normalizeRequest(request("custom-llm/gw/claude-sonnet-5", 0.7, null));
+        var normalized = resolve(request("custom-llm/gw/claude-sonnet-5", 0.7, null));
 
         assertThat(normalized.temperature()).isNull();
     }
@@ -158,7 +178,7 @@ class SamplingParamsNormalizerTest {
             "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
     })
     void keepsTemperatureForACapableClaudeHoweverItIsSpelled(String model) {
-        var normalized = SamplingParamsNormalizer.normalizeRequest(request(model, 0.7, null));
+        var normalized = resolve(request(model, 0.7, null));
 
         assertThat(normalized.temperature()).isEqualTo(0.7);
     }
@@ -172,7 +192,7 @@ class SamplingParamsNormalizerTest {
     @ParameterizedTest
     @ValueSource(strings = {"enabled", "adaptive", "ENABLED"})
     void dropsBothWhenExtendedThinkingIsEnabled(String type) {
-        var normalized = SamplingParamsNormalizer.normalizeRequest(
+        var normalized = resolve(
                 thinkingRequest("custom-llm/gw/claude-sonnet-4-6", 0.7, 0.9, type));
 
         assertThat(normalized.temperature()).isNull();
@@ -182,7 +202,7 @@ class SamplingParamsNormalizerTest {
     @ParameterizedTest
     @ValueSource(strings = {"disabled", "DISABLED", "  "})
     void leavesTemperatureWhenThinkingIsNotEnabled(String type) {
-        var normalized = SamplingParamsNormalizer.normalizeRequest(
+        var normalized = resolve(
                 thinkingRequest("custom-llm/gw/claude-sonnet-4-6", 0.7, null, type));
 
         assertThat(normalized.temperature()).isEqualTo(0.7);
@@ -193,7 +213,7 @@ class SamplingParamsNormalizerTest {
     @ParameterizedTest
     @ValueSource(strings = {"disabled", "DISABLED", "  "})
     void leavesTopPWhenThinkingIsNotEnabled(String type) {
-        var normalized = SamplingParamsNormalizer.normalizeRequest(
+        var normalized = resolve(
                 thinkingRequest("custom-llm/gw/claude-sonnet-4-6", null, 0.9, type));
 
         assertThat(normalized.topP()).isEqualTo(0.9);
@@ -212,22 +232,21 @@ class SamplingParamsNormalizerTest {
 
     @Test
     void leavesASamplingCapableClaudeAlone() {
-        var normalized = SamplingParamsNormalizer
-                .normalizeRequest(request("custom-llm/gw/claude-sonnet-4-6", 0.7, null));
+        var normalized = resolve(request("custom-llm/gw/claude-sonnet-4-6", 0.7, null));
 
         assertThat(normalized.temperature()).isEqualTo(0.7);
     }
 
     @Test
     void keepsTopPForClaudeWhenTemperatureIsAbsent() {
-        var normalized = SamplingParamsNormalizer.normalizeRequest(request("claude-opus-4-6", null, 0.9));
+        var normalized = resolve(request("claude-opus-4-6", null, 0.9));
 
         assertThat(normalized.topP()).isEqualTo(0.9);
     }
 
     @Test
     void leavesModelsWithoutTheConstraintAlone() {
-        var normalized = SamplingParamsNormalizer.normalizeRequest(request("gpt-4o", 0.7, 0.9));
+        var normalized = resolve(request("gpt-4o", 0.7, 0.9));
 
         assertThat(normalized.temperature()).isEqualTo(0.7);
         assertThat(normalized.topP()).isEqualTo(0.9);
@@ -237,18 +256,35 @@ class SamplingParamsNormalizerTest {
     void returnsTheSameRequestWhenNothingNeedsDropping() {
         var original = request("claude-opus-4-6", 0.7, null);
 
-        assertThat(SamplingParamsNormalizer.normalizeRequest(original)).isSameAs(original);
+        assertThat(resolve(original)).isSameAs(original);
     }
 
     @Test
     void toleratesARequestWithNoModel() {
         var original = request(null, 0.7, 0.9);
 
-        assertThat(SamplingParamsNormalizer.normalizeRequest(original)).isSameAs(original);
+        assertThat(resolve(original)).isSameAs(original);
     }
 
     @Test
-    void dropOpenAiReasoningModelParamsRemovesSamplingParamsAndPenaltiesOnly() {
+    void reportsEachSettingItDropsAndWhy() {
+        var resolution = RESOLVER.resolve(request("claude-sonnet-5", 0.7, 0.9));
+
+        assertThat(resolution.changes()).containsExactly(
+                "temperature not sent: claude-sonnet-5 does not take it",
+                "top_p not sent: claude-sonnet-5 does not take it");
+    }
+
+    @Test
+    void reportsTheTopPItDropsForAModelThatTakesOnlyOneOfThem() {
+        var resolution = RESOLVER.resolve(request("claude-sonnet-4-6", 0.7, 0.9));
+
+        assertThat(resolution.changes())
+                .containsExactly("top_p not sent: claude-sonnet-4-6 takes temperature or top_p, not both");
+    }
+
+    @Test
+    void dropsTheSettingsTheOpenAiCatalogParamsRefuseAndKeepsTheRest() {
         var request = ChatCompletionRequest.builder()
                 .model("gpt-5-mini")
                 .temperature(0.7)
@@ -259,8 +295,9 @@ class SamplingParamsNormalizerTest {
                 .seed(7)
                 .build();
 
-        var normalized = SamplingParamsNormalizer.dropOpenAiReasoningModelParams(request);
+        var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(request);
 
+        var normalized = resolution.request();
         assertThat(normalized.temperature()).isNull();
         assertThat(normalized.topP()).isNull();
         assertThat(normalized.frequencyPenalty()).isNull();
@@ -268,12 +305,27 @@ class SamplingParamsNormalizerTest {
         assertThat(normalized.model()).isEqualTo("gpt-5-mini");
         assertThat(normalized.maxCompletionTokens()).isEqualTo(100);
         assertThat(normalized.seed()).isEqualTo(7);
+        assertThat(resolution.changes()).hasSize(4).allMatch(change -> change.endsWith("gpt-5-mini does not take it"));
     }
 
     @Test
-    void dropOpenAiReasoningModelParamsReturnsTheSameRequestWhenNothingIsSet() {
+    void returnsTheSameRequestWhenTheOpenAiCatalogParamsRefuseNothingThatIsSet() {
         var request = ChatCompletionRequest.builder().model("o3").maxCompletionTokens(100).build();
 
-        assertThat(SamplingParamsNormalizer.dropOpenAiReasoningModelParams(request)).isSameAs(request);
+        var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(request);
+
+        assertThat(resolution.request()).isSameAs(request);
+        assertThat(resolution.changes()).isEmpty();
+    }
+
+    @Test
+    void dropsAJudgeTemperatureTheOpenAiCatalogParamsRefuse() {
+        var parameters = LlmAsJudgeModelParameters.builder().name("o3").temperature(0.0).seed(3).build();
+
+        var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(parameters);
+
+        assertThat(resolution.request().temperature()).isNull();
+        assertThat(resolution.request().seed()).isEqualTo(3);
+        assertThat(resolution.changes()).isEqualTo(List.of("temperature not sent: o3 does not take it"));
     }
 }

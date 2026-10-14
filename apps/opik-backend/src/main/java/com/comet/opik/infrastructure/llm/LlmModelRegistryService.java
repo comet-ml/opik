@@ -247,12 +247,36 @@ public class LlmModelRegistryService {
         return Collections.unmodifiableMap(copy);
     }
 
+    /**
+     * The params the bundled catalog gives a model id, listed by the registry or not, or the provider's own profile
+     * for an id without a row.
+     *
+     * <p>Static, and read once, because the per-model rules are applied from code that has no injector (the
+     * MapStruct mappers and the client generators). The curated file ships with the release, so a self-hoster's
+     * local override reaches the API but not these rules yet.
+     */
+    public static ModelParams bundledParams(@NonNull String provider, String modelId) {
+        var row = Bundled.CATALOG.models().getOrDefault(provider, List.of()).stream()
+                .filter(m -> m.id() != null && m.id().equals(modelId))
+                .findFirst()
+                .orElseGet(() -> ModelEntry.builder().id(modelId).build());
+        return Bundled.CATALOG.resolve(provider, row);
+    }
+
+    private static final class Bundled {
+        private static final CuratedCatalog CATALOG = readCuratedCatalog(
+                new LlmModelRegistryConfig().getCuratedResource());
+    }
+
     private CuratedCatalog loadCuratedCatalog() {
-        var resourceName = config.getCuratedResource();
+        return readCuratedCatalog(config.getCuratedResource());
+    }
+
+    private static CuratedCatalog readCuratedCatalog(String resourceName) {
         if (resourceName == null || resourceName.isBlank()) {
             return NO_CATALOG;
         }
-        try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourceName)) {
+        try (InputStream is = LlmModelRegistryService.class.getClassLoader().getResourceAsStream(resourceName)) {
             if (is == null) {
                 throw new IllegalStateException("Classpath resource not found: " + resourceName);
             }

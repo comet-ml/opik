@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.LlmProviderApiKeyService;
@@ -133,11 +134,10 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     }
 
     @Override
-    public boolean isOpenAiReasoningModel(@NonNull String model) {
+    public Optional<ModelParams> openAiParams(@NonNull String model) {
         return registryService.findModel(model)
                 .filter(result -> result.provider() == LlmProvider.OPEN_AI)
-                .map(result -> result.model().reasoning())
-                .orElse(false);
+                .map(result -> result.model().params());
     }
 
     private LlmProvider getLlmProviderFromEnums(@NonNull String model) {

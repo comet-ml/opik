@@ -56,6 +56,7 @@ public class ChatCompletionService {
 
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final LlmProviderFactory llmProviderFactory;
+    private final ParamResolver paramResolver;
     private final RetryUtils.RetryPolicy retryPolicy;
 
     @Inject
@@ -64,6 +65,7 @@ public class ChatCompletionService {
             @NonNull LlmProviderFactory llmProviderFactory) {
         this.llmProviderClientConfig = llmProviderClientConfig;
         this.llmProviderFactory = llmProviderFactory;
+        this.paramResolver = new ParamResolver(llmProviderFactory);
         this.retryPolicy = newRetryPolicy();
     }
 
@@ -137,8 +139,9 @@ public class ChatCompletionService {
     public ChatResponse scoreTrace(@NonNull ChatRequest chatRequest,
             @NonNull LlmAsJudgeModelParameters modelParameters,
             @NonNull String workspaceId) {
-        var languageModelClient = llmProviderFactory.getLanguageModel(workspaceId,
-                dropOpenAiReasoningModelTemperature(modelParameters));
+        var resolved = paramResolver.resolve(modelParameters);
+        logChanges(resolved.request().name(), resolved.changes());
+        var languageModelClient = llmProviderFactory.getLanguageModel(workspaceId, resolved.request());
 
         ChatResponse chatResponse;
         try {
@@ -254,19 +257,15 @@ public class ChatCompletionService {
     }
 
     private ChatCompletionRequest normalizeRequest(ChatCompletionRequest rawRequest) {
-        var request = SamplingParamsNormalizer.normalizeRequest(MessageContentNormalizer.normalizeRequest(rawRequest));
-        return request.model() != null && llmProviderFactory.isOpenAiReasoningModel(request.model())
-                ? SamplingParamsNormalizer.dropOpenAiReasoningModelParams(request)
-                : request;
+        var resolved = paramResolver.resolve(MessageContentNormalizer.normalizeRequest(rawRequest));
+        logChanges(resolved.request().model(), resolved.changes());
+        return resolved.request();
     }
 
-    // Saved judge rules keep the temperature they were created with, and the frontend strips it only on save.
-    private LlmAsJudgeModelParameters dropOpenAiReasoningModelTemperature(
-            LlmAsJudgeModelParameters modelParameters) {
-        return modelParameters.temperature() != null
-                && llmProviderFactory.isOpenAiReasoningModel(modelParameters.name())
-                        ? modelParameters.toBuilder().temperature(null).build()
-                        : modelParameters;
+    private void logChanges(String model, List<String> changes) {
+        if (!changes.isEmpty()) {
+            log.debug("Request to model '{}' changed: {}", model, changes);
+        }
     }
 
     /**

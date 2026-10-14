@@ -53,7 +53,7 @@ class AnthropicEffort {
         }
         // A model without a row, such as one the model sync just added, is only checked for a known level name.
         // Anthropic has the final word on it, so a stale table never blocks a new model.
-        var supported = AnthropicModelName.effortLevels(model).orElse(AnthropicModelName.ALL_EFFORT_LEVELS);
+        var supported = AnthropicModelName.effortLevels(model).orElseGet(AnthropicModelName::unlistedModelEffortLevels);
         if (supported.isEmpty()) {
             throw new BadRequestException(
                     "The model does not support custom_parameters.output_config.effort, model '%s', effort '%s'"
