@@ -327,7 +327,7 @@ public class SpanService {
         if (CollectionUtils.isEmpty(traceIds)) {
             return Mono.just(List.of());
         }
-        return spanWeeksDAO.findByTraceIds(traceIds);
+        return spanWeeksDAO.findByTraceIds(traceIds).collectList();
     }
 
     private Mono<Project> getProjectById(SpanUpdate spanUpdate) {

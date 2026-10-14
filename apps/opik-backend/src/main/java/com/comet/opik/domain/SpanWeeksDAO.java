@@ -28,6 +28,7 @@ import java.util.UUID;
 
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
+import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 /**
@@ -102,13 +103,14 @@ public class SpanWeeksDAO {
 
     /**
      * The weeks the given traces' spans are registered in. Bounded by the trace ids, each holding a handful of weeks
-     * (one per week its spans' ids fall in), so the result needs no pagination.
+     * (one per week its spans' ids fall in), so the result needs no pagination. Streamed; collecting is the caller's
+     * choice.
      */
-    public Mono<List<SpanWeek>> findByTraceIds(Set<UUID> traceIds) {
+    public Flux<SpanWeek> findByTraceIds(Set<UUID> traceIds) {
         if (CollectionUtils.isEmpty(traceIds)) {
-            return Mono.just(List.of());
+            return Flux.empty();
         }
-        return makeMonoContextAware((userName, workspaceId) -> Mono.from(connectionFactory.create())
+        return makeFluxContextAware((userName, workspaceId) -> Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     ST template = getSTWithLogComment(FIND_BY_TRACE_IDS, "find_span_weeks_by_trace_ids", workspaceId,
                             userName, "trace_ids:%d".formatted(traceIds.size()));
@@ -121,8 +123,7 @@ public class SpanWeeksDAO {
                         .projectId(row.get("project_id", UUID.class))
                         .traceId(row.get("trace_id", UUID.class))
                         .idWeek(row.get("id_week", Long.class))
-                        .build()))
-                .collectList());
+                        .build())));
     }
 
     /** When the first span was written, if any; one scan of the created_at column. */

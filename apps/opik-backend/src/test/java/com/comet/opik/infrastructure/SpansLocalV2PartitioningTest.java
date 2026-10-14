@@ -671,6 +671,7 @@ class SpansLocalV2PartitioningTest {
         spanWeeksDAO.backfill(20250310L, null, 4, 600).block();
 
         assertThat(spanWeeksDAO.findByTraceIds(Set.copyOf(traceIdBySpanId.values()))
+                .collectList()
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, "user", workspaceId))
                 .block())
                 .containsExactlyInAnyOrderElementsOf(expected);
