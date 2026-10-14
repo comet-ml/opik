@@ -6,49 +6,34 @@ import usePluginsStore from "@/store/PluginsStore";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
 import { Separator } from "@/ui/separator";
 
-export const OUT_OF_CREDITS_RUN_DESCRIPTION =
-  "Diagnostics run on your organization's Ollie credits, and there aren't enough left for another run. Issues already found stay available.";
-
 type OutOfCreditsButtonProps = {
   label: string;
   description: string;
   large?: boolean;
-  // An inline text link (e.g. inside a callout) in place of the button, same popover.
-  asLink?: boolean;
 };
 
 const OutOfCreditsButton: React.FC<OutOfCreditsButtonProps> = ({
   label,
   description,
   large = false,
-  asLink = false,
 }) => {
   const BillingLink = usePluginsStore((state) => state.BillingLink);
 
   return (
     <HoverCard openDelay={100}>
       <HoverCardTrigger asChild>
-        {asLink ? (
-          <button
-            type="button"
-            className="cursor-default underline underline-offset-2"
-          >
-            {label}
-          </button>
-        ) : (
-          <Button
-            variant="outline"
-            size={large ? "default" : "2xs"}
-            className={cn(
-              "cursor-default bg-[var(--tag-yellow-bg)] text-[var(--tag-yellow-text)] hover:bg-[var(--tag-yellow-bg)] hover:text-[var(--tag-yellow-text)] active:bg-[var(--tag-yellow-bg)] active:text-[var(--tag-yellow-text)]",
-              "dark:bg-muted-disabled dark:text-chart-yellow dark:hover:bg-muted-disabled dark:hover:text-chart-yellow dark:active:bg-muted-disabled",
-              large ? "gap-2" : "gap-1.5",
-            )}
-          >
-            <Coins className={large ? "size-4" : "size-3.5"} />
-            {label}
-          </Button>
-        )}
+        <Button
+          variant="outline"
+          size={large ? "default" : "2xs"}
+          className={cn(
+            "cursor-default bg-[var(--tag-yellow-bg)] text-[var(--tag-yellow-text)] hover:bg-[var(--tag-yellow-bg)] hover:text-[var(--tag-yellow-text)] active:bg-[var(--tag-yellow-bg)] active:text-[var(--tag-yellow-text)]",
+            "dark:bg-muted-disabled dark:text-chart-yellow dark:hover:bg-muted-disabled dark:hover:text-chart-yellow dark:active:bg-muted-disabled",
+            large ? "gap-2" : "gap-1.5",
+          )}
+        >
+          <Coins className={large ? "size-4" : "size-3.5"} />
+          {label}
+        </Button>
       </HoverCardTrigger>
       <HoverCardContent align="center" className="w-[278px] p-1">
         <div className="flex items-center gap-1 p-1">
