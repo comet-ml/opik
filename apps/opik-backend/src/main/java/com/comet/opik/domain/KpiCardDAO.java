@@ -209,9 +209,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
                       AND trace_id IN (SELECT id FROM traces_filtered)
                       <if(spans_partitioned)>
                       AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                          SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
+                          SELECT DISTINCT <if(span_weeks_bound)>id_week<else>toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))<endif> FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
                           WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN (SELECT id FROM traces_filtered)
-                          AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))) <if(uuid_to_time)>AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                          AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))) <if(uuid_to_time)>AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
                       <endif>
                     GROUP BY trace_id
                 )
@@ -331,9 +331,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                     <if(spans_partitioned)>
                     AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
+                        SELECT DISTINCT <if(span_weeks_bound)>id_week<else>toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))<endif> FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
                         WHERE workspace_id = :workspace_id AND project_id = :project_id
-                        AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))) <if(uuid_to_time)>AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                        AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))) <if(uuid_to_time)>AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
                     <endif>
                     <if(span_filters)> AND <span_filters> <endif>
                     <if(span_feedback_scores_filters)>
@@ -572,9 +572,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
                           \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                       <if(spans_partitioned)>
                       AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                          SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
+                          SELECT DISTINCT <if(span_weeks_bound)>id_week<else>toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))<endif> FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
                           WHERE workspace_id = :workspace_id AND project_id = :project_id
-                        AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))) <if(uuid_to_time)>AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                        AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))) <if(uuid_to_time)>AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
                       <endif>
                 ) s
                 JOIN traces_final tr ON s.trace_id = tr.id
@@ -654,6 +654,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
         // the weeks their own matching span ids resolve to; on the legacy table there is nothing to prune.
         if (spanColumnsNonNullable()) {
             template.add("spans_partitioned", true);
+        }
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
         }
         // Without a requested end the upper bounds are omitted, so far-future ids count, as they do in the list.
         if (criteria.intervalEnd() != null) {

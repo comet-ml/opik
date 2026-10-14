@@ -10,19 +10,26 @@ import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.util.retry.Retry;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
+import java.time.Duration;
 import java.util.List;
 
 /**
  * Registers in span_weeks the weekly partition of every span written, so trace-keyed spans reads can bind their
- * partitions. Runs on the AsyncEventBus virtual threads, off the request path; failures are logged and swallowed, since
- * the span itself was already written. A failed registration leaves that span's week out of the index.
+ * partitions. Runs on the AsyncEventBus virtual threads, off the request path, so a read right after a write can miss
+ * the new spans until their week lands. Failures are retried, since a repeat registration collapses in span_weeks;
+ * once retries run out they are logged and swallowed, since the span itself was already written, leaving that span's
+ * week out of the index until another span of the same trace and week registers it.
  */
 @EagerSingleton
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class SpanWeeksListener {
+
+    private static final int MAX_RETRIES = 3;
+    private static final Duration MIN_BACKOFF = Duration.ofMillis(200);
 
     private final @NonNull SpanService spanService;
 
@@ -43,6 +50,8 @@ public class SpanWeeksListener {
 
     private void register(List<Span> spans, String workspaceId, String userName) {
         spanService.registerWeeks(spans)
+                .retryWhen(Retry.backoff(MAX_RETRIES, MIN_BACKOFF)
+                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                 .subscribe(
                         null,

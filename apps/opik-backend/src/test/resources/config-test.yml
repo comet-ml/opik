@@ -182,6 +182,12 @@ databaseAnalyticsDataModel:
   #   spans already written, one range of weeks at a time. Turn true only once spanWeeksWriteEnabled is live on every
   #   instance: the backfill covers the spans written until its first run, live registration the rest.
   spanWeeksBackfillEnabled: false
+  #  Default: false
+  #  Description: Bound span reads by trace id to the weeks the span_weeks index holds for those traces. Effective only
+  #   while spanColumnsNonNullable is also true (the legacy spans id_at wraps far-future ids). Turn true once the span
+  #   weeks backfill logs that it is complete; before that, spans it has not indexed yet would be skipped. Registration
+  #   is asynchronous, so a read right after a write can miss the new spans until their week is indexed.
+  spanWeeksReadEnabled: false
 
 # Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
 # It tiles the span ids into ranges of weeks, from the install week (the first project's created_at) to the plan's own

@@ -12,6 +12,7 @@ import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.ProjectStats;
@@ -42,6 +43,8 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectMetricsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
@@ -144,8 +147,8 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class SpansReadPathPartitionPruningTest {
 
-    private static final String API_KEY = "apiKey-" + UUID.randomUUID();
-    private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+    protected static final String API_KEY = "apiKey-" + UUID.randomUUID();
+    protected static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
 
@@ -216,7 +219,7 @@ class SpansReadPathPartitionPruningTest {
 
     private final WireMockUtils.WireMockRuntime wireMock;
 
-    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    protected final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     @RegisterApp
     private final TestDropwizardAppExtension app;
@@ -240,20 +243,23 @@ class SpansReadPathPartitionPruningTest {
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .redisUrl(redisContainer.getRedisURI())
                         .runtimeInfo(wireMock.runtimeInfo())
-                        .customConfigs(List.of(
+                        .customConfigs(Stream.concat(Stream.of(
                                 // Lets the filler and past-ceiling ids through ingestion, as in production.
                                 new CustomConfig("uuidValidation.enabled", "false"),
                                 // The successor's columns are non-nullable, as the cutover flips this with it.
-                                new CustomConfig("databaseAnalyticsDataModel.spanColumnsNonNullable", "true")))
+                                new CustomConfig("databaseAnalyticsDataModel.spanColumnsNonNullable", "true")),
+                                extraConfigs().stream()).toList())
                         .build());
     }
 
-    private SpanResourceClient spanResourceClient;
+    protected SpanResourceClient spanResourceClient;
     private DatasetResourceClient datasetResourceClient;
+    private ExperimentResourceClient experimentResourceClient;
+    private OptimizationResourceClient optimizationResourceClient;
     private ProjectResourceClient projectResourceClient;
     private ProjectMetricsResourceClient projectMetricsResourceClient;
-    private TraceResourceClient traceResourceClient;
-    private TransactionTemplateAsync template;
+    protected TraceResourceClient traceResourceClient;
+    protected TransactionTemplateAsync template;
     private AlertResourceClient alertResourceClient;
 
     @BeforeAll
@@ -261,8 +267,10 @@ class SpansReadPathPartitionPruningTest {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
-        this.spanResourceClient = new SpanResourceClient(clientSupport, baseUrl);
+        this.spanResourceClient = newSpanResourceClient(clientSupport, baseUrl);
         this.datasetResourceClient = new DatasetResourceClient(clientSupport, baseUrl);
+        this.experimentResourceClient = new ExperimentResourceClient(clientSupport, baseUrl, factory);
+        this.optimizationResourceClient = new OptimizationResourceClient(clientSupport, baseUrl, factory);
         this.projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
         this.projectMetricsResourceClient = new ProjectMetricsResourceClient(clientSupport, baseUrl);
         this.traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
@@ -273,6 +281,91 @@ class SpansReadPathPartitionPruningTest {
                 .flatMap(monday -> Stream.of(0, 1).map(_ -> newSpan(
                         monday.atTime(12, 0).toInstant(ZoneOffset.UTC), ID_GENERATOR.generateId())))
                 .toList(), API_KEY, WORKSPACE_NAME);
+    }
+
+    /**
+     * A trace's spans in this week and in 2201 reach every trace-keyed read that sums them. The subclass reruns this
+     * with the {@code span_weeks} bound on, where it also shows each statement read the index.
+     */
+    @Test
+    void traceKeyedReadsCountAFarFutureSpanOfTheTrace() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var now = Instant.now();
+        var threadId = "thread-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
+                .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
+                .projectName(projectName)
+                .threadId(threadId)
+                .startTime(now)
+                .endTime(now.plusMillis(100))
+                .feedbackScores(null)
+                .usage(null)
+                .build(), API_KEY, WORKSPACE_NAME);
+        var spans = List.of(
+                newSpan(now, traceId).toBuilder().projectName(projectName)
+                        .totalEstimatedCost(new BigDecimal("1.25")).build(),
+                newSpan(Instant.parse("2201-08-30T03:18:08Z"), traceId).toBuilder().projectName(projectName)
+                        .totalEstimatedCost(new BigDecimal("2.5")).build());
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+        var expectedCost = new BigDecimal("3.75");
+
+        var datasetName = "dataset-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                .source(DatasetItemSource.SDK)
+                .traceId(null)
+                .spanId(null)
+                .experimentItems(null)
+                .build();
+        datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                .datasetName(datasetName)
+                .items(List.of(datasetItem))
+                .build(), WORKSPACE_NAME, API_KEY);
+        var optimizationId = optimizationResourceClient.create(optimizationResourceClient.createPartialOptimization()
+                .datasetName(datasetName)
+                .build(), API_KEY, WORKSPACE_NAME);
+        var experimentId = experimentResourceClient.create(experimentResourceClient.createPartialExperiment()
+                .datasetName(datasetName)
+                .optimizationId(optimizationId)
+                .build(), API_KEY, WORKSPACE_NAME);
+        experimentResourceClient.createExperimentItem(Set.of(ExperimentItem.builder()
+                .experimentId(experimentId)
+                .datasetItemId(datasetItem.id())
+                .traceId(traceId)
+                .build()), API_KEY, WORKSPACE_NAME);
+
+        assertThat(spanResourceClient.findSpans(WORKSPACE_NAME, API_KEY, projectName, null, 1, 10, traceId, null,
+                null, null, null).content())
+                .extracting(Span::id)
+                .containsExactlyInAnyOrderElementsOf(spans.stream().map(Span::id).toList());
+        assertSpanWeeksRead("find_spans_by_project_id", traceId);
+
+        assertThat(experimentResourceClient.getExperiment(experimentId, API_KEY, WORKSPACE_NAME)
+                .totalEstimatedCost()).isEqualByComparingTo(expectedCost);
+        assertSpanWeeksRead("get_experiment_by_id", experimentId);
+
+        assertThat(optimizationResourceClient.get(optimizationId, API_KEY, WORKSPACE_NAME, HttpStatus.SC_OK)
+                .totalOptimizationCost()).isEqualByComparingTo(expectedCost);
+        assertSpanWeeksRead("get_optimization_by_id", optimizationId);
+
+        // Threads are materialised from their traces asynchronously.
+        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(traceResourceClient
+                .getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME).totalEstimatedCost())
+                .isEqualByComparingTo(expectedCost));
+        assertSpanWeeksRead("find_thread_by_id", projectId);
+    }
+
+    /** Asserts the latest statement of {@code op} naming {@code id} read the span_weeks index; off here. */
+    protected void assertSpanWeeksRead(String op, UUID id) {
+    }
+
+    /** Called from the constructor, before any subclass field is set. */
+    protected List<CustomConfig> extraConfigs() {
+        return List.of();
+    }
+
+    protected SpanResourceClient newSpanResourceClient(ClientSupport clientSupport, String baseUrl) {
+        return new SpanResourceClient(clientSupport, baseUrl);
     }
 
     @AfterAll
@@ -954,7 +1047,7 @@ class SpansReadPathPartitionPruningTest {
         return span;
     }
 
-    private Span newSpan(Instant idAt, UUID traceId) {
+    protected Span newSpan(Instant idAt, UUID traceId) {
         return factory.manufacturePojo(Span.class).toBuilder()
                 .id(ID_GENERATOR.getTimeOrderedEpoch(idAt.toEpochMilli()))
                 .projectName(PROJECT_NAME)

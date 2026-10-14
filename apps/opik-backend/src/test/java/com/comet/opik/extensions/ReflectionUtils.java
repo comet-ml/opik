@@ -5,7 +5,9 @@ import java.lang.reflect.Field;
 import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 public class ReflectionUtils {
 
@@ -23,7 +25,9 @@ public class ReflectionUtils {
         Class<?> clazz = testInstance.getClass();
 
         while (clazz != null) { // Traverse nested class hierarchy
-            Optional<Field> fieldOpt = Arrays.stream(clazz.getDeclaredFields())
+            // Superclasses too, so a test can subclass another to rerun its cases under a different app config.
+            Optional<Field> fieldOpt = Stream.<Class<?>>iterate(clazz, Objects::nonNull, Class::getSuperclass)
+                    .flatMap(type -> Arrays.stream(type.getDeclaredFields()))
                     .filter(f -> f.isAnnotationPresent(annotationClass))
                     .findFirst();
 

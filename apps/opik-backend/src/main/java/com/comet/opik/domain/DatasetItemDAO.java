@@ -705,6 +705,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
+                <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN (SELECT trace_id FROM experiment_items_scope))<endif>
                 GROUP BY workspace_id, trace_id
                 ) s ON t.id = s.trace_id
                 GROUP BY
@@ -1047,6 +1048,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     FROM spans final
                     WHERE workspace_id = :workspace_id
                     AND trace_id IN (SELECT trace_id FROM experiment_items_final)
+                    <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN (SELECT trace_id FROM experiment_items_final))<endif>
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON eif.trace_id = s.trace_id
             ), feedback_scores_agg AS (
@@ -1393,10 +1395,17 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         }
     }
 
+    private void addSpanWeeksBound(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
+        }
+    }
+
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria, String queryName,
             String workspaceId) {
         var template = getSTWithLogComment(query, queryName, workspaceId, "", "");
         addTracesPartitionedFlag(template);
+        addSpanWeeksBound(template);
 
         Optional.ofNullable(datasetItemSearchCriteria.filters())
                 .ifPresent(filters -> {
@@ -1589,6 +1598,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             var template = getSTWithLogComment(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS,
                     "get_experiment_items_stats", workspaceId, userName, experimentIds.size());
             addTracesPartitionedFlag(template);
+            addSpanWeeksBound(template);
             template.add("dataset_id", datasetId);
             if (!experimentIds.isEmpty()) {
                 template.add("experiment_ids", true);

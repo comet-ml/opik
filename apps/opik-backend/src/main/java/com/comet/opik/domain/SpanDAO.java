@@ -761,10 +761,14 @@ public class SpanDAO {
             ;
             """;
 
+    /**
+     * With {@code <span_weeks_bound>}, the traces' projects and weeks come from the {@code span_weeks} index, so the
+     * {@code spans} read is pruned to those partitions. The other trace-id reads carry the same bound and point here.
+     */
     private static final String SELECT_BY_TRACE_IDS = """
             WITH target_projects AS (
                 SELECT DISTINCT project_id
-                FROM spans
+                FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
                 WHERE workspace_id = :workspace_id
                 AND trace_id IN :trace_ids
             )
@@ -775,6 +779,7 @@ public class SpanDAO {
             WHERE workspace_id = :workspace_id
             AND project_id IN (SELECT project_id FROM target_projects)
             AND trace_id IN :trace_ids
+            <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN :trace_ids)<endif>
             ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY workspace_id, project_id, id
             SETTINGS log_comment = '<log_comment>'
@@ -793,7 +798,7 @@ public class SpanDAO {
     private static final String SELECT_SPANS_SIZE_BY_TRACE_IDS = """
             WITH target_projects AS (
                 SELECT DISTINCT project_id
-                FROM spans
+                FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
                 WHERE workspace_id = :workspace_id
                 AND trace_id IN :trace_ids
             )
@@ -804,6 +809,7 @@ public class SpanDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN (SELECT project_id FROM target_projects)
                 AND trace_id IN :trace_ids
+                <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN :trace_ids)<endif>
                 GROUP BY id
             )
             SETTINGS log_comment = '<log_comment>'
@@ -873,6 +879,7 @@ public class SpanDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(trace_id)><if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif><endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
@@ -1064,6 +1071,7 @@ public class SpanDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(trace_id)><if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif><endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
@@ -1185,6 +1193,7 @@ public class SpanDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(trace_id)><if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif><endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
@@ -1281,6 +1290,7 @@ public class SpanDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(trace_id)><if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif><endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
@@ -1597,6 +1607,7 @@ public class SpanDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(trace_id)><if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif><endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
@@ -1752,6 +1763,7 @@ public class SpanDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(trace_id)><if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif><endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
@@ -1822,6 +1834,7 @@ public class SpanDAO {
             WHERE trace_id IN :trace_ids
             AND workspace_id = :workspace_id
             AND project_id = :project_id
+            <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN :trace_ids)<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2106,6 +2119,12 @@ public class SpanDAO {
             return Flux.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment));
         });
+    }
+
+    private void addSpanWeeksBound(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
+        }
     }
 
     private boolean spanColumnsNonNullable() {
@@ -2454,6 +2473,7 @@ public class SpanDAO {
                     var template = getSTWithLogComment(SELECT_BY_TRACE_IDS, "get_spans_by_trace_ids", workspaceId,
                             userName,
                             traceIds.size());
+                    addSpanWeeksBound(template);
                     var statement = connection.createStatement(template.render())
                             .bind("trace_ids", traceIds.toArray(new UUID[0]))
                             .bind("workspace_id", workspaceId);
@@ -2482,6 +2502,7 @@ public class SpanDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(SELECT_SPANS_SIZE_BY_TRACE_IDS, "get_spans_size_by_trace_ids",
                             workspaceId, userName, "traces_size=%s".formatted(traceIds.size()));
+                    addSpanWeeksBound(template);
                     var statement = connection.createStatement(template.render())
                             .bind("trace_ids", traceIds.toArray(new UUID[0]))
                             .bind("workspace_id", workspaceId);
@@ -3039,6 +3060,7 @@ public class SpanDAO {
         if (spanColumnsNonNullable()) {
             template.add("spans_partitioned", true);
         }
+        addSpanWeeksBound(template);
         return template;
     }
 
@@ -3272,6 +3294,7 @@ public class SpanDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(SELECT_SPAN_IDS_BY_TRACE_ID, "get_span_ids_by_trace_ids",
                             workspaceId, userName, traceIds.size());
+                    addSpanWeeksBound(template);
 
                     var statement = connection.createStatement(template.render())
                             .bind("trace_ids", traceIds)

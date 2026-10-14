@@ -133,9 +133,9 @@ final class SpanMetricsQueries {
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                     <if(spans_partitioned)>
                     AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
+                        SELECT DISTINCT <if(span_weeks_bound)>id_week<else>toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))<endif> FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
                         WHERE workspace_id = :workspace_id AND project_id IN :project_ids
-                        <if(uuid_from_time)> AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))))<endif><if(uuid_to_time)> AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                        <if(uuid_from_time)> AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))))<endif><if(uuid_to_time)> AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
                     <endif>
                     <if(span_filters)> AND <span_filters> <endif>
                     <if(span_feedback_scores_filters)>

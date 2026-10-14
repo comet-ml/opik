@@ -504,6 +504,7 @@ Call opik api on http://localhost:5173/api
 | databaseAnalyticsDataModel.spanColumnsNonNullable | bool | `false` |  |
 | databaseAnalyticsDataModel.spanDeletionEventsCaptureEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.spanWeeksBackfillEnabled | bool | `false` |  |
+| databaseAnalyticsDataModel.spanWeeksReadEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.spanWeeksWriteEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.spansDistributedWrapEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.traceColumnsNonNullable | bool | `false` |  |
