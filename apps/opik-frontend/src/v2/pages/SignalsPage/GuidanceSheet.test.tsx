@@ -52,7 +52,7 @@ describe("GuidanceSheet", () => {
     expect(screen.getByText("Saved Oct 2 by Jolanta")).toBeInTheDocument();
   });
 
-  it("saves the edited guidance and closes", () => {
+  it("saves, then runs a diagnostic from the primary button", () => {
     const setOpen = vi.fn();
     const onRun = vi.fn();
     renderSheet({ setOpen, onRun });
@@ -60,17 +60,19 @@ describe("GuidanceSheet", () => {
     fireEvent.change(screen.getByLabelText("About this project"), {
       target: { value: "Only report tool failures." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save guidance" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save and run diagnostic" }),
+    );
 
     expect(mutate).toHaveBeenCalledWith(
       { projectId: "p1", guidance: "Only report tool failures." },
       expect.anything(),
     );
     expect(setOpen).toHaveBeenCalledWith(false);
-    expect(onRun).not.toHaveBeenCalled();
+    expect(onRun).toHaveBeenCalledTimes(1);
   });
 
-  it("saves, then runs a diagnostic from the split menu", () => {
+  it("saves without running from the split menu", () => {
     const onRun = vi.fn();
     renderSheet({ onRun });
 
@@ -78,29 +80,29 @@ describe("GuidanceSheet", () => {
       target: { value: "" },
     });
     openSaveMenu();
-    fireEvent.click(
-      screen.getByRole("menuitem", { name: "Save and run diagnostic" }),
-    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Save guidance" }));
 
     expect(mutate).toHaveBeenCalledWith(
       { projectId: "p1", guidance: "" },
       expect.anything(),
     );
-    expect(onRun).toHaveBeenCalledTimes(1);
+    expect(onRun).not.toHaveBeenCalled();
   });
 
   it("disables saving until the guidance changes", () => {
     renderSheet({});
 
     expect(
-      screen.getByRole("button", { name: "Save guidance" }),
+      screen.getByRole("button", { name: "Save and run diagnostic" }),
     ).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText("About this project"), {
       target: { value: "Draft" },
     });
 
-    expect(screen.getByRole("button", { name: "Save guidance" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Save and run diagnostic" }),
+    ).toBeEnabled();
   });
 
   it("closes on Esc when nothing changed", () => {
@@ -169,16 +171,26 @@ describe("GuidanceSheet", () => {
     expect(screen.getByLabelText("About this project")).toHaveValue("Draft");
   });
 
-  it("disables Save and run when a run can't start", () => {
-    renderSheet({ onRun: undefined });
+  it("offers only Save when a run can't start", () => {
+    const setOpen = vi.fn();
+    renderSheet({ setOpen, onRun: undefined });
+
+    expect(
+      screen.queryByRole("button", { name: "Save and run diagnostic" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Show more options" }),
+    ).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("About this project"), {
       target: { value: "Draft" },
     });
-    openSaveMenu();
+    fireEvent.click(screen.getByRole("button", { name: "Save guidance" }));
 
-    expect(
-      screen.getByRole("menuitem", { name: "Save and run diagnostic" }),
-    ).toHaveAttribute("data-disabled");
+    expect(mutate).toHaveBeenCalledWith(
+      { projectId: "p1", guidance: "Draft" },
+      expect.anything(),
+    );
+    expect(setOpen).toHaveBeenCalledWith(false);
   });
 });

@@ -75,7 +75,7 @@ describe("IssueDetail status actions", () => {
     toast.mockReset();
   });
 
-  it("closes an open issue as resolved", () => {
+  const renderWithToggle = () =>
     render(
       <IssueDetail
         issue={baseIssue}
@@ -85,37 +85,49 @@ describe("IssueDetail status actions", () => {
       />,
     );
 
+  const dialogCloseButton = () =>
+    screen.getAllByRole("button", { name: "Close issue" }).at(-1)!;
+
+  it("closes as resolved from the dialog, Resolved preselected", () => {
+    renderWithToggle();
+
     fireEvent.click(screen.getByRole("button", { name: "Close issue" }));
+
+    expect(screen.getByRole("radio", { name: /Resolved/ })).toBeChecked();
+    expect(
+      screen.queryByLabelText("Why isn't it useful? (Optional)"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(dialogCloseButton());
 
     expect(mutate).toHaveBeenCalledWith(
       { issueId: "i1", projectId: "p1", status: "resolved" },
       expect.anything(),
     );
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Issue was resolved" }),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    clickUndo();
+
+    expect(mutate).toHaveBeenLastCalledWith({
+      issueId: "i1",
+      projectId: "p1",
+      status: "open",
+      closeNote: undefined,
+    });
   });
 
   it("closes as not useful with the reason, and Undo reopens it", () => {
-    render(
-      <IssueDetail
-        issue={baseIssue}
-        projectId="p1"
-        canConfigure
-        canCloseAsNotUseful
-      />,
-    );
+    renderWithToggle();
 
-    fireEvent.keyDown(
-      screen.getByRole("button", { name: "Show more options" }),
-      { key: "Enter" },
-    );
-    fireEvent.click(
-      screen.getByRole("menuitem", { name: "Close as Not useful" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Close issue" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Not useful/ }));
     fireEvent.change(screen.getByLabelText("Why isn't it useful? (Optional)"), {
       target: { value: "  Retries are by design  " },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Close issue as Not useful" }),
-    );
+    fireEvent.click(dialogCloseButton());
 
     expect(mutate).toHaveBeenCalledWith(
       {
@@ -140,15 +152,37 @@ describe("IssueDetail status actions", () => {
     });
   });
 
-  it("offers only Close issue when the guidance toggle is off", () => {
+  it("keeps the dialog and the reason when closing fails", () => {
+    mutate.mockImplementation(() => undefined);
+    renderWithToggle();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close issue" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Not useful/ }));
+    fireEvent.change(screen.getByLabelText("Why isn't it useful? (Optional)"), {
+      target: { value: "Expected" },
+    });
+    fireEvent.click(dialogCloseButton());
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Why isn't it useful? (Optional)"),
+    ).toHaveValue("Expected");
+    expect(toast).not.toHaveBeenCalled();
+  });
+
+  it("resolves in one click with a toast when the guidance toggle is off", () => {
     render(<IssueDetail issue={baseIssue} projectId="p1" canConfigure />);
 
-    expect(
-      screen.getByRole("button", { name: "Close issue" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Show more options" }),
-    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close issue" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mutate).toHaveBeenCalledWith(
+      { issueId: "i1", projectId: "p1", status: "resolved" },
+      expect.anything(),
+    );
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Issue was resolved" }),
+    );
   });
 
   it("shows how a not-useful issue was closed, and Undo of Reopen restores the reason", () => {

@@ -3,7 +3,7 @@ import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import { Label } from "@/ui/label";
-import { Textarea } from "@/ui/textarea";
+import { AutoGrowTextarea } from "@/ui/auto-grow-textarea";
 import {
   ButtonWithDropdown,
   ButtonWithDropdownContent,
@@ -24,7 +24,7 @@ type GuidanceSheetProps = {
   setOpen: (open: boolean) => void;
   projectId: string;
   job?: AgentInsightsJob | null;
-  // Undefined disables "Save and run diagnostic" (run in progress, out of credits).
+  // Undefined leaves only Save (run in progress, out of credits, no permission to run).
   onRun?: () => void;
 };
 
@@ -117,13 +117,14 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
           >
             About this project
           </Label>
-          <Textarea
+          {/* Grows with the text from 330px; the sheet body scrolls, the footer stays put. */}
+          <AutoGrowTextarea
             id="diagnosticsGuidance"
-            className="comet-body-s h-[330px] min-h-0 resize-none"
+            className="comet-body-s min-h-[330px] shrink-0 border-input leading-5"
             value={guidance}
             readOnly={isPending}
             maxLength={GUIDANCE_MAX_LENGTH}
-            onChange={(e) => setGuidance(e.target.value)}
+            onChange={setGuidance}
           />
           <p className="comet-body-s pl-0.5 pr-1 text-light-slate">
             Describe your project, its expected behavior, and any constraints
@@ -149,25 +150,37 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
           >
             Cancel
           </Button>
-          <ButtonWithDropdown>
-            <ButtonWithDropdownTrigger
-              size="sm"
-              triggerClassName="w-8 border-l border-[var(--click-blue)] px-0 disabled:border-muted-disabled [&>svg]:size-3.5"
-              disabled={!isDirty || isPending}
-              onPrimaryClick={() => save(false)}
-            >
-              Save guidance
-            </ButtonWithDropdownTrigger>
-            <ButtonWithDropdownContent align="end" className="w-[227px] p-1.5">
-              <ButtonWithDropdownItem
-                className="h-6 p-1"
-                disabled={!onRun}
-                onSelect={() => save(true)}
+          {onRun ? (
+            <ButtonWithDropdown>
+              <ButtonWithDropdownTrigger
+                size="sm"
+                triggerClassName="w-8 border-l border-[var(--click-blue)] px-0 disabled:border-muted-disabled [&>svg]:size-3.5"
+                disabled={!isDirty || isPending}
+                onPrimaryClick={() => save(true)}
               >
                 Save and run diagnostic
-              </ButtonWithDropdownItem>
-            </ButtonWithDropdownContent>
-          </ButtonWithDropdown>
+              </ButtonWithDropdownTrigger>
+              <ButtonWithDropdownContent
+                align="end"
+                className="w-[227px] p-1.5"
+              >
+                <ButtonWithDropdownItem
+                  className="h-6 p-1"
+                  onSelect={() => save(false)}
+                >
+                  Save guidance
+                </ButtonWithDropdownItem>
+              </ButtonWithDropdownContent>
+            </ButtonWithDropdown>
+          ) : (
+            <Button
+              size="sm"
+              disabled={!isDirty || isPending}
+              onClick={() => save(false)}
+            >
+              Save guidance
+            </Button>
+          )}
         </div>
       </SheetContent>
       <ConfirmDialog
