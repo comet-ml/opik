@@ -252,6 +252,8 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
   editChart: (request: ChartEditRequest) => {
     sendOrPark(refs, "chart:edit", request);
   },
+  canEditChart: () =>
+    useExplainStore.getState().capabilities.includes("charts"),
 });
 
 /** Emit a host event to all subscribed sidebar listeners. */

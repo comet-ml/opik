@@ -9,6 +9,7 @@ import {
   type BridgeRefs,
   type HostListeners,
 } from "./assistantBridge";
+import useExplainStore from "./explain/explainStore";
 
 // Minimal refs: only `listeners` matters for these tests; the rest are unused
 // no-op handles the bridge reads through.
@@ -160,5 +161,28 @@ describe("assistantBridge — requests made before the console subscribes", () =
 
     dropStalePending([refs.pendingConversation!], "dash-b");
     expect(refs.pendingConversation!.current).toBeNull();
+  });
+});
+
+describe("assistantBridge — chart editing capability", () => {
+  afterEach(() => {
+    useExplainStore
+      .getState()
+      .onConsoleReady({ bridgeVersion: 2, capabilities: [] });
+  });
+
+  it("offers chart editing only once the console announces it", () => {
+    const bridge = createBridge(makeRefs(createHostListeners()));
+
+    useExplainStore
+      .getState()
+      .onConsoleReady({ bridgeVersion: 2, capabilities: ["explain"] });
+    expect(bridge.canEditChart!()).toBe(false);
+
+    useExplainStore.getState().onConsoleReady({
+      bridgeVersion: 3,
+      capabilities: ["explain", "charts"],
+    });
+    expect(bridge.canEditChart!()).toBe(true);
   });
 });

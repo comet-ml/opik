@@ -109,12 +109,15 @@ export interface ExplainButtonProps {
  *
  * 2 = explain/chat events added (`explain:run`/`explain:cancel`/`chat:continue`
  * + `console:ready`/`explain:chunk`/`explain:done`/`explain:error`).
+ * 3 = Ollie charts: `charts` and `dashboard` in the context, `chart:edit`
+ * (host → shell), `dashboard:updated` (shell → host), and the `charts`
+ * capability in `console:ready`.
  *
  * ⚠️ MUST move in lockstep with `ollie-console/src/bridge.ts`; the console's
  * VER-4 assertions guard the event-shape contract. Bump here AND there together
  * whenever a bridge event is added/removed/reshaped.
  */
-export const BRIDGE_PROTOCOL_VERSION = 2;
+export const BRIDGE_PROTOCOL_VERSION = 3;
 
 /** Host → Sidebar events */
 export interface HostEventMap {
@@ -174,6 +177,8 @@ export interface AssistantSidebarBridge {
   startConversation(message: string): void;
   // Opens the sidebar and hands it the widget; replayed if the console is not listening yet.
   editChart?(request: ChartEditRequest): void;
+  // Whether the console announced the `charts` capability; an older console never handles `chart:edit`.
+  canEditChart?(): boolean;
 }
 
 declare global {

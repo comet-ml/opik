@@ -21,7 +21,7 @@ type OllieChartActionsMenuProps = {
   sectionId: string;
   widgetId: string;
   widgetTitle: string;
-  // Edit in Ollie; without it (Ollie off) the item opens the widget editor instead.
+  // Edit in Ollie; without it (Ollie off, or a console without chart editing) the item opens the widget editor.
   onEditInOllie?: () => void;
   // Absent until the widget's query can run.
   onRefresh?: () => void;
@@ -59,6 +59,11 @@ const OllieChartActionsMenu: React.FunctionComponent<
     [open, onOpenChange],
   );
 
+  // Read on every render, so opening the menu sees whether the console has announced chart editing yet.
+  const editInOllie = window.opikBridge?.canEditChart?.()
+    ? onEditInOllie
+    : undefined;
+
   const run = (action: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
     action();
@@ -80,13 +85,13 @@ const OllieChartActionsMenu: React.FunctionComponent<
         <DropdownMenuContent align="end" className="w-44">
           <DropdownMenuItem
             onClick={run(() =>
-              onEditInOllie
-                ? onEditInOllie()
+              editInOllie
+                ? editInOllie()
                 : onAddEditWidgetCallback?.({ sectionId, widgetId }),
             )}
           >
             <Pencil className="mr-2 size-4" />
-            {onEditInOllie ? "Edit in Ollie" : "Edit"}
+            {editInOllie ? "Edit in Ollie" : "Edit"}
           </DropdownMenuItem>
           {onRefresh && (
             <DropdownMenuItem onClick={run(onRefresh)}>
