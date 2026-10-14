@@ -1183,8 +1183,8 @@ def build_params_lines(
 
     A model a source says nothing about keeps the line it has, the same add-only rule the model lists follow: a
     failed OpenRouter fetch (openrouter_params is None), an OpenRouter model missing from the fetched list, or a
-    model LiteLLM has no entry for. An OpenRouter model the list includes with no parameters is an answer, not a
-    gap, so it loses its line.
+    model LiteLLM has no entry for. A model the source lists with no params is an answer, not a gap, so it loses
+    its line.
     """
     previous = _yaml_params_lines(existing_yaml_content)
     max_output_defaults = _profile_max_output_defaults(curated_catalog or {})
@@ -1195,20 +1195,16 @@ def build_params_lines(
         for entry in entries:
             model_id = entry.value.removeprefix("vertex_ai/") if provider_key == "vertexai" else entry.value
             if provider_key == "openrouter":
-                if openrouter_params is not None and model_id in openrouter_params:
-                    params = openrouter_params[model_id]
-                    # OpenRouter lists the model but no parameters: its old params no longer hold.
-                    if not params:
-                        continue
-                else:
-                    params = {}
+                answered = openrouter_params is not None and model_id in openrouter_params
+                params = openrouter_params[model_id] if answered else {}
             else:
                 info = _litellm_info(prices, provider_key, entry.value)
+                answered = bool(info)
                 params = litellm_params(provider_key, model_id, info, max_output_defaults.get(yaml_key)) if info else {}
             if params:
                 lines.setdefault(yaml_key, {})[model_id] = params_line(params)
                 generated.setdefault(yaml_key, {})[model_id] = params
-            elif model_id in previous.get(yaml_key, {}):
+            elif not answered and model_id in previous.get(yaml_key, {}):
                 lines.setdefault(yaml_key, {})[model_id] = previous[yaml_key][model_id]
     return lines, generated
 
