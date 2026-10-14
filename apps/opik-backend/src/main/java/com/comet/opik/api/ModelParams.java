@@ -7,6 +7,7 @@ import lombok.Builder;
 import org.apache.commons.lang3.ObjectUtils;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +27,10 @@ public record ModelParams(
         Boolean samplingExclusive,
         Boolean thinksByDefault,
         Map<String, ModelParams> routes) {
+
+    public ModelParams {
+        routes = routes == null ? null : Collections.unmodifiableMap(new LinkedHashMap<>(routes));
+    }
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -54,6 +59,7 @@ public record ModelParams(
         }
     }
 
+    @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record FlagParam(Boolean accepted) {
@@ -77,6 +83,10 @@ public record ModelParams(
             Boolean accepted,
             List<String> levels,
             @JsonProperty("default") String defaultLevel) {
+
+        public EffortParam {
+            levels = levels == null ? null : List.copyOf(levels);
+        }
 
         static EffortParam overlay(EffortParam base, EffortParam top) {
             if (base == null || top == null) {
