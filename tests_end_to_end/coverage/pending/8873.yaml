@@ -1,0 +1,13 @@
+# pending capabilities from opik#8873 — applied by the release job
+#
+# `playground` has keys for composing and running a prompt, for loading and
+# saving a library version, and for the model settings — but none for what a
+# message's ROLE does to the message's own content. The two specs below assert
+# exactly that, and `load-prompt-version` cannot hold it: half of the behaviour
+# is reached without a load at all (the role dropdown), and reading that key as
+# covering the media rule would mean a role switch nobody tested counts as
+# tested the moment the next library-load spec lands. A capability counted as
+# covered is never re-derived, so filing it there would be permanent.
+- area: playground
+  capability: message-role-media
+  note: "Media lives only on user messages, and the two doors to that rule agree. Library load (playground-load-media-prompt-by-role.spec.ts): loading a version whose content is text plus an image, a video and an audio part keeps the whole content on a User row with no toast, and lands the text alone — as a plain string, with no media tag and the editor showing it — on a System and on an Assistant row, each raising exactly one 'Media not loaded' toast. Role switch (playground-media-prompt-role-switch.spec.ts): switching an already-loaded User row to System strips the media parts in place, keeps both rows, and stays silent. Both specs assert the loaded-version chip shows NO unsaved-changes dot and the save tooltip still reads 'Save to prompt library' — the dirty check is role-aware, so a drop the user did not ask for is not reported as their unsaved edit — and both prove that absence can flip by typing into the row. Both also read the version back over the API to show the drop is client-side only. Not covered: what SAVING a system row after the drop writes to the library (changed behaviour the exploration flagged for a product decision, deliberately not pinned), the media-only and text-only content variants, and the Optimizations new-run composer, which mounts the same component with `disableMedia` and keeps media invisibly on a user row (pre-existing, unchanged by this PR)."

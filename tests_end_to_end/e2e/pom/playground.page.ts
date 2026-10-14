@@ -1434,16 +1434,24 @@ export class PlaygroundPage {
 
     const promptRow = menu.getByRole('button').filter({ hasText: promptName }).first();
     await promptRow.waitFor({ state: 'visible' });
-    await promptRow.hover();
 
     const versionSubmenu = this.page.getByTestId('prompt-versions-submenu');
-    await versionSubmenu.waitFor({ state: 'visible' });
 
-    await versionSubmenu
-      .getByRole('button')
-      .filter({ has: this.page.getByText(versionLabel, { exact: true }) })
-      .first()
-      .click();
+    // The hover and the click are retried as a PAIR, and the search above is
+    // not: `PromptsSelectBox` mounts the menu with `refetchOnMount`, so the
+    // list can re-render under the cursor and detach the version submenu
+    // between opening it and clicking into it. Re-hovering re-opens it against
+    // the row that is mounted now; re-filling the search box would reset the
+    // list and lose the hover that opens the submenu at all.
+    await expect(async () => {
+      await promptRow.hover();
+      await expect(versionSubmenu).toBeVisible({ timeout: 2_000 });
+      await versionSubmenu
+        .getByRole('button')
+        .filter({ has: this.page.getByText(versionLabel, { exact: true }) })
+        .first()
+        .click({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
   }
 
   async loadPromptVersionFromLibrary(promptName: string, versionLabel: string): Promise<void> {
@@ -1482,6 +1490,243 @@ export class PlaygroundPage {
       await this.variantMessage(0, 'user').hover();
       await expect(card.getByText(promptName)).toBeVisible();
       await expect(card.getByText(versionLabel, { exact: true })).toBeVisible();
+    });
+  }
+
+  // ── message rows addressed by index ─────────────────────────────────────
+  //
+  // `variantMessage` above addresses a row by `data-role`, which is right for a
+  // card whose roles are known and distinct. It cannot be used by a spec that
+  // CHANGES a row's role: the Playground's default card opens with a System row
+  // and a User row, so switching the User row to System leaves two rows
+  // answering to `[data-role="system"]` and the locator becomes ambiguous — it
+  // resolves to the wrong one rather than failing. Index is stable across a role
+  // change because the role dropdown does not reorder the card.
+
+  /** Variant 0's message rows, in render order. */
+  messageRows(variantIndex = 0): Locator {
+    return this.variantCard(variantIndex).getByTestId('playground-message-row');
+  }
+
+  /** One message row of a variant card, by position rather than by role. */
+  messageRowAt(messageIndex: number, variantIndex = 0): Locator {
+    return this.messageRows(variantIndex).nth(messageIndex);
+  }
+
+  /** The role label a row's own dropdown trigger displays, e.g. "System". */
+  async messageRoleAt(messageIndex: number, variantIndex = 0): Promise<string> {
+    return test.step(`read the role of message ${messageIndex}`, async () => {
+      const row = this.messageRowAt(messageIndex, variantIndex);
+      // `data-role` carries the store's value and the trigger carries what the
+      // user reads; the trigger is the one asserted, so a card that kept the
+      // attribute while rendering another label fails rather than passes.
+      return (await row.locator('button').first().innerText()).trim();
+    });
+  }
+
+  /**
+   * Change a message row's role through the dropdown a user would use.
+   *
+   * Resolves only once the trigger shows the new role, so a caller reading the
+   * row's content "after the switch" cannot read it before the switch landed.
+   * The dropdown is a Radix checkbox menu, so the item carries the
+   * `menuitemcheckbox` role rather than `option`.
+   */
+  async setMessageRole(
+    messageIndex: number,
+    role: 'System' | 'Assistant' | 'User',
+    variantIndex = 0,
+  ): Promise<void> {
+    return test.step(`switch message ${messageIndex} to ${role}`, async () => {
+      const row = this.messageRowAt(messageIndex, variantIndex);
+      await row.locator('button').first().click();
+      await this.page.getByRole('menuitemcheckbox', { name: role, exact: true }).click();
+      await expect(
+        row.locator('button').first(),
+        `message ${messageIndex} is now a ${role} message`,
+      ).toHaveText(role);
+    });
+  }
+
+  /**
+   * Hover a message row so the strip holding its load button, its save button
+   * and its loaded-prompt chip is on screen.
+   *
+   * That strip is `invisible group-hover:visible [.group:focus-within_&]:visible`,
+   * so none of those three is VISIBLE until the row is hovered or focused —
+   * which makes this a precondition of every visibility assertion about them,
+   * not a convenience. Typing into the row's editor focuses it and has the same
+   * effect, so a spec that has just edited the message does not need this.
+   */
+  async hoverMessageRow(messageIndex: number, variantIndex = 0): Promise<void> {
+    return test.step(`hover message ${messageIndex}`, async () => {
+      await this.messageRowAt(messageIndex, variantIndex).hover();
+    });
+  }
+
+  /**
+   * Assert a message row's chip shows the given prompt at the given version.
+   *
+   * The row-scoped counterpart of `waitForLoadedPromptVersion`, which addresses
+   * variant 0's User row specifically and so cannot see a load into a System or
+   * Assistant row.
+   */
+  async waitForLoadedPromptVersionInMessage(
+    messageIndex: number,
+    promptName: string,
+    versionLabel: string,
+    variantIndex = 0,
+  ): Promise<void> {
+    return test.step(
+      `wait for "${promptName}" ${versionLabel} to be loaded into message ${messageIndex}`,
+      async () => {
+        const row = this.messageRowAt(messageIndex, variantIndex);
+        await this.hoverMessageRow(messageIndex, variantIndex);
+        await expect(this.loadedPromptChip(messageIndex, promptName, variantIndex)).toBeVisible();
+        await expect(row.getByText(versionLabel, { exact: true })).toBeVisible();
+      },
+    );
+  }
+
+  /**
+   * A media tag in a message row, addressed by the URL it displays.
+   *
+   * By its text and not by the delete button inside it: that button is
+   * `hidden` until the tag itself is hovered, which keeps it out of the
+   * accessibility tree, so `getByRole('button', { name: 'Delete image' })`
+   * finds nothing whether or not the tag is there — the exact failure mode an
+   * absence assertion must not have. `MediaTagsList` renders the URL verbatim
+   * as the tag's text (the truncation is CSS), so an exact text match addresses
+   * one tag and reads as what the user sees.
+   */
+  mediaTag(messageIndex: number, url: string, variantIndex = 0): Locator {
+    return this.messageRowAt(messageIndex, variantIndex).getByText(url, { exact: true });
+  }
+
+  /**
+   * Open a message row's prompt-library menu and load one version into THAT
+   * row — the per-row control, which is what carries the target message's role
+   * into the load (opik#8873).
+   *
+   * The actions strip is `invisible group-hover:visible`, so the row is hovered
+   * before the button is addressed, exactly as `loadTextPromptVersionFromLibrary`
+   * does for the User row.
+   */
+  async loadTextPromptVersionIntoMessage(
+    messageIndex: number,
+    promptName: string,
+    versionLabel: string,
+    variantIndex = 0,
+  ): Promise<void> {
+    return test.step(
+      `load text prompt "${promptName}" ${versionLabel} into message ${messageIndex}`,
+      async () => {
+        const row = this.messageRowAt(messageIndex, variantIndex);
+        await row.hover();
+        await row.getByTestId('load-text-prompt-button').click();
+
+        await this.navigateLibraryMenuToVersion(promptName, versionLabel);
+      },
+    );
+  }
+
+  /**
+   * The loaded-prompt chip in a message row — present only once a library
+   * prompt is linked to it, since the chip and the load button share the one
+   * slot `PromptsSelectBox` renders into.
+   *
+   * By the prompt's own name, so a chip belonging to another row (or to a load
+   * that linked the wrong prompt) is not what gets read.
+   */
+  loadedPromptChip(messageIndex: number, promptName: string, variantIndex = 0): Locator {
+    return this.messageRowAt(messageIndex, variantIndex).getByText(promptName, { exact: true });
+  }
+
+  /**
+   * The amber dot `LoadedPromptDisplay` puts on the chip when the message no
+   * longer matches the version it was loaded from.
+   *
+   * A class-scoped CSS selector, which is a last resort and deliberate: the dot
+   * is a bare decorative `<span>` with no text, no role and no testid, and
+   * adding one would mean touching `apps/opik-frontend` from a spec that has to
+   * run against a deployed Opik built without it. Scoped to the row, and
+   * `saveTooltipText` below asserts the same flag through its own independent
+   * text handle — so a renamed utility class shows up as one of the two
+   * assertions disagreeing rather than as a silent pass.
+   */
+  unsavedChangesDot(messageIndex: number, variantIndex = 0): Locator {
+    return this.messageRowAt(messageIndex, variantIndex).locator('span.rounded-full.bg-warning');
+  }
+
+  /**
+   * Hover a row's save-to-library button and read the tooltip it raises.
+   *
+   * The tooltip is the user-readable half of the same `saveWarning` flag the
+   * dot renders: "Save to prompt library" when the message still matches the
+   * loaded version, and "This prompt version hasn't been saved" when it does
+   * not. Radix portals the content out of the row, so it is read at page scope.
+   */
+  async saveTooltipText(messageIndex: number, variantIndex = 0): Promise<string> {
+    return test.step(`read message ${messageIndex}'s save tooltip`, async () => {
+      const row = this.messageRowAt(messageIndex, variantIndex);
+      await row.hover();
+      const save = row.getByTestId('save-text-prompt-button');
+      await expect(save, 'the row offers a save-to-library button').toHaveCount(1);
+      await save.hover();
+      const tooltip = this.page.getByRole('tooltip');
+      await expect(tooltip.first()).toBeVisible({ timeout: 10_000 });
+      return (await tooltip.first().innerText()).trim();
+    });
+  }
+
+  /**
+   * Variant 0's messages as the persisted `PLAYGROUND_STATE` holds them —
+   * role and content, not just the ids `storedMessageIds` reads.
+   *
+   * The store is the only place the SHAPE of a message's content is observable.
+   * On a system or assistant row the editor renders the text part either way,
+   * and the media tags never render there at all (`showMediaActions` gates them
+   * on the user role), so "the media was dropped" and "the media is still in
+   * the message but invisible" look identical on screen — and the second is
+   * precisely the bug opik#8873 fixed. Reading localStorage follows
+   * `storedMessageIds` and `LogsPage.readStoredFilters`.
+   */
+  async storedMessages(): Promise<Array<{ id: string; role: string; content: unknown }>> {
+    return test.step('read variant 0\'s messages from PLAYGROUND_STATE', async () => {
+      const messages = await this.page.evaluate(() => {
+        const raw = window.localStorage.getItem('PLAYGROUND_STATE');
+        if (!raw) return null;
+        const state = (JSON.parse(raw) as { state?: unknown }).state as
+          | {
+              promptIds?: string[];
+              promptMap?: Record<
+                string,
+                { messages?: Array<{ id?: string; role?: string; content?: unknown }> }
+              >;
+            }
+          | undefined;
+        const first = state?.promptIds?.[0];
+        if (!first) return null;
+        const stored = state?.promptMap?.[first]?.messages;
+        if (!stored) return null;
+        return stored.map((m) => ({
+          id: m.id ?? '',
+          role: m.role ?? '',
+          content: m.content,
+        }));
+      });
+      // Asserted rather than defaulted to []: an absent store is a different
+      // failure from a prompt with no messages, and an empty array would
+      // satisfy a "no media in any message" check without reading anything.
+      expect(messages, 'PLAYGROUND_STATE holds variant 0 and its messages').not.toBeNull();
+      return messages as Array<{ id: string; role: string; content: unknown }>;
+    });
+  }
+
+  /** Type into one message row of variant 0, addressed by position. */
+  async fillMessageAt(messageIndex: number, text: string, variantIndex = 0): Promise<void> {
+    return test.step(`type into message ${messageIndex}`, async () => {
+      await this.fillMessageBody(this.messageRowAt(messageIndex, variantIndex), text);
     });
   }
 

@@ -2011,18 +2011,26 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * count creates: the label the prompt page renders comes from this field,
      * so a spec asserting on labels must compare against what the server said,
      * not against the order the fixture happened to write in.
+     *
+     * `metadata` is what decides how the front end READS the template back:
+     * `parsePromptVersionContent` only parses it as structured message content
+     * when the metadata says `{created_from: "opik_ui", type: "messages_json"}`,
+     * and treats it as plain text otherwise. A seed that wants the structured
+     * shape — a message with media parts, say — must send it.
      */
     async createPromptVersion(args: {
       name: string;
       template: string;
       projectId?: string;
       changeDescription?: string;
+      metadata?: Record<string, unknown>;
     }): Promise<PromptVersionRef> {
       const created = await opik.api.prompts.createPromptVersion({
         name: args.name,
         version: {
           template: args.template,
           ...(args.changeDescription ? { changeDescription: args.changeDescription } : {}),
+          ...(args.metadata ? { metadata: args.metadata } : {}),
         },
         ...(args.projectId ? { projectId: args.projectId } : {}),
       });
@@ -2065,6 +2073,31 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         versionNumber: v.versionNumber ?? null,
         template: v.template,
       }));
+    },
+
+    /**
+     * One commit, by version id — `GET /v1/private/prompts/versions/{id}`.
+     *
+     * Exists for the half of a prompt a version row cannot answer: `metadata`,
+     * which is what tells the front end whether to read `template` as
+     * structured message content or as plain text. `listPromptVersions` does
+     * not carry it, and the shape a spec needs to compare against is the
+     * stored template plus the metadata that gives it meaning.
+     *
+     * `template` and `metadata` are returned exactly as the server sent them,
+     * including absent — a version whose template came back empty is a real
+     * answer a caller may be asserting about, and defaulting it here would
+     * erase the difference between "stored empty" and "not stored".
+     */
+    async getPromptVersion(
+      versionId: string,
+    ): Promise<{ id: string; template: string | undefined; metadata: unknown }> {
+      const version = await opik.api.prompts.getPromptVersionById(versionId);
+      return {
+        id: String(version.id ?? ''),
+        template: version.template,
+        metadata: version.metadata,
+      };
     },
 
     /**
