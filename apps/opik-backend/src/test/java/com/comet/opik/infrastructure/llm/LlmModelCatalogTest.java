@@ -34,8 +34,12 @@ class LlmModelCatalogTest {
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
 
     private static LlmModelRegistryService service(String localOverridePath) {
+        return service("llm-models-test.yaml", localOverridePath);
+    }
+
+    private static LlmModelRegistryService service(String generatedResource, String localOverridePath) {
         var config = new LlmModelRegistryConfig();
-        config.setDefaultResource("llm-models-test.yaml");
+        config.setDefaultResource(generatedResource);
         config.setCuratedResource("llm-models-test-curated.yaml");
         config.setLocalOverridePath(localOverridePath);
         return new LlmModelRegistryService(config);
@@ -77,6 +81,24 @@ class LlmModelCatalogTest {
             assertThat(params.temperature()).isEqualTo(range(true, 0, 1, 0));
             assertThat(params.effort())
                     .isEqualTo(new EffortParam(true, List.of("low", "medium", "high", "max"), "high"));
+        }
+
+        @Test
+        void aCuratedProfileWinsOverTheParamsTheSyncGenerated() {
+            var params = model(service("llm-models-test-generated-params.yaml", null), "anthropic",
+                    "claude-sonnet-4-6").params();
+
+            assertThat(params.temperature()).isEqualTo(range(true, 0, 1, 0));
+            assertThat(params.effort())
+                    .isEqualTo(new EffortParam(true, List.of("low", "medium", "high", "max"), "high"));
+        }
+
+        @Test
+        void aRowWaitingForTheSyncAppliesOnceTheSyncListsTheModel() {
+            var params = model(service("llm-models-test-generated-params.yaml", null), "anthropic",
+                    "claude-not-yet-synced").params();
+
+            assertThat(params.effort()).isEqualTo(new EffortParam(true, List.of("low"), "high"));
         }
 
         @Test
@@ -191,16 +213,17 @@ class LlmModelCatalogTest {
             assertThat(catalog.profiles().keySet()).containsAll(named);
         }
 
+        // A row the sync has since listed passes too: sync PRs are made by a bot, and the loader logs that its
+        // awaitingSync can be removed.
         @Test
         void everyRowNamesAListedModelUnlessItWaitsForTheSync() {
-            catalog.models().forEach((provider, rows) -> rows.forEach(row -> {
-                var listed = generated.getOrDefault(provider, List.of()).stream()
-                        .anyMatch(m -> m.id().equals(row.id()));
-                assertThat(listed)
-                        .as("%s/%s: listed by the sync %s; awaitingSync is for rows written ahead of it", provider,
-                                row.id(), listed)
-                        .isNotEqualTo(Boolean.TRUE.equals(row.awaitingSync()));
-            }));
+            catalog.models().forEach((provider, rows) -> rows.stream()
+                    .filter(row -> !Boolean.TRUE.equals(row.awaitingSync()))
+                    .forEach(row -> assertThat(generated.getOrDefault(provider, List.of()))
+                            .as("%s/%s is not listed by the sync; mark it awaitingSync if it is written ahead of it",
+                                    provider, row.id())
+                            .extracting(ModelEntry::id)
+                            .contains(row.id())));
         }
 
         @Test

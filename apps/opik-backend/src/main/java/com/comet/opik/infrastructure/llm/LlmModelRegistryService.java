@@ -31,6 +31,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Singleton
@@ -103,6 +104,26 @@ public class LlmModelRegistryService {
             defaults = defaults == null ? Map.of() : defaults;
             profiles = profiles == null ? Map.of() : profiles;
             models = models == null ? Map.of() : models;
+        }
+
+        /**
+         * Each layer's profile, merged into that layer's params before the layers are merged, so a layer's profile
+         * outranks every layer below it: a curated {@code profile} wins over the params the sync generated.
+         */
+        Map<String, List<ModelEntry>> foldProfiles(Map<String, List<ModelEntry>> layer) {
+            var folded = new LinkedHashMap<String, List<ModelEntry>>(layer.size());
+            layer.forEach((provider, rows) -> folded.put(provider, rows == null
+                    ? null
+                    : rows.stream()
+                            .map(row -> row == null || row.profile() == null
+                                    ? row
+                                    : row.toBuilder()
+                                            .profile(null)
+                                            .params(ModelParams.overlay(profile(row.profile(), provider, row),
+                                                    row.params()))
+                                            .build())
+                            .toList()));
+            return folded;
         }
 
         /** Provider profile, then the reasoning profile, then the model's own profile, then its own params. */
@@ -195,12 +216,12 @@ public class LlmModelRegistryService {
 
     private Map<String, List<LlmModelDefinition>> load() {
         var catalog = loadCuratedCatalog();
-        var result = loadClasspathResource(config.getDefaultResource());
+        var result = catalog.foldProfiles(loadClasspathResource(config.getDefaultResource()));
 
         if (isRemoteConfigured() && httpClient != null) {
             try {
                 var remote = loadRemoteResource(config.getRemoteUrl());
-                result = merge(result, remote);
+                result = merge(result, catalog.foldProfiles(remote));
                 lastGoodRemote = remote;
                 log.debug("Merged remote model registry from '{}'", config.getRemoteUrl());
             } catch (Exception e) {
@@ -210,12 +231,12 @@ public class LlmModelRegistryService {
                 } else {
                     log.warn("Failed to fetch remote model registry from '{}', keeping the last good copy",
                             config.getRemoteUrl(), e);
-                    result = merge(result, lastGoodRemote);
+                    result = merge(result, catalog.foldProfiles(lastGoodRemote));
                 }
             }
         }
 
-        result = applyCurated(result, catalog.models());
+        result = applyCurated(result, catalog.foldProfiles(catalog.models()));
 
         var overridePath = config.getLocalOverridePath();
         if (overridePath == null || overridePath.isBlank()) {
@@ -229,7 +250,7 @@ public class LlmModelRegistryService {
         }
 
         try {
-            var overrides = loadFileResource(path);
+            var overrides = catalog.foldProfiles(loadFileResource(path));
             return toRegistry(merge(result, overrides), catalog);
         } catch (Exception e) {
             log.error("Failed to load local override registry from '{}', falling back to defaults",
@@ -284,6 +305,11 @@ public class LlmModelRegistryService {
             result.put(provider, existing.stream()
                     .map(m -> byId.containsKey(m.id()) ? inheritUnsetFields(m, byId.get(m.id())) : m)
                     .toList());
+            var listed = existing.stream().map(ModelEntry::id).collect(Collectors.toSet());
+            byId.values().stream()
+                    .filter(row -> BooleanUtils.isTrue(row.awaitingSync()) && listed.contains(row.id()))
+                    .forEach(row -> log.info("Curated row '{}' of provider '{}' waits for the sync, which now"
+                            + " lists the model; its awaitingSync can be removed", row.id(), provider));
         });
         return result;
     }
