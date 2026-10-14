@@ -40,7 +40,7 @@ public class LlmModelRegistryService {
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
     private static final TypeReference<Map<String, List<ModelEntry>>> REGISTRY_TYPE = new TypeReference<>() {
     };
-    private static final CuratedCatalog NO_CATALOG = new CuratedCatalog(Map.of(), Map.of(), Map.of());
+    private static final CuratedCatalog NO_CATALOG = CuratedCatalog.builder().build();
 
     private final LlmModelRegistryConfig config;
     private final Client httpClient;
@@ -90,10 +90,12 @@ public class LlmModelRegistryService {
         }
     }
 
+    @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record ProviderDefaults(String profile, String reasoning) {
+    record ProviderDefaults(String profile, String reasoningProfile) {
     }
 
+    @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     record CuratedCatalog(
             Map<String, ProviderDefaults> defaults,
@@ -132,8 +134,9 @@ public class LlmModelRegistryService {
             ModelParams resolved = null;
             if (providerDefaults != null) {
                 resolved = profile(providerDefaults.profile(), provider, entry);
-                if (BooleanUtils.isTrue(entry.reasoning()) && providerDefaults.reasoning() != null) {
-                    resolved = ModelParams.overlay(resolved, profile(providerDefaults.reasoning(), provider, entry));
+                if (BooleanUtils.isTrue(entry.reasoning()) && providerDefaults.reasoningProfile() != null) {
+                    resolved = ModelParams.overlay(resolved,
+                            profile(providerDefaults.reasoningProfile(), provider, entry));
                 }
             }
             if (entry.profile() != null) {
@@ -273,14 +276,8 @@ public class LlmModelRegistryService {
         if (resourceName == null || resourceName.isBlank()) {
             return NO_CATALOG;
         }
-        try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourceName)) {
-            if (is == null) {
-                throw new IllegalStateException("Classpath resource not found: " + resourceName);
-            }
-            return YAML_MAPPER.readValue(is, CuratedCatalog.class);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to load classpath resource: " + resourceName, e);
-        }
+        return readClasspathYaml(resourceName, new TypeReference<>() {
+        });
     }
 
     // A curated row corrects a model the generated layers list; it never adds one, so a row written ahead of the
@@ -300,7 +297,11 @@ public class LlmModelRegistryService {
                     log.warn("Skipping curated row with missing id for provider '{}'", provider);
                     return;
                 }
-                byId.put(row.id(), row);
+                if (byId.containsKey(row.id())) {
+                    log.warn("Curated model '{}' of provider '{}' is listed twice; the later row wins only where it"
+                            + " sets a field", row.id(), provider);
+                }
+                byId.merge(row.id(), row, LlmModelRegistryService::inheritUnsetFields);
             });
             result.put(provider, existing.stream()
                     .map(m -> byId.containsKey(m.id()) ? inheritUnsetFields(m, byId.get(m.id())) : m)
@@ -315,12 +316,16 @@ public class LlmModelRegistryService {
     }
 
     private Map<String, List<ModelEntry>> loadClasspathResource(String resourceName) {
-        try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourceName)) {
+        return readClasspathYaml(resourceName, REGISTRY_TYPE);
+    }
+
+    private static <T> T readClasspathYaml(String resourceName, TypeReference<T> type) {
+        try (InputStream is = LlmModelRegistryService.class.getClassLoader().getResourceAsStream(resourceName)) {
             if (is == null) {
                 throw new IllegalStateException(
                         "Classpath resource not found: " + resourceName);
             }
-            return YAML_MAPPER.readValue(is, REGISTRY_TYPE);
+            return YAML_MAPPER.readValue(is, type);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to load classpath resource: " + resourceName, e);
         }

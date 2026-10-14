@@ -29,7 +29,15 @@ public record ModelParams(
         Map<String, ModelParams> routes) {
 
     public ModelParams {
-        routes = routes == null ? null : Collections.unmodifiableMap(new LinkedHashMap<>(routes));
+        if (routes != null) {
+            var copy = new LinkedHashMap<String, ModelParams>();
+            routes.forEach((route, params) -> {
+                if (params != null) {
+                    copy.put(route, params);
+                }
+            });
+            routes = Collections.unmodifiableMap(copy);
+        }
     }
 
     @Builder(toBuilder = true)

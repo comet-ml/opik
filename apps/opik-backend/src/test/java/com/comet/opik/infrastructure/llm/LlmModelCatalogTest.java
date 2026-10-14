@@ -75,7 +75,7 @@ class LlmModelCatalogTest {
         }
 
         @Test
-        void aRowsProfileAndParamsOverlayTheProviderProfileFieldByField() {
+        void aRowProfileAndParamsOverlayTheProviderProfileFieldByField() {
             var params = model(service(null), "anthropic", "claude-sonnet-4-6").params();
 
             assertThat(params.temperature()).isEqualTo(range(true, 0, 1, 0));
@@ -154,6 +154,17 @@ class LlmModelCatalogTest {
     }
 
     @Test
+    void aRouteWithoutParamsIsDropped() {
+        var routes = new LinkedHashMap<String, ModelParams>();
+        routes.put("responses_api", null);
+
+        var params = ModelParams.builder().temperature(range(true, 0, 2, 0)).routes(routes).build();
+
+        assertThat(params.routes()).isEmpty();
+        assertThat(params.settled().routes()).isNull();
+    }
+
+    @Test
     void theApiNamesParamsFieldsTheWayItNamesTheOtherFields() {
         var json = JsonUtils.writeValueAsString(model(service(null), "openai", "o3"));
 
@@ -201,8 +212,8 @@ class LlmModelCatalogTest {
             var named = new ArrayList<String>();
             catalog.defaults().values().forEach(d -> {
                 named.add(d.profile());
-                if (d.reasoning() != null) {
-                    named.add(d.reasoning());
+                if (d.reasoningProfile() != null) {
+                    named.add(d.reasoningProfile());
                 }
             });
             catalog.models().values().forEach(rows -> rows.stream()
@@ -224,6 +235,14 @@ class LlmModelCatalogTest {
                                     provider, row.id())
                             .extracting(ModelEntry::id)
                             .contains(row.id())));
+        }
+
+        @Test
+        void noModelHasTwoRows() {
+            catalog.models().forEach((provider, rows) -> assertThat(rows)
+                    .as(provider)
+                    .extracting(ModelEntry::id)
+                    .doesNotHaveDuplicates());
         }
 
         @Test
