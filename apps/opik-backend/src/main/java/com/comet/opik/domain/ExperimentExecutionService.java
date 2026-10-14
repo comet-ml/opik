@@ -41,7 +41,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -109,10 +108,11 @@ public class ExperimentExecutionService {
                     : experimentExecutionConfig.getDefaultProjectName();
 
             return Mono.zip(
-                    fetchDatasetExecutionPolicyReactive(request.datasetId(), request.versionHash()),
+                    fetchRunSourceReactive(request.datasetId(), request.versionHash()),
                     resolveDataset(request.datasetId()))
                     .flatMap(tuple -> {
-                        ExecutionPolicy datasetExecutionPolicy = tuple.getT1().orElse(null);
+                        ExecutionPolicy datasetExecutionPolicy = tuple.getT1().executionPolicy();
+                        String versionHash = tuple.getT1().versionHash();
                         var dataset = tuple.getT2();
                         boolean testSuite = dataset.type() == DatasetType.TEST_SUITE;
                         String datasetName = dataset.name();
@@ -131,7 +131,7 @@ public class ExperimentExecutionService {
 
                                     UUID batchId = idGenerator.generateId();
 
-                                    return streamDatasetItems(request, datasetName, filters)
+                                    return streamDatasetItems(request, datasetName, filters, versionHash)
                                             .flatMapIterable(item -> buildMessages(
                                                     item, request, experimentIds, datasetExecutionPolicy,
                                                     projectName, workspaceId, workspaceName, userName, batchId,
@@ -316,19 +316,19 @@ public class ExperimentExecutionService {
      * so the last item of a page is the cursor for the next one. A short page means the dataset is exhausted.
      */
     private Flux<DatasetItem> streamDatasetItems(ExperimentExecutionRequest request, String datasetName,
-            List<DatasetItemFilter> filters) {
-        return fetchItemPage(request, datasetName, filters, null)
+            List<DatasetItemFilter> filters, String versionHash) {
+        return fetchItemPage(request, datasetName, filters, versionHash, null)
                 .expand(page -> page.size() < STREAM_PAGE_SIZE
                         ? Mono.empty()
-                        : fetchItemPage(request, datasetName, filters, page.getLast().id()))
+                        : fetchItemPage(request, datasetName, filters, versionHash, page.getLast().id()))
                 .flatMapIterable(page -> page);
     }
 
     private Mono<List<DatasetItem>> fetchItemPage(ExperimentExecutionRequest request, String datasetName,
-            List<DatasetItemFilter> filters, UUID lastRetrievedId) {
+            List<DatasetItemFilter> filters, String versionHash, UUID lastRetrievedId) {
         var streamRequest = DatasetItemStreamRequest.builder()
                 .datasetName(datasetName)
-                .datasetVersion(request.versionHash())
+                .datasetVersion(versionHash)
                 .steamLimit(STREAM_PAGE_SIZE)
                 .lastRetrievedId(lastRetrievedId)
                 .build();
@@ -352,11 +352,20 @@ public class ExperimentExecutionService {
         });
     }
 
-    private Mono<Optional<ExecutionPolicy>> fetchDatasetExecutionPolicyReactive(UUID datasetId, String versionHash) {
+    /**
+     * The version a run reads its items from, and the policy that version carries. Both come from one
+     * read: a request that pins no version is answered with the latest, rather than taking the policy
+     * from the latest and then letting the items page from whatever the dataset holds at the time -
+     * which lets the two disagree, and lets the items change between pages. A dataset with no version
+     * at all is answered with neither, and streams live as before.
+     */
+    private record RunSource(ExecutionPolicy executionPolicy, String versionHash) {
+    }
+
+    private Mono<RunSource> fetchRunSourceReactive(UUID datasetId, String versionHash) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            return Mono.fromCallable(
-                    () -> Optional.ofNullable(fetchDatasetExecutionPolicy(datasetId, versionHash, workspaceId)))
+            return Mono.fromCallable(() -> fetchRunSource(datasetId, versionHash, workspaceId))
                     .subscribeOn(Schedulers.boundedElastic());
         });
     }
@@ -367,15 +376,15 @@ public class ExperimentExecutionService {
      * reports its pass rate against thresholds nobody chose. Null is still a valid answer — it means
      * the version carries no policy — but it has to come from the version, not from an error.
      */
-    private ExecutionPolicy fetchDatasetExecutionPolicy(UUID datasetId, String versionHash, String workspaceId) {
+    private RunSource fetchRunSource(UUID datasetId, String versionHash, String workspaceId) {
         if (versionHash != null) {
             var versionId = datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash);
             var version = datasetVersionService.getVersionById(workspaceId, datasetId, versionId);
-            return version.executionPolicy();
+            return new RunSource(version.executionPolicy(), versionHash);
         }
         return datasetVersionService.getLatestVersion(datasetId, workspaceId)
-                .map(v -> v.executionPolicy())
-                .orElse(null);
+                .map(version -> new RunSource(version.executionPolicy(), version.versionHash()))
+                .orElseGet(() -> new RunSource(null, null));
     }
 
     /**
