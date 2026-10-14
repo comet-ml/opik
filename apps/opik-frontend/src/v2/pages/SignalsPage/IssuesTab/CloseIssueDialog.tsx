@@ -100,7 +100,11 @@ const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      // While the close is saving, Esc / outside click / X can't drop the choice and note.
+      onOpenChange={(next) => (next || !isPending) && setOpen(next)}
+    >
       <DialogContent
         className="max-w-lg gap-1.5 p-5 sm:max-w-screen-sm"
         onKeyDown={handleKeyDown}
