@@ -1398,8 +1398,8 @@ public class SpanDAO {
      * The per-workspace bounded counterpart of {@link #DELETE_FOR_RETENTION} (applyToPast=false): each workspace
      * carries its own {@code trace_id} floor, so the windows are OR-ed rather than sharing one {@code :lower_bound}.
      * <p>
-     * The OR-ed predicates are a template loop over {@code getQueryItemPlaceHolder}, matching {@code BULK_INSERT} and
-     * the other variable-arity queries in this DAO, so the query text is declared once and every value is bound.
+     * The OR-ed predicates are a template loop over {@code getQueryItemPlaceHolder}, matching the other
+     * variable-arity queries in this DAO, so the query text is declared once and every value is bound.
      * Declaring it rather than assembling it at runtime is also what puts it in reach of the routing guard, which
      * reads these constants.
      * <p>

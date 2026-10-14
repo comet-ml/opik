@@ -3430,9 +3430,10 @@ class TracesResourceTest {
                 assertThat(retrieved.id()).isEqualTo(trace.id());
             }
 
-            // The trace BATCH_INSERT and the side-effect trace_threads INSERT must both stop
-            // tripping the FORMAT Values fast-path. These counters are silent in production (the
-            // inserts succeed) but pollute system.errors and pod stderr. See OPIK-5694.
+            // The trace batch path writes JSONEachRow and cannot reach the Values fast-path; the
+            // side-effect trace_threads INSERT still goes through it, so that is the live arm here.
+            // These counters are silent in production (the inserts succeed) but pollute
+            // system.errors and pod stderr. See OPIK-5694.
             assertThat(readClickHouseErrorCount(templateAsync, 70) - convertTypeBefore)
                     .as("CANNOT_CONVERT_TYPE (70): NULL bound to non-nullable last_updated_at")
                     .isZero();

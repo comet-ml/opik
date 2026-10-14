@@ -1151,7 +1151,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * table is a {@code ReplicatedReplacingMergeTree} ordered by
      * {@code (workspace_id, dataset_id, dataset_version_id, id)} with {@code last_updated_at}
      * as the version column. The upsert flow (PUT {@code /datasets/items} →
-     * {@code BATCH_INSERT_ITEMS}) re-INSERTs the same {@code (ws, ds, dvid, id)} tuple when a
+     * {@link #insertItemsJsonEachRow}) re-INSERTs the same {@code (ws, ds, dvid, id)} tuple when a
      * client PUTs the same item ids twice with changed {@code data} / {@code description} /
      * {@code tags} / {@code evaluators} / {@code execution_policy} (the endpoint contract
      * says: "Each item's id is the stable identifier and upsert key"). Pre-merge duplicates
