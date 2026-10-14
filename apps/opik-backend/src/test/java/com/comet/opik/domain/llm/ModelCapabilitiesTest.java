@@ -7,7 +7,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -100,17 +100,17 @@ class ModelCapabilitiesTest {
 
     @ParameterizedTest
     @MethodSource
-    void newestInFamilyRanksByVersionNotReleaseDate(List<String> modelIds, String familyPrefix, String newest) {
+    void newestInFamilyRanksByVersionNotReleaseDate(Set<String> modelIds, String familyPrefix, String newest) {
         assertThat(ModelCapabilities.newestInFamily(modelIds, familyPrefix)).contains(newest);
     }
 
     private static Stream<Arguments> newestInFamilyRanksByVersionNotReleaseDate() {
         return Stream.of(
-                Arguments.of(List.of("claude-haiku-4-5-20251001", "claude-haiku-5-5"), "claude-haiku",
+                Arguments.of(Set.of("claude-haiku-4-5-20251001", "claude-haiku-5-5"), "claude-haiku",
                         "claude-haiku-5-5"),
-                Arguments.of(List.of("claude-opus-4-20250514", "claude-opus-4-6", "claude-opus-4-1-20250805"),
+                Arguments.of(Set.of("claude-opus-4-20250514", "claude-opus-4-6", "claude-opus-4-1-20250805"),
                         "claude-opus", "claude-opus-4-6"),
-                Arguments.of(List.of("claude-sonnet-4-5", "claude-opus-5-5"), "claude-sonnet", "claude-sonnet-4-5"));
+                Arguments.of(Set.of("claude-sonnet-4-5", "claude-opus-5-5"), "claude-sonnet", "claude-sonnet-4-5"));
     }
 
     /**
@@ -121,9 +121,10 @@ class ModelCapabilitiesTest {
     @ValueSource(strings = {"claude-haiku", "claude-opus", "claude-sonnet", "claude-fable"})
     void readsAFloatingAliasAsTheFamilysNewestListedMember(String family) {
         var newest = ModelCapabilities.newestInFamily(AnthropicModelName.allModelIds(), family).orElseThrow();
+        var alias = "~anthropic/" + family + "-latest";
 
-        assertThat(ModelCapabilities.knownAnthropicId(family + "-latest")).contains(newest);
-        assertThat(ModelCapabilities.rejectsSamplingParams("~anthropic/" + family + "-latest"))
+        assertThat(ModelCapabilities.rejectsSamplingParams(alias))
                 .isEqualTo(ModelCapabilities.rejectsSamplingParams(newest));
+        assertThat(ModelCapabilities.thinksByDefault(alias)).isEqualTo(ModelCapabilities.thinksByDefault(newest));
     }
 }
