@@ -25,6 +25,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
@@ -137,7 +138,10 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     public Optional<ModelParams> openAiParams(@NonNull String model) {
         return registryService.findModel(model)
                 .filter(result -> result.provider() == LlmProvider.OPEN_AI)
-                .map(result -> result.model().params());
+                // A deployment that turns the curated layer off still keeps a reasoning model's drops.
+                .map(result -> ObjectUtils.getIfNull(result.model().params(), () -> LlmModelRegistryService
+                        .bundledParams(LlmProvider.OPEN_AI.getValue(), result.model().id(),
+                                result.model().reasoning())));
     }
 
     private LlmProvider getLlmProviderFromEnums(@NonNull String model) {

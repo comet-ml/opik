@@ -77,7 +77,7 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     }
 
     private static List<String> effortLevelsOf(ModelParams params) {
-        var effort = params.effort();
+        var effort = params == null ? null : params.effort();
         return effort != null && Boolean.TRUE.equals(effort.accepted()) ? effort.levels() : List.of();
     }
 
@@ -87,12 +87,16 @@ public enum AnthropicModelName implements StructuredOutputSupported {
                 && Boolean.TRUE.equals(params.temperature().accepted()));
         private static final Set<String> THINKING_OFF_BY_DEFAULT_MODEL_IDS = idsWhere(
                 params -> Boolean.FALSE.equals(params.thinksByDefault()));
+
         private static final List<String> UNLISTED_MODEL_EFFORT_LEVELS = effortLevelsOf(
                 LlmModelRegistryService.bundledParams(PROVIDER, null));
 
         private static Set<String> idsWhere(Predicate<ModelParams> test) {
             return ALL_MODEL_IDS.stream()
-                    .filter(id -> test.test(LlmModelRegistryService.bundledParams(PROVIDER, id)))
+                    .filter(id -> {
+                        var params = LlmModelRegistryService.bundledParams(PROVIDER, id);
+                        return params != null && test.test(params);
+                    })
                     .collect(Collectors.toUnmodifiableSet());
         }
     }

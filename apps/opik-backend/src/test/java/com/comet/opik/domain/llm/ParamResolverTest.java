@@ -305,7 +305,11 @@ class ParamResolverTest {
         assertThat(normalized.model()).isEqualTo("gpt-5-mini");
         assertThat(normalized.maxCompletionTokens()).isEqualTo(100);
         assertThat(normalized.seed()).isEqualTo(7);
-        assertThat(resolution.changes()).hasSize(4).allMatch(change -> change.endsWith("gpt-5-mini does not take it"));
+        assertThat(resolution.changes()).containsExactly(
+                "temperature not sent: gpt-5-mini does not take it",
+                "top_p not sent: gpt-5-mini does not take it",
+                "frequency_penalty not sent: gpt-5-mini does not take it",
+                "presence_penalty not sent: gpt-5-mini does not take it");
     }
 
     @Test

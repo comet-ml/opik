@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
@@ -248,19 +249,23 @@ public class LlmModelRegistryService {
     }
 
     /**
-     * The params the bundled catalog gives a model id, listed by the registry or not, or the provider's own profile
-     * for an id without a row.
+     * The params the bundled catalog gives a model id, listed by the registry or not; a null id, or one without a
+     * row, gets the provider's own profile, plus the reasoning profile when {@code reasoning} is set.
      *
      * <p>Static, and read once, because the per-model rules are applied from code that has no injector (the
      * MapStruct mappers and the client generators). The curated file ships with the release, so a self-hoster's
      * local override reaches the API but not these rules yet.
      */
-    public static ModelParams bundledParams(@NonNull String provider, String modelId) {
+    public static ModelParams bundledParams(@NonNull String provider, @Nullable String modelId) {
+        return bundledParams(provider, modelId, false);
+    }
+
+    public static ModelParams bundledParams(@NonNull String provider, @Nullable String modelId, boolean reasoning) {
         var row = Bundled.CATALOG.models().getOrDefault(provider, List.of()).stream()
                 .filter(m -> m.id() != null && m.id().equals(modelId))
                 .findFirst()
                 .orElseGet(() -> ModelEntry.builder().id(modelId).build());
-        return Bundled.CATALOG.resolve(provider, row);
+        return Bundled.CATALOG.resolve(provider, row.toBuilder().reasoning(reasoning).build());
     }
 
     private static final class Bundled {

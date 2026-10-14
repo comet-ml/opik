@@ -35,21 +35,21 @@ public class ParamResolver {
         // Some Claude models refuse both outright rather than refusing them together, and extended thinking
         // refuses them on any Claude: "temperature may only be set to 1 when thinking is enabled", "top_p must be
         // greater than or equal to 0.95 or unset when thinking is enabled".
-        var samplingOff = ModelCapabilities.rejectsSamplingParams(model)
+        var samplingParamsDisabledReason = ModelCapabilities.rejectsSamplingParams(model)
                 ? "%s does not take it".formatted(model)
                 : SamplingParamsNormalizer.thinkingEnabled(request) ? "thinking is on" : null;
         var temperature = request.temperature();
         var topP = request.topP();
-        if (samplingOff != null) {
+        if (samplingParamsDisabledReason != null) {
             if (temperature != null) {
                 builder.temperature(null);
                 temperature = null;
-                changes.add("temperature not sent: " + samplingOff);
+                changes.add("temperature not sent: " + samplingParamsDisabledReason);
             }
             if (topP != null) {
                 builder.topP(null);
                 topP = null;
-                changes.add("top_p not sent: " + samplingOff);
+                changes.add("top_p not sent: " + samplingParamsDisabledReason);
             }
         } else if (temperature != null && topP != null && ModelCapabilities.requiresExclusiveSamplingParams(model)) {
             // Temperature wins, matching LlmProviderAnthropicMapper and Anthropic's own guidance.
@@ -60,22 +60,22 @@ public class ParamResolver {
 
         var params = openAiParams(model);
         if (params.isPresent()) {
-            var refused = "%s does not take it".formatted(model);
+            var refusedReason = "%s does not take it".formatted(model);
             if (temperature != null && isRefused(params.get().temperature())) {
                 builder.temperature(null);
-                changes.add("temperature not sent: " + refused);
+                changes.add("temperature not sent: " + refusedReason);
             }
             if (topP != null && isRefused(params.get().topP())) {
                 builder.topP(null);
-                changes.add("top_p not sent: " + refused);
+                changes.add("top_p not sent: " + refusedReason);
             }
             if (request.frequencyPenalty() != null && isRefused(params.get().frequencyPenalty())) {
                 builder.frequencyPenalty(null);
-                changes.add("frequency_penalty not sent: " + refused);
+                changes.add("frequency_penalty not sent: " + refusedReason);
             }
             if (request.presencePenalty() != null && isRefused(params.get().presencePenalty())) {
                 builder.presencePenalty(null);
-                changes.add("presence_penalty not sent: " + refused);
+                changes.add("presence_penalty not sent: " + refusedReason);
             }
         }
 

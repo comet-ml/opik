@@ -537,6 +537,21 @@ class LlmProviderFactoryTest {
     }
 
     @Test
+    @DisplayName("openAiParams falls back to the bundled catalog when the registry serves no params")
+    void openAiParamsFallBackToTheBundledCatalogWithoutACuratedLayer() {
+        var registry = mock(LlmModelRegistryService.class);
+        when(registry.findModel("gpt-5-mini")).thenReturn(Optional.of(
+                new LlmModelRegistryService.ModelLookupResult(LlmProvider.OPEN_AI,
+                        LlmModelDefinition.builder().id("gpt-5-mini").reasoning(true).build())));
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
+                registry);
+
+        assertThat(llmProviderFactory.openAiParams("gpt-5-mini"))
+                .hasValueSatisfying(params -> assertThat(params.temperature().accepted()).isFalse());
+    }
+
+    @Test
     @DisplayName("openAiParams ignores another provider's model")
     void openAiParamsIgnoresOtherProviders() {
         var registry = mock(LlmModelRegistryService.class);
