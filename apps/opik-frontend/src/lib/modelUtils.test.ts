@@ -2943,7 +2943,7 @@ describe("OpenRouter request contract", () => {
       request: { ...WITHOUT_MAX_TOKENS, maxTokens: 1000 },
     },
     {
-      model: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B_FREE,
+      model: PROVIDER_MODEL_TYPE.SAO10K_L3_LUNARIS_8B,
       maxTokens: 9000,
       request: { ...WITHOUT_MAX_TOKENS, maxTokens: 7372 },
     },
