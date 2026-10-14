@@ -99,6 +99,11 @@ describe("IssueDetail status actions", () => {
     expect(screen.getByRole("radio", { name: /Resolved/ })).toBeChecked();
     expect(screen.getByRole("radio", { name: /Resolved/ })).toHaveFocus();
     expect(
+      screen.getByText(
+        "The issue will move to Closed issues. You can reopen it at any time.",
+      ),
+    ).toBeInTheDocument();
+    expect(
       screen.queryByLabelText("Why isn't it useful? (Optional)"),
     ).not.toBeInTheDocument();
 
