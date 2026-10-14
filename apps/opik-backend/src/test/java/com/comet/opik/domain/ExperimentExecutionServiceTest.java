@@ -1109,6 +1109,23 @@ class ExperimentExecutionServiceTest {
             verify(cancellationService).cancel(eq(WORKSPACE_ID), anyCollection());
         }
 
+        // A run nobody could mark failed is bad; one later marked COMPLETED is worse. The counters
+        // are discarded regardless, and a counter that is gone reads as a run that drained.
+        @Test
+        void keepTheClaimWhenTheRunCannotBeMarkedFailed() {
+            when(itemPublisher.publish(any(), any(), anyBoolean()))
+                    .thenReturn(Mono.error(new IllegalStateException("redis is down")));
+            when(experimentService.update(any(UUID.class), any()))
+                    .thenReturn(Mono.error(new IllegalStateException("clickhouse is down")));
+
+            assertThatThrownBy(() -> executeRequest(request()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("redis is down");
+
+            verify(cancellationService, never()).releaseFinish(any(), any(UUID.class));
+            verify(itemPublisher).discardCounters(anyCollection());
+        }
+
         @Test
         void discardTheCountersSoNothingHoldsAnUnreachableTotal() {
             when(itemPublisher.publish(any(), any(), anyBoolean()))
@@ -1259,6 +1276,36 @@ class ExperimentExecutionServiceTest {
     class DatasetItemStreaming {
 
         private static final int STREAM_PAGE_SIZE = 2000;
+
+        // The items are read from the resolved version, so the message has to say so too: a message
+        // carrying null leaves the assertion sampler to score against whatever is latest when it
+        // runs, which is the same disagreement one step further on.
+        @Test
+        @SuppressWarnings("unchecked")
+        void createAndExecutePutsTheResolvedVersionOnEveryMessage() {
+            var datasetId = UUID.randomUUID();
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(datasetVersionService.getLatestVersion(datasetId, WORKSPACE_ID))
+                    .thenReturn(Optional.of(DatasetVersion.builder()
+                            .versionHash("the-latest-hash")
+                            .executionPolicy(new ExecutionPolicy(1, 1))
+                            .build()));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(datasetId)
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build());
+
+            var captor = ArgumentCaptor.forClass(List.class);
+            verify(itemPublisher).publish(any(UUID.class), captor.capture(), anyBoolean());
+            assertThat((List<ExperimentItemToProcess>) captor.getValue())
+                    .isNotEmpty()
+                    .allSatisfy(message -> assertThat(message.versionHash()).isEqualTo("the-latest-hash"));
+        }
 
         // The policy was read from the latest version while the items streamed from whatever the
         // dataset held at the time, so the two could describe different versions - and a dataset

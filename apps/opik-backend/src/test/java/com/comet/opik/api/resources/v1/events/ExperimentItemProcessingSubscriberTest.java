@@ -257,6 +257,53 @@ class ExperimentItemProcessingSubscriberTest {
         verify(cancellationService).releaseFinish(WORKSPACE_ID, experimentId);
     }
 
+    // A run whose status landed and whose aggregates did not has still completed. FAILED would
+    // describe it less accurately, and could not be written anyway from inside the held claim.
+    @Test
+    @DisplayName("should stay completed when only the aggregates fail")
+    void keepCompletedWhenOnlyTheAggregatesFail() {
+        var experimentId = UUID.randomUUID();
+
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(any())).thenReturn(Mono.empty());
+        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
+        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+        when(experimentService.finishExperiments(any()))
+                .thenReturn(Mono.error(new IllegalStateException("aggregation is down")));
+
+        subscriber.processEvent(buildMessage(experimentId)).block();
+
+        var update = ArgumentCaptor.forClass(ExperimentUpdate.class);
+        verify(experimentService).update(eq(experimentId), update.capture());
+        assertThat(update.getValue().status()).isEqualTo(ExperimentStatus.COMPLETED);
+        verify(cancellationService, never()).releaseFinish(any(), any());
+    }
+
+    // setIfAbsent refuses the holder a second time, so a terminal status written from inside the
+    // claim lands as nothing. A failed finish hands the claim back instead.
+    @Test
+    @DisplayName("should hand the finish back rather than write a status it cannot claim")
+    void releaseRatherThanReclaimWhenTheStatusWriteFails() {
+        var experimentId = UUID.randomUUID();
+
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(any())).thenReturn(Mono.empty());
+        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
+        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        // What Redis actually answers: won once, refused every time after.
+        when(cancellationService.claimFinish(WORKSPACE_ID, experimentId))
+                .thenReturn(Mono.just(true))
+                .thenReturn(Mono.just(false));
+        when(experimentService.update(any(UUID.class), any()))
+                .thenReturn(Mono.error(new IllegalStateException("database is down")));
+        when(cancellationService.releaseFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
+
+        subscriber.processEvent(buildMessage(experimentId)).block();
+
+        verify(cancellationService).releaseFinish(WORKSPACE_ID, experimentId);
+    }
+
     @Test
     @DisplayName("should hand the finish back when a test suite cannot be stamped")
     void releaseTheFinishWhenTheTestSuiteStampFails() {
