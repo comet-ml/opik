@@ -7,6 +7,7 @@ import {
 } from "@/types/signals";
 import {
   countAffectedTraces,
+  getGuidanceCalloutAction,
   getHeaderControls,
   isGuidanceOutdated,
 } from "./helpers";
@@ -129,5 +130,37 @@ describe("getHeaderControls", () => {
         showJobControls: true,
       }),
     ).toEqual(none);
+  });
+});
+
+describe("getGuidanceCalloutAction", () => {
+  const base = { canConfigure: true, canRun: true, isOutOfCredits: false };
+
+  it("offers a run to users who can run", () => {
+    expect(getGuidanceCalloutAction(base)).toBe("run");
+  });
+
+  it("offers the out-of-credits popover instead when credits ran out", () => {
+    expect(
+      getGuidanceCalloutAction({
+        ...base,
+        canRun: false,
+        isOutOfCredits: true,
+      }),
+    ).toBe("outOfCredits");
+  });
+
+  it("offers nothing while a run can't start, or without permission", () => {
+    expect(getGuidanceCalloutAction({ ...base, canRun: false })).toBeNull();
+    expect(
+      getGuidanceCalloutAction({ ...base, canConfigure: false }),
+    ).toBeNull();
+    expect(
+      getGuidanceCalloutAction({
+        ...base,
+        canConfigure: false,
+        isOutOfCredits: true,
+      }),
+    ).toBeNull();
   });
 });
