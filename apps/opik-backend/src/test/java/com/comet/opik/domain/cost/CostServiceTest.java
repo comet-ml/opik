@@ -1,15 +1,23 @@
 package com.comet.opik.domain.cost;
 
+import com.comet.opik.api.ModelCostData;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -564,7 +572,7 @@ class CostServiceTest {
     }
 
     /**
-     * Mistral cost tracking: until `mistral` was added to PROVIDERS_MAPPING the entire set of
+     * Mistral cost tracking: until `mistral` was registered in CostService the entire set of
      * upstream LiteLLM `litellm_provider: "mistral"` rows was dropped at startup, so every
      * Mistral span returned cost = 0. This locks in both the upstream-sourced rows and the
      * two override-only rows (Medium 3.5, Small 4) added alongside the registry fix.
@@ -600,7 +608,7 @@ class CostServiceTest {
 
     /**
      * Overrides file: `litellm_provider: "microsoft"` is remapped to canonical `azure` via
-     * PROVIDERS_MAPPING. A span emitted with provider=`azure` and the model name must hit
+     * PROVIDER_ALIASES. A span emitted with provider=`azure` and the model name must hit
      * the override row for `azure/multilingual-e5-large`.
      */
     @Test
@@ -975,7 +983,7 @@ class CostServiceTest {
      * OpenRouter exposes Moonshot's Kimi family under a different namespace prefix
      * ({@code moonshotai/*}) than LiteLLM's canonical ({@code moonshot/*}) — see the
      * {@code MOONSHOTAI_*} entries in {@code OpenRouterModelName}. Without a
-     * {@code moonshotai -> moonshot} alias in {@link CostService#PROVIDERS_MAPPING}, the
+     * {@code moonshotai -> moonshot} alias in {@link CostService#PROVIDER_ALIASES}, the
      * provider-prefix fallback returns null and the aggregator-routed request resolves to
      * {@code DEFAULT_COST}, silently under-charging every Kimi call routed through OpenRouter.
      * With the alias, the fallback maps {@code moonshotai} to the canonical {@code moonshot}
@@ -1057,15 +1065,14 @@ class CostServiceTest {
     /**
      * Same gap as the {@code moonshotai} alias, for five more vendors OpenRouter resells.
      * {@code ai21}, {@code morph}, {@code inception}, {@code meta} and {@code zai} all carry
-     * non-zero-cost rows in {@code model_prices_and_context_window.json}, but none were in
-     * {@link CostService#PROVIDERS_MAPPING}, so {@code buildModelPrice} dropped every one of
-     * them at load time and the provider-prefix fallback had nothing to resolve against. Any
-     * call routed through OpenRouter fell through to {@code DEFAULT_COST}.
+     * non-zero-cost rows in {@code model_prices_and_context_window.json}, but none were registered
+     * in {@link CostService}, so {@code buildModelPrice} dropped every one of them at load time and
+     * the provider-prefix fallback had nothing to resolve against. Any call routed through
+     * OpenRouter fell through to {@code DEFAULT_COST}.
      * <p>
-     * {@code z-ai} needs two entries for the same reason {@code moonshot} does: the map is read
-     * both with the price file's {@code litellm_provider} ({@code zai}) when loading rows, and
-     * with the model-name prefix OpenRouter uses ({@code z-ai}) when resolving the fallback.
-     * The other four spell both the same way, so one entry each.
+     * Every provider in the price file now loads under its own name. {@code z-ai} still needs an
+     * alias for the same reason {@code moonshotai} does: OpenRouter's model-name prefix
+     * ({@code z-ai}) differs from the price file's {@code litellm_provider} ({@code zai}).
      * <p>
      * All of these take the {@link SpanCostCalculator#textGenerationCost} path. Four of the
      * models below publish a {@code cache_read_input_token_cost}, but none of these providers is
@@ -1183,7 +1190,7 @@ class CostServiceTest {
     }
 
     /**
-     * Covers registering the canonical providers added here, plus the {@code cohere_chat} alias that
+     * Covers providers that were once registered by hand, plus the {@code cohere_chat} alias that
      * maps onto {@code cohere}, so that their entries in
      * {@code model_prices_and_context_window.json} load instead of being silently dropped at startup.
      * Each case pins one representative token-priced model routed through
@@ -1252,5 +1259,39 @@ class CostServiceTest {
                 // openrouter/anthropic/claude-3.5-sonnet: input 3e-06, output 1.5e-05
                 // -> 1000*3e-06 + 200*1.5e-05 = 0.006
                 Arguments.of("openrouter", "openrouter/anthropic/claude-3.5-sonnet", "0.006"));
+    }
+
+    /**
+     * Every provider in the bundled LiteLLM price file is priced under its exact
+     * {@code litellm_provider} name, with no per-provider registration in {@link CostService}.
+     * Covers providers that used to be dropped at load time, and price-file names that are aliased
+     * to another provider ({@code bedrock_converse}, {@code vertex_ai-language-models}, ...).
+     * Each provider with a token-priced row must price at least one of its rows.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideTokenPricedProviders")
+    void calculateCostPricesEveryProviderInThePriceFile(String provider, List<String> models) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
+
+        assertThat(models).anySatisfy(model -> assertThat(CostService.calculateCost(model, provider, usage, null))
+                .isGreaterThan(BigDecimal.ZERO));
+    }
+
+    private static Stream<Arguments> provideTokenPricedProviders() throws IOException {
+        Map<String, ModelCostData> prices = JsonUtils.readJsonFile(CostService.MODEL_PRICES_FILE,
+                new TypeReference<>() {
+                });
+        Map<String, List<String>> modelsByProvider = prices.entrySet().stream()
+                .filter(entry -> StringUtils.isNotBlank(entry.getValue().litellmProvider()))
+                .filter(entry -> isPositivePrice(entry.getValue().inputCostPerToken())
+                        || isPositivePrice(entry.getValue().outputCostPerToken()))
+                .collect(Collectors.groupingBy(entry -> entry.getValue().litellmProvider(), TreeMap::new,
+                        Collectors.mapping(Map.Entry::getKey, Collectors.toList())));
+        return modelsByProvider.entrySet().stream()
+                .map(entry -> Arguments.of(entry.getKey(), entry.getValue()));
+    }
+
+    private static boolean isPositivePrice(String price) {
+        return StringUtils.isNotBlank(price) && new BigDecimal(price).signum() > 0;
     }
 }

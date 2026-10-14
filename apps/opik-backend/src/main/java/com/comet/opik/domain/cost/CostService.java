@@ -27,69 +27,22 @@ import java.util.function.BiFunction;
 public class CostService {
     private static final char MODEL_PROVIDER_SEPARATOR = '/';
     private static final Map<String, ModelPrice> modelProviderPrices;
-    private static final Map<String, String> PROVIDERS_MAPPING = Map.ofEntries(
-            Map.entry("openai", "openai"),
+    // Any provider in the price file is priced under its own litellm_provider name, so providers LiteLLM
+    // adds need no code change. Only names that differ from the provider spans carry need an alias. The
+    // same aliases apply when the price file is loaded and when a span's provider is looked up, so a span
+    // may carry either name.
+    private static final Map<String, String> PROVIDER_ALIASES = Map.ofEntries(
             Map.entry("vertex_ai-language-models", "google_vertexai"),
             Map.entry("gemini", "google_ai"),
-            Map.entry("anthropic", "anthropic"),
             Map.entry("vertex_ai-anthropic_models", "anthropic_vertexai"),
-            Map.entry("bedrock", "bedrock"),
             Map.entry("bedrock_converse", "bedrock"),
-            Map.entry("groq", "groq"),
-            Map.entry("jina_ai", "jina_ai"),
-            Map.entry("elastic", "elastic"),
             Map.entry("microsoft", "azure"),
-            Map.entry("azure", "azure"),
-            Map.entry("mistral", "mistral"),
-            Map.entry("xai", "xai"),
-            Map.entry("deepseek", "deepseek"),
-            Map.entry("perplexity", "perplexity"),
-            Map.entry("fireworks_ai", "fireworks_ai"),
-            Map.entry("moonshot", "moonshot"),
             Map.entry("moonshotai", "moonshot"),
-            Map.entry("ai21", "ai21"),
-            Map.entry("morph", "morph"),
-            Map.entry("inception", "inception"),
-            Map.entry("meta", "meta"),
-            Map.entry("zai", "zai"),
             Map.entry("z-ai", "zai"),
-            Map.entry("sambanova", "sambanova"),
-            Map.entry("nebius", "nebius"),
-            Map.entry("snowflake", "snowflake"),
-            Map.entry("deepinfra", "deepinfra"),
-            Map.entry("cerebras", "cerebras"),
-            Map.entry("typesafe", "typesafe"),
-            Map.entry("hyperbolic", "hyperbolic"),
-            Map.entry("baseten", "baseten"),
-            Map.entry("lambda_ai", "lambda_ai"),
-            Map.entry("nscale", "nscale"),
-            Map.entry("oci", "oci"),
-            Map.entry("replicate", "replicate"),
-            Map.entry("watsonx", "watsonx"),
-            Map.entry("cohere", "cohere"),
             Map.entry("cohere_chat", "cohere"),
-            Map.entry("novita", "novita"),
-            Map.entry("cloudflare", "cloudflare"),
-            Map.entry("anyscale", "anyscale"),
-            Map.entry("scaleway", "scaleway"),
-            Map.entry("ovhcloud", "ovhcloud"),
-            Map.entry("gmi", "gmi"),
-            Map.entry("gradient_ai", "gradient_ai"),
-            Map.entry("libertai", "libertai"),
-            Map.entry("azure_ai", "azure_ai"),
-            Map.entry("vercel_ai_gateway", "vercel_ai_gateway"),
-            Map.entry("openrouter", "openrouter"));
-
-    // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
-    // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider
-    // at lookup so cost tracking and the per-evaluation spend budget work for every provider selectable
-    // for online evaluation. Only providers whose name actually differs need an entry: openai / anthropic
-    // / bedrock already equal their canonical name, and self-hosted providers (ollama, custom-llm) have no
-    // public pricing to map to. Vertex is unambiguous here because only Gemini models are offered on
-    // Vertex for online evaluation. Canonical names (and any not listed) pass through unchanged.
-    private static final Map<String, String> RUNTIME_PROVIDER_MAPPING = Map.of(
-            "gemini", "google_ai",
-            "vertex-ai", "google_vertexai");
+            // Online evaluation's LlmProvider value for Vertex. Unambiguous because only Gemini models are
+            // offered on Vertex for online evaluation.
+            Map.entry("vertex-ai", "google_vertexai"));
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
@@ -167,9 +120,7 @@ public class CostService {
             return DEFAULT_COST;
         }
 
-        // Normalize runtime provider names ("gemini", "vertex-ai") to the canonical price-table provider
-        // so callers holding an LlmProvider value hit the same rows as callers passing the canonical name.
-        provider = RUNTIME_PROVIDER_MAPPING.getOrDefault(provider, provider);
+        provider = resolveProvider(provider);
 
         // Preserve the original name so the provider-prefix fallback below can inspect it after
         // all primary lookups have missed under the caller-supplied provider.
@@ -257,8 +208,8 @@ public class CostService {
         }
 
         // Provider-prefix fallback: when every primary lookup misses and the model name carries a
-        // provider prefix (e.g. "perplexity/sonar") that maps to a canonical provider we know
-        // pricing for, retry the lookup under that prefix's canonical provider. This covers models
+        // provider prefix (e.g. "perplexity/sonar"), retry the lookup under that prefix's provider.
+        // A prefix that names no provider in the price file finds nothing. This covers models
         // that a caller routes through an aggregator (LlmProviderFactoryImpl enumerates
         // "perplexity/*", "xai/*", "deepseek/*" under OpenRouter, so BudgetGuard invokes
         // calculateCost with provider="openrouter" — the pricing row itself lives under the
@@ -268,8 +219,8 @@ public class CostService {
         int prefixSlash = originalModelName.indexOf('/');
         if (prefixSlash > 0) {
             String modelPrefix = originalModelName.substring(0, prefixSlash);
-            String canonicalFromPrefix = PROVIDERS_MAPPING.get(modelPrefix);
-            if (canonicalFromPrefix != null && !canonicalFromPrefix.equalsIgnoreCase(provider)) {
+            String canonicalFromPrefix = resolveProvider(modelPrefix);
+            if (!canonicalFromPrefix.equalsIgnoreCase(provider)) {
                 String prefixKey = createModelProviderKey(modelName, canonicalFromPrefix);
                 ModelPrice prefixMatch = modelProviderPrices.get(prefixKey);
                 if (prefixMatch != null) {
@@ -437,7 +388,7 @@ public class CostService {
     private static void applyDirectOverride(Map<String, ModelPrice> prices, String modelName, ModelCostData override) {
         String runtimeKey = buildRuntimeKey(modelName, override);
         if (runtimeKey == null) {
-            log.warn("Override entry '{}' has unknown provider '{}'; skipping",
+            log.warn("Override entry '{}' has a blank provider or a legacy Bedrock name (provider '{}'); skipping",
                     modelName, override.litellmProvider());
             return;
         }
@@ -449,15 +400,15 @@ public class CostService {
 
     /**
      * Computes the runtime key {@code <parsedModel>/<canonicalProvider>} for a price-map entry.
-     * Returns null if the provider isn't in {@link #PROVIDERS_MAPPING} or the entry is invalid
-     * for the resolved provider (e.g. legacy Bedrock paths).
+     * Returns null if the provider is blank or the entry is invalid for the resolved provider
+     * (e.g. legacy Bedrock paths).
      */
     private static String buildRuntimeKey(String modelName, ModelCostData modelCost) {
         String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
-        String canonical = PROVIDERS_MAPPING.get(provider);
-        if (canonical == null) {
+        if (provider.isBlank()) {
             return null;
         }
+        String canonical = resolveProvider(provider);
         if (!isValidModelProvider(modelName, canonical)) {
             return null;
         }
@@ -466,7 +417,7 @@ public class CostService {
 
     private static ModelPrice buildModelPrice(ModelCostData modelCost) {
         String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
-        if (!PROVIDERS_MAPPING.containsKey(provider)) {
+        if (provider.isBlank()) {
             return null;
         }
 
@@ -566,6 +517,10 @@ public class CostService {
     private static String parseModelName(String modelName) {
         int prefixIndex = modelName.indexOf('/');
         return prefixIndex == -1 ? modelName : modelName.substring(prefixIndex + 1);
+    }
+
+    private static String resolveProvider(String provider) {
+        return PROVIDER_ALIASES.getOrDefault(provider, provider);
     }
 
     private static String createModelProviderKey(String modelName, String provider) {
