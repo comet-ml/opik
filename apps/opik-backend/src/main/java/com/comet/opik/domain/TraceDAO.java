@@ -510,8 +510,8 @@ class TraceDAOImpl implements TraceDAO {
      */
     private static final String SELECT_BY_IDS = """
             WITH <if(spans_partitioned)>trace_span_weeks AS (
-                SELECT DISTINCT <if(span_weeks_bound)>id_week<else>toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))<endif> AS week
-                FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
+                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
+                FROM spans
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
@@ -1030,8 +1030,8 @@ class TraceDAOImpl implements TraceDAO {
                 <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
             ), <endif><if(trace_span_weeks)>trace_span_weeks AS (
-                SELECT DISTINCT <if(span_weeks_bound)>id_week<else>toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))<endif> AS week
-                FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
+                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
+                FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(page_keyed_aggregates)>AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
@@ -2610,8 +2610,8 @@ class TraceDAOImpl implements TraceDAO {
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
             ), <endif><if(spans_partitioned)>
             trace_span_weeks AS (
-                SELECT DISTINCT <if(span_weeks_bound)>id_week<else>toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))<endif> AS week
-                FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
+                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
+                FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
@@ -3075,8 +3075,8 @@ class TraceDAOImpl implements TraceDAO {
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
             ), <endif><if(spans_partitioned)>
             trace_span_weeks AS (
-                SELECT DISTINCT <if(span_weeks_bound)>id_week<else>toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))<endif> AS week
-                FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
+                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
+                FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
@@ -3749,10 +3749,8 @@ class TraceDAOImpl implements TraceDAO {
         if (configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable()) {
             template.add("spans_partitioned", true);
         }
-        addSpanWeeksBound(template);
     }
 
-    // The span week pre-passes read the span_weeks index instead of the spans keys.
     private void addSpanWeeksBound(ST template) {
         if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
             template.add("span_weeks_bound", true);
@@ -4567,7 +4565,6 @@ class TraceDAOImpl implements TraceDAO {
                 && Stream.of("page_keyed_aggregates", "trace_id_prefilter", "uuid_from_time", "uuid_to_time")
                         .anyMatch(name -> template.getAttribute(name) != null)) {
             template.add("trace_span_weeks", true);
-            addSpanWeeksBound(template);
         }
     }
 

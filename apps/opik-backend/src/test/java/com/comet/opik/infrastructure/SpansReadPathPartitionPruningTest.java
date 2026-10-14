@@ -12,7 +12,6 @@ import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
-import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.ProjectStats;
@@ -26,13 +25,6 @@ import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
-import com.comet.opik.api.filter.Operator;
-import com.comet.opik.api.filter.TraceField;
-import com.comet.opik.api.filter.TraceFilter;
-import com.comet.opik.api.filter.TraceThreadField;
-import com.comet.opik.api.filter.TraceThreadFilter;
-import com.comet.opik.api.metrics.BreakdownConfig;
-import com.comet.opik.api.metrics.BreakdownField;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.metrics.MetricType;
@@ -50,24 +42,16 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
-import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
-import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectMetricsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
-import com.comet.opik.api.sorting.Direction;
-import com.comet.opik.api.sorting.SortableFields;
-import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.IdGenerator;
-import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.TestIdGeneratorFactory;
-import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -160,8 +144,8 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class SpansReadPathPartitionPruningTest {
 
-    protected static final String API_KEY = "apiKey-" + UUID.randomUUID();
-    protected static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+    private static final String API_KEY = "apiKey-" + UUID.randomUUID();
+    private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
 
@@ -232,7 +216,7 @@ class SpansReadPathPartitionPruningTest {
 
     private final WireMockUtils.WireMockRuntime wireMock;
 
-    protected final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     @RegisterApp
     private final TestDropwizardAppExtension app;
@@ -256,40 +240,29 @@ class SpansReadPathPartitionPruningTest {
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .redisUrl(redisContainer.getRedisURI())
                         .runtimeInfo(wireMock.runtimeInfo())
-                        .customConfigs(Stream.concat(Stream.of(
+                        .customConfigs(List.of(
                                 // Lets the filler and past-ceiling ids through ingestion, as in production.
                                 new CustomConfig("uuidValidation.enabled", "false"),
                                 // The successor's columns are non-nullable, as the cutover flips this with it.
-                                new CustomConfig("databaseAnalyticsDataModel.spanColumnsNonNullable", "true"),
-                                // Finished experiments aggregate after this delay; the aggregates cases wait for it. Its
-                                // bucket lives twice as long, so at the job's 5s interval a tick always finds it.
-                                new CustomConfig("experimentDenormalization.debounceDelay", "5s")),
-                                extraConfigs().stream()).toList())
+                                new CustomConfig("databaseAnalyticsDataModel.spanColumnsNonNullable", "true")))
                         .build());
     }
 
-    protected SpanResourceClient spanResourceClient;
+    private SpanResourceClient spanResourceClient;
     private DatasetResourceClient datasetResourceClient;
-    private ExperimentResourceClient experimentResourceClient;
-    private OptimizationResourceClient optimizationResourceClient;
-    private ExperimentAggregatesService experimentAggregatesService;
     private ProjectResourceClient projectResourceClient;
     private ProjectMetricsResourceClient projectMetricsResourceClient;
-    protected TraceResourceClient traceResourceClient;
-    protected TransactionTemplateAsync template;
+    private TraceResourceClient traceResourceClient;
+    private TransactionTemplateAsync template;
     private AlertResourceClient alertResourceClient;
 
     @BeforeAll
-    void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template,
-            ExperimentAggregatesService experimentAggregatesService) {
-        this.experimentAggregatesService = experimentAggregatesService;
+    void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template) {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
-        this.spanResourceClient = newSpanResourceClient(clientSupport, baseUrl);
+        this.spanResourceClient = new SpanResourceClient(clientSupport, baseUrl);
         this.datasetResourceClient = new DatasetResourceClient(clientSupport, baseUrl);
-        this.experimentResourceClient = new ExperimentResourceClient(clientSupport, baseUrl, factory);
-        this.optimizationResourceClient = new OptimizationResourceClient(clientSupport, baseUrl, factory);
         this.projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
         this.projectMetricsResourceClient = new ProjectMetricsResourceClient(clientSupport, baseUrl);
         this.traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
@@ -300,252 +273,6 @@ class SpansReadPathPartitionPruningTest {
                 .flatMap(monday -> Stream.of(0, 1).map(_ -> newSpan(
                         monday.atTime(12, 0).toInstant(ZoneOffset.UTC), ID_GENERATOR.generateId())))
                 .toList(), API_KEY, WORKSPACE_NAME);
-    }
-
-    /** A trace with a 1.25 span this week and a 2.5 one in 2201: every trace-keyed read must count both. */
-    @Builder(toBuilder = true)
-    private record FarFutureTrace(String projectName, UUID projectId, UUID traceId, String threadId, List<Span> spans) {
-        static final BigDecimal TOTAL_COST = new BigDecimal("3.75");
-    }
-
-    private FarFutureTrace createFarFutureTrace() {
-        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
-        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-        var now = Instant.now();
-        var threadId = "thread-" + RandomStringUtils.secure().nextAlphanumeric(16);
-        var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
-                .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
-                .projectName(projectName)
-                .threadId(threadId)
-                .startTime(now)
-                .endTime(now.plusMillis(100))
-                .feedbackScores(null)
-                .usage(null)
-                .build(), API_KEY, WORKSPACE_NAME);
-        var spans = List.of(
-                newSpan(now, traceId).toBuilder().projectName(projectName)
-                        .totalEstimatedCost(new BigDecimal("1.25")).build(),
-                newSpan(Instant.parse("2201-08-30T03:18:08Z"), traceId).toBuilder().projectName(projectName)
-                        .totalEstimatedCost(new BigDecimal("2.5")).build());
-        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
-        return FarFutureTrace.builder()
-                .projectName(projectName)
-                .projectId(projectId)
-                .traceId(traceId)
-                .threadId(threadId)
-                .spans(spans)
-                .build();
-    }
-
-    /** Creates an experiment over the trace, optionally under an optimization. */
-    private UUID createExperiment(UUID traceId, UUID optimizationId, String datasetName) {
-        var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                .source(DatasetItemSource.SDK)
-                .traceId(null)
-                .spanId(null)
-                .experimentItems(null)
-                .build();
-        datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
-                .datasetName(datasetName)
-                .items(List.of(datasetItem))
-                .build(), WORKSPACE_NAME, API_KEY);
-        var experimentId = experimentResourceClient.create(experimentResourceClient.createPartialExperiment()
-                .datasetName(datasetName)
-                .optimizationId(optimizationId)
-                .build(), API_KEY, WORKSPACE_NAME);
-        experimentResourceClient.createExperimentItem(Set.of(ExperimentItem.builder()
-                .experimentId(experimentId)
-                .datasetItemId(datasetItem.id())
-                .traceId(traceId)
-                .build()), API_KEY, WORKSPACE_NAME);
-        return experimentId;
-    }
-
-    // The subclass reruns these with the span_weeks bound on, where they also show each statement read the index.
-    @Test
-    void spansOfATraceIncludeItsFarFutureSpan() {
-        var trace = createFarFutureTrace();
-
-        var actual = spanResourceClient.findSpans(WORKSPACE_NAME, API_KEY, trace.projectName(), null, 1, 10,
-                trace.traceId(), null, null, null, null);
-
-        assertThat(actual.content()).extracting(Span::id)
-                .containsExactlyInAnyOrderElementsOf(trace.spans().stream().map(Span::id).toList());
-        assertSpanWeeksRead("find_spans_by_project_id", trace.traceId());
-    }
-
-    @Test
-    void experimentCostCountsAFarFutureSpanOfItsTrace() {
-        var trace = createFarFutureTrace();
-        var experimentId = createExperiment(trace.traceId(), null,
-                "dataset-" + RandomStringUtils.secure().nextAlphanumeric(16));
-
-        var actual = experimentResourceClient.getExperiment(experimentId, API_KEY, WORKSPACE_NAME);
-
-        assertThat(actual.totalEstimatedCost()).isEqualByComparingTo(FarFutureTrace.TOTAL_COST);
-        assertSpanWeeksRead("get_experiment_by_id", experimentId);
-    }
-
-    @Test
-    void optimizationCostCountsAFarFutureSpanOfItsTrace() {
-        var trace = createFarFutureTrace();
-        var datasetName = "dataset-" + RandomStringUtils.secure().nextAlphanumeric(16);
-        var optimizationId = optimizationResourceClient.create(optimizationResourceClient.createPartialOptimization()
-                .datasetName(datasetName)
-                .build(), API_KEY, WORKSPACE_NAME);
-        createExperiment(trace.traceId(), optimizationId, datasetName);
-
-        var actual = optimizationResourceClient.get(optimizationId, API_KEY, WORKSPACE_NAME, HttpStatus.SC_OK);
-
-        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(FarFutureTrace.TOTAL_COST);
-        assertSpanWeeksRead("get_optimization_by_id", optimizationId);
-    }
-
-    @Test
-    void threadCostCountsAFarFutureSpanOfItsTrace() {
-        var trace = createFarFutureTrace();
-
-        // Threads are materialised from their traces asynchronously.
-        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(traceResourceClient
-                .getTraceThread(trace.threadId(), trace.projectId(), API_KEY, WORKSPACE_NAME).totalEstimatedCost())
-                .isEqualByComparingTo(FarFutureTrace.TOTAL_COST));
-        assertSpanWeeksRead("find_thread_by_id", trace.projectId());
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"getSpanAggregations", "getSpansData"})
-    void experimentAggregatesCountAFarFutureSpanOfItsTrace(String queryName) {
-        var trace = createFarFutureTrace();
-        var experimentId = createExperiment(trace.traceId(), null,
-                "dataset-" + RandomStringUtils.secure().nextAlphanumeric(16));
-
-        experimentResourceClient.finishExperiments(Set.of(experimentId), API_KEY, WORKSPACE_NAME);
-        // Finishing publishes the aggregation after the debounce; the statement in query_log shows it ran, and the
-        // aggregate row it writes may land a moment later.
-        spansPartitionsRead(queryName, experimentId);
-
-        // The aggregate row itself: the API falls back to raw span sums while it is missing, which would hide a
-        // dropped span.
-        Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
-                .untilAsserted(() -> assertThat(experimentAggregatesService.getExperimentFromAggregates(experimentId)
-                        .contextWrite(ctx -> ctx
-                                .put(RequestContext.USER_NAME, USER)
-                                .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
-                        .blockOptional())
-                        .hasValueSatisfying(experiment -> assertThat(experiment.totalEstimatedCost())
-                                .isEqualByComparingTo(FarFutureTrace.TOTAL_COST)));
-        assertSpanWeeksRead(queryName, experimentId);
-    }
-
-    @ParameterizedTest(name = "breakdown: {0}")
-    @ValueSource(booleans = {false, true})
-    void costChartCountsAFarFutureSpanOfATraceInTheWindow(boolean breakdown) {
-        var trace = createFarFutureTrace();
-        var request = ProjectMetricRequest.builder()
-                .metricType(MetricType.COST)
-                .interval(TimeInterval.HOURLY)
-                .intervalStart(Instant.now().minus(Duration.ofHours(1)))
-                .breakdown(breakdown ? BreakdownConfig.builder().field(BreakdownField.NAME).build() : null)
-                .build();
-
-        var response = projectMetricsResourceClient.getProjectMetrics(trace.projectId(), request, BigDecimal.class,
-                API_KEY, WORKSPACE_NAME);
-
-        var cost = response.results().stream()
-                .flatMap(result -> result.data().stream())
-                .map(DataPoint::value)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        assertThat(cost).isEqualByComparingTo(FarFutureTrace.TOTAL_COST);
-        assertSpanWeeksRead("ProjectMetrics_cost", trace.projectId());
-    }
-
-    @ParameterizedTest(name = "breakdown: {0}")
-    @ValueSource(booleans = {false, true})
-    void tokenUsageChartCountsAFarFutureSpanOfATraceInTheWindow(boolean breakdown) {
-        var trace = createFarFutureTrace();
-        var expected = totalUsage(trace.spans());
-        var subMetric = expected.keySet().iterator().next();
-        var request = ProjectMetricRequest.builder()
-                .metricType(MetricType.TOKEN_USAGE)
-                .interval(TimeInterval.HOURLY)
-                .intervalStart(Instant.now().minus(Duration.ofHours(1)))
-                .breakdown(breakdown
-                        ? BreakdownConfig.builder().field(BreakdownField.NAME).subMetric(subMetric).build()
-                        : null)
-                .build();
-
-        var response = projectMetricsResourceClient.getProjectMetrics(trace.projectId(), request, Long.class,
-                API_KEY, WORKSPACE_NAME);
-
-        // Per usage key without a breakdown; one sub-metric, under the trace's name, with it.
-        var actual = response.results().stream()
-                .flatMap(result -> result.data().stream()
-                        .filter(point -> point.value() != null)
-                        .map(point -> Map.entry(breakdown ? subMetric : result.name(), point.value())))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
-        assertThat(actual).isEqualTo(breakdown ? Map.of(subMetric, expected.get(subMetric)) : expected);
-        assertSpanWeeksRead("ProjectMetrics_token usage", trace.projectId());
-    }
-
-    /** The thread list's three span reads: the page pushdown, the trace-set prefilter, and the plain window. */
-    @ParameterizedTest
-    @ValueSource(strings = {"page pushdown", "trace set", "window"})
-    void threadListCountsAFarFutureSpanOfItsTrace(String variant) {
-        var trace = createFarFutureTrace();
-        // A thread id filter activates the trace-set prefilter; a cost sort disqualifies the page pushdown.
-        var filters = variant.equals("trace set") ? threadIdFilter(trace.threadId()) : null;
-        var sorting = variant.equals("window")
-                ? List.of(SortingField.builder().field(SortableFields.TOTAL_ESTIMATED_COST)
-                        .direction(Direction.DESC).build())
-                : null;
-
-        // Threads are materialised from their traces asynchronously.
-        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(traceResourceClient
-                .getTraceThreads(trace.projectId(), null, API_KEY, WORKSPACE_NAME, filters, sorting, Map.of())
-                .content())
-                .singleElement()
-                .satisfies(thread -> assertThat(thread.totalEstimatedCost())
-                        .isEqualByComparingTo(FarFutureTrace.TOTAL_COST)));
-        assertSpanWeeksRead("find_threads_by_project", trace.projectId());
-    }
-
-    @ParameterizedTest(name = "trace set: {0}")
-    @ValueSource(booleans = {false, true})
-    void threadStatsCountAFarFutureSpanOfItsTrace(boolean traceSet) {
-        var trace = createFarFutureTrace();
-        var filters = traceSet ? threadIdFilter(trace.threadId()) : null;
-
-        // One thread, so its cost is the average the stats report.
-        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(traceResourceClient
-                .getTraceThreadStats(null, trace.projectId(), API_KEY, WORKSPACE_NAME, filters, Map.of())
-                .stats())
-                .filteredOn(stat -> stat.getName().equals("total_estimated_cost"))
-                .singleElement()
-                .satisfies(stat -> assertThat(((ProjectStats.AvgValueStat) stat).getValue())
-                        .isCloseTo(FarFutureTrace.TOTAL_COST.doubleValue(), within(1e-9))));
-        assertSpanWeeksRead("thread_stats", trace.projectId());
-    }
-
-    private static List<TraceThreadFilter> threadIdFilter(String threadId) {
-        return List.of(TraceThreadFilter.builder()
-                .field(TraceThreadField.ID)
-                .operator(Operator.EQUAL)
-                .value(threadId)
-                .build());
-    }
-
-    /** Asserts the latest statement of {@code op} naming {@code id} read the span_weeks index; off here. */
-    protected void assertSpanWeeksRead(String op, UUID id) {
-    }
-
-    /** Called from the constructor, before any subclass field is set. */
-    protected List<CustomConfig> extraConfigs() {
-        return List.of();
-    }
-
-    protected SpanResourceClient newSpanResourceClient(ClientSupport clientSupport, String baseUrl) {
-        return new SpanResourceClient(clientSupport, baseUrl);
     }
 
     @AfterAll
@@ -775,7 +502,6 @@ class SpansReadPathPartitionPruningTest {
                 .ignoringCollectionOrder()
                 .withComparatorForType((a, b) -> Math.abs(a - b) <= 1e-6 ? 0 : Double.compare(a, b), Double.class)
                 .isEqualTo(expected);
-        assertSpanWeeksRead("KpiCards_getTraceKpiCards", projectId);
     }
 
     @ParameterizedTest(name = "open-ended: {0}")
@@ -800,7 +526,6 @@ class SpansReadPathPartitionPruningTest {
         assertThat(cost).isEqualByComparingTo(openEnded ? "3.75" : "1.25");
         assertThat(spansPartitionsRead("ProjectMetrics_threadCost", seeded.projectId()))
                 .containsExactlyInAnyOrderElementsOf(seeded.weeksRead(intervalStart, intervalEnd));
-        assertSpanWeeksRead("ProjectMetrics_threadCost", seeded.projectId());
     }
 
     @ParameterizedTest(name = "open-ended: {0}")
@@ -834,7 +559,6 @@ class SpansReadPathPartitionPruningTest {
                         within(1e-6)));
         assertThat(spansPartitionsRead("KpiCards_getThreadKpiCards", seeded.projectId()))
                 .isIn(expectedWeekSets);
-        assertSpanWeeksRead("KpiCards_getThreadKpiCards", seeded.projectId());
     }
 
     private record SeededThread(UUID projectId, Instant now, Set<String> spanWeeks) {
@@ -900,7 +624,6 @@ class SpansReadPathPartitionPruningTest {
         var actual = fireTraceCostAlert(projectId);
 
         assertThat(new BigDecimal(actual.metricValue())).isEqualByComparingTo(expected);
-        assertSpanWeeksRead("AlertMetrics_getTotalCost", projectId);
     }
 
     /** Each read takes the project name and the trace id, and returns the traces it read. */
@@ -919,7 +642,7 @@ class SpansReadPathPartitionPruningTest {
     @MethodSource("traceReads")
     void traceAggregatesAFarFutureSpanOfItsTrace(String queryName, BiFunction<String, UUID, List<Trace>> read) {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
-        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         // The spans reads are keyed by trace id, so the far-future week must come from the span-weeks pre-pass.
         var created = createTraceWithAFarFutureSpan(projectName, Instant.now());
         var expected = SpanAggregates.builder().spanCount(created.spans().size())
@@ -937,56 +660,6 @@ class SpansReadPathPartitionPruningTest {
                         .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
                         .build())
                 .containsExactly(expected);
-        assertSpanWeeksRead(queryName, projectId);
-    }
-
-    @Test
-    void traceCountFilteredOnSpanCostCountsAFarFutureSpanOfItsTrace() {
-        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
-        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-        var created = createTraceWithAFarFutureSpan(projectName, Instant.now());
-        var filters = fullCostFilter(created.spans());
-
-        var actual = traceResourceClient.getTraces(projectName, null, API_KEY, WORKSPACE_NAME, filters, null, 10,
-                Map.of());
-
-        var expectedTrace = created.trace().toBuilder().usage(totalUsage(created.spans())).build();
-        TraceAssertions.assertTraces(actual.content(), List.of(expectedTrace), USER);
-        assertThat(actual.total()).isEqualTo(1);
-        assertSpanWeeksRead("count_traces_by_project", projectId);
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"get_trace_stats_traces_spans", "get_trace_stats_feedback_scores"})
-    void traceStatsCountAFarFutureSpanOfTheTrace(String queryName) {
-        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
-        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-        var created = createTraceWithAFarFutureSpan(projectName, Instant.now());
-        var expectedTrace = created.trace().toBuilder()
-                .usage(totalUsage(created.spans()))
-                .totalEstimatedCost(totalCost(created.spans()))
-                .spanCount(created.spans().size())
-                .llmSpanCount((int) created.spans().stream().filter(span -> span.type() == SpanType.llm).count())
-                // Generated on the fixture but never written, so the stats have none.
-                .spanFeedbackScores(null)
-                .guardrailsValidations(null)
-                .build();
-
-        // The filter is what makes both stats statements read spans, and it keeps the trace only at its full cost.
-        var stats = traceResourceClient.getTraceStats(projectName, null, API_KEY, WORKSPACE_NAME,
-                fullCostFilter(created.spans()), Map.of());
-
-        TraceAssertions.assertStats(stats.stats(), StatsUtils.getProjectTraceStatItems(List.of(expectedTrace)));
-        assertSpanWeeksRead(queryName, projectId);
-    }
-
-    /** Keeps a trace only if its cost includes every given span; the far-future one is the one at stake. */
-    private static List<TraceFilter> fullCostFilter(List<Span> spans) {
-        return List.of(TraceFilter.builder()
-                .field(TraceField.TOTAL_ESTIMATED_COST)
-                .operator(Operator.GREATER_THAN_EQUAL)
-                .value(totalCost(spans).toPlainString())
-                .build());
     }
 
     /** The span count and total cost reported by a trace read. */
@@ -1281,7 +954,7 @@ class SpansReadPathPartitionPruningTest {
         return span;
     }
 
-    protected Span newSpan(Instant idAt, UUID traceId) {
+    private Span newSpan(Instant idAt, UUID traceId) {
         return factory.manufacturePojo(Span.class).toBuilder()
                 .id(ID_GENERATOR.getTimeOrderedEpoch(idAt.toEpochMilli()))
                 .projectName(PROJECT_NAME)

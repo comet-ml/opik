@@ -22,9 +22,9 @@ import java.util.concurrent.TimeUnit;
 @Builder(toBuilder = true)
 public record SpanWeeksRegistrationConfig(
         @Min(0) @Max(10) int maxRetries,
-        @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS) //
+        @NotNull @MinDuration(value = 10, unit = TimeUnit.MILLISECONDS) //
         @MaxDuration(value = 1, unit = TimeUnit.MINUTES) Duration minBackoff,
-        @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS) //
+        @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS) //
         @MaxDuration(value = 1, unit = TimeUnit.MINUTES) Duration maxBackoff) {
 
     @AssertTrue(message = "spanWeeksRegistration.minBackoff must not exceed spanWeeksRegistration.maxBackoff") public boolean isBackoffRangeValid() {

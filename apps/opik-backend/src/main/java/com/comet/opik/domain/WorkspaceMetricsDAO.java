@@ -440,9 +440,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             if (spanColumnsNonNullable()) {
                 stTemplate.add("spans_partitioned", true);
             }
-            if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
-                stTemplate.add("span_weeks_bound", true);
-            }
             if (request.intervalEnd() != null) {
                 stTemplate.add("uuid_to_time", true);
             }

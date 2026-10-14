@@ -596,9 +596,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                     <if(spans_partitioned)>
                     AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                        SELECT DISTINCT <if(span_weeks_bound)>id_week<else>toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))<endif> FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
+                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
                         WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN (SELECT id FROM traces_filtered)
-                        <if(uuid_from_time)> AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))))<endif><if(uuid_to_time)> AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                        <if(uuid_from_time)> AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))))<endif><if(uuid_to_time)> AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
                     <endif>
                 ) s ON s.trace_id = t.id
             )
@@ -637,9 +637,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                     <if(spans_partitioned)>
                     AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                        SELECT DISTINCT <if(span_weeks_bound)>id_week<else>toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))<endif> FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
+                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
                         WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN (SELECT id FROM traces_filtered)
-                        <if(uuid_from_time)> AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))))<endif><if(uuid_to_time)> AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                        <if(uuid_from_time)> AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))))<endif><if(uuid_to_time)> AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
                     <endif>
                 ) s ON s.trace_id = t.id
             )
@@ -675,9 +675,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                     <if(spans_partitioned)>
                     AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                        SELECT DISTINCT <if(span_weeks_bound)>id_week<else>toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))<endif> FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
+                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
                         WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN (SELECT id FROM traces_filtered)
-                        <if(uuid_from_time)> AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))))<endif><if(uuid_to_time)> AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                        <if(uuid_from_time)> AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))))<endif><if(uuid_to_time)> AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
                     <endif>
                 ) s ON s.trace_id = t.id
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
@@ -720,9 +720,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                     <if(spans_partitioned)>
                     AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                        SELECT DISTINCT <if(span_weeks_bound)>id_week<else>toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))<endif> FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
+                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
                         WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN (SELECT id FROM traces_filtered)
-                        <if(uuid_from_time)> AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))))<endif><if(uuid_to_time)> AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                        <if(uuid_from_time)> AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))))<endif><if(uuid_to_time)> AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
                     <endif>
                 ) s ON s.trace_id = t.id
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
@@ -1028,7 +1028,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                     <if(spans_partitioned)>
                     AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                        SELECT DISTINCT <if(span_weeks_bound)>id_week<else>toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))<endif> FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
+                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
                         WHERE workspace_id = :workspace_id
                         <if(project_ids)> AND project_id IN :project_ids <endif>
                         <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
@@ -1263,9 +1263,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                     <if(spans_partitioned)>
                     AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                        SELECT DISTINCT <if(span_weeks_bound)>id_week<else>toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))<endif> FROM <if(span_weeks_bound)>span_weeks<else>spans<endif>
+                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
                         WHERE workspace_id = :workspace_id AND project_id = :project_id
-                        <if(uuid_from_time)> AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))))<endif><if(uuid_to_time)> AND <if(span_weeks_bound)>id_week<else>toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))))<endif> \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                        <if(uuid_from_time)> AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))))<endif><if(uuid_to_time)> AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
                     <endif>
                 ) s ON s.trace_id = tr.id
             )
@@ -1632,9 +1632,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             if (spanColumnsNonNullable()) {
                 stTemplate.add("spans_partitioned", true);
             }
-            if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
-                stTemplate.add("span_weeks_bound", true);
-            }
 
             // Add uuid_from_time flag
             stTemplate.add("uuid_from_time", true);
@@ -1711,9 +1708,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             // Span reads bound to their own matching span weeks once spans is weekly-partitioned; see KpiCardDAO.
             if (spanColumnsNonNullable()) {
                 template.add("spans_partitioned", true);
-            }
-            if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
-                template.add("span_weeks_bound", true);
             }
             if (request.uuidToTime() != null) {
                 template.add("uuid_to_time", true);
