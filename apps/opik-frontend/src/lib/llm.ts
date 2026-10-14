@@ -340,7 +340,20 @@ export const resolveTraceEvaluatorVariableDefault = (
     scope === EVALUATORS_RULE_SCOPE.trace ||
     scope === EVALUATORS_RULE_SCOPE.span
   ) {
-    return reservedVariables[variableName] ?? "";
+    return (
+      reservedVariables[variableName] ??
+      (isInlineEntityPath(variableName) ? variableName : "")
+    );
   }
   return "";
 };
+
+/**
+ * A variable written as the field path itself — `{{input}}`,
+ * `{{output.answer}}`, `{{metadata.tags[0]}}` — needs no separate mapping: the
+ * backend reads the path straight from the trace or span, so the mapping is
+ * the name. Anything else (`{{context}}`, `{{ground_truth}}`) still needs a
+ * source picked by the user.
+ */
+export const isInlineEntityPath = (variableName: string): boolean =>
+  /^(input|output|metadata)(\.|\[|$)/.test(variableName);

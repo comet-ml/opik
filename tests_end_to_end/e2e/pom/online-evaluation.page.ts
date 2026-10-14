@@ -3,10 +3,13 @@ import { expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
 
+/** Rule type picked from the "Create rule" menu. */
+export type RuleDialogType = 'LLM-as-judge' | 'Code metric';
+
 export interface CreateRuleDialogLLMJudgeFields {
   name: string;
   /** Canned-template label as shown in the dialog. */
-  template: 'Moderation' | 'Hallucination' | 'AnswerRelevance' | 'Custom LLM-as-judge';
+  template: 'Moderation' | 'Hallucination' | 'Answer relevance' | 'Custom LLM-as-judge';
   /** Model display name as shown in the model picker (e.g. "Claude Haiku 4.5"). */
   modelDisplayName: string;
 }
@@ -97,12 +100,18 @@ export class OnlineEvaluationPage {
    * ("Create your first rule") AND the toolbar button ("Create rule") that
    * appears once at least one rule exists.
    */
-  async openCreateRuleDialog(): Promise<void> {
+  async openCreateRuleDialog(type: RuleDialogType = 'LLM-as-judge'): Promise<void> {
     const toolbarButton = this.page.getByTestId('online-evaluation-create-rule-button');
     const emptyStateButton = this.page.getByRole('button', {
       name: 'Create your first rule',
     });
     await toolbarButton.or(emptyStateButton).first().click();
+    // The toolbar button opens a type menu (when code metrics are enabled);
+    // the empty-state CTA goes straight to an LLM-as-judge panel.
+    const typeItem = this.page.getByRole('menuitem', { name: type });
+    if (await typeItem.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await typeItem.click();
+    }
     await this.dialog.waitFor({ state: 'visible' });
   }
 
@@ -421,39 +430,35 @@ export class OnlineEvaluationPage {
    * Choose the rule's Scope (Trace / Thread / Span).
    *
    * Disabled in edit mode by design, so this is only callable while creating.
-   * Addressed through the "Scope" label because the trigger carries no test id
-   * and its accessible name is whatever is currently selected.
+   * The control is a segmented group whose options are labelled in the plural
+   * ("Traces"); switching away from an edited prompt asks for confirmation.
    */
   async setScope(label: 'Trace' | 'Thread' | 'Span'): Promise<void> {
     return test.step(`set the rule scope to ${label}`, async () => {
-      const trigger = this.scopeControl;
-      await expect(trigger, 'exactly one Scope control').toHaveCount(1);
-      await trigger.click();
-      await this.page.getByRole('option', { name: label, exact: true }).click();
-      await expect(trigger, 'the Scope control').toHaveText(label);
+      const option = this.scopeOption(label);
+      await expect(option, `exactly one "${label}" scope option`).toHaveCount(1);
+      await option.click();
+      const confirm = this.page.getByRole('button', { name: 'Reset and continue' });
+      if (await confirm.isVisible({ timeout: 500 }).catch(() => false)) {
+        await confirm.click();
+      }
+      await expect(option).toHaveAttribute('data-state', 'on');
     });
   }
 
-  /**
-   * The Scope select's trigger.
-   *
-   * Identified by the VALUE it displays rather than by its label: the label is
-   * a bare `<Label>` with no `htmlFor`, so there is nothing tying it to the
-   * control, and walking up to the shared FormItem wrapper matches a stack of
-   * anonymous divs whose innermost is not reliably the right one — an earlier
-   * attempt at that resolved to the model picker, which is disabled until a
-   * type is chosen. Scope is the only combobox in this dialog whose text is one
-   * of the three scope names, which makes the value the stable handle.
-   */
+  /** The Scope segmented control. */
   private get scopeControl(): Locator {
-    return this.dialog
-      .locator('button[role="combobox"]')
-      .filter({ hasText: /^(Trace|Thread|Span)$/ });
+    return this.dialog.getByTestId('add-edit-rule-dialog-scope');
   }
 
-  /** What the Scope control currently reads. */
+  private scopeOption(label: 'Trace' | 'Thread' | 'Span'): Locator {
+    return this.scopeControl.getByRole('radio', { name: `${label}s`, exact: true });
+  }
+
+  /** What the Scope control currently reads, in the singular the specs use. */
   async readScope(): Promise<string> {
-    return ((await this.scopeControl.textContent()) ?? '').trim();
+    const selected = this.scopeControl.locator('[data-state="on"]');
+    return ((await selected.textContent()) ?? '').trim().replace(/s$/, '');
   }
 
   /** The LLM-model picker trigger in the judge form. */
@@ -526,12 +531,12 @@ export class OnlineEvaluationPage {
     return this.dialog.getByRole('button', { name: 'Model parameters' });
   }
 
-  /** The "Max cost per evaluation (USD)" field's label — absent for a decisions model. */
+  /** The "Cost limit (USD)" field's label — absent for a decisions model. */
   get maxCostLabel(): Locator {
-    return this.dialog.getByText('Max cost per evaluation (USD)', { exact: true });
+    return this.dialog.getByText('Cost limit (USD)', { exact: true });
   }
 
-  /** The "Enable rule" switch inside the add/edit dialog. */
+  /** The "Enable rule" switch in the add/edit panel footer. */
   get enableRuleSwitch(): Locator {
     return this.dialog.getByRole('switch', { name: 'Enable rule' });
   }
@@ -713,13 +718,9 @@ export class OnlineEvaluationPage {
     const d = this.dialog;
     await d.getByRole('textbox', { name: 'Rule name' }).fill(fields.name);
 
-    // Pick the template FIRST — selecting it rebuilds the prompt + variable
-    // mapping section, so any prior tweaks would be wiped out.
-    const promptCombobox = d.getByRole('combobox').filter({
-      hasText: /^(Custom LLM-as-judge|Hallucination|Moderation|AnswerRelevance|Structured Output Compliance|Meaning Match)$/,
-    });
-    await promptCombobox.click();
-    await this.page.getByRole('option', { name: fields.template, exact: true }).click();
+    // Pick the template FIRST — it fills the prompt and the score definition;
+    // the chips are only offered while the prompt is still empty.
+    await d.getByTestId('llm-judge-template-chips').getByRole('button', { name: fields.template, exact: true }).click();
 
     // Pick the model. Guarded: an unselected picker defaults to the
     // provider's newest/most expensive entry.
@@ -744,11 +745,14 @@ export class OnlineEvaluationPage {
       await expect(modelCombobox).toContainText(fields.modelDisplayName, { timeout: 2_000 });
     }).toPass({ timeout: 30_000 });
 
-    // Change the output variable-mapping from default `output` to `output.output`
-    // so the engine extracts the bare string (per the JsonPath semantics in
-    // OnlineScoringEngine.toVariableMapping — dot-containing paths get
-    // `$.output`, bare paths get `$` which yields the whole JSON node).
-    await this.setVariableMapping('output', 'output.output');
+    // Variables are written inline as field paths. The template's `{{output}}`
+    // renders the whole JSON node; point the judge at the bare string as well
+    // (OnlineScoringEngine.toVariableMapping: dotted paths get `$.output`).
+    // `insertText` bypasses the editor's `{{` picker, which key-typing would open.
+    const editor = d.locator('.cm-content').first();
+    await editor.click();
+    await this.page.keyboard.press('ControlOrMeta+End');
+    await this.page.keyboard.insertText('\n\nText to score:\n{{output.output}}');
 
     await d.getByTestId('add-edit-rule-dialog-submit').click();
     await d.waitFor({ state: 'hidden' });
@@ -756,14 +760,13 @@ export class OnlineEvaluationPage {
 
   /**
    * Fill + submit the dialog for a Python-code rule using the deterministic
-   * Equals snippet. Toggles the TYPE radio to "Code metric" first.
+   * Equals snippet. Open the dialog with `openCreateRuleDialog('Code metric')`.
    */
   async fillAndSubmitCreateRuleDialogPythonEquals(
     fields: CreateRuleDialogPythonEqualsFields,
   ): Promise<void> {
     const d = this.dialog;
     await d.getByRole('textbox', { name: 'Rule name' }).fill(fields.name);
-    await d.getByRole('radio', { name: 'Code metric' }).click();
 
     // Replace the default Python template in the CodeMirror editor.
     const editor = d.locator('.cm-content').first();

@@ -80,6 +80,11 @@ vi.mock(
 vi.mock("@/v2/pages-shared/llm/LLMJudgeScores/LLMJudgeScores", () => ({
   default: () => null,
 }));
+// The `{{` picker's sample entity comes from a react-query hook; there is no QueryClient here.
+vi.mock(
+  "@/v2/pages-shared/automations/AddEditRuleDialog/useEntitySampleJson",
+  () => ({ useEntitySampleJson: () => ({}) }),
+);
 
 const EXTRA_BODY = { max_tokens: 66, marker: "D" };
 
