@@ -181,6 +181,22 @@ public class WeeklyPartitions {
     }
 
     /**
+     * The partition the partitioned spans table actually stores the id's row in — total, never empty, unlike
+     * {@link #weeksOf}. For an index of where rows are (span_weeks), rejecting an id would drop its week, and a read
+     * bound to the index would then silently skip the row. Mirrors what ClickHouse 26.3 does: {@code UUIDv7ToDateTime}
+     * reads any non-v7 id as the epoch (only the version nibble is checked), and {@code DateTime64} saturates at
+     * 2299-12-31, so every id at or past {@link #ID_AT_CEILING} lands in that last week. Pinned against the real table
+     * by {@code SpansLocalV2PartitioningTest}.
+     */
+    public static long storedPartitionOf(@NonNull UUID id) {
+        if (id.version() != 7) {
+            return weeklyPartitionOf(0L);
+        }
+        long epochMilli = Math.min(id.getMostSignificantBits() >>> 16, ID_AT_CEILING - 1);
+        return weeklyPartitionOf(epochMilli / 1_000L);
+    }
+
+    /**
      * The weekly partition value(s) a single id resolves to under each {@code id_at} type the mutation may meet (see
      * class javadoc) — extracted from {@link #groupByPartition} so the per-id {@code id_at} math reads separately
      * from the grouping it feeds. Empty exactly when the id cannot be derived exactly: not a UUIDv7, or an embedded
