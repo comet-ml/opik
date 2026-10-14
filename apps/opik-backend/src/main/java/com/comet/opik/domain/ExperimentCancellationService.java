@@ -39,7 +39,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ExperimentCancellationService {
 
-    private static final int PURGE_CHUNK_SIZE = 500;
+    private static final int ID_CHUNK_SIZE = 500;
 
     private final RedissonReactiveClient redisClient;
     private final ExperimentExecutionConfig config;
@@ -77,7 +77,8 @@ public class ExperimentCancellationService {
                     var list = queuedIds(workspaceId, entry.getKey());
                     var ids = entry.getValue().stream().map(StreamMessageId::toString).toList();
 
-                    return list.addAll(ids)
+                    return Flux.fromIterable(Lists.partition(ids, ID_CHUNK_SIZE))
+                            .concatMap(list::addAll)
                             .then(list.expire(config.getBatchCounterTtl().toJavaDuration()));
                 })
                 .then();
@@ -112,7 +113,7 @@ public class ExperimentCancellationService {
                                     return Mono.just(false);
                                 }
 
-                                return Flux.fromIterable(Lists.partition(queued, PURGE_CHUNK_SIZE))
+                                return Flux.fromIterable(Lists.partition(queued, ID_CHUNK_SIZE))
                                         .concatMap(chunk -> stream().remove(chunk.toArray(StreamMessageId[]::new)))
                                         .reduce(0L, Long::sum)
                                         .flatMap(removed -> {

@@ -13,6 +13,7 @@ import { AxiosError } from "axios";
 interface ExperimentInfo {
   experiment_id: string;
   prompt_index: number;
+  total_items: number;
 }
 
 export interface ExperimentExecutionResponse {
@@ -27,6 +28,7 @@ interface UseRunExperimentExecutionParams {
   versionHash?: string;
   prompts: PlaygroundPromptType[];
   projectName?: string;
+  projectId?: string | null;
   experimentNames?: Record<string, string | undefined>;
   openAiPipelineMode?: OpenAiPipelineMode;
   selectedRuleIds?: string[] | null;
@@ -40,6 +42,7 @@ const runExperimentExecution = async ({
   versionHash,
   prompts,
   projectName,
+  projectId,
   experimentNames,
   openAiPipelineMode,
   selectedRuleIds,
@@ -71,6 +74,7 @@ const runExperimentExecution = async ({
     dataset_version_id: datasetVersionId,
     prompts: promptVariants,
     project_name: projectName,
+    project_id: projectId ?? undefined,
     dataset_id: datasetId,
     version_hash: versionHash,
     selected_rule_ids: selectedRuleIds,
