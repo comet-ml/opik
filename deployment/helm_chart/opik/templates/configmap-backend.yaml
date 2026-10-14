@@ -60,6 +60,11 @@ data:
   {{ $k }}: {{ $v | quote }}
   {{- end }}
   {{- end }}
+  {{- range $k, $v := include "opik.alerts.awsEventBridgeEnv" $ | fromYaml }}
+  {{- if not (hasKey $env $k) }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+  {{- end }}
   {{- end }}
 {{- end }}
 {{- end }}

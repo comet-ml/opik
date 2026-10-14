@@ -244,3 +244,40 @@ Usage:
     {{- $value }}
 {{- end }}
 {{- end -}}
+
+{{/*
+ALERTS_EVENTBRIDGE_* backend env from alerts.awsEventBridge, as a YAML map; empty when disabled.
+Validates like the backend's startup checks, so a bad value fails the render instead of crash-looping
+the pod. REGION is left out when empty so the backend resolves it from the ARN or the pod's region.
+*/}}
+{{- define "opik.alerts.awsEventBridgeEnv" -}}
+{{- $eb := (.Values.alerts | default dict).awsEventBridge | default dict -}}
+{{- $env := dict -}}
+{{- if $eb.enabled -}}
+{{- if not (kindIs "bool" $eb.enabled) -}}
+{{- fail (printf "alerts.awsEventBridge.enabled must be true or false, got %v" $eb.enabled) -}}
+{{- end -}}
+{{- $bus := required "alerts.awsEventBridge.eventBus is required when alerts.awsEventBridge.enabled is true" $eb.eventBus | toString -}}
+{{- $regionPattern := "[a-z]{2,4}(-[a-z]+)+-[0-9]+" -}}
+{{- $namePattern := "[.\\-_A-Za-z0-9]{1,256}" -}}
+{{- $arnPattern := printf "^arn:aws[a-z-]*:events:(%s):[0-9]{12}:event-bus/%s$" $regionPattern $namePattern -}}
+{{- $isArn := regexMatch $arnPattern $bus -}}
+{{- /* Custom bus names can't contain '/'; only partner buses can, and they aren't PutEvents targets. */ -}}
+{{- if not (or $isArn (regexMatch (printf "^%s$" $namePattern) $bus)) -}}
+{{- fail (printf "alerts.awsEventBridge.eventBus must be a bus name or an event-bus ARN, got %q" $bus) -}}
+{{- end -}}
+{{- $_ := set $env "ALERTS_EVENTBRIDGE_ENABLED" "true" -}}
+{{- $_ := set $env "ALERTS_EVENTBRIDGE_EVENT_BUS" $bus -}}
+{{- with $eb.region -}}
+{{- $region := toString . -}}
+{{- if not (regexMatch (printf "^%s$" $regionPattern) $region) -}}
+{{- fail (printf "alerts.awsEventBridge.region must be an AWS region such as us-east-1, got %q" $region) -}}
+{{- end -}}
+{{- if and $isArn (ne $region (index (splitList ":" $bus) 3)) -}}
+{{- fail (printf "alerts.awsEventBridge.region %q does not match the region of eventBus %q" $region $bus) -}}
+{{- end -}}
+{{- $_ := set $env "ALERTS_EVENTBRIDGE_REGION" $region -}}
+{{- end -}}
+{{- end -}}
+{{- toYaml $env -}}
+{{- end }}
