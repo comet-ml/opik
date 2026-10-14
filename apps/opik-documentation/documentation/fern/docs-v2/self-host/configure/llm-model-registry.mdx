@@ -42,18 +42,21 @@ vertex-ai:
 Fields:
 
 - `id` (required) — the model identifier used at inference time.
-- `qualifiedName` (optional) — disambiguates models that exist under multiple providers (e.g. Gemini via Vertex AI vs. the Gemini API directly). Used as the routing key when set.
+- `qualifiedName` (optional) — disambiguates models that exist under multiple providers (e.g. Gemini via Vertex AI vs. the Gemini API directly). Used as the routing key when set. Vertex AI entries need it, in the form `vertex_ai/<id>`.
 - `label` (optional) — the human-readable name shown in dropdowns. Falls back to `id` when omitted.
 - `structuredOutput` (optional, default `false`) — whether the model supports JSON schema / tool-calling structured output mode.
-- `reasoning` (optional, default `false`) — whether the model is a reasoning model (enforces temperature = 1.0 and unlocks reasoning-effort parameters in the UI). Unlike the other fields, an override that leaves it out keeps the lower layer's value (see below).
+- `reasoning` (optional, default `false`) — whether the model is a reasoning model (enforces temperature = 1.0 and unlocks reasoning-effort parameters in the UI).
+
+An optional field that an override leaves out keeps the lower layer's value (see below). The defaults apply only when no layer sets the field.
 
 ## Merge behavior
 
 Models are keyed by `id` across every provider. `qualifiedName` is used for routing lookups (to disambiguate `gemini-2.5-pro` under the Gemini direct API vs. Vertex AI), but override deduplication always uses `id`. When a merge happens:
 
 - **Add**: an `id` not present in lower layers is appended to that provider's list.
-- **Override**: an `id` that matches a lower layer replaces the full definition. Partial overrides are not supported — supply all fields you want on the final model. One exception: if the overriding entry leaves out `reasoning`, the lower layer's value is kept, so an older remote copy can't turn off the backend's reasoning-model handling for models your release already flags. To turn the flag off, set `reasoning: false` explicitly.
+- **Override**: an `id` that matches a lower layer updates that model. Fields the overriding entry sets replace the lower layer's values. Fields it leaves out (`qualifiedName`, `label`, `structuredOutput`, `reasoning`) keep them. So an override can change a single field, and an older remote copy can't turn off a flag your release sets. To turn a flag off, set it to `false` explicitly.
 - **Remove**: not currently supported. Contact support if you need to hide a default model entirely.
+- **Order**: providers keep the order of the classpath file. A provider that only an upper layer adds comes last.
 
 ## Configuration scenarios
 
@@ -71,9 +74,9 @@ LLM_MODEL_REGISTRY_REMOTE_URL=https://your-cdn.example.com/opik/llm-models-defau
 LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS=3600
 ```
 
-Comet SaaS uses `https://cdn.comet.ml/opik/llm-models-default.yaml`, regenerated daily by the Opik sync workflow — you can either mirror that content on your own CDN or point directly at it if your policies allow.
+Comet SaaS uses `https://cdn.comet.ml/opik/llm-models-default.yaml` — you can either mirror that content on your own CDN or point directly at it if your policies allow. A daily job checks the providers for new models and opens a pull request in the Opik repository. The CDN copy changes only when that reviewed update merges.
 
-Remote fetch failures are logged but non-fatal: the backend keeps serving the last successful registry (or the classpath defaults if the first fetch fails), so enabling the remote tier never risks losing model routing.
+Remote fetch failures are logged but non-fatal: the backend keeps using the last remote copy it fetched successfully (or the classpath defaults if no fetch has succeeded since startup), so enabling the remote tier never risks losing model routing. Your local override is still applied on top.
 
 ### Add a private fine-tuned model (Docker Compose)
 
@@ -140,7 +143,7 @@ The same list appears in the UI dropdowns within seconds of a browser refresh.
 
 | What fails | What happens |
 |---|---|
-| Remote CDN fetch at startup | Logged; registry uses classpath defaults only. |
-| Remote CDN fetch on scheduled refresh | Logged; previous in-memory registry retained. |
+| Remote CDN fetch at startup | Logged; registry uses classpath defaults + override. |
+| Remote CDN fetch on scheduled refresh | Logged; the last good remote copy stays in use. |
 | Override YAML malformed | Logged; registry uses classpath + remote only. |
 | Override YAML path set but file missing | Silently ignored (defaults + remote used). |

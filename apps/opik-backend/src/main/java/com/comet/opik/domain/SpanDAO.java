@@ -26,7 +26,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.UsageUtils;
 import com.comet.opik.utils.WeeklyPartitions;
-import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -112,75 +111,6 @@ public class SpanDAO {
             OR arrayExists(element -> ilike(element, :search_text), tags)
             OR ilike(model, :search_text)
             OR ilike(provider, :search_text))""";
-
-    private static final String BULK_INSERT = """
-            INSERT INTO spans(
-                id,
-                project_id,
-                workspace_id,
-                trace_id,
-                parent_span_id,
-                name,
-                type,
-                start_time,
-                end_time,
-                input,
-                output,
-                metadata,
-                model,
-                provider,
-                total_estimated_cost,
-                total_estimated_cost_version,
-                tags,
-                usage,
-                last_updated_at,
-                error_info,
-                created_by,
-                last_updated_by,
-                truncation_threshold,
-                input_slim,
-                output_slim,
-                ttft,
-                source,
-                environment
-            )
-            SETTINGS log_comment = '<log_comment>'
-            FORMAT Values
-                <items:{item |
-                    (
-                        :id<item.index>,
-                        :project_id<item.index>,
-                        :workspace_id,
-                        :trace_id<item.index>,
-                        :parent_span_id<item.index>,
-                        :name<item.index>,
-                        :type<item.index>,
-                        :start_time<item.index>,
-                        :end_time<item.index>,
-                        :input<item.index>,
-                        :output<item.index>,
-                        :metadata<item.index>,
-                        :model<item.index>,
-                        :provider<item.index>,
-                        :total_estimated_cost<item.index>,
-                        :total_estimated_cost_version<item.index>,
-                        :tags<item.index>,
-                        :usage<item.index>,
-                        :last_updated_at<item.index>,
-                        :error_info<item.index>,
-                        :created_by<item.index>,
-                        :last_updated_by<item.index>,
-                        :truncation_threshold<item.index>,
-                        :input_slim<item.index>,
-                        :output_slim<item.index>,
-                        :ttft<item.index>,
-                        :source<item.index>,
-                        :environment<item.index>
-                    )
-                    <if(item.hasNext)>,<endif>
-                }>
-            ;
-            """;
 
     /**
      * This query handles the insertion of a new span into the database in two cases:
@@ -2062,19 +1992,12 @@ public class SpanDAO {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(spans), "Spans list must not be empty");
 
-        if (configuration.getBulkInsert().v2ClientEnabled()) {
-            return insertJsonEachRow(spans);
-        }
-
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> insert(spans, connection))
-                .flatMap(Result::getRowsUpdated)
-                .reduce(0L, Long::sum);
+        return insertJsonEachRow(spans);
     }
 
     /**
-     * The {@link #BULK_INSERT} rows streamed as JSONEachRow through the v2 client rather than bound as 27
-     * named parameters per row. See {@link SpanJsonRowMapper} for the per-column parity notes.
+     * Span rows streamed as JSONEachRow through the v2 client. Replaced an R2DBC insert that bound 27
+     * named parameters per row. See {@link SpanJsonRowMapper} for the per-column notes.
      */
     private Mono<Long> insertJsonEachRow(List<Span> spans) {
         return makeMonoContextAware((userName, workspaceId) -> {
@@ -2102,90 +2025,6 @@ public class SpanDAO {
                                 costVersion, spanColumnsNonNullable(),
                                 configuration.getResponseFormatting().getTruncationSize());
                     });
-        });
-    }
-
-    private Publisher<? extends Result> insert(List<Span> spans, Connection connection) {
-
-        return makeMonoContextAware((userName, workspaceId) -> {
-            List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(spans.size());
-
-            var template = getSTWithLogComment(BULK_INSERT, "batch_insert_spans", workspaceId, userName, spans.size())
-                    .add("items", queryItems);
-
-            Statement statement = connection.createStatement(template.render());
-
-            // Captured once per batch so every row whose client did not provide lastUpdatedAt gets
-            // the same timestamp — matches the prior server-side now64(6) semantics.
-            Instant nowForBatch = Instant.now();
-
-            int i = 0;
-            for (Span span : spans) {
-                String inputValue = TruncationUtils.toJsonString(span.input());
-                String outputValue = TruncationUtils.toJsonString(span.output());
-
-                statement.bind("id" + i, span.id())
-                        .bind("project_id" + i, span.projectId())
-                        .bind("trace_id" + i, span.traceId())
-                        .bind("name" + i, StringUtils.defaultIfBlank(span.name(), ""))
-                        .bind("type" + i, Objects.toString(span.type(), SpanType.UNKNOWN_VALUE))
-                        .bind("start_time" + i, ClickHouseDateTimeFormat.formatNanos(span.startTime()))
-                        .bind("parent_span_id" + i, span.parentSpanId() != null ? span.parentSpanId() : "")
-                        .bind("input" + i, inputValue)
-                        .bind("output" + i, outputValue)
-                        .bind("metadata" + i, span.metadata() != null ? span.metadata().toString() : "")
-                        .bind("model" + i, StringUtils.defaultIfBlank(span.model(), ""))
-                        .bind("provider" + i, StringUtils.defaultIfBlank(span.provider(), ""))
-                        .bind("tags" + i, span.tags() != null ? span.tags().toArray(String[]::new) : new String[]{})
-                        .bind("error_info" + i,
-                                span.errorInfo() != null ? JsonUtils.readTree(span.errorInfo()).toString() : "")
-                        .bind("created_by" + i, userName)
-                        .bind("last_updated_by" + i, userName)
-                        .bind("input_slim" + i, TruncationUtils.createSlimJsonString(inputValue))
-                        .bind("output_slim" + i, TruncationUtils.createSlimJsonString(outputValue));
-
-                bindEpochSentinel(statement, "end_time" + i, span.endTime());
-
-                statement.bind("usage" + i, UsageUtils.sanitizeUsage(span.usage()));
-
-                // Format the timestamp client-side so the SQL contains a plain string literal in the
-                // last_updated_at cell. Fall back to "now" when the client did not provide a value —
-                // matches the column's DEFAULT now64(6) but avoids the function call in the tuple
-                // that would trip the FORMAT Values fast-path. See OPIK-5694.
-                statement.bind("last_updated_at" + i, ClickHouseDateTimeFormat.formatMicros(
-                        span.lastUpdatedAt() != null ? span.lastUpdatedAt() : nowForBatch));
-
-                TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
-
-                // BULK_INSERT writes the cost cell directly into Decimal128(12) (no toDecimal128
-                // wrap), so the driver must emit an unquoted numeric literal — bind the
-                // BigDecimal itself rather than its String form. See OPIK-5694.
-                BigDecimal cost = span.totalEstimatedCost() != null ? span.totalEstimatedCost() : calculateCost(span);
-                statement.bind("total_estimated_cost" + i, cost);
-                statement.bind("total_estimated_cost_version" + i,
-                        span.totalEstimatedCost() == null && cost.compareTo(BigDecimal.ZERO) > 0
-                                ? ESTIMATED_COST_VERSION
-                                : "");
-
-                bindNanSentinel(statement, "ttft" + i, span.ttft());
-
-                // The column is non-nullable with DEFAULT 'unknown'; binding NULL makes the
-                // driver wrap it in a nullable guard, costing two swallowed exceptions per row.
-                statement.bind("source" + i, span.source() == null
-                        ? Source.UNKNOWN_VALUE
-                        : span.source().getValue());
-
-                statement.bind("environment" + i, StringUtils.defaultString(span.environment()));
-
-                i++;
-            }
-
-            statement.bind("workspace_id", workspaceId);
-
-            Segment segment = startSegment("spans", "Clickhouse", "batch_insert");
-
-            return Mono.from(statement.execute())
-                    .doFinally(signalType -> endSegment(segment));
         });
     }
 

@@ -11,6 +11,7 @@ import { AttachmentsClient } from "./api/resources/attachments/client/Client.js"
 import { AutomationRuleEvaluatorsClient } from "./api/resources/automationRuleEvaluators/client/Client.js";
 import { ChatCompletionsClient } from "./api/resources/chatCompletions/client/Client.js";
 import { CheckClient } from "./api/resources/check/client/Client.js";
+import { DashboardSavedQueriesClient } from "./api/resources/dashboardSavedQueries/client/Client.js";
 import { DashboardsClient } from "./api/resources/dashboards/client/Client.js";
 import { DatasetsClient } from "./api/resources/datasets/client/Client.js";
 import { EnvironmentsClient } from "./api/resources/environments/client/Client.js";
@@ -61,6 +62,7 @@ export class OpikApiClient {
     protected _mcpOAuth: McpOAuthClient | undefined;
     protected _agentInsightsEnrollment: AgentInsightsEnrollmentClient | undefined;
     protected _systemAnalyticsQueries: SystemAnalyticsQueriesClient | undefined;
+    protected _dashboardSavedQueries: DashboardSavedQueriesClient | undefined;
     protected _systemUsage: SystemUsageClient | undefined;
     protected _agentConfigs: AgentConfigsClient | undefined;
     protected _agentInsightsJobs: AgentInsightsJobsClient | undefined;
@@ -115,6 +117,10 @@ export class OpikApiClient {
 
     public get systemAnalyticsQueries(): SystemAnalyticsQueriesClient {
         return (this._systemAnalyticsQueries ??= new SystemAnalyticsQueriesClient(this._options));
+    }
+
+    public get dashboardSavedQueries(): DashboardSavedQueriesClient {
+        return (this._dashboardSavedQueries ??= new DashboardSavedQueriesClient(this._options));
     }
 
     public get systemUsage(): SystemUsageClient {
