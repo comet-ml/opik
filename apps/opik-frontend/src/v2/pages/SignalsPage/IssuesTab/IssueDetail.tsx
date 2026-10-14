@@ -5,7 +5,6 @@ import {
   Eye,
   EyeOff,
   Hash,
-  ThumbsDown,
   Undo2,
   Users,
 } from "lucide-react";
@@ -15,12 +14,6 @@ import {
   AgentInsightsIssue,
 } from "@/types/signals";
 import { Button } from "@/ui/button";
-import {
-  ButtonWithDropdown,
-  ButtonWithDropdownContent,
-  ButtonWithDropdownItem,
-  ButtonWithDropdownTrigger,
-} from "@/ui/button-with-dropdown";
 import { Card } from "@/ui/card";
 import { ToastAction } from "@/ui/toast";
 import { useToast } from "@/ui/use-toast";
@@ -30,7 +23,9 @@ import { cn } from "@/lib/utils";
 import IssueSeverityBadge from "@/v2/pages/SignalsPage/IssuesTab/IssueSeverityBadge";
 import OccurrenceChart from "@/v2/pages/SignalsPage/IssuesTab/OccurrenceChart";
 import AffectedTracesSample from "@/v2/pages/SignalsPage/IssuesTab/AffectedTracesSample";
-import CloseAsNotUsefulDialog from "@/v2/pages/SignalsPage/IssuesTab/CloseAsNotUsefulDialog";
+import CloseIssueDialog, {
+  CloseIssueStatus,
+} from "@/v2/pages/SignalsPage/IssuesTab/CloseIssueDialog";
 import {
   ACTION_BUTTON_CLASS,
   formatOccurrences,
@@ -43,13 +38,10 @@ type IssueDetailProps = {
   issue: AgentInsightsIssue;
   projectId: string;
   canConfigure: boolean;
-  // Enables "Close as Not useful" (guidance feature toggle).
+  // Enables "Close as Not useful" (guidance feature toggle): Close then asks
+  // Resolved or Not useful; without it, Close resolves in one click.
   canCloseAsNotUseful?: boolean;
 };
-
-// Figma: 227px menu, 24px items with 14px regular text.
-const MENU_CONTENT_CLASS = "w-[227px] p-1.5";
-const MENU_ITEM_CLASS = "h-6 gap-1.5 p-1";
 
 type StatusChange = {
   status: AGENT_INSIGHTS_ISSUE_STATUS;
@@ -134,7 +126,7 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
 
   const updateMutation = useUpdateAgentInsightsIssueMutation();
   const { toast } = useToast();
-  const [notUsefulOpen, setNotUsefulOpen] = useState(false);
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
 
   const isOpen = issue.status === AGENT_INSIGHTS_ISSUE_STATUS.open;
 
@@ -185,24 +177,34 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
     );
   };
 
-  const handleResolve = () => {
+  const handleResolve = (onSuccess?: () => void) => {
     trackEvent(OpikEvent.DIAGNOSTICS_ISSUE_RESOLVED, {
       project_id: projectId,
       issue_id: issue.id,
       severity: issue.severity,
     });
-    changeStatus({ status: AGENT_INSIGHTS_ISSUE_STATUS.resolved });
+    changeStatus(
+      { status: AGENT_INSIGHTS_ISSUE_STATUS.resolved },
+      { title: "Issue was resolved" },
+      onSuccess,
+    );
   };
 
-  const handleCloseAsNotUseful = (closeNote: string) =>
+  const handleCloseConfirm = (status: CloseIssueStatus, closeNote?: string) => {
+    const closeDialog = () => setCloseDialogOpen(false);
+    if (status === AGENT_INSIGHTS_ISSUE_STATUS.resolved) {
+      handleResolve(closeDialog);
+      return;
+    }
     changeStatus(
       { status: AGENT_INSIGHTS_ISSUE_STATUS.closed, closeNote },
       {
         title: "Issue was closed as Not useful",
         description: "This will help future runs avoid similar issues",
       },
-      () => setNotUsefulOpen(false),
+      closeDialog,
     );
+  };
 
   const handleReopen = () => {
     trackEvent(OpikEvent.DIAGNOSTICS_ISSUE_REOPENED, {
@@ -238,49 +240,19 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
       );
     }
 
-    const closeLabel = (
-      <>
+    return (
+      <Button
+        variant="outline"
+        size="2xs"
+        className={ACTION_BUTTON_CLASS}
+        disabled={updateMutation.isPending}
+        onClick={() =>
+          canCloseAsNotUseful ? setCloseDialogOpen(true) : handleResolve()
+        }
+      >
         <CircleCheck className="size-3.5" />
         Close issue
-      </>
-    );
-
-    if (!canCloseAsNotUseful) {
-      return (
-        <Button
-          variant="outline"
-          size="2xs"
-          className={ACTION_BUTTON_CLASS}
-          disabled={updateMutation.isPending}
-          onClick={handleResolve}
-        >
-          {closeLabel}
-        </Button>
-      );
-    }
-
-    return (
-      <ButtonWithDropdown>
-        <ButtonWithDropdownTrigger
-          variant="outline"
-          size="2xs"
-          className={cn(ACTION_BUTTON_CLASS, "rounded-r-none")}
-          triggerClassName="-ml-px w-6 rounded-l-none rounded-r px-0 [&>svg]:size-3"
-          disabled={updateMutation.isPending}
-          onPrimaryClick={handleResolve}
-        >
-          {closeLabel}
-        </ButtonWithDropdownTrigger>
-        <ButtonWithDropdownContent align="end" className={MENU_CONTENT_CLASS}>
-          <ButtonWithDropdownItem
-            className={MENU_ITEM_CLASS}
-            onSelect={() => setNotUsefulOpen(true)}
-          >
-            <ThumbsDown className="size-3" />
-            Close as Not useful
-          </ButtonWithDropdownItem>
-        </ButtonWithDropdownContent>
-      </ButtonWithDropdown>
+      </Button>
     );
   };
 
@@ -402,10 +374,11 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
         </SectionCard>
       </div>
       {canCloseAsNotUseful && (
-        <CloseAsNotUsefulDialog
-          open={notUsefulOpen}
-          setOpen={setNotUsefulOpen}
-          onConfirm={handleCloseAsNotUseful}
+        <CloseIssueDialog
+          open={closeDialogOpen}
+          setOpen={setCloseDialogOpen}
+          issueName={issue.name}
+          onConfirm={handleCloseConfirm}
           isPending={updateMutation.isPending}
         />
       )}
