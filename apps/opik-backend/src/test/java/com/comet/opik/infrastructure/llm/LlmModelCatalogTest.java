@@ -11,6 +11,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import org.apache.commons.collections4.CollectionUtils;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -24,6 +25,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -271,6 +273,29 @@ class LlmModelCatalogTest {
                         assertThat(model.params()).as(label).isNotNull();
                         allVariants(model.params()).forEach(params -> assertConsistent(label, params));
                     }));
+        }
+
+        // The consistency check can't catch a reasoning model served with no effort control, since refusing
+        // effort is consistent; a row has to say so on purpose.
+        @Test
+        void everyOpenAiReasoningModelOffersEffortUnlessARowRefusesIt() {
+            var refusedByARow = catalog.models().getOrDefault("openai", List.of()).stream()
+                    .filter(row -> row.params() != null && row.params().effort() != null
+                            && Boolean.FALSE.equals(row.params().effort().accepted()))
+                    .map(ModelEntry::id)
+                    .collect(Collectors.toSet());
+
+            var withoutLevels = registry.getOrDefault("openai", List.of()).stream()
+                    .filter(LlmModelDefinition::reasoning)
+                    .filter(model -> !refusedByARow.contains(model.id()))
+                    .filter(model -> CollectionUtils.isEmpty(model.params().effort().levels()))
+                    .map(LlmModelDefinition::id)
+                    .toList();
+
+            assertThat(withoutLevels)
+                    .as("OpenAI reasoning models without effort levels; give each a curated row with them, or"
+                            + " effort: {accepted: false} if it refuses reasoning_effort")
+                    .isEmpty();
         }
 
         private static Stream<ModelParams> allVariants(ModelParams params) {
