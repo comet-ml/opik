@@ -1,11 +1,12 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.domain.SpanWeeksBackfillChunkDAO.Chunk;
 import com.comet.opik.infrastructure.SpanWeeksBackfillConfig;
 import com.google.common.base.Preconditions;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -29,10 +30,10 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * Backfills span_weeks from the spans already written, one range of span ids per step.
  *
  * <p>The first step plans: it tiles the id space into chunks of {@code weeksPerChunk} weeks, from the Monday of the
- * first span's {@code created_at} to the Monday of the plan's own week. The first chunk is open below, for every older
- * id (past-dated and junk ids included), and the last open above, for the current week and any later id. Each later
- * step backfills the oldest pending chunk; once none is pending, steps do nothing. Nothing here needs spans to be
- * partitioned: a span's week always comes from its id.
+ * install date (the first project's {@code created_at}, which no span precedes) to the Monday of the plan's own week.
+ * The first chunk is open below, for every older id (past-dated and junk ids included), and the last open above, for
+ * the current week and any later id. Each later step backfills the oldest pending chunk; once none is pending, steps do
+ * nothing. Nothing here needs spans to be partitioned: a span's week always comes from its id.
  *
  * <p>The plan covers the spans written until it is taken; live registration ({@code spanWeeksWriteEnabled}) covers
  * everything after. So the job ({@code spanWeeksBackfillEnabled}) must only be switched on once live registration is on
@@ -41,36 +42,30 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  */
 @Singleton
 @Slf4j
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class SpanWeeksBackfillService {
 
-    private final TransactionTemplate template;
-    private final SpanWeeksDAO spanWeeksDAO;
-    private final SpanWeeksBackfillConfig config;
-
-    @Inject
-    public SpanWeeksBackfillService(
-            @NonNull TransactionTemplate template,
-            @NonNull SpanWeeksDAO spanWeeksDAO,
-            @NonNull @Config("spanWeeksBackfill") SpanWeeksBackfillConfig config) {
-        this.template = template;
-        this.spanWeeksDAO = spanWeeksDAO;
-        this.config = config;
-    }
+    private final @NonNull TransactionTemplate template;
+    private final @NonNull SpanWeeksDAO spanWeeksDAO;
+    private final @NonNull ProjectService projectService;
+    private final @NonNull @Config("spanWeeksBackfill") SpanWeeksBackfillConfig config;
 
     /**
      * Whether the backfill is done cluster-wide: a plan exists and every one of its ranges is backfilled. Read from
      * the shared progress table, so any instance sees it as soon as another finishes; a finished plan never gains
      * ranges, so it stays true.
      */
-    public boolean isCompleted() {
-        return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(SpanWeeksBackfillChunkDAO.class).isComplete());
+    public Mono<Boolean> isCompleted() {
+        return Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
+                handle -> handle.attach(SpanWeeksBackfillChunkDAO.class).isComplete()))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
+    /** Plans the backfill if it has no plan yet, else backfills the oldest pending chunk, if any. */
     public Mono<Void> runStep() {
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
             var chunks = handle.attach(SpanWeeksBackfillChunkDAO.class);
-            return new Progress(chunks.count() > 0, chunks.findNextPending());
+            return Progress.builder().planned(chunks.count() > 0).next(chunks.findNextPending()).build();
         })).subscribeOn(Schedulers.boundedElastic())
                 .flatMap(progress -> {
                     if (!progress.planned()) {
@@ -86,50 +81,50 @@ public class SpanWeeksBackfillService {
         return Mono.empty();
     }
 
-    private record Progress(boolean planned, Optional<Chunk> next) {
+    @Builder(toBuilder = true)
+    private record Progress(boolean planned, Optional<SpanWeeksBackfillChunk> next) {
     }
 
     private Mono<Void> plan() {
         LocalDate last = monday(Instant.now());
-        return spanWeeksDAO.findFirstCreatedAt(config.getQueryTimeout().toSeconds())
-                .flatMap(firstCreatedAt -> Mono.<Void>fromRunnable(() -> {
-                    LocalDate first = firstCreatedAt.map(SpanWeeksBackfillService::monday)
+        return projectService.findInstallationDate()
+                .flatMap(installationDate -> Mono.<Void>fromRunnable(() -> {
+                    LocalDate first = installationDate
+                            .map(date -> date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)))
                             .filter(monday -> monday.isBefore(last))
                             .orElse(last);
-                    List<Chunk> chunks = chunks(first, last, config.getWeeksPerChunk());
-                    template.inTransaction(WRITE, handle -> {
-                        handle.attach(SpanWeeksBackfillChunkDAO.class).insert(chunks);
-                        return null;
-                    });
+                    List<SpanWeeksBackfillChunk> chunks = chunks(first, last, config.weeksPerChunk());
+                    template.inTransaction(WRITE, handle -> handle.attach(SpanWeeksBackfillChunkDAO.class)
+                            .insert(chunks));
                     log.info("Span weeks backfill planned '{}' chunks from week '{}' to '{}'", chunks.size(), first,
                             last);
                 }).subscribeOn(Schedulers.boundedElastic()));
     }
 
-    private Mono<Void> backfill(Chunk chunk) {
+    private Mono<Void> backfill(SpanWeeksBackfillChunk chunk) {
         long started = System.currentTimeMillis();
-        return spanWeeksDAO.backfill(chunk.fromWeek(), chunk.toWeek(), config.getMaxThreads(),
-                config.getQueryTimeout().toSeconds())
-                .then(Mono.<Void>fromRunnable(() -> template.inTransaction(WRITE, handle -> {
-                    handle.attach(SpanWeeksBackfillChunkDAO.class).markBackfilled(chunk.fromWeek());
-                    return null;
-                })).subscribeOn(Schedulers.boundedElastic()))
-                .doOnSuccess(__ -> log.info("Span weeks backfilled ids from week '{}' to '{}' in '{}' ms",
-                        chunk.fromWeek(), chunk.toWeek(), System.currentTimeMillis() - started));
+        return spanWeeksDAO.backfill(chunk)
+                .flatMap(rows -> Mono.fromCallable(() -> template.inTransaction(WRITE,
+                        handle -> handle.attach(SpanWeeksBackfillChunkDAO.class).markBackfilled(chunk.fromWeek())))
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .doOnSuccess(__ -> log.info(
+                                "Span weeks backfilled '{}' rows for ids from week '{}' to '{}' in '{}' ms", rows,
+                                chunk.fromWeek(), chunk.toWeek(), System.currentTimeMillis() - started)))
+                .then();
     }
 
     /** Tiles the ids: open below up to {@code first}, then every {@code weeks} weeks to {@code last}, open above. */
-    static List<Chunk> chunks(@NonNull LocalDate first, @NonNull LocalDate last, int weeks) {
+    private static List<SpanWeeksBackfillChunk> chunks(LocalDate first, LocalDate last, int weeks) {
         Preconditions.checkArgument(!first.isAfter(last), "Argument 'first' must not be after 'last'");
         Preconditions.checkArgument(weeks > 0, "Argument 'weeks' must be positive");
-        List<Chunk> chunks = new ArrayList<>();
+        List<SpanWeeksBackfillChunk> chunks = new ArrayList<>();
         long from = 0;
         for (LocalDate boundary = first; boundary.isBefore(last); boundary = boundary.plusWeeks(weeks)) {
-            chunks.add(Chunk.builder().fromWeek(from).toWeek(yyyymmdd(boundary)).build());
+            chunks.add(SpanWeeksBackfillChunk.builder().fromWeek(from).toWeek(yyyymmdd(boundary)).build());
             from = yyyymmdd(boundary);
         }
-        chunks.add(Chunk.builder().fromWeek(from).toWeek(yyyymmdd(last)).build());
-        chunks.add(Chunk.builder().fromWeek(yyyymmdd(last)).toWeek(null).build());
+        chunks.add(SpanWeeksBackfillChunk.builder().fromWeek(from).toWeek(yyyymmdd(last)).build());
+        chunks.add(SpanWeeksBackfillChunk.builder().fromWeek(yyyymmdd(last)).toWeek(null).build());
         return chunks;
     }
 

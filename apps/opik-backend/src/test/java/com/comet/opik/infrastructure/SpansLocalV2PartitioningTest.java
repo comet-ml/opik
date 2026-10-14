@@ -1,10 +1,12 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanWeek;
+import com.comet.opik.domain.SpanWeeksBackfillChunk;
 import com.comet.opik.domain.SpanWeeksDAO;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
@@ -172,7 +174,8 @@ class SpansLocalV2PartitioningTest {
         transactionTemplateAsync = TransactionTemplateAsync.create(connectionFactory);
         spanWeeksDAO = new SpanWeeksDAO(connectionFactory,
                 new JsonEachRowBulkInsert(databaseAnalyticsFactory.buildClient(), JsonUtils.getMapper()),
-                new InstantToUUIDMapper());
+                new InstantToUUIDMapper(),
+                TestConfigUtils.loadConfigTest().getSpanWeeksBackfill());
     }
 
     /**
@@ -654,10 +657,8 @@ class SpansLocalV2PartitioningTest {
         Map<UUID, UUID> traceIdBySpanId = idsAcrossPartitionEdges()
                 .collect(Collectors.toMap(Function.identity(), id -> ID_GENERATOR.generateId()));
         var oracleWorkspaceId = UUID.randomUUID().toString();
-        traceIdBySpanId.forEach((id, traceId) -> {
-            insert("spans", List.of(id), workspaceId, projectId, traceId, weekInstant(0));
-            insert(List.of(id), oracleWorkspaceId, projectId, traceId, weekInstant(0));
-        });
+        insert("spans", traceIdBySpanId, workspaceId, projectId, weekInstant(0));
+        insert("spans_local_v2", traceIdBySpanId, oracleWorkspaceId, projectId, weekInstant(0));
 
         var expected = traceIdBySpanId.entrySet().stream()
                 .map(entry -> SpanWeek.builder()
@@ -666,15 +667,18 @@ class SpansLocalV2PartitioningTest {
                         .idWeek(Long.parseLong(partitionIdFor(oracleWorkspaceId, projectId, entry.getKey())))
                         .build())
                 .toList();
-        spanWeeksDAO.backfill(0, 20250303L, 4, 600).block();
-        spanWeeksDAO.backfill(20250303L, 20250310L, 4, 600).block();
-        spanWeeksDAO.backfill(20250310L, null, 4, 600).block();
+        Stream.of(chunk(0, 20250303L), chunk(20250303L, 20250310L), chunk(20250310L, null))
+                .forEach(chunk -> spanWeeksDAO.backfill(chunk).block());
 
         assertThat(spanWeeksDAO.findByTraceIds(Set.copyOf(traceIdBySpanId.values()))
                 .collectList()
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, "user", workspaceId))
                 .block())
                 .containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    private static SpanWeeksBackfillChunk chunk(long fromWeek, Long toWeek) {
+        return SpanWeeksBackfillChunk.builder().fromWeek(fromWeek).toWeek(toWeek).build();
     }
 
     private static UUID uuidV7(long epochMillis) {
@@ -738,6 +742,14 @@ class SpansLocalV2PartitioningTest {
 
     private void insert(String table, List<UUID> ids, String workspaceId, UUID projectId, UUID traceId,
             Instant lastUpdatedAt) {
+        insert(table, ids.stream().collect(Collectors.toMap(Function.identity(), __ -> traceId)), workspaceId,
+                projectId, lastUpdatedAt);
+    }
+
+    /** One batch insert of the given spans, each with its own trace. */
+    private void insert(String table, Map<UUID, UUID> traceIdBySpanId, String workspaceId, UUID projectId,
+            Instant lastUpdatedAt) {
+        var ids = List.copyOf(traceIdBySpanId.keySet());
         var sql = TemplateUtils.getBatchSql("""
                 INSERT INTO <table> (
                     id,
@@ -752,7 +764,7 @@ class SpansLocalV2PartitioningTest {
                             :id<item.index>,
                             :workspace_id,
                             :project_id,
-                            :trace_id,
+                            :trace_id<item.index>,
                             :last_updated_at
                         )
                         <if(item.hasNext)>,<endif>
@@ -763,10 +775,10 @@ class SpansLocalV2PartitioningTest {
             var statement = connection.createStatement(sql)
                     .bind("workspace_id", workspaceId)
                     .bind("project_id", projectId)
-                    .bind("trace_id", traceId)
                     .bind("last_updated_at", ClickHouseDateTimeFormat.formatMicros(lastUpdatedAt));
             for (int index = 0; index < ids.size(); index++) {
                 statement.bind("id" + index, ids.get(index));
+                statement.bind("trace_id" + index, traceIdBySpanId.get(ids.get(index)));
             }
             return Mono.from(statement.execute());
         }).block();

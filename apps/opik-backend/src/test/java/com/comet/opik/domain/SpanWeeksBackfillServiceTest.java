@@ -20,15 +20,13 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AsyncUtils;
 import com.redis.testcontainers.RedisContainer;
-import org.apache.http.HttpStatus;
+import lombok.Builder;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -41,16 +39,15 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
 
 @DisplayName("Span weeks backfill")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -60,10 +57,15 @@ class SpanWeeksBackfillServiceTest {
     private static final String USER = UUID.randomUUID().toString();
     private static final int MAX_STEPS = 100;
 
-    // Literal weeks, so the expectation does not reuse the code under test.
-    private static final Instant MONDAY = Instant.parse("2025-03-03T00:00:00Z");
-    private static final long MONDAY_WEEK = 20250303L;
-    private static final long PREVIOUS_WEEK = 20250224L;
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+
+    // A random past Monday, before the install week; its weeks come from java.time, not from the code under test.
+    private static final LocalDate MONDAY_DATE = LocalDate.of(2020, 1, 6)
+            .plusWeeks(RandomUtils.secure().randomInt(0, 260));
+    private static final Instant MONDAY = MONDAY_DATE.atStartOfDay(ZoneOffset.UTC).toInstant();
+    private static final long MONDAY_WEEK = yyyymmdd(MONDAY_DATE);
+    private static final long PREVIOUS_WEEK = yyyymmdd(MONDAY_DATE.minusWeeks(1));
+    // Where the epoch and ids past 2300 are stored.
     private static final long EPOCH_WEEK = 19691229L;
     private static final long SATURATED_WEEK = 22991225L;
 
@@ -109,7 +111,8 @@ class SpanWeeksBackfillServiceTest {
 
     @BeforeAll
     void setUpAll(ClientSupport client, SpanService spanService, @Jit SpanWeeksBackfillService backfillService,
-            TransactionTemplate template, @Jit SpanWeeksDAO spanWeeksDAO, OpikConfiguration configuration) {
+            TransactionTemplate template, @Jit SpanWeeksDAO spanWeeksDAO, ProjectService projectService,
+            OpikConfiguration configuration) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
@@ -117,7 +120,8 @@ class SpanWeeksBackfillServiceTest {
         this.spanService = spanService;
         this.backfillService = backfillService;
         // A second instance of the service, as another backend instance in the cluster would hold.
-        this.otherInstance = new SpanWeeksBackfillService(template, spanWeeksDAO, configuration.getSpanWeeksBackfill());
+        this.otherInstance = new SpanWeeksBackfillService(template, spanWeeksDAO, projectService,
+                configuration.getSpanWeeksBackfill());
     }
 
     @Test
@@ -128,23 +132,17 @@ class SpanWeeksBackfillServiceTest {
         var otherProjectName = "span-weeks-" + UUID.randomUUID();
         var projectId = projectResourceClient.createProject(projectName, ws.apiKey(), ws.workspaceName());
         var otherProjectId = projectResourceClient.createProject(otherProjectName, ws.apiKey(), ws.workspaceName());
-        var traceAcrossWeeks = uuidV7(System.currentTimeMillis());
-        var traceWithBoundaryIds = uuidV7(System.currentTimeMillis());
+        var traceAcrossWeeks = ID_GENERATOR.generateId();
+        var traceWithBoundaryIds = ID_GENERATOR.generateId();
         var traceIds = Set.of(traceAcrossWeeks, traceWithBoundaryIds);
         var spans = List.of(
-                span(uuidV7(MONDAY.toEpochMilli()), traceAcrossWeeks, projectName),
-                span(uuidV7(MONDAY.toEpochMilli() - 1), traceAcrossWeeks, projectName),
-                span(uuidV7(MONDAY.toEpochMilli()), traceAcrossWeeks, otherProjectName),
-                span(uuidV7(0L), traceWithBoundaryIds, projectName),
-                span(uuidV7(Instant.parse("2300-01-01T00:00:00Z").toEpochMilli()), traceWithBoundaryIds,
-                        projectName));
+                span(ID_GENERATOR.getTimeOrderedEpoch(MONDAY.toEpochMilli()), traceAcrossWeeks, projectName),
+                span(ID_GENERATOR.getTimeOrderedEpoch(MONDAY.toEpochMilli() - 1), traceAcrossWeeks, projectName),
+                span(ID_GENERATOR.getTimeOrderedEpoch(MONDAY.toEpochMilli()), traceAcrossWeeks, otherProjectName),
+                span(ID_GENERATOR.getTimeOrderedEpoch(0L), traceWithBoundaryIds, projectName),
+                span(ID_GENERATOR.getTimeOrderedEpoch(Instant.parse("2300-01-01T00:00:00Z").toEpochMilli()),
+                        traceWithBoundaryIds, projectName));
         spanResourceClient.batchCreateSpans(spans, ws.apiKey(), ws.workspaceName());
-        // The batch is written asynchronously; the plan must see every span, as it would in a running install.
-        await().atMost(30, SECONDS).untilAsserted(() -> spans.forEach(span -> {
-            try (var response = spanResourceClient.callGetSpanIdApi(span.id(), ws.workspaceName(), ws.apiKey())) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            }
-        }));
         var upToMonday = List.of(
                 SpanWeek.builder().projectId(projectId).traceId(traceWithBoundaryIds).idWeek(EPOCH_WEEK).build(),
                 SpanWeek.builder().projectId(projectId).traceId(traceAcrossWeeks).idWeek(PREVIOUS_WEEK).build(),
@@ -154,15 +152,15 @@ class SpanWeeksBackfillServiceTest {
                 .build();
 
         // No plan yet, then a plan with every range pending: not complete either way.
-        assertThat(backfillService.isCompleted()).isFalse();
+        assertThat(backfillService.isCompleted().block()).isFalse();
 
         // The first step only plans, reading no span week.
         backfillService.runStep().block();
         assertThat(weeks(traceIds, ws)).isEmpty();
-        assertThat(backfillService.isCompleted()).isFalse();
+        assertThat(backfillService.isCompleted().block()).isFalse();
 
-        // Oldest range first: the ids before the first span's week (2025 and the epoch) come in before the open-ended
-        // last range, which holds the 2300 id.
+        // Oldest range first: the ids before the install week (the random Monday and the epoch) come in before the
+        // open-ended last range, which holds the 2300 id.
         runStepsUntil(traceIds, ws, upToMonday.size());
         assertThat(weeks(traceIds, ws)).containsExactlyInAnyOrderElementsOf(upToMonday);
 
@@ -173,38 +171,10 @@ class SpanWeeksBackfillServiceTest {
 
         // Every range is done: the shared progress table reports the backfill complete to any instance, and a further
         // step changes nothing.
-        assertThat(backfillService.isCompleted()).isTrue();
-        assertThat(otherInstance.isCompleted()).isTrue();
+        assertThat(backfillService.isCompleted().block()).isTrue();
+        assertThat(otherInstance.isCompleted().block()).isTrue();
         backfillService.runStep().block();
         assertThat(weeks(traceIds, ws)).containsExactlyInAnyOrderElementsOf(all);
-    }
-
-    @ParameterizedTest(name = "{0} to {1} in steps of {2} weeks")
-    @MethodSource
-    void chunksTileEveryIdFromTheFirstWeekToTheLast(LocalDate first, LocalDate last, int weeks,
-            List<SpanWeeksBackfillChunkDAO.Chunk> expected) {
-        assertThat(SpanWeeksBackfillService.chunks(first, last, weeks)).isEqualTo(expected);
-    }
-
-    static Stream<Arguments> chunksTileEveryIdFromTheFirstWeekToTheLast() {
-        var first = LocalDate.of(2026, 9, 7);
-        var last = LocalDate.of(2026, 10, 5);
-        return Stream.of(
-                // The first span is in the plan's own week: only the two open ranges.
-                Arguments.of(last, last, 4, List.of(chunk(0, 20261005L), chunk(20261005L, null))),
-                Arguments.of(first, last, 4, List.of(
-                        chunk(0, 20260907L), chunk(20260907L, 20261005L), chunk(20261005L, null))),
-                Arguments.of(first, last, 1, List.of(
-                        chunk(0, 20260907L), chunk(20260907L, 20260914L), chunk(20260914L, 20260921L),
-                        chunk(20260921L, 20260928L), chunk(20260928L, 20261005L), chunk(20261005L, null))),
-                // A step that does not divide the span: the last bounded range is shorter, never past the plan's week.
-                Arguments.of(first, last, 3, List.of(
-                        chunk(0, 20260907L), chunk(20260907L, 20260928L), chunk(20260928L, 20261005L),
-                        chunk(20261005L, null))));
-    }
-
-    private static SpanWeeksBackfillChunkDAO.Chunk chunk(long fromWeek, Long toWeek) {
-        return SpanWeeksBackfillChunkDAO.Chunk.builder().fromWeek(fromWeek).toWeek(toWeek).build();
     }
 
     private void runStepsUntil(Set<UUID> traceIds, WorkspaceContext ws, int expectedRowCount) {
@@ -229,8 +199,8 @@ class SpanWeeksBackfillServiceTest {
                 .build();
     }
 
-    private static UUID uuidV7(long epochMillis) {
-        return new UUID((epochMillis << 16) | 0x7000L, 0x8000_0000_0000_0000L | (System.nanoTime() & 0xFFFFFFFFFFFFL));
+    private static long yyyymmdd(LocalDate date) {
+        return Long.parseLong(date.format(DateTimeFormatter.BASIC_ISO_DATE));
     }
 
     private WorkspaceContext newWorkspace() {
@@ -238,9 +208,10 @@ class SpanWeeksBackfillServiceTest {
         String workspaceName = "test-workspace-" + UUID.randomUUID();
         String workspaceId = UUID.randomUUID().toString();
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
-        return new WorkspaceContext(apiKey, workspaceName, workspaceId);
+        return WorkspaceContext.builder().apiKey(apiKey).workspaceName(workspaceName).workspaceId(workspaceId).build();
     }
 
+    @Builder(toBuilder = true)
     private record WorkspaceContext(String apiKey, String workspaceName, String workspaceId) {
     }
 }

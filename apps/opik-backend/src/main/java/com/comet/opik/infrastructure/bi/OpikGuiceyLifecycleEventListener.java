@@ -255,7 +255,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
 
         scheduleRepeatingJob(SpanWeeksBackfillJob.class,
-                configuration.getSpanWeeksBackfill().getInterval().toJavaDuration(), null);
+                configuration.getSpanWeeksBackfill().interval().toJavaDuration(), null);
     }
 
     private void setAgentInsightsJobs() {
