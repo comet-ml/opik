@@ -15,8 +15,6 @@ export interface VegaChartInput {
 export interface VegaRenderOptions {
   // The user's colour for a series label (workspace colour map), if any; the chart rules colour the rest.
   colorOverride?: (label: string) => string | undefined;
-  // Keeps remembered entity colours apart per workspace.
-  registryScope?: string;
   // "container" fills the element's height; a number fixes it.
   height?: number | "container";
 }
@@ -103,7 +101,7 @@ export const buildOpikVegaConfig = (
       columnPadding: legend.gapX,
       rowPadding: legend.gapY,
       labelLimit: axis.max,
-      labelColor: tokens.tooltip.muted,
+      labelColor: tokens.tick,
       labelFont: tokens.font,
       labelFontSize: legend.fontSize,
       titleColor: tokens.tick,
@@ -228,9 +226,8 @@ const applyChartRules = (
   tokens: ChartTokens,
   {
     colorOverride,
-    registryScope,
     parentTransformed = false,
-  }: Pick<VegaRenderOptions, "colorOverride" | "registryScope"> & {
+  }: Pick<VegaRenderOptions, "colorOverride"> & {
     parentTransformed?: boolean;
   },
 ) => {
@@ -285,10 +282,8 @@ const applyChartRules = (
       color.scale = {
         domain,
         range: assignSeriesColors(domain.map(String), tokens, {
-          field,
           strong: THIN_MARKS.has(mark),
           override: colorOverride,
-          registryScope,
         }),
       };
     }
@@ -331,7 +326,7 @@ export const coerceNumericRows = (rows: VegaRows): VegaRows =>
 
 export const prepareVegaSpec = (
   { spec, rows }: VegaChartInput,
-  { colorOverride, registryScope, height = DEFAULT_HEIGHT }: VegaRenderOptions,
+  { colorOverride, height = DEFAULT_HEIGHT }: VegaRenderOptions,
   tokens: ChartTokens = readChartTokens(),
 ): VegaSpec => {
   const prepared = cloneDeep(spec);
@@ -357,7 +352,7 @@ export const prepareVegaSpec = (
     };
   }
 
-  const ruleOptions = { colorOverride, registryScope };
+  const ruleOptions = { colorOverride };
   applyChartRules(prepared, values, tokens, ruleOptions);
   if (Array.isArray(prepared.layer)) {
     const parentTransformed =
@@ -420,7 +415,7 @@ const createTooltipHandler = (el: HTMLElement, tokens: ChartTokens) => {
         background: t.background,
         color: t.foreground,
         boxShadow: t.shadow,
-        font: `${type.weightRegular} ${t.fontSize}px/1.33 ${font}`,
+        font: `${type.weightRegular} ${t.fontSize}px/${t.lineHeight}px ${font}`,
       });
       doc.body.appendChild(tooltip);
     }
@@ -435,7 +430,7 @@ const createTooltipHandler = (el: HTMLElement, tokens: ChartTokens) => {
       .map(
         ([key, entryValue], index) =>
           `<div style="display:flex;align-items:center;gap:8px;justify-content:space-between;padding:2px 0">` +
-          `<span style="display:flex;align-items:center;gap:6px;color:${t.muted};opacity:${t.secondaryOpacity};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">` +
+          `<span style="display:flex;align-items:center;gap:${t.gap}px;color:${t.muted};opacity:${t.secondaryOpacity};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">` +
           (index === 0 && color && color !== "transparent"
             ? `<span style="width:${swatch}px;height:${swatch}px;border-radius:9999px;flex:none;background:${escapeHtml(
                 color,

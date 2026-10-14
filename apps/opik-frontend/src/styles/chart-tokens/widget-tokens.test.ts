@@ -11,7 +11,7 @@ const mainScss = read("../../main.scss");
 const definedIn = (css: string) =>
   new Set(Array.from(css.matchAll(/(--[\w-]+)\s*:/g), (match) => match[1]));
 
-const darkStart = tokensCss.indexOf(':root[data-theme="dark"] {');
+const darkStart = tokensCss.indexOf(".dark {");
 const lightBlock = tokensCss.slice(0, darkStart);
 const darkBlock = tokensCss.slice(darkStart);
 const SLASH_ALPHA = /(--[\w-]+)\s*:[^;]*hsl\(var\(--[\w-]+\)\s*\//g;
@@ -23,6 +23,11 @@ describe("widget-tokens.css", () => {
 
   it("does not override --chart-tick-stroke, which existing charts take from main.scss", () => {
     expect(definedIn(tokensCss).has("--chart-tick-stroke")).toBe(false);
+  });
+
+  it("keys dark mode on the .dark class the theme provider sets", () => {
+    expect(darkStart).toBeGreaterThan(0);
+    expect(tokensCss).not.toMatch(/data-theme/);
   });
 
   it("does not set color-scheme, which would change native controls app-wide", () => {

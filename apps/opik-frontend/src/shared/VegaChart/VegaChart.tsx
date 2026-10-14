@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 
 import { useTheme } from "@/contexts/theme-provider";
 import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
-import { useActiveWorkspaceName } from "@/store/AppStore";
 import { renderVegaChart, VegaRows, VegaSpec } from "@/lib/charts/vega";
 import { cn } from "@/lib/utils";
 import ChartSkeleton from "./ChartSkeleton";
@@ -37,7 +36,6 @@ const VegaSpecChart: React.FunctionComponent<VegaChartProps> = ({
   const [error, setError] = useState<string | null>(null);
   const { themeMode } = useTheme();
   const { colorMap } = useWorkspaceColorMap();
-  const workspaceName = useActiveWorkspaceName();
   const [rendered, setRendered] = useState(false);
 
   useEffect(() => {
@@ -53,7 +51,6 @@ const VegaSpecChart: React.FunctionComponent<VegaChartProps> = ({
       { spec, rows },
       {
         colorOverride: (label) => colorMap?.[label],
-        registryScope: workspaceName,
         height,
       },
     )
@@ -75,7 +72,7 @@ const VegaSpecChart: React.FunctionComponent<VegaChartProps> = ({
       finalize?.();
     };
     // themeMode: the config is read from CSS variables, so a theme switch needs a re-render.
-  }, [spec, rows, height, colorMap, workspaceName, themeMode]);
+  }, [spec, rows, height, colorMap, themeMode]);
 
   // The container stays mounted under the error, so the next spec or rows can draw into it again.
   const renderError = () => {

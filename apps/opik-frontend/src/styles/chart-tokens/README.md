@@ -21,6 +21,8 @@ aliases) aren't used by Opik yet. They are kept so the file stays a plain copy o
 
 - **Remove `--chart-tick-stroke`.** This file isn't inside a CSS layer and `main.scss` is (`@layer base`), so this file
   always wins. If the token stays, it recolours every existing Opik chart axis and the JSON tree popover.
+- **Key dark mode on `.dark`.** The export uses `:root[data-theme="dark"]`; Opik's theme provider sets only the `.dark`
+  class. `.dark` and `:root` have the same specificity, so the dark block must stay after the light one.
 - **Remove `color-scheme: dark`.** It changes native scrollbars, inputs and date pickers across the whole app, not only
   charts.
 - **No slash alpha on primitives in dark mode.** Opik's dark primitives are comma-separated (`--background: 0, 0%, 7%`),
@@ -29,9 +31,9 @@ aliases) aren't used by Opik yet. They are kept so the file stays a plain copy o
 - **Fix the comment placement.** The exporter moves some comments one token down: a section heading ends up on the last
   token of the section above it (e.g. `--chart-pin-max: 18px; /* Opacity */`).
 
-`widget-tokens.test.ts` catches the first three. It also fails if a token `readChartTokens` reads is missing from both
-this file and `main.scss`. A missing token reads as `0` and fails silently, e.g. legend dots disappear without
-`--chart-legend-swatch`. It doesn't check comment placement.
+`widget-tokens.test.ts` catches all of these except the comment placement. It also fails if a token `readChartTokens`
+reads is missing from both this file and `main.scss`. A missing token reads as `0` and fails silently, e.g. legend dots
+disappear without `--chart-legend-swatch`.
 
 ## Known gaps in the 1.1.0 export
 

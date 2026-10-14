@@ -1,7 +1,6 @@
 /*
- * The `--chart-*` tokens, light on `:root`, dark on `:root[data-theme="dark"]`
- * (the theme provider sets `data-theme` next to the `.dark` class). Loaded after `main.scss`;
- * it only references primitives `main.scss` defines.
+ * The `--chart-*` tokens, light on `:root`, dark on `.dark` (the class the theme provider sets).
+ * Loaded after `main.scss`; it only references primitives `main.scss` defines.
  */
 :root {
   /* Categorical (Opik chart colours) */
@@ -230,7 +229,7 @@
   --chart-skeleton-sheen: hsl(var(--background) / 0.35);
 }
 
-:root[data-theme="dark"] {
+.dark {
   /* Categorical (Opik chart colours) */
   --chart-1: var(--chart-purple);
   --chart-2: var(--chart-teal);

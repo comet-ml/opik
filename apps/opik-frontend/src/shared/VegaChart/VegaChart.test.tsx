@@ -14,9 +14,6 @@ vi.mock("@/contexts/theme-provider", () => ({
 vi.mock("@/hooks/useWorkspaceColorMap", () => ({
   default: () => ({ colorMap: null }),
 }));
-vi.mock("@/store/AppStore", () => ({
-  useActiveWorkspaceName: () => "ws",
-}));
 
 const renderMock = vi.mocked(renderVegaChart);
 
@@ -38,5 +35,20 @@ describe("VegaChart", () => {
     await waitFor(() => expect(screen.queryByText("bad spec")).toBeNull());
     expect(renderMock).toHaveBeenCalledTimes(2);
     expect(renderMock.mock.calls[1][0]).toBeInstanceOf(HTMLElement);
+  });
+
+  it("shows the rows as a table when the spec can't be drawn", async () => {
+    renderMock.mockRejectedValueOnce(new Error("bad spec"));
+    render(
+      <VegaChart
+        spec={{ mark: "nope" }}
+        rows={[{ model: "gpt-4o", cost: "1.5" }]}
+      />,
+    );
+
+    await screen.findByText("Couldn't draw the chart; showing the data.");
+    expect(screen.getByText("gpt-4o")).toBeTruthy();
+    expect(screen.getByText("1.5")).toBeTruthy();
+    expect(screen.queryByText("bad spec")).toBeNull();
   });
 });

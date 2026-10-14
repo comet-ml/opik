@@ -48,7 +48,6 @@ export function ThemeProvider({
     const root = window.document.documentElement;
     root.classList.remove(THEME_MODE.LIGHT, THEME_MODE.DARK);
     root.classList.add(calculateThemeMode(theme));
-    root.dataset.theme = calculateThemeMode(theme);
   }, [theme]);
 
   const value = useMemo(

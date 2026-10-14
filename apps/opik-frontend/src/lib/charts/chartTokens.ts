@@ -53,6 +53,8 @@ export interface ChartTokens {
     paddingY: number;
     minWidth: number;
     fontSize: number;
+    lineHeight: number;
+    gap: number;
     secondaryOpacity: number;
   };
 }
@@ -183,6 +185,8 @@ export const readChartTokens = (): ChartTokens => {
       paddingY: number("--chart-tooltip-padding-y"),
       minWidth: number("--chart-tooltip-min-width"),
       fontSize: number("--chart-tooltip-font-size"),
+      lineHeight: number("--chart-line-height-md"),
+      gap: number("--chart-tooltip-gap"),
       secondaryOpacity: number("--chart-tooltip-secondary-opacity"),
     },
   };
