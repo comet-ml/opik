@@ -186,11 +186,19 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
 
         // Aggregates describe a run that ran, so they are built only by the caller that completed it
         return settle(message, ExperimentStatus.COMPLETED,
-                Mono.defer(() -> experimentService.finishExperiments(Set.of(experimentId))))
+                Mono.defer(() -> experimentService.finishExperiments(Set.of(experimentId))
+                        .onErrorResume(error -> {
+                            // COMPLETED is already written and is true: aggregates are derived from
+                            // it and can be rebuilt, so FAILED would describe the run less well.
+                            log.error("Failed to aggregate completed experiment '{}'", experimentId, error);
+                            return Mono.empty();
+                        })))
                 .contextWrite(reactorContext)
                 .onErrorResume(error -> {
-                    log.error("Failed to finish experiment '{}', marking as FAILED", experimentId, error);
-                    return markExperimentFailed(message, reactorContext);
+                    // Nothing was written about how this ended, so hand the finish back. Marking it
+                    // FAILED from inside the claim we hold writes nothing: setIfAbsent refuses it.
+                    log.error("Failed to finish experiment '{}'", experimentId, error);
+                    return releaseFinishClaim(message);
                 });
     }
 
