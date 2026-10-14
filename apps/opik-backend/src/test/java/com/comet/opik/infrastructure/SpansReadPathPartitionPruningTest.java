@@ -303,7 +303,7 @@ class SpansReadPathPartitionPruningTest {
     }
 
     /** A trace with a 1.25 span this week and a 2.5 one in 2201: every trace-keyed read must count both. */
-    @Builder
+    @Builder(toBuilder = true)
     private record FarFutureTrace(String projectName, UUID projectId, UUID traceId, String threadId, List<Span> spans) {
         static final BigDecimal TOTAL_COST = new BigDecimal("3.75");
     }
