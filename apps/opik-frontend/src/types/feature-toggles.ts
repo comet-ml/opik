@@ -12,6 +12,7 @@ export enum FeatureToggleKeys {
   DEMO_DATA_ENABLED = "demo_data_enabled",
   OLLIE_ENABLED = "ollie_enabled",
   AGENT_INSIGHTS_ENABLED = "agent_insights_enabled",
+  AGENT_INSIGHTS_GUIDANCE_ENABLED = "agent_insights_guidance_enabled",
   PROJECT_HOMEPAGE_ENABLED = "project_homepage_enabled",
   ANNOTATION_QUEUE_AUTOMATION_ENABLED = "annotation_queue_automation_enabled",
   SPAN_LLM_AS_JUDGE_ENABLED = "span_llm_as_judge_enabled",
