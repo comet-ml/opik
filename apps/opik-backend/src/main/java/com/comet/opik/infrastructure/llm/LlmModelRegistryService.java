@@ -274,7 +274,13 @@ public class LlmModelRegistryService {
                 return;
             }
             var byId = new LinkedHashMap<String, ModelEntry>();
-            rows.forEach(row -> byId.put(row.id(), row));
+            rows.forEach(row -> {
+                if (row == null || row.id() == null || row.id().isBlank()) {
+                    log.warn("Skipping curated row with missing id for provider '{}'", provider);
+                    return;
+                }
+                byId.put(row.id(), row);
+            });
             result.put(provider, existing.stream()
                     .map(m -> byId.containsKey(m.id()) ? inheritUnsetFields(m, byId.get(m.id())) : m)
                     .toList());

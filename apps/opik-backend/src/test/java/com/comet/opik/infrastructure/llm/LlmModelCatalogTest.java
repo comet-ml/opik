@@ -21,11 +21,13 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class LlmModelCatalogTest {
 
@@ -109,6 +111,24 @@ class LlmModelCatalogTest {
             assertThat(model(service, "openai", "o3").params())
                     .isEqualTo(model(service(null), "openai", "o3").params());
         }
+    }
+
+    @Test
+    void paramsKeepTheirOwnCopiesOfLevelsAndRoutesInOrder() {
+        var levels = new ArrayList<>(List.of("low", "high"));
+        var routes = new LinkedHashMap<String, ModelParams>();
+        routes.put("b_route", ModelParams.builder().build());
+        routes.put("a_route", ModelParams.builder().build());
+
+        var params = ModelParams.builder().effort(new EffortParam(true, levels, "low")).routes(routes).build();
+        levels.add("medium");
+        routes.put("c_route", ModelParams.builder().build());
+
+        assertThat(params.effort().levels()).containsExactly("low", "high");
+        assertThat(params.routes().keySet()).containsExactly("b_route", "a_route");
+        assertThatThrownBy(() -> params.effort().levels().add("max")).isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> params.routes().put("d_route", ModelParams.builder().build()))
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
