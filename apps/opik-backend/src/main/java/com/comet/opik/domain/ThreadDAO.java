@@ -174,12 +174,12 @@ class ThreadDAOImpl implements ThreadDAO {
             ;
             """;
 
-    @VisibleForTesting
     /**
      * The span_weeks lookup repeats the read's {@code groupArray(traces_final_ids)} form on purpose: ClickHouse caches
      * that scalar subquery, so the lookup costs no extra read, whereas {@code IN (SELECT id FROM traces_final_ids)}
      * re-reads the set.
      */
+    @VisibleForTesting
     static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
                 SELECT item_id AS thread_model_id, groupUniqArray(queue_id) AS annotation_queue_ids
@@ -1276,12 +1276,12 @@ class ThreadDAOImpl implements ThreadDAO {
     // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
     // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
     // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
-    @VisibleForTesting
     /**
      * The span_weeks lookup repeats the read's {@code groupArray(traces_final_ids)} form on purpose: ClickHouse caches
      * that scalar subquery, so the lookup costs no extra read, whereas {@code IN (SELECT id FROM traces_final_ids)}
      * re-reads the set.
      */
+    @VisibleForTesting
     static final String SELECT_TRACE_THREADS_STATS = """
             SELECT
                 threads.workspace_id as workspace_id,
