@@ -146,6 +146,61 @@ describe("getDefaultConfigByProvider — the starting temperature", () => {
   });
 });
 
+describe("getDefaultConfigByProvider — the starting max output tokens", () => {
+  it.each<[PROVIDER_TYPE, PROVIDER_MODEL_TYPE, string]>([
+    [
+      PROVIDER_TYPE.OPEN_AI,
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      "maxCompletionTokens",
+    ],
+    [
+      PROVIDER_TYPE.OPEN_ROUTER,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      "maxTokens",
+    ],
+    [
+      PROVIDER_TYPE.ANTHROPIC,
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "maxCompletionTokens",
+    ],
+    [
+      PROVIDER_TYPE.GEMINI,
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "maxCompletionTokens",
+    ],
+    [
+      PROVIDER_TYPE.VERTEX_AI,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      "maxCompletionTokens",
+    ],
+  ])("starts a new %s prompt at 4000", (provider, model, key) => {
+    expect(
+      getDefaultConfigByProvider(provider as COMPOSED_PROVIDER_TYPE, model),
+    ).toMatchObject({ [key]: 4000 });
+  });
+
+  it.each([
+    { model: "google/gemma-2-27b-it", maxTokens: 2048 },
+    { model: "gryphe/mythomax-l2-13b", maxTokens: 3686 },
+    // OpenAI's own entry for gpt-3.5-turbo-instruct allows 4096.
+    { model: "openai/gpt-3.5-turbo-instruct", maxTokens: 3685 },
+    { model: "openai/gpt-4o-mini", maxTokens: 4000 },
+    // Only OpenAI and Azure list it, at 1024.
+    { model: "openai/computer-use-preview", maxTokens: 4000 },
+    { model: "acme/unlisted-model", maxTokens: 4000 },
+  ])(
+    "starts OpenRouter $model at $maxTokens: 4000, or OpenRouter's own lower limit for the model",
+    ({ model, maxTokens }) => {
+      expect(
+        getDefaultConfigByProvider(
+          PROVIDER_TYPE.OPEN_ROUTER as COMPOSED_PROVIDER_TYPE,
+          model as PROVIDER_MODEL_TYPE,
+        ),
+      ).toMatchObject({ maxTokens });
+    },
+  );
+});
+
 describe("getDefaultConfigByProvider — OpenAI", () => {
   const defaults = (model: PROVIDER_MODEL_TYPE) =>
     getDefaultConfigByProvider(
@@ -302,6 +357,18 @@ describe("restoreMissingConfigKeys", () => {
 
     expect(restoreMissingConfigKeys(stored).configs).toMatchObject({
       temperature: 1,
+    });
+  });
+
+  it("keeps the 0 an OpenRouter prompt was stored with, which means no limit", () => {
+    const stored = prompt(
+      PROVIDER_TYPE.OPEN_ROUTER,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      { temperature: 0, topP: 1, maxTokens: 0 },
+    );
+
+    expect(restoreMissingConfigKeys(stored).configs).toMatchObject({
+      maxTokens: 0,
     });
   });
 
@@ -659,6 +726,7 @@ describe("generateDefaultPrompt", () => {
       setupProviders: [],
       providerResolver: () => "",
       modelResolver: () => "",
+      isDropdownModel: () => false,
     });
 
   it("starts with an empty system message and an empty user message", () => {
