@@ -25,6 +25,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.InternalServerErrorException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -48,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -98,6 +100,8 @@ class ExperimentExecutionServiceTest {
                 itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig(), promptService);
 
         lenient().when(itemPublisher.publish(any(), any(), anyBoolean())).thenReturn(Mono.empty());
+        // An empty queue, so only the tests that fill it see the run refused.
+        lenient().when(itemPublisher.queuedMessageCount()).thenReturn(Mono.just(0L));
         // Every publish asks whether a stop landed while it was running; almost no test is about that.
         lenient().when(cancellationService.isCancelled(any(), any(UUID.class))).thenReturn(Mono.just(false));
         stubDatasetType(DatasetType.TEST_SUITE);
@@ -284,6 +288,32 @@ class ExperimentExecutionServiceTest {
         }
 
         @Test
+        void createAndExecuteCarriesTheProjectIdWhenTheCallerKnowsIt() {
+            var projectId = UUID.randomUUID();
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .projectName("my-project")
+                    .projectId(projectId)
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build();
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(request);
+
+            var captor = ArgumentCaptor.forClass(Experiment.class);
+            verify(experimentService).create(captor.capture());
+            assertThat(captor.getValue().projectId()).isEqualTo(projectId);
+            assertThat(captor.getValue().projectName())
+                    .as("still carried, since it is what the run's traces are written under")
+                    .isEqualTo("my-project");
+        }
+
+        @Test
         void createAndExecuteUsesDefaultProjectNameWhenNotProvided() {
             var request = ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
@@ -427,6 +457,26 @@ class ExperimentExecutionServiceTest {
             assertThat(response.totalItems()).isEqualTo(3);
         }
 
+        // The policy decides how many times each item runs and what counts as a pass. Defaulting on a
+        // read that failed runs a suite configured for three runs once, and reports its pass rate
+        // against thresholds nobody chose — with nothing in the response to say so.
+        @Test
+        void createAndExecuteFailsRatherThanRunWithoutThePolicyItCouldNotRead() {
+            var datasetId = UUID.randomUUID();
+            when(datasetVersionService.getLatestVersion(any(UUID.class), any()))
+                    .thenThrow(new IllegalStateException("version store is down"));
+
+            assertThatThrownBy(() -> executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(datasetId)
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("version store is down");
+
+            verify(experimentService, never()).create(any(Experiment.class));
+        }
+
         @Test
         void createAndExecuteUsesVersionLevelExecutionPolicy() {
             var datasetId = UUID.randomUUID();
@@ -484,6 +534,37 @@ class ExperimentExecutionServiceTest {
             var response = executeRequest(request);
 
             assertThat(response.totalItems()).isEqualTo(8);
+        }
+
+        // The batch total describes the run, not a variant. A caller can re-run one variant while its
+        // siblings are still going, so each needs the number its own item counter was seeded with
+        // rather than a share divided out of the whole.
+        @Test
+        void createAndExecuteReportsWhatEachVariantDispatched() {
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(
+                            buildPrompt("gpt-4", "first"),
+                            buildPrompt("gpt-4", "second")))
+                    .build();
+
+            stubDatasetItems(List.of(
+                    buildDatasetItem(UUID.randomUUID(), null),
+                    buildDatasetItem(UUID.randomUUID(), null),
+                    buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            var response = executeRequest(request);
+
+            assertThat(response.totalItems())
+                    .as("three items across two variants")
+                    .isEqualTo(6);
+            assertThat(response.experiments())
+                    .as("each variant dispatched the three items, not the batch's six")
+                    .allSatisfy(info -> assertThat(info.totalItems()).isEqualTo(3));
         }
 
         @Test
@@ -629,8 +710,6 @@ class ExperimentExecutionServiceTest {
                     .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
                     .toList());
             when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
-            stubExperimentCreate();
-            when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
 
             // Two variants over 501 items is 1,002 messages against a queue bounded at 1,000. The run
             // is refused on the first message past the bound, so the message names the bound, not a
@@ -646,58 +725,11 @@ class ExperimentExecutionServiceTest {
 
             verify(itemPublisher, never()).publish(any(), any(), anyBoolean());
 
-            // The records exist by this point; left alone they would read as running forever. Every
-            // one of them has to be marked, and marked finished: 'finished' is what makes the DAO
-            // stamp finished_at, which is how the page tells a stopped row from one still running.
-            var createCaptor = ArgumentCaptor.forClass(Experiment.class);
-            verify(experimentService, times(2)).create(createCaptor.capture());
-            var createdIds = createCaptor.getAllValues().stream().map(Experiment::id).toList();
-
-            var idCaptor = ArgumentCaptor.forClass(UUID.class);
-            var updateCaptor = ArgumentCaptor.forClass(ExperimentUpdate.class);
-            verify(experimentService, times(2)).update(idCaptor.capture(), updateCaptor.capture());
-
-            assertThat(idCaptor.getAllValues()).containsExactlyInAnyOrderElementsOf(createdIds);
-            assertThat(updateCaptor.getAllValues()).allSatisfy(update -> {
-                assertThat(update.status()).isEqualTo(ExperimentStatus.FAILED);
-                assertThat(update.finished()).isTrue();
-            });
-        }
-
-        // The cleanup runs to report a refusal. One record failing to update must not cancel the
-        // rest, nor replace the 400 the caller is owed with whatever persistence threw.
-        @Test
-        void refusalSurvivesAFailingCleanupUpdate() {
-            var config = new ExperimentExecutionConfig();
-            config.setStreamMaxLen(1000);
-            service = new ExperimentExecutionService(
-                    experimentService, cancellationService, datasetService, datasetItemService,
-                    datasetVersionService, itemPublisher, idGenerator,
-                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService);
-
-            stubDatasetItems(IntStream.range(0, 1001)
-                    .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
-                    .toList());
-            when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
-            stubExperimentCreate();
-            // The first variant's cleanup fails; the second must still be marked.
-            when(experimentService.update(any(UUID.class), any()))
-                    .thenReturn(Mono.error(new IllegalStateException("persistence is down")))
-                    .thenReturn(Mono.empty());
-
-            assertThatThrownBy(() -> executeRequest(ExperimentExecutionRequest.builder()
-                    .datasetName("test-dataset")
-                    .datasetId(UUID.randomUUID())
-                    .prompts(List.of(buildPrompt("gpt-4", "Hello"), buildPrompt("gpt-4", "Hi")))
-                    .build()))
-                    .as("the caller still learns the run was refused, not that a write failed")
-                    .isInstanceOf(BadRequestException.class);
-
-            var idCaptor = ArgumentCaptor.forClass(UUID.class);
-            verify(experimentService, times(2)).update(idCaptor.capture(), any());
-            assertThat(idCaptor.getAllValues())
-                    .as("the surviving update is the sibling's, not a retry of the one that failed")
-                    .doesNotHaveDuplicates();
+            // Nothing written at all. The variants are planned with ids of our own and only persisted
+            // once the run is one we will accept, so a refusal leaves no experiments behind rather
+            // than a workspace of FAILED records for a run that never started.
+            verify(experimentService, never()).create(any(Experiment.class));
+            verify(experimentService, never()).update(any(UUID.class), any());
         }
 
         @Test
@@ -707,6 +739,67 @@ class ExperimentExecutionServiceTest {
             stubExperimentCreate();
             stubFinishExperiments();
 
+            executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build());
+
+            verify(itemPublisher).publish(any(), any(), anyBoolean());
+        }
+
+        // The bound belongs to the stream, which every workspace shares. A run small enough on its
+        // own still trims entries off the front when others are already queued, and those belong to
+        // somebody else's run, which then never drains.
+        @Test
+        void refuseARunThatWouldNotFitBesideTheBacklog() {
+            var config = new ExperimentExecutionConfig();
+            config.setStreamMaxLen(1000);
+            service = new ExperimentExecutionService(
+                    experimentService, cancellationService, datasetService, datasetItemService,
+                    datasetVersionService, itemPublisher, idGenerator,
+                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService);
+
+            stubDatasetItems(IntStream.range(0, 400)
+                    .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
+                    .toList());
+            when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
+            when(itemPublisher.queuedMessageCount()).thenReturn(Mono.just(700L));
+
+            // 400 items would fit on their own. Behind 700 already queued they do not.
+            assertThatThrownBy(() -> executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build()))
+                    .isInstanceOf(InternalServerErrorException.class)
+                    .hasMessageContaining("too busy");
+
+            // Nothing written and nothing queued. publish() is not asserted on: the chain is built
+            // before the guard decides, so the call is recorded whether or not it is ever subscribed.
+            verify(experimentService, never()).create(any(Experiment.class));
+            verify(experimentService, never()).update(any(UUID.class), any());
+            verify(cancellationService, never()).recordQueued(any(), any());
+        }
+
+        @Test
+        void publishARunThatFitsBesideTheBacklog() {
+            var config = new ExperimentExecutionConfig();
+            config.setStreamMaxLen(1000);
+            service = new ExperimentExecutionService(
+                    experimentService, cancellationService, datasetService, datasetItemService,
+                    datasetVersionService, itemPublisher, idGenerator,
+                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService);
+
+            stubDatasetItems(IntStream.range(0, 300)
+                    .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
+                    .toList());
+            when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
+            when(itemPublisher.queuedMessageCount()).thenReturn(Mono.just(700L));
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            // Exactly the bound, which is still room.
             executeRequest(ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
                     .datasetId(UUID.randomUUID())
@@ -732,8 +825,9 @@ class ExperimentExecutionServiceTest {
                             .build()));
             // The finish goes to one caller; these tests are always it, and nothing has taken it yet.
             lenient().when(cancellationService.claimFinish(any(), any(UUID.class))).thenReturn(Mono.just(true));
-            lenient().when(cancellationService.isFinishClaimed(any(), any(UUID.class)))
-                    .thenReturn(Mono.just(false));
+            // Runs this service queued; the one test about SDK-logged experiments overrides it.
+            lenient().when(itemPublisher.isTracked(any(UUID.class))).thenReturn(Mono.just(true));
+
         }
 
         @Test
@@ -779,25 +873,84 @@ class ExperimentExecutionServiceTest {
                     .thenReturn(Mono.error(new IllegalStateException("experiment is gone")));
             when(experimentService.update(eq(sibling), any())).thenReturn(Mono.empty());
 
-            service.cancel(Set.of(failing, sibling))
+            assertThatThrownBy(() -> service.cancel(Set.of(failing, sibling))
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, USER_NAME)
+                            .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
+                    .block())
+                    .as("reported, not swallowed: its items are skipped while its status still reads running")
+                    .isInstanceOf(InternalServerErrorException.class)
+                    .hasMessageContaining("1 of 2");
+
+            verify(experimentService).update(eq(sibling), any());
+            verify(cancellationService).purgeQueued(WORKSPACE_ID, sibling);
+        }
+
+        // Reproduced: an experiment created through POST /experiments, then cancelled, became
+        // CANCELLED with finished_at null for ever — nothing of ours counts it down, so no consumer
+        // ever stamps it, and the page waits on it indefinitely.
+        @Test
+        void cancelLeavesAloneAnExperimentThisServiceNeverQueued() {
+            var sdkLogged = UUID.randomUUID();
+
+            when(itemPublisher.isTracked(sdkLogged)).thenReturn(Mono.just(false));
+            lenient().when(cancellationService.cancel(any(), any())).thenReturn(Mono.empty());
+            lenient().when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+
+            service.cancel(Set.of(sdkLogged))
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER_NAME)
                             .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
                     .block();
 
-            verify(experimentService).update(eq(sibling), any());
-            verify(cancellationService).purgeQueued(WORKSPACE_ID, sibling);
+            verify(cancellationService, never()).cancel(any(), any());
+            verify(experimentService, never()).update(any(UUID.class), any());
+            // Not even read: there is nothing a stop could do to it
+            verify(experimentService, never()).getMetadataById(sdkLogged);
         }
 
-        // A consumer takes the claim the moment its last item drains, before the status it is about to
-        // write can be read back. A stop landing in that window must leave the run alone rather than
-        // relabel one that finished on its own.
+        // Reproduced with ClickHouse paused: the read failed, the run was cancelled anyway, and it
+        // ended permanently RUNNING with its remaining items silently skipped. A stop acts on a run
+        // that may already have ended, so a read it cannot trust must not be acted on.
         @Test
-        void cancelLeavesAnExperimentWhoseFinishIsAlreadyClaimed() {
+        void cancelLeavesAloneAnExperimentItCannotRead() {
+            var unreadable = UUID.randomUUID();
+
+            when(experimentService.getMetadataById(unreadable))
+                    .thenReturn(Mono.error(new IllegalStateException("analytics db is down")));
+            // Stubbed so that acting anyway fails the verifies below, not a null dereference
+            lenient().when(cancellationService.cancel(any(), any())).thenReturn(Mono.empty());
+            lenient().when(cancellationService.purgeQueued(any(), any(UUID.class))).thenReturn(Mono.just(false));
+            lenient().when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+
+            service.cancel(Set.of(unreadable))
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, USER_NAME)
+                            .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
+                    .block();
+
+            // Nothing at all: no mark, so its items keep running rather than being skipped under a
+            // status that was never written
+            verify(cancellationService, never()).cancel(any(), any());
+            verify(experimentService, never()).update(any(UUID.class), any());
+        }
+
+        // A status read only rules out what had already finished when it was taken. A consumer
+        // draining its last item in the window after that read writes the run's ending, and the claim
+        // is what stops the stop from writing over it — reading the status again could not, since the
+        // two writes would still be racing.
+        @Test
+        void cancelDoesNotRelabelARunThatFinishedAsTheStopArrived() {
             var finishing = UUID.randomUUID();
 
-            when(cancellationService.isFinishClaimed(WORKSPACE_ID, finishing)).thenReturn(Mono.just(true));
+            when(cancellationService.cancel(any(), any())).thenReturn(Mono.empty());
+            when(cancellationService.claimFinish(WORKSPACE_ID, finishing)).thenReturn(Mono.just(false));
+            when(cancellationService.purgeQueued(any(), any(UUID.class))).thenReturn(Mono.just(false));
+            // Stubbed so that relabelling anyway fails the verify below, not a null dereference
+            lenient().when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
 
             service.cancel(Set.of(finishing))
                     .contextWrite(ctx -> ctx
@@ -807,8 +960,8 @@ class ExperimentExecutionServiceTest {
                     .block();
 
             verify(experimentService, never()).update(eq(finishing), any());
-            verify(cancellationService, never()).cancel(any(), any());
-            verify(cancellationService, never()).purgeQueued(any(), any(UUID.class));
+            // Still worth stopping the queue: the outcome is written, but its items need not run
+            verify(cancellationService).purgeQueued(WORKSPACE_ID, finishing);
         }
 
         // A prompt that completes before its siblings keeps its Stop button until the whole run
@@ -833,6 +986,30 @@ class ExperimentExecutionServiceTest {
             verify(experimentService, never()).update(eq(finished), any());
             verify(cancellationService, never()).cancel(any(), any());
             verify(cancellationService, never()).purgeQueued(any(), any(UUID.class));
+        }
+
+        // A test suite whose items have drained is still RUNNING until its assertions land, and the
+        // drain deliberately writes no status. Nothing has claimed the ending, so a stop can still take
+        // it — this used to find the finish claimed by the drain and leave the run running for ever.
+        @Test
+        void cancelStopsATestSuiteStillWaitingOnItsAssertions() {
+            var waiting = UUID.randomUUID();
+
+            when(cancellationService.cancel(any(), any())).thenReturn(Mono.empty());
+            when(cancellationService.claimFinish(WORKSPACE_ID, waiting)).thenReturn(Mono.just(true));
+            when(cancellationService.purgeQueued(any(), any(UUID.class))).thenReturn(Mono.just(false));
+            when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+
+            service.cancel(Set.of(waiting))
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, USER_NAME)
+                            .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
+                    .block();
+
+            var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+            verify(experimentService).update(eq(waiting), captor.capture());
+            assertThat(captor.getValue().status()).isEqualTo(ExperimentStatus.CANCELLED);
         }
 
         // Purging the last of an experiment's queued items leaves no message to reach a consumer, so
@@ -876,6 +1053,97 @@ class ExperimentExecutionServiceTest {
             var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
             verify(experimentService).update(eq(experimentId), captor.capture());
             assertThat(captor.getValue().finished()).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("A launch that fails partway")
+    class LaunchFailure {
+
+        @BeforeEach
+        void stubRun() {
+            lenient().when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
+            stubExperimentCreate();
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            lenient().when(cancellationService.cancel(any(), any())).thenReturn(Mono.empty());
+            lenient().when(cancellationService.claimFinish(any(), any(UUID.class))).thenReturn(Mono.just(true));
+            lenient().when(itemPublisher.discardCounters(any())).thenReturn(Mono.empty());
+            lenient().when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+        }
+
+        private ExperimentExecutionRequest request() {
+            return ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "hi")))
+                    .build();
+        }
+
+        @Test
+        void markTheRunFailedWhenPublishingStopsPartway() {
+            when(itemPublisher.publish(any(), any(), anyBoolean()))
+                    .thenReturn(Mono.error(new IllegalStateException("redis is down")));
+
+            assertThatThrownBy(() -> executeRequest(request()))
+                    .as("the caller still learns the launch failed")
+                    .isInstanceOf(IllegalStateException.class);
+
+            var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+            verify(experimentService).update(any(UUID.class), captor.capture());
+            assertThat(captor.getValue().status()).isEqualTo(ExperimentStatus.FAILED);
+            assertThat(captor.getValue().finished())
+                    .as("finished is what stamps finished_at, which is how the page stops waiting")
+                    .isTrue();
+        }
+
+        // Messages may already be on the stream with no record of their ids, so they cannot be
+        // purged. Marking the run is what stops a consumer calling a provider for work already lost.
+        @Test
+        void stopConsumersWorkingOnWhatDidGetPublished() {
+            when(itemPublisher.publish(any(), any(), anyBoolean()))
+                    .thenReturn(Mono.error(new IllegalStateException("redis is down")));
+
+            assertThatThrownBy(() -> executeRequest(request())).isInstanceOf(IllegalStateException.class);
+
+            verify(cancellationService).cancel(eq(WORKSPACE_ID), anyCollection());
+        }
+
+        @Test
+        void discardTheCountersSoNothingHoldsAnUnreachableTotal() {
+            when(itemPublisher.publish(any(), any(), anyBoolean()))
+                    .thenReturn(Mono.error(new IllegalStateException("redis is down")));
+
+            assertThatThrownBy(() -> executeRequest(request())).isInstanceOf(IllegalStateException.class);
+
+            verify(itemPublisher).discardCounters(anyCollection());
+        }
+
+        // The claim is taken before the status is written, so an item that drains a counter late
+        // cannot report the run complete over the failure.
+        @Test
+        void leaveTheFailureAloneWhenSomethingElseOwnsTheEnding() {
+            when(itemPublisher.publish(any(), any(), anyBoolean()))
+                    .thenReturn(Mono.error(new IllegalStateException("redis is down")));
+            when(cancellationService.claimFinish(any(), any(UUID.class))).thenReturn(Mono.just(false));
+
+            assertThatThrownBy(() -> executeRequest(request())).isInstanceOf(IllegalStateException.class);
+
+            verify(experimentService, never()).update(any(UUID.class), any());
+        }
+
+        @Test
+        void carryOnAbortingWhenOneRecordCannotBeMarked() {
+            when(itemPublisher.publish(any(), any(), anyBoolean()))
+                    .thenReturn(Mono.error(new IllegalStateException("redis is down")));
+            when(experimentService.update(any(UUID.class), any()))
+                    .thenReturn(Mono.error(new IllegalStateException("persistence is down")));
+
+            assertThatThrownBy(() -> executeRequest(request()))
+                    .as("the launch error, not whatever the cleanup threw")
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("redis is down");
+
+            verify(itemPublisher).discardCounters(anyCollection());
         }
     }
 

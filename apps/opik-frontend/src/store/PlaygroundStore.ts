@@ -151,11 +151,12 @@ export type PlaygroundStore = {
   progressTotal: number;
   progressCompleted: number;
   progressPhase: "running" | "evaluating" | null;
+  watchPaused: boolean;
   experimentName: string | null;
   lastSuggestedExperimentName: string | null;
   datasetType: DATASET_TYPE | null;
   experimentByPromptId: Record<string, string>;
-  runTotalItems: number;
+  runTotalItemsByPromptId: Record<string, number>;
   datasetItemsTotal: number | null;
   hasUnseenRunCompletion: boolean;
   isRunInFlight: boolean;
@@ -182,7 +183,7 @@ export type PlaygroundStore = {
   triggerProviderValidation: () => void;
   setSelectedRuleIds: (ruleIds: string[] | null) => void;
   setCreatedExperiments: (experiments: LogExperiment[]) => void;
-  setRunTotalItems: (total: number) => void;
+  setRunTotalItemsForPrompts: (promptIds: string[], total: number) => void;
   setDatasetItemsTotal: (total: number | null) => void;
   setHasUnseenRunCompletion: (value: boolean) => void;
   setIsRunInFlight: (value: boolean) => void;
@@ -202,6 +203,7 @@ export type PlaygroundStore = {
   setProgress: (completed: number, total: number) => void;
   setProgressPhase: (phase: "running" | "evaluating" | null) => void;
   resetProgress: () => void;
+  setWatchPaused: (paused: boolean) => void;
   setLastActiveProjectId: (projectId: string | null) => void;
   setDatasetType: (type: DATASET_TYPE | null) => void;
   setExperimentByPromptId: (map: Record<string, string>) => void;
@@ -228,11 +230,12 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       progressTotal: 0,
       progressCompleted: 0,
       progressPhase: null,
+      watchPaused: false,
       experimentName: null,
       lastSuggestedExperimentName: null,
       datasetType: null,
       experimentByPromptId: {},
-      runTotalItems: 0,
+      runTotalItemsByPromptId: {},
       datasetItemsTotal: null,
       hasUnseenRunCompletion: false,
       isRunInFlight: false,
@@ -372,8 +375,16 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
-      setRunTotalItems: (total) => {
-        set((state) => ({ ...state, runTotalItems: total }));
+      setRunTotalItemsForPrompts: (promptIds, total) => {
+        set((state) => ({
+          ...state,
+          runTotalItemsByPromptId: {
+            ...state.runTotalItemsByPromptId,
+            ...Object.fromEntries(
+              promptIds.map((promptId) => [promptId, total]),
+            ),
+          },
+        }));
       },
       setDatasetItemsTotal: (total) => {
         set((state) => ({ ...state, datasetItemsTotal: total }));
@@ -398,7 +409,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
             ...state,
             createdExperiments: [],
             experimentByPromptId: {},
-            runTotalItems: 0,
+            runTotalItemsByPromptId: {},
           };
         });
       },
@@ -429,6 +440,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           isRunningMap: {},
           isRunInFlight: false,
           isResumingRun: false,
+          watchPaused: false,
         }));
       },
       setIsResumingRun: (value) => {
@@ -501,8 +513,12 @@ const usePlaygroundStore = create<PlaygroundStore>()(
             progressCompleted: 0,
             progressTotal: 0,
             progressPhase: null,
+            watchPaused: false,
           };
         });
+      },
+      setWatchPaused: (paused) => {
+        set((state) => ({ ...state, watchPaused: paused }));
       },
       setLastActiveProjectId: (projectId) => {
         set((state) => ({ ...state, lastActiveProjectId: projectId }));
@@ -587,6 +603,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           isRunning,
           isRunningMap,
           isResumingRun,
+          watchPaused,
           ...rest
         } = state;
         /* eslint-enable @typescript-eslint/no-unused-vars */
@@ -676,8 +693,8 @@ export const useCreatedExperiments = () =>
 export const useSetCreatedExperiments = () =>
   usePlaygroundStore((state) => state.setCreatedExperiments);
 
-export const useSetRunTotalItems = () =>
-  usePlaygroundStore((state) => state.setRunTotalItems);
+export const useSetRunTotalItemsForPrompts = () =>
+  usePlaygroundStore((state) => state.setRunTotalItemsForPrompts);
 
 export const useDatasetItemsTotal = () =>
   usePlaygroundStore((state) => state.datasetItemsTotal);
@@ -779,6 +796,12 @@ export const useProgressPhase = () =>
 
 export const useSetProgressPhase = () =>
   usePlaygroundStore((state) => state.setProgressPhase);
+
+export const useWatchPaused = () =>
+  usePlaygroundStore((state) => state.watchPaused);
+
+export const useSetWatchPaused = () =>
+  usePlaygroundStore((state) => state.setWatchPaused);
 
 export const useResetProgress = () =>
   usePlaygroundStore((state) => state.resetProgress);

@@ -33,6 +33,7 @@ interface PlaygroundOutputsProps {
   versionHash?: string;
   runSingle: (promptId: string) => void;
   stopSingle: (promptId: string) => void;
+  checkAgain: () => void;
 }
 
 const EMPTY_ITEMS: DatasetItem[] = [];
@@ -44,6 +45,7 @@ const PlaygroundOutputs = ({
   versionHash,
   runSingle,
   stopSingle,
+  checkAgain,
 }: PlaygroundOutputsProps) => {
   const promptIds = usePromptIds();
   const setDatasetVariables = useSetDatasetVariables();
@@ -148,6 +150,7 @@ const PlaygroundOutputs = ({
             onChangeSize={setSize}
             total={total}
             isLoadingTotal={isProcessing}
+            checkAgain={checkAgain}
           />
           <div
             data-testid="playground-results-table"

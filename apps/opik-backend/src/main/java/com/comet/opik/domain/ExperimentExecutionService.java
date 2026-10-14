@@ -9,6 +9,7 @@ import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentExecutionResponse;
+import com.comet.opik.api.ExperimentExecutionResponse.ExperimentInfo;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.OpikPromptEntry;
@@ -27,7 +28,7 @@ import com.fasterxml.jackson.databind.node.TextNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
-import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -36,13 +37,14 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -88,9 +90,11 @@ public class ExperimentExecutionService {
     }
 
     /**
-     * Creates experiments and publishes item processing messages to Redis Streams.
-     * Returns immediately with experiment IDs so the caller can start polling.
-     * Dataset items are read a page at a time, so a large dataset never lands in memory whole.
+     * Creates experiments and publishes item processing messages to Redis Streams. Answers once the
+     * whole run is queued, not straight away: every message is collected first, because the counter
+     * each experiment settles against must be set before a consumer reaches the first item. That
+     * collection is the ceiling a too-large run is refused against. A retried timeout starts a
+     * second run; there is no idempotency key.
      */
     public Mono<ExperimentExecutionResponse> createAndExecute(
             @NonNull ExperimentExecutionRequest request, @NonNull List<DatasetItemFilter> filters) {
@@ -113,45 +117,55 @@ public class ExperimentExecutionService {
                         var dataset = tuple.getT2();
                         boolean testSuite = dataset.type() == DatasetType.TEST_SUITE;
                         String datasetName = dataset.name();
-                        return createExperiments(request, projectName, testSuite, datasetName)
-                                .collectSortedList(Comparator.comparingInt(e -> e.info().promptIndex()))
-                                .flatMap(experimentEntries -> resolveOpikPromptsByVariant(request)
-                                        .flatMap(opikPromptsByVariant -> {
-                                            List<UUID> experimentIds = experimentEntries.stream()
-                                                    .map(ExperimentEntry::experimentId).toList();
-                                            List<ExperimentExecutionResponse.ExperimentInfo> experimentInfos = experimentEntries
-                                                    .stream()
-                                                    .map(ExperimentEntry::info).toList();
+                        var plannedExperiments = planExperiments(request, projectName, testSuite, datasetName);
+                        return resolveOpikPromptsByVariant(request)
+                                .flatMap(opikPromptsByVariant -> {
+                                    List<UUID> experimentIds = plannedExperiments.stream()
+                                            .map(Experiment::id).toList();
+                                    List<ExperimentInfo> experimentInfos = IntStream
+                                            .range(0, experimentIds.size())
+                                            .mapToObj(i -> ExperimentInfo.builder()
+                                                    .experimentId(experimentIds.get(i))
+                                                    .promptIndex(i)
+                                                    .build())
+                                            .toList();
 
-                                            UUID batchId = idGenerator.generateId();
+                                    UUID batchId = idGenerator.generateId();
 
-                                            return streamDatasetItems(request, datasetName, filters)
-                                                    .flatMapIterable(item -> buildMessages(
-                                                            item, request, experimentIds, datasetExecutionPolicy,
-                                                            projectName, workspaceId, workspaceName, userName, batchId,
-                                                            opikPromptsByVariant, testSuite))
-                                                    // One past the cap is already too many
-                                                    .take(experimentExecutionConfig.getStreamMaxLen() + 1L)
-                                                    .collectList()
-                                                    .flatMap(messages -> {
-                                                        if (messages.isEmpty()) {
-                                                            log.warn(
-                                                                    "No dataset items found for dataset '{}', workspaceId '{}'",
-                                                                    request.datasetName(), workspaceId);
-                                                            return markExperimentsCompleted(experimentIds)
-                                                                    .thenReturn(ExperimentExecutionResponse.builder()
-                                                                            .experiments(experimentInfos)
-                                                                            .totalItems(0)
-                                                                            .build());
-                                                        }
+                                    return streamDatasetItems(request, datasetName, filters)
+                                            .flatMapIterable(item -> buildMessages(
+                                                    item, request, experimentIds, datasetExecutionPolicy,
+                                                    projectName, workspaceId, workspaceName, userName, batchId,
+                                                    opikPromptsByVariant, testSuite))
+                                            // One past the cap is already too many
+                                            .take(experimentExecutionConfig.getStreamMaxLen() + 1L)
+                                            .collectList()
+                                            .flatMap(messages -> {
+                                                // Refused before anything is written, so a run
+                                                // we will not accept leaves nothing behind
+                                                if (messages.size() > experimentExecutionConfig
+                                                        .getStreamMaxLen()) {
+                                                    return Mono.error(tooLargeToRun());
+                                                }
 
-                                                        if (messages.size() > experimentExecutionConfig
-                                                                .getStreamMaxLen()) {
-                                                            return markRunRefused(experimentIds)
-                                                                    .then(Mono.error(tooLargeToRun()));
-                                                        }
+                                                if (messages.isEmpty()) {
+                                                    log.warn(
+                                                            "No dataset items found for dataset '{}', workspaceId '{}'",
+                                                            request.datasetName(), workspaceId);
+                                                    return persistExperiments(plannedExperiments)
+                                                            .then(markExperimentsCompleted(experimentIds))
+                                                            .thenReturn(ExperimentExecutionResponse.builder()
+                                                                    .experiments(experimentInfos)
+                                                                    .totalItems(0)
+                                                                    .build())
+                                                            .onErrorResume(error -> abortRun(workspaceId,
+                                                                    experimentIds).then(Mono.error(error)));
+                                                }
 
-                                                        return itemPublisher.publish(batchId, messages, testSuite)
+                                                return refuseIfQueueIsFull(messages.size())
+                                                        .then(persistExperiments(plannedExperiments)
+                                                                .then(itemPublisher.publish(batchId, messages,
+                                                                        testSuite))
                                                                 .then(purgeIfCancelledWhilePublishing(
                                                                         workspaceId, experimentIds))
                                                                 .then(Mono.fromCallable(() -> {
@@ -162,12 +176,20 @@ public class ExperimentExecutionService {
                                                                             workspaceId);
 
                                                                     return ExperimentExecutionResponse.builder()
-                                                                            .experiments(experimentInfos)
+                                                                            .experiments(withItemCounts(
+                                                                                    experimentInfos, messages))
                                                                             .totalItems(messages.size())
                                                                             .build();
-                                                                }));
-                                                    });
-                                        }));
+                                                                }))
+                                                                // Every failure from the first write on;
+                                                                // the caller still gets the error, just
+                                                                // not a run left running over work that
+                                                                // never started.
+                                                                .onErrorResume(error -> abortRun(workspaceId,
+                                                                        experimentIds)
+                                                                        .then(Mono.error(error))));
+                                            });
+                                });
                     });
         });
     }
@@ -198,31 +220,56 @@ public class ExperimentExecutionService {
 
                         // Marked first: the mark is what stops an item a consumer already holds, and
                         // purging before marking would leave that window unguarded
+                        var notStopped = new AtomicInteger();
+
                         return cancellationService.cancel(workspaceId, running)
                                 .thenMany(Flux.fromIterable(running)
-                                        .concatMap(experimentId -> experimentService
-                                                .update(experimentId, statusUpdate)
+                                        .concatMap(experimentId -> writeCancelledIfUnclaimed(workspaceId,
+                                                experimentId, statusUpdate)
                                                 .then(cancellationService.purgeQueued(workspaceId, experimentId))
-                                                .flatMap(drained -> recordFinishedIfDrained(workspaceId, experimentId,
-                                                        drained))
+                                                .flatMap(drained -> recordFinishedIfDrained(experimentId, drained))
                                                 .onErrorResume(error -> {
+                                                    // Counted, not swallowed: one failing must not
+                                                    // strand the others, but nor can the caller be
+                                                    // told a run stopped when it did not
+                                                    notStopped.incrementAndGet();
                                                     log.error("Failed to cancel experiment '{}', workspaceId '{}'",
                                                             experimentId, workspaceId, error);
                                                     return Mono.empty();
                                                 })))
-                                .then()
-                                .doOnSuccess(unused -> log.info("Cancelled '{}' experiments, workspaceId '{}'",
-                                        running.size(), workspaceId));
+                                .then(Mono.defer(() -> {
+                                    if (notStopped.get() > 0) {
+                                        return Mono.error(stopDidNotApply(notStopped.get(), running.size()));
+                                    }
+                                    log.info("Cancelled '{}' experiments, workspaceId '{}'",
+                                            running.size(), workspaceId);
+                                    return Mono.<Void>empty();
+                                }));
                     });
         });
     }
 
-    private record ExperimentEntry(UUID experimentId, ExperimentExecutionResponse.ExperimentInfo info) {
+    /**
+     * What each variant dispatched, counted from the messages themselves rather than divided out of
+     * the batch total.
+     */
+    private static List<ExperimentInfo> withItemCounts(
+            List<ExperimentInfo> experimentInfos,
+            List<ExperimentItemToProcess> messages) {
+
+        var countsByExperiment = messages.stream()
+                .collect(Collectors.groupingBy(ExperimentItemToProcess::experimentId, Collectors.counting()));
+
+        return experimentInfos.stream()
+                .map(info -> info.toBuilder()
+                        .totalItems(countsByExperiment.getOrDefault(info.experimentId(), 0L).intValue())
+                        .build())
+                .toList();
     }
 
-    private Flux<ExperimentEntry> createExperiments(ExperimentExecutionRequest request, String projectName,
+    private List<Experiment> planExperiments(ExperimentExecutionRequest request, String projectName,
             boolean testSuite, String datasetName) {
-        var monos = IntStream.range(0, request.prompts().size())
+        return IntStream.range(0, request.prompts().size())
                 .mapToObj(i -> {
                     var prompt = request.prompts().get(i);
                     UUID experimentId = idGenerator.generateId();
@@ -239,6 +286,7 @@ public class ExperimentExecutionService {
                             .name(prompt.experimentName())
                             .datasetName(datasetName)
                             .datasetVersionId(request.datasetVersionId())
+                            .projectId(request.projectId())
                             .projectName(projectName)
                             .metadata(metadata)
                             .evaluationMethod(testSuite ? EvaluationMethod.TEST_SUITE : EvaluationMethod.DATASET)
@@ -249,15 +297,15 @@ public class ExperimentExecutionService {
                                             : request.promptVersions())
                             .build();
 
-                    return experimentService.create(experiment)
-                            .map(id -> new ExperimentEntry(experimentId,
-                                    ExperimentExecutionResponse.ExperimentInfo.builder()
-                                            .experimentId(experimentId)
-                                            .promptIndex(i)
-                                            .build()));
+                    return experiment;
                 })
                 .toList();
-        return Flux.merge(monos);
+    }
+
+    private Mono<Void> persistExperiments(List<Experiment> experiments) {
+        return Flux.fromIterable(experiments)
+                .concatMap(experimentService::create)
+                .then();
     }
 
     /**
@@ -329,45 +377,69 @@ public class ExperimentExecutionService {
         });
     }
 
+    /**
+     * Failures are not caught: the policy decides how many times each item runs and what counts as a
+     * pass, so defaulting on a read that failed runs a suite configured for three runs once and
+     * reports its pass rate against thresholds nobody chose. Null is still a valid answer — it means
+     * the version carries no policy — but it has to come from the version, not from an error.
+     */
     private ExecutionPolicy fetchDatasetExecutionPolicy(UUID datasetId, String versionHash, String workspaceId) {
-        try {
-            if (versionHash != null) {
-                var versionId = datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash);
-                var version = datasetVersionService.getVersionById(workspaceId, datasetId, versionId);
-                return version.executionPolicy();
-            }
-            return datasetVersionService.getLatestVersion(datasetId, workspaceId)
-                    .map(v -> v.executionPolicy())
-                    .orElse(null);
-        } catch (NotFoundException e) {
-            throw e;
-        } catch (Exception e) {
-            log.warn("Failed to fetch dataset execution policy for dataset '{}', versionHash '{}'",
-                    datasetId, versionHash, e);
-            return null;
+        if (versionHash != null) {
+            var versionId = datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash);
+            var version = datasetVersionService.getVersionById(workspaceId, datasetId, versionId);
+            return version.executionPolicy();
         }
+        return datasetVersionService.getLatestVersion(datasetId, workspaceId)
+                .map(v -> v.executionPolicy())
+                .orElse(null);
     }
 
     /**
      * The ones a stop can still affect. An experiment that has already finished must keep the outcome
      * it earned: a prompt that completes before its siblings keeps its Stop button until the whole run
-     * settles, so cancelling what is already done is a click away and would relabel it. The claim is
-     * asked before the status, being taken the moment a consumer's last item drains — before the
-     * status it is about to write can be read back.
+     * settles, so cancelling what is already done is a click away and would relabel it.
+     *
+     * A status read only rules out what had already finished when it was taken, which is why this is a
+     * filter and not the decision. What stops a stop from overwriting an ending written in the moment
+     * between the two is the claim, taken in {@link #writeCancelledIfUnclaimed}.
      */
     private Mono<Set<UUID>> stillRunning(String workspaceId, Set<UUID> experimentIds) {
         return Flux.fromIterable(experimentIds)
-                .filterWhen(experimentId -> cancellationService
-                        .isFinishClaimed(workspaceId, experimentId)
-                        .map(claimed -> !claimed))
+                .filterWhen(experimentId -> itemPublisher.isTracked(experimentId)
+                        .doOnNext(tracked -> {
+                            if (!tracked) {
+                                log.info("Experiment '{}' is not a run this service queued, leaving it alone",
+                                        experimentId);
+                            }
+                        }))
                 .filterWhen(experimentId -> experimentService.getMetadataById(experimentId)
                         .map(experiment -> experiment.status() == null || !experiment.status().isTerminal())
                         .onErrorResume(error -> {
-                            log.warn("Could not read experiment '{}' before cancelling, cancelling anyway",
+                            log.warn("Could not read experiment '{}' before cancelling, leaving it alone",
                                     experimentId, error);
-                            return Mono.just(true);
+                            return Mono.just(false);
                         }))
                 .collect(Collectors.toSet());
+    }
+
+    /**
+     * Writes CANCELLED only if nothing has written how this run ended. The stop and the consumer
+     * draining its last item can reach that point together, and the claim is what settles which of
+     * them owns the outcome — rather than each reading the other's state and both writing.
+     *
+     * Losing it is not a failure: the run ended as it ended, and the stop still purges what is queued.
+     */
+    private Mono<Void> writeCancelledIfUnclaimed(String workspaceId, UUID experimentId,
+            ExperimentUpdate statusUpdate) {
+        return cancellationService.claimFinish(workspaceId, experimentId)
+                .flatMap(won -> {
+                    if (!won) {
+                        log.info("Experiment '{}' finished as the stop arrived, leaving its outcome alone",
+                                experimentId);
+                        return Mono.<Void>empty();
+                    }
+                    return experimentService.update(experimentId, statusUpdate);
+                });
     }
 
     /**
@@ -382,7 +454,7 @@ public class ExperimentExecutionService {
         return Flux.fromIterable(experimentIds)
                 .filterWhen(experimentId -> cancellationService.isCancelled(workspaceId, experimentId))
                 .concatMap(experimentId -> cancellationService.purgeQueued(workspaceId, experimentId)
-                        .flatMap(drained -> recordFinishedIfDrained(workspaceId, experimentId, drained))
+                        .flatMap(drained -> recordFinishedIfDrained(experimentId, drained))
                         .onErrorResume(error -> {
                             // Only the walk is lost, and the run still settles through its consumer
                             log.warn("Failed to purge cancelled experiment '{}' after publishing, workspaceId '{}'",
@@ -395,36 +467,76 @@ public class ExperimentExecutionService {
     /**
      * A run whose remaining items were all purged has stopped producing with nothing left to notice
      * it: no message will reach a consumer to count the last one down. Anything above zero is still
-     * with a consumer, which will record it on the way out.
+     * with a consumer, which will record it on the way out. Unclaimed, because the stamp is not the outcome.
      */
-    private Mono<Void> recordFinishedIfDrained(String workspaceId, UUID experimentId, boolean drained) {
+    private Mono<Void> recordFinishedIfDrained(UUID experimentId, boolean drained) {
         if (!drained) {
             return Mono.empty();
         }
 
-        return cancellationService.claimFinish(workspaceId, experimentId)
-                .filter(Boolean::booleanValue)
-                .flatMap(claimed -> experimentService.update(experimentId,
-                        ExperimentUpdate.builder().finished(true).build()))
-                .then();
+        return experimentService.update(experimentId, ExperimentUpdate.builder().finished(true).build());
     }
 
     /**
-     * The experiment records exist before their items are counted, so a run refused at that point
-     * would otherwise be left behind reading as still running, for work that will never start.
+     * Ends a launch that failed after its records were written. A half-started run can still be
+     * half-queued, hence three steps: the mark stops consumers working on whatever did get
+     * published, the claim stops a late item reporting the run complete over the failure, and the
+     * counters go with it.
      */
-    private Mono<Void> markRunRefused(List<UUID> experimentIds) {
+    private Mono<Void> abortRun(String workspaceId, List<UUID> experimentIds) {
         var statusUpdate = ExperimentUpdate.builder()
                 .status(ExperimentStatus.FAILED)
                 .finished(true)
                 .build();
-        return Flux.fromIterable(experimentIds)
-                .concatMap(id -> experimentService.update(id, statusUpdate)
-                        .onErrorResume(error -> {
-                            log.error("Failed to mark refused experiment '{}' as failed", id, error);
-                            return Mono.empty();
-                        }))
-                .then();
+
+        return cancellationService.cancel(workspaceId, experimentIds)
+                .thenMany(Flux.fromIterable(experimentIds)
+                        .concatMap(id -> cancellationService.claimFinish(workspaceId, id)
+                                .flatMap(won -> won
+                                        ? experimentService.update(id, statusUpdate)
+                                        : Mono.<Void>empty())
+                                .onErrorResume(error -> {
+                                    // One record failing must not strand the others, nor replace the
+                                    // error the caller is owed with whatever persistence threw
+                                    log.error("Failed to mark aborted experiment '{}' as failed", id, error);
+                                    return Mono.empty();
+                                })))
+                .then(itemPublisher.discardCounters(experimentIds));
+    }
+
+    /**
+     * The stop itself did not land, not that the run had failures: the mark is set, so items are
+     * already being skipped under a status that still reads as running.
+     */
+    private InternalServerErrorException stopDidNotApply(int notStopped, int total) {
+        log.error("Could not stop '{}' of '{}' experiments", notStopped, total);
+        return new InternalServerErrorException(
+                "Could not stop %d of %d experiments. Their items are no longer being processed, but their status could not be updated — try again."
+                        .formatted(notStopped, total));
+    }
+
+    /**
+     * The bound is on the stream, not on one run. It is shared by every workspace and trimmed by
+     * length, so a run that fits on its own still pushes the backlog past the bound when others are
+     * in flight — and the trim takes the oldest entries whether or not anyone has them yet, which
+     * silently deletes another tenant's work and leaves their run unable to finish.
+     *
+     * Checked, not reserved: two launches can still pass together. It narrows a window that loses
+     * data to one that refuses a run, which is the trade worth making until runs stop sharing a
+     * queue at all.
+     */
+    private Mono<Void> refuseIfQueueIsFull(int runSize) {
+        return itemPublisher.queuedMessageCount()
+                .flatMap(queued -> queued + runSize > experimentExecutionConfig.getStreamMaxLen()
+                        ? Mono.<Void>error(queueTooBusy(queued, runSize))
+                        : Mono.<Void>empty());
+    }
+
+    private InternalServerErrorException queueTooBusy(long queued, int runSize) {
+        log.warn("Refusing a run of '{}' items: '{}' already queued against a bound of '{}'",
+                runSize, queued, experimentExecutionConfig.getStreamMaxLen());
+        return new InternalServerErrorException(
+                "The processing queue is too busy to accept this run right now. Try again in a few minutes.");
     }
 
     /**
@@ -438,8 +550,9 @@ public class ExperimentExecutionService {
                 experimentExecutionConfig.getStreamMaxLen());
 
         return new BadRequestException(
-                "This run would queue more than the %,d items the processing queue holds. Narrow the dataset with filters, or run fewer prompts at once."
-                        .formatted(experimentExecutionConfig.getStreamMaxLen()));
+                String.format(Locale.ROOT,
+                        "This run would queue more than the %,d items the processing queue holds. Narrow the dataset with filters, or run fewer prompts at once.",
+                        experimentExecutionConfig.getStreamMaxLen()));
     }
 
     private Mono<Void> markExperimentsCompleted(List<UUID> experimentIds) {
