@@ -69,6 +69,40 @@ server-side request forgery, remote code execution, path traversal, injection,
 deserialization, or access to data across workspace boundaries — is a vulnerability,
 is in scope, and we want to hear about it.
 
+#### Features that run user-supplied code
+
+Some Opik features execute Python code supplied by the user, by design: Python
+custom metrics in online evaluation rules, for example, run in the
+`opik-python-backend` service. How that code is isolated depends on
+`PYTHON_CODE_EXECUTOR_STRATEGY` (see
+[the architecture docs](https://www.comet.com/docs/opik/self-host/architecture)):
+
+- `process`, the default in the open-source `docker compose` and Helm installs, runs
+  the code in a worker process of the Python backend, with a timeout but no
+  sandbox. The code has the service's privileges, environment, and network access.
+- `docker` runs each execution in a separate, non-root container with memory and CPU
+  limits and, by default, no network access.
+
+In an open-source deployment, anyone who can reach the API is an administrator of
+the instance (see above), and administrators are allowed to run code through these
+features. Code execution through them, and what that code can reach in the `process`
+strategy, is therefore the documented behaviour of that configuration rather than a
+vulnerability — the same way the absence of a login is. If your deployment runs
+code from people you do not trust with the Python backend's access, use the `docker`
+strategy and keep the instance behind the network boundary described above.
+
+These reports remain in scope:
+
+- Escaping the `docker` executor's sandbox, or reaching resources it is configured
+  to block.
+- Executing code through a path that is not meant to run user code.
+- Running code through these features without the permission they require, in a
+  deployment where authentication is enabled (Opik Cloud or self-hosted Enterprise).
+
+Hardening suggestions for the `process` strategy and the default deployment are
+welcome through the same private channel; we may track them as hardening work rather
+than as vulnerabilities.
+
 ## Supported versions
 
 Opik releases frequently, and security fixes land in the next release rather than
