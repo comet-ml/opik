@@ -179,8 +179,8 @@ rows:
     model: gpt-4.1
     request: {seed: 42}
     body: {seed: 42}
-  - name: a judge does not send custom_parameters
+  - name: a judge sends custom_parameters as top-level fields
     path: judge
     model: gpt-4.1
     request: {custom_parameters: {max_completion_tokens: 300, reasoning_effort: low, service_tier: flex}}
-    # #8844 (with #8889, merged into it) sends a judge's custom_parameters here.
+    body: {max_completion_tokens: 300, reasoning_effort: low, service_tier: flex}
