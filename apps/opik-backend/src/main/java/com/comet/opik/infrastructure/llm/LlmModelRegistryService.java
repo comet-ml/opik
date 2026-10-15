@@ -30,10 +30,12 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @Singleton
@@ -42,14 +44,15 @@ public class LlmModelRegistryService {
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
     private static final TypeReference<Map<String, List<ModelEntry>>> REGISTRY_TYPE = new TypeReference<>() {
     };
-    private static final CuratedCatalog NO_CATALOG = CuratedCatalog.builder().build();
 
     private final LlmModelRegistryConfig config;
     private final Client httpClient;
+    private final CuratedCatalog catalog;
     // volatile: reload() is called from the scheduled job thread
     private volatile Map<String, List<LlmModelDefinition>> registry;
     private volatile Map<String, List<ModelEntry>> lastGoodRemote;
     private final Set<String> reportedAwaitingSyncRows = ConcurrentHashMap.newKeySet();
+    private final Set<String> reportedUnknownProfiles = ConcurrentHashMap.newKeySet();
 
     @Inject
     public LlmModelRegistryService(@NonNull @Config OpikConfiguration configuration,
@@ -61,6 +64,7 @@ public class LlmModelRegistryService {
     LlmModelRegistryService(@NonNull LlmModelRegistryConfig config, @NonNull Client httpClient) {
         this.config = config;
         this.httpClient = httpClient;
+        this.catalog = loadCuratedCatalog();
         this.registry = load();
     }
 
@@ -68,6 +72,7 @@ public class LlmModelRegistryService {
     LlmModelRegistryService(@NonNull LlmModelRegistryConfig config) {
         this.config = config;
         this.httpClient = null;
+        this.catalog = loadCuratedCatalog();
         this.registry = load();
     }
 
@@ -105,6 +110,8 @@ public class LlmModelRegistryService {
             Map<String, ModelParams> profiles,
             Map<String, List<ModelEntry>> models) {
 
+        static final CuratedCatalog EMPTY = CuratedCatalog.builder().build();
+
         CuratedCatalog {
             defaults = defaults == null ? Map.of() : defaults;
             profiles = profiles == null ? Map.of() : profiles;
@@ -119,46 +126,62 @@ public class LlmModelRegistryService {
             var folded = new LinkedHashMap<String, List<ModelEntry>>(layer.size());
             layer.forEach((provider, rows) -> folded.put(provider, rows == null
                     ? null
-                    : rows.stream()
-                            .map(row -> row == null || row.profile() == null
-                                    ? row
-                                    : row.toBuilder()
-                                            .profile(null)
-                                            .params(ModelParams.overlay(profile(row.profile(), provider, row),
-                                                    row.params()))
-                                            .build())
-                            .toList()));
+                    : rows.stream().map(this::foldProfile).toList()));
             return folded;
         }
 
-        /** Provider profile, then the reasoning profile, then the model's own profile, then its own params. */
+        ModelEntry foldProfile(ModelEntry row) {
+            if (row == null || row.profile() == null) {
+                return row;
+            }
+            return row.toBuilder()
+                    .profile(null)
+                    .params(ModelParams.overlay(profile(row.profile()), row.params()))
+                    .build();
+        }
+
+        /**
+         * Provider profile, then the reasoning profile, then the model's own params, into which
+         * {@link #foldProfiles} has already merged the model's own profile.
+         */
         ModelParams resolve(String provider, ModelEntry entry) {
             var providerDefaults = defaults.get(provider);
             ModelParams resolved = null;
             if (providerDefaults != null) {
-                resolved = profile(providerDefaults.profile(), provider, entry);
-                if (BooleanUtils.isTrue(entry.reasoning()) && providerDefaults.reasoningProfile() != null) {
-                    resolved = ModelParams.overlay(resolved,
-                            profile(providerDefaults.reasoningProfile(), provider, entry));
+                resolved = profile(providerDefaults.profile());
+                if (BooleanUtils.isTrue(entry.reasoning())) {
+                    resolved = ModelParams.overlay(resolved, profile(providerDefaults.reasoningProfile()));
                 }
-            }
-            if (entry.profile() != null) {
-                resolved = ModelParams.overlay(resolved, profile(entry.profile(), provider, entry));
             }
             resolved = ModelParams.overlay(resolved, entry.params());
             return resolved == null ? null : resolved.settled();
         }
 
-        private ModelParams profile(String name, String provider, ModelEntry entry) {
-            if (name == null) {
-                return null;
+        private ModelParams profile(String name) {
+            return name == null ? null : profiles.get(name);
+        }
+
+        // The file ships with the release, so a name it gets wrong is a bug to stop at startup, not a warning
+        // to repeat on every reload.
+        CuratedCatalog requireKnownProfiles() {
+            var named = Stream.concat(
+                    defaults.values().stream()
+                            .filter(Objects::nonNull)
+                            .flatMap(d -> Stream.of(d.profile(), d.reasoningProfile())),
+                    models.values().stream()
+                            .filter(Objects::nonNull)
+                            .flatMap(List::stream)
+                            .filter(Objects::nonNull)
+                            .map(ModelEntry::profile));
+            var unknown = named.filter(Objects::nonNull)
+                    .filter(name -> !profiles.containsKey(name))
+                    .distinct()
+                    .toList();
+            if (!unknown.isEmpty()) {
+                throw new IllegalStateException(
+                        "The curated model catalog names params profiles it doesn't define: " + unknown);
             }
-            var found = profiles.get(name);
-            if (found == null) {
-                log.warn("Unknown params profile '{}' for model '{}' of provider '{}', skipping it", name,
-                        entry.id(), provider);
-            }
-            return found;
+            return this;
         }
     }
 
@@ -221,13 +244,12 @@ public class LlmModelRegistryService {
     }
 
     private Map<String, List<LlmModelDefinition>> load() {
-        var catalog = loadCuratedCatalog();
-        var result = catalog.foldProfiles(loadClasspathResource(config.getDefaultResource()));
+        var result = fold(loadClasspathResource(config.getDefaultResource()));
 
         if (isRemoteConfigured() && httpClient != null) {
             try {
                 var remote = loadRemoteResource(config.getRemoteUrl());
-                result = merge(result, catalog.foldProfiles(remote));
+                result = merge(result, fold(remote));
                 lastGoodRemote = remote;
                 log.debug("Merged remote model registry from '{}'", config.getRemoteUrl());
             } catch (Exception e) {
@@ -237,37 +259,36 @@ public class LlmModelRegistryService {
                 } else {
                     log.warn("Failed to fetch remote model registry from '{}', keeping the last good copy",
                             config.getRemoteUrl(), e);
-                    result = merge(result, catalog.foldProfiles(lastGoodRemote));
+                    result = merge(result, fold(lastGoodRemote));
                 }
             }
         }
 
         result = applyCurated(result, catalog.foldProfiles(catalog.models()));
-        reportAwaitingSyncRowsTheSyncLists(result, catalog.models());
+        reportSyncedAwaitingRows(result, catalog.models());
 
         var overridePath = config.getLocalOverridePath();
         if (overridePath == null || overridePath.isBlank()) {
-            return toRegistry(result, catalog);
+            return toRegistry(result);
         }
 
         var path = Path.of(overridePath);
         if (!Files.exists(path)) {
             log.debug("Local override file not found at '{}', using defaults only", overridePath);
-            return toRegistry(result, catalog);
+            return toRegistry(result);
         }
 
         try {
-            var overrides = catalog.foldProfiles(loadFileResource(path));
-            return toRegistry(merge(result, overrides), catalog);
+            var overrides = fold(loadFileResource(path));
+            return toRegistry(merge(result, overrides));
         } catch (Exception e) {
             log.error("Failed to load local override registry from '{}', falling back to defaults",
                     overridePath, e);
-            return toRegistry(result, catalog);
+            return toRegistry(result);
         }
     }
 
-    private static Map<String, List<LlmModelDefinition>> toRegistry(Map<String, List<ModelEntry>> merged,
-            CuratedCatalog catalog) {
+    private Map<String, List<LlmModelDefinition>> toRegistry(Map<String, List<ModelEntry>> merged) {
         var copy = new LinkedHashMap<String, List<LlmModelDefinition>>(merged.size());
         merged.forEach((provider, models) -> copy.put(provider,
                 models.stream().map(m -> m.toDefinition(catalog.resolve(provider, m))).toList()));
@@ -278,9 +299,35 @@ public class LlmModelRegistryService {
     private CuratedCatalog loadCuratedCatalog() {
         var resourceName = config.getCuratedResource();
         if (resourceName == null || resourceName.isBlank()) {
-            return NO_CATALOG;
+            return CuratedCatalog.EMPTY;
         }
-        return readClasspathYaml(resourceName, new TypeReference<>() {
+        return readClasspathYaml(resourceName, new TypeReference<CuratedCatalog>() {
+        }).requireKnownProfiles();
+    }
+
+    private Map<String, List<ModelEntry>> fold(Map<String, List<ModelEntry>> layer) {
+        reportUnknownProfiles(layer);
+        return catalog.foldProfiles(layer);
+    }
+
+    // A generated layer or the local override is data, so a profile it names wrongly is skipped rather than
+    // failing the load, and the reload would otherwise repeat the warning every few minutes.
+    private void reportUnknownProfiles(Map<String, List<ModelEntry>> layer) {
+        layer.forEach((provider, rows) -> {
+            if (rows == null) {
+                return;
+            }
+            rows.stream()
+                    .filter(row -> row != null && row.profile() != null
+                            && !catalog.profiles().containsKey(row.profile()))
+                    .forEach(row -> {
+                        var message = "Unknown params profile '{}' for model '{}' of provider '{}', skipping it";
+                        if (reportedUnknownProfiles.add(provider + "/" + row.id() + "/" + row.profile())) {
+                            log.warn(message, row.profile(), row.id(), provider);
+                        } else {
+                            log.debug(message, row.profile(), row.id(), provider);
+                        }
+                    });
         });
     }
 
@@ -316,7 +363,7 @@ public class LlmModelRegistryService {
 
     // The registry reloads every few minutes and a release's curated file never changes, so once the CDN lists the
     // model this would otherwise repeat at INFO until the deployment upgrades.
-    private void reportAwaitingSyncRowsTheSyncLists(Map<String, List<ModelEntry>> merged,
+    private void reportSyncedAwaitingRows(Map<String, List<ModelEntry>> merged,
             Map<String, List<ModelEntry>> curated) {
         curated.forEach((provider, rows) -> {
             if (rows == null) {
