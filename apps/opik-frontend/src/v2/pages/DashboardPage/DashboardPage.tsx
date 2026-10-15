@@ -10,7 +10,7 @@ import {
   useMetricDateRangeWithQueryAndStorage,
   MetricDateRangeSelect,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
-import { DASHBOARD_TYPE } from "@/types/dashboard";
+import { DASHBOARD_SCOPE, DASHBOARD_TYPE } from "@/types/dashboard";
 import Loader from "@/shared/Loader/Loader";
 import { useDashboardLifecycle } from "@/v2/pages-shared/dashboards/hooks/useDashboardLifecycle";
 import DashboardAutoSaveIndicator from "@/v2/pages-shared/dashboards/DashboardAutoSaveIndicator/DashboardAutoSaveIndicator";
@@ -48,8 +48,10 @@ const DashboardPage: React.FunctionComponent = () => {
     setRuntimeConfig({
       dateRange: dateRangeValue,
       dashboardType: dashboard?.type,
+      dashboardId: dashboard?.id,
+      dashboardScope: DASHBOARD_SCOPE.WORKSPACE,
     });
-  }, [dateRangeValue, dashboard?.type, setRuntimeConfig]);
+  }, [dateRangeValue, dashboard?.type, dashboard?.id, setRuntimeConfig]);
 
   useEffect(() => {
     if (dashboard?.name) {

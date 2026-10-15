@@ -332,6 +332,7 @@ class LlmModelRegistryServiceTest {
     void registryJsonHasBothFlagsWhenTheYamlLeavesThemOut() {
         var config = new LlmModelRegistryConfig();
         config.setDefaultResource("llm-models-test.yaml");
+        config.setCuratedResource(null);
 
         var service = new LlmModelRegistryService(config);
 
@@ -451,6 +452,7 @@ class LlmModelRegistryServiceTest {
 
         var config = new LlmModelRegistryConfig();
         config.setDefaultResource("llm-models-test.yaml");
+        config.setCuratedResource(null);
         config.setRemoteEnabled(true);
         config.setRemoteUrl("https://cdn.example.com/models.yaml");
 
