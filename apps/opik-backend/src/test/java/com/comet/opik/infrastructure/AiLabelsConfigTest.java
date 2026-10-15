@@ -34,7 +34,8 @@ class AiLabelsConfigTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("inferenceSettings")
-    void inferenceIsRequiredOnlyWhenEnabled(String description, boolean enabled, boolean inferenceBlock, String url,
+    void inferenceBlockIsAlwaysRequiredAndItsSettingsWhenEnabled(String description, boolean enabled,
+            boolean inferenceBlock, String url,
             String credential, List<String> expectedViolations) {
         var config = new AiLabelsConfig();
         config.setEnabled(enabled);
