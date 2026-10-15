@@ -113,8 +113,14 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   const assistantAvailable = usePluginsStore((state) =>
     Boolean(state.AssistantSidebar),
   );
+  // Ollie can only build a widget in a workspace on the Custom Charts allowlist.
+  const customChartsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.CUSTOM_CHARTS_ENABLED,
+  );
   const ollieEnabled =
-    useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED) && assistantAvailable;
+    useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED) &&
+    customChartsEnabled &&
+    assistantAvailable;
   // Hands the request to Ollie, which draws it and offers "Add to <this dashboard>" on the chart.
   const handleDescribeToOllie = () => {
     onOpenChange(false);

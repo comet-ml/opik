@@ -11,6 +11,7 @@ export enum FeatureToggleKeys {
   DATASET_EXPORT_ENABLED = "dataset_export_enabled",
   DEMO_DATA_ENABLED = "demo_data_enabled",
   OLLIE_ENABLED = "ollie_enabled",
+  CUSTOM_CHARTS_ENABLED = "custom_charts_enabled",
   AGENT_INSIGHTS_ENABLED = "agent_insights_enabled",
   PROJECT_HOMEPAGE_ENABLED = "project_homepage_enabled",
   ANNOTATION_QUEUE_AUTOMATION_ENABLED = "annotation_queue_automation_enabled",
