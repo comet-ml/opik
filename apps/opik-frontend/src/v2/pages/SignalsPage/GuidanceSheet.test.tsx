@@ -3,9 +3,10 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { AGENT_INSIGHTS_JOB_STATUS, AgentInsightsJob } from "@/types/signals";
 
 const mutate = vi.fn();
+let isPending = false;
 
 vi.mock("@/api/signals/useUpdateAgentInsightsGuidanceMutation", () => ({
-  default: () => ({ mutate, isPending: false }),
+  default: () => ({ mutate, isPending }),
 }));
 
 import GuidanceSheet from "./GuidanceSheet";
@@ -41,6 +42,33 @@ describe("GuidanceSheet", () => {
   beforeEach(() => {
     mutate.mockReset();
     mutate.mockImplementation((_vars, options) => options?.onSuccess?.());
+    isPending = false;
+  });
+
+  it("doesn't start a second save while one is in flight", () => {
+    const { rerender } = renderSheet({});
+    fireEvent.change(screen.getByLabelText("About this project"), {
+      target: { value: "Only report tool failures." },
+    });
+    isPending = true;
+    rerender(
+      <GuidanceSheet
+        open
+        setOpen={vi.fn()}
+        projectId="p1"
+        job={job}
+        onRun={vi.fn()}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByLabelText("About this project"), {
+      key: "Enter",
+      metaKey: true,
+    });
+    openSaveMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Save guidance" }));
+
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it("starts from the saved guidance and says who saved it", () => {
