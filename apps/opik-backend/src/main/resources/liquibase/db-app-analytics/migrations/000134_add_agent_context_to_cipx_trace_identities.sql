@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset petrot:000133_add_agent_context_to_cipx_trace_identities
+--changeset petrot:000134_add_agent_context_to_cipx_trace_identities
 --comment: Repository skill trees and instruction-file blobs per cipx trace, for the teaches-agent metric
 
 -- Parallel arrays per group (lengths must match); scope 'repo' = committed at HEAD, 'user'/'plugin' may reuse them; version_id = git tree (skills) / blob (files) id.
