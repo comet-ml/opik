@@ -81,7 +81,7 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
                 report.issues().isEmpty() ? "all clear" : report.issues().size());
 
         // Serialized before the transaction so it holds the connection only for the writes.
-        List<String> allMetadata = report.issues().stream()
+        List<String> serializedMetadataByIssueIndex = report.issues().stream()
                 .map(issue -> issue.metadata() == null ? null : JsonUtils.writeValueAsString(issue.metadata()))
                 .toList();
 
@@ -96,30 +96,34 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
                 log.warn("Skipping '{}' reported agent insights issues that belong to another workspace or project, "
                         + "project '{}', workspace '{}'", foreignIds.size(), report.projectId(), workspaceId);
             }
-            List<Integer> kept = IntStream.range(0, report.issues().size())
+            List<Integer> keptIssueIndexes = IntStream.range(0, report.issues().size())
                     .filter(i -> report.issues().get(i).id() == null
                             || !foreignIds.contains(report.issues().get(i).id()))
                     .boxed()
                     .toList();
-            List<AgentInsightsReport.ReportedIssue> issues = kept.stream().map(report.issues()::get).toList();
+            List<AgentInsightsReport.ReportedIssue> keptIssues = keptIssueIndexes.stream()
+                    .map(report.issues()::get)
+                    .toList();
 
-            if (!issues.isEmpty()) {
-                List<UUID> issueIds = issues.stream()
+            if (!keptIssues.isEmpty()) {
+                List<UUID> issueIds = keptIssues.stream()
                         .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
                         .toList();
-                List<UUID> detailIds = issues.stream()
+                List<UUID> detailIds = keptIssues.stream()
                         .map(issue -> idGenerator.generateId())
                         .toList();
-                List<String> metadata = kept.stream().map(allMetadata::get).toList();
-                dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, issues);
+                List<String> metadata = keptIssueIndexes.stream()
+                        .map(serializedMetadataByIssueIndex::get)
+                        .toList();
+                dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, keptIssues);
                 dao.upsertDetails(workspaceId, report.projectId(), report.reportDay(), userName,
-                        detailIds, issueIds, issues, metadata);
+                        detailIds, issueIds, keptIssues, metadata);
             }
 
             handle.attach(AgentInsightsJobDAO.class)
                     .markScanned(workspaceId, report.projectId(), userName);
 
-            return issues.size();
+            return keptIssues.size();
         });
 
         AgentInsightsMetrics.REPORTS_RECEIVED.add(1);
@@ -188,9 +192,11 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
         String userName = requestContext.get().getUserName();
 
         // The note explains a "not useful" close, so it is kept only with that status; any other status clears it.
-        String closeNote = update.status() == AgentInsightsIssueStatus.CLOSED
-                ? StringUtils.trimToNull(update.closeNote())
-                : null;
+        // Closing without the field leaves the stored note alone (null while the issue was not closed); a blank
+        // note clears it.
+        boolean closing = update.status() == AgentInsightsIssueStatus.CLOSED;
+        boolean keepCloseNote = closing && update.closeNote() == null;
+        String closeNote = closing ? StringUtils.trimToNull(update.closeNote()) : null;
 
         log.info("Updating agent insights issue '{}' status to '{}' for project '{}' in workspace '{}'",
                 issueId, update.status(), update.projectId(), workspaceId);
@@ -199,7 +205,7 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
             int updated = dao.updateStatus(workspaceId, update.projectId(), issueId, update.status(), closeNote,
-                    userName);
+                    keepCloseNote, userName);
             if (updated == 0) {
                 throw new NotFoundException("Agent insights issue '%s' not found".formatted(issueId));
             }

@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset yaroslavb:000107_add_guidance_columns_to_agent_insights_jobs
+--changeset yaroslavb:000108_add_guidance_columns_to_agent_insights_jobs
 --comment: Add project guidance and its version tracking to agent_insights_jobs
 
 -- guidance is the team's free-text instruction for Ollie on this project, sent with every run. NULL = none.

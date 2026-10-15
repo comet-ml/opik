@@ -206,10 +206,15 @@ interface AgentInsightsIssueDAO {
             @Bind("from_date") LocalDate fromDate,
             @Bind("to_date") LocalDate toDate);
 
+    // The status_changed_* stamps are assigned before status, as MySQL applies single-table assignments left to
+    // right: they compare against the stored status and move only on an actual change. keep_close_note leaves the
+    // stored note alone (a PATCH without close_note on an issue that stays closed).
     @SqlUpdate("""
             UPDATE agent_insights_issues
-            SET status = :status, close_note = :close_note,
-                status_changed_by = :user_name, status_changed_at = CURRENT_TIMESTAMP(6),
+            SET status_changed_by = IF(status <=> :status, status_changed_by, :user_name),
+                status_changed_at = IF(status <=> :status, status_changed_at, CURRENT_TIMESTAMP(6)),
+                status = :status,
+                close_note = IF(:keep_close_note, close_note, :close_note),
                 last_updated_by = :user_name
             WHERE workspace_id = :workspace_id AND project_id = :project_id AND id = :id
             """)
@@ -219,6 +224,7 @@ interface AgentInsightsIssueDAO {
             @Bind("id") UUID id,
             @Bind("status") AgentInsightsIssueStatus status,
             @Bind("close_note") String closeNote,
+            @Bind("keep_close_note") boolean keepCloseNote,
             @Bind("user_name") String userName);
 
     class IssueWithDetailsRowMapper implements RowMapper<AgentInsightsIssueWithDetails> {

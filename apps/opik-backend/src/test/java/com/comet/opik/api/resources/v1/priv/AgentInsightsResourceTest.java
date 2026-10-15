@@ -77,6 +77,9 @@ class AgentInsightsResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
+    private static final String OTHER_USER_API_KEY = UUID.randomUUID().toString();
+    private static final String OTHER_USER = UUID.randomUUID().toString();
+
     private static final String OTHER_API_KEY = UUID.randomUUID().toString();
     private static final String OTHER_WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String OTHER_WORKSPACE = UUID.randomUUID().toString();
@@ -132,6 +135,8 @@ class AgentInsightsResourceTest {
         ClientSupportUtils.config(client);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), OTHER_USER_API_KEY, TEST_WORKSPACE, WORKSPACE_ID,
+                OTHER_USER);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), OTHER_API_KEY, OTHER_WORKSPACE, OTHER_WORKSPACE_ID, USER);
 
         wireMock.server().stubFor(
@@ -839,6 +844,37 @@ class AgentInsightsResourceTest {
         }
 
         @Test
+        @DisplayName("A dropped foreign issue ahead of an in-scope one does not shift metadata onto the wrong detail")
+        void getIssueWhenForeignIssueReportedFirstThenInScopeDetailKeepsItsOwnMetadata() {
+            var otherProjectId = createProject();
+            var foreignId = UUID.randomUUID();
+            var foreignName = rndName();
+            report(otherProjectId, DAY_1, List.of(reportedIssue(foreignId, foreignName, rndOccurrences(),
+                    rndTotalCount(), rndUserCount(), rndUserCount())));
+
+            var projectId = createProject();
+            var inScopeId = UUID.randomUUID();
+            var foreignMetadata = JsonUtils.getJsonNodeFromString("{\"sample_trace_ids\":[\"foreign\"]}");
+            var inScopeMetadata = JsonUtils.getJsonNodeFromString("{\"sample_trace_ids\":[\"in-scope\"]}");
+            report(projectId, DAY_2, List.of(
+                    reportedIssue(foreignId, foreignName, rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount()).toBuilder().metadata(foreignMetadata).build(),
+                    reportedIssue(inScopeId, rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount()).toBuilder().metadata(inScopeMetadata).build()));
+
+            var inScope = agentInsightsResourceClient.getIssue(inScopeId, projectId, DAY_1, DAY_2, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(inScope.details()).hasSize(1);
+            assertThat(inScope.details().getFirst().metadata()).isEqualTo(inScopeMetadata);
+
+            var foreign = agentInsightsResourceClient.getIssue(foreignId, otherProjectId, DAY_1, DAY_2, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(foreign.details())
+                    .extracting(detail -> detail.reportDay())
+                    .containsExactly(DAY_1);
+        }
+
+        @Test
         @DisplayName("Omitting dates returns all available details")
         void getIssueByIdWhenNoDatesProvidedThenAllDetailsReturned() {
             var projectId = createProject();
@@ -994,11 +1030,22 @@ class AgentInsightsResourceTest {
                     .comparingOnlyFields("status", "closeNote", "statusChangedBy", "statusChangedAt")
                     .isEqualTo(listed);
 
-            // Closing again without a note replaces the previous one.
+            // Closing again without the field leaves the note and the status stamp alone, as a PATCH should.
             agentInsightsResourceClient.updateStatus(issueId, update.toBuilder().closeNote(null).build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+                    OTHER_USER_API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
             assertThat(agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
-                    TEST_WORKSPACE, HttpStatus.SC_OK).closeNote()).isNull();
+                    TEST_WORKSPACE, HttpStatus.SC_OK))
+                    .usingRecursiveComparison()
+                    .comparingOnlyFields("status", "closeNote", "statusChangedBy", "statusChangedAt")
+                    .isEqualTo(closed);
+
+            // A blank note clears it, still without re-stamping the unchanged status.
+            agentInsightsResourceClient.updateStatus(issueId, update.toBuilder().closeNote("  ").build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+            var cleared = agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(cleared.closeNote()).isNull();
+            assertThat(cleared.statusChangedAt()).isEqualTo(closed.statusChangedAt());
             agentInsightsResourceClient.updateStatus(issueId, update, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NO_CONTENT);
 

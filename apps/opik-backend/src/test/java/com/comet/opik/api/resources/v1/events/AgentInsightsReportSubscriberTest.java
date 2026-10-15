@@ -5,6 +5,7 @@ import com.comet.opik.domain.AgentInsightsJobService;
 import com.comet.opik.domain.AgentInsightsMetrics;
 import com.comet.opik.domain.AgentInsightsReportClient;
 import com.comet.opik.domain.AgentInsightsReportMessage;
+import com.comet.opik.domain.AgentInsightsRunGuidanceService;
 import com.comet.opik.domain.AgentInsightsTriggerException;
 import com.comet.opik.infrastructure.AgentInsightsReportConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
@@ -53,12 +54,15 @@ class AgentInsightsReportSubscriberTest {
     private AgentInsightsReportClient reportClient;
     @Mock
     private AgentInsightsJobService jobService;
+    @Mock
+    private AgentInsightsRunGuidanceService runGuidanceService;
 
     private AgentInsightsReportSubscriber subscriber;
 
     @BeforeEach
     void setUp() {
-        subscriber = new AgentInsightsReportSubscriber(config, serviceToggles, redisson, reportClient, jobService);
+        subscriber = new AgentInsightsReportSubscriber(config, serviceToggles, redisson, reportClient, jobService,
+                runGuidanceService);
     }
 
     private static AgentInsightsReportMessage message() {
@@ -145,6 +149,7 @@ class AgentInsightsReportSubscriberTest {
         StepVerifier.create(subscriber.processEvent(message)).verifyComplete();
 
         verify(reportClient).triggerAgentInsights(expectedTrigger(message, "Only report billing failures"));
+        verify(runGuidanceService, never()).markEnqueued(any(), any(), any());
     }
 
     @Test
@@ -156,6 +161,18 @@ class AgentInsightsReportSubscriberTest {
         StepVerifier.create(subscriber.processEvent(message)).verifyComplete();
 
         verify(reportClient).triggerAgentInsights(expectedTrigger(message, null));
+        // The run was stamped with version 3 at enqueue; it must not claim results produced under that guidance.
+        verify(runGuidanceService).markEnqueued(WORKSPACE_ID, PROJECT_ID, null);
+    }
+
+    @Test
+    @DisplayName("Guidance off and the run carried no version: the stamp is left alone")
+    void processEvent__guidanceOffNoVersion__leavesStampAlone() {
+        when(serviceToggles.isAgentInsightsGuidanceActive()).thenReturn(false);
+
+        StepVerifier.create(subscriber.processEvent(message())).verifyComplete();
+
+        verify(runGuidanceService, never()).markEnqueued(any(), any(), any());
     }
 
     private static AgentInsightsReportClient.Trigger expectedTrigger(AgentInsightsReportMessage message,

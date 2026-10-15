@@ -5,6 +5,7 @@ import com.comet.opik.domain.AgentInsightsJobService;
 import com.comet.opik.domain.AgentInsightsMetrics;
 import com.comet.opik.domain.AgentInsightsReportClient;
 import com.comet.opik.domain.AgentInsightsReportMessage;
+import com.comet.opik.domain.AgentInsightsRunGuidanceService;
 import com.comet.opik.domain.AgentInsightsTriggerException;
 import com.comet.opik.infrastructure.AgentInsightsReportConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
@@ -33,6 +34,7 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
     private final ServiceTogglesConfig serviceToggles;
     private final AgentInsightsReportClient reportClient;
     private final AgentInsightsJobService jobService;
+    private final AgentInsightsRunGuidanceService runGuidanceService;
 
     @Inject
     public AgentInsightsReportSubscriber(
@@ -40,12 +42,14 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
             @NonNull RedissonReactiveClient redisson,
             @NonNull AgentInsightsReportClient reportClient,
-            @NonNull AgentInsightsJobService jobService) {
+            @NonNull AgentInsightsJobService jobService,
+            @NonNull AgentInsightsRunGuidanceService runGuidanceService) {
         super(config, redisson, AgentInsightsReportConfig.PAYLOAD_FIELD, METRICS_NAMESPACE, METRICS_BASE_NAME);
         this.config = config;
         this.serviceToggles = serviceToggles;
         this.reportClient = reportClient;
         this.jobService = jobService;
+        this.runGuidanceService = runGuidanceService;
     }
 
     @Override
@@ -80,7 +84,11 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
                 : AgentInsightsMetrics.SCHEDULED;
 
         // Re-checked here so turning guidance off also drops it from runs already queued.
-        String guidance = serviceToggles.isAgentInsightsGuidanceActive() ? message.guidance() : null;
+        boolean guidanceActive = serviceToggles.isAgentInsightsGuidanceActive();
+        String guidance = guidanceActive ? message.guidance() : null;
+        if (!guidanceActive && message.guidanceVersion() != null) {
+            clearRunGuidanceVersion(message);
+        }
         var trigger = AgentInsightsReportClient.Trigger.builder()
                 .reportId(message.reportId())
                 .projectId(message.projectId())
@@ -115,6 +123,20 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
                     markRunFailed(message, throwable);
                     return Mono.empty();
                 });
+    }
+
+    /**
+     * The publisher stamped the run with the guidance version it was queued with. The run now goes out without that
+     * guidance, so clear the stamp, otherwise the report would record results produced under guidance it never got.
+     * Best-effort, like the stamp itself: a miss only leaves the "guidance changed" callout less precise.
+     */
+    private void clearRunGuidanceVersion(AgentInsightsReportMessage message) {
+        try {
+            runGuidanceService.markEnqueued(message.workspaceId(), message.projectId(), null);
+        } catch (RuntimeException e) {
+            log.warn("Failed to clear the guidance version of a queued Agent Insights run, reportId='{}', "
+                    + "project='{}'", message.reportId(), message.projectId(), e);
+        }
     }
 
     private void markRunFailed(AgentInsightsReportMessage message, Throwable throwable) {

@@ -139,6 +139,7 @@ interface AgentInsightsJobDAO {
     @SqlUpdate("""
             UPDATE agent_insights_jobs SET run_guidance_version = :guidanceVersion, last_updated_at = last_updated_at
             WHERE workspace_id = :workspaceId AND project_id = :projectId
+                AND NOT (run_guidance_version <=> :guidanceVersion)
             """)
     void markRunGuidanceVersion(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
