@@ -1,0 +1,28 @@
+{
+  "name": "support-agent",
+  "input": {
+    "question": "Où est mon remboursement?"
+  },
+  "output": {
+    "answer": "Refund issued — Monday"
+  },
+  "metadata": {
+    "model": "gpt-4o",
+    "temperature": 0.2
+  },
+  "start_time": "2026-10-15T12:00:00.123456Z",
+  "end_time": "2026-10-15T12:00:01.5Z",
+  "duration": 1376.544,
+  "error_info": null,
+  "spans": [
+    {
+      "name": "lookup",
+      "type": "tool",
+      "input": {
+        "order": 42
+      },
+      "output": "found",
+      "spans": []
+    }
+  ]
+}
