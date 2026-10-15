@@ -177,11 +177,13 @@ class AiLabelRendererClickHouseTest {
         // An open trace with outsized fields, which the reads swap for a marker of their size.
         var outsized = fixtures.trace(30).toBuilder()
                 .input("{\"blob\":\"" + "x".repeat((int) MAX_FIELD_BYTES) + "\"}")
+                .errorInfo("{\"message\":\"" + "e".repeat((int) MAX_FIELD_BYTES) + "\"}")
                 .endTime(null)
                 .build();
         var outsizedSpans = new ArrayList<>(fixtures.spans(outsized, 3, 2, 20));
         outsizedSpans.set(1, outsizedSpans.get(1).toBuilder()
                 .output("\"" + fixtures.text((int) MAX_FIELD_BYTES) + "\"")
+                .errorInfo("{\"message\":\"" + "e".repeat((int) MAX_FIELD_BYTES) + "\"}")
                 .build());
         addTrace(outsized, outsizedSpans);
 
@@ -271,12 +273,14 @@ class AiLabelRendererClickHouseTest {
                         .input(guard(span.input()))
                         .output(guard(span.output()))
                         .metadata(guard(span.metadata()))
+                        .errorInfo(guard(span.errorInfo()))
                         .build())
                 .toList();
         var guardedTrace = trace.toBuilder()
                 .input(guard(trace.input()))
                 .output(guard(trace.output()))
                 .metadata(guard(trace.metadata()))
+                .errorInfo(guard(trace.errorInfo()))
                 .build();
         return canonical(AiLabelRenderer.render(new TraceRef(trace.projectId(), trace.id(), trace.startTime()),
                 guardedTrace, read, BUDGET));

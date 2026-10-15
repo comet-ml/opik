@@ -42,7 +42,7 @@ class AiLabelRenderDAO {
 
     private static final String FIND_TRACES = """
             SELECT id, project_id, name, guarded_input AS input, guarded_output AS output,
-                guarded_metadata AS metadata, start_time, end_time, error_info
+                guarded_metadata AS metadata, start_time, end_time, guarded_error_info AS error_info
             FROM (
                 SELECT
                     id,
@@ -56,7 +56,8 @@ class AiLabelRenderDAO {
                         concat('"[', toString(length(metadata)), ' bytes omitted]"'), metadata) AS guarded_metadata,
                     start_time,
                     end_time,
-                    error_info,
+                    if(length(error_info) > :max_field_bytes,
+                        concat('"[', toString(length(error_info)), ' bytes omitted]"'), error_info) AS guarded_error_info,
                     is_deleted
                 FROM traces
                 WHERE workspace_id = :workspace_id
@@ -75,7 +76,7 @@ class AiLabelRenderDAO {
      */
     private static final String FIND_SPANS = """
             SELECT trace_id, id, parent_span_id, name, type, guarded_input AS input, guarded_output AS output,
-                guarded_metadata AS metadata, start_time, end_time, model, provider, error_info
+                guarded_metadata AS metadata, start_time, end_time, model, provider, guarded_error_info AS error_info
             FROM (
                 SELECT
                     trace_id,
@@ -93,7 +94,8 @@ class AiLabelRenderDAO {
                     end_time,
                     model,
                     provider,
-                    error_info
+                    if(length(error_info) > :max_field_bytes,
+                        concat('"[', toString(length(error_info)), ' bytes omitted]"'), error_info) AS guarded_error_info
                     <if(spans_v2)>, is_deleted<endif>
                 FROM spans
                 WHERE workspace_id = :workspace_id
