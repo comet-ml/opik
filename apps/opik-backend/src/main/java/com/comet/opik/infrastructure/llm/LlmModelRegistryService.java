@@ -249,12 +249,12 @@ public class LlmModelRegistryService {
     }
 
     private Map<String, List<LlmModelDefinition>> load() {
-        var result = fold(loadClasspathResource(config.getDefaultResource()));
+        var result = foldLayerProfiles(loadClasspathResource(config.getDefaultResource()));
 
         if (isRemoteConfigured() && httpClient != null) {
             try {
                 var remote = loadRemoteResource(config.getRemoteUrl());
-                result = merge(result, fold(remote));
+                result = merge(result, foldLayerProfiles(remote));
                 lastGoodRemote = remote;
                 log.debug("Merged remote model registry from '{}'", config.getRemoteUrl());
             } catch (Exception e) {
@@ -264,7 +264,7 @@ public class LlmModelRegistryService {
                 } else {
                     log.warn("Failed to fetch remote model registry from '{}', keeping the last good copy",
                             config.getRemoteUrl(), e);
-                    result = merge(result, fold(lastGoodRemote));
+                    result = merge(result, foldLayerProfiles(lastGoodRemote));
                 }
             }
         }
@@ -284,7 +284,7 @@ public class LlmModelRegistryService {
         }
 
         try {
-            var overrides = fold(loadFileResource(path));
+            var overrides = foldLayerProfiles(loadFileResource(path));
             return toRegistry(merge(result, overrides));
         } catch (Exception e) {
             log.error("Failed to load local override registry from '{}', falling back to defaults",
@@ -345,7 +345,7 @@ public class LlmModelRegistryService {
         }).requireKnownProfiles();
     }
 
-    private Map<String, List<ModelEntry>> fold(Map<String, List<ModelEntry>> layer) {
+    private Map<String, List<ModelEntry>> foldLayerProfiles(Map<String, List<ModelEntry>> layer) {
         reportUnknownProfiles(layer);
         return catalog.foldProfiles(layer);
     }
