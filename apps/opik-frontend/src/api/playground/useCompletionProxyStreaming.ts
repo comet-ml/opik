@@ -253,15 +253,15 @@ const useCompletionProxyStreaming = ({
         };
 
         const handleLine = (line: string) => {
-          const JSONData = line.startsWith(DATA_PREFIX)
+          const jsonData = line.startsWith(DATA_PREFIX)
             ? line.split(DATA_PREFIX)[1]
             : line;
 
-          if (JSONData.trim() === "[DONE]") {
+          if (jsonData.trim() === "[DONE]") {
             return;
           }
 
-          const parsed = safelyParseJSON(JSONData) as ChatCompletionResponse;
+          const parsed = safelyParseJSON(jsonData) as ChatCompletionResponse;
 
           // handle different message types
           if (isPythonProxyError(parsed)) {

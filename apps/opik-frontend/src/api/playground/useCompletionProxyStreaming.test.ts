@@ -499,7 +499,7 @@ describe("the error status a failed run reports", () => {
     expect(run.opikError).toBe(message);
   });
 
-  it("keeps the last chunk of a stream that ends without a newline", async () => {
+  it("reads the last line of a stream that ends without a newline", async () => {
     const run = await runAgainst(
       new Response(
         `data: ${JSON.stringify({
