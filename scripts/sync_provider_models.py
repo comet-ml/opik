@@ -1170,7 +1170,7 @@ def _profile_max_output_defaults(catalog: dict) -> dict[str, int]:
     for yaml_key, provider_defaults in (catalog.get("defaults") or {}).items():
         profile = profiles.get((provider_defaults or {}).get("profile")) or {}
         value = (profile.get("maxOutputTokens") or {}).get("default")
-        if isinstance(value, int):
+        if isinstance(value, int) and not isinstance(value, bool):
             defaults[yaml_key] = value
     return defaults
 
@@ -1219,7 +1219,8 @@ def params_changes(
     """Per YAML section: (models that gain params, models whose params change, models that lose them)."""
     previous = _yaml_params_lines(existing_yaml_content)
     changes = {}
-    for yaml_key in sorted(params_lines.keys() | previous.keys()):
+    managed = set(_PROVIDER_TO_YAML_KEY.values())
+    for yaml_key in sorted((params_lines.keys() | previous.keys()) & managed):
         if yaml_key in kept_yaml_keys:
             continue
         before = previous.get(yaml_key, {})
