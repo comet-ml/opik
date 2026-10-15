@@ -64,7 +64,7 @@ class TestHeuristicSelector:
     def test_context_present__capable_model__returns_agentic(self):
         sel = strategy_selector.HeuristicSelector()
         ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})
-        for model in ("gpt-5", "gpt-4o", "gpt-4o-mini", "claude-opus-4-7"):
+        for model in ("gpt-5", "gpt-4o", "gpt-4o-mini", "claude-opus-4-6"):
             assert (
                 sel.select(trace_tool_context=ctx, model_name=model, assertions=[])
                 is strategy_selector.ScoringToolStrategy.AGENTIC
@@ -136,6 +136,19 @@ class TestCapabilityLookup:
         cap = strategy_selector._capability_for("someprovider/totally-unknown-model")
         assert cap is model_capabilities.DEFAULT_CAPABILITY
 
+    def test_bedrock_name__resolves_same_as_bare(self):
+        # LiteLLM Bedrock ids keep a geo/vendor prefix after the provider.
+        for bedrock_name, bare in (
+            ("bedrock/us.anthropic.claude-sonnet-4-6", "claude-sonnet-4-6"),
+            ("bedrock/global.anthropic.claude-opus-5", "claude-opus-5"),
+            (
+                "bedrock/converse/us.anthropic.claude-haiku-4-5-20251001-v1:0",
+                "claude-haiku-4-5",
+            ),
+        ):
+            cap = strategy_selector._capability_for(bedrock_name)
+            assert cap is strategy_selector._capability_for(bare), bedrock_name
+
     def test_fifth_generation_models__are_registered(self):
         for model_name in ("claude-opus-5", "claude-sonnet-5"):
             cap = strategy_selector._capability_for(model_name)
@@ -150,11 +163,11 @@ class TestCapabilityLookup:
             assert cap.context_window == 1_000_000, model_name
 
     def test_sampling_rejecting_models__stay_out_of_agentic_auto(self):
-        # `agentic/loop.py` sends temperature=0 on every turn. Anthropic
-        # returns 400 for a non-default temperature from Opus 4.7 onward,
-        # so routing these models into the agentic loop under `auto` would
-        # fail the first request instead of scoring.
-        for model_name in ("claude-opus-5", "claude-sonnet-5"):
+        # `agentic/loop.py` sends temperature=0 on every turn, and Opus 4.7
+        # onward rejects a non-default temperature, so routing these models
+        # into the agentic loop under `auto` would fail the first request
+        # instead of scoring.
+        for model_name in ("claude-opus-4-7", "claude-opus-5", "claude-sonnet-5"):
             cap = strategy_selector._capability_for(model_name)
             assert cap.agentic_in_auto is False, model_name
 

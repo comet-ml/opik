@@ -84,7 +84,8 @@ def _capability_for(
     )
     candidates = [model_name]
     if "/" in model_name:
-        candidates.append(model_name.rsplit("/", 1)[1])
+        # Bedrock keeps a geo/vendor prefix: "bedrock/us.anthropic.claude-sonnet-4-6".
+        candidates.append(model_name.rsplit("/", 1)[1].rpartition("anthropic.")[2])
 
     best: Optional[capabilities_registry.ModelCapability] = None
     best_len = -1
