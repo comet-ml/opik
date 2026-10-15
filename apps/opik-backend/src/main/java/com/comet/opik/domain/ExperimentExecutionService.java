@@ -20,6 +20,7 @@ import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
@@ -64,6 +65,7 @@ public class ExperimentExecutionService {
     private final TestSuiteEvaluatorMapper testSuiteEvaluatorMapper;
     private final ExperimentExecutionConfig experimentExecutionConfig;
     private final PromptService promptService;
+    private final FeatureFlags featureFlags;
 
     @Inject
     public ExperimentExecutionService(
@@ -76,7 +78,8 @@ public class ExperimentExecutionService {
             @NonNull IdGenerator idGenerator,
             @NonNull TestSuiteEvaluatorMapper testSuiteEvaluatorMapper,
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig experimentExecutionConfig,
-            @NonNull PromptService promptService) {
+            @NonNull PromptService promptService,
+            @NonNull FeatureFlags featureFlags) {
         this.experimentService = experimentService;
         this.cancellationService = cancellationService;
         this.datasetService = datasetService;
@@ -87,6 +90,7 @@ public class ExperimentExecutionService {
         this.testSuiteEvaluatorMapper = testSuiteEvaluatorMapper;
         this.experimentExecutionConfig = experimentExecutionConfig;
         this.promptService = promptService;
+        this.featureFlags = featureFlags;
     }
 
     /**
@@ -401,7 +405,8 @@ public class ExperimentExecutionService {
             return new RunSource(version.executionPolicy(), versionHash);
         }
         return datasetVersionService.getLatestVersion(datasetId, workspaceId)
-                .map(version -> new RunSource(version.executionPolicy(), version.versionHash()))
+                .map(version -> new RunSource(version.executionPolicy(),
+                        featureFlags.isDatasetVersioningEnabled() ? version.versionHash() : null))
                 .orElseGet(() -> new RunSource(null, null));
     }
 

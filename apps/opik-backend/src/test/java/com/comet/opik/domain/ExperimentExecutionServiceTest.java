@@ -20,6 +20,7 @@ import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -81,6 +82,9 @@ class ExperimentExecutionServiceTest {
     private DatasetVersionService datasetVersionService;
 
     @Mock
+    private FeatureFlags featureFlags;
+
+    @Mock
     private ExperimentItemPublisher itemPublisher;
 
     @Mock
@@ -98,8 +102,10 @@ class ExperimentExecutionServiceTest {
         service = new ExperimentExecutionService(
                 experimentService, cancellationService, datasetService, datasetItemService,
                 datasetVersionService,
-                itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig(), promptService);
+                itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig(), promptService,
+                featureFlags);
 
+        lenient().when(featureFlags.isDatasetVersioningEnabled()).thenReturn(true);
         lenient().when(itemPublisher.publish(any(), any(), anyBoolean())).thenReturn(Mono.empty());
         // An empty queue, so only the tests that fill it see the run refused.
         lenient().when(itemPublisher.queuedMessageCount()).thenReturn(Mono.just(0L));
@@ -705,7 +711,7 @@ class ExperimentExecutionServiceTest {
             service = new ExperimentExecutionService(
                     experimentService, cancellationService, datasetService, datasetItemService,
                     datasetVersionService, itemPublisher, idGenerator,
-                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService);
+                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags);
 
             stubDatasetItems(IntStream.range(0, 501)
                     .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
@@ -759,7 +765,7 @@ class ExperimentExecutionServiceTest {
             service = new ExperimentExecutionService(
                     experimentService, cancellationService, datasetService, datasetItemService,
                     datasetVersionService, itemPublisher, idGenerator,
-                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService);
+                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags);
 
             stubDatasetItems(IntStream.range(0, 400)
                     .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
@@ -790,7 +796,7 @@ class ExperimentExecutionServiceTest {
             service = new ExperimentExecutionService(
                     experimentService, cancellationService, datasetService, datasetItemService,
                     datasetVersionService, itemPublisher, idGenerator,
-                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService);
+                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags);
 
             stubDatasetItems(IntStream.range(0, 300)
                     .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
@@ -1360,6 +1366,36 @@ class ExperimentExecutionServiceTest {
             assertThat(captor.getAllValues())
                     .allSatisfy(streamed -> assertThat(streamed.datasetVersion()).isEqualTo("pinned-hash"));
             verify(datasetVersionService, never()).getLatestVersion(any(UUID.class), any());
+        }
+
+        // Reading items by hash goes to the versioned table ahead of the flag the rest of that read
+        // honours. Where versioning is off the writes land in the legacy table, so pinning would run
+        // the dataset against a snapshot instead of its data.
+        @Test
+        void createAndExecuteStreamsLiveWhenVersioningIsOff() {
+            var datasetId = UUID.randomUUID();
+            when(featureFlags.isDatasetVersioningEnabled()).thenReturn(false);
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(datasetVersionService.getLatestVersion(datasetId, WORKSPACE_ID))
+                    .thenReturn(Optional.of(DatasetVersion.builder()
+                            .versionHash("a-stale-snapshot")
+                            .executionPolicy(new ExecutionPolicy(3, 1))
+                            .build()));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(datasetId)
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build());
+
+            var captor = ArgumentCaptor.forClass(DatasetItemStreamRequest.class);
+            verify(datasetItemService, atLeastOnce()).getItems(captor.capture(), any());
+            assertThat(captor.getAllValues())
+                    .as("the items must come from the legacy read, not the version")
+                    .allSatisfy(streamed -> assertThat(streamed.datasetVersion()).isNull());
         }
 
         // A dataset with no versions at all has nothing to pin to, and streams live as it always did.
