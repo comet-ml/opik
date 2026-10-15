@@ -82,7 +82,7 @@ interface AgentInsightsJobDAO {
 
     // Stamped when the automatic run is enqueued, so the sweep stops picking the project up and the page
     // can tell that run from a finished one. Manual runs do not set it.
-    // Re-checks what the candidate was selected by (see findAwaitingFirstRun), since it can change mid-sweep: the
+    // Re-checks the conditions findAwaitingFirstRun selected the candidate by, since they can change mid-sweep: the
     // rollout can be cancelled, or a reaped run can report back. Returns 0 then, and the caller skips the trigger.
     @SqlUpdate("""
             UPDATE agent_insights_jobs j
@@ -92,11 +92,13 @@ interface AgentInsightsJobDAO {
                 AND NOT EXISTS (
                     SELECT 1 FROM report_failures f
                     WHERE f.workspace_id = j.workspace_id AND f.project_id = j.project_id
-                        AND f.type = 'agent_insights' AND f.reason = 'timed_out' AND f.created_at < j.last_scan_at
+                        AND f.type = :type AND f.reason = :timedOutReason AND f.created_at < j.last_scan_at
                 )
             """)
     int markAutoFirstRun(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
+            @Bind("type") String type,
+            @Bind("timedOutReason") String timedOutReason,
             @Bind("userName") String userName);
 
     @SqlUpdate("""
@@ -134,18 +136,20 @@ interface AgentInsightsJobDAO {
                 AND NOT EXISTS (
                     SELECT 1 FROM report_failures f
                     WHERE f.workspace_id = j.workspace_id AND f.project_id = j.project_id
-                        AND f.type = 'agent_insights' AND f.reason = 'timed_out' AND f.created_at < j.last_scan_at
+                        AND f.type = :type AND f.reason = :timedOutReason AND f.created_at < j.last_scan_at
                 )
             ORDER BY j.id
             """)
     @RegisterConstructorMapper(EnabledJob.class)
-    List<EnabledJob> findAwaitingFirstRun();
+    List<EnabledJob> findAwaitingFirstRun(@Bind("type") String type, @Bind("timedOutReason") String timedOutReason);
 
     @SqlQuery("SELECT id FROM projects WHERE id IN (<projectIds>)")
     Set<UUID> findExistingProjectIds(@BindList("projectIds") Collection<UUID> projectIds);
 
-    // The job rows of the given projects, resolved through the projects primary key so callers can address each row
-    // by its (workspace_id, project_id) unique key rather than scanning on project_id.
+    // Internal, cross-workspace: only the internal enrolment endpoint calls it, with project ids an operator sent, so
+    // it is deliberately not scoped to a workspace. Returns the job rows of the given projects, resolved through the
+    // projects primary key so callers can address each row by its (workspace_id, project_id) unique key rather than
+    // scanning on project_id.
     @SqlQuery("""
             SELECT j.id, j.workspace_id, j.project_id
             FROM projects p
@@ -199,12 +203,13 @@ interface AgentInsightsJobDAO {
                     OR EXISTS (
                         SELECT 1 FROM report_failures f
                         WHERE f.workspace_id = j.workspace_id AND f.project_id = j.project_id
-                            AND f.type = 'agent_insights' AND f.created_at >= j.auto_first_run_at
+                            AND f.type = :type AND f.created_at >= j.auto_first_run_at
                     ))
             """)
     int clearUnfinishedAutoFirstRunClaim(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
             @Bind("timeoutSeconds") long timeoutSeconds,
+            @Bind("type") String type,
             @Bind("userName") String userName);
 
     // Cross-workspace — used only by the auto-first-run sweep. Automatic runs that died without reporting:
@@ -223,11 +228,11 @@ interface AgentInsightsJobDAO {
                 AND NOT EXISTS (
                     SELECT 1 FROM report_failures f
                     WHERE f.workspace_id = j.workspace_id AND f.project_id = j.project_id
-                        AND f.type = 'agent_insights' AND f.created_at >= j.auto_first_run_at
+                        AND f.type = :type AND f.created_at >= j.auto_first_run_at
                 )
             """)
     @RegisterConstructorMapper(EnabledJob.class)
-    List<EnabledJob> findTimedOutAutoFirstRuns(@Bind("timeoutSeconds") long timeoutSeconds);
+    List<EnabledJob> findTimedOutAutoFirstRuns(@Bind("timeoutSeconds") long timeoutSeconds, @Bind("type") String type);
 
     // Reaps one candidate of findTimedOutAutoFirstRuns, re-checking that it is still enrolled and timed out in the
     // same statement: a scan or failure that landed after the candidates were read means the run did not die, and a
@@ -244,13 +249,14 @@ interface AgentInsightsJobDAO {
                 AND NOT EXISTS (
                     SELECT 1 FROM report_failures f
                     WHERE f.workspace_id = j.workspace_id AND f.project_id = j.project_id
-                        AND f.type = 'agent_insights' AND f.created_at >= j.auto_first_run_at
+                        AND f.type = :type AND f.created_at >= j.auto_first_run_at
                 )
             """)
     int reapTimedOutAutoFirstRun(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
             @Bind("timeoutSeconds") long timeoutSeconds,
             @Bind("clearClaim") boolean clearClaim,
+            @Bind("type") String type,
             @Bind("userName") String userName);
 
     // A run rejected before it started: clears its enqueue stamp, which would otherwise read as a run in flight

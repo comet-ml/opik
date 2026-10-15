@@ -144,6 +144,7 @@ public class AgentInsightsJobService {
             @NonNull Instant periodEnd) {
         int stamped = transactionTemplate.inTransaction(WRITE,
                 handle -> handle.attach(AgentInsightsJobDAO.class).markAutoFirstRun(workspaceId, projectId,
+                        ReportFailureDAO.AGENT_INSIGHTS_TYPE, AgentInsightsJob.FailureReason.TIMED_OUT,
                         RequestContext.SYSTEM_USER));
         if (stamped == 0) {
             log.info("Skipping auto first Agent Insights run for project '{}': no longer awaiting one", projectId);
@@ -212,7 +213,7 @@ public class AgentInsightsJobService {
     public void reapTimedOutAutoFirstRuns(@NonNull Duration runTimeout, int maxRetries) {
         List<EnabledJob> timedOut = transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(AgentInsightsJobDAO.class)
-                        .findTimedOutAutoFirstRuns(runTimeout.toSeconds()));
+                        .findTimedOutAutoFirstRuns(runTimeout.toSeconds(), ReportFailureDAO.AGENT_INSIGHTS_TYPE));
         for (var job : timedOut) {
             try {
                 reapTimedOutAutoFirstRun(job, runTimeout, maxRetries);
@@ -232,7 +233,8 @@ public class AgentInsightsJobService {
                     job.projectId(), AgentInsightsJob.FailureReason.TIMED_OUT);
             boolean retry = earlier < maxRetries;
             if (handle.attach(AgentInsightsJobDAO.class).reapTimedOutAutoFirstRun(job.workspaceId(),
-                    job.projectId(), runTimeout.toSeconds(), retry, RequestContext.SYSTEM_USER) == 0) {
+                    job.projectId(), runTimeout.toSeconds(), retry, ReportFailureDAO.AGENT_INSIGHTS_TYPE,
+                    RequestContext.SYSTEM_USER) == 0) {
                 return null;
             }
             failures.insert(idGenerator.generateId(), job.workspaceId(),
@@ -309,7 +311,7 @@ public class AgentInsightsJobService {
             UnenrolOutcome outcome = transactionTemplate.inTransaction(WRITE, handle -> {
                 var dao = handle.attach(AgentInsightsJobDAO.class);
                 boolean wasReset = dao.clearUnfinishedAutoFirstRunClaim(job.workspaceId(), job.projectId(),
-                        runTimeoutSeconds, RequestContext.SYSTEM_USER) > 0;
+                        runTimeoutSeconds, ReportFailureDAO.AGENT_INSIGHTS_TYPE, RequestContext.SYSTEM_USER) > 0;
                 boolean wasCleared = dao.clearEnrolment(job.workspaceId(), job.projectId(),
                         RequestContext.SYSTEM_USER) > 0;
                 return UnenrolOutcome.builder().reset(wasReset).cleared(wasCleared).build();
@@ -350,7 +352,8 @@ public class AgentInsightsJobService {
     // run has not been enqueued yet.
     public List<EnabledJob> findAwaitingFirstRun() {
         return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(AgentInsightsJobDAO.class).findAwaitingFirstRun());
+                handle -> handle.attach(AgentInsightsJobDAO.class).findAwaitingFirstRun(
+                        ReportFailureDAO.AGENT_INSIGHTS_TYPE, AgentInsightsJob.FailureReason.TIMED_OUT));
     }
 
     // Cross-workspace; used by the daily sweep (OPIK-6853), never from a request thread. The DAO's JOIN
