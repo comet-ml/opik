@@ -114,7 +114,7 @@ public class AiLabelsConfig {
     @JsonIgnore
     @AssertTrue(message = "aiLabels.inference.url (AI_LABELS_INFERENCE_URL) and aiLabels.inference.credential (AI_LABELS_INFERENCE_CREDENTIAL) must be set when aiLabels.enabled (AI_LABELS_ENABLED) is true")
     public boolean isInferenceConfigured() {
-        return !enabled || (StringUtils.isNotBlank(inference.getUrl())
+        return !enabled || (inference != null && StringUtils.isNotBlank(inference.getUrl())
                 && StringUtils.isNotBlank(inference.getCredential()));
     }
 
@@ -158,6 +158,7 @@ public class AiLabelsConfig {
         /** D: the wait before a retryable failure is picked up again. */
         @NotNull @JsonProperty
         @MinDuration(value = 0, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 1, unit = TimeUnit.DAYS)
         private Duration delay = Duration.minutes(15);
     }
 
