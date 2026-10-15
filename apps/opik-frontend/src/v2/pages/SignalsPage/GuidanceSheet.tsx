@@ -88,7 +88,9 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
     if (!isConfirmOpen && !isPending) window.setTimeout(requestClose);
   };
 
-  const save = (andRun: boolean) =>
+  // One save at a time: a second one would land after the first and drop its run.
+  const save = (andRun: boolean) => {
+    if (isPending) return;
     mutate(
       { projectId, guidance },
       {
@@ -98,12 +100,13 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
         },
       },
     );
+  };
 
   // Cmd/Ctrl+Enter does what the primary button does, like the other forms with a text area.
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
     event.preventDefault();
-    if (isDirty && !isPending) save(Boolean(onRun));
+    if (isDirty) save(Boolean(onRun));
   };
 
   return (
@@ -191,6 +194,7 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
               >
                 <ButtonWithDropdownItem
                   className="h-6 p-1"
+                  disabled={isPending}
                   onSelect={() => save(false)}
                 >
                   Save guidance
