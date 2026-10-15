@@ -48,7 +48,9 @@ public class AiLabelTaskLoader {
             .registerModule(new JavaTimeModule())
             .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
             // A repeated key would otherwise silently replace the first, e.g. a question or a version.
-            .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
+            .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+            // One task per file: a second YAML document would otherwise be ignored.
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
     /** The tasks in {@code tasksDir} when it is set, otherwise the ones bundled on the classpath. */
     public static List<AiLabelTask> load(@NonNull AiLabelsConfig config) {
