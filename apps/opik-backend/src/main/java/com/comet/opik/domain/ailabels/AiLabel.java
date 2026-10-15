@@ -32,6 +32,11 @@ public record AiLabel(
 
     public static final String OUTPUT_KEY = "output";
 
+    public AiLabel {
+        probabilities = Map.copyOf(probabilities);
+        legend = Map.copyOf(legend);
+    }
+
     @Getter
     @RequiredArgsConstructor
     public enum AnswerType {

@@ -82,8 +82,14 @@ public class TraceDeletedListener {
                         projectId)))
                 .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, traceIds, projectId)))
                 // Unconditional, even with ai-labels off: labels hold trace-derived text and must not outlive the trace.
-                .then(Mono.defer(() -> aiLabelsDAO.deleteByTraceIds(traceIds, projectId)))
-                .then(Mono.defer(() -> aiLabelStatusDAO.deleteByTraceIds(traceIds, projectId)))
+                // A failure there must not skip the span cascade; retention removes any rows left behind.
+                .then(Mono.defer(() -> aiLabelsDAO.deleteByTraceIds(traceIds, projectId)
+                        .then(aiLabelStatusDAO.deleteByTraceIds(traceIds, projectId))
+                        .onErrorResume(error -> {
+                            log.error("Failed to delete ai-labels for deleted traces, count '{}'", traceIds.size(),
+                                    error);
+                            return Mono.empty();
+                        })))
                 .then(Mono.defer(() -> spanService.deleteByTraceIds(traceIds, projectId)));
     }
 }
