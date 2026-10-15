@@ -3,6 +3,8 @@ package com.comet.opik.domain.ailabels;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectWriter;
+import com.fasterxml.jackson.databind.cfg.JsonNodeFeature;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -25,6 +27,10 @@ import java.util.TreeMap;
 class AiLabelJson {
 
     static final JsonNodeFactory NODE_FACTORY = new CanonicalNodeFactory();
+
+    // Sorts keys whatever map backs a node, so a state built outside the renderer serializes the same way.
+    private static final ObjectWriter CANONICAL_WRITER = JsonUtils.getMapper().writer()
+            .with(JsonNodeFeature.WRITE_PROPERTIES_SORTED);
 
     /** The bytes a code point takes inside a JSON string, for the ASCII range: escapes included. */
     private static final int[] ASCII_BYTES = new int[128];
@@ -52,7 +58,7 @@ class AiLabelJson {
 
     static String toCanonicalString(JsonNode node) {
         try {
-            return JsonUtils.getMapper().writeValueAsString(node);
+            return CANONICAL_WRITER.writeValueAsString(node);
         } catch (JsonProcessingException e) {
             throw new UncheckedIOException(e);
         }

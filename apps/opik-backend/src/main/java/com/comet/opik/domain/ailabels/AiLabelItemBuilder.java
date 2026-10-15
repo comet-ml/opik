@@ -173,7 +173,7 @@ public class AiLabelItemBuilder {
         var filled = new StringBuilder();
         while (matcher.find()) {
             var value = matcher.group().equals(AiLabelTask.STATE_PLACEHOLDER) ? rendered.state() : rendered.history();
-            matcher.appendReplacement(filled, Matcher.quoteReplacement(InferenceJson.canonical(value)));
+            matcher.appendReplacement(filled, Matcher.quoteReplacement(AiLabelRenderer.canonicalJson(value)));
         }
         return matcher.appendTail(filled).toString();
     }
