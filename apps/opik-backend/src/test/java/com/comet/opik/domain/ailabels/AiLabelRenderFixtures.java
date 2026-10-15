@@ -20,6 +20,11 @@ import java.util.UUID;
  */
 final class AiLabelRenderFixtures {
 
+    // Literals, not Math.pow: pow may differ in the last bit between CPUs, which would make golden files platform-bound.
+    private static final double[] POWERS_OF_TEN = {1e-15, 1e-14, 1e-13, 1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6,
+            1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13,
+            1e14};
+
     /** Code points from several scripts, plus the characters JSON escapes. */
     private static final int[][] SCRIPTS = {
             {'a', 'z'}, {'A', 'Z'}, {'0', '9'}, {' ', ' '},
@@ -119,7 +124,7 @@ final class AiLabelRenderFixtures {
                 var object = new LinkedHashMap<String, Object>();
                 object.put("role", "user");
                 object.put("count", random.nextInt(1000));
-                object.put("score", random.nextDouble() * Math.pow(10, random.nextInt(30) - 15));
+                object.put("score", random.nextDouble() * POWERS_OF_TEN[random.nextInt(POWERS_OF_TEN.length)]);
                 object.put("flag", random.nextBoolean());
                 object.put("nothing", null);
                 object.put("z_" + text(3), value(chars / 2, depth + 1));
