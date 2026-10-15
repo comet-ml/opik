@@ -29,7 +29,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.DATASET_EXPORT_ENABLED]: true,
   [FeatureToggleKeys.DEMO_DATA_ENABLED]: true,
   [FeatureToggleKeys.OLLIE_ENABLED]: false,
-  [FeatureToggleKeys.CUSTOM_CHARTS_ENABLED]: false,
+  [FeatureToggleKeys.CUSTOM_CHARTS_ENABLED_FOR_WORKSPACE]: false,
   // Matches the backend default, so a backend that omits the key keeps Diagnostics as-is.
   [FeatureToggleKeys.AGENT_INSIGHTS_ENABLED]: true,
   [FeatureToggleKeys.PROJECT_HOMEPAGE_ENABLED]: false,

@@ -111,7 +111,7 @@ class ServiceTogglesResourceTest {
 
     @ParameterizedTest
     @MethodSource("customChartsWorkspaces")
-    @DisplayName("custom_charts_enabled is true only for a workspace on the Custom Charts allowlist")
+    @DisplayName("custom_charts_enabled_for_workspace is true only for a workspace on the Custom Charts allowlist")
     void getToggles__customChartsEnabled__followsTheCallersWorkspace(String apiKey, String workspaceName,
             boolean expected) {
         try (var response = client.target("%s/v1/private/toggles/".formatted(baseURI))
@@ -122,7 +122,7 @@ class ServiceTogglesResourceTest {
 
             assertThat(response.getStatus()).isEqualTo(200);
             var toggles = response.readEntity(JsonNode.class);
-            assertThat(toggle(toggles, "custom_charts_enabled")).isEqualTo(expected);
+            assertThat(toggle(toggles, "custom_charts_enabled_for_workspace")).isEqualTo(expected);
             assertThat(toggle(toggles, "ollie_enabled")).isTrue();
         }
     }

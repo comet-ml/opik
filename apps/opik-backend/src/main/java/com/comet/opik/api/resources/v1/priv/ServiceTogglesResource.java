@@ -36,11 +36,10 @@ public class ServiceTogglesResource {
             @ApiResponse(responseCode = "200", description = "Service Toggles", content = @Content(schema = @Schema(implementation = ServiceTogglesConfig.class)))})
     public Response getToggles() {
         ServiceTogglesConfig toggles = config.getServiceToggles();
-        // The same check the Custom Charts endpoints make, so the UI offers chart building only where it works.
-        boolean customChartsEnabled = toggles.isOllieEnabled()
+        boolean customChartsEnabledForWorkspace = toggles.isOllieEnabled()
                 && config.getCustomCharts().enabledWorkspaceIds().contains(requestContext.get().getWorkspaceId());
         return Response.ok()
-                .entity(toggles.withCustomChartsEnabled(customChartsEnabled))
+                .entity(toggles.withCustomChartsEnabledForWorkspace(customChartsEnabledForWorkspace))
                 .build();
     }
 }

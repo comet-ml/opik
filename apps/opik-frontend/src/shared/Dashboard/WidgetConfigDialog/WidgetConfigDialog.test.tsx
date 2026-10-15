@@ -30,7 +30,7 @@ describe("WidgetConfigDialog Ollie prompt", () => {
   beforeEach(() => {
     enabledToggles = new Set([
       FeatureToggleKeys.OLLIE_ENABLED,
-      FeatureToggleKeys.CUSTOM_CHARTS_ENABLED,
+      FeatureToggleKeys.CUSTOM_CHARTS_ENABLED_FOR_WORKSPACE,
     ]);
     usePluginsStore.setState({ AssistantSidebar: () => null });
   });
@@ -52,7 +52,7 @@ describe("WidgetConfigDialog Ollie prompt", () => {
     ["Ollie is off", FeatureToggleKeys.OLLIE_ENABLED],
     [
       "the workspace is not on the Custom Charts allowlist",
-      FeatureToggleKeys.CUSTOM_CHARTS_ENABLED,
+      FeatureToggleKeys.CUSTOM_CHARTS_ENABLED_FOR_WORKSPACE,
     ],
   ])("hides the prompt when %s", (_, toggle) => {
     enabledToggles.delete(toggle);

@@ -82,7 +82,7 @@ public class ServiceTogglesConfig {
     // Not configured here: the toggles endpoint sets it for the caller's workspace from customCharts.enabledWorkspaces.
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     @With
-    boolean customChartsEnabled;
+    boolean customChartsEnabledForWorkspace;
 
     @JsonIgnore
     public boolean isAgentInsightsActive() {
