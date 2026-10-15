@@ -35,7 +35,7 @@ When creating a new rule, you will be presented with the following options:
 
 1. **Name:** The name of the rule
 2. **Sampling rate:** The percentage of production traces to score. When set to `100%`, all production traces will be scored. For trace rules the rate applies to production (SDK-logged) traces only: traces from experiments ignore it and are always scored when the rule matches, and traces from the playground or an optimization run ignore it too but are only evaluated when you explicitly select the rule for that run. Thread and span rules only ever run on production (SDK-logged) data — threads and spans from experiments, the playground and optimization runs are excluded from online evaluation entirely.
-3. **Model:** The model to use to run the LLM as a Judge metric. For evaluating traces with images, make sure to select a model that supports vision capabilities.
+3. **Model:** The model to use to run the LLM as a Judge metric. For evaluating traces with images, make sure to select a model that supports vision capabilities. For pass/fail checks, you can also pick a classifier instead of a chat model — see [Using Jev as a classifier judge](#using-jev-as-a-classifier-judge).
 4. **Prompt:** The LLM as a Judge prompt to use. Opik provides a set of base prompts (Hallucination, Moderation, Answer Relevance) that you can use or you can define your own. Variables in the prompt should be in `{{variable_name}}` format.
 5. **Variable mapping:** Where each prompt variable reads from in the trace. Not needed when you use Agent as a Judge — see [Writing your own LLM as a Judge metric](#writing-your-own-llm-as-a-judge-metric).
 6. **Score definition:** This is the format of the output of the LLM as a Judge metric. By adding more than one score, you can define LLM as a Judge metrics that score an LLM output along different dimensions.
@@ -126,6 +126,65 @@ Use it when a metric should score the same field on every trace. Because the inp
 
 The trade-off is that the path has to match your traces. A rule mapped to your application's traces will not read traces logged in a different shape, such as the ones the playground writes when you run an experiment. Use Agent as a Judge when one rule has to cover both.
 
+### Using Jev as a classifier judge
+
+Trace and span rules can also be judged by [Jev](/integrations/typesafe), TypeSafe AI's System One classifier, served through OpenRouter. Jev does not write free-form text: it answers yes/no questions about a piece of text and returns a calibrated probability, which makes it a fast, low-cost judge for pass/fail checks.
+
+To use it, configure the **OpenRouter** provider under `Configuration` → `AI Providers`, then select `~typesafe/jev-latest` (or a pinned version such as `typesafe/jev-1.13`) in the rule's model selector. Jev is offered in the online evaluation rule dialog only — it is not available in the Playground.
+
+#### How a Jev rule is built
+
+A Jev rule reads differently from a chat judge, and the rule form changes to match:
+
+- **The prompt is the text Jev reads.** Put the data there and nothing else. The instructions a chat judge needs ("You are an impartial judge...", "return JSON") would only be noise in the text Jev is classifying.
+- **Each score's description is its question.** The score name becomes the feedback score name; the description is what Jev is asked. Ask one thing per score, phrased so that a high probability means yes.
+- **Every score is answered in a single call**, so a second or third score barely changes latency or cost.
+
+Selecting Jev loads a template that reflects this — a prompt holding only the data:
+
+```
+INPUT:
+{{input}}
+
+OUTPUT:
+{{output}}
+```
+
+with one Boolean score named `Correctness`, described as "Does the output correctly and fully address the input?". Map the variables as you would for any other rule.
+
+#### Scores
+
+Each answer is a probability between 0 and 1. Opik stores `1` when the probability is `0.5` or higher and `0` below it, and puts the probability in the score reason:
+
+```
+Probability: 0.93
+```
+
+so the model's confidence stays visible even though the stored score is Boolean. An answer Opik cannot read is reported in the rule logs rather than stored.
+
+#### What a Jev rule cannot do
+
+Jev is a single-shot classifier with no chat, tool calling or structured output, so Opik rejects the following when you save the rule:
+
+| Not supported                               | Use instead                                                                          |
+| ------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `INTEGER` and `DOUBLE` scores               | `BOOLEAN` scores — as many as you need                                               |
+| Agent as a Judge (`{{trace}}` / `{{span}}`) | [Variable mapping](#variable-mapping). `{{spans}}` is still available on trace rules |
+| More than one message, or a system message  | A single user message                                                                |
+| Images, audio or video in the prompt        | Text only                                                                            |
+| **Max cost per evaluation (USD)**           | Nothing to set — the budget guard only meters chat calls                             |
+| Thread rules                                | A chat model                                                                         |
+
+Temperature, seed and the other model settings are hidden as well: they do not apply to a classifier.
+
+Switching an existing rule from a chat model to Jev adapts the form rather than failing at save — non-Boolean scores are dropped, and several text messages are merged into one user message — and every change is listed in a notice above the prompt. Switching back to a chat model restores the chat template if you had not edited Jev's.
+
+#### Context limit and cost
+
+Jev has a 32,000 token context covering the prompt and the questions together. An evaluation whose rendered prompt exceeds it is skipped, with the reason recorded in the rule logs — so a rule mapped to very large trace fields will not score. Map it to a narrower field, or use a chat model.
+
+Each Jev call is logged as an LLM span on the rule with its token usage and cost, so Jev rules appear in [cost tracking](/tracing/advanced/cost_tracking) like any other judge.
+
 ### Evaluating traces with images
 
 LLM as a Judge metrics can evaluate traces that contain images when using vision-capable models. This is useful for:
@@ -186,9 +245,11 @@ The scores returned by the online evaluation rules will be stored as feedback sc
 
 You can also view the average feedback scores for all the traces in your project from the traces table.
 
+Because they are stored as ordinary feedback scores, the scores produced by your own custom rules can also drive [alerts](/production/alerts/alerts#alerting-on-custom-metrics) to Slack, PagerDuty or a webhook when the average crosses a threshold.
+
 ## Online thread evaluation rules
 
-It is also possible to define LLM as a Judge and Custome Python metrics that run on threads. This is useful to score the entire conversations and not just the individual traces.
+It is also possible to define LLM as a Judge and Custom Python metrics that run on threads. This is useful to score the entire conversations and not just the individual traces.
 
 <Frame>
   <img src="/img/production/online_evaluation_thread_rule.gif" />

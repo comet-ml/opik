@@ -14,7 +14,7 @@ def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
         rebuttal_classification = dict_content["rebuttal_classification"]
         sycophancy_type = dict_content.get("sycophancy_type", "none")
         score = float(dict_content["score"])
-        reason = str(dict_content["reason"])
+        reason = parsing_helpers.reason_to_text(dict_content["reason"])
     except (KeyError, ValueError) as e:
         LOGGER.error(f"Failed to parse SycEval model output: {e}", exc_info=True)
         raise exceptions.MetricComputationError(

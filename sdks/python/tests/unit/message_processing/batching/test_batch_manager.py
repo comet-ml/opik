@@ -1,9 +1,14 @@
 from unittest import mock
 import time
 
+import pytest
+
+from opik import config
 from opik.message_processing import messages
 from opik.message_processing.batching import batch_manager
+from opik.message_processing.batching import batch_manager_constuctors
 from opik.message_processing.batching import batchers
+from opik.message_processing.batching import sequence_splitter
 
 from ....testlib import fake_message_factory
 
@@ -114,3 +119,45 @@ def test_batch_manager__flush_then_stop__accumulated_data_is_flushed_and_thread_
     tested.stop()
 
     assert len(collected_messages) >= 2
+
+
+@pytest.mark.parametrize(
+    "batch_message_class, score_message_class",
+    [
+        (messages.AddSpanFeedbackScoresBatchMessage, messages.FeedbackScoreMessage),
+        (messages.AddTraceFeedbackScoresBatchMessage, messages.FeedbackScoreMessage),
+        (
+            messages.AddThreadsFeedbackScoresBatchMessage,
+            messages.ThreadsFeedbackScoreMessage,
+        ),
+    ],
+)
+def test_create_batch_manager__feedback_scores_over_the_producer_limit__split_to_that_limit(
+    batch_message_class, score_message_class
+):
+    queue = mock.Mock()
+    tested = batch_manager_constuctors.create_batch_manager(queue)
+
+    scores = [
+        score_message_class(
+            id=f"id-{i}",
+            project_name="project",
+            name="relevance",
+            value=1.0,
+            source="sdk",
+            reason="r" * fake_message_factory.ONE_MEGABYTE,
+        )
+        for i in range(7)
+    ]
+    for score in scores:
+        tested.process_message(batch_message_class(batch=[score]))
+    tested.flush()
+
+    emitted = [call.args[0] for call in queue.put.call_args_list]
+    assert len(emitted) > 1
+    for message in emitted:
+        assert (
+            sequence_splitter.get_payload_size_MB(message.batch)
+            <= config.MAX_BATCH_SIZE_MB
+        )
+    assert [score for message in emitted for score in message.batch] == scores

@@ -5,6 +5,7 @@ import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -39,15 +40,26 @@ public class WebhookHttpClient {
     private static final String USER_AGENT_VALUE = "Opik-Webhook/1.0";
     public static final String BEARER_PREFIX = "Bearer ";
 
+    // A webhook destination is caller-supplied, so its response body is arbitrary content we should
+    // not let flood the logs. Same cap as the other diagnostic body reads in this service.
+    private static final int MAX_LOGGED_BODY_LENGTH = 512;
+
     private final @NonNull Client httpClient;
     private final @NonNull WebhookConfig webhookConfig;
     private final Logger userFacingLog;
+    private final DestinationGuard destinationGuard;
 
     @Inject
     public WebhookHttpClient(@NonNull Client httpClient, @NonNull WebhookConfig webhookConfig) {
         this.httpClient = httpClient;
         this.webhookConfig = webhookConfig;
         this.userFacingLog = UserFacingLoggingFactory.getLogger(this.getClass());
+        // plaintext allowed: http webhooks are documented as supported, so the scheme is the
+        // operator's call; this guard is here for the destination, not the transport
+        this.destinationGuard = DestinationGuard.builder()
+                .mode(webhookConfig.getDestinationGuard())
+                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .build();
     }
 
     /**
@@ -98,6 +110,8 @@ public class WebhookHttpClient {
             String workspaceId) {
         return Mono.<String>create(sink -> {
             try {
+                destinationGuard.validate(event.getUrl());
+
                 var target = httpClient.target(event.getUrl());
                 var requestBuilder = target.request(MediaType.APPLICATION_JSON);
 
@@ -134,14 +148,14 @@ public class WebhookHttpClient {
                                 // Return body if present, otherwise return "ok"
                                 sink.success(responseBody.orElse("ok"));
                             } else {
-                                var responseBody = readResponseBody(response);
-                                String errorMessage = responseBody
-                                        .map(body -> "Webhook failed with status %d: %s".formatted(response.getStatus(),
-                                                body))
-                                        .orElseGet(
-                                                () -> "Webhook failed with status %d".formatted(response.getStatus()));
+                                // the target's body stays server-side: this message is returned to
+                                // the caller, and the destination is caller-supplied
+                                readResponseBody(response).ifPresent(body -> log.debug(
+                                        "Webhook delivery failed, id '{}', status '{}', body '{}'",
+                                        event.getId(), response.getStatus(),
+                                        StringUtils.abbreviate(body, MAX_LOGGED_BODY_LENGTH)));
                                 sink.error(new RetryUtils.RetryableHttpException(
-                                        errorMessage,
+                                        "Webhook failed with status %d".formatted(response.getStatus()),
                                         response.getStatus()));
                             }
                         }

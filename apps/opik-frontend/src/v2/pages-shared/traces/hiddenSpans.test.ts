@@ -105,5 +105,24 @@ describe("hiddenSpans", () => {
 
       expect(spans[1].parent_span_id).toBe("hidden");
     });
+
+    it("should keep the parent id when the parent is not loaded", () => {
+      const spans = [
+        makeSpan({ id: "orphan", parent_span_id: "missing" }),
+        makeSpan({
+          id: "hiddenOrphan",
+          parent_span_id: "missing",
+          metadata: hiddenMeta,
+        }),
+        makeSpan({ id: "child", parent_span_id: "hiddenOrphan" }),
+      ];
+
+      const result = excludeHiddenSpans(spans);
+
+      expect(result.map((s) => [s.id, s.parent_span_id])).toEqual([
+        ["orphan", "missing"],
+        ["child", "missing"],
+      ]);
+    });
   });
 });

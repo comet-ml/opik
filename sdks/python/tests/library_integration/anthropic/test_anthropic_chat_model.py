@@ -13,21 +13,23 @@ import pytest
 
 from opik.evaluation.models.anthropic import anthropic_chat_model
 
+from ...llm_constants import ANTHROPIC_CLAUDE_HAIKU
+
 pytestmark = pytest.mark.usefixtures("ensure_anthropic_configured")
 
-MODEL_FOR_TESTS = "claude-haiku-4-5"
+MAX_TOKENS = 20
 
 
 def test_anthropic_chat_model_generate_chat_completion__happyflow():
     """``generate_chat_completion`` returns a typed assistant ``ConversationDict``."""
     model = anthropic_chat_model.AnthropicChatModel(
-        model_name=MODEL_FOR_TESTS, track=False
+        model_name=ANTHROPIC_CLAUDE_HAIKU, track=False, max_tokens=MAX_TOKENS
     )
 
     message = model.generate_chat_completion(
         messages=[
-            {"role": "system", "content": "You answer in one sentence."},
-            {"role": "user", "content": "Tell me a short fact about Python."},
+            {"role": "system", "content": "Answer in one word."},
+            {"role": "user", "content": "Say hi"},
         ]
     )
 
@@ -40,13 +42,13 @@ def test_anthropic_chat_model_generate_chat_completion__happyflow():
 async def test_anthropic_chat_model_agenerate_chat_completion__happyflow():
     """Async ``agenerate_chat_completion`` returns the same shape as the sync path."""
     model = anthropic_chat_model.AnthropicChatModel(
-        model_name=MODEL_FOR_TESTS, track=False
+        model_name=ANTHROPIC_CLAUDE_HAIKU, track=False, max_tokens=MAX_TOKENS
     )
 
     message = await model.agenerate_chat_completion(
         messages=[
-            {"role": "system", "content": "You answer in one sentence."},
-            {"role": "user", "content": "Tell me a short fact about async Python."},
+            {"role": "system", "content": "Answer in one word."},
+            {"role": "user", "content": "Say hi"},
         ]
     )
 
@@ -62,12 +64,12 @@ def test_anthropic_chat_model_generate_chat_completion__with_response_format():
         capital: str
 
     model = anthropic_chat_model.AnthropicChatModel(
-        model_name=MODEL_FOR_TESTS, track=False
+        model_name=ANTHROPIC_CLAUDE_HAIKU, track=False, max_tokens=MAX_TOKENS
     )
 
     message = model.generate_chat_completion(
         messages=[
-            {"role": "user", "content": "What is the capital of France?"},
+            {"role": "user", "content": "Capital of France?"},
         ],
         response_format=Answer,
     )

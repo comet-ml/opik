@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.domain.AgentInsightsJobService;
+import com.comet.opik.domain.AgentInsightsMetrics;
 import com.comet.opik.domain.AgentInsightsReportClient;
 import com.comet.opik.domain.AgentInsightsReportMessage;
 import com.comet.opik.domain.AgentInsightsTriggerException;
@@ -60,9 +61,13 @@ class AgentInsightsReportSubscriberTest {
     }
 
     private static AgentInsightsReportMessage message() {
+        return message(AgentInsightsMetrics.MANUAL);
+    }
+
+    private static AgentInsightsReportMessage message(String triggerSource) {
         Instant periodEnd = Instant.now();
         return new AgentInsightsReportMessage("report-1", PROJECT_ID, WORKSPACE_ID,
-                periodEnd.minusSeconds(86_400), periodEnd, "manual");
+                periodEnd.minusSeconds(86_400), periodEnd, triggerSource);
     }
 
     private void failTriggerWith(RuntimeException failure) {
@@ -92,6 +97,33 @@ class AgentInsightsReportSubscriberTest {
 
         verify(jobService).markRunFailed(eq(WORKSPACE_ID), eq(PROJECT_ID),
                 eq(AgentInsightsJob.FailureReason.DID_NOT_START), eq("connection refused"));
+    }
+
+    @Test
+    @DisplayName("Comet's free budget running out on the automatic first run cancels the rollout")
+    void processEvent__freePoolExhaustedOnAutoFirstRun__cancelsRollout() {
+        failTriggerWith(new AgentInsightsTriggerException(AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED,
+                "free budget unavailable"));
+
+        StepVerifier.create(subscriber.processEvent(message(AgentInsightsMetrics.AUTO_FIRST_RUN))).verifyComplete();
+
+        verify(jobService).cancelAutoFirstRunRollout(WORKSPACE_ID, PROJECT_ID);
+        verify(jobService, never()).markRunFailed(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Free-budget exhaustion reported on any other run is recorded as out of credits, never cancelling the rollout")
+    void processEvent__freePoolExhaustedOnManualRun__recordsOutOfCreditsInstead() {
+        // Only the free run draws on Comet's budget, so this is a misclassification; cancelling the rollout for
+        // every workspace over it would leave nothing to turn it back on.
+        failTriggerWith(new AgentInsightsTriggerException(AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED,
+                "free budget unavailable"));
+
+        StepVerifier.create(subscriber.processEvent(message(AgentInsightsMetrics.MANUAL))).verifyComplete();
+
+        verify(jobService, never()).cancelAutoFirstRunRollout(any(), any());
+        verify(jobService).markRunFailed(eq(WORKSPACE_ID), eq(PROJECT_ID),
+                eq(AgentInsightsJob.FailureReason.OUT_OF_CREDITS), eq("free budget unavailable"));
     }
 
     @Test

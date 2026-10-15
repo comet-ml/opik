@@ -184,6 +184,7 @@ public class AlertResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.ALERT_UPDATE)
     public Response deleteAlertBatch(
             @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid @NotNull BatchDelete batch) {
 
@@ -206,6 +207,7 @@ public class AlertResource {
             @ApiResponse(responseCode = "200", description = "Webhook test", content = @Content(schema = @Schema(implementation = WebhookTestResult.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.ALERT_UPDATE)
     public Response testWebhook(
             @RequestBody(content = @Content(schema = @Schema(implementation = Alert.class))) @JsonView(Alert.View.Write.class) @Valid @NotNull Alert alert) {
 

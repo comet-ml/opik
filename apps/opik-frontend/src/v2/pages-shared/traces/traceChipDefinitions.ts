@@ -12,6 +12,7 @@ import { LOGS_SOURCE } from "@/types/traces";
 import { GuardrailResult } from "@/types/guardrails";
 import { TRACE_DATA_TYPE } from "@/constants/traces";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
+import { JSON_PATH_FORMAT } from "@/lib/utils";
 import {
   ChipDefinition,
   ChipOptionsResult,
@@ -284,6 +285,7 @@ export const buildSharedDynamicChips = ({
           rootKeys: ["metadata"],
           excludeRoot: true,
           logsSource,
+          pathFormat: JSON_PATH_FORMAT.bracket,
         }),
       },
       value: { placeholder: "value" },
@@ -304,6 +306,7 @@ export const buildSharedDynamicChips = ({
           rootKeys: ["input", "output"],
           excludeRoot: false,
           logsSource,
+          pathFormat: JSON_PATH_FORMAT.bracket,
         }),
         validate: (k) =>
           CUSTOM_FILTER_VALIDATION_REGEXP.test(k)

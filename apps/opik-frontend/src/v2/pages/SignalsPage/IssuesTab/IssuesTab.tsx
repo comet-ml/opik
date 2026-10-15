@@ -290,6 +290,8 @@ type IssuesTabProps = {
   onShowOpenIssues?: () => void;
 };
 
+export const ISSUES_LIST_ATTRIBUTE = "data-issues-list";
+
 const IssuesTab: React.FC<IssuesTabProps> = ({
   projectId,
   showResolved = false,
@@ -401,7 +403,10 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   const renderListBody = () => {
     if (hasIssues) {
       return (
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div
+          {...{ [ISSUES_LIST_ATTRIBUTE]: "" }}
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        >
           {isFailed && (
             <FailedBanner
               reason={failedReason}

@@ -19,6 +19,11 @@ public class AutomationRuleRowMapper implements RowMapper<AutomationRuleModel> {
                     .orElseThrow(() -> new IllegalStateException(
                             "No mapper found for Automation Rule Action type: %s".formatted(action)))
                     .map(rs, ctx);
+            // Queue automations are read through their queue, by a query that names the action, so one
+            // reaching this mapper means a caller asked for rules generically and would get a row it
+            // cannot render. Failing here is louder than returning something half-mapped.
+            case ANNOTATION_QUEUE_ROUTER -> throw new IllegalStateException(
+                    "Annotation queue automation rules are not served through the automation rules API");
         };
     }
 }

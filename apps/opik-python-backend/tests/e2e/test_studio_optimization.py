@@ -29,6 +29,7 @@ import pytest
 import opik
 from opik import synchronization
 
+from conftest import resolve_e2e_model
 from llm_constants import (
     ANTHROPIC_CLAUDE_HAIKU,
     ANTHROPIC_CLAUDE_HAIKU_SHORT,
@@ -36,6 +37,26 @@ from llm_constants import (
 )
 
 pytestmark = pytest.mark.e2e
+
+
+def _task_model() -> str:
+    """The task model for this run — Anthropic, or OpenAI when it is unusable."""
+    return resolve_e2e_model()
+
+
+def _model_trace_substring() -> str:
+    """Substring identifying the task model in span records.
+
+    The Anthropic id carries a date suffix that changes, so it matches on a
+    prefix; OpenAI ids are stable and match in full.
+    """
+    model = _task_model()
+    return (
+        ANTHROPIC_CLAUDE_HAIKU_SHORT
+        if model == ANTHROPIC_CLAUDE_HAIKU
+        else model.lower()
+    )
+
 
 RunStudioOptimization = Callable[[str, str, dict[str, Any]], dict[str, Any]]
 
@@ -118,8 +139,9 @@ class LabelMatchRenamed(BaseMetric):
 # signature, `isolated_metric` restricts `data` to `output` + the mapped params
 # only (OPIK-7172), so `score(output=...)` raises a `TypeError` for the missing
 # required `reference`. That failure is caught per item and reported as an
-# explicit `ScoreResult(0.0, reason="Error: ...")` (see `run_user_code`) rather
-# than a silent, unexplained 0.0 or a crashed run.
+# explicit `ScoreResult(0.0, reason="Error: ...")` flagged `scoring_failed`, so
+# with every item failing the run fails loudly with `ScoringFailedError` rather
+# than completing green at a silent, unexplained 0.0.
 _MISSING_COLUMN_CODE_METRIC = '''
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -232,14 +254,23 @@ def _wait_for_optimization_status(
     return fetched["optimization"]
 
 
+def _error_info_field(error_info: Any, name: str) -> str:
+    # The pinned (released) opik SDK doesn't type `error_info` yet, so it comes
+    # back as a plain dict; a newer SDK would expose a typed object.
+    if isinstance(error_info, dict):
+        return str(error_info.get(name) or "")
+    return str(getattr(error_info, name, "") or "")
+
+
 def _assert_only_configured_model_ran(opik_client: opik.Opik, project_name: str) -> None:
     """The configured model actually ran, and the SDK default never leaked (the
     model-passing regression fell back to it). Spans land in ClickHouse with
     eventual consistency, so wait for the expected model to appear."""
-    _wait_for_model(opik_client, project_name, ANTHROPIC_CLAUDE_HAIKU_SHORT)
+    expected = _model_trace_substring()
+    _wait_for_model(opik_client, project_name, expected)
     models = _models_in_project(opik_client, project_name)
     # Healthy volume: it evaluated the dataset, not just a single call.
-    assert sum(ANTHROPIC_CLAUDE_HAIKU_SHORT in m.lower() for m in models) >= 2, (
+    assert sum(expected in m.lower() for m in models) >= 2, (
         f"expected multiple model calls, saw {models}"
     )
     assert not any(OPENAI_GPT_NANO in m for m in models), (
@@ -261,7 +292,7 @@ def test_studio_optimization_runs_on_dataset_and_prompt(
         "type": "equals",
         "parameters": {"reference_key": "label", "case_sensitive": False},
     }
-    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, optimizer_type, metric)
+    studio_config = _studio_config(_task_model(), dataset_name, optimizer_type, metric)
 
     result = run_studio_optimization(project_name, dataset_name, studio_config)
 
@@ -278,7 +309,7 @@ def test_studio_optimization_with_code_metric(
 ) -> None:
     dataset_name = seeded_sentiment_classification_dataset.name
     metric = {"type": "code", "parameters": {"code": _CODE_METRIC}}
-    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, "gepa", metric)
+    studio_config = _studio_config(_task_model(), dataset_name, "gepa", metric)
 
     result = run_studio_optimization(project_name, dataset_name, studio_config)
 
@@ -301,7 +332,7 @@ def test_studio_optimization_code_metric_syntax_error_surfaces_as_error(
     """
     dataset_name = seeded_sentiment_classification_dataset.name
     metric = {"type": "code", "parameters": {"code": _SYNTAX_ERROR_CODE_METRIC}}
-    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, "gepa", metric)
+    studio_config = _studio_config(_task_model(), dataset_name, "gepa", metric)
 
     # `MetricFactory.build` raises `InvalidMetricError` inside
     # `optimization_lifecycle`, which marks the run as failed before
@@ -317,18 +348,13 @@ def test_studio_optimization_code_metric_syntax_error_surfaces_as_error(
     assert optimization.status == "error"
     assert optimization.error_info, "error_info was not persisted on the failed run"
     # error_info is now the structured ErrorInfo shape (exception_type/message/
-    # traceback), matching the type spans/traces use (OPIK-7172). The pinned
-    # (released) opik SDK doesn't type this field yet, so it comes back as a
-    # plain dict; a newer SDK would expose a typed object — handle both. The
-    # build failure reason is carried in the message.
+    # traceback), matching the type spans/traces use (OPIK-7172). The build
+    # failure reason is carried in the message.
     error_info = optimization.error_info
-
-    def _field(name: str) -> str:
-        if isinstance(error_info, dict):
-            return str(error_info.get(name) or "")
-        return str(getattr(error_info, name, "") or "")
-
-    error_text = f"{_field('message')} {_field('traceback')}"
+    error_text = (
+        f"{_error_info_field(error_info, 'message')} "
+        f"{_error_info_field(error_info, 'traceback')}"
+    )
     assert "invalid Python code" in error_text, (
         f"error_info did not surface the build failure: {error_info!r}"
     )
@@ -363,7 +389,7 @@ def test_studio_optimization_with_code_metric_arguments_map_rename(
             "arguments": {"gold_label": "label"},
         },
     }
-    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, "gepa", metric)
+    studio_config = _studio_config(_task_model(), dataset_name, "gepa", metric)
 
     result = run_studio_optimization(project_name, dataset_name, studio_config)
 
@@ -388,12 +414,12 @@ def test_studio_optimization_with_code_metric_missing_mapped_column(
 ) -> None:
     """An `arguments` map entry pointing at a column absent from the dataset
     can't be validated at build time (the code metric builder has no dataset
-    access), so it degrades to a defined, explained per-item failure rather
-    than silently reporting a healthy-looking run: every item's `score(**data)`
-    call raises (the mapped `reference` never resolves), which is caught and
-    reported as `ScoreResult(0.0, reason="Error: ...")` — never a crash, and
-    never an unexplained/silent score (OPIK-7172; mirrors the OPIK-7160
-    anti-pattern other reference-based metrics guard against at build time).
+    access). Every item's `score(**data)` call raises (the mapped `reference`
+    never resolves), which is caught per item and flagged `scoring_failed`, so
+    the run fails with `ScoringFailedError` and is persisted as ERROR rather
+    than completing green at an unexplained 0.0 (OPIK-7172; mirrors the
+    OPIK-7160 anti-pattern other reference-based metrics guard against at
+    build time).
     """
     dataset_name = seeded_sentiment_classification_dataset.name
     metric = {
@@ -403,19 +429,20 @@ def test_studio_optimization_with_code_metric_missing_mapped_column(
             "arguments": {"reference": "does_not_exist_in_dataset"},
         },
     }
-    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, "gepa", metric)
+    studio_config = _studio_config(_task_model(), dataset_name, "gepa", metric)
 
-    result = run_studio_optimization(project_name, dataset_name, studio_config)
+    with pytest.raises(Exception, match="failed to score"):
+        run_studio_optimization(project_name, dataset_name, studio_config)
 
-    # The run completes (the per-item scoring failure never crashes the whole
-    # optimization) but the metric can never produce anything but 0: it's a
-    # deterministic, explained degradation, not an accidental "healthy" score.
-    assert result is not None, "no result returned"
-    assert result.get("status") != "cancelled", "optimization was cancelled"
-    assert result.get("initial_score") == 0.0, (
-        f"expected a deterministic 0.0 baseline (every item's score() call is "
-        f"missing 'reference'), got {result.get('initial_score')!r}"
+    optimization_id = run_studio_optimization.last_optimization_id
+    assert optimization_id, "fixture did not record the created optimization id"
+
+    optimization = _wait_for_optimization_status(opik_client, optimization_id, "error")
+    error_info = optimization.error_info
+    assert error_info, "error_info was not persisted on the failed run"
+    assert _error_info_field(error_info, "exception_type") == "ScoringFailedError", (
+        f"expected a ScoringFailedError, got {error_info!r}"
     )
-    assert result.get("score") == 0.0, (
-        f"expected a deterministic 0.0 final score, got {result.get('score')!r}"
+    assert "requires_missing_column" in _error_info_field(error_info, "message"), (
+        f"error_info did not name the failing metric: {error_info!r}"
     )

@@ -37,7 +37,11 @@ function seedSentimentDataset(sdkClient: SdkClient, projectName: string, name: s
   });
 }
 
-test.describe('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '@area:optimization-studio'] }, () => {
+// Disabled (Sept 2026 cost spike): the Studio drives GEPA / Hierarchical
+// Reflective optimizers, whose trial count is bounded only by the run's
+// timeout — so one test's LLM spend is whatever the optimizer chooses to do.
+// Re-enable behind an explicit trial ceiling and a per-project spend cap.
+test.describe.skip('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '@area:optimization-studio'] }, () => {
   test('the new-run form renders its sections and enables Optimize only once valid', { tag: ['@cap:optimization-studio.new-run-form-validation'] }, async ({
     project,
     sdkClient,
@@ -184,7 +188,7 @@ test.describe('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '
   });
 });
 
-test.describe('Optimization Studio — variant', { tag: ['@t2-cuj', '@t1-stsaas', '@area:optimization-studio'] }, () => {
+test.describe.skip('Optimization Studio — variant', { tag: ['@t2-cuj', '@t1-stsaas', '@area:optimization-studio'] }, () => {
   test('launches a Hierarchical Reflective + Equals run and it completes end-to-end', { tag: ['@cap:optimization-studio.launch-hier-reflective', '@cap:optimization-studio.run-completes-healthy'] }, async ({
     project,
     sdkClient,

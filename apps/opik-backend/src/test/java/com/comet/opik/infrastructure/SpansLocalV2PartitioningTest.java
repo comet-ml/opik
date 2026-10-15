@@ -1,12 +1,20 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.TestConfigUtils;
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.SpanWeek;
+import com.comet.opik.domain.SpanWeeksBackfillChunk;
+import com.comet.opik.domain.SpanWeeksDAO;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.WeeklyPartitions;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -17,6 +25,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -31,8 +40,13 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -101,17 +115,67 @@ class SpansLocalV2PartitioningTest {
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
+    /**
+     * {@link #FAR_FUTURE_INSTANT}'s week as the legacy 32-bit {@code id_at} stores it (wrapped mod 2^32 seconds), then
+     * as this table stores it (honest). Computed once in ClickHouse 26.3 via
+     * {@code toYYYYMMDD(toDate32(d) - toIntervalDay(toDayOfWeek(d, 1)))} over {@code d} and
+     * {@code toDateTime(toUnixTimestamp64Second(d) % 4294967296, 'UTC')}.
+     */
+    private static final List<Long> FAR_FUTURE_WEEKS = List.of(20650420L, 22010601L);
+
+    /** The predicate the span-id reads emit (OPIK-8361); run both through EXPLAIN and executed, so it is one value. */
+    private static final String SELECT_BY_ID_LIST_AND_WEEK_SET = """
+            SELECT id
+            FROM spans_local_v2
+            WHERE workspace_id = :workspace_id
+            AND id IN :ids
+            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks
+            """;
+
+    /**
+     * The search scan (OPIK-8206): a project's id-range, which prunes no partition on its own, then the same scan with
+     * the week pre-pass the search reads carry. The pre-pass derives the set inside ClickHouse from the project's own
+     * rows within the same bounds, so it can only name weeks the scan can match. Declared once, like
+     * {@link #SELECT_BY_ID_LIST_AND_WEEK_SET}, so the part counts and the rows are about the same statements.
+     */
+    private static final String SELECT_SEARCH_SCAN = """
+            SELECT id
+            FROM spans_local_v2
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND id >= :uuid_from_time
+            """;
+
+    private static final String SELECT_SEARCH_SCAN_WITH_PROJECT_WEEKS = """
+            SELECT id
+            FROM spans_local_v2
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND id >= :uuid_from_time
+            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                FROM spans_local_v2
+                WHERE workspace_id = :workspace_id AND project_id = :project_id AND id >= :uuid_from_time)
+            """;
+
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer clickHouseContainer = ClickHouseContainerUtils
             .newClickHouseContainer(zookeeperContainer);
 
     private final TransactionTemplateAsync transactionTemplateAsync;
+    private final SpanWeeksDAO spanWeeksDAO;
 
     {
         Startables.deepStart(zookeeperContainer, clickHouseContainer).join();
         MigrationUtils.runClickhouseDbMigration(clickHouseContainer);
-        transactionTemplateAsync = TransactionTemplateAsync.create(
-                ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouseContainer, DATABASE_NAME).build());
+        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouseContainer,
+                DATABASE_NAME);
+        var connectionFactory = databaseAnalyticsFactory.build();
+        transactionTemplateAsync = TransactionTemplateAsync.create(connectionFactory);
+        spanWeeksDAO = new SpanWeeksDAO(connectionFactory,
+                new JsonEachRowBulkInsert(databaseAnalyticsFactory.buildClient(), JsonUtils.getMapper()),
+                new InstantToUUIDMapper(),
+                TestConfigUtils.loadConfigTest().getSpanWeeksBackfill());
     }
 
     /**
@@ -258,6 +322,53 @@ class SpansLocalV2PartitioningTest {
         // Equality on the week-start expression prunes to the single week id 1 lands in; the other three seeded weeks
         // (and every out-of-window part) fall away, so selected drops below total.
         assertThat(actualParts.selected()).isLessThan(actualParts.total());
+    }
+
+    @Test
+    void idListWithWeekInSetPrunesPartitions() {
+        var thisMonday = LocalDate.now(ZoneOffset.UTC).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        var seed = seedConsecutiveWeeklyPartitions(thisMonday.minusWeeks(3));
+        var ids = new UUID[]{seed.ids().get(1), seed.ids().get(2)};
+        var expectedWeeks = List.of(yyyymmdd(thisMonday.minusWeeks(2)), yyyymmdd(thisMonday.minusWeeks(1)));
+
+        var actualParts = prunedParts(SELECT_BY_ID_LIST_AND_WEEK_SET, statement -> statement
+                .bind("workspace_id", seed.workspaceId())
+                .bind("ids", ids)
+                .bind("id_weeks", expectedWeeks.toArray(Long[]::new)));
+        var actualIds = idsMatching(SELECT_BY_ID_LIST_AND_WEEK_SET, seed.workspaceId(), statement -> statement
+                .bind("ids", ids)
+                .bind("id_weeks", expectedWeeks.toArray(Long[]::new)));
+
+        // Weeks 0 and 3 prune away; the rows asserted too, since a set naming the wrong weeks would also prune.
+        assertThat(actualParts.selected()).isLessThan(actualParts.total());
+        assertThat(actualIds).containsExactlyInAnyOrder(ids[0].toString(), ids[1].toString());
+        // The DAOs bind weeksOf's output, so it has to name exactly the weeks this table holds the rows in.
+        assertThat(WeeklyPartitions.weeksOf(List.of(ids))).contains(expectedWeeks);
+    }
+
+    /**
+     * A far-future id resolves to two weeks and this schema files it under the honest one, so a set naming only the
+     * legacy wrapped week would return nothing. The expected set is built independently of {@link WeeklyPartitions}
+     * (java.time for the present week, ClickHouse-computed literals for the far-future ones), and {@code weeksOf} must
+     * produce exactly it.
+     */
+    @Test
+    void weekInSetKeepsFarFutureRowsThatTheIdListAdmits() {
+        var now = Instant.now();
+        var workspaceId = UUID.randomUUID().toString();
+        var present = ID_GENERATOR.generateId(now);
+        var farFuture = ID_GENERATOR.generateId(FAR_FUTURE_INSTANT);
+        insert(List.of(present, farFuture), workspaceId, ID_GENERATOR.generateId(), ID_GENERATOR.generateId(), now);
+        var presentWeek = yyyymmdd(LocalDate.ofInstant(now, ZoneOffset.UTC)
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)));
+        var expectedWeeks = Stream.concat(Stream.of(presentWeek), FAR_FUTURE_WEEKS.stream()).sorted().toList();
+
+        var actualIds = idsMatching(SELECT_BY_ID_LIST_AND_WEEK_SET, workspaceId, statement -> statement
+                .bind("ids", new UUID[]{present, farFuture})
+                .bind("id_weeks", expectedWeeks.toArray(Long[]::new)));
+
+        assertThat(actualIds).containsExactlyInAnyOrder(present.toString(), farFuture.toString());
+        assertThat(WeeklyPartitions.weeksOf(List.of(present, farFuture))).contains(expectedWeeks);
     }
 
     /**
@@ -472,6 +583,108 @@ class SpansLocalV2PartitioningTest {
      * Takes the whole statement rather than a fragment, like {@link #prunedParts}, so each read-path case shows the
      * query it pins in full.
      */
+    @Test
+    void searchScanWithProjectWeeksPrunesToProjectWeeks() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var projectIds = List.of(ID_GENERATOR.generateId(weekInstant(1)), ID_GENERATOR.generateId(weekInstant(2)),
+                ID_GENERATOR.generateId(FAR_FUTURE_INSTANT));
+        insert(projectIds, workspaceId, projectId, ID_GENERATOR.generateId(), Instant.now());
+        // Another project's rows in weeks the searched project has none of, inside the same id-range.
+        insert(List.of(ID_GENERATOR.generateId(weekInstant(0)), ID_GENERATOR.generateId(weekInstant(3))), workspaceId,
+                ID_GENERATOR.generateId(), ID_GENERATOR.generateId(), Instant.now());
+        Consumer<Statement> binder = statement -> statement
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId)
+                .bind("uuid_from_time", new InstantToUUIDMapper().toLowerBound(weekInstant(0)).toString());
+
+        var withoutHint = prunedParts(SELECT_SEARCH_SCAN, binder);
+        var withHint = prunedParts(SELECT_SEARCH_SCAN_WITH_PROJECT_WEEKS, binder);
+        var rowsWithoutHint = idsMatching(SELECT_SEARCH_SCAN, workspaceId, binder);
+        var rowsWithHint = idsMatching(SELECT_SEARCH_SCAN_WITH_PROJECT_WEEKS, workspaceId, binder);
+
+        // The id-range alone opens every partition; the project's weeks skip the ones it has no rows in.
+        assertThat(withoutHint.selected()).isEqualTo(withoutHint.total());
+        assertThat(withHint.selected()).isLessThan(withoutHint.selected());
+        // And the hint drops no row the scan admits, the far-future one included.
+        var expectedIds = projectIds.stream().map(UUID::toString).toList();
+        assertThat(rowsWithoutHint).containsExactlyInAnyOrderElementsOf(expectedIds);
+        assertThat(rowsWithHint).containsExactlyInAnyOrderElementsOf(expectedIds);
+    }
+
+    /**
+     * Ids whose stored partition is not their honest week, plus the ordinary cases around a week boundary: span_weeks
+     * records {@link WeeklyPartitions#storedPartitionOf}, so it must equal the partition ClickHouse actually writes the
+     * row to, or a read bound to the index skips the row.
+     */
+    private static Stream<UUID> idsAcrossPartitionEdges() {
+        long mondayMillis = ANCHOR_MONDAY.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
+        long ceilingMillis = Instant.parse("2300-01-01T00:00:00Z").toEpochMilli();
+        return Stream.of(
+                uuidV7(mondayMillis),
+                uuidV7(mondayMillis - 1),
+                ID_GENERATOR.generateId(FAR_FUTURE_INSTANT),
+                uuidV7(0L),
+                uuidV7(ceilingMillis - 1),
+                uuidV7(ceilingMillis),
+                uuidV7((1L << 48) - 1),
+                UUID.randomUUID(),
+                new UUID(0L, 0L));
+    }
+
+    @ParameterizedTest
+    @MethodSource("idsAcrossPartitionEdges")
+    void storedPartitionOfMatchesThePartitionTheRowIsWrittenTo(UUID id) {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var traceId = ID_GENERATOR.generateId();
+        insert(List.of(id), workspaceId, projectId, traceId, weekInstant(0));
+
+        assertThat(partitionIdFor(workspaceId, projectId, id))
+                .isEqualTo(String.valueOf(WeeklyPartitions.storedPartitionOf(id)));
+    }
+
+    /**
+     * The backfill, reading the unpartitioned legacy spans table in id ranges that tile every id, registers the
+     * partition spans_local_v2 stores each span in: non-v7 and nil ids in whichever range holds them, far-future ones
+     * in the open last range. The expected week is the partition ClickHouse writes the same id to in spans_local_v2,
+     * not a value computed in Java.
+     */
+    @Test
+    void backfillRegistersThePartitionEachSpanIsStoredIn() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        Map<UUID, UUID> traceIdBySpanId = idsAcrossPartitionEdges()
+                .collect(Collectors.toMap(Function.identity(), id -> ID_GENERATOR.generateId()));
+        var oracleWorkspaceId = UUID.randomUUID().toString();
+        insert("spans", traceIdBySpanId, workspaceId, projectId, weekInstant(0));
+        insert("spans_local_v2", traceIdBySpanId, oracleWorkspaceId, projectId, weekInstant(0));
+
+        var expected = traceIdBySpanId.entrySet().stream()
+                .map(entry -> SpanWeek.builder()
+                        .projectId(projectId)
+                        .traceId(entry.getValue())
+                        .idWeek(Long.parseLong(partitionIdFor(oracleWorkspaceId, projectId, entry.getKey())))
+                        .build())
+                .toList();
+        Stream.of(chunk(0, 20250303L), chunk(20250303L, 20250310L), chunk(20250310L, null))
+                .forEach(chunk -> spanWeeksDAO.backfill(chunk).block());
+
+        assertThat(spanWeeksDAO.findByTraceIds(Set.copyOf(traceIdBySpanId.values()))
+                .collectList()
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, "user", workspaceId))
+                .block())
+                .containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    private static SpanWeeksBackfillChunk chunk(long fromWeek, Long toWeek) {
+        return SpanWeeksBackfillChunk.builder().fromWeek(fromWeek).toWeek(toWeek).build();
+    }
+
+    private static UUID uuidV7(long epochMillis) {
+        return new UUID((epochMillis << 16) | 0x7000L, 0x8000_0000_0000_0000L);
+    }
+
     private List<String> idsMatching(String selectSql, String workspaceId, Consumer<Statement> binder) {
         return transactionTemplateAsync.stream(connection -> {
             var statement = connection.createStatement(selectSql);
@@ -502,14 +715,18 @@ class SpansLocalV2PartitioningTest {
      * layout the trace_id-keyed guards read. Returns the ids so the reads target the same rows.
      */
     private Seed seedConsecutiveWeeklyPartitions() {
+        return seedConsecutiveWeeklyPartitions(ANCHOR_MONDAY);
+    }
+
+    private Seed seedConsecutiveWeeklyPartitions(LocalDate firstMonday) {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
-        var traceId = ID_GENERATOR.generateId(weekInstant(0));
+        var traceId = ID_GENERATOR.generateId(weekInstant(firstMonday, 0));
         var ids = List.of(
-                ID_GENERATOR.generateId(weekInstant(0)),
-                ID_GENERATOR.generateId(weekInstant(1)),
-                ID_GENERATOR.generateId(weekInstant(2)),
-                ID_GENERATOR.generateId(weekInstant(3)));
+                ID_GENERATOR.generateId(weekInstant(firstMonday, 0)),
+                ID_GENERATOR.generateId(weekInstant(firstMonday, 1)),
+                ID_GENERATOR.generateId(weekInstant(firstMonday, 2)),
+                ID_GENERATOR.generateId(weekInstant(firstMonday, 3)));
         insert(ids, workspaceId, projectId, traceId, Instant.now());
         return Seed.builder().workspaceId(workspaceId).projectId(projectId).traceId(traceId).ids(ids).build();
     }
@@ -520,8 +737,21 @@ class SpansLocalV2PartitioningTest {
      * tests exercise are bound — the rest take their DDL defaults.
      */
     private void insert(List<UUID> ids, String workspaceId, UUID projectId, UUID traceId, Instant lastUpdatedAt) {
+        insert("spans_local_v2", ids, workspaceId, projectId, traceId, lastUpdatedAt);
+    }
+
+    private void insert(String table, List<UUID> ids, String workspaceId, UUID projectId, UUID traceId,
+            Instant lastUpdatedAt) {
+        insert(table, ids.stream().collect(Collectors.toMap(Function.identity(), __ -> traceId)), workspaceId,
+                projectId, lastUpdatedAt);
+    }
+
+    /** One batch insert of the given spans, each with its own trace. */
+    private void insert(String table, Map<UUID, UUID> traceIdBySpanId, String workspaceId, UUID projectId,
+            Instant lastUpdatedAt) {
+        var ids = List.copyOf(traceIdBySpanId.keySet());
         var sql = TemplateUtils.getBatchSql("""
-                INSERT INTO spans_local_v2 (
+                INSERT INTO <table> (
                     id,
                     workspace_id,
                     project_id,
@@ -534,21 +764,21 @@ class SpansLocalV2PartitioningTest {
                             :id<item.index>,
                             :workspace_id,
                             :project_id,
-                            :trace_id,
+                            :trace_id<item.index>,
                             :last_updated_at
                         )
                         <if(item.hasNext)>,<endif>
                     }>
                 ;
-                """, ids.size()).render();
+                """, ids.size()).add("table", table).render();
         transactionTemplateAsync.nonTransaction(connection -> {
             var statement = connection.createStatement(sql)
                     .bind("workspace_id", workspaceId)
                     .bind("project_id", projectId)
-                    .bind("trace_id", traceId)
                     .bind("last_updated_at", ClickHouseDateTimeFormat.formatMicros(lastUpdatedAt));
             for (int index = 0; index < ids.size(); index++) {
                 statement.bind("id" + index, ids.get(index));
+                statement.bind("trace_id" + index, traceIdBySpanId.get(ids.get(index)));
             }
             return Mono.from(statement.execute());
         }).block();
@@ -686,7 +916,16 @@ class SpansLocalV2PartitioningTest {
     }
 
     private Instant weekInstant(int weekOffset) {
-        return ANCHOR_MONDAY.plusWeeks(weekOffset).atTime(12, 0).toInstant(ZoneOffset.UTC);
+        return weekInstant(ANCHOR_MONDAY, weekOffset);
+    }
+
+    private Instant weekInstant(LocalDate firstMonday, int weekOffset) {
+        return firstMonday.plusWeeks(weekOffset).atTime(12, 0).toInstant(ZoneOffset.UTC);
+    }
+
+    /** A Monday as the partition value, via java.time rather than {@link WeeklyPartitions}, so the two stay independent. */
+    private static long yyyymmdd(LocalDate monday) {
+        return Long.parseLong(monday.format(DateTimeFormatter.BASIC_ISO_DATE));
     }
 
     @Builder(toBuilder = true)

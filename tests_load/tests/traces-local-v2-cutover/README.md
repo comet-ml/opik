@@ -19,6 +19,11 @@ not make.
 read-only, so it cannot produce back-dated rows — but the backfill slices the source by `created_at`. Direct inserts are
 the only way to get the multi-week history the weekly backfill loop needs. The two traffic scripts use the normal APIs.
 
+**Shared with the spans suite:** client construction, id minting, project discovery and the delete generator itself
+live in [`tests_load/tests/cutover_common`](../cutover_common) — there is only one delete endpoint, so both suites
+drive the same loop. `_common.py` here binds it to this suite's project name; the seeder and the write generator stay
+local, because their row shapes and traffic differ.
+
 ## Setup
 
 ```bash
@@ -28,7 +33,7 @@ ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED=true ./opik.sh --p
 
 # 2. Install the SDK and these scripts' deps.
 pip install -e sdks/python
-pip install -r tests_load/tests/traces-local-v2-cutover/requirements.txt
+pip install -r tests_load/tests/cutover_common/requirements.txt
 
 # 3. Point the SDK at the local install.
 export OPIK_URL_OVERRIDE=http://localhost:5173/api/

@@ -273,6 +273,8 @@ pip install bert-score
 
 `ChrF` computes the character n-gram F-score (`chrF` / `chrF++`). Adjust `beta`, `char_order`, and `word_order` to switch between the two variants.
 
+`beta` must be a number and `char_order` an integer of at least 1 (booleans are not accepted for either). Invalid values raise `ValueError` when the metric is created.
+
 ```python
 from opik.evaluation.metrics import ChrF
 
@@ -373,6 +375,8 @@ Install the optional dependency when using this metric:
 pip install textstat
 ```
 
+Pass `language` to score text in another language, for example `Readability(language="de_DE")`. It sets the `textstat` locale used for syllable counting, and so for both Flesch scores (default `en_US`). If `textstat` does not know the locale, `score()` raises `MetricComputationError`; inside `evaluate()` the score is recorded as failed.
+
 Pass `enforce_bounds=True` alongside `min_grade` and/or `max_grade` to turn the metric into a strict guardrail that only reports 1.0 when the text meets your grade limits.
 
 ### Spearman Ranking
@@ -402,6 +406,20 @@ score = metric.score(output="THIS IS TERRIBLE!!!")
 print(score.value, score.reason)
 print(score.metadata)
 ```
+
+<Note>
+`positive_lexicon`, `negative_lexicon` and `forbidden_phrases` replace the built-in lists when you pass them. Leave one as `None` to keep the defaults, or pass an empty list to turn that check off. `PromptInjection` follows the same rule for `patterns` and `keywords`.
+
+```python
+from opik.evaluation.metrics import PromptInjection, Tone
+
+# keep the default sentiment lexicons, but skip the forbidden-phrase check
+metric = Tone(forbidden_phrases=[])
+
+# only run your own injection patterns, with no keyword check
+metric = PromptInjection(patterns=[r"reveal (?:the )?secret"], keywords=[])
+```
+</Note>
 
 ### Sentiment
 

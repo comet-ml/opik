@@ -1,6 +1,7 @@
 import { test as baseTest } from './paged-spans.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import { uuid7, type SpanBatchSeed } from '../core/backend';
+import { skipUnlessBackdatedIdsAccepted } from './uuid-window-guard';
 
 /** What the seeded project must total over one of the two KPI periods. */
 export interface SpanKpiPeriodExpectation {
@@ -169,6 +170,14 @@ export const test = baseTest.extend<SpanKpiSpansFixtures>({
     const mean = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length;
 
     try {
+      // Both periods are backdated — the previous one out to 11.5 days — so a
+      // reject-mode env refuses the very first seed.
+      await skipUnlessBackdatedIdsAccepted(
+        backendClient,
+        project.name,
+        Math.max(...PREVIOUS_AGE_DAYS) * DAY_MS,
+      );
+
       await seedPeriod('current', CURRENT_AGE_DAYS, CURRENT_DURATIONS_MS, CURRENT_ERROR_COUNT);
       await seedPeriod('previous', PREVIOUS_AGE_DAYS, PREVIOUS_DURATIONS_MS, 0);
 

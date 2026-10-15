@@ -286,7 +286,29 @@ class SpanCostCalculatorTest {
                 Arguments.of(
                         Map.of("prompt_tokens", 1000, "completion_tokens", 100, "cache_read_input_tokens", 200),
                         "OTel cache_read_input_tokens key",
-                        "11.00"));
+                        "11.00"),
+                // Tool-use prompt tokens (Google's URL-context sample: prompt 27, tool_use 10309) are input
+                // (27 + 10309)*0.01 + 76*0.02 = 103.36 + 1.52 = 104.88
+                Arguments.of(
+                        Map.of("original_usage.prompt_token_count", 27, "completion_tokens", 76,
+                                "original_usage.tool_use_prompt_token_count", 10309),
+                        "Gemini tool_use_prompt_token_count counted as input",
+                        "104.88"),
+                // Tool use with context cache: cached tokens are still a subset of prompt_token_count only
+                // (1000 + 500 - 300)*0.01 + 100*0.02 + 300*0.005 = 12.00 + 2.00 + 1.50 = 15.50
+                Arguments.of(
+                        Map.of("original_usage.prompt_token_count", 1000, "completion_tokens", 100,
+                                "original_usage.tool_use_prompt_token_count", 500,
+                                "original_usage.cached_content_token_count", 300),
+                        "Gemini tool use with cached content",
+                        "15.50"),
+                // Normalized prompt_tokens fallback already includes tool-use tokens, so they are not added twice
+                // 10336*0.01 + 76*0.02 = 103.36 + 1.52 = 104.88
+                Arguments.of(
+                        Map.of("prompt_tokens", 10336, "completion_tokens", 76,
+                                "original_usage.tool_use_prompt_token_count", 10309),
+                        "prompt_tokens fallback does not double count tool-use tokens",
+                        "104.88"));
     }
 
     /**

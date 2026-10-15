@@ -1,5 +1,9 @@
 import { test as baseTest } from './span-kpi-cards.fixture';
-import { isUuidWindowRejection, UUID_VALIDATION_SKIP_REASON } from './uuid-window-guard';
+import {
+  isUuidWindowRejection,
+  skipUnlessBackdatedIdsAccepted,
+  UUID_VALIDATION_SKIP_REASON,
+} from './uuid-window-guard';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import { uuid7, type BackendClient } from '../core/backend';
 
@@ -110,6 +114,17 @@ export const test = baseTest.extend<FarFutureErrorTracesFixtures>({
     };
 
     try {
+      // The dated rows below are backdated well past a default validation
+      // window, so this fixture cannot reach its far-future seed on a
+      // reject-mode env at all. The inner guard on that seed is therefore not
+      // enough on its own: without this, the first ordinary row fails as an
+      // opaque 400 that reads like a product bug.
+      await skipUnlessBackdatedIdsAccepted(
+        backendClient,
+        project.name,
+        Math.max(...OLDER_ERROR_AGE_DAYS) * DAY_MS,
+      );
+
       for (const [i, age] of RECENT_ERROR_AGE_DAYS.entries()) {
         await seed(`recent-error-${i}`, age, true);
       }

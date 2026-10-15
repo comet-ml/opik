@@ -101,20 +101,48 @@ public class OAuthResourceClient {
         }
     }
 
-    /** Registers a client, walks consent + PKCE, and exchanges the code for the raw code and the token pair. */
-    public Minted mintArtifacts() {
-        String clientId = registerClient();
-        String codeVerifier = RandomStringUtils.secure().nextAlphanumeric(64);
-        String code = authorize(clientId, codeVerifier);
-        return new Minted(clientId, code, exchangeCode(clientId, code, codeVerifier));
+    /** A consented, not-yet-exchanged authorization: everything the token endpoint needs. */
+    public record Authorized(String clientId, String code, String codeVerifier) {
     }
 
-    private String registerClient() {
-        var request = ClientRegistrationRequest.builder()
-                .clientName(RandomStringUtils.secure().nextAlphanumeric(10))
-                .redirectUris(Set.of(redirectUri))
-                .build();
+    /** Registers a client, walks consent + PKCE, and exchanges the code for the raw code and the token pair. */
+    public Minted mintArtifacts() {
+        var authorized = authorizeArtifacts(RandomStringUtils.secure().nextAlphanumeric(10));
+        return new Minted(authorized.clientId(), authorized.code(),
+                exchangeCode(authorized.clientId(), authorized.code(), authorized.codeVerifier()));
+    }
 
+    /**
+     * Registers a client under the given display name and walks consent + PKCE, stopping short of the exchange —
+     * for tests that want to drive the exchange through the service and inspect what it decided.
+     */
+    public Authorized authorizeArtifacts(String clientName) {
+        return authorizeArtifacts(ClientRegistrationRequest.builder()
+                .clientName(clientName)
+                .redirectUris(Set.of(redirectUri))
+                .build());
+    }
+
+    /**
+     * Same, registering with the full RFC 7591 metadata the caller supplies (software_id, logo_uri, ...).
+     * Consent and the exchange are always driven with this helper's {@code redirectUri}, so the registration
+     * must list it — a registration that does not would be rejected at the consent context, one step later and
+     * less legibly.
+     */
+    public Authorized authorizeArtifacts(ClientRegistrationRequest registration) {
+        assertThat(registration.redirectUris())
+                .as("the helper consents and exchanges with its own redirect URI, so the registration must allow it")
+                .contains(redirectUri);
+        return reauthorize(registerClient(registration));
+    }
+
+    /** Walks consent + PKCE again for a client that is already registered — a host reusing its client_id. */
+    public Authorized reauthorize(String clientId) {
+        String codeVerifier = RandomStringUtils.secure().nextAlphanumeric(64);
+        return new Authorized(clientId, authorize(clientId, codeVerifier), codeVerifier);
+    }
+
+    private String registerClient(ClientRegistrationRequest request) {
         try (var response = client.target(baseURI + REGISTER_PATH).request().post(Entity.json(request))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
             return response.readEntity(ClientRegistrationResponse.class).clientId();

@@ -6,6 +6,7 @@ import {
   LogExperiment,
   LogExperimentItem,
   LogExperimentPromptVersion,
+  LogErrorInfo,
   LogSpan,
   LogTrace,
   PromptLibraryMetadata,
@@ -23,11 +24,12 @@ import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
+  OpenAiPipelineMode,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
-import { parseCompletionOutput } from "@/lib/playground";
+import { parseCompletionError, parseCompletionOutput } from "@/lib/playground";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import { sanitizeConfigForRequest } from "@/lib/modelUtils";
 
@@ -39,9 +41,15 @@ export interface LogQueueParams extends RunStreamingReturn {
   model: PROVIDER_MODEL_TYPE | "";
   provider: COMPOSED_PROVIDER_TYPE | "";
   providerMessages: ProviderMessageType[];
+  // The prompt as authored, with {{variables}} intact. providerMessages is this
+  // template rendered against one dataset item, so it describes a single run
+  // rather than the experiment (OPIK-7965).
+  templateMessages?: ProviderMessageType[];
   promptLibraryVersions?: LogExperimentPromptVersion[];
   promptLibraryMetadata?: PromptLibraryMetadata;
+  experimentName?: string;
   configs: LLMPromptConfigsType;
+  openAiPipelineMode?: OpenAiPipelineMode;
   selectedRuleIds: string[] | null;
   datasetItemData?: object;
 }
@@ -131,11 +139,23 @@ const USAGE_FIELDS_TO_SEND = [
   "total_tokens",
 ];
 
+const getRunErrorInfo = (run: LogQueueParams): LogErrorInfo | undefined => {
+  const error = parseCompletionError(run);
+  if (!error) return undefined;
+
+  return {
+    exception_type: error.exceptionType,
+    message: error.message,
+  };
+};
+
 const getTraceFromRun = (
   run: LogQueueParams,
   projectName: string,
   source: LOGS_SOURCE,
 ): LogTrace => {
+  const errorInfo = getRunErrorInfo(run);
+
   const trace: LogTrace = {
     id: v7(),
     projectName,
@@ -146,6 +166,7 @@ const getTraceFromRun = (
       messages: run.providerMessages,
     },
     output: { output: parseCompletionOutput(run) },
+    ...(errorInfo && { errorInfo }),
     metadata: {
       created_from: "playground",
     },
@@ -190,6 +211,8 @@ const getSpanFromRun = (
   projectName: string,
   source: LOGS_SOURCE,
 ): LogSpan => {
+  const errorInfo = getRunErrorInfo(run);
+
   const spanOutput =
     run.choices && hasChoicesContent(run)
       ? { choices: run.choices }
@@ -212,6 +235,7 @@ const getSpanFromRun = (
       messages: run.providerMessages,
     },
     output: spanOutput,
+    ...(errorInfo && { errorInfo }),
     usage: !run.usage ? undefined : pick(run.usage, USAGE_FIELDS_TO_SEND),
     model: spanModel,
     provider: spanProvider,
@@ -237,11 +261,12 @@ const getSpanFromRun = (
  * call never ran at.
  */
 export const getLoggedParameters = (
-  run: Pick<LogQueueParams, "model" | "configs">,
+  run: Pick<LogQueueParams, "model" | "configs" | "openAiPipelineMode">,
 ): Record<string, unknown> =>
   sanitizeConfigForRequest(
     run.model,
     run.configs as unknown as Record<string, unknown>,
+    run.openAiPipelineMode,
   );
 
 const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
@@ -250,7 +275,7 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
 
   const experimentMetadata: Record<string, unknown> = {
     model: experimentModel,
-    messages: JSON.stringify(run.providerMessages),
+    messages: JSON.stringify(run.templateMessages ?? run.providerMessages),
     model_config: getLoggedParameters(run),
   };
 
@@ -265,6 +290,7 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
     ...(run.datasetVersionId && {
       datasetVersionId: run.datasetVersionId,
     }),
+    ...(run.experimentName && { name: run.experimentName }),
     metadata: experimentMetadata,
     ...(run.promptLibraryVersions?.length && {
       prompt_versions: run.promptLibraryVersions,

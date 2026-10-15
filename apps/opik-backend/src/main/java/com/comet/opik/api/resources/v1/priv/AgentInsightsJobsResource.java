@@ -43,7 +43,7 @@ public class AgentInsightsJobsResource {
 
     @POST
     @Path("/{projectId}")
-    @Operation(operationId = "createAgentInsightsJob", summary = "Create Agent Insights job", description = "Creates the Agent Insights job for a project. 409 if one already exists.", responses = {
+    @Operation(operationId = "createAgentInsightsJob", summary = "Create Agent Insights job", description = "Creates the Agent Insights job for a project, disabled: the daily schedule stays off until the job is enabled with PATCH. 409 if one already exists.", responses = {
             @ApiResponse(responseCode = "201", description = "Job created", headers = @Header(name = "Location", description = "URI of the created job", schema = @Schema(type = "string")), content = @Content(schema = @Schema(implementation = AgentInsightsJob.class))),
             @ApiResponse(responseCode = "404", description = "Project not found"),
             @ApiResponse(responseCode = "409", description = "Job already exists")

@@ -1,3 +1,5 @@
+import functools
+import inspect
 from typing import Any, Callable, Dict, Optional, List, Union
 
 from opik.evaluation.metrics import base_metric, score_result
@@ -52,6 +54,10 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
         """
         Score using the wrapped ScorerFunction.
 
+        The scorer receives only the arguments its signature declares, so it can take
+        any subset of ``dataset_item``, ``task_outputs`` and (for task-span scorers)
+        ``task_span``. A scorer that accepts ``**kwargs`` receives all of them.
+
         Args:
             dataset_item: The dataset item data to score against
             task_outputs: The output dictionary to be scored - can be the output of LLM task, etc.
@@ -60,7 +66,23 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
         Returns:
             ScoreResult from the wrapped scorer function
         """
-        return self.scorer(dataset_item=dataset_item, task_outputs=task_outputs)
+        return self._call_scorer(dataset_item=dataset_item, task_outputs=task_outputs)
+
+    def _call_scorer(
+        self, **arguments: Any
+    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+        # A scorer may declare only some of the arguments (e.g. only task_span),
+        # so pass just the ones its signature accepts.
+        parameters = inspect.signature(self.scorer).parameters
+        accepts_var_keyword = any(
+            parameter.kind == inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        )
+        if not accepts_var_keyword:
+            arguments = {
+                name: value for name, value in arguments.items() if name in parameters
+            }
+        return self.scorer(**arguments)
 
 
 class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
@@ -85,6 +107,9 @@ class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
         """
         Score using the wrapped ScorerFunction.
 
+        The scorer receives only the arguments its signature declares; a scorer that
+        declares ``task_span`` always gets it, as ``None`` when no span was collected.
+
         Args:
             dataset_item: The dataset item data to score against
             task_outputs: The output dictionary to be scored - can be the output of LLM task, etc.
@@ -94,20 +119,24 @@ class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
         Returns:
             ScoreResult from the wrapped scorer function
         """
-        if task_span is not None and scorer_function.has_task_span_in_parameters(
-            self.scorer
-        ):
-            return self.scorer(
+        if scorer_function.has_task_span_in_parameters(self.scorer):
+            # Pass task_span even when there is none, so a scorer that declares it
+            # without a default gets None instead of failing with a TypeError.
+            return self._call_scorer(
                 dataset_item=dataset_item,
                 task_outputs=task_outputs,
                 task_span=task_span,
             )
 
-        return self.scorer(dataset_item=dataset_item, task_outputs=task_outputs)
+        return self._call_scorer(dataset_item=dataset_item, task_outputs=task_outputs)
 
 
 def _scorer_name(scorer: Callable) -> str:
-    return scorer.__name__
+    # functools.partial objects and callable class instances have no __name__.
+    if isinstance(scorer, functools.partial):
+        return _scorer_name(scorer.func)
+    name = getattr(scorer, "__name__", None)
+    return name if isinstance(name, str) and name else type(scorer).__name__
 
 
 def wrap_scorer_functions(

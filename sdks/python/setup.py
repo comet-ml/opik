@@ -74,6 +74,22 @@ setup(
         "tenacity",
         "tqdm",
         "uuid6",
+        # Optional accelerator for JSON encoding; see opik/json_helpers.py. Guarded
+        # twice -- this marker keeps pip from attempting a source build where no
+        # wheel exists, and the import there is optional, so a missing orjson costs
+        # speed rather than breaking anything.
+        # An allowlist rather than a denylist: orjson publishes CPython wheels for
+        # these architectures only, and a denylist would let a future architecture
+        # through to a source build. armv7l is left out entirely because a marker
+        # cannot tell glibc (wheel exists) from musl (none).
+        (
+            "orjson>=3.9.10;"
+            " platform_python_implementation == 'CPython'"
+            " and platform_machine in 'x86_64 AMD64 aarch64 arm64 ARM64 i686 x86'"
+            " and (sys_platform != 'win32'"
+            " or platform_machine != 'ARM64'"
+            " or python_version >= '3.11')"
+        ),
         "jinja2",
         "watchfiles>=1.0.0,<2.0.0",
         # tree-sitter is used for JS/TS syntax checking in bridge handlers.

@@ -92,33 +92,3 @@ class TestGranted:
         verdict = consent.Verdict(ASK, R.ASKING)
 
         assert consent.granted(verdict, lambda: answer) is answer
-
-
-class TestReadableList:
-    @pytest.mark.parametrize(
-        "names, expected",
-        [
-            ([], ""),
-            (["A"], "A"),
-            (["A", "B"], "A and B"),
-            (["A", "B", "C"], "A, B and C"),
-        ],
-    )
-    def test_reads_as_a_sentence(self, names, expected):
-        assert consent.readable_list(names) == expected
-
-
-class TestPrompts:
-    def test_mcp_prompt__names_what_was_found(self):
-        prompt = consent.mcp_prompt(["Claude Code", "Cursor"])
-
-        assert "Claude Code and Cursor" in prompt
-        assert "(y/N)" in prompt, "defaults to no"
-
-    def test_skills_prompt__is_recommended_and_defaults_to_yes(self):
-        assert "Recommended" in consent.SKILLS_PROMPT
-        assert "(Y/n)" in consent.SKILLS_PROMPT
-
-    def test_skills_prompt__does_not_re_list_the_assistants(self):
-        """The server step's results table just named them."""
-        assert "Claude Code" not in consent.SKILLS_PROMPT

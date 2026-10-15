@@ -1,5 +1,20 @@
-import { describe, expect, it } from "vitest";
-import { processSSEChunk } from "./useCompletionProxyStreaming";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderHook } from "@testing-library/react";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import useCompletionProxyStreaming, {
+  processSSEChunk,
+  pythonProxyErrorMessage,
+} from "./useCompletionProxyStreaming";
+import {
+  LLMPromptConfigsType,
+  OpenAiPipelineMode,
+  PROVIDER_MODEL_TYPE,
+} from "@/types/providers";
+import { LLM_MESSAGE_ROLE } from "@/types/llm";
+
+// The app registers this plugin at startup (lib/date.ts); the hook timestamps every run with it.
+dayjs.extend(utc);
 
 describe("processSSEChunk", () => {
   describe("basic line processing", () => {
@@ -232,5 +247,391 @@ describe("processSSEChunk", () => {
 
       expect(fullContent).toBe("wedding surprise reactions|0.86, beach|0.75");
     });
+  });
+});
+
+describe("pythonProxyErrorMessage", () => {
+  // The two shapes the proxy actually sends. Reading only the first left the
+  // second assigning the wrapper object, which reached the user as
+  // "Run failed: [object Object]".
+  it("should read the message nested under detail", () => {
+    expect(pythonProxyErrorMessage({ detail: "Invalid API key" })).toBe(
+      "Invalid API key",
+    );
+  });
+
+  it("should read the message under error", () => {
+    expect(pythonProxyErrorMessage({ error: "Rate limit exceeded" })).toBe(
+      "Rate limit exceeded",
+    );
+  });
+
+  it("should take a detail that is already a message", () => {
+    expect(pythonProxyErrorMessage("Upstream timed out")).toBe(
+      "Upstream timed out",
+    );
+  });
+
+  // A `detail` at all is what says the run failed; the text only describes it.
+  // Returning the blank string would leave the error falsy, and a failed run
+  // with partially streamed content would then render as a successful one.
+  it.each([
+    ["nothing", undefined],
+    ["null", null],
+    ["an unrecognised shape", { code: 500 }],
+    ["a nested object", { detail: { deeper: "value" } }],
+    ["an empty detail", { detail: "" }],
+    ["a whitespace-only detail", { detail: "   " }],
+    ["an empty error", { error: "" }],
+    ["an empty string", ""],
+  ])("should fall back to a generic message given %s", (_label, detail) => {
+    expect(pythonProxyErrorMessage(detail)).toBe("Python proxy error");
+  });
+
+  it("should never return a falsy message, whatever the proxy sends", () => {
+    const shapes = [undefined, null, "", "   ", { detail: "" }, { error: "" }];
+
+    for (const shape of shapes) {
+      expect(pythonProxyErrorMessage(shape)).toBeTruthy();
+    }
+  });
+
+  it("should prefer a usable message over a blank one earlier in the chain", () => {
+    expect(
+      pythonProxyErrorMessage({ error: "", detail: "Invalid API key" }),
+    ).toBe("Invalid API key");
+  });
+
+  it("should trim the message it returns", () => {
+    expect(pythonProxyErrorMessage({ detail: "  Invalid API key  " })).toBe(
+      "Invalid API key",
+    );
+  });
+
+  it("should never hand back a value that renders as [object Object]", () => {
+    const shapes = [
+      { detail: "a" },
+      { error: "b" },
+      "c",
+      { code: 1 },
+      null,
+      undefined,
+    ];
+
+    for (const shape of shapes) {
+      expect(String(pythonProxyErrorMessage(shape))).not.toContain(
+        "[object Object]",
+      );
+    }
+  });
+});
+
+describe("a run on a model the API key can't use", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("reports the 404 and Anthropic's own message", async () => {
+    const anthropicError = {
+      type: "error",
+      error: { type: "not_found_error", message: "model: claude-mythos-5" },
+      request_id: "req_011CfxbMhbsXYbQCVuBpCBKP",
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({
+          code: 404,
+          message: JSON.stringify(anthropicError),
+        })}\n\ndata: [DONE]\n`,
+        { status: 200 },
+      ),
+    );
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    const run = await result.current({
+      model: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: {} as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+    });
+
+    expect(run.errorStatus).toBe(404);
+    expect(run.providerError).toBe("model: claude-mythos-5");
+  });
+});
+
+describe("the reasoning effort a playground run sends", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const sentReasoningEffort = async (mode?: OpenAiPipelineMode) => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(""));
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    await result.current({
+      model: PROVIDER_MODEL_TYPE.GPT_6_SOL,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: {
+        maxCompletionTokens: 4000,
+        reasoningEffort: "max",
+      } as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+      openAiPipelineMode: mode,
+    });
+
+    const [, init] = fetchSpy.mock.calls[0];
+    return JSON.parse(init?.body as string).reasoning_effort;
+  };
+
+  it("sends a stored max on a Responses API key", async () => {
+    expect(await sentReasoningEffort("responses_api")).toBe("max");
+  });
+
+  it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
+    "sends a stored max as high when the mode is %s",
+    async (mode) => {
+      expect(await sentReasoningEffort(mode)).toBe("high");
+    },
+  );
+});
+
+describe("the error status a failed run reports", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const runAgainst = async (response: Response) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    return result.current({
+      model: PROVIDER_MODEL_TYPE.GPT_4O,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: {} as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+    });
+  };
+
+  const streamOf = (event: object) =>
+    new Response(`data: ${JSON.stringify(event)}\n`, { status: 200 });
+
+  it("reads the status the backend sends with an in-stream error", async () => {
+    const run = await runAgainst(
+      streamOf({ code: 429, message: "Rate limit reached for gpt-4o" }),
+    );
+
+    expect(run.errorStatus).toBe(429);
+    expect(run.opikError).toBe("Rate limit reached for gpt-4o");
+  });
+
+  it("reads the status of an error wrapped in the provider's own envelope", async () => {
+    const run = await runAgainst(
+      streamOf({
+        code: 402,
+        message: JSON.stringify({
+          error: { message: "You exceeded your current quota." },
+        }),
+      }),
+    );
+
+    expect(run.errorStatus).toBe(402);
+    expect(run.providerError).toBe("You exceeded your current quota.");
+  });
+
+  it("falls back to the HTTP status when the body is not an error event", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const run = await runAgainst(
+      new Response("<html>429 Too Many Requests</html>\n", { status: 429 }),
+    );
+
+    expect(run.errorStatus).toBe(429);
+  });
+
+  it("reads a status sent as a string of digits", async () => {
+    const run = await runAgainst(streamOf({ code: "429", message: "slow" }));
+
+    expect(run.errorStatus).toBe(429);
+  });
+
+  it.each([
+    ["a boolean", true],
+    ["an array", [429]],
+    ["a status below the error range", 399],
+    ["a status past the HTTP range", 5000],
+    ["a string that is not a status", "429abc"],
+  ])(
+    "keeps the HTTP status when the event's code is %s",
+    async (_label, code) => {
+      const run = await runAgainst(
+        new Response(`data: ${JSON.stringify({ code, message: "x" })}\n`, {
+          status: 503,
+        }),
+      );
+
+      expect(run.errorStatus).toBe(503);
+    },
+  );
+
+  it("reports no status for a run that succeeds", async () => {
+    const run = await runAgainst(
+      streamOf({ choices: [{ delta: { content: "hello" } }] }),
+    );
+
+    expect(run.errorStatus).toBeNull();
+    expect(run.result).toBe("hello");
+  });
+});
+
+describe("the penalties a playground run sends", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const sentBody = async (mode?: OpenAiPipelineMode) => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(""));
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    await result.current({
+      model: PROVIDER_MODEL_TYPE.GPT_4O,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: {
+        temperature: 0.4,
+        maxCompletionTokens: 4000,
+        topP: 1,
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.3,
+      } as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+      openAiPipelineMode: mode,
+    });
+
+    const [, init] = fetchSpy.mock.calls[0];
+    return JSON.parse(init?.body as string);
+  };
+
+  it("sends neither on a Responses API key", async () => {
+    const body = await sentBody("responses_api");
+
+    expect(body).not.toHaveProperty("frequency_penalty");
+    expect(body).not.toHaveProperty("presence_penalty");
+    expect(body.temperature).toBe(0.4);
+  });
+
+  it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
+    "sends both when the mode is %s",
+    async (mode) => {
+      const body = await sentBody(mode);
+
+      expect(body.frequency_penalty).toBe(0.5);
+      expect(body.presence_penalty).toBe(0.3);
+    },
+  );
+});
+
+describe("the finish reason a playground run reports", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const sse = (...events: object[]) =>
+    events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") +
+    "data: [DONE]\n\n";
+
+  const runAgainst = async (body: string) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(body));
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    return result.current({
+      model: PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: { maxCompletionTokens: 60 } as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+    });
+  };
+
+  const USAGE = { prompt_tokens: 58, completion_tokens: 60, total_tokens: 118 };
+
+  it.each<[string, string, string | null, typeof USAGE | null]>([
+    [
+      "keeps OpenAI's length although the usage chunk after it has no choices",
+      sse(
+        { choices: [{ index: 0, delta: { content: "" } }] },
+        { choices: [{ index: 0, delta: {}, finish_reason: "length" }] },
+        { choices: [], usage: USAGE },
+      ),
+      "length",
+      USAGE,
+    ],
+    [
+      "reads a finish reason sent together with the usage",
+      sse(
+        { choices: [{ delta: { content: "" } }] },
+        {
+          choices: [{ delta: { content: "" }, finish_reason: "length" }],
+          usage: USAGE,
+        },
+      ),
+      "length",
+      USAGE,
+    ],
+    [
+      "reports stop for an answer that finished normally without usage",
+      sse(
+        { choices: [{ delta: { content: "hi" } }] },
+        { choices: [{ delta: { content: "" }, finish_reason: "stop" }] },
+      ),
+      "stop",
+      null,
+    ],
+    [
+      "reports none when the stream carries no finish reason",
+      sse({ choices: [{ delta: { content: "" } }], usage: USAGE }),
+      null,
+      USAGE,
+    ],
+  ])("%s", async (_, body, expectedFinishReason, expectedUsage) => {
+    const run = await runAgainst(body);
+
+    expect(run).toMatchObject({
+      finishReason: expectedFinishReason,
+      usage: expectedUsage,
+      providerError: null,
+      opikError: null,
+      pythonProxyError: null,
+    });
+  });
+
+  it("returns an empty result for a run that spent the limit on reasoning", async () => {
+    const run = await runAgainst(
+      sse(
+        { choices: [{ index: 0, delta: { content: "" } }] },
+        { choices: [{ index: 0, delta: {}, finish_reason: "length" }] },
+        { choices: [], usage: USAGE },
+      ),
+    );
+
+    expect(run.result).toBe("");
+    expect(run.usage).toEqual(USAGE);
   });
 });

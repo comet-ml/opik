@@ -11,6 +11,7 @@ type InlineEditableTextProps = {
   className?: string;
   isTitle?: boolean;
   rightIcon?: React.ReactNode;
+  alwaysShowEditIcon?: boolean;
 };
 
 const InlineEditableText: React.FunctionComponent<InlineEditableTextProps> = ({
@@ -21,6 +22,7 @@ const InlineEditableText: React.FunctionComponent<InlineEditableTextProps> = ({
   className,
   isTitle = false,
   rightIcon,
+  alwaysShowEditIcon = false,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
@@ -186,7 +188,12 @@ const InlineEditableText: React.FunctionComponent<InlineEditableTextProps> = ({
             <div className="flex shrink-0 items-center">{rightIcon}</div>
           )}
         </div>
-        <div className="ml-auto hidden h-full items-center pr-2 group-hover/inline-edit:flex">
+        <div
+          className={cn(
+            "ml-auto h-full items-center pr-2",
+            alwaysShowEditIcon ? "flex" : "hidden group-hover/inline-edit:flex",
+          )}
+        >
           <div className="flex size-7 items-center justify-center rounded">
             <Pencil className="size-3.5 text-foreground" />
           </div>

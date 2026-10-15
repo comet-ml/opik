@@ -44,7 +44,7 @@ const ColumnsButton = <TColumnData,>({
 
   return (
     <DropdownMenu>
-      <TooltipWrapper content="Columns">
+      <TooltipWrapper content={layout === "icon" ? "Columns" : undefined}>
         <DropdownMenuTrigger asChild>
           {layout === "labeled" ? (
             <Button

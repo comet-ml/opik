@@ -109,6 +109,15 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
         String reason = throwable instanceof AgentInsightsTriggerException triggerFailure
                 ? triggerFailure.getReason()
                 : AgentInsightsJob.FailureReason.DID_NOT_START;
+        if (AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED.equals(reason)) {
+            if (AgentInsightsMetrics.AUTO_FIRST_RUN.equals(message.triggerSource())) {
+                cancelAutoFirstRunRollout(message);
+                return;
+            }
+            // Only the free run draws on Comet's budget. Anything else reporting it is misclassified, and cancelling
+            // the whole rollout over it would leave nothing to re-enable it: record it as the customer's credits.
+            reason = AgentInsightsJob.FailureReason.OUT_OF_CREDITS;
+        }
         try {
             jobService.markRunFailed(message.workspaceId(), message.projectId(), reason, throwable.getMessage());
         } catch (Exception e) {
@@ -117,8 +126,20 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
         }
     }
 
+    // Comet's free-run budget is spent: cancel the rollout for everyone still owed a run. Nothing re-enables it:
+    // resuming means re-enrolling the projects through the internal enrolment endpoint.
+    private void cancelAutoFirstRunRollout(AgentInsightsReportMessage message) {
+        try {
+            int cancelled = jobService.cancelAutoFirstRunRollout(message.workspaceId(), message.projectId());
+            log.warn("Free Agent Insights budget exhausted on reportId='{}', project='{}'; cancelled the "
+                    + "auto-first-run rollout for {} projects", message.reportId(), message.projectId(), cancelled);
+        } catch (Exception e) {
+            log.error("Failed to cancel the auto-first-run rollout after the free budget ran out", e);
+        }
+    }
+
     private boolean isDisabled() {
-        if (!serviceToggles.isOllieEnabled()) {
+        if (!serviceToggles.isAgentInsightsActive()) {
             log.info("Agent Insights is disabled, skipping report subscriber lifecycle operation");
             return true;
         }

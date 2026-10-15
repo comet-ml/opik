@@ -1,0 +1,139 @@
+---
+headline: Query spend with MCP
+og:description: Connect your coding agent to the Opik MCP server and ask about
+  your organization's coding-agent spend in plain language, from the biggest
+  spenders to what drove the cost of a single session.
+og:site_name: Opik Documentation
+og:title: Query spend with MCP - Opik
+title: Query spend with MCP
+---
+
+Point the Opik MCP server at your Cost Intelligence workspace and you can ask your coding agent about your organization's spend in plain language: who spends the most, which skills and MCP servers earn their keep, and what drove the cost of a single session. The agent reads the same figures as the Cost Intelligence dashboard, and links each answer to the matching page so you can check it.
+
+<Note>
+  Only admins can use it. The Cost Intelligence workspace holds company-wide
+  data, so access to it is limited to admins, and the MCP server can only read
+  what your own API key can.
+</Note>
+
+## Before you begin
+
+You need three things:
+
+- [`uv`](https://docs.astral.sh/uv/), which runs the MCP server.
+- Your Opik API key, from your [Opik account settings](https://www.comet.com/settings/api-keys?utm_source=opik&utm_medium=docs&utm_campaign=cost_intelligence).
+- The name of your Cost Intelligence workspace. It is `__ai_spend_` followed by your organization ID and two underscores, for example `__ai_spend_XJtf7HIqB9i2K59BxoHmUUGTD__`. To find yours, open **Cost Intelligence** from the user menu in Opik and copy the name from the browser address bar, which reads `https://www.comet.com/opik/<workspace>/ai-spend/...`.
+
+## Set it up
+
+<Steps>
+  <Step title="Install uv, if you don't have it">
+    ```bash title="macOS / Linux"
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+
+    ```powershell title="Windows"
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    ```
+
+    Open a new terminal afterwards so `uvx` is on your `PATH`.
+  </Step>
+  <Step title="Add the server to your coding agent">
+    Add it under its own name, `opik-cost-intelligence`, so it sits alongside any Opik MCP server you already use for your regular workspace.
+
+    <Tabs>
+      <Tab title="Claude Code">
+        ```bash
+        claude mcp add --scope user opik-cost-intelligence \
+          --env OPIK_API_KEY=<your-api-key> \
+          --env OPIK_WORKSPACE=<your-cost-intelligence-workspace> \
+          -- uvx opik-mcp
+        ```
+      </Tab>
+      <Tab title="Cursor">
+        Edit `~/.cursor/mcp.json`:
+
+        ```json
+        {
+          "mcpServers": {
+            "opik-cost-intelligence": {
+              "type": "stdio",
+              "command": "uvx",
+              "args": ["opik-mcp"],
+              "env": {
+                "OPIK_API_KEY": "<your-api-key>",
+                "OPIK_WORKSPACE": "<your-cost-intelligence-workspace>"
+              }
+            }
+          }
+        }
+        ```
+      </Tab>
+      <Tab title="Codex">
+        ```bash
+        codex mcp add opik-cost-intelligence \
+          --env OPIK_API_KEY=<your-api-key> \
+          --env OPIK_WORKSPACE=<your-cost-intelligence-workspace> \
+          -- uvx opik-mcp
+        ```
+      </Tab>
+    </Tabs>
+
+    For other clients, [Advanced setup](/mcp-server/advanced-setup#local-server) shows where each one keeps this configuration.
+
+    <Tip>
+      On a self-hosted Comet deployment, also set `COMET_URL_OVERRIDE` to your
+      instance URL. The server expects Opik's API at that URL plus `/opik/api`.
+      If your deployment serves it at a different host or path, also set
+      `OPIK_URL` to the full API URL.
+    </Tip>
+  </Step>
+  <Step title="Start a new session and check it works">
+    Coding agents read their MCP configuration at startup, so start a new session, then ask:
+
+    ```text title="Check it worked"
+    Summarize our coding agent spend over the last 30 days.
+    ```
+
+    The agent should answer with total spend and how it compares with the 30 days before.
+  </Step>
+</Steps>
+
+## Questions to ask
+
+Answers cover the last 30 days unless you name another time window.
+
+```text title="Spend overview" wordWrap
+Tell me about our company's AI spend, and break it down for the top 10 token consumers.
+```
+
+Total spend for the period, and what each of the ten heaviest users spends their tokens on.
+
+```text title="Most used skills" wordWrap
+Which skills do people across the company use the most?
+```
+
+Which skills earn their place, and which ones only add to every request.
+
+```text title="Unused MCP servers" wordWrap
+Are we paying for any MCP servers that nobody actually uses?
+```
+
+MCP servers that are installed but never called, and what removing them would save.
+
+```text title="Duplicate MCP servers" wordWrap
+Is anyone running the same MCP server in more than one way, for example as a claude.ai connector and as a local install?
+```
+
+Duplicates like `claude_ai_Notion` and `Notion`, where users pay for the same tool definitions twice.
+
+```text title="Session deep dive" wordWrap
+Walk me through my most recent session. What drove most of its cost?
+```
+
+What one session did, step by step, and which cost category dominated it.
+
+## Troubleshooting
+
+- **The agent says it has no access to spend data.** The server is pointed at the wrong workspace. Set `OPIK_WORKSPACE` to your Cost Intelligence workspace, the one starting with `__ai_spend_`. An `opik-mcp` version older than 0.2.38 shows the same symptom; if `uvx` is still running an older copy from its cache, run `uv cache clean opik-mcp`. Restart the coding agent after any change.
+- **The agent reports an authentication or permission error.** The API key belongs to an account without access to the Cost Intelligence workspace. Use an admin's key.

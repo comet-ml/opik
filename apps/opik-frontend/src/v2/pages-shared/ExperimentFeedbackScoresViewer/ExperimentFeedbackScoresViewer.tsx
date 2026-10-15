@@ -19,11 +19,12 @@ type ExperimentFeedbackScoresViewerProps = {
   traceId: string;
   spanId?: string;
   sectionIdx: number;
+  onChangeApplied?: () => void;
 };
 
 const ExperimentFeedbackScoresViewer: React.FunctionComponent<
   ExperimentFeedbackScoresViewerProps
-> = ({ feedbackScores = [], traceId, spanId, sectionIdx }) => {
+> = ({ feedbackScores = [], traceId, spanId, sectionIdx, onChangeApplied }) => {
   const [activeTab, setActiveTab] = useState<string>(
     FEEDBACK_SCORES_TABS.ALL_SCORES,
   );
@@ -31,11 +32,14 @@ const ExperimentFeedbackScoresViewer: React.FunctionComponent<
   const { mutate: feedbackScoreDelete } = useTraceFeedbackScoreDeleteMutation();
 
   const onUpdateFeedbackScore = (data: UpdateFeedbackScoreData) => {
-    setTraceFeedbackScore({
-      ...data,
-      traceId,
-      spanId,
-    });
+    setTraceFeedbackScore(
+      {
+        ...data,
+        traceId,
+        spanId,
+      },
+      { onSuccess: onChangeApplied },
+    );
   };
 
   const onDeleteFeedbackScore = (
@@ -44,7 +48,10 @@ const ExperimentFeedbackScoresViewer: React.FunctionComponent<
     _spanId?: string,
     sourceQueueId?: string,
   ) => {
-    feedbackScoreDelete({ name, traceId, spanId, author, sourceQueueId });
+    feedbackScoreDelete(
+      { name, traceId, spanId, author, sourceQueueId },
+      { onSuccess: onChangeApplied },
+    );
   };
 
   return (

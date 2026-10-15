@@ -2404,11 +2404,9 @@ class ExperimentsResourceTest {
             assertThat(experimentCaptor.getValue().traceIds()).isEqualTo(Set.of(trace6.id()));
             assertThat(experimentCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
 
-            traceDeletedListener.onTracesDeleted(TracesDeleted.builder()
-                    .traceIds(Set.of(trace6.id()))
-                    .workspaceId(workspaceId)
-                    .userName(USER)
-                    .build());
+            // Replay the captured event rather than rebuilding it: a hand-assembled copy silently drifts from what
+            // production actually posts, which is how this lost the project id the real event has always carried.
+            traceDeletedListener.onTracesDeleted(experimentCaptor.getValue());
 
             List<ExperimentItem> experimentExpected = experimentItems
                     .stream()
@@ -4753,9 +4751,19 @@ class ExperimentsResourceTest {
             var trace3 = podamFactory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(project.name()).build();
 
+            // Same workspace and project, but no experiment item points at it: its comments must not reach
+            // the experiment.
+            var unrelatedTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+
             var traces = List.of(trace1, trace2, trace3);
 
-            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(
+                    Stream.concat(traces.stream(), Stream.of(unrelatedTrace)).toList(), API_KEY, TEST_WORKSPACE);
+
+            IntStream.range(0, 3)
+                    .forEach(i -> traceResourceClient.generateAndCreateComment(
+                            unrelatedTrace.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED));
 
             // Creating 5 scores peach each of the three traces above
             var scoreForTrace1 = makeTraceScores(trace1);
@@ -5059,11 +5067,9 @@ class ExperimentsResourceTest {
             assertThat(experimentCaptor.getValue().traceIds()).isEqualTo(Set.of(trace6.id()));
             assertThat(experimentCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
 
-            traceDeletedListener.onTracesDeleted(TracesDeleted.builder()
-                    .traceIds(Set.of(trace6.id()))
-                    .workspaceId(workspaceId)
-                    .userName(USER)
-                    .build());
+            // Replay the captured event rather than rebuilding it: a hand-assembled copy silently drifts from what
+            // production actually posts, which is how this lost the project id the real event has always carried.
+            traceDeletedListener.onTracesDeleted(experimentCaptor.getValue());
 
             List<BigDecimal> quantities = getQuantities(Stream.of(trace1, trace2, trace3, trace4, trace5));
 
@@ -6627,6 +6633,257 @@ class ExperimentsResourceTest {
                             .items(List.of(datasetItem)).build(),
                     TEST_WORKSPACE, API_KEY);
             return new BulkDataset(dataset.name(), datasetItem);
+        }
+
+        /**
+         * An experiment created without a {@code project_name} stores no project of its own, and its effective
+         * project comes from the traces its items point at. Bulk ingestion reads that project back to decide two things:
+         * whether an explicit {@code project_name} agrees with the experiment, and - when none is given - which
+         * project the new traces land in. Reading the bare stored column instead makes such an experiment look
+         * projectless, which turns the correct {@code project_name} into a 409.
+         */
+        @Test
+        void experimentItemsBulk__whenEffectiveProjectComesFromTrace__thenMatchingProjectNameIsAccepted() {
+            var datasetWithItem = createDatasetWithItem();
+            var projectName = newProjectName();
+            var experimentName = newExperimentName();
+
+            // createPartialExperiment already leaves projectName and projectId null, so the experiment stores
+            // no project of its own.
+            var experimentId = experimentResourceClient.create(
+                    experimentResourceClient.createPartialExperiment()
+                            .datasetName(datasetWithItem.datasetName())
+                            .name(experimentName)
+                            .build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            // Its only item's trace lives in projectName, so that is the experiment's effective project.
+            var trace = createTrace().toBuilder().projectName(projectName).build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+            experimentResourceClient.createExperimentItem(Set.of(ExperimentItem.builder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetWithItem.item().id())
+                    .traceId(trace.id())
+                    .build()), API_KEY, TEST_WORKSPACE);
+
+            var bulkUpload = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(datasetWithItem.datasetName())
+                    .experimentId(experimentId)
+                    .projectName(projectName)
+                    .items(List.of(ExperimentItemBulkRecord.builder()
+                            .datasetItemId(datasetWithItem.item().id())
+                            .trace(createTrace().toBuilder().projectName(projectName).build())
+                            .build()))
+                    .build();
+
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUpload, API_KEY,
+                    TEST_WORKSPACE)) {
+                var body = response.hasEntity() ? response.readEntity(String.class) : "";
+                assertThat(response.getStatus())
+                        .as("the request names the experiment's own effective project, so it is not a mismatch: %s",
+                                body)
+                        .isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+        }
+
+        /**
+         * The effective project comes from the item's <b>trace</b>, not from the denormalized
+         * {@code experiment_items.project_id}. The two differ when an item names one project while its trace was
+         * logged in another, and the read model derives from the traces, so reading the column instead inverts
+         * which {@code project_name} bulk ingestion accepts.
+         */
+        @Test
+        void experimentItemsBulk__whenItemNamesADifferentProjectThanItsTrace__thenTheTracesProjectWins() {
+            var datasetWithItem = createDatasetWithItem();
+            var itemNamedProject = newProjectName();
+            var traceProject = newProjectName();
+            var experimentName = newExperimentName();
+
+            var experimentId = experimentResourceClient.create(
+                    experimentResourceClient.createPartialExperiment()
+                            .datasetName(datasetWithItem.datasetName())
+                            .name(experimentName)
+                            .build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            var trace = createTrace().toBuilder().projectName(traceProject).build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+            experimentResourceClient.createExperimentItem(Set.of(ExperimentItem.builder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetWithItem.item().id())
+                    .traceId(trace.id())
+                    .projectName(itemNamedProject)
+                    .build()), API_KEY, TEST_WORKSPACE);
+
+            // Accepted, and the trace is persisted under the project it named - a 204 alone would not see
+            // where it landed.
+            var ingested = createTrace().toBuilder().projectName(traceProject).build();
+            experimentResourceClient.bulkUploadExperimentItem(
+                    bulkUpload(experimentId, experimentName, datasetWithItem.datasetName(),
+                            datasetWithItem.item().id(), traceProject, ingested),
+                    API_KEY, TEST_WORKSPACE);
+            assertThat(traceResourceClient.getById(ingested.id(), TEST_WORKSPACE, API_KEY).projectId())
+                    .as("the trace's project is the experiment's effective project")
+                    .isEqualTo(seedProjectId(trace));
+
+            assertThat(bulkStatus(experimentId, experimentName, datasetWithItem, itemNamedProject))
+                    .as("the project the item merely named is not")
+                    .isEqualTo(HttpStatus.SC_CONFLICT);
+        }
+
+        /**
+         * With traces in several projects both this query and the read model pick arbitrarily - the read model
+         * takes {@code groupUniqArrayIf(...)[1]} off a set whose order is undefined - so the property to pin is
+         * that the answer is one of the experiment's own trace projects, never something else.
+         */
+        @Test
+        void experimentItemsBulk__whenTracesSpanTwoProjects__thenOneOfThemIsTheEffectiveProject() {
+            var dataset = buildDataset();
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItems = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class).subList(0, 2)
+                    .stream().map(item -> item.toBuilder().datasetId(datasetId).build()).toList();
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder().datasetName(dataset.name())
+                    .items(datasetItems).build(), TEST_WORKSPACE, API_KEY);
+
+            var projectA = newProjectName();
+            var projectB = newProjectName();
+            var experimentName = newExperimentName();
+            var experimentId = experimentResourceClient.create(
+                    experimentResourceClient.createPartialExperiment()
+                            .datasetName(dataset.name()).name(experimentName).build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            var traceA = createTrace().toBuilder().projectName(projectA).build();
+            var traceB = createTrace().toBuilder().projectName(projectB).build();
+            traceResourceClient.batchCreateTraces(List.of(traceA, traceB), API_KEY, TEST_WORKSPACE);
+            experimentResourceClient.createExperimentItem(Set.of(
+                    ExperimentItem.builder().experimentId(experimentId)
+                            .datasetItemId(datasetItems.getFirst().id()).traceId(traceA.id()).build(),
+                    ExperimentItem.builder().experimentId(experimentId)
+                            .datasetItemId(datasetItems.getLast().id()).traceId(traceB.id()).build()),
+                    API_KEY, TEST_WORKSPACE);
+
+            // An unrelated project always conflicts, and the message names whichever project was resolved.
+            var unrelated = newProjectName();
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(
+                    bulkUpload(experimentId, experimentName, dataset.name(), datasetItems.getFirst().id(), unrelated),
+                    API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                        .as("the resolved project is one of the experiment's own trace projects")
+                        .containsAnyOf("'%s'".formatted(projectA), "'%s'".formatted(projectB));
+            }
+        }
+
+        /**
+         * Nothing to derive the project from, so nothing to conflict with: an explicit project_name is accepted,
+         * as it is on the read model.
+         */
+        @Test
+        void experimentItemsBulk__whenExperimentHasNoItemsYet__thenAnyProjectNameIsAccepted() {
+            var datasetWithItem = createDatasetWithItem();
+            var experimentName = newExperimentName();
+            var experimentId = experimentResourceClient.create(
+                    experimentResourceClient.createPartialExperiment()
+                            .datasetName(datasetWithItem.datasetName()).name(experimentName).build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(bulkStatus(experimentId, experimentName, datasetWithItem, newProjectName()))
+                    .isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+
+        /**
+         * A stored project short-circuits the fallback entirely, so it still decides the match.
+         */
+        @Test
+        void experimentItemsBulk__whenExperimentStoresItsOwnProject__thenThatProjectDecidesTheMatch() {
+            var datasetWithItem = createDatasetWithItem();
+            var storedProject = newProjectName();
+            var experimentName = newExperimentName();
+            var experimentId = experimentResourceClient.create(
+                    experimentResourceClient.createPartialExperiment()
+                            .datasetName(datasetWithItem.datasetName())
+                            .name(experimentName)
+                            .projectName(storedProject)
+                            .build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(bulkStatus(experimentId, experimentName, datasetWithItem, storedProject))
+                    .isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(bulkStatus(experimentId, experimentName, datasetWithItem, newProjectName()))
+                    .isEqualTo(HttpStatus.SC_CONFLICT);
+        }
+
+        /**
+         * The other half of the effective project: with no {@code project_name} on the request the project is
+         * reused from the experiment, so the ingested trace must land in the experiment's own project rather
+         * than in the default one. A status code cannot see that - it is asserted on the persisted trace.
+         */
+        @Test
+        void experimentItemsBulk__whenNoProjectNameIsGiven__thenTheTraceLandsInTheExperimentsProject() {
+            var datasetWithItem = createDatasetWithItem();
+            var traceProject = newProjectName();
+            var experimentName = newExperimentName();
+
+            var experimentId = experimentResourceClient.create(
+                    experimentResourceClient.createPartialExperiment()
+                            .datasetName(datasetWithItem.datasetName()).name(experimentName).build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            var seedTrace = createTrace().toBuilder().projectName(traceProject).build();
+            traceResourceClient.batchCreateTraces(List.of(seedTrace), API_KEY, TEST_WORKSPACE);
+            experimentResourceClient.createExperimentItem(Set.of(ExperimentItem.builder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetWithItem.item().id())
+                    .traceId(seedTrace.id())
+                    .build()), API_KEY, TEST_WORKSPACE);
+
+            var ingested = createTrace().toBuilder().projectName(null).build();
+            experimentResourceClient.bulkUploadExperimentItem(
+                    bulkUpload(experimentId, experimentName, datasetWithItem.datasetName(),
+                            datasetWithItem.item().id(), null, ingested),
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(traceResourceClient.getById(ingested.id(), TEST_WORKSPACE, API_KEY).projectId())
+                    .as("reused into the experiment's own project, not re-homed to the default one")
+                    .isEqualTo(seedProjectId(seedTrace));
+        }
+
+        private int bulkStatus(UUID experimentId, String experimentName, BulkDataset dataset, String projectName) {
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(
+                    bulkUpload(experimentId, experimentName, dataset.datasetName(), dataset.item().id(), projectName),
+                    API_KEY, TEST_WORKSPACE)) {
+                return response.getStatus();
+            }
+        }
+
+        private ExperimentItemBulkUpload bulkUpload(UUID experimentId, String experimentName, String datasetName,
+                UUID datasetItemId, String projectName) {
+            return bulkUpload(experimentId, experimentName, datasetName, datasetItemId, projectName,
+                    createTrace().toBuilder().projectName(projectName).build());
+        }
+
+        private ExperimentItemBulkUpload bulkUpload(UUID experimentId, String experimentName, String datasetName,
+                UUID datasetItemId, String projectName, Trace trace) {
+            return ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(datasetName)
+                    .experimentId(experimentId)
+                    .projectName(projectName)
+                    .items(List.of(ExperimentItemBulkRecord.builder()
+                            .datasetItemId(datasetItemId)
+                            .trace(trace)
+                            .build()))
+                    .build();
+        }
+
+        /**
+         * The project the experiment's seed trace was logged in, read back so assertions compare ids rather
+         * than assuming how a name resolves.
+         */
+        private UUID seedProjectId(Trace seedTrace) {
+            return traceResourceClient.getById(seedTrace.id(), TEST_WORKSPACE, API_KEY).projectId();
         }
 
         private String newExperimentName() {

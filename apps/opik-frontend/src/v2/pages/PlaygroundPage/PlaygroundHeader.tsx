@@ -8,13 +8,11 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import RunExperimentControl from "@/v2/pages/PlaygroundPage/RunExperimentControl";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { generateDefaultPrompt } from "@/lib/playground";
+import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
 import { LOGS_SOURCE } from "@/types/traces";
 import { useActiveProjectId } from "@/store/AppStore";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
-import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { DATASET_TYPE } from "@/types/datasets";
-import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import {
@@ -24,31 +22,22 @@ import {
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 import {
   usePromptMap,
-  useSetPromptMap,
   useClearCreatedExperiments,
   useCreatedExperiments,
   useIsRunning,
   useSetSelectedRuleIds,
   useResetDatasetFilters,
   useResetOutputMap,
-  useSetExperimentNamePrefix,
+  useSetExperimentName,
   useSetDatasetType,
   useDatasetType,
   useDatasetFilters,
   useSetDatasetFilters,
 } from "@/store/PlaygroundStore";
-import useLastPickedModel from "@/hooks/useLastPickedModel";
-import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import {
-  supportsImageInput,
-  supportsVideoInput,
-} from "@/lib/modelCapabilities";
-import { hasImagesInContent, hasVideosInContent } from "@/lib/llm";
 
 interface PlaygroundHeaderProps {
   workspaceName: string;
-  providerKeys: COMPOSED_PROVIDER_TYPE[];
   datasetId: string | null;
   datasetName: string | null;
   versionName?: string;
@@ -62,7 +51,6 @@ interface PlaygroundHeaderProps {
 
 const PlaygroundHeader = ({
   workspaceName,
-  providerKeys,
   datasetId,
   datasetName,
   versionName,
@@ -73,13 +61,12 @@ const PlaygroundHeader = ({
   maxWidth,
 }: PlaygroundHeaderProps) => {
   const promptMap = usePromptMap();
-  const setPromptMap = useSetPromptMap();
   const clearCreatedExperiments = useClearCreatedExperiments();
   const createdExperiments = useCreatedExperiments();
   const setSelectedRuleIds = useSetSelectedRuleIds();
   const resetDatasetFilters = useResetDatasetFilters();
   const resetOutputMap = useResetOutputMap();
-  const setExperimentNamePrefix = useSetExperimentNamePrefix();
+  const setExperimentName = useSetExperimentName();
   const isRunning = useIsRunning();
   const setDatasetType = useSetDatasetType();
   const currentDatasetType = useDatasetType();
@@ -92,12 +79,6 @@ const PlaygroundHeader = ({
   const {
     permissions: { canViewExperiments, canCreateExperiments, canViewDatasets },
   } = usePermissions();
-
-  const [lastPickedModel] = useLastPickedModel({
-    key: PLAYGROUND_LAST_PICKED_MODEL,
-  });
-  const { calculateModelProvider, calculateDefaultModel } =
-    useLLMProviderModelsData();
 
   const isExperimentMode = !!datasetId;
   const activeProjectId = useActiveProjectId();
@@ -144,47 +125,32 @@ const PlaygroundHeader = ({
     [datasetItemsForColumns?.columns],
   );
 
-  const hasMediaCompatibilityIssues = useMemo(() => {
-    return Object.values(promptMap).some((prompt) => {
-      if (!prompt.model) return false;
-      const modelSupportsImages = supportsImageInput(prompt.model);
-      const modelSupportsVideos = supportsVideoInput(prompt.model);
-      const hasImages = prompt.messages.some((message) =>
-        hasImagesInContent(message.content),
-      );
-      const hasVideos = prompt.messages.some((message) =>
-        hasVideosInContent(message.content),
-      );
-      return (
-        (hasImages && !modelSupportsImages) ||
-        (hasVideos && !modelSupportsVideos)
-      );
-    });
-  }, [promptMap]);
+  const hasMediaCompatibilityIssues = useMemo(
+    () =>
+      Object.values(promptMap).some((prompt) => hasUnsupportedMedia(prompt)),
+    [promptMap],
+  );
 
   const allPromptsHaveModels = useMemo(
     () => Object.values(promptMap).every((p) => !!p.model),
     [promptMap],
   );
 
-  const allMessagesNotEmpty = useMemo(
-    () =>
-      Object.values(promptMap).every((p) =>
-        p.messages.every((m) => m.content?.length > 0),
-      ),
+  const allMessagesRunnable = useMemo(
+    () => Object.values(promptMap).every((p) => canRunMessages(p.messages)),
     [promptMap],
   );
 
   const isRunDisabled =
     !allPromptsHaveModels ||
-    !allMessagesNotEmpty ||
+    !allMessagesRunnable ||
     hasMediaCompatibilityIssues ||
     (isExperimentMode && !datasetName);
 
   const runDisabledReason = useMemo(() => {
     if (!allPromptsHaveModels)
       return "Please select an LLM model for your prompts";
-    if (!allMessagesNotEmpty)
+    if (!allMessagesRunnable)
       return "Some messages are empty. Please add some text to proceed";
     if (hasMediaCompatibilityIssues)
       return "Some prompts contain media but the selected model doesn't support media input";
@@ -193,7 +159,7 @@ const PlaygroundHeader = ({
     return null;
   }, [
     allPromptsHaveModels,
-    allMessagesNotEmpty,
+    allMessagesRunnable,
     hasMediaCompatibilityIssues,
     isExperimentMode,
     datasetName,
@@ -217,31 +183,13 @@ const PlaygroundHeader = ({
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [onRunAll, isRunDisabled, isRunning]);
 
-  const resetPlayground = useCallback(() => {
-    onReset();
-    const newPrompt = generateDefaultPrompt({
-      setupProviders: providerKeys,
-      lastPickedModel,
-      providerResolver: calculateModelProvider,
-      modelResolver: calculateDefaultModel,
-    });
-    setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
-  }, [
-    onReset,
-    providerKeys,
-    lastPickedModel,
-    calculateModelProvider,
-    calculateDefaultModel,
-    setPromptMap,
-  ]);
-
   const handleLeaveExperimentMode = useCallback(() => {
     clearCreatedExperiments();
     resetOutputMap();
     onChangeDatasetId(null);
     resetDatasetFilters();
     setSelectedRuleIds(null);
-    setExperimentNamePrefix(null);
+    setExperimentName(null);
     setDatasetType(null);
   }, [
     clearCreatedExperiments,
@@ -249,7 +197,7 @@ const PlaygroundHeader = ({
     onChangeDatasetId,
     resetDatasetFilters,
     setSelectedRuleIds,
-    setExperimentNamePrefix,
+    setExperimentName,
     setDatasetType,
   ]);
 
@@ -363,7 +311,7 @@ const PlaygroundHeader = ({
         key={`reset-${resetKeyRef.current}`}
         open={resetDialogOpen}
         setOpen={setResetDialogOpen}
-        onConfirm={resetPlayground}
+        onConfirm={onReset}
         title="Reset playground"
         description="Resetting the Playground will discard all unsaved prompts. This action can't be undone. Are you sure you want to continue?"
         confirmText="Reset playground"

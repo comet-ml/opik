@@ -35,6 +35,10 @@ Required fields:
 - `quarkus.otel.exporter.otlp.traces.endpoint`
 - `quarkus.otel.exporter.otlp.traces.protocol=http/protobuf`
 
+Recommended fields:
+- `quarkus.langchain4j.tracing.include-prompt=true` and `quarkus.langchain4j.tracing.include-completion=true`: without them, LLM spans arrive with model and token usage but no input or output (both default to `false`)
+- `quarkus.langchain4j.tracing.include-tool-arguments=true` and `quarkus.langchain4j.tracing.include-tool-result=true` if your AI services call tools
+
 Optional fields:
 - `quarkus.otel.exporter.otlp.traces.headers` (`projectName` strongly recommended)
 - `quarkus.application.name` (for `service.name` attribution)
@@ -47,6 +51,10 @@ quarkus.otel.traces.enabled=true
 quarkus.otel.exporter.otlp.traces.endpoint=https://www.comet.com/opik/api/v1/private/otel
 quarkus.otel.exporter.otlp.traces.protocol=http/protobuf
 quarkus.otel.exporter.otlp.traces.headers=Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>
+
+# Send prompt and completion text, not just model and token counts
+quarkus.langchain4j.tracing.include-prompt=true
+quarkus.langchain4j.tracing.include-completion=true
 ```
 
 ## Validation
@@ -54,6 +62,7 @@ quarkus.otel.exporter.otlp.traces.headers=Authorization=<your-api-key>,Comet-Wor
 1. Start your Quarkus app with OTEL enabled.
 2. Trigger a LangChain4j-backed endpoint/action.
 3. Confirm spans with your configured `service.name` and project headers arrive in Opik.
+4. Open the `completion <model>` span: it should show the model, token usage, the prompt as input and the model response as output. If input and output are empty, check the `include-prompt` / `include-completion` settings above.
 
 ## Source references
 

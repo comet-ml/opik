@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import sys
 import time
+from typing import List
 
 import certifi
 import pytest
@@ -11,6 +12,7 @@ import requests
 from opik import synchronization
 from opik.integrations.adk import helpers as adk_helpers
 from opik.llm_usage.openai_chat_completions_usage import OpenAICompletionsUsage
+from opik.rest_api.types import span_public
 from ... import llm_constants, testlib
 
 # needed for OpenAI agents tests
@@ -56,6 +58,24 @@ def _create_user_session(
     except requests.exceptions.ConnectionError:
         return False
     return False
+
+
+def _describe_spans(spans: List[span_public.SpanPublic]) -> str:
+    # On Python 3.14 the last LLM span is intermittently stored without usage
+    # (OPIK-8572). Output presence and the tracer's status metadata tell whether the
+    # stored copy came from after_model_callback or from another finalization path.
+    lines = []
+    for span in spans:
+        metadata = span.metadata if isinstance(span.metadata, dict) else {}
+        lines.append(
+            f"id={span.id} name={span.name} type={span.type} "
+            f"provider={span.provider} usage={span.usage} "
+            f"has_output={span.output is not None} "
+            f"status={metadata.get('_OPIK_SPAN_STATUS')} "
+            f"force_closed_reason="
+            f"{metadata.get('_opik_llm_span_force_closed_reason')}"
+        )
+    return "\n".join(lines)
 
 
 @pytest.fixture()
@@ -147,6 +167,8 @@ def test_opik_tracer_with_sample_agent(
     assert len(spans) == 3
     assert spans[0].provider == adk_helpers.get_adk_provider()
     assert spans[2].provider == adk_helpers.get_adk_provider()
+    assert spans[0].usage is not None, _describe_spans(spans)
+    assert spans[2].usage is not None, _describe_spans(spans)
     testlib.assert_dict_has_keys(spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
     testlib.assert_dict_has_keys(spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
@@ -298,9 +320,11 @@ def test_opik_tracer_with_sample_agent__anthropic(
     assert spans[0].type == "llm"
     assert spans[0].provider == "anthropic"
     assert spans[0].model.startswith("claude-sonnet-4")
+    assert spans[0].usage is not None, _describe_spans(spans)
     OpenAICompletionsUsage.from_original_usage_dict(spans[0].usage)
 
     assert spans[2].type == "llm"
     assert spans[2].provider == "anthropic"
     assert spans[2].model.startswith("claude-sonnet-4")
+    assert spans[2].usage is not None, _describe_spans(spans)
     OpenAICompletionsUsage.from_original_usage_dict(spans[2].usage)

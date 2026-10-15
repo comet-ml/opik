@@ -1,23 +1,37 @@
 import {
+  ANTHROPIC_THINKING_EFFORT_VALUES,
   AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
+  OpenAiPipelineMode,
+  OpenAIReasoningEffort,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
-  ReasoningEffort,
 } from "@/types/providers";
 import {
   ANTHROPIC_MODEL_CAPABILITIES,
   DEFAULT_ANTHROPIC_CONFIGS,
+  DEFAULT_OPEN_AI_CONFIGS,
+  DEFAULT_OPEN_ROUTER_CONFIGS,
   OPENAI_MODEL_CAPABILITIES,
-  REASONING_MODELS,
 } from "@/constants/llm";
 import {
   getProviderFromModel,
   parseComposedProviderType,
 } from "@/lib/provider";
+import {
+  getMaxOutputTokens,
+  getOpenRouterMaxOutputTokens,
+  isCustomProviderModel,
+} from "@/lib/modelCapabilities";
+import isPlainObject from "lodash/isPlainObject";
+import isEmpty from "lodash/isEmpty";
 import omit from "lodash/omit";
-import { getLatestModelFlags } from "@/lib/modelRegistryStore";
+import {
+  getLatestModelFlags,
+  getLatestProviderModelsSnapshot,
+} from "@/lib/modelRegistryStore";
+import { PROVIDER_MODELS } from "@/constants/providerModels";
 
 export const getRoutableProviderModelValue = (
   composedProviderType: COMPOSED_PROVIDER_TYPE,
@@ -33,56 +47,26 @@ export const getRoutableProviderModelValue = (
 };
 
 /**
- * Checks if a model is a reasoning model that requires temperature = 1.0.
- *
- * For OpenAI models, OPENAI_MODEL_CAPABILITIES is authoritative — every
- * gating decision (sampling sliders, effort dropdown, request stripping)
- * keys off the same map, so it must also answer the umbrella question.
- *
- * For other providers, the backend-fetched registry wins (via the module-
- * level flag index populated by useLLMProviderModelsData), with the
- * hardcoded REASONING_MODELS list as a pre-fetch fallback.
+ * An OPENAI_MODEL_CAPABILITIES row wins; otherwise the backend registry flag.
  */
 export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
   if (!model) return false;
 
-  // OpenAI: capability map is the source of truth, mirroring how Anthropic
-  // owns its supportsAnthropicThinkingEffort gating without consulting the
-  // BE flag. Stops a BE YAML entry without `reasoning: true` from silently
-  // disabling the playground reasoning-effort dropdown.
+  const declared = OPENAI_MODEL_CAPABILITIES[model]?.reasoning;
   if (
+    declared !== undefined &&
     getProviderFromModel(model as PROVIDER_MODEL_TYPE) === PROVIDER_TYPE.OPEN_AI
   ) {
-    return OPENAI_MODEL_CAPABILITIES[model]?.reasoning ?? false;
+    return declared;
   }
 
-  // Other providers: BE flag wins; fall back to hardcoded REASONING_MODELS.
-  const fetched = getLatestModelFlags(model);
-  if (fetched !== undefined) {
-    return fetched.reasoning;
-  }
-  return (REASONING_MODELS as readonly PROVIDER_MODEL_TYPE[]).includes(
-    model as PROVIDER_MODEL_TYPE,
-  );
-};
-
-/**
- * Returns the default temperature for a given model
- * Reasoning models require temperature = 1.0, other models default to 0
- *
- * @param model - The model type
- * @returns 1.0 for reasoning models, 0 for all other models
- */
-export const getDefaultTemperatureForModel = (
-  model?: PROVIDER_MODEL_TYPE | "",
-): number => {
-  return isReasoningModel(model) ? 1 : 0;
+  return getLatestModelFlags(model)?.reasoning ?? false;
 };
 
 // Which thinking levels each Gemini model accepts, per Google's own support table
 // (https://ai.google.dev/gemini-api/docs/thinking). The sets genuinely differ per model — 3.7 Flash
-// has no "minimal", 3.1 Flash Lite has only "minimal" and "high" — and sending a level a model does
-// not accept is rejected upstream, so this cannot be collapsed into one list per family.
+// has no "minimal", 3 Pro has only "low" and "high" — and sending a level a model does not accept
+// is rejected upstream, so this cannot be collapsed into one list per family.
 //
 // Keep both provider spellings of a model on the same row: the level support is a property of the
 // underlying model, not of whether it is reached through AI Studio or Vertex. New models arrive via
@@ -121,19 +105,21 @@ const THINKING_LEVELS_BY_MODEL: ReadonlyMap<
   // no thinkingConfig and keeps their latency where it was. Asking for a level here switches thinking
   // ON, which measurably slows them (~2.5s -> ~5s at budget 2048 on 3.1 Flash Lite).
   //
-  // 3.1 Flash Lite also has no low/medium: minimal and high only.
-  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, ["none", "minimal", "high"]],
+  // 3.1 Flash Lite takes all four levels: the AI Studio table omits it, Vertex's table lists
+  // minimal/low/medium/high, and Vertex accepted each one live with rising thinking counts. The
+  // "minimal, high" row in Google's tables is the separate gemini-3.1-flash-lite-image model.
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, ["none", ...MINIMAL_TO_HIGH]],
   [
     PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
-    ["none", "minimal", "high"],
+    ["none", ...MINIMAL_TO_HIGH],
   ],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
-    ["none", "minimal", "high"],
+    ["none", ...MINIMAL_TO_HIGH],
   ],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
-    ["none", "minimal", "high"],
+    ["none", ...MINIMAL_TO_HIGH],
   ],
   [PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, MINIMAL_TO_HIGH],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW, MINIMAL_TO_HIGH],
@@ -174,6 +160,29 @@ const THINKING_LEVEL_LABELS: Record<GeminiThinkingLevel, string> = {
 const isVertexModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean =>
   typeof model === "string" && model.startsWith("vertex_ai/");
 
+// An allow-list, so a Gemini generation newer than this list gets no sampling sliders until someone
+// checks it: Google asks to keep every Gemini 3 model at its default temperature, and the aliases,
+// Omni and Robotics ER ids all resolve to Gemini 3-era models. Only native ids are gated — OpenRouter's
+// google/gemini-* and gemma-* fall through, since nothing here describes them.
+const SAMPLING_CAPABLE_GEMINI_GENERATIONS =
+  /^gemini-(?:1\.0|1\.5|2\.0|2\.5)(?:-|$)/;
+const SAMPLING_CAPABLE_UNVERSIONED_GEMINI_IDS: ReadonlySet<string> = new Set([
+  "gemini-pro-vision",
+]);
+
+export const supportsGeminiSamplingParams = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean => {
+  const id = (model ?? "").replace(/^vertex_ai\//, "");
+  if (!id.startsWith("gemini-")) {
+    return true;
+  }
+  return (
+    SAMPLING_CAPABLE_GEMINI_GENERATIONS.test(id) ||
+    SAMPLING_CAPABLE_UNVERSIONED_GEMINI_IDS.has(id)
+  );
+};
+
 /**
  * Checks if a Gemini model supports thinking level parameter
  *
@@ -211,11 +220,11 @@ export const getThinkingLevelOptions = (
 // Each model's own default thinking level. Measured against the live API rather than taken from
 // Google's docs table, which disagrees with it: the docs list 3.5 Flash Lite as defaulting to
 // "minimal", but every Flash Lite model returns zero thinking tokens by default on both providers.
-// Preselecting the
-// documented default keeps the control from silently changing a model's behaviour just by being
-// shown: 2.5 Flash Lite ships with thinking off, 2.5 Pro/Flash default to a dynamic budget
-// ("auto"), 3.8/3.7/3.6/3.5 Flash default to medium, and 3.5 Flash Lite to minimal — none of which is
-// "high". Models absent here default to "high", which is what the Gemini 3 Pro rows document.
+// Preselecting the real default keeps the control from silently changing a model's behaviour just
+// by being shown: 2.5 Flash Lite ships with thinking off, 2.5 Pro/Flash default to a dynamic budget
+// ("auto"), 3.8/3.7/3.6/3.5 Flash default to medium, and the 3.x Flash Lite models to none — none
+// of which is "high". Models absent here default to "high", which is what the Gemini 3 Pro rows
+// document.
 const DEFAULT_THINKING_LEVEL_BY_MODEL: ReadonlyMap<
   PROVIDER_MODEL_TYPE,
   GeminiThinkingLevel
@@ -282,20 +291,249 @@ export const getDefaultThinkingLevel = (
 ): GeminiThinkingLevel =>
   DEFAULT_THINKING_LEVEL_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ?? "high";
 
+export type ThinkingLevelParams = {
+  thinkingLevel?: GeminiThinkingLevel;
+  custom_parameters?: unknown;
+};
+
+// What the Gemini and Vertex AI panels show and what the request sends. A
+// level the model does not offer (saved for another model, or by older code)
+// falls back to the model's default, the same way resolveEffort does.
+export const resolveThinkingLevel = (
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: ThinkingLevelParams,
+): GeminiThinkingLevel => {
+  const nested = (
+    (configs.custom_parameters as Record<string, unknown> | undefined)
+      ?.thinking as Record<string, unknown> | undefined
+  )?.level;
+  const stored = configs.thinkingLevel ?? nested;
+  return getThinkingLevelOptions(model).some((o) => o.value === stored)
+    ? (stored as GeminiThinkingLevel)
+    : getDefaultThinkingLevel(model);
+};
+
+// A model switch has to carry the level the panel showed. Carrying a hidden stored one (a "minimal"
+// shown as Auto on Gemini 2.5 Flash) brings it back on the next model that offers it.
+export const withShownThinkingLevel = <T extends object>(
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: T,
+): T => {
+  if (getThinkingLevelOptions(model).length === 0) {
+    return configs;
+  }
+  const params = configs as ThinkingLevelParams;
+  const shown = resolveThinkingLevel(model, params);
+  return params.thinkingLevel === shown
+    ? configs
+    : ({ ...configs, thinkingLevel: shown } as T);
+};
+
+// "auto" leaves how much to think to the model, so it drops both ways of setting that: the level and
+// a budget_tokens set through the API, which outranks any level server-side. include_thoughts and the
+// other keys stay, as they do for "off".
+export const withoutThinkingAmount = (
+  customParameters: unknown,
+): Record<string, unknown> | undefined => {
+  const params = (customParameters ?? {}) as Record<string, unknown>;
+  const thinking = isPlainObject(params.thinking)
+    ? (params.thinking as Record<string, unknown>)
+    : undefined;
+  if (!thinking || !("level" in thinking || "budget_tokens" in thinking)) {
+    return isEmpty(params) ? undefined : params;
+  }
+  const restThinking = omit(thinking, ["level", "budget_tokens"]);
+  const rest = isEmpty(restThinking)
+    ? omit(params, "thinking")
+    : { ...params, thinking: restThinking };
+  return isEmpty(rest) ? undefined : rest;
+};
+
 const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
-  adaptive: "Adaptive",
   low: "Low",
   medium: "Medium",
-  high: "High (Default)",
+  high: "High",
   xhigh: "xHigh",
   max: "Max",
 };
 
+// Derived from the capability map so the two cannot drift.
+const SAMPLING_CAPABLE_MODELS = Object.entries(ANTHROPIC_MODEL_CAPABILITIES)
+  .filter(([, capabilities]) => capabilities?.supportsSamplingParams)
+  .map(([model]) => model);
+
+/**
+ * The generations that predate the constraint, recognised by shape rather than listed: they all take
+ * sampling params. Claude 3 and earlier spell the version before the family (`claude-3-5-sonnet`) or
+ * omit it (`claude-instant`); Claude 4 onward spells it after (`claude-sonnet-4-5`). The backend
+ * applies the same set.
+ */
+const LEGACY_GENERATION_PREFIXES = [
+  "claude-2",
+  "claude-3",
+  "claude-v2",
+  "claude-instant",
+];
+
+const LATEST_ALIAS_SUFFIX = "-latest";
+const RELEASE_DATE = /^\d{8}$/;
+
+// The union of both lists, because neither alone is the set of Anthropic models we know: the
+// dropdown omits ids that are still reachable through Bedrock and proxies, and the capability map
+// only names the ones that take sampling params. Missing an id here no longer means "assume
+// permissive" — it means the model is treated as taking none, so the set has to be complete.
+// The prefix has to end where a segment does, or `claude-30-future` would read as Claude 3.
+const isLegacyGeneration = (canonical: string): boolean =>
+  LEGACY_GENERATION_PREFIXES.some(
+    (prefix) => canonical === prefix || canonical.startsWith(`${prefix}-`),
+  );
+
+const familyToken = (id: string): string =>
+  id.replace(/^claude-/, "").split("-")[0];
+
+const KNOWN_ANTHROPIC_MODELS = Array.from(
+  new Set([
+    ...(PROVIDER_MODELS[PROVIDER_TYPE.ANTHROPIC] ?? []).map(
+      (model) => model.value as string,
+    ),
+    ...Object.keys(ANTHROPIC_MODEL_CAPABILITIES),
+  ]),
+);
+
+/**
+ * The family words Anthropic actually ships, read off the known ids so a sync that adds a family adds
+ * it here too. A name whose family we do not recognise is not treated as an Anthropic id at all:
+ * `claude-prod` behind a gateway is a deployment someone named, and says nothing about which Claude
+ * is serving it, so it keeps the sampling params set on it.
+ */
+const FAMILY_TOKENS = new Set(
+  KNOWN_ANTHROPIC_MODELS.map(familyToken).filter(
+    (token) => !/^\d+$/.test(token),
+  ),
+);
+
+const namesAnAnthropicModel = (id: string): boolean =>
+  isLegacyGeneration(id) || FAMILY_TOKENS.has(familyToken(id));
+
+/**
+ * Comparable version segments, with any release date dropped so `claude-opus-4-6` outranks
+ * `claude-opus-4-20250514` instead of losing to the larger number.
+ */
+const versionKey = (id: string): string =>
+  id
+    .split("-")
+    .filter((segment) => /^\d+$/.test(segment) && !RELEASE_DATE.test(segment))
+    .map((segment) => segment.padStart(4, "0"))
+    .join(".");
+
+/**
+ * The newest known member of a family, which is what `claude-opus-latest` names. A floating alias has
+ * to be read as the model it currently resolves to: `claude-haiku-latest` is Haiku 4.5, which does
+ * take sampling params, and the same model under its own id already says so.
+ */
+const newestInFamily = (familyPrefix: string): string | undefined =>
+  KNOWN_ANTHROPIC_MODELS.filter((id) => id.startsWith(`${familyPrefix}-`)).sort(
+    (a, b) => versionKey(b).localeCompare(versionKey(a)),
+  )[0];
+
+/**
+ * The Anthropic id a routed model name denotes, when we know it.
+ *
+ * One model arrives spelled three ways: Anthropic's own `claude-opus-4-6`, Bedrock's
+ * `us.anthropic.claude-sonnet-4-5-20250929-v1:0` and OpenRouter's dotted `anthropic/claude-opus-4.7`.
+ * Reducing all three to the bare id lets the match be anchored at the start rather than found
+ * anywhere in the string, and the longest match wins so a later `claude-opus-4-9` reads as itself
+ * rather than as the `claude-opus-4` it begins with. The backend canonicalizes identically.
+ */
+const canonicalAnthropicId = (model: string): string => {
+  const segment = (model.split("/").pop() ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\./g, "-");
+  const claudeAt = segment.indexOf("claude-");
+  if (claudeAt < 0) {
+    return "";
+  }
+  // Only a vendor decoration may precede the id: Bedrock's region and vendor prefix says which
+  // Claude this is, whereas a proxy's own name for a model it renamed (my-claude-deployment) does
+  // not, and must keep the sampling params someone set on it.
+  const prefix = segment.slice(0, claudeAt);
+  if (prefix && !prefix.endsWith("anthropic-")) {
+    return "";
+  }
+  // Bedrock appends an inference profile (-v1:0); OpenRouter, a :free or :beta variant. Never strip
+  // down to the bare family word: `claude-v2` is Claude 2, not a decorated `claude`.
+  const bare = segment.slice(claudeAt).split(":")[0];
+  const stripped = bare.replace(/-v\d+$/, "");
+  const id = stripped.includes("-") ? stripped : bare;
+
+  return namesAnAnthropicModel(id) ? id : "";
+};
+
+// A prefix names the model only when it ends where a segment does, so `claude-opus-4-1` is not
+// `claude-opus-4`. A numeric segment is the next version rather than a variant of this one — an
+// unlisted `claude-sonnet-4-6-1` must not inherit `claude-sonnet-4-6`'s capability — while a named
+// variant (`-fast`) and a release date still name the same model.
+const namesModel = (canonical: string, id: string): boolean => {
+  if (canonical === id) {
+    return true;
+  }
+  if (canonical.startsWith(`${id}-`)) {
+    const next = canonical.slice(id.length + 1).split("-")[0];
+    return RELEASE_DATE.test(next) || !/^\d+$/.test(next);
+  }
+  return (
+    id.startsWith(`${canonical}-`) &&
+    RELEASE_DATE.test(id.slice(canonical.length + 1))
+  );
+};
+
+const knownAnthropicId = (canonical: string): string | undefined => {
+  if (canonical.endsWith(LATEST_ALIAS_SUFFIX)) {
+    return newestInFamily(canonical.slice(0, -LATEST_ALIAS_SUFFIX.length));
+  }
+  return KNOWN_ANTHROPIC_MODELS.filter((id) => namesModel(canonical, id)).sort(
+    (a, b) => b.length - a.length,
+  )[0];
+};
+
+/**
+ * Whether the model accepts temperature/top_p at all.
+ *
+ * The capability map names the models that do, so an Anthropic id without a row is assumed to take
+ * none — newer ones increasingly don't, and an unplaceable id is far more often a model newer than
+ * this list than an older one missing from it. The two failures are not equal: assuming it takes none
+ * omits a parameter, while assuming it takes them fails the whole request.
+ *
+ * Two exceptions stay permissive. The generations before Claude 4 predate the constraint entirely,
+ * and a name that is not an Anthropic id at all may be a capable Claude a proxy renamed.
+ *
+ * Matching goes through knownAnthropicId, because the same models arrive through Bedrock and
+ * OpenAI-compatible proxies under prefixed, dotted and dated ids.
+ */
 export const supportsSamplingParams = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean =>
-  ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-    ?.supportsSamplingParams ?? true;
+): boolean => {
+  if (!model) {
+    return true;
+  }
+
+  const declared =
+    ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+      ?.supportsSamplingParams;
+  if (declared !== undefined) {
+    return declared;
+  }
+
+  const canonical = canonicalAnthropicId(model);
+  // Not an Anthropic id, or the generation that predates the constraint: leave it alone.
+  if (!canonical || isLegacyGeneration(canonical)) {
+    return true;
+  }
+
+  const known = knownAnthropicId(canonical);
+  return known !== undefined && SAMPLING_CAPABLE_MODELS.includes(known);
+};
 
 export const supportsAnthropicThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
@@ -303,20 +541,70 @@ export const supportsAnthropicThinkingEffort = (
   !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
     ?.thinkingEffortOptions;
 
+// A Claude model with no row is one this build does not know yet. The backend checks its effort only
+// against the known level names and lets Anthropic judge the rest, so a stored level must pass through
+// rather than be dropped as unsupported. A row without thinkingEffortOptions means the model takes none.
+export const knowsAnthropicEffortLevels = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean => !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE];
+
+export const getDefaultThinkingEffort = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): AnthropicThinkingEffort =>
+  ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+    ?.defaultThinkingEffort ?? "high";
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  isPlainObject(value) ? (value as Record<string, unknown>) : {};
+
+/**
+ * The effort a config holds under custom_parameters.output_config, which is where the request
+ * carries it. Surfaces that store the request shape and load it back (a saved optimization run, an
+ * evaluator rule) have only this copy.
+ */
+export const getNestedThinkingEffort = (
+  customParameters: unknown,
+): AnthropicThinkingEffort | undefined => {
+  const effort = asRecord(asRecord(customParameters).output_config).effort;
+  return ANTHROPIC_THINKING_EFFORT_VALUES.find((level) => level === effort);
+};
+
+// Keeps every other key, inside output_config too, so fields no form control shows survive a save.
+export const withThinkingEffort = (
+  customParameters: unknown,
+  effort: AnthropicThinkingEffort | undefined,
+): Record<string, unknown> | undefined => {
+  const params = asRecord(customParameters);
+  // Rebuilding a non-object output_config would turn it into a valid effort-only one and hide the
+  // backend's 400, so a malformed value is sent as it is.
+  if (params.output_config != null && !isPlainObject(params.output_config)) {
+    return Object.keys(params).length > 0 ? params : undefined;
+  }
+  const outputConfig = omit(asRecord(params.output_config), "effort");
+  const nextOutputConfig = effort ? { ...outputConfig, effort } : outputConfig;
+  const next =
+    Object.keys(nextOutputConfig).length > 0
+      ? { ...omit(params, "output_config"), output_config: nextOutputConfig }
+      : omit(params, "output_config");
+  return Object.keys(next).length > 0 ? next : undefined;
+};
+
 export const getAnthropicThinkingEffortOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): Array<{ label: string; value: AnthropicThinkingEffort }> =>
-  (
-    ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-      ?.thinkingEffortOptions ?? []
-  ).map((value) => ({ label: EFFORT_LABELS[value], value }));
+  supportsAnthropicThinkingEffort(model)
+    ? (
+        ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+          ?.thinkingEffortOptions ?? []
+      ).map((value) => ({ label: EFFORT_LABELS[value], value }))
+    : [];
 
-const OPENAI_EFFORT_LABELS: Record<ReasoningEffort, string> = {
+const OPENAI_EFFORT_LABELS: Record<OpenAIReasoningEffort, string> = {
   none: "None",
   minimal: "Minimal",
   low: "Low",
   medium: "Medium",
-  high: "High (Default)",
+  high: "High",
   xhigh: "xHigh",
   max: "Max",
 };
@@ -327,13 +615,24 @@ export const supportsOpenAIReasoningEffort = (
   !!OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
     ?.reasoningEffortOptions;
 
+// An unknown pipeline mode (keys still loading, a surface that never reaches
+// Opik's OpenAI pipeline) is treated as Chat Completions, the backend's own
+// default: offering a Responses-only value there would 400.
 export const getOpenAIReasoningEffortOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
-): Array<{ label: string; value: ReasoningEffort }> =>
-  (
-    OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-      ?.reasoningEffortOptions ?? []
-  ).map((value) => ({ label: OPENAI_EFFORT_LABELS[value], value }));
+  openAiPipelineMode?: OpenAiPipelineMode,
+): Array<{ label: string; value: OpenAIReasoningEffort }> => {
+  const capabilities = OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE];
+  const responsesApiOnly =
+    openAiPipelineMode === "responses_api"
+      ? capabilities?.responsesApiOnlyEffortOptions ?? []
+      : [];
+
+  return [
+    ...(capabilities?.reasoningEffortOptions ?? []),
+    ...responsesApiOnly,
+  ].map((value) => ({ label: OPENAI_EFFORT_LABELS[value], value }));
+};
 
 // Single reconciler called by every model-change handler (playground, judge
 // dialog). Keeping the rules here means the form state stays valid even when
@@ -343,7 +642,7 @@ export const updateProviderConfig = <
     temperature?: number;
     topP?: number;
     thinkingEffort?: AnthropicThinkingEffort;
-    reasoningEffort?: ReasoningEffort;
+    reasoningEffort?: OpenAIReasoningEffort;
     thinkingLevel?: GeminiThinkingLevel;
   },
 >(
@@ -351,6 +650,7 @@ export const updateProviderConfig = <
   params: {
     model: PROVIDER_MODEL_TYPE | "";
     provider: COMPOSED_PROVIDER_TYPE;
+    openAiPipelineMode?: OpenAiPipelineMode;
   },
 ): T | undefined => {
   if (!currentConfig) {
@@ -365,8 +665,18 @@ export const updateProviderConfig = <
 
     // reasoningEffort: drop it for models without an effort option list,
     // coerce stale values to "high" otherwise. Mirrors the Anthropic
-    // thinkingEffort handling below.
-    const effortOptions = getOpenAIReasoningEffortOptions(params.model);
+    // thinkingEffort handling below. Unlike resolveEffort, which only masks a
+    // max the key cannot take, this writes the coerced value back on purpose:
+    // a model change settles on a level the new model and mode offer, so a key
+    // later moved back to the Responses API restores max only on prompts whose
+    // model never changed.
+    // An unknown mode (keys still loading) is checked against the Responses
+    // API list, a superset of the Chat Completions one, so a stored max is
+    // kept: assuming Chat Completions here would rewrite it to high for good.
+    const effortOptions = getOpenAIReasoningEffortOptions(
+      params.model,
+      params.openAiPipelineMode ?? "responses_api",
+    );
     if (effortOptions.length === 0) {
       if (next.reasoningEffort !== undefined) {
         next.reasoningEffort = undefined;
@@ -397,7 +707,7 @@ export const updateProviderConfig = <
       next.thinkingEffort !== undefined &&
       !effortOptions.some((o) => o.value === next.thinkingEffort)
     ) {
-      next.thinkingEffort = "high";
+      next.thinkingEffort = getDefaultThinkingEffort(params.model);
       changed = true;
     }
 
@@ -436,6 +746,41 @@ export const updateProviderConfig = <
 export type SamplingParams = { temperature?: number; topP?: number };
 
 /**
+ * Whether a model is an Anthropic Claude model, whatever provider is serving it.
+ *
+ * The family name is the only signal common to every route: Anthropic's own ids
+ * (`claude-opus-4-6`), Bedrock's decorated ids (`us.anthropic.claude-…-v1:0`), OpenRouter's
+ * (`anthropic/claude-…`) and whatever an OpenAI-compatible proxy is configured to call them.
+ *
+ * Only the last segment is matched, because a custom id carries the gateway in its prefix
+ * (`custom-llm/<provider_name>/<model>`) — a provider someone called "claude-gw" must not make
+ * every model behind it, Mistral included, look like Claude and lose its Top P.
+ */
+export const isClaudeModel = (model: PROVIDER_MODEL_TYPE | ""): boolean =>
+  /claude/i.test((model.split("/").pop() ?? "").trim());
+
+// OpenRouter names OpenAI's and Google's models `<vendor>/<native id>`, with routing variants after a
+// colon (`:free`, `:batch`). The native id is used only when that provider's list has it: ids only
+// OpenRouter uses (o3-mini-high, gpt-5-chat) have no row to read, and guessing would hide working sliders.
+const OPEN_ROUTER_NATIVE_ID_PATTERN = /^(openai|google)\/([^:]+)/;
+
+const getNativeModelBehindOpenRouter = (
+  model: PROVIDER_MODEL_TYPE,
+): PROVIDER_MODEL_TYPE | undefined => {
+  const match = OPEN_ROUTER_NATIVE_ID_PATTERN.exec(model);
+  if (!match) {
+    return undefined;
+  }
+  const [, vendor, id] = match;
+  const nativeProvider =
+    vendor === "openai" ? PROVIDER_TYPE.OPEN_AI : PROVIDER_TYPE.GEMINI;
+  const listed = (getLatestProviderModelsSnapshot()[nativeProvider] ?? []).some(
+    (option) => option.value === id,
+  );
+  return listed ? (id as PROVIDER_MODEL_TYPE) : undefined;
+};
+
+/**
  * The single interpreter of temperature/topP for a model: capability gating plus Anthropic's
  * temperature-XOR-topP rule.
  *
@@ -460,12 +805,22 @@ export const resolveSamplingParams = (
     return { temperature, topP };
   }
 
+  // Some Claude models refuse both outright. Checked ahead of the provider branches because it
+  // holds wherever the model is served from, not only under the Anthropic provider.
+  if (isClaudeModel(model) && !supportsSamplingParams(model)) {
+    return {};
+  }
+
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
-  if (provider === PROVIDER_TYPE.ANTHROPIC) {
-    if (!supportsSamplingParams(model)) {
-      return {};
+  if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+    const native = getNativeModelBehindOpenRouter(model);
+    if (native) {
+      return resolveSamplingParams(native, configs);
     }
+  }
+
+  if (provider === PROVIDER_TYPE.ANTHROPIC) {
     // Anthropic takes one of the pair, never both: temperature wins a config carrying both, and
     // takes over when neither is set so the panel can't offer two live sliders.
     if (temperature !== undefined) {
@@ -484,12 +839,59 @@ export const resolveSamplingParams = (
     return {};
   }
 
+  if (!supportsGeminiSamplingParams(model)) {
+    return {};
+  }
+
+  // Claude rejects the pair wherever it is served from, not only under the Anthropic provider —
+  // Bedrock answers "temperature and top_p cannot both be specified for this model". Temperature
+  // wins, as it does in the Anthropic branch above.
+  if (temperature !== undefined && topP !== undefined && isClaudeModel(model)) {
+    return { temperature };
+  }
+
   return { temperature, topP };
 };
 
+// LlmProviderOpenAiResponsesMapper drops both penalties on a key set to the Responses API, which
+// rejects them. The OpenAI list is checked because getProviderFromModel also answers OpenAI for a
+// custom gateway's ids, and those never reach the OpenAI key.
+const isSentThroughOpenAiResponsesApi = (
+  model: PROVIDER_MODEL_TYPE | "",
+  openAiPipelineMode?: OpenAiPipelineMode,
+): boolean =>
+  openAiPipelineMode === "responses_api" &&
+  (getLatestProviderModelsSnapshot()[PROVIDER_TYPE.OPEN_AI] ?? []).some(
+    (option) => option.value === model,
+  );
+
+export const supportsPenaltyParams = (
+  model?: PROVIDER_MODEL_TYPE | "",
+  openAiPipelineMode?: OpenAiPipelineMode,
+): boolean => {
+  if (!model) {
+    return true;
+  }
+
+  const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
+
+  if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+    const native = getNativeModelBehindOpenRouter(model);
+    // No pipeline mode: that belongs to the OpenAI key, which never carries an OpenRouter request.
+    return !native || supportsPenaltyParams(native);
+  }
+
+  return (
+    provider !== PROVIDER_TYPE.OPEN_AI ||
+    (!isReasoningModel(model) &&
+      !isSentThroughOpenAiResponsesApi(model, openAiPipelineMode))
+  );
+};
+
 export type EffortParams = {
-  reasoningEffort?: ReasoningEffort;
+  reasoningEffort?: OpenAIReasoningEffort;
   thinkingEffort?: AnthropicThinkingEffort;
+  custom_parameters?: unknown;
 };
 
 /**
@@ -497,16 +899,20 @@ export type EffortParams = {
  * {@link resolveSamplingParams} for the effort dropdowns.
  *
  * Unlike the sampling pair this does substitute a default, because the dropdown has no empty state:
- * it renders "High (Default)" for a config holding nothing, which is also what a fresh config is
- * seeded with. Resolving to that same value is what stops the control claiming an effort the
- * request never carries — a model change into a reasoning model leaves the config's effort unset,
- * and the provider would then apply its own default rather than the high the panel showed.
+ * it renders the model's default for a config holding nothing, which is also what a fresh config is
+ * seeded with. Resolving to that same value is what stops the control claiming an effort the request
+ * never carries — a model change into a reasoning model leaves the config's effort unset, and the
+ * provider would then apply its own default rather than the one the panel showed.
  *
- * "high" is offered by every model in both capability maps, so it is always a valid substitute.
+ * The OpenAI default is "high", which every reasoning row offers. The Anthropic one is the model's
+ * own (medium on Opus 5.5). An Anthropic effort under custom_parameters counts as stored too: the
+ * flat one wins when the model offers it, else the nested one does, so a reloaded request shape
+ * shows the level it will send and a stale flat value cannot override a valid nested one.
  */
 export const resolveEffort = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: EffortParams,
+  openAiPipelineMode?: OpenAiPipelineMode,
 ): EffortParams => {
   if (!model) {
     return { ...configs };
@@ -515,7 +921,7 @@ export const resolveEffort = (
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
   if (provider === PROVIDER_TYPE.OPEN_AI) {
-    const options = getOpenAIReasoningEffortOptions(model);
+    const options = getOpenAIReasoningEffortOptions(model, openAiPipelineMode);
     if (options.length === 0) {
       return {};
     }
@@ -531,15 +937,87 @@ export const resolveEffort = (
     if (options.length === 0) {
       return {};
     }
-    return {
-      thinkingEffort: options.some((o) => o.value === configs.thinkingEffort)
-        ? configs.thinkingEffort
-        : "high",
-    };
+    const stored = [
+      configs.thinkingEffort,
+      getNestedThinkingEffort(configs.custom_parameters),
+    ].find((effort) => options.some((o) => o.value === effort));
+    return { thinkingEffort: stored ?? getDefaultThinkingEffort(model) };
   }
 
   return { ...configs };
 };
+
+// Used for a model the pricing data does not list: the caps the panels had before it was read.
+const MAX_COMPLETION_TOKENS_FALLBACK = {
+  [PROVIDER_TYPE.OPEN_AI]: 128000,
+  [PROVIDER_TYPE.ANTHROPIC]: 64000,
+};
+
+export type MaxCompletionTokensRange = { min: number; max: number };
+
+export const getMaxCompletionTokensRange = (
+  provider: keyof typeof MAX_COMPLETION_TOKENS_FALLBACK,
+  model: string,
+  openAiPipelineMode?: OpenAiPipelineMode,
+): MaxCompletionTokensRange => ({
+  // Below 16, the Responses API rejects max_output_tokens. Elsewhere 0 is rejected too: OpenAI
+  // wants at least 1, and Anthropic refuses 0 on a streamed request, which every playground run is.
+  min:
+    provider === PROVIDER_TYPE.OPEN_AI && openAiPipelineMode === "responses_api"
+      ? 16
+      : 1,
+  max: getMaxOutputTokens(model) ?? MAX_COMPLETION_TOKENS_FALLBACK[provider],
+});
+
+const MAX_COMPLETION_TOKENS_DEFAULT = {
+  [PROVIDER_TYPE.OPEN_AI]: DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS,
+  [PROVIDER_TYPE.ANTHROPIC]: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
+};
+
+export const resolveMaxCompletionTokens = (
+  provider: keyof typeof MAX_COMPLETION_TOKENS_FALLBACK,
+  model: string,
+  value: number | undefined,
+  openAiPipelineMode?: OpenAiPipelineMode,
+): number => {
+  const { min, max } = getMaxCompletionTokensRange(
+    provider,
+    model,
+    openAiPipelineMode,
+  );
+  // A stored 0 was saved while the slider still went down to 0: it meant "not set", never a
+  // one-token answer, so it gets the default rather than the new floor.
+  const requested = value || MAX_COMPLETION_TOKENS_DEFAULT[provider];
+  return Math.min(Math.max(Math.floor(requested), min), max);
+};
+
+export const getOpenRouterDefaultMaxTokens = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): number => {
+  const modelMaxOutputTokens = getOpenRouterMaxOutputTokens(model);
+  return modelMaxOutputTokens
+    ? Math.min(DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS, modelMaxOutputTokens)
+    : DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS;
+};
+
+const OPEN_ROUTER_MAX_TOKENS_LIMIT = 10000;
+
+export const getOpenRouterMaxTokensLimit = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): number => {
+  const modelMaxOutputTokens = getOpenRouterMaxOutputTokens(model);
+  return modelMaxOutputTokens
+    ? Math.min(OPEN_ROUTER_MAX_TOKENS_LIMIT, modelMaxOutputTokens)
+    : OPEN_ROUTER_MAX_TOKENS_LIMIT;
+};
+
+// Only shown and sent clamped, never written back, so switching back to a model with a higher
+// limit brings the stored value back, as resolveMaxCompletionTokens does for OpenAI and Anthropic.
+export const resolveOpenRouterMaxTokens = (
+  model: PROVIDER_MODEL_TYPE | "" | undefined,
+  value: number | undefined,
+): number | undefined =>
+  value ? Math.min(value, getOpenRouterMaxTokensLimit(model)) : value;
 
 // Last-mile request hardening, complementary to updateProviderConfig: this
 // layer doesn't trust upstream and keeps the payload valid for stale state
@@ -547,23 +1025,82 @@ export const resolveEffort = (
 export const sanitizeConfigForRequest = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: Record<string, unknown>,
+  openAiPipelineMode?: OpenAiPipelineMode,
 ): Record<string, unknown> => {
   if (!model) return configs;
 
   const sanitized: Record<string, unknown> = { ...configs };
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
+  const sampling = resolveSamplingParams(model, configs as SamplingParams);
+  for (const key of ["temperature", "topP"] as const) {
+    if (sampling[key] === undefined) {
+      delete sanitized[key];
+    } else {
+      sanitized[key] = sampling[key];
+    }
+  }
+
+  if (!supportsPenaltyParams(model, openAiPipelineMode)) {
+    delete sanitized.frequencyPenalty;
+    delete sanitized.presencePenalty;
+  }
+
+  // On these providers the slider starts at 0, and 0 means no limit, so it is left out rather than
+  // sent. Rounded down first: the backend truncates a fraction, so a 0.5 would reach them as 0.
   if (
-    provider === PROVIDER_TYPE.ANTHROPIC ||
-    provider === PROVIDER_TYPE.OPEN_AI
+    provider === PROVIDER_TYPE.OPEN_ROUTER ||
+    provider === PROVIDER_TYPE.GEMINI ||
+    provider === PROVIDER_TYPE.VERTEX_AI ||
+    isCustomProviderModel(model)
   ) {
-    const sampling = resolveSamplingParams(model, configs as SamplingParams);
-    for (const key of ["temperature", "topP"] as const) {
-      if (sampling[key] === undefined) {
-        delete sanitized[key];
-      } else {
-        sanitized[key] = sampling[key];
+    for (const key of ["maxTokens", "maxCompletionTokens"] as const) {
+      const value = sanitized[key];
+      if (typeof value !== "number") {
+        continue;
       }
+      if (Math.floor(value) > 0) {
+        sanitized[key] =
+          provider === PROVIDER_TYPE.OPEN_ROUTER
+            ? resolveOpenRouterMaxTokens(model, Math.floor(value))
+            : Math.floor(value);
+      } else {
+        delete sanitized[key];
+      }
+    }
+  }
+
+  // Prompts stored while the Top K slider stepped by 0.01 can still carry a fraction.
+  if (
+    provider === PROVIDER_TYPE.OPEN_ROUTER &&
+    typeof sanitized.topK === "number"
+  ) {
+    sanitized.topK = Math.round(sanitized.topK);
+  }
+
+  // Same trap as thinking_level below: ChatCompletionRequest has no field for these, so sent flat
+  // they are dropped, while custom_parameters entries reach OpenRouter as top-level keys.
+  if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+    const nested: Record<string, unknown> = {};
+    for (const [key, wireKey] of Object.entries({
+      topK: "top_k",
+      minP: "min_p",
+      topA: "top_a",
+      repetitionPenalty: "repetition_penalty",
+    })) {
+      if (sanitized[key] != null) {
+        nested[wireKey] = sanitized[key];
+      }
+      delete sanitized[key];
+    }
+
+    if (Object.keys(nested).length > 0) {
+      sanitized.custom_parameters = {
+        ...(isPlainObject(sanitized.custom_parameters)
+          ? (sanitized.custom_parameters as Record<string, unknown>)
+          : {}),
+        ...nested,
+      };
     }
   }
 
@@ -575,16 +1112,53 @@ export const sanitizeConfigForRequest = (
       DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS;
   }
 
+  // getProviderFromModel answers OpenAI for any model the registry does not list, a custom gateway's
+  // ids included, so only a listed model is held to OpenAI's or Anthropic's limits.
+  if (
+    (provider === PROVIDER_TYPE.ANTHROPIC ||
+      provider === PROVIDER_TYPE.OPEN_AI) &&
+    (getLatestProviderModelsSnapshot()[provider] ?? []).some(
+      (option) => option.value === model,
+    ) &&
+    typeof sanitized.maxCompletionTokens === "number"
+  ) {
+    sanitized.maxCompletionTokens = resolveMaxCompletionTokens(
+      provider,
+      model,
+      sanitized.maxCompletionTokens,
+      openAiPipelineMode,
+    );
+  }
+
   if (
     provider === PROVIDER_TYPE.ANTHROPIC ||
     provider === PROVIDER_TYPE.OPEN_AI
   ) {
-    const effort = resolveEffort(model, configs as EffortParams);
-    for (const key of ["reasoningEffort", "thinkingEffort"] as const) {
-      if (effort[key] === undefined) {
-        delete sanitized[key];
+    const effort = resolveEffort(
+      model,
+      configs as EffortParams,
+      openAiPipelineMode,
+    );
+    if (effort.reasoningEffort === undefined) {
+      delete sanitized.reasoningEffort;
+    } else {
+      sanitized.reasoningEffort = effort.reasoningEffort;
+    }
+
+    // Anthropic reads output_config.effort, and a flat thinking_effort is one more unknown top-level
+    // field the backend's ChatCompletionRequest drops, so the effort travels in custom_parameters.
+    delete sanitized.thinkingEffort;
+    if (provider === PROVIDER_TYPE.ANTHROPIC) {
+      const customParameters = withThinkingEffort(
+        sanitized.custom_parameters,
+        knowsAnthropicEffortLevels(model)
+          ? effort.thinkingEffort
+          : getNestedThinkingEffort(sanitized.custom_parameters),
+      );
+      if (customParameters) {
+        sanitized.custom_parameters = customParameters;
       } else {
-        sanitized[key] = effort[key];
+        delete sanitized.custom_parameters;
       }
     }
   }
@@ -613,18 +1187,7 @@ export const sanitizeConfigForRequest = (
     // A nested level the model still offers is a real past choice and is honoured — including on the
     // Flash Lite models, where an explicitly saved "minimal" keeps thinking on. Only the *default*
     // changed to "none"; a level someone chose is not overridden.
-    const nested = (
-      (sanitized.custom_parameters as Record<string, unknown> | undefined)
-        ?.thinking as Record<string, unknown> | undefined
-    )?.level;
-    const stored = (sanitized.thinkingLevel ?? nested) as
-      | GeminiThinkingLevel
-      | undefined;
-    const level = (
-      stored != null && thinkingLevelOptions.some((o) => o.value === stored)
-        ? stored
-        : getDefaultThinkingLevel(model)
-    ) as GeminiThinkingLevel;
+    const level = resolveThinkingLevel(model, sanitized as ThinkingLevelParams);
 
     // Dropped unconditionally: the field is Opik's own, and no provider accepts it at the top
     // level, so leaving it on the payload can only be dead weight.
@@ -645,8 +1208,20 @@ export const sanitizeConfigForRequest = (
       }
     }
 
-    // "auto" also sends no thinkingConfig, but it is a weaker statement — "let the model decide" —
-    // so it leaves a persisted block alone rather than deleting fields the form cannot represent.
+    // "auto" also sends no thinkingConfig: it drops a persisted level and budget, since either would
+    // pin how much the model thinks. Unlike "none" it keeps the rest of the block, which the form
+    // cannot represent.
+    if (level === "auto" && thinkingLevelOptions.length > 0) {
+      const customParameters = withoutThinkingAmount(
+        sanitized.custom_parameters,
+      );
+      if (customParameters) {
+        sanitized.custom_parameters = customParameters;
+      } else {
+        delete sanitized.custom_parameters;
+      }
+    }
+
     // `level` is already known to be one this model offers.
     if (
       level !== "auto" &&
@@ -655,19 +1230,15 @@ export const sanitizeConfigForRequest = (
     ) {
       const customParameters =
         (sanitized.custom_parameters as Record<string, unknown>) ?? {};
-      // Merge into any existing thinking block rather than replacing it — the backend also reads
-      // budget_tokens and include_thoughts from there, and only `level` is ours to set here.
       const thinking =
         (customParameters.thinking as Record<string, unknown>) ?? {};
 
+      // Merged into the existing block so include_thoughts survives. A budget_tokens set through the
+      // API does not: the backend lets it outrank any level, so the model would get that budget
+      // while the panel shows Low, or thinking would stay on under Off.
       sanitized.custom_parameters = {
         ...customParameters,
-        // An explicit budget outranks the level server-side, so "off" has to clear it. Left in, the
-        // block would say "disabled" and "4096 tokens" at once and thinking would stay on.
-        thinking:
-          level === "off"
-            ? { ...omit(thinking, "budget_tokens"), level }
-            : { ...thinking, level },
+        thinking: { ...omit(thinking, "budget_tokens"), level },
       };
     }
   }

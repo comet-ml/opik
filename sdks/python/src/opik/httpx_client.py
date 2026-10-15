@@ -1,11 +1,12 @@
 import gzip
 import logging
-from typing import Optional, Dict, Any, Union, Iterable, AsyncIterable, Mapping
+from typing import Optional, Dict, Any, Tuple, Union, Iterable, AsyncIterable, Mapping
 import httpx
 import os
+import urllib.parse
 import json as jsonlib
 
-from . import hooks, package_version
+from . import exceptions, hooks, package_version
 import platform
 
 LOGGER = logging.getLogger(__name__)
@@ -21,12 +22,25 @@ READ_TIMEOUT_SECONDS = 100
 WRITE_TIMEOUT_SECONDS = 100
 POOL_TIMEOUT_SECONDS = 20
 
+# zlib's own default. Python's gzip.compress defaults to 9 instead, which costs several
+# times the CPU for well under 1% fewer bytes on Opik payloads.
+DEFAULT_COMPRESSION_LEVEL = 6
+
+# A gzip stream starts with these two bytes; JSON never does.
+_GZIP_MAGIC = b"\x1f\x8b"
+
+# What the backend uses for the same decision: Dropwizard's GzipHandlerFactory refuses to
+# compress an entity below this and Opik runs it at its default. Below it gzip's framing
+# can leave a body bigger than it started -- an 81-byte feedback score comes out at 93.
+MIN_COMPRESSED_ENTITY_BYTES = 256
+
 
 def get(
     workspace: Optional[str],
     api_key: Optional[str],
     check_tls_certificate: bool,
     compress_json_requests: bool,
+    compression_level: int = DEFAULT_COMPRESSION_LEVEL,
 ) -> httpx.Client:
     limits = httpx.Limits(keepalive_expiry=KEEPALIVE_EXPIRY_SECONDS)
 
@@ -55,7 +69,11 @@ def get(
     }
     kwargs = hooks.httpx_client_hook.build_init_arguments(kwargs)
 
-    client = OpikHttpxClient(compress_json_requests=compress_json_requests, **kwargs)
+    client = OpikHttpxClient(
+        compress_json_requests=compress_json_requests,
+        compression_level=compression_level,
+        **kwargs,
+    )
 
     headers = _prepare_headers(workspace=workspace, api_key=api_key)
     client.headers.update(headers)
@@ -83,10 +101,116 @@ def _prepare_headers(
     return result
 
 
+def compresses_json_requests(client: httpx.Client, default: bool = True) -> bool:
+    """Whether bodies sent through `client` are expected to be gzipped.
+
+    One reading of the setting for both the code that produces a prepared body and the
+    code that labels it, so the `Content-Encoding` header cannot disagree with the bytes.
+
+    A plain `httpx.Client` carries no such setting -- which is what a REST client built
+    directly rather than by `Opik` sends through -- so the caller supplies the default it
+    would otherwise have had, rather than this assuming one.
+    """
+    compress: bool = getattr(client, "compress_json_requests", default)
+    return compress
+
+
+def wrapper_headers(rest_client: Any) -> Dict[str, str]:
+    """The headers the generated client applies to each request it sends.
+
+    Auth and workspace live on the generated client's *wrapper*, not on the httpx client,
+    whenever the REST client was built directly -- `OpikApi(api_key=..., workspace_name=...)`.
+    A client built by `Opik` carries them on the httpx client instead, so this repeats
+    what is already there. Sending a prepared body talks to the httpx client, so without
+    this a standalone REST client would upload unauthenticated.
+
+    Returns nothing for a REST client that is not a generated one, which has no wrapper.
+    """
+    wrapper = getattr(rest_client, "_client_wrapper", None)
+    get_headers = getattr(wrapper, "get_headers", None)
+    headers = get_headers() if callable(get_headers) else None
+    if not isinstance(headers, dict):
+        return {}
+    return {key: value for key, value in headers.items() if isinstance(value, str)}
+
+
+def upload_transport(
+    rest_client: Any,
+    *,
+    client: Optional[httpx.Client] = None,
+    base_url: Optional[str] = None,
+) -> Tuple[httpx.Client, str]:
+    """The HTTP client and base URL a prepared request body is sent through.
+
+    The generated client exposes neither: both come off its wrapper, where
+    `httpx_client.httpx_client` is the very `OpikHttpxClient` the owning `Opik` holds --
+    the same object, carrying the same auth, workspace headers and compression setting --
+    so a `Dataset` or an `Experiment` built from a REST client alone resolves a transport
+    like any other. Resolved here rather than at each upload path, so both reach it the
+    same way and there is one traversal to replace if the generated client ever grows a
+    public accessor.
+
+    `client` and `base_url` win where they were supplied, for a caller that was handed an
+    explicit transport.
+    """
+    wrapper = getattr(rest_client, "_client_wrapper", None)
+    resolved_client: Optional[httpx.Client] = client
+    if resolved_client is None:
+        resolved_client = getattr(
+            getattr(wrapper, "httpx_client", None), "httpx_client", None
+        )
+    resolved_base_url: Optional[str] = base_url
+    if resolved_base_url is None:
+        get_base_url = getattr(wrapper, "get_base_url", None)
+        resolved_base_url = get_base_url() if callable(get_base_url) else None
+
+    if resolved_client is None or resolved_base_url is None:
+        raise exceptions.OpikException(
+            "The REST client exposes no HTTP transport to upload through"
+        )
+    return resolved_client, resolved_base_url
+
+
+def send_prepared_json(
+    client: httpx.Client,
+    base_url: str,
+    path: str,
+    body: bytes,
+    headers: Optional[Dict[str, str]] = None,
+) -> httpx.Response:
+    """PUT an already-serialised JSON body.
+
+    Exists so a caller that has produced the request body itself can send it without a
+    second serialisation pass. Auth and workspace headers ride on `client`, which is the
+    same client the generated REST client sends through, so this does not depend on the
+    generated client's internals. The body is declared gzipped when it is gzipped -- read
+    off the bytes rather than from a setting, so the header cannot disagree with what it
+    describes however the producer was configured.
+    """
+    url = urllib.parse.urljoin(
+        base_url if base_url.endswith("/") else base_url + "/", path
+    )
+    # Ours last: the caller's headers carry identity, never the framing of this request.
+    request_headers = {
+        **(headers or {}),
+        "Content-Type": "application/json;charset=utf-8",
+    }
+    if body.startswith(_GZIP_MAGIC):
+        request_headers["Content-Encoding"] = "gzip"
+
+    return client.request("PUT", url, content=body, headers=request_headers)
+
+
 class OpikHttpxClient(httpx.Client):
-    def __init__(self, compress_json_requests: bool = True, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        compress_json_requests: bool = True,
+        compression_level: int = DEFAULT_COMPRESSION_LEVEL,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.compress_json_requests = compress_json_requests
+        self.compression_level = compression_level
         self.warnings: Dict[str, bool] = {}
 
     def build_request(
@@ -110,14 +234,30 @@ class OpikHttpxClient(httpx.Client):
         # by httpx.Client.request() as well as by httpx.Client.stream() (both used in the OPIK)
         if self.compress_json_requests:
             if method in ("POST", "PUT", "PATCH") and json is not None:
+                # Serialised here whatever the size, so only *whether it is gzipped*
+                # turns on the size. Handing a small body back to httpx instead would
+                # re-encode it with different settings -- compact separators, and
+                # `allow_nan=False`, which raises on a NaN this encoder writes -- and a
+                # body would then be accepted or rejected according to its length.
                 json_data = jsonlib.dumps(json).encode("utf-8")
-                content = gzip.compress(json_data)
+                content = json_data
                 json = None
-                if headers is None:
-                    headers = {}
+                # Copied rather than mutated: the caller's dict is not ours to edit.
+                headers = {} if headers is None else dict(headers)
+                if len(json_data) >= MIN_COMPRESSED_ENTITY_BYTES:
+                    content = gzip.compress(json_data, self.compression_level)
+                    headers["Content-Encoding"] = "gzip"
+                else:
+                    # A caller's gzip label would otherwise outlive the body it described
+                    # and the server would try to inflate plain JSON. Only gzip is
+                    # dropped; any other encoding the caller set is theirs to keep.
+                    for name in [
+                        key for key in headers if key.lower() == "content-encoding"
+                    ]:
+                        if str(headers[name]).lower() == "gzip":
+                            del headers[name]
                 headers["Content-Length"] = str(len(content))
-                headers["Content-Encoding"] = "gzip"
-                if "content-type" not in headers:
+                if not any(key.lower() == "content-type" for key in headers):
                     # to avoid having it in headers two times with different cases in keys (e.g., streaming operations)
                     headers["Content-Type"] = "application/json;charset=utf-8"
 

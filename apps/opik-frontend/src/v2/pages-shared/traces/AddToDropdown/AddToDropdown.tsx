@@ -17,12 +17,11 @@ import {
 import { Span, Trace, Thread } from "@/types/traces";
 import { cn } from "@/lib/utils";
 import AddToDatasetDialog from "@/v2/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
+import AddToTestSuiteDialog from "@/v2/pages-shared/traces/AddToTestSuiteDialog/AddToTestSuiteDialog";
 import AddToQueueDialog from "@/v2/pages-shared/traces/AddToQueueDialog/AddToQueueDialog";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { DATASET_TYPE } from "@/types/datasets";
 
 type DatasetOption = {
-  datasetType: DATASET_TYPE;
   label: string;
   icon: LucideIcon;
   openValue: number;
@@ -30,13 +29,11 @@ type DatasetOption = {
 
 const DATASET_OPTIONS: DatasetOption[] = [
   {
-    datasetType: DATASET_TYPE.TEST_SUITE,
     label: "Test suite",
     icon: ListChecks,
     openValue: 1,
   },
   {
-    datasetType: DATASET_TYPE.DATASET,
     label: "Dataset",
     icon: Database,
     openValue: 3,
@@ -87,16 +84,22 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
 
   return (
     <>
-      {showAddToDataset &&
-        DATASET_OPTIONS.map((opt) => (
-          <AddToDatasetDialog
-            key={`${opt.label}-${resetKeyRef.current}`}
+      {showAddToDataset && (
+        <>
+          <AddToTestSuiteDialog
+            key={`Test suite-${resetKeyRef.current}`}
             selectedRows={selectedRows as Array<Trace | Span>}
-            datasetType={opt.datasetType}
-            open={open === opt.openValue}
+            open={open === 1}
             setOpen={() => setOpen(0)}
           />
-        ))}
+          <AddToDatasetDialog
+            key={`Dataset-${resetKeyRef.current}`}
+            selectedRows={selectedRows as Array<Trace | Span>}
+            open={open === 3}
+            setOpen={() => setOpen(0)}
+          />
+        </>
+      )}
       {showAddToQueue && (
         <AddToQueueDialog
           key={`queue-${resetKeyRef.current}`}

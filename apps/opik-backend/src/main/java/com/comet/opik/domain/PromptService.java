@@ -195,20 +195,21 @@ class PromptServiceImpl implements PromptService {
     private PromptVersion createPromptVersionFromPromptRequest(Prompt createdPrompt,
             String workspaceId,
             Prompt promptRequest) {
-        UUID versionId = idGenerator.generateId();
-        PromptVersion promptVersion = PromptVersion.builder()
-                .id(versionId)
-                .promptId(createdPrompt.id())
-                .commit(CommitUtils.getCommit(versionId))
-                .template(promptRequest.template())
-                .metadata(promptRequest.metadata())
-                .changeDescription(promptRequest.changeDescription())
-                .type(promptRequest.type())
-                .createdBy(createdPrompt.createdBy())
-                .build();
+        return withPromptVersionLock(workspaceId, createdPrompt.id(), () -> {
+            UUID versionId = idGenerator.generateId();
+            PromptVersion promptVersion = PromptVersion.builder()
+                    .id(versionId)
+                    .promptId(createdPrompt.id())
+                    .commit(CommitUtils.getCommit(versionId))
+                    .template(promptRequest.template())
+                    .metadata(promptRequest.metadata())
+                    .changeDescription(promptRequest.changeDescription())
+                    .type(promptRequest.type())
+                    .createdBy(createdPrompt.createdBy())
+                    .build();
 
-        return withPromptVersionLock(workspaceId, createdPrompt.id(),
-                () -> savePromptVersion(workspaceId, createdPrompt.projectId(), promptVersion, createdPrompt.name()));
+            return savePromptVersion(workspaceId, createdPrompt.projectId(), promptVersion, createdPrompt.name());
+        });
     }
 
     private Prompt savePrompt(String workspaceId, Prompt prompt) {
@@ -348,14 +349,9 @@ class PromptServiceImpl implements PromptService {
         String workspaceName = requestContext.get().getWorkspaceName();
         String userName = requestContext.get().getUserName();
 
-        UUID id = createPromptVersion.version().id() == null
-                ? idGenerator.generateId()
-                : createPromptVersion.version().id();
-        String commit = createPromptVersion.version().commit() == null
-                ? CommitUtils.getCommit(id)
-                : createPromptVersion.version().commit();
-
-        IdGenerator.validateVersion(id, "prompt version");
+        if (createPromptVersion.version().id() != null) {
+            IdGenerator.validateVersion(createPromptVersion.version().id(), "prompt version");
+        }
 
         TemplateStructure templateStructure = createPromptVersion.templateStructure();
 
@@ -377,6 +373,14 @@ class PromptServiceImpl implements PromptService {
         }
 
         return withPromptVersionLock(workspaceId, prompt.id(), () -> {
+            // Minted under the lock so id order follows version_number order: "latest" is read as max id
+            UUID id = createPromptVersion.version().id() == null
+                    ? idGenerator.generateId()
+                    : createPromptVersion.version().id();
+            String commit = createPromptVersion.version().commit() == null
+                    ? CommitUtils.getCommit(id)
+                    : createPromptVersion.version().commit();
+
             if (!environments.isEmpty()) {
                 return createVersionWithEnvironment(workspaceId, workspaceName, userName, projectId, prompt,
                         createPromptVersion, id, commit, environments);
@@ -952,30 +956,30 @@ class PromptServiceImpl implements PromptService {
         // Get the prompt to get its name
         Prompt prompt = getById(promptId);
 
-        // Create a new version with the content from the old version
-        UUID newVersionId = idGenerator.generateId();
-        String newCommit = CommitUtils.getCommit(newVersionId);
-
         String versionRef = StringUtils.defaultIfBlank(versionToRestore.versionNumber(), versionToRestore.commit());
 
-        PromptVersion newVersion = versionToRestore.toBuilder()
-                .id(newVersionId)
-                .commit(newCommit)
-                .createdBy(userName)
-                .changeDescription("Restored from version " + versionRef)
-                .tags(null) // Don't propagate tags to restored version
-                .environments(null) // Don't propagate environment ownership to restored version
-                .build();
+        PromptVersion restoredVersion = withPromptVersionLock(workspaceId, promptId, () -> {
+            // Create a new version with the content from the old version
+            UUID newVersionId = idGenerator.generateId();
 
-        PromptVersion restoredVersion = withPromptVersionLock(workspaceId, promptId,
-                () -> EntityConstraintHandler
-                        .handle(() -> savePromptVersion(workspaceId, prompt.projectId(), newVersion, prompt.name()))
-                        .onErrorDo(() -> retryableCreateVersion(workspaceId,
-                                CreatePromptVersion.builder()
-                                        .name(prompt.name())
-                                        .version(newVersion)
-                                        .build(),
-                                prompt, userName)));
+            PromptVersion newVersion = versionToRestore.toBuilder()
+                    .id(newVersionId)
+                    .commit(CommitUtils.getCommit(newVersionId))
+                    .createdBy(userName)
+                    .changeDescription("Restored from version " + versionRef)
+                    .tags(null) // Don't propagate tags to restored version
+                    .environments(null) // Don't propagate environment ownership to restored version
+                    .build();
+
+            return EntityConstraintHandler
+                    .handle(() -> savePromptVersion(workspaceId, prompt.projectId(), newVersion, prompt.name()))
+                    .onErrorDo(() -> retryableCreateVersion(workspaceId,
+                            CreatePromptVersion.builder()
+                                    .name(prompt.name())
+                                    .version(newVersion)
+                                    .build(),
+                            prompt, userName));
+        });
 
         log.info("Successfully restored prompt version with id '{}' for prompt id '{}' on workspace_id '{}'",
                 versionId, promptId, workspaceId);

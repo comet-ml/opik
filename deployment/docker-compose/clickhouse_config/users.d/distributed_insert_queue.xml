@@ -6,17 +6,21 @@
          caps forwarding throughput. split_batch_on_failure retries a failed batch file-by-file
          rather than wedging the queue behind one bad file.
 
-         Inert in this stack: a single node with prefer_localhost_replica at its default of 1
-         writes in-process, so no queue file is produced. Set anyway to keep the local stack
-         identical to Kubernetes, the same reason additional_config.xml pins
-         internal_replication on a single-replica cluster. Note this does not depend on there
-         being no Distributed table — enabling the wrap locally creates one, and these apply.
+         prefer_localhost_replica is stated at 0 here too, the same value every deployed
+         installation runs, so the local stack stays identical to Kubernetes — the same reason
+         additional_config.xml pins internal_replication on a single-replica cluster. With 0 a
+         write through a Distributed table is serialised to a queue file and shipped
+         asynchronously rather than written in-process, so anything needing an immediate
+         read-back must force distributed_foreground_insert on that statement. None of this
+         depends on there being no Distributed table locally — enabling the wrap creates one,
+         and these settings then apply.
 
          Must be a profile (users.d) setting, not a server (config.d) one: ClickHouse reads
          <profiles> only from users.d. clickhouse-init copies clickhouse_config into config.d,
          so this file also needs its own mount in docker-compose.yaml to reach users.d. -->
     <profiles>
         <default>
+            <prefer_localhost_replica>0</prefer_localhost_replica>
             <distributed_background_insert_batch>1</distributed_background_insert_batch>
             <distributed_background_insert_split_batch_on_failure>1</distributed_background_insert_split_batch_on_failure>
         </default>

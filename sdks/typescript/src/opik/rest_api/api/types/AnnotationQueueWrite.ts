@@ -16,4 +16,5 @@ export interface AnnotationQueueWrite {
     feedbackDefinitionNames?: string[];
     annotatorsPerItem?: number;
     lockTimeoutSeconds?: number;
+    automation?: OpikApi.AnnotationQueueAutomationWrite;
 }

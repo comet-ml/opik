@@ -7,8 +7,9 @@ import {
   usePromptMap,
   useSetPromptMap,
   useSetDatasetType,
+  useSetExperimentName,
 } from "@/store/PlaygroundStore";
-import { generateDefaultPrompt } from "@/lib/playground";
+import { generateDefaultPrompt, isEmptyMessage } from "@/lib/playground";
 import { DATASET_TYPE } from "@/types/datasets";
 import {
   generateDefaultLLMPromptMessage,
@@ -51,11 +52,12 @@ function useLoadPlayground() {
   const promptMap = usePromptMap();
   const setPromptMap = useSetPromptMap();
   const setDatasetType = useSetDatasetType();
+  const setExperimentName = useSetExperimentName();
 
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
-  const { calculateModelProvider, calculateDefaultModel } =
+  const { calculateModelProvider, calculateDefaultModel, isDropdownModel } =
     useLLMProviderModelsData();
 
   const { data: providerKeysData, isPending: isPendingProviderKeys } =
@@ -74,9 +76,7 @@ function useLoadPlayground() {
     const keys = Object.keys(promptMap);
 
     return (
-      keys.length === 1 &&
-      promptMap[keys[0]]?.messages?.length === 1 &&
-      promptMap[keys[0]]?.messages[0]?.content === ""
+      keys.length === 1 && !!promptMap[keys[0]]?.messages?.every(isEmptyMessage)
     );
   }, [promptMap]);
 
@@ -109,6 +109,7 @@ function useLoadPlayground() {
         lastPickedModel,
         providerResolver: calculateModelProvider,
         modelResolver: calculateDefaultModel,
+        isDropdownModel,
       });
 
       if (templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
@@ -150,7 +151,7 @@ function useLoadPlayground() {
             }),
           ];
         }
-      } else {
+      } else if (content || promptId) {
         newPrompt.messages = [
           generateDefaultLLMPromptMessage({
             content,
@@ -166,6 +167,7 @@ function useLoadPlayground() {
     [
       calculateDefaultModel,
       calculateModelProvider,
+      isDropdownModel,
       lastPickedModel,
       providerKeys,
     ],
@@ -220,6 +222,7 @@ function useLoadPlayground() {
       }
 
       setDatasetType(datasetType ?? null);
+      setExperimentName(null);
 
       navigate({
         to: "/$workspaceName/projects/$projectId/playground",
@@ -235,6 +238,7 @@ function useLoadPlayground() {
       setPromptMap,
       setDatasetVersionKey,
       setDatasetType,
+      setExperimentName,
       workspaceName,
       activeProjectId,
     ],

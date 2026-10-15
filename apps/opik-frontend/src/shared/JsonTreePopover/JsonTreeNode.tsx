@@ -10,7 +10,9 @@ import {
 } from "./jsonTreeUtils";
 
 const INDENT_PER_DEPTH = 16;
-const BASE_PADDING_LEFT = 4;
+const BASE_PADDING_LEFT = 8;
+const SUBTREE_TINT =
+  "bg-[color-mix(in_srgb,var(--tag-green-bg)_50%,transparent)]";
 
 const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
   nodeKey,
@@ -111,13 +113,15 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
   };
 
   return (
-    <div>
+    <div className={cn("rounded", isFocused && isExpanded && SUBTREE_TINT)}>
       <div
         ref={nodeRef}
+        data-testid={`json-tree-node-${path}`}
+        data-focused={isFocused}
         className={cn(
           "flex items-center gap-1 py-1 pr-2 rounded cursor-pointer pl-[var(--node-indent)]",
-          "hover:bg-muted transition-colors font-mono",
-          isFocused && "bg-muted",
+          "transition-colors font-mono",
+          isFocused && "bg-[var(--tag-green-bg)]",
         )}
         style={{ "--node-indent": `${indent}px` } as React.CSSProperties}
         onClick={handleClick}
@@ -135,7 +139,7 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
           <span className="w-5 shrink-0" />
         )}
         <span
-          className="comet-body-s truncate text-[var(--key-color)]"
+          className="comet-body-xs truncate text-[var(--key-color)]"
           style={
             {
               "--key-color": VALUE_TYPE_STYLES.key.color,
@@ -146,9 +150,9 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
         </span>
         {showValues && (
           <>
-            <span className="comet-body-s text-muted-foreground">:</span>
+            <span className="comet-body-xs text-muted-foreground">:</span>
             <span
-              className="comet-body-s truncate text-[var(--value-color)]"
+              className="comet-body-xs truncate text-[var(--value-color)]"
               style={
                 {
                   "--value-color": getValueTypeStyle(value).color,

@@ -34,12 +34,14 @@ public class TraceEnrichmentService {
      *
      * @param traceIds The IDs of the traces to enrich
      * @param options Options specifying which metadata to include
+     * @param fieldMappings Dataset item field name to a path into the trace
      * @return A Mono containing a map of trace IDs to their enriched data
      */
     @WithSpan
     public Mono<Map<UUID, Map<String, JsonNode>>> enrichTraces(
             @NonNull Set<UUID> traceIds,
-            @NonNull TraceEnrichmentOptions options) {
+            @NonNull TraceEnrichmentOptions options,
+            @NonNull Map<String, String> fieldMappings) {
 
         if (traceIds.isEmpty()) {
             return Mono.just(Map.of());
@@ -65,12 +67,16 @@ public class TraceEnrichmentService {
                     Map<UUID, Map<String, JsonNode>> enrichedTraces = traces.stream()
                             .collect(Collectors.toMap(
                                     Trace::id,
-                                    trace -> TraceEnrichmentMapper.enrichTraceData(
+                                    trace -> FieldMappingResolver.apply(
+                                            TraceEnrichmentMapper.enrichTraceData(
+                                                    trace,
+                                                    spansByTraceId.getOrDefault(trace.id(), List.of()),
+                                                    options),
                                             trace,
-                                            spansByTraceId.getOrDefault(trace.id(), List.of()),
-                                            options)));
+                                            fieldMappings)));
 
                     return Mono.just(enrichedTraces);
                 });
     }
+
 }

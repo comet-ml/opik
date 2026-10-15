@@ -8,7 +8,7 @@ subtitle: Describes how to run Opik on a Kubernetes cluster
 title: Kubernetes deployment
 ---
 
-> **Important:** If you're using or looking to use Opik or Comet enterprise version please reach out to Sales@comet.com to gain access to the correct deployment documentation.
+> **Important:** If you're using or considering the enterprise version of Opik or Comet, reach out to Sales@comet.com to access the enterprise deployment documentation.
 
 For production deployments, we recommend using our Kubernetes Helm chart. This chart is designed to be highly configurable and has been battle-tested in Comet's managed cloud offering.
 
@@ -121,6 +121,15 @@ clickhouse:
 
 ## Configure additional ClickHouse users and profiles
 
+<Warning>
+`clickhouse.additionalProfiles` is a list, and Helm replaces lists wholesale instead of merging
+them. Declaring your own list therefore drops the chart's `default` profile entry unless you repeat
+it, which would silently remove the Distributed insert-queue settings. The examples below keep it.
+
+`prefer_localhost_replica` is in that same `default` entry, so it is dropped by list replacement
+too. Keep the whole entry, not just the batching settings.
+</Warning>
+
 You can create read-only ClickHouse users with custom settings profiles.
 
 ### Using inline passwords
@@ -128,6 +137,14 @@ You can create read-only ClickHouse users with custom settings profiles.
 ```yaml
 clickhouse:
   additionalProfiles:
+    # Keep this `default` entry. Helm replaces lists rather than merging them, so a values file
+    # that declares its own `additionalProfiles` drops the chart's default one — taking the
+    # Distributed insert-queue settings with it, silently.
+    - name: default
+      settings:
+        distributed_background_insert_batch: 1
+        distributed_background_insert_split_batch_on_failure: 1
+        prefer_localhost_replica: 0
     - name: readonly_profile
       settings:
         readonly: 1
@@ -152,6 +169,14 @@ clickhouse:
       enabled: true
     secretname: clickhouse-admin-pass
   additionalProfiles:
+    # Keep this `default` entry. Helm replaces lists rather than merging them, so a values file
+    # that declares its own `additionalProfiles` drops the chart's default one — taking the
+    # Distributed insert-queue settings with it, silently.
+    - name: default
+      settings:
+        distributed_background_insert_batch: 1
+        distributed_background_insert_split_batch_on_failure: 1
+        prefer_localhost_replica: 0
     - name: readonly_profile
       settings:
         readonly: 1
@@ -204,6 +229,44 @@ component:
       enabled: true
       annotations:
         eks.amazonaws.com/role-arn: <your IAM Role arn>
+```
+
+## Configure ClickHouse force-merge (LWD reclaim)
+
+Deleted traces and spans are masked by lightweight deletes and only physically removed when ClickHouse merges the
+part. ClickHouse can force that merge for parts that have stopped receiving writes. The chart does not enable it
+by default.
+
+<Warning>
+  Chart versions 2.2.78 through the release before `clickhouse.forceMerge` was added enabled force-merge by default. Upgrading from one of
+  those versions removes the settings and restarts ClickHouse once; set `clickhouse.forceMerge.enabled: true` to keep
+  them. If ClickHouse is running a large merge backlog, let it finish before upgrading: a restart starts in-progress
+  merges over.
+</Warning>
+
+To enable it:
+
+```yaml
+clickhouse:
+  forceMerge:
+    enabled: true
+```
+
+The chart then renders `conf.d/merge_tree.xml` from the `clickhouse.forceMerge` values (minimum part age, merge size
+cap and pool throttle); see the chart README for each one. Don't also set `conf.d/merge_tree.xml` under
+`clickhouse.configuration.files`: the chart refuses to render with both.
+
+On the first rollout, every part older than `minAgeSeconds` becomes eligible at once. On a large installation that
+can fill the background merge pool for hours, and mutations (deletes) cannot start while the pool is full. Before
+enabling it, check how much data sits in old parts. Run this on each replica, since every replica merges its own
+copy; replace `opik` if you changed the database name:
+
+```sql
+SELECT database, table, count() AS parts, formatReadableSize(sum(bytes_on_disk)) AS size
+FROM system.parts
+WHERE active AND database = 'opik' AND modification_time < now() - INTERVAL 7 DAY
+GROUP BY database, table
+ORDER BY sum(bytes_on_disk) DESC;
 ```
 
 ## Use external Clickhouse installation

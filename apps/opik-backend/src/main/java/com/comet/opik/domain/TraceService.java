@@ -117,6 +117,9 @@ public interface TraceService {
     Mono<Set<UUID>> getProjectsWithTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
             @NonNull Instant from, @NonNull Instant to);
 
+    Mono<Set<UUID>> getProjectsWithMinTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
+            @NonNull Instant from, @NonNull Instant to, int minTraces);
+
     Mono<Void> deleteTraceThreads(DeleteTraceThreads traceThreads);
 
     Flux<Trace> search(int limit, TraceSearchCriteria searchCriteria);
@@ -229,8 +232,10 @@ class TraceServiceImpl implements TraceService {
                             .collectList();
 
                     return resolveProjects
-                            .flatMap(traces -> template
-                                    .nonTransaction(connection -> dao.batchInsert(traces, connection))
+                            // No nonTransaction here: the DAO picks the write path and allocates a
+                            // connection only if it needs one. The JSONEachRow path uses the v2 client's
+                            // own pool, and nonTransaction does not close what it hands out.
+                            .flatMap(traces -> dao.batchInsert(traces)
                                     .doOnSuccess(__ -> {
                                         eventBus.post(new TracesCreated(traces, workspaceId, userName,
                                                 workspaceName, cipxDeviceId));
@@ -766,6 +771,17 @@ class TraceServiceImpl implements TraceService {
         }
         return template.nonTransaction(
                 connection -> dao.getProjectsWithTracesInRange(workspaceProjectPairs, from, to, connection));
+    }
+
+    @Override
+    public Mono<Set<UUID>> getProjectsWithMinTracesInRange(
+            @NonNull Collection<Pair<String, UUID>> workspaceProjectPairs, @NonNull Instant from, @NonNull Instant to,
+            int minTraces) {
+        if (workspaceProjectPairs.isEmpty()) {
+            return Mono.just(Set.of());
+        }
+        return template.nonTransaction(connection -> dao.getProjectsWithMinTracesInRange(workspaceProjectPairs, from,
+                to, minTraces, connection));
     }
 
     @Override

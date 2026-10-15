@@ -1,3 +1,4 @@
+import { expect } from '@playwright/test';
 import { test as baseTest } from './bystander.fixture';
 import { uuid7, type BackendClient } from '../core/backend';
 
@@ -36,9 +37,13 @@ export function isUuidWindowRejection(err: unknown): boolean {
  * the one thing a skip must never key on. Probing over REST surfaces the clean
  * 400 instead, which says exactly why.
  *
- * The probe writes one trace and removes it. A delete failure is not fatal: the
- * probe trace carries no spans and no usage, so it cannot move any aggregate the
- * callers assert on.
+ * The probe writes one trace and removes it, then blocks until that removal is
+ * readable. Callers assert exact per-project counts — `project-stats-far-future-id`
+ * polls `traceCount` with `toBe`, which a lingering probe would hold one too high
+ * until the poll times out — and trace deletion is eventually consistent, so
+ * returning on the delete call alone would race the very counts the fixture then
+ * seeds. A probe that cannot be confirmed gone fails the fixture rather than
+ * leaving a silent miscount: at that point the count it would skew is unknowable.
  */
 export async function skipUnlessBackdatedIdsAccepted(
   backendClient: BackendClient,
@@ -59,9 +64,10 @@ export async function skipUnlessBackdatedIdsAccepted(
     throw err;
   }
 
-  try {
-    await backendClient.deleteTraces([id]);
-  } catch (err) {
-    console.warn('[uuid-window-guard] probe trace delete warning:', err);
-  }
+  await backendClient.deleteTraces([id]);
+
+  // Deletion is eventually consistent; the caller's counts are not.
+  await expect
+    .poll(async () => await backendClient.getTrace(id), { timeout: 30_000 })
+    .toBeNull();
 }

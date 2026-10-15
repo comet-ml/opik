@@ -112,7 +112,10 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
           variant="link"
           size="2xs"
           asChild
-          className="shrink-0 text-white underline underline-offset-2 hover:text-white focus-visible:ring-white"
+          // The dark variants are needed because the link variant sets its own
+          // `dark:text-primary-hover`, which otherwise wins here and turns the
+          // CTA blue against the orange bar.
+          className="shrink-0 text-white underline underline-offset-2 hover:text-white focus-visible:ring-white dark:text-white dark:hover:text-white"
         >
           <a
             href={buildDocsUrl(MCP_BANNER_DOCS_PATH)}

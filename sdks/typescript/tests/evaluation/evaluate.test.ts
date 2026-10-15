@@ -3,7 +3,13 @@ import { MockInstance } from "vitest";
 import { evaluate } from "@/evaluation/evaluate";
 import { OpikClient } from "@/client/Client";
 import { Dataset } from "@/dataset/Dataset";
-import { EvaluationTask, TASK_ERROR_SCORE_NAME } from "@/evaluation/types";
+import {
+  EvaluationScoreResult,
+  EvaluationTask,
+  TASK_ERROR_SCORE_NAME,
+} from "@/evaluation/types";
+import { BaseMetric } from "@/evaluation/metrics/BaseMetric";
+import { z } from "zod";
 import {
   createMockHttpResponsePromise,
   mockAPIFunction,
@@ -341,6 +347,49 @@ describe("evaluate function", () => {
         ]),
       }),
     );
+  });
+
+  test("records a failed score when a metric throws, and keeps scoring the others", async () => {
+    class ThrowingMetric extends BaseMetric {
+      public readonly validationSchema = z.object({});
+
+      constructor() {
+        super("throwing-metric", false);
+      }
+
+      score(): EvaluationScoreResult {
+        throw new Error("metric exploded");
+      }
+    }
+
+    const mockTask: EvaluationTask = async () => {
+      return { output: "generated output" };
+    };
+
+    const result = await evaluate({
+      dataset: testDataset,
+      task: mockTask,
+      experimentName: "test-experiment",
+      scoringMetrics: [new ThrowingMetric(), new ExactMatch("test-metric")],
+      client: opikClient,
+    });
+
+    expect(result.testResults[0].scoreResults).toEqual([
+      {
+        name: "throwing-metric",
+        value: 0,
+        reason: "metric exploded",
+        scoringFailed: true,
+      },
+      expect.objectContaining({ name: "test-metric", value: 0 }),
+    ]);
+
+    // A failed score is not a real 0: it must not be logged on the trace.
+    const loggedScoreNames = scoreBatchOfTracesSpy.mock.calls.flatMap((call) =>
+      call[0].scores.map((score) => score.name),
+    );
+    expect(loggedScoreNames).toContain("test-metric");
+    expect(loggedScoreNames).not.toContain("throwing-metric");
   });
 
   test("should throw error when dataset is missing", async () => {

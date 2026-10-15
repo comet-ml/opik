@@ -2,6 +2,7 @@ from typing import Type, Dict
 
 from . import base_batcher, batchers, batch_manager
 from .. import messages, message_queue
+from ... import config as opik_config
 
 CREATE_SPANS_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS = 2.0
 CREATE_SPANS_MESSAGE_BATCHER_MAX_BATCH_SIZE = 1000
@@ -34,21 +35,31 @@ def create_batch_manager(
         flush_callback=queue.put,
     )
 
+    # The producers of these messages (Opik.log_spans_feedback_scores,
+    # Opik.log_traces_feedback_scores, ThreadsClient.log_threads_feedback_scores)
+    # split their input at MAX_BATCH_SIZE_MB, so the batchers have to re-split to
+    # the same budget rather than the larger batcher default. Read here rather
+    # than at import so the two sides cannot drift.
+    feedback_scores_memory_limit_mb = opik_config.MAX_BATCH_SIZE_MB
+
     add_span_feedback_scores_batch_message_batcher = batchers.AddSpanFeedbackScoresBatchMessageBatcher(
         flush_interval_seconds=FEEDBACK_SCORES_BATCH_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS,
         max_batch_size=FEEDBACK_SCORES_BATCH_MESSAGE_BATCHER_MAX_BATCH_SIZE,
+        batch_memory_limit_mb=feedback_scores_memory_limit_mb,
         flush_callback=queue.put,
     )
 
     add_trace_feedback_scores_batch_message_batcher = batchers.AddTraceFeedbackScoresBatchMessageBatcher(
         flush_interval_seconds=FEEDBACK_SCORES_BATCH_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS,
         max_batch_size=FEEDBACK_SCORES_BATCH_MESSAGE_BATCHER_MAX_BATCH_SIZE,
+        batch_memory_limit_mb=feedback_scores_memory_limit_mb,
         flush_callback=queue.put,
     )
 
     add_threads_feedback_scores_batch_message_batcher = batchers.AddThreadsFeedbackScoresBatchMessageBatcher(
         flush_interval_seconds=FEEDBACK_SCORES_BATCH_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS,
         max_batch_size=FEEDBACK_SCORES_BATCH_MESSAGE_BATCHER_MAX_BATCH_SIZE,
+        batch_memory_limit_mb=feedback_scores_memory_limit_mb,
         flush_callback=queue.put,
     )
 

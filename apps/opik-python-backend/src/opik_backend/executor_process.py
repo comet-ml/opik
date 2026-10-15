@@ -6,7 +6,7 @@ import signal
 import time
 import uuid
 import sys
-from multiprocessing import Process, Pipe
+import multiprocessing
 from queue import Queue, Empty
 from threading import Event, Thread
 from typing import Optional
@@ -23,6 +23,13 @@ from opik_backend.executor import (
 from opik_backend import process_worker
 
 logger = logging.getLogger(__name__)
+
+# Python 3.14 made "forkserver" the Linux default. A forkserver worker is a fresh
+# interpreter that must re-import opik before it can send READY, which on a loaded
+# host exceeds the READY timeout, leaving the pool empty and every scoring call a 503.
+# A forked worker inherits the parent's already-imported modules. Linux only: macOS
+# system frameworks are not fork-safe, which is why "spawn" stays its default.
+_mp_context = multiprocessing.get_context("fork" if sys.platform == "linux" else None)
 
 # OTel metrics setup (assuming this is standard and correct)
 meter = metrics.get_meter("process_executor")
@@ -217,10 +224,10 @@ class ProcessExecutor(CodeExecutorBase):
 
         start_time = time.time()
         worker_id = str(uuid.uuid4())[:8]
-        parent_conn, child_conn = Pipe()
+        parent_conn, child_conn = _mp_context.Pipe()
         process = None
         try:
-            process = Process(target=process_worker.worker_process_main, args=(child_conn,))
+            process = _mp_context.Process(target=process_worker.worker_process_main, args=(child_conn,))
             process.start()
 
             # Wait for READY signal from worker

@@ -29,12 +29,14 @@ public class SpanEnrichmentService {
      *
      * @param spanIds The IDs of the spans to enrich
      * @param options Options specifying which metadata to include
+     * @param fieldMappings Dataset item field name to a path into the span
      * @return A Mono containing a map of span IDs to their enriched data
      */
     @WithSpan
     public Mono<Map<UUID, Map<String, JsonNode>>> enrichSpans(
             @NonNull Set<UUID> spanIds,
-            @NonNull SpanEnrichmentOptions options) {
+            @NonNull SpanEnrichmentOptions options,
+            @NonNull Map<String, String> fieldMappings) {
 
         if (spanIds.isEmpty()) {
             return Mono.just(Map.of());
@@ -44,7 +46,9 @@ public class SpanEnrichmentService {
 
         // Fetch all spans and enrich them reactively
         return spanService.getByIds(spanIds)
-                .map(span -> Map.entry(span.id(), SpanEnrichmentMapper.enrichSpanData(span, options)))
+                .map(span -> Map.entry(span.id(), FieldMappingResolver.apply(
+                        SpanEnrichmentMapper.enrichSpanData(span, options), span, fieldMappings)))
                 .collectMap(Map.Entry::getKey, Map.Entry::getValue);
     }
+
 }

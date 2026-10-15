@@ -134,9 +134,9 @@ class TraceMutationRoutingArchTest {
                     if (sql == null) {
                         continue;
                     }
-                    for (var mutation : TraceMutationSql.findMutations(sql)) {
+                    for (var mutation : MutationSql.TRACES.findMutations(sql)) {
                         mutationsScanned++;
-                        if (TraceMutationSql.targetsAnythingOtherThanTheResolver(mutation)) {
+                        if (MutationSql.TRACES.targetsAnythingOtherThanTheResolver(mutation)) {
                             events.add(SimpleConditionEvent.violated(item, """
                                     %s.%s declares `%s`. Every trace mutation must target %s, which \
                                     TraceDAOImpl#tracesMutationTable resolves from the wrap flag and \
@@ -145,7 +145,7 @@ class TraceMutationRoutingArchTest {
                                     that has not cut over (no such table), and any other target is never bound at all \
                                     — it reaches the server as literal placeholder text.\
                                     """.formatted(item.getSimpleName(), field.getName(), mutation,
-                                    TraceMutationSql.RESOLVER_PLACEHOLDER)));
+                                    MutationSql.TRACES.getResolverPlaceholder())));
                         }
                     }
                 }

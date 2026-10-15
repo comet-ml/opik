@@ -758,6 +758,13 @@ redis:
 
 altinity-clickhouse-operator:
   enabled: true
+  # The operator chart's CRD-install hook defaults to bitnami/kubectl:latest. Pin it to the
+  # same official kubectl image this chart uses elsewhere (the hook only runs `kubectl apply`
+  # via /bin/sh), so no Bitnami image is pulled.
+  crdHook:
+    image:
+      repository: alpine/kubectl
+      tag: "1.35.0"
   metrics:
     enabled: false
   serviceMonitor:
@@ -806,6 +813,17 @@ databaseAnalyticsDataModel:
   # message naming the flag and the observed engine. That is intentional — it beats serving traffic whose trace
   # deletes are guaranteed to fail — and it clears on the next probe once the two sides are back in step.
   tracesDistributedWrapEnabled: false
+  # Spans sibling: turn true in lockstep with applying the spans Distributed wrap, so span cascade/retention
+  # mutations target spans_local. Leave false while spans is still a MergeTree. Flips independently of the trace
+  # flag, and has its own `clickhouse-spans-topology` readiness probe with the same fail-fast behaviour: if this
+  # disagrees with the actual `spans` engine in either direction, the backend fails readiness at startup with a
+  # message naming the flag and the observed engine, and clears on the next probe once the two are back in step.
+  spansDistributedWrapEnabled: false
+  # Register each written span's weekly partition in the span_weeks index. Turn true before the span weeks
+  # backfill starts.
+  spanWeeksWriteEnabled: false
+  # Run the span weeks backfill job. Turn true only once spanWeeksWriteEnabled is live on every backend instance.
+  spanWeeksBackfillEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
 # lightweight-delete mask and publishes opik.clickhouse.partition.* gauges; a distributed lock keeps
@@ -816,6 +834,21 @@ partitionMetrics:
   interval: 5m
   # Comma-separated tables scanned for lightweight-deleted (masked) rows.
   lwdTables: "traces,spans"
+
+# Publish Opik alerts to an Amazon EventBridge event bus (best-effort, no durable retry). Off by
+# default; while off nothing is rendered. When enabled, sets ALERTS_EVENTBRIDGE_* on the backend; an
+# explicit key under component.backend.env wins. The backend's service account needs
+# `events:PutEvents` on the bus: bind an IAM role through component.backend.serviceAccount.annotations
+# (IRSA) or an EKS Pod Identity association. Inside the comet-ml chart, set
+# comet.alerts.awsEventBridge there instead.
+alerts:
+  awsEventBridge:
+    enabled: false
+    # Bus name or ARN. Required when enabled.
+    eventBus: ""
+    # Optional. When empty, resolved from the ARN or the pod's region. With an ARN bus it must match the
+    # ARN's region.
+    region: ""
 
 clickhouse:
   enabled: true
@@ -872,10 +905,17 @@ clickhouse:
     # the table definition is untouched; `ALTER TABLE ... MODIFY SETTING` is rejected on a
     # Distributed table (Code 48, NOT_IMPLEMENTED).
     #
+    # `prefer_localhost_replica` decides whether an insert with a local replica available bypasses
+    # the Distributed forwarding queue and writes straight into the local `_local` table. It is
+    # stated explicitly rather than inherited: the Altinity operator ships 0 and vanilla ClickHouse
+    # ships 1, so leaving it unset makes the insert path depend on nothing but which flavour an
+    # installation runs. 0 is the value production runs and was verified under load (OPIK-8255);
+    # the batching settings above are what make that path keep up.
     - name: default
       settings:
         distributed_background_insert_batch: 1
         distributed_background_insert_split_batch_on_failure: 1
+        prefer_localhost_replica: 0
   # For a FRESH High-Availability install, use the two-phase flow: install with replicasCount 1, let
   # opik-backend finish all migrations, THEN raise replicasCount and upgrade so the ClickHouse operator
   # clones the schema to the new replicas. Installing directly on >= 2 replicas prevents the analytics
@@ -901,12 +941,31 @@ clickhouse:
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 30
+  # Graceful restarts: ClickHouse closes its listeners the moment it gets SIGTERM, so clients
+  # still holding the pod's address get "connection refused". A preStop sleep keeps it serving
+  # while the pod leaves the service; the grace period must cover that plus
+  # shutdown_wait_unfinished. E.g. lifecycle: {preStop: {sleep: {seconds: 15}}} with 60.
+  lifecycle: {}
+  # -- (object) securityContext of the clickhouse container. The pod runs as uid 101, and
+  # policies against privilege escalation (e.g. Azure AKS Deployment Safeguards) refuse a
+  # non-root container unless allowPrivilegeEscalation is set false explicitly.
+  securityContext:
+    allowPrivilegeEscalation: false
+  # -- (int) Pod termination grace period in seconds. Unset keeps the Kubernetes default (30).
+  terminationGracePeriodSeconds: null
   configuration:
     files:
       conf.d/memory.xml: |
         <yandex>
           <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>
         </yandex>
+      # Server default timezone. The backend writes absolute UTC instants but compares against timezone-less
+      # literals such as the epoch end_time sentinel, so a host timezone leaking in misreads unfinished traces.
+      # Only a default: a query can still override it with SETTINGS session_timezone or a timezone argument.
+      conf.d/timezone.xml: |
+        <clickhouse>
+          <timezone>UTC</timezone>
+        </clickhouse>
       conf.d/profiles.xml: |
         <clickhouse>
           <profiles>
@@ -998,11 +1057,30 @@ clickhouse:
   # via `clickhouse.extraVolumeClaimTemplates` and referencing it by name in
   # `extraVolumeMounts` above.
   extraVolumes: []
+  # -- LWD reclaim: force-merge parts that stopped taking writes, so lightweight-deleted
+  # rows are physically removed. Renders conf.d/merge_tree.xml. Off by default: the first
+  # rollout makes every old part eligible at once, which on a large install fills the merge
+  # pool for hours and blocks mutations (deletes). Size the backlog first (self-host
+  # Kubernetes docs). Charts 2.2.78 through the release before this flag enabled it by
+  # default; upgrading drops it and rolls ClickHouse once, so set `enabled: true` to keep it.
+  forceMerge:
+    enabled: false
+    # -- (int) A part quiet for this long becomes eligible for force-merge (min_age_to_force_merge_seconds).
+    minAgeSeconds: 604800
+    # -- (bool) false: per part. true: only once the whole partition is quiet, so a partition
+    # still taking writes never becomes eligible (min_age_to_force_merge_on_partition_only).
+    onPartitionOnly: false
+    # -- (int) Largest merge allowed (max_bytes_to_merge_at_max_space_in_pool). 400 GiB:
+    # month-sized parts outgrow the 150 GiB ClickHouse default.
+    maxBytesToMergeAtMaxSpaceInPool: 429496729600
+    # -- (int) Below this many free pool slots, the largest merges are throttled so they
+    # cannot starve the pool (number_of_free_entries_in_pool_to_lower_max_size_of_merge).
+    numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge: 8
   # -- Tiered storage (hot local disk -> cold S3 with a read-through cache).
   # Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold
   # disks) and provisions a per-node EBS cache volume for the S3 cache. This is
-  # pure server-side infrastructure: it stays inert until a migration attaches
-  # the `tiered_replicated` policy to a table, so `enabled: false` (default) is
+  # pure server-side infrastructure: it stays inert until the `tiered_replicated`
+  # policy is attached to a table (see `ttl`), so `enabled: false` (default) is
   # a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros
   # ({shard}/{replica}) cannot be used because the S3 disk is read at server
   # start, before macros bind.
@@ -1038,6 +1116,47 @@ clickhouse:
         maxSize: "214748364800" # 200 GiB
         # Falls back to clickhouse.storageClassName when empty.
         storageClassName: ""
+    # Post-upgrade job that recovers any ClickHouse StatefulSet left without the
+    # cache volume when the cold tier is enabled — by bouncing the operator so it
+    # rebuilds each StatefulSet with the volume (never deletes StatefulSets/data),
+    # so all replicas mount it and go Ready. Runs whenever the cold tier is on;
+    # set enabled=false to opt out.
+    coldTierMigration:
+      # Renders only when clickhouse.enabled and tieredStorage.enabled are also true.
+      # Hard-fails at render if altinity-clickhouse-operator sets namespaceOverride,
+      # nameOverride or fullnameOverride: the job is namespace-scoped and finds the
+      # operator by its default app.kubernetes.io/name, so it could not bounce it.
+      enabled: true
+      image: "alpine/kubectl:1.35.0"
+      # Total budget for the whole run (all replicas: operator bounce + rebuild +
+      # reschedule + wait Ready), shared across migration and readiness.
+      pollTimeoutSeconds: 1200
+      # Kubernetes hard cap on the Job: pollTimeoutSeconds plus startup/kubectl
+      # overhead. Must exceed pollTimeoutSeconds.
+      activeDeadlineSeconds: 1320
+      # SA with get/list/watch on statefulsets and pods, and get/patch on the
+      # altinity operator Deployment (falls back to the chart-created SA).
+      serviceAccountName: ""
+      nodeSelector: {}
+      tolerations: []
+    # Post-sync job that puts each listed table on the tiered_replicated policy with a
+    # move-to-cold TTL, idempotently. By default it never moves existing data (see
+    # `materialize`). Tables that do not exist yet are skipped. Off unless turned on per environment.
+    ttl:
+      enabled: false
+      tables:
+        - name: traces_local
+          moveAfterWeeks: 13
+      # Backfill: also run MATERIALIZE TTL, so data written before the TTL existed moves to cold.
+      # It runs only while some part lacks the TTL and no run is in flight, so later syncs are
+      # no-ops and it can stay on. It loads disk I/O, S3 and the move pool: on large installs,
+      # run it by hand at a quiet time instead.
+      materialize:
+        enabled: false
+      activeDeadlineSeconds: 600
+      resources: {}
+      nodeSelector: {}
+      tolerations: []
   adminUser:
     useSecret:
       enabled: false
@@ -1093,8 +1212,12 @@ clickhouse:
       tolerations: []  # Defaults to .Values.clickhouse.tolerations if not specified
   backupServer:
     enabled: false
-    image: altinity/clickhouse-backup:2.6.39
+    image: altinity/clickhouse-backup:2.7.4
     port: 7171
+    # -- (object) securityContext of the clickhouse-backup sidecar; it inherits the pod's uid 101,
+    # so it needs the same explicit allowPrivilegeEscalation as `clickhouse.securityContext`.
+    securityContext:
+      allowPrivilegeEscalation: false
     # Service the restore job uses to reach the clickhouse-backup REST API.
     # The backup port is exposed on the operator's per-replica service, so this
     # defaults (in the restore job template) to chi-<opik.name>-clickhouse-cluster-0-0

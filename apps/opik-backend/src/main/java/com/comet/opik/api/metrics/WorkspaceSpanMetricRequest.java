@@ -24,7 +24,8 @@ import java.util.UUID;
  * for a tenant with many projects, {@code project_id IN (<all ids>)} reads roughly the same granules as a full
  * workspace span scan, because the {@code id}/time window cannot prune at the primary-key level across many disjoint
  * project prefixes.
- * {@code intervalEnd} is optional and defaults to "now" server-side, mirroring the per-project metrics endpoint.
+ * {@code intervalEnd} is optional; without it the range has no upper bound, so far-future ids count in the latest
+ * bucket, mirroring the per-project metrics endpoint.
  */
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
