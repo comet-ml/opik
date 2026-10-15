@@ -173,12 +173,13 @@ class LlmModelCatalogTest {
         }
 
         @Test
-        void withoutTheCuratedLayerAModelStillTakesTheProfileOfItsShippedRow() {
-            var params = service("llm-models-test.yaml", "", null).paramsOf("anthropic", "claude-sonnet-4-6");
+        void withoutTheCuratedLayerAModelGetsTheParamsTheShippedLayerWouldGiveIt() {
+            var withoutCurated = service("llm-models-test.yaml", "", null);
+            var withShipped = service("llm-models-test.yaml", "llm-models-curated.yaml", null);
 
-            assertThat(Stream.of(params.temperature(), params.topP(), params.topK()))
-                    .extracting(NumberParam::accepted)
-                    .containsExactly(true, true, true);
+            assertThat(withoutCurated.getRegistry().get("anthropic").getFirst().params()).isNull();
+            assertThat(withoutCurated.paramsOf("anthropic", "claude-sonnet-4-6"))
+                    .isEqualTo(withShipped.paramsOf("anthropic", "claude-sonnet-4-6"));
         }
 
         @Test
