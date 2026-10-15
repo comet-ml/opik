@@ -131,7 +131,7 @@ class ServiceTogglesResourceTest {
     private static boolean toggle(JsonNode toggles, String snakeCaseName) {
         String name = snakeCaseName.replace("_", "");
         return toggles.properties().stream()
-                .filter(entry -> entry.getKey().equalsIgnoreCase(name))
+                .filter(entry -> entry.getKey().replace("_", "").equalsIgnoreCase(name))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no toggle " + snakeCaseName + " in " + toggles))
                 .getValue()
