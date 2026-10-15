@@ -104,6 +104,7 @@ class AiLabelTaskLoaderTest {
                         "appliesFrom"),
                 arguments("unknown key", DECIDE + "sampling: 0.5\n", "sampling"),
                 arguments("duplicate key", DECIDE + "version: 3\n", "Duplicate field 'version'"),
+                arguments("second YAML document", DECIDE + "---\n" + GENERATE, "Trailing token"),
                 arguments("decide without questions", DECIDE.substring(0, DECIDE.indexOf("questions:")),
                         "1 to 32 questions"),
                 arguments("decide with 33 questions", DECIDE.substring(0, DECIDE.indexOf("questions:"))
