@@ -167,10 +167,11 @@ public class AiLabelsTickService {
         var candidates = whenDue(SWEEP_LOCK, config.getSweepInterval().toJavaDuration(),
                 () -> sweep(sweepTasks, start.plus(budget.dividedBy(2))))
                 .orElse(List.of());
+        submit(candidates, tasks, start, deadline);
+        // After submitting, so the health query never eats the time this sweep's candidates need.
         whenDue(HEALTH_LOCK, config.getHealthInterval().toJavaDuration(),
                 () -> sweepService.refreshHealth(sweepService.buckets(), sweepTasks).block());
         whenDue(HOUSEKEEPING_LOCK, HOUSEKEEPING_INTERVAL, this::deleteLoadedJobs);
-        submit(candidates, tasks, start, deadline);
     }
 
     /** Runs {@code action} only if no pod has run it within {@code interval}. */
@@ -220,7 +221,8 @@ public class AiLabelsTickService {
      * {@code done} row always has its values. A crash only means the job is loaded again; the writes are idempotent.
      */
     private void loadJob(AiLabelJob job) {
-        var items = itemsOf(job);
+        var pending = statusDAO.pendingTraceTasks(job.workspaceId(), job.jobId()).collectList().block();
+        var items = itemsOf(job, pending);
         var seen = new HashSet<String>();
         Integer cursor = 0;
         while (cursor != null) {
@@ -245,10 +247,14 @@ public class AiLabelsTickService {
             countOutcomes(job.endpoint(), statuses);
             cursor = page.nextCursor();
         }
-        // An item the job never reported is retried now rather than left pending until it counts as an orphan.
-        var unreported = items.entrySet().stream()
-                .filter(entry -> !seen.contains(entry.getKey()))
+        // A pending pair no reported item covered (never reported, or of a task this pod doesn't know) is retried now
+        // rather than left pending until it counts as an orphan.
+        var reported = items.entrySet().stream()
+                .filter(entry -> seen.contains(entry.getKey()))
                 .flatMap(entry -> entry.getValue().pending().stream())
+                .collect(Collectors.toSet());
+        var unreported = pending.stream()
+                .filter(row -> !reported.contains(row))
                 .map(row -> failed(row, MISSING_RESULT, true))
                 .toList();
         statusDAO.insert(unreported).block();
@@ -263,8 +269,7 @@ public class AiLabelsTickService {
      * The job's items, rebuilt from its pending rows: a trace's items for one job are always submitted together, so
      * planning that trace's pending tasks again gives the same items and ids.
      */
-    private Map<String, PendingItem> itemsOf(AiLabelJob job) {
-        var pending = statusDAO.pendingTraceTasks(job.workspaceId(), job.jobId()).collectList().block();
+    private Map<String, PendingItem> itemsOf(AiLabelJob job, List<AiLabelStatus> pending) {
         var jobKey = new JobKey(job.endpoint(), job.cache());
         var items = new HashMap<String, PendingItem>();
         pending.stream()
@@ -445,7 +450,8 @@ public class AiLabelsTickService {
             long jobCalls = 0;
             for (var items : entry.getValue()) {
                 long calls = items.stream().mapToLong(AiLabelItem::engineCalls).sum();
-                long bytes = items.stream().mapToLong(AiLabelItem::bytes).sum();
+                // Plus one comma per item in the request's items array.
+                long bytes = items.stream().mapToLong(item -> item.bytes() + 1L).sum();
                 if (submitted + jobCalls + calls > free) {
                     budgetFull = true;
                     break;
