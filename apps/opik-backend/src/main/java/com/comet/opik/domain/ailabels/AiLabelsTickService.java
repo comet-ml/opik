@@ -390,7 +390,11 @@ public class AiLabelsTickService {
         return false;
     }
 
-    /** Renders a chunk, builds its items and submits them as jobs. Returns the engine calls submitted. */
+    /**
+     * Renders a chunk, builds its items and submits them as jobs. Returns the budget used up: the engine calls
+     * submitted, or all of {@code free} once a trace's items didn't fit, so that the turns stop instead of rendering
+     * traces that can't go out this tick.
+     */
     private long submitChunk(String workspaceId, List<Candidate> chunk, Map<String, AiLabelTask> tasksByName,
             long free, Instant start) {
         var byTrace = chunk.stream().collect(Collectors.toMap(Candidate::traceId, Function.identity()));
@@ -434,6 +438,7 @@ public class AiLabelsTickService {
         countOutcomes(null, failures);
 
         long submitted = 0;
+        boolean budgetFull = false;
         for (var entry : traceItems.entrySet()) {
             var job = new ArrayList<AiLabelItem>();
             long jobBytes = JOB_ENVELOPE_BYTES;
@@ -442,6 +447,7 @@ public class AiLabelsTickService {
                 long calls = items.stream().mapToLong(AiLabelItem::engineCalls).sum();
                 long bytes = items.stream().mapToLong(AiLabelItem::bytes).sum();
                 if (submitted + jobCalls + calls > free) {
+                    budgetFull = true;
                     break;
                 }
                 if (!job.isEmpty() && (job.size() + items.size() > InferenceClient.MAX_BATCH_ITEMS
@@ -467,7 +473,7 @@ public class AiLabelsTickService {
                 submitted += outcome == SubmitOutcome.ACCEPTED ? jobCalls : 0;
             }
         }
-        return submitted;
+        return budgetFull ? free : submitted;
     }
 
     /**
