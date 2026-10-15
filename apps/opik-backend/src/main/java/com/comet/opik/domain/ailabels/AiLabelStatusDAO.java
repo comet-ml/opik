@@ -53,7 +53,7 @@ public class AiLabelStatusDAO {
      * keys: a key's later rows may carry another job (a resubmission), so the job and status are checked on the latest
      * row of each candidate.
      */
-    private static final String PENDING_TRACE_TASKS = """
+    private static final String JOB_TRACE_TASKS = """
             SELECT * FROM (
                 SELECT workspace_id, project_id, task, trace_id, trace_created_at, task_version, renderer_version,
                     status, retryable, attempt, error_code, job_id, compaction_level
@@ -68,7 +68,7 @@ public class AiLabelStatusDAO {
                 LIMIT 1 BY workspace_id, project_id, task, trace_id
             )
             WHERE job_id = :job_id
-            AND status = 'pending'
+            <if(pending_only)>AND status = 'pending'<endif>
             SETTINGS log_comment = '<log_comment>'
             """;
 
@@ -118,8 +118,19 @@ public class AiLabelStatusDAO {
     }
 
     public Flux<AiLabelStatus> pendingTraceTasks(@NonNull String workspaceId, @NonNull String jobId) {
-        var template = getSTWithLogComment(PENDING_TRACE_TASKS, "ai-labels:pending_trace_tasks", workspaceId, null,
-                "job_id=%s".formatted(jobId));
+        return jobTraceTasks(workspaceId, jobId, true);
+    }
+
+    /** Every (trace, task) whose latest row is still this job's, whatever its status. */
+    public Flux<AiLabelStatus> jobTraceTasks(@NonNull String workspaceId, @NonNull String jobId) {
+        return jobTraceTasks(workspaceId, jobId, false);
+    }
+
+    private Flux<AiLabelStatus> jobTraceTasks(String workspaceId, String jobId, boolean pendingOnly) {
+        var template = getSTWithLogComment(JOB_TRACE_TASKS,
+                pendingOnly ? "ai-labels:pending_trace_tasks" : "ai-labels:job_trace_tasks", workspaceId, null,
+                "job_id=%s".formatted(jobId))
+                .add("pending_only", pendingOnly);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
