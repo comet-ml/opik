@@ -20,6 +20,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
@@ -244,8 +245,7 @@ public class LlmModelRegistryService {
 
     boolean isRemoteConfigured() {
         return config.isRemoteEnabled()
-                && config.getRemoteUrl() != null
-                && !config.getRemoteUrl().isBlank();
+                && StringUtils.isNotBlank(config.getRemoteUrl());
     }
 
     private Map<String, List<LlmModelDefinition>> load() {
@@ -273,7 +273,7 @@ public class LlmModelRegistryService {
         reportSyncedAwaitingRows(result, catalog.models());
 
         var overridePath = config.getLocalOverridePath();
-        if (overridePath == null || overridePath.isBlank()) {
+        if (StringUtils.isBlank(overridePath)) {
             return toRegistry(result);
         }
 
@@ -338,7 +338,7 @@ public class LlmModelRegistryService {
     }
 
     private static CuratedCatalog readCuratedCatalog(String resourceName) {
-        if (resourceName == null || resourceName.isBlank()) {
+        if (StringUtils.isBlank(resourceName)) {
             return CuratedCatalog.EMPTY;
         }
         return readClasspathYaml(resourceName, new TypeReference<CuratedCatalog>() {
@@ -384,7 +384,7 @@ public class LlmModelRegistryService {
             }
             var byId = new LinkedHashMap<String, ModelEntry>();
             rows.forEach(row -> {
-                if (row == null || row.id() == null || row.id().isBlank()) {
+                if (row == null || StringUtils.isBlank(row.id())) {
                     log.warn("Skipping curated row with missing id for provider '{}'", provider);
                     return;
                 }
@@ -481,7 +481,7 @@ public class LlmModelRegistryService {
             var existing = result.getOrDefault(provider, List.of());
             var existingIds = new LinkedHashMap<String, ModelEntry>();
             existing.forEach(m -> {
-                if (m.id() == null || m.id().isBlank()) {
+                if (StringUtils.isBlank(m.id())) {
                     log.warn("Skipping default model with missing id for provider '{}'", provider);
                     return;
                 }
@@ -489,7 +489,7 @@ public class LlmModelRegistryService {
             });
 
             overrideModels.forEach(m -> {
-                if (m.id() == null || m.id().isBlank()) {
+                if (StringUtils.isBlank(m.id())) {
                     log.warn("Skipping override model with missing id for provider '{}'", provider);
                     return;
                 }
