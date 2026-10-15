@@ -835,6 +835,21 @@ partitionMetrics:
   # Comma-separated tables scanned for lightweight-deleted (masked) rows.
   lwdTables: "traces,spans"
 
+# Publish Opik alerts to an Amazon EventBridge event bus (best-effort, no durable retry). Off by
+# default; while off nothing is rendered. When enabled, sets ALERTS_EVENTBRIDGE_* on the backend; an
+# explicit key under component.backend.env wins. The backend's service account needs
+# `events:PutEvents` on the bus: bind an IAM role through component.backend.serviceAccount.annotations
+# (IRSA) or an EKS Pod Identity association. Inside the comet-ml chart, set
+# comet.alerts.awsEventBridge there instead.
+alerts:
+  awsEventBridge:
+    enabled: false
+    # Bus name or ARN. Required when enabled.
+    eventBus: ""
+    # Optional. When empty, resolved from the ARN or the pod's region. With an ARN bus it must match the
+    # ARN's region.
+    region: ""
+
 clickhouse:
   enabled: true
   shardsCount: 1

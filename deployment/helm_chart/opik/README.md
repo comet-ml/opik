@@ -91,6 +91,9 @@ Call opik api on http://localhost:5173/api
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
+| alerts.awsEventBridge.enabled | bool | `false` |  |
+| alerts.awsEventBridge.eventBus | string | `""` |  |
+| alerts.awsEventBridge.region | string | `""` |  |
 | altinity-clickhouse-operator.crdHook.image.repository | string | `"alpine/kubectl"` |  |
 | altinity-clickhouse-operator.crdHook.image.tag | string | `"1.35.0"` |  |
 | altinity-clickhouse-operator.enabled | bool | `true` |  |
