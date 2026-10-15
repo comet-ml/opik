@@ -121,13 +121,18 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
                             message.reportId(), message.projectId(), throwable);
                     // Ollie never ran, so it can't report this itself: record the reason so the UI stops.
                     markRunFailed(message, throwable);
+                    // Nor did it get the guidance, so a later report must not be recorded under this stamp.
+                    if (message.guidanceVersion() != null) {
+                        clearRunGuidanceVersion(message);
+                    }
                     return Mono.empty();
                 });
     }
 
     /**
-     * The publisher stamped the run with the guidance version it was queued with. The run now goes out without that
-     * guidance, so clear the stamp, otherwise the report would record results produced under guidance it never got.
+     * The publisher stamped the run with the guidance version it was queued with. The run goes out without that
+     * guidance (turned off since) or never runs (trigger failed), so clear the stamp, otherwise a report would record
+     * results under guidance they were never produced with.
      * Best-effort, like the stamp itself: a miss only leaves the "guidance changed" callout less precise.
      */
     private void clearRunGuidanceVersion(AgentInsightsReportMessage message) {

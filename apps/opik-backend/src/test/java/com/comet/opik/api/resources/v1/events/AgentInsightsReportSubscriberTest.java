@@ -175,6 +175,18 @@ class AgentInsightsReportSubscriberTest {
         verify(runGuidanceService, never()).markEnqueued(any(), any(), any());
     }
 
+    @Test
+    @DisplayName("A failed trigger clears the run's guidance stamp: the run never got that guidance")
+    void processEvent__triggerFailsWithGuidanceVersion__clearsStamp() {
+        var message = message().toBuilder().guidance("Only report billing failures").guidanceVersion(3).build();
+        when(serviceToggles.isAgentInsightsGuidanceActive()).thenReturn(true);
+        failTriggerWith(new IllegalStateException("connection refused"));
+
+        StepVerifier.create(subscriber.processEvent(message)).verifyComplete();
+
+        verify(runGuidanceService).markEnqueued(WORKSPACE_ID, PROJECT_ID, null);
+    }
+
     private static AgentInsightsReportClient.Trigger expectedTrigger(AgentInsightsReportMessage message,
             String guidance) {
         return AgentInsightsReportClient.Trigger.builder()

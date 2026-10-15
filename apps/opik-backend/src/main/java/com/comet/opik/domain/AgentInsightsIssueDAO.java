@@ -76,12 +76,16 @@ interface AgentInsightsIssueDAO {
             @Bind("id") List<UUID> ids,
             @BindMethods("bean") List<AgentInsightsReport.ReportedIssue> issues);
 
+    // Written only when the issue row is in the caller's scope, in the same statement: the service's unlocked
+    // pre-check can race with another workspace creating the same id, and must not leave a detail row for it.
     @SqlBatch("""
             INSERT INTO agent_insights_issues_details
                 (id, issue_id, workspace_id, project_id, `count`, total_count, users_impacted, total_users,
                  metadata, report_day, created_by, last_updated_by)
-            VALUES (:id, :issue_id, :workspace_id, :project_id, :bean.count, :bean.totalCount, :bean.usersImpacted,
-                    :bean.totalUsers, :metadata, :report_day, :user_name, :user_name)
+            SELECT :id, :issue_id, :workspace_id, :project_id, :bean.count, :bean.totalCount, :bean.usersImpacted,
+                   :bean.totalUsers, :metadata, :report_day, :user_name, :user_name
+            FROM agent_insights_issues
+            WHERE id = :issue_id AND workspace_id = :workspace_id AND project_id = :project_id
             ON DUPLICATE KEY UPDATE
                 `count` = :bean.count,
                 total_count = :bean.totalCount,

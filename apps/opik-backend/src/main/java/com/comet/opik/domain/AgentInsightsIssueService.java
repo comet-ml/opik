@@ -80,25 +80,32 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
                 report.projectId(), report.reportDay(), workspaceId,
                 report.issues().isEmpty() ? "all clear" : report.issues().size());
 
-        // Serialized before the transaction so it holds the connection only for the writes.
+        // Ids and metadata are prepared before the transaction so it holds the connection only for the writes;
+        // inside, the scope check picks which of them are kept, by issue index.
         List<String> serializedMetadataByIssueIndex = report.issues().stream()
                 .map(issue -> issue.metadata() == null ? null : JsonUtils.writeValueAsString(issue.metadata()))
                 .toList();
+        List<UUID> issueIdByIssueIndex = report.issues().stream()
+                .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
+                .toList();
+        List<UUID> detailIdByIssueIndex = report.issues().stream()
+                .map(issue -> idGenerator.generateId())
+                .toList();
 
-        int stored = transactionTemplate.inTransaction(WRITE, handle -> {
+        int storedIssueCount = transactionTemplate.inTransaction(WRITE, handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
             // The id is the whole primary key: an id owned by another workspace or project is dropped, details too.
-            Set<UUID> foreignIds = explicitIds.isEmpty()
+            Set<UUID> issueIdsOutsideScope = explicitIds.isEmpty()
                     ? Set.of()
                     : dao.findIdsOutsideScope(workspaceId, report.projectId(), explicitIds);
-            if (!foreignIds.isEmpty()) {
+            if (!issueIdsOutsideScope.isEmpty()) {
                 log.warn("Skipping '{}' reported agent insights issues that belong to another workspace or project, "
-                        + "project '{}', workspace '{}'", foreignIds.size(), report.projectId(), workspaceId);
+                        + "project '{}', workspace '{}'", issueIdsOutsideScope.size(), report.projectId(), workspaceId);
             }
             List<Integer> keptIssueIndexes = IntStream.range(0, report.issues().size())
                     .filter(i -> report.issues().get(i).id() == null
-                            || !foreignIds.contains(report.issues().get(i).id()))
+                            || !issueIdsOutsideScope.contains(report.issues().get(i).id()))
                     .boxed()
                     .toList();
             List<AgentInsightsReport.ReportedIssue> keptIssues = keptIssueIndexes.stream()
@@ -106,12 +113,8 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
                     .toList();
 
             if (!keptIssues.isEmpty()) {
-                List<UUID> issueIds = keptIssues.stream()
-                        .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
-                        .toList();
-                List<UUID> detailIds = keptIssues.stream()
-                        .map(issue -> idGenerator.generateId())
-                        .toList();
+                List<UUID> issueIds = keptIssueIndexes.stream().map(issueIdByIssueIndex::get).toList();
+                List<UUID> detailIds = keptIssueIndexes.stream().map(detailIdByIssueIndex::get).toList();
                 List<String> metadata = keptIssueIndexes.stream()
                         .map(serializedMetadataByIssueIndex::get)
                         .toList();
@@ -127,7 +130,7 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
         });
 
         AgentInsightsMetrics.REPORTS_RECEIVED.add(1);
-        AgentInsightsMetrics.ISSUES_REPORTED.add(stored);
+        AgentInsightsMetrics.ISSUES_REPORTED.add(storedIssueCount);
     }
 
     @Override

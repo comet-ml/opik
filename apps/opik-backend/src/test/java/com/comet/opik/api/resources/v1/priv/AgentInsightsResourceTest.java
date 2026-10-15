@@ -1129,6 +1129,38 @@ class AgentInsightsResourceTest {
                     apiKey, workspaceName, HttpStatus.SC_FORBIDDEN);
         }
 
+        @Test
+        @DisplayName("An over-long close note is rejected with 422 and leaves the issue as it was")
+        void updateIssueStatusWhenCloseNoteTooLongThenIssueUnchanged() {
+            var projectId = createProject();
+            report(projectId, DAY_1,
+                    List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
+                            rndUserCount())));
+            var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
+            var update = AgentInsightsIssueUpdate.builder()
+                    .projectId(projectId)
+                    .status(AgentInsightsIssueStatus.CLOSED)
+                    .closeNote("Expected: retries are by design")
+                    .build();
+            agentInsightsResourceClient.updateStatus(issueId, update, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+            var closed = agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            var tooLong = "{\"project_id\":\"%s\",\"status\":\"open\",\"close_note\":\"%s\"}"
+                    .formatted(projectId, "x".repeat(501));
+            try (var response = agentInsightsResourceClient.updateStatusWithResponse(issueId, tooLong, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+
+            assertThat(agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK))
+                    .usingRecursiveComparison()
+                    .comparingOnlyFields("status", "closeNote", "statusChangedBy", "statusChangedAt")
+                    .isEqualTo(closed);
+        }
+
         Stream<Arguments> invalidStatusUpdatePayloads() {
             return Stream.of(
                     Arguments.of("{\"project_id\":\"%s\",\"status\":\"unknown\"}".formatted(UUID.randomUUID()),
