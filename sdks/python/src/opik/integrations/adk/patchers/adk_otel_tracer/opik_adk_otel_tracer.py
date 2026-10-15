@@ -357,8 +357,9 @@ def _record_error_info(
 class _OpikFinalizingSpan(opentelemetry.trace.Span):
     """
     Wraps a span returned by the inner tracer's start_span so that the Opik
-    trace/span opened alongside it is finalized when ADK ends the span. Every
-    call is delegated, so OTel exporters and context propagation see the real span.
+    trace/span opened alongside it is finalized when ADK ends the span. OTel
+    operations are delegated, so exporters and context propagation see the real
+    span; end, record_exception and is_recording also drive the Opik bookkeeping.
     """
 
     def __init__(
