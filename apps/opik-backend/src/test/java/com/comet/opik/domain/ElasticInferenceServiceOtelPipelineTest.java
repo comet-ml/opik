@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Span;
 import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.domain.cost.CostTestUtils;
 import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -63,7 +64,7 @@ class ElasticInferenceServiceOtelPipelineTest {
                 .as("resolver model for EIS model '%s'", eisModelId)
                 .isEqualTo(expectedModel);
 
-        BigDecimal cost = CostService.calculateCost(span.model(), span.provider(), span.usage(), span.metadata());
+        BigDecimal cost = CostTestUtils.calculateCost(span.model(), span.provider(), span.usage(), span.metadata());
         if (expectNonZeroCost) {
             assertThat(cost)
                     .as("cost for EIS model '%s' (%s/%s)", eisModelId, expectedProvider, expectedModel)

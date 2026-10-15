@@ -56,7 +56,7 @@ import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.TestIdGeneratorFactory;
-import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.domain.cost.CostTestUtils;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -1909,8 +1909,9 @@ class GetTracesByProjectResourceTest {
                     .map(spanInStream -> spanInStream.toBuilder()
                             .projectName(projectName)
                             .traceId(traces.getFirst().id())
-                            .usage(Map.of("completion_tokens", Math.abs(factory.manufacturePojo(Integer.class)),
-                                    "prompt_tokens", Math.abs(factory.manufacturePojo(Integer.class))))
+                            .usage(CostTestUtils.storedUsage(
+                                    Map.of("completion_tokens", Math.abs(factory.manufacturePojo(Integer.class)),
+                                            "prompt_tokens", Math.abs(factory.manufacturePojo(Integer.class)))))
                             .model("gpt-3.5-turbo-1106")
                             .provider("openai")
                             .totalEstimatedCost(null)
@@ -1972,8 +1973,9 @@ class GetTracesByProjectResourceTest {
                     .map(spanInStream -> spanInStream.toBuilder()
                             .projectName(projectName)
                             .traceId(traces.getFirst().id())
-                            .usage(Map.of("completion_tokens", Math.abs(factory.manufacturePojo(Integer.class)),
-                                    "prompt_tokens", Math.abs(factory.manufacturePojo(Integer.class))))
+                            .usage(CostTestUtils.storedUsage(
+                                    Map.of("completion_tokens", Math.abs(factory.manufacturePojo(Integer.class)),
+                                            "prompt_tokens", Math.abs(factory.manufacturePojo(Integer.class)))))
                             .model("gpt-3.5-turbo-1106")
                             .provider("openai")
                             .totalEstimatedCost(null)
@@ -2958,12 +2960,12 @@ class GetTracesByProjectResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(Map.of(usageKey, (long) otherUsageValue))
+                            .usage(CostTestUtils.storedTraceUsage(Map.of(usageKey, otherUsageValue)))
                             .build())
                     .collect(Collectors.toList());
 
             traces.set(0, traces.getFirst().toBuilder()
-                    .usage(Map.of(usageKey, (long) usageValue))
+                    .usage(CostTestUtils.storedTraceUsage(Map.of(usageKey, usageValue)))
                     .build());
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -2972,12 +2974,12 @@ class GetTracesByProjectResourceTest {
                     .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
                             .projectName(projectName)
                             .traceId(trace.id())
-                            .usage(Map.of(usageKey, otherUsageValue))
+                            .usage(CostTestUtils.storedUsage(Map.of(usageKey, otherUsageValue)))
                             .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toMap(Span::traceId, Function.identity()));
             traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()
-                    .usage(Map.of(usageKey, usageValue))
+                    .usage(CostTestUtils.storedUsage(Map.of(usageKey, usageValue)))
                     .build());
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
@@ -3017,13 +3019,13 @@ class GetTracesByProjectResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(Map.of(usageKey, 123L))
+                            .usage(CostTestUtils.storedTraceUsage(Map.of(usageKey, 123)))
                             .llmSpanCount(1)
                             .spanCount(1)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
-                    .usage(Map.of(usageKey, 456L))
+                    .usage(CostTestUtils.storedTraceUsage(Map.of(usageKey, 456)))
                     .build());
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
@@ -3031,13 +3033,13 @@ class GetTracesByProjectResourceTest {
                     .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
                             .projectName(projectName)
                             .traceId(trace.id())
-                            .usage(Map.of(usageKey, 123))
+                            .usage(CostTestUtils.storedUsage(Map.of(usageKey, 123)))
                             .totalEstimatedCost(null)
                             .type(SpanType.llm)
                             .build())
                     .collect(Collectors.toMap(Span::traceId, Function.identity()));
             traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()
-                    .usage(Map.of(usageKey, 456))
+                    .usage(CostTestUtils.storedUsage(Map.of(usageKey, 456)))
                     .build());
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
@@ -3076,11 +3078,11 @@ class GetTracesByProjectResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(Map.of(usageKey, 123L))
+                            .usage(CostTestUtils.storedTraceUsage(Map.of(usageKey, 123)))
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
-                    .usage(Map.of(usageKey, 456L))
+                    .usage(CostTestUtils.storedTraceUsage(Map.of(usageKey, 456)))
                     .build());
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -3089,12 +3091,12 @@ class GetTracesByProjectResourceTest {
                     .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
                             .projectName(projectName)
                             .traceId(trace.id())
-                            .usage(Map.of(usageKey, 123))
+                            .usage(CostTestUtils.storedUsage(Map.of(usageKey, 123)))
                             .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toMap(Span::traceId, Function.identity()));
             traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()
-                    .usage(Map.of(usageKey, 456))
+                    .usage(CostTestUtils.storedUsage(Map.of(usageKey, 456)))
                     .build());
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
@@ -3134,11 +3136,11 @@ class GetTracesByProjectResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(Map.of(usageKey, 456L))
+                            .usage(CostTestUtils.storedTraceUsage(Map.of(usageKey, 456)))
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
-                    .usage(Map.of(usageKey, 123L))
+                    .usage(CostTestUtils.storedTraceUsage(Map.of(usageKey, 123)))
                     .build());
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -3147,12 +3149,12 @@ class GetTracesByProjectResourceTest {
                     .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
                             .projectName(projectName)
                             .traceId(trace.id())
-                            .usage(Map.of(usageKey, 456))
+                            .usage(CostTestUtils.storedUsage(Map.of(usageKey, 456)))
                             .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toMap(Span::traceId, Function.identity()));
             traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()
-                    .usage(Map.of(usageKey, 123))
+                    .usage(CostTestUtils.storedUsage(Map.of(usageKey, 123)))
                     .build());
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
@@ -3192,13 +3194,13 @@ class GetTracesByProjectResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(Map.of(usageKey, 456L))
+                            .usage(CostTestUtils.storedTraceUsage(Map.of(usageKey, 456)))
                             .llmSpanCount(1)
                             .spanCount(1)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
-                    .usage(Map.of(usageKey, 123L))
+                    .usage(CostTestUtils.storedTraceUsage(Map.of(usageKey, 123)))
                     .build());
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -3207,13 +3209,13 @@ class GetTracesByProjectResourceTest {
                     .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
                             .projectName(projectName)
                             .traceId(trace.id())
-                            .usage(Map.of(usageKey, 456))
+                            .usage(CostTestUtils.storedUsage(Map.of(usageKey, 456)))
                             .totalEstimatedCost(null)
                             .type(SpanType.llm)
                             .build())
                     .collect(Collectors.toMap(Span::traceId, Function.identity()));
             traceIdToSpanMap.put(traces.getFirst().id(), traceIdToSpanMap.get(traces.getFirst().id()).toBuilder()
-                    .usage(Map.of(usageKey, 123))
+                    .usage(CostTestUtils.storedUsage(Map.of(usageKey, 123)))
                     .build());
             batchCreateSpansAndAssert(traceIdToSpanMap.values().stream().toList(), apiKey, workspaceName);
 
@@ -4482,7 +4484,7 @@ class GetTracesByProjectResourceTest {
 
     private BigDecimal calculateEstimatedCost(List<Span> spans) {
         return spans.stream()
-                .map(span -> CostService.calculateCost(span.model(), span.provider(), span.usage(), null))
+                .map(span -> CostTestUtils.calculateCost(span.model(), span.provider(), span.usage(), null))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
@@ -4886,7 +4888,8 @@ class GetTracesByProjectResourceTest {
             var spans = traces.stream()
                     .flatMap(trace -> IntStream.range(0, trace.spanCount())
                             .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
-                                    .usage(Map.of("completion_tokens", RandomUtils.secure().randomInt()))
+                                    .usage(CostTestUtils
+                                            .storedUsage(Map.of("completion_tokens", RandomUtils.secure().randomInt())))
                                     .projectName(projectName)
                                     .traceId(trace.id())
                                     .type(i < trace.llmSpanCount() ? SpanType.llm : SpanType.general)
@@ -4952,7 +4955,8 @@ class GetTracesByProjectResourceTest {
             var spans = traces.stream()
                     .flatMap(trace -> IntStream.range(0, trace.spanCount())
                             .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
-                                    .usage(Map.of("completion_tokens", RandomUtils.secure().randomInt()))
+                                    .usage(CostTestUtils
+                                            .storedUsage(Map.of("completion_tokens", RandomUtils.secure().randomInt())))
                                     .projectName(projectName)
                                     .traceId(trace.id())
                                     .type(i < trace.llmSpanCount() ? SpanType.llm : SpanType.general)
@@ -5090,7 +5094,8 @@ class GetTracesByProjectResourceTest {
             var spans = traces.stream()
                     .flatMap(trace -> IntStream.range(0, trace.spanCount())
                             .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
-                                    .usage(Map.of("completion_tokens", RandomUtils.secure().randomInt()))
+                                    .usage(CostTestUtils
+                                            .storedUsage(Map.of("completion_tokens", RandomUtils.secure().randomInt())))
                                     .projectName(projectName)
                                     .traceId(trace.id())
                                     .type(i < trace.llmSpanCount() ? SpanType.llm : SpanType.general)

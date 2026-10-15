@@ -1,5 +1,6 @@
 package com.comet.opik.domain.evaluation;
 
+import com.comet.opik.domain.cost.CostTestUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.anthropic.AnthropicTokenUsage;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -8,6 +9,8 @@ import dev.langchain4j.model.openai.OpenAiTokenUsage;
 import dev.langchain4j.model.openaiofficial.OpenAiOfficialTokenUsage;
 import dev.langchain4j.model.output.TokenUsage;
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -50,11 +53,24 @@ class LlmUsageExtractorTest {
                 .inputTokenCount(100).outputTokenCount(20)
                 .cacheCreationInputTokens(30).cacheReadInputTokens(40).build()));
 
-        assertThat(usage)
-                .containsEntry("prompt_tokens", 100)
-                .containsEntry("completion_tokens", 20)
-                .containsEntry("cache_creation_input_tokens", 30)
-                .containsEntry("cache_read_input_tokens", 40);
+        assertThat(usage).isEqualTo(Map.of(
+                "input_tokens", 100,
+                "output_tokens", 20,
+                "cache_creation_input_tokens", 30,
+                "cache_read_input_tokens", 40));
+    }
+
+    @Test
+    void anthropicUsageIsPricedWithItsCacheOutsideTheInput() {
+        var usage = LlmUsageExtractor.toUsageMap(responseWith(AnthropicTokenUsage.builder()
+                .inputTokenCount(100).outputTokenCount(20)
+                .cacheCreationInputTokens(30).cacheReadInputTokens(40).build()));
+        var sdkUsage = Map.of("original_usage.input_tokens", 100, "original_usage.output_tokens", 20,
+                "original_usage.cache_creation_input_tokens", 30, "original_usage.cache_read_input_tokens", 40);
+
+        assertThat(CostTestUtils.calculateCost("claude-sonnet-4-5", "anthropic", usage, null))
+                .isPositive()
+                .isEqualByComparingTo(CostTestUtils.calculateCost("claude-sonnet-4-5", "anthropic", sdkUsage, null));
     }
 
     @Test
@@ -100,7 +116,7 @@ class LlmUsageExtractorTest {
         var usage = LlmUsageExtractor.toUsageMap(responseWith(AnthropicTokenUsage.builder()
                 .inputTokenCount(100).outputTokenCount(20).build()));
         assertThat(usage)
-                .containsEntry("prompt_tokens", 100)
+                .containsEntry("input_tokens", 100)
                 .doesNotContainKeys("cache_creation_input_tokens", "cache_read_input_tokens");
     }
 

@@ -21,6 +21,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -2086,11 +2087,16 @@ class OpenTelemetryMapperTest {
                     intVal("cache_creation_tokens", 50)),
                     null);
 
-            assertThat(span.usage().get("prompt_tokens")).isEqualTo(1234);
-            assertThat(span.usage().get("completion_tokens")).isEqualTo(26);
-            // Normalized to the names the Anthropic cache-cost calculator recognizes.
-            assertThat(span.usage().get("cache_read_input_tokens")).isEqualTo(100);
-            assertThat(span.usage().get("cache_creation_input_tokens")).isEqualTo(50);
+            // Anthropic's input excludes the cache, so the prompt total adds it back; the instrumentation's own keys
+            // are kept under original_usage.*.
+            assertThat(span.usage()).isEqualTo(Map.of(
+                    "original_usage.input_tokens", 1234,
+                    "original_usage.output_tokens", 26,
+                    "original_usage.cache_read_input_tokens", 100,
+                    "original_usage.cache_creation_input_tokens", 50,
+                    "prompt_tokens", 1384,
+                    "completion_tokens", 26,
+                    "total_tokens", 1410));
             assertThat(span.input()).isNull();
             assertThat(span.output()).isNull();
         }

@@ -3,11 +3,13 @@ package com.comet.opik.domain;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span.SpanBuilder;
+import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.domain.mapping.otel.GenAIMappingRules;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
 import com.comet.opik.domain.mapping.otel.ProviderResolvers;
 import com.comet.opik.domain.retention.RetentionUtils;
+import com.comet.opik.domain.token_usage.model.UsageContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.proto.common.v1.AnyValue;
@@ -318,14 +320,11 @@ public class OpenTelemetryMapper {
             spanBuilder.input(input);
         }
         if (!usage.isEmpty()) {
-            // Some integrations (e.g. PydanticAI) send prompt_tokens and completion_tokens
-            // but omit total_tokens. Compute it so callers always get a complete picture.
-            if (!usage.containsKey("total_tokens")
-                    && usage.containsKey("prompt_tokens")
-                    && usage.containsKey("completion_tokens")) {
-                usage.put("total_tokens", usage.get("prompt_tokens") + usage.get("completion_tokens"));
-            }
-            spanBuilder.usage(usage);
+            // The usage keys were renamed above (input_tokens -> prompt_tokens, ...), which changes their meaning for
+            // providers whose input excludes the cache, so the provider's format reads them under their original names.
+            // A total the integration omits (e.g. PydanticAI) is derived either way.
+            spanBuilder.usage(
+                    CostService.toSpanUsage(provider, model, usage, UsageContext.OTEL_RENAMED_KEYS).toUsageMap());
         }
         if (!tags.isEmpty()) {
             spanBuilder.tags(tags);

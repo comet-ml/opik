@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Span;
 import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.domain.cost.CostTestUtils;
 import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -62,7 +63,7 @@ class OtelProviderCostPipelineTest {
                 .as("resolved provider for '%s' (model '%s' @ '%s')", system, model, serverAddress)
                 .isEqualTo(expectedProvider);
 
-        BigDecimal cost = CostService.calculateCost(span.model(), span.provider(), span.usage(), span.metadata());
+        BigDecimal cost = CostTestUtils.calculateCost(span.model(), span.provider(), span.usage(), span.metadata());
         assertThat(cost)
                 .as("cost for '%s' (%s)", model, expectedProvider)
                 .isGreaterThan(BigDecimal.ZERO);

@@ -22,6 +22,8 @@ import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
+import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.domain.token_usage.model.UsageContext;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -219,7 +221,11 @@ public class SpanService {
             String projectName = project.name();
 
             // Strip attachments from the span with the generated ID and project ID
-            Span spanWithId = span.toBuilder().id(id).projectId(project.id()).build();
+            Span spanWithId = span.toBuilder()
+                    .id(id)
+                    .projectId(project.id())
+                    .usage(normalizeUsage(span.provider(), span.model(), span.usage()))
+                    .build();
             return attachmentStripperService.stripAttachments(spanWithId, workspaceId, userName, projectName)
                     .flatMap(processedSpan -> {
                         log.info("Inserting span with id '{}' , projectId '{}' , traceId '{}' , parentSpanId '{}'",
@@ -278,7 +284,8 @@ public class SpanService {
 
             return validateSpanReferencesAsync(batchUpdate.update().traceId(),
                     batchUpdate.update().parentSpanId())
-                    .then(spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags))
+                    .then(spanDAO.bulkUpdate(batchUpdate.ids(), withNormalizedUsage(batchUpdate.update(),
+                            batchUpdate.update().provider(), batchUpdate.update().model()), mergeTags))
                     .onErrorResume(TagOperations::mapTagLimitError)
                     .doOnSuccess(__ -> {
                         log.info("Completed batch update for '{}' spans", batchUpdate.ids().size());
@@ -296,7 +303,8 @@ public class SpanService {
             // Strip attachments OUTSIDE the database transaction
             return attachmentStripperService.stripAttachments(
                     spanUpdate, id, workspaceId, userName, projectName)
-                    .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate))
+                    .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(),
+                            withNormalizedUsage(processedUpdate, processedUpdate.provider(), processedUpdate.model())))
                     .doOnSuccess(__ -> eventBus.post(
                             new PartialSpanCreated(id, spanUpdate.traceId(), project.id(), workspaceId, userName)));
         });
@@ -390,7 +398,11 @@ public class SpanService {
                     spanUpdate, id, workspaceId, userName, projectName)
                     .flatMap(processedUpdate ->
             // Step 3: Update the span in database transaction
-            spanDAO.update(id, processedUpdate, existingSpan)
+            // An update without a provider or model keeps the span's own, as SpanDAO.update does.
+            spanDAO.update(id, withNormalizedUsage(processedUpdate,
+                    processedUpdate.provider() != null ? processedUpdate.provider() : existingSpan.provider(),
+                    processedUpdate.model() != null ? processedUpdate.model() : existingSpan.model()),
+                    existingSpan)
                     .flatMap(updateResult -> {
                         // Step 4: Delete only auto-stripped attachments from the old data
                         // User-uploaded attachments are preserved unless explicitly removed by user
@@ -559,9 +571,27 @@ public class SpanService {
                     // Ids are already validated up-front in create(SpanBatch); generated ids are inherently valid.
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
 
-                    return span.toBuilder().id(id).projectId(project.id()).build();
+                    return span.toBuilder()
+                            .id(id)
+                            .projectId(project.id())
+                            .usage(normalizeUsage(span.provider(), span.model(), span.usage()))
+                            .build();
                 })
                 .toList();
+    }
+
+    /**
+     * The backend owns the prompt, completion and total tokens: they're derived from the provider's own usage, which is
+     * kept under {@code original_usage.*}. Usage no provider format can read is stored as sent.
+     */
+    private static Map<String, Integer> normalizeUsage(String provider, String model, Map<String, Integer> usage) {
+        return usage == null
+                ? null
+                : CostService.toSpanUsage(provider, model, usage, UsageContext.NONE).toUsageMap();
+    }
+
+    private static SpanUpdate withNormalizedUsage(SpanUpdate spanUpdate, String provider, String model) {
+        return spanUpdate.toBuilder().usage(normalizeUsage(provider, model, spanUpdate.usage())).build();
     }
 
     public Mono<ProjectStats> getStats(@NonNull SpanSearchCriteria criteria) {

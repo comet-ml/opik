@@ -40,7 +40,7 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.IdGenerator;
-import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.domain.cost.CostTestUtils;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -245,7 +245,7 @@ class FindTraceThreadsResourceTest {
 
     private BigDecimal calculateEstimatedCost(List<Span> spans) {
         return spans.stream()
-                .map(span -> CostService.calculateCost(span.model(), span.provider(), span.usage(), null))
+                .map(span -> CostTestUtils.calculateCost(span.model(), span.provider(), span.usage(), null))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
