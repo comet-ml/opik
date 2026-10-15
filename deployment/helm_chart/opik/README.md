@@ -249,6 +249,8 @@ Call opik api on http://localhost:5173/api
 | component.backend.autoscaling.enabled | bool | `false` |  |
 | component.backend.backendConfigMap.enabled | bool | `true` |  |
 | component.backend.enabled | bool | `true` |  |
+| component.backend.env.AI_LABELS_ENABLED | string | `"false"` |  |
+| component.backend.env.AI_LABELS_INFERENCE_URL | string | `""` |  |
 | component.backend.env.ANALYTICS_DB_DATABASE_NAME | string | `"opik"` |  |
 | component.backend.env.ANALYTICS_DB_HOST | string | `"clickhouse-opik-clickhouse"` |  |
 | component.backend.env.ANALYTICS_DB_MIGRATIONS_PASS | string | `"opik"` |  |
