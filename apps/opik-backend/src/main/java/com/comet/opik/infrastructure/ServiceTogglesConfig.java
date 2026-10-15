@@ -1,14 +1,22 @@
 package com.comet.opik.infrastructure;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.With;
 
 @Data
+@NoArgsConstructor
+// Only for @With; kept from Jackson so config.yml keeps binding through the no-args constructor and its defaults.
+@AllArgsConstructor(access = AccessLevel.PRIVATE, onConstructor_ = @JsonCreator(mode = JsonCreator.Mode.DISABLED))
 public class ServiceTogglesConfig {
 
     @Valid @JsonProperty
@@ -70,6 +78,11 @@ public class ServiceTogglesConfig {
 
     @JsonProperty
     @Min(5) @Max(100) int defaultPageSize;
+
+    // Not configured here: the toggles endpoint sets it for the caller's workspace from customCharts.enabledWorkspaces.
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @With
+    boolean customChartsEnabledForWorkspace;
 
     @JsonIgnore
     public boolean isAgentInsightsActive() {
