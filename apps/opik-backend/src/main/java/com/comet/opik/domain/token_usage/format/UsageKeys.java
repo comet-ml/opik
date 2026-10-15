@@ -11,6 +11,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -28,13 +30,20 @@ final class UsageKeys {
     // stripping an unknown prefix would read the cache count as input.
     private static final List<String> NAMESPACES = List.of("gen_ai.usage.", "llm.token_count.");
 
+    private static final List<String> TOTAL_NAMES = List.of("total_tokens", "total");
+
     private final Map<String, Long> countsByName;
+    private final @Nullable Long reportedTotal;
 
     static UsageKeys of(@NonNull OriginalUsage original) {
         var countsByName = new HashMap<String, Long>();
         // OriginalUsage keeps its keys sorted, so when two spellings normalize to the same name the choice is stable.
         original.keys().forEach((key, value) -> countsByName.putIfAbsent(normalize(key), value.longValue()));
-        return new UsageKeys(Map.copyOf(countsByName));
+        Long reportedTotal = TOTAL_NAMES.stream().map(countsByName::get).filter(Objects::nonNull).findFirst()
+                .orElseGet(() -> Optional.ofNullable(original.outerKeys().get("total_tokens"))
+                        .map(Integer::longValue)
+                        .orElse(null));
+        return new UsageKeys(Map.copyOf(countsByName), reportedTotal);
     }
 
     static String normalize(@NonNull String key) {
@@ -68,6 +77,11 @@ final class UsageKeys {
 
     @Nullable Long find(String name) {
         return countsByName.get(name);
+    }
+
+    /** The total the client reported, in the provider's usage or next to it when the SDK converted it. */
+    @Nullable Long reportedTotal() {
+        return reportedTotal;
     }
 
     /** The count under the first of the names that is present, or 0. */

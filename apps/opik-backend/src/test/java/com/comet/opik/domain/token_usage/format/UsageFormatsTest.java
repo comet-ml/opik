@@ -162,6 +162,19 @@ class UsageFormatsTest {
                     .cacheCreation5mInputTokens(300).build());
         }
 
+        // Production: the TTL split accounted for 2,017 of the 9,818 tokens written; the rest were written all the same.
+        @Test
+        void nativeCountsWritesTheTtlSplitLeavesOutAsFiveMinutes() {
+            var nativeUsage = normalize("anthropic", usage("input_tokens", 123, "output_tokens", 1477,
+                    "cache_read_input_tokens", 81131, "cache_creation_input_tokens", 9818,
+                    "cache_creation.ephemeral_5m_input_tokens", 0, "cache_creation.ephemeral_1h_input_tokens", 2017));
+
+            assertThat(nativeUsage).isEqualTo(expected("anthropic_native").inputTokens(123)
+                    .cacheReadInputTokens(81131).cacheCreation5mInputTokens(7801).cacheCreation1hInputTokens(2017)
+                    .outputTokens(1477).build());
+            assertThat(nativeUsage.toOpenAiLike().promptTokens()).isEqualTo(91072);
+        }
+
         @Test
         void nativeTakesTheTtlSplitInsteadOfTheTotalCacheWrite() {
             var nativeUsage = normalize("anthropic", usage("input_tokens", 10, "cache_creation_input_tokens", 300,
@@ -174,10 +187,44 @@ class UsageFormatsTest {
         @Test
         void liteLlmWithOnlyACacheWriteExcludesItFromTheInput() {
             var nativeUsage = normalize("anthropic", usage("prompt_tokens", 1300, "completion_tokens", 5,
-                    "cache_creation_input_tokens", 1000));
+                    "cache_creation_input_tokens", 1000, "prompt_tokens_details.cached_tokens", 0,
+                    "prompt_tokens_details.cache_creation_tokens", 1000));
 
             assertThat(nativeUsage).isEqualTo(expected("litellm").inputTokens(300).cacheCreation5mInputTokens(1000)
                     .outputTokens(5).build());
+        }
+
+        // OTel ingestion and the online-evaluation judge send Anthropic's input_tokens, which excludes the cache, as
+        // prompt_tokens; only LiteLLM details its prompt. A total of prompt + completion doesn't tell them apart.
+        @Test
+        void promptTokensWithoutLiteLlmDetailsAreAnthropicsInput() {
+            var nativeUsage = normalize("anthropic", usage("prompt_tokens", 1300, "completion_tokens", 5,
+                    "total_tokens", 1305, "cache_read_input_tokens", 200, "cache_creation_input_tokens", 1000));
+
+            assertThat(nativeUsage).isEqualTo(expected("litellm").inputTokens(1300).cacheReadInputTokens(200)
+                    .cacheCreation5mInputTokens(1000).outputTokens(5).build());
+            assertThat(warnings).isEmpty();
+        }
+
+        // Production (Pydantic AI's names): the total shows the cache is outside the prompt.
+        @Test
+        void liteLlmReadsTheShortCacheNames() {
+            var nativeUsage = normalize("anthropic", usage("prompt_tokens", 6, "completion_tokens", 874,
+                    "total_tokens", 208992, "cache_read_tokens", 135324, "cache_write_tokens", 72788));
+
+            assertThat(nativeUsage).isEqualTo(expected("litellm").inputTokens(6).cacheReadInputTokens(135324)
+                    .cacheCreation5mInputTokens(72788).outputTokens(874).build());
+            assertThat(nativeUsage.toOpenAiLike().totalTokens()).isEqualTo(208992);
+        }
+
+        // Production (Claude Code's names): a total that leaves the cache out, like the prompt does.
+        @Test
+        void liteLlmReadsClaudeCodeCacheNames() {
+            var nativeUsage = normalize("anthropic", usage("prompt_tokens", 615, "completion_tokens", 2062,
+                    "total_tokens", 2677, "cache_read_tokens", 116079, "cache_creation_tokens", 19912));
+
+            assertThat(nativeUsage).isEqualTo(expected("litellm").inputTokens(615).cacheReadInputTokens(116079)
+                    .cacheCreation5mInputTokens(19912).outputTokens(2062).build());
         }
 
         @Test
@@ -248,12 +295,75 @@ class UsageFormatsTest {
         }
 
         @Test
-        void responsesWithCacheAboveTheInputReportsItAndKeepsTheProviderValues() {
+        void responsesWithCacheAboveTheInputReportsItAndAddsTheCache() {
             var nativeUsage = normalize("openai", usage("input_tokens", 100, "input_tokens_details.cached_tokens",
                     300));
 
-            assertThat(nativeUsage).isEqualTo(expected("responses").promptTokens(100).cachedTokens(300).build());
+            assertThat(nativeUsage).isEqualTo(expected("responses").promptTokens(400).cachedTokens(300).build());
             assertThat(warnings).containsExactly(UsageWarning.cacheExceedsInput("openai", "responses", 100, 300));
+        }
+
+        // Production (nous through LiteLLM): a prompt below its cache leaves it out, and so does the reported total.
+        @Test
+        void chatCompletionsWithAPromptBelowItsCacheAddsTheCacheToThePromptAndTheTotal() {
+            var nativeUsage = normalize("openai", usage("prompt_tokens", 170, "completion_tokens", 78,
+                    "total_tokens", 248, "cache_read_input_tokens", 31232));
+
+            assertThat(nativeUsage).isEqualTo(expected("chat_completions").promptTokens(31402).cachedTokens(31232)
+                    .completionTokens(78).totalTokens(248).build());
+            assertThat(nativeUsage.toOpenAiLike().totalTokens()).isEqualTo(31480);
+        }
+
+        @Test
+        void chatCompletionsWhoseTotalAddsTheCacheOnTopOfThePromptAddsIt() {
+            var nativeUsage = normalize("openai", usage("prompt_tokens", 1000, "completion_tokens", 100,
+                    "total_tokens", 1400, "prompt_tokens_details.cached_tokens", 300));
+
+            assertThat(nativeUsage).isEqualTo(expected("chat_completions").promptTokens(1300).cachedTokens(300)
+                    .completionTokens(100).totalTokens(1400).build());
+            assertThat(warnings).isEmpty();
+        }
+
+        // Production (gpt-5.6-sol): the total adds up with the cache inside the input.
+        @Test
+        void responsesWhoseTotalAddsUpWithoutTheCacheKeepsItInsideTheInput() {
+            var nativeUsage = normalize("openai", usage("input_tokens", 897182, "output_tokens", 3684,
+                    "total_tokens", 900866, "reasoning_tokens", 542, "cache_read_input_tokens", 836352));
+
+            assertThat(nativeUsage).isEqualTo(expected("responses").promptTokens(897182).cachedTokens(836352)
+                    .completionTokens(3684).reasoningTokens(542).totalTokens(900866).build());
+        }
+
+        // Production (Mistral's Anthropic-style usage, logged by the SDK): only the SDK's total shows the cache is out.
+        @Test
+        void responsesReadsTheTotalTheSdkLoggedNextToTheProviderUsage() {
+            var nativeUsage = UsageFormats.normalize("mistral", OriginalUsage.from(usage("prompt_tokens", 14835,
+                    "completion_tokens", 103, "total_tokens", 14938, "original_usage.input_tokens", 14435,
+                    "original_usage.output_tokens", 103, "original_usage.cache_read_input_tokens", 400,
+                    "original_usage.cache_creation_input_tokens", 0)), warnings).orElseThrow();
+
+            assertThat(nativeUsage.toOpenAiLike().promptTokens()).isEqualTo(14835);
+            assertThat(nativeUsage.toOpenAiLike().totalTokens()).isEqualTo(14938);
+        }
+
+        // OpenRouter reports Anthropic's cache writes, which bill at their own rate, in the prompt details.
+        @Test
+        void chatCompletionsWithCacheWrites() {
+            var nativeUsage = normalize("openai", usage("prompt_tokens", 1250, "completion_tokens", 100,
+                    "prompt_tokens_details.cached_tokens", 200, "prompt_tokens_details.cache_write_tokens", 50));
+
+            assertThat(nativeUsage).isEqualTo(expected("chat_completions").promptTokens(1250).cachedTokens(200)
+                    .cacheWriteTokens(50).completionTokens(100).build());
+        }
+
+        // Production (OpenRouter through LiteLLM): the writes are left out of a prompt smaller than them.
+        @Test
+        void chatCompletionsWithCacheWritesAboveThePromptAddsThem() {
+            var nativeUsage = normalize("openai", usage("prompt_tokens", 4, "completion_tokens", 51,
+                    "total_tokens", 55, "cache_creation_input_tokens", 22574));
+
+            assertThat(nativeUsage).isEqualTo(expected("chat_completions").promptTokens(22578)
+                    .cacheWriteTokens(22574).completionTokens(51).totalTokens(55).build());
         }
 
         @Test
@@ -281,6 +391,25 @@ class UsageFormatsTest {
 
             assertThat(nativeUsage).isEqualTo(expected("gemini_native").promptTokenCount(200)
                     .candidatesTokenCount(100).build());
+        }
+
+        // Production: the cache is within the prompt and the tool results together, as Gemini's total shows.
+        @Test
+        void nativeTakesTheCacheAsPartOfThePromptAndTheToolResults() {
+            var nativeUsage = normalize("gemini", usage("prompt_token_count", 6063, "tool_use_prompt_token_count", 6063,
+                    "cached_content_token_count", 11511, "candidates_token_count", 430, "thoughts_token_count", 8605,
+                    "total_token_count", 21161));
+
+            assertThat(nativeUsage.toOpenAiLike().promptTokens()).isEqualTo(12126);
+            assertThat(warnings).isEmpty();
+        }
+
+        @Test
+        void nativeWithoutAPromptTakesTheCacheAsIt() {
+            var nativeUsage = normalize("gemini", usage("cached_content_token_count", 16384,
+                    "candidates_token_count", 15201));
+
+            assertThat(nativeUsage.toOpenAiLike().promptTokens()).isEqualTo(16384);
         }
 
         @Test
@@ -335,6 +464,43 @@ class UsageFormatsTest {
         void converseWithOnlyTheOutput() {
             assertThat(normalize("bedrock", usage("outputTokens", 3)))
                     .isEqualTo(expected("converse").outputTokens(3).build());
+        }
+
+        // Production (LiteLLM): the total shows this prompt includes the cache it's reported next to.
+        @Test
+        void liteLlmWhoseTotalAddsUpWithTheCacheInsideThePromptExcludesIt() {
+            var nativeUsage = normalize("bedrock", usage("prompt_tokens", 14805, "completion_tokens", 190,
+                    "total_tokens", 14995, "cache_creation_input_tokens", 14802, "cache_read_input_tokens", 0,
+                    "prompt_tokens_details.cache_creation_tokens", 14802));
+
+            assertThat(nativeUsage).isEqualTo(expected("litellm").inputTokens(3).cacheWriteInputTokens(14802)
+                    .outputTokens(190).build());
+        }
+
+        @Test
+        void liteLlmWhoseTotalAddsTheCacheOnTopOfThePromptKeepsIt() {
+            var nativeUsage = normalize("bedrock", usage("prompt_tokens", 10247, "completion_tokens", 329,
+                    "total_tokens", 34270, "cache_creation_input_tokens", 23694, "cache_read_input_tokens", 0));
+
+            assertThat(nativeUsage).isEqualTo(expected("litellm").inputTokens(10247).cacheWriteInputTokens(23694)
+                    .outputTokens(329).build());
+        }
+
+        @Test
+        void liteLlmWithoutATotalKeepsThePromptAsExcludingTheCache() {
+            var nativeUsage = normalize("bedrock", usage("prompt_tokens", 1000, "completion_tokens", 100,
+                    "cache_read_input_tokens", 200));
+
+            assertThat(nativeUsage).isEqualTo(expected("litellm").inputTokens(1000).cacheReadInputTokens(200)
+                    .outputTokens(100).build());
+            assertThat(warnings).isEmpty();
+        }
+
+        @Test
+        void geminiShapedUsageIsNotLlama() {
+            var usage = usage("prompt_token_count", 55659, "candidates_token_count", 438);
+
+            assertThat(UsageFormats.normalize("bedrock", OriginalUsage.from(usage), warnings)).isEmpty();
         }
 
         @Test

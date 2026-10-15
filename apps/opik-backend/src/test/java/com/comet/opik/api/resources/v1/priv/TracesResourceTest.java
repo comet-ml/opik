@@ -69,7 +69,7 @@ import com.comet.opik.domain.EnvironmentService;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.ThreadDAOTestQueries;
-import com.comet.opik.domain.cost.CostTestUtils;
+import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
@@ -1563,7 +1563,7 @@ class TracesResourceTest {
 
     private BigDecimal calculateEstimatedCost(List<Span> spans) {
         return spans.stream()
-                .map(span -> CostTestUtils.calculateCost(span.model(), span.provider(), span.usage(), null))
+                .map(span -> CostService.calculateCost(span.model(), span.provider(), span.usage(), null))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
@@ -2255,8 +2255,7 @@ class TracesResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var span = factory.manufacturePojo(Span.class);
             var usage = Stream.concat(
-                    // The prompt-only span adds the 3 total tokens the backend derives for it.
-                    Map.of("completion_tokens", 2 * 5L, "prompt_tokens", 3 * 5L + 3, "total_tokens", 4 * 5L + 3)
+                    Map.of("completion_tokens", 2 * 5L, "prompt_tokens", 3 * 5L + 3, "total_tokens", 4 * 5L)
                             .entrySet().stream(),
                     span.usage().entrySet().stream())
                     .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), entry.getValue().longValue()))
@@ -2291,7 +2290,7 @@ class TracesResourceTest {
             spans.add(factory.manufacturePojo(Span.class).toBuilder()
                     .projectName(projectName)
                     .traceId(id)
-                    .usage(CostTestUtils.storedUsage(Map.of("prompt_tokens", 3)))
+                    .usage(Map.of("prompt_tokens", 3))
                     .build());
             spans.add(span.toBuilder()
                     .projectName(projectName)
@@ -2320,9 +2319,8 @@ class TracesResourceTest {
                     .map(spanInStream -> spanInStream.toBuilder()
                             .projectName(projectName)
                             .traceId(id)
-                            .usage(CostTestUtils.storedUsage(Map.of(
-                                    "completion_tokens", Math.abs(factory.manufacturePojo(Integer.class)),
-                                    "prompt_tokens", Math.abs(factory.manufacturePojo(Integer.class)))))
+                            .usage(Map.of("completion_tokens", Math.abs(factory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(factory.manufacturePojo(Integer.class))))
                             .model(model)
                             .provider("openai")
                             .totalEstimatedCost(null)
@@ -6643,8 +6641,7 @@ class TracesResourceTest {
                     .projectName(projectName)
                     .traceId(trace.id())
                     .parentSpanId(null)
-                    .usage(CostTestUtils
-                            .storedUsage(Map.of("prompt_tokens", RandomUtils.secure().randomInt(1, 10_000))))
+                    .usage(Map.of("prompt_tokens", RandomUtils.secure().randomInt(1, 10_000)))
                     .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomDouble(0.01, 1))
                             .setScale(6, RoundingMode.HALF_UP))
                     .comments(null)

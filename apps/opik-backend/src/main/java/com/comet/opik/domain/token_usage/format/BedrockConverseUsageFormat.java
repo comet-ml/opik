@@ -15,8 +15,9 @@ final class BedrockConverseUsageFormat implements UsageFormat {
             new InputVariant("converse",
                     keys -> keys.hasAny("input_tokens", "output_tokens"),
                     BedrockConverseUsageFormat::fromConverse),
+            // generation_token_count is Llama's own; prompt_token_count alone is Gemini's too.
             new InputVariant("llama",
-                    keys -> keys.hasAny("prompt_token_count", "generation_token_count"),
+                    keys -> keys.has("generation_token_count"),
                     BedrockConverseUsageFormat::fromLlama),
             new InputVariant("litellm",
                     keys -> keys.has("prompt_tokens")
@@ -50,11 +51,19 @@ final class BedrockConverseUsageFormat implements UsageFormat {
 
     private static NativeUsage fromLiteLlm(VariantInput input) {
         // Measured in production: LiteLLM's Bedrock prompt_tokens is below the cache on 98% of rows, so it excludes it.
+        // The LiteLLM versions that include it also report the prompt's details.
         var keys = input.keys();
+        long cacheRead = keys.get("cache_read_input_tokens");
+        long cacheWrite = keys.get("cache_creation_input_tokens");
+        long promptTokens = keys.get("prompt_tokens");
         return builder(input)
-                .inputTokens(keys.get("prompt_tokens"))
-                .cacheReadInputTokens(keys.get("cache_read_input_tokens"))
-                .cacheWriteInputTokens(keys.get("cache_creation_input_tokens"))
+                .inputTokens(keys.hasAny("prompt_tokens_details.cached_tokens",
+                        "prompt_tokens_details.cache_creation_tokens")
+                                ? input.excludingCache(promptTokens, cacheRead + cacheWrite,
+                                        keys.get("completion_tokens"))
+                                : promptTokens)
+                .cacheReadInputTokens(cacheRead)
+                .cacheWriteInputTokens(cacheWrite)
                 .outputTokens(keys.get("completion_tokens"))
                 .build();
     }

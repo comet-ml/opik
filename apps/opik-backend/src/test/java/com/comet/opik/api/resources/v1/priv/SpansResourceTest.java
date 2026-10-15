@@ -47,7 +47,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanMapper;
 import com.comet.opik.domain.SpanType;
-import com.comet.opik.domain.cost.CostTestUtils;
+import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
@@ -1512,7 +1512,7 @@ class SpansResourceTest {
 
             var expectedCost = manualCost != null
                     ? manualCost
-                    : CostTestUtils.calculateCost(
+                    : CostService.calculateCost(
                             StringUtils.isNotBlank(model)
                                     ? model
                                     : Optional.ofNullable(metadata)
@@ -1532,7 +1532,6 @@ class SpansResourceTest {
                     provider);
             var expectedSpanWithProviderInMetadata = expectedSpan.toBuilder()
                     .metadata(expectedMetadata)
-                    .usage(CostTestUtils.storedUsage(provider, model, usage))
                     .build();
 
             var span = getAndAssert(expectedSpanWithProviderInMetadata, API_KEY, TEST_WORKSPACE);
@@ -2660,9 +2659,7 @@ class SpansResourceTest {
             spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
 
             var actualSpan = spanResourceClient.getById(expectedSpan.id(), TEST_WORKSPACE, API_KEY);
-            // The backend owns the three totals, so the prompt the client left out is written as 0.
-            assertThat(actualSpan.usage()).isEqualTo(Map.of("completion_tokens", 7, "prompt_tokens", 0,
-                    "total_tokens", 7));
+            assertThat(actualSpan.usage()).isEqualTo(Map.of("completion_tokens", 7));
         }
 
         @ParameterizedTest
@@ -2693,10 +2690,7 @@ class SpansResourceTest {
             var expectedSpanBuilder = expectedSpan.toBuilder()
                     .projectName(DEFAULT_PROJECT);
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, expectedSpanUpdate);
-            var updatedSpan = expectedSpanBuilder.build();
-            var actualSpan = getAndAssert(updatedSpan.toBuilder()
-                    .usage(CostTestUtils.storedUsage(updatedSpan.provider(), updatedSpan.model(), updatedSpan.usage()))
-                    .build(), API_KEY, TEST_WORKSPACE);
+            var actualSpan = getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
 
             BigDecimal expectedCost;
             if (expectedSpanUpdate.totalEstimatedCost() != null) {
@@ -2706,7 +2700,7 @@ class SpansResourceTest {
             } else {
                 if (expectedSpanUpdate.model() != null || expectedSpanUpdate.provider() != null
                         || expectedSpanUpdate.usage() != null) {
-                    expectedCost = CostTestUtils.calculateCost(
+                    expectedCost = CostService.calculateCost(
                             expectedSpanUpdate.model() != null ? expectedSpanUpdate.model() : expectedSpan.model(),
                             expectedSpanUpdate.provider() != null
                                     ? expectedSpanUpdate.provider()
@@ -2714,7 +2708,7 @@ class SpansResourceTest {
                             expectedSpanUpdate.usage() != null ? expectedSpanUpdate.usage() : expectedSpan.usage(),
                             expectedSpanUpdate.metadata());
                 } else {
-                    expectedCost = CostTestUtils.calculateCost(
+                    expectedCost = CostService.calculateCost(
                             null, null, null,
                             expectedSpanUpdate.metadata());
                 }

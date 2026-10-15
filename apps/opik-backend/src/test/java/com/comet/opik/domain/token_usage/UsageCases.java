@@ -109,7 +109,8 @@ public final class UsageCases {
                         anthropic("litellm").inputTokens(500).cacheReadInputTokens(1000).outputTokens(50).build()),
                 new UsageCase("Anthropic through LiteLLM with cache writes split by TTL", "anthropic",
                         usage("prompt_tokens", 5000, "completion_tokens", 100, "cache_read_input_tokens", 1000,
-                                "cache_creation_input_tokens", 3000,
+                                "cache_creation_input_tokens", 3000, "prompt_tokens_details.cached_tokens", 1000,
+                                "prompt_tokens_details.cache_creation_tokens", 3000,
                                 "cache_creation_token_details.ephemeral_5m_input_tokens", 1000,
                                 "cache_creation_token_details.ephemeral_1h_input_tokens", 2000),
                         anthropic("litellm").inputTokens(1000).cacheReadInputTokens(1000)

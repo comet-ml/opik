@@ -1,6 +1,7 @@
 package com.comet.opik.domain.cost;
 
 import com.comet.opik.api.ModelCostData;
+import com.comet.opik.domain.token_usage.SpanUsageFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,6 +14,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -24,6 +26,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
 
 class CostServiceTest {
 
@@ -31,7 +35,7 @@ class CostServiceTest {
 
     @Test
     void calculateCostForVideoGenerationUsesDuration() {
-        BigDecimal cost = CostTestUtils.calculateCost("sora-2", "openai",
+        BigDecimal cost = CostService.calculateCost("sora-2", "openai",
                 Map.of("video_duration_seconds", 4), null);
 
         assertThat(cost).isEqualByComparingTo("0.4");
@@ -45,8 +49,7 @@ class CostServiceTest {
                 "original_usage.cacheReadInputTokens", 10,
                 "original_usage.cacheWriteInputTokens", 5);
 
-        BigDecimal cost = CostTestUtils.calculateCost("anthropic.claude-3-5-haiku-20241022-v1:0", "bedrock", usage,
-                null);
+        BigDecimal cost = CostService.calculateCost("anthropic.claude-3-5-haiku-20241022-v1:0", "bedrock", usage, null);
 
         assertThat(cost).isEqualByComparingTo("0.0001658");
     }
@@ -69,17 +72,12 @@ class CostServiceTest {
     @MethodSource("provideAudioPromptTokenCases")
     void calculateCostBillsAudioPromptTokensAtTheConfiguredRate(
             String model, String audioUsageKey, String expectedCost) {
-        var usage = new HashMap<>(Map.of(
+        Map<String, Integer> usage = Map.of(
                 "prompt_tokens", 1_000,
                 "completion_tokens", 200,
-                audioUsageKey, 300));
-        if (audioUsageKey.startsWith("original_usage.")) {
-            // The SDK logs the provider's whole usage under original_usage.*, next to its own totals.
-            usage.put("original_usage.prompt_tokens", 1_000);
-            usage.put("original_usage.completion_tokens", 200);
-        }
+                audioUsageKey, 300);
 
-        BigDecimal cost = CostTestUtils.calculateCost(model, "openai", usage, null);
+        BigDecimal cost = CostService.calculateCost(model, "openai", usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -118,16 +116,12 @@ class CostServiceTest {
     @MethodSource("provideAudioCompletionTokenCases")
     void calculateCostBillsAudioCompletionTokensAtTheConfiguredRate(
             String model, String audioUsageKey, String expectedCost) {
-        var usage = new HashMap<>(Map.of(
+        Map<String, Integer> usage = Map.of(
                 "prompt_tokens", 200,
                 "completion_tokens", 500,
-                audioUsageKey, 200));
-        if (audioUsageKey.startsWith("original_usage.")) {
-            usage.put("original_usage.prompt_tokens", 200);
-            usage.put("original_usage.completion_tokens", 500);
-        }
+                audioUsageKey, 200);
 
-        BigDecimal cost = CostTestUtils.calculateCost(model, "openai", usage, null);
+        BigDecimal cost = CostService.calculateCost(model, "openai", usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -162,7 +156,7 @@ class CostServiceTest {
                 "original_usage.cache_read_input_tokens", 200,
                 "original_usage.cache_creation_input_tokens", 50);
 
-        BigDecimal cost = CostTestUtils.calculateCost("vertex_ai/claude-haiku-4-5", "anthropic_vertexai", usage, null);
+        BigDecimal cost = CostService.calculateCost("vertex_ai/claude-haiku-4-5", "anthropic_vertexai", usage, null);
 
         // vertex_ai/claude-haiku-4-5 (vertex_ai-anthropic_models):
         // input 1e-6, output 5e-6, cache_read 1e-7, cache_creation 1.25e-6
@@ -187,7 +181,7 @@ class CostServiceTest {
                 "original_usage.prompt_token_count", promptTokens,
                 "original_usage.candidates_token_count", 1_000);
 
-        BigDecimal cost = CostTestUtils.calculateCost("gemini-2.5-pro", "google_vertexai", usage, null);
+        BigDecimal cost = CostService.calculateCost("gemini-2.5-pro", "google_vertexai", usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -214,7 +208,7 @@ class CostServiceTest {
                 "prompt_tokens", promptTokens,
                 "completion_tokens", 1_000);
 
-        BigDecimal cost = CostTestUtils.calculateCost("openrouter/bytedance-seed/seed-2.0-lite", "openrouter", usage,
+        BigDecimal cost = CostService.calculateCost("openrouter/bytedance-seed/seed-2.0-lite", "openrouter", usage,
                 null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
@@ -247,7 +241,7 @@ class CostServiceTest {
                 "original_usage.prompt_tokens", promptTokens,
                 "original_usage.completion_tokens", 1_000);
 
-        BigDecimal cost = CostTestUtils.calculateCost("gpt-5.4", "openai", usage, null);
+        BigDecimal cost = CostService.calculateCost("gpt-5.4", "openai", usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -270,7 +264,7 @@ class CostServiceTest {
                 "original_usage.candidates_token_count", 100,
                 "original_usage.cached_content_token_count", 400);
 
-        BigDecimal cost = CostTestUtils.calculateCost("gemini-2.5-flash", "google_vertexai", usage, null);
+        BigDecimal cost = CostService.calculateCost("gemini-2.5-flash", "google_vertexai", usage, null);
 
         // gemini-2.5-flash: input 3e-7, output 2.5e-6, cache_read 3e-8
         // non-cached input = 1000 - 400 = 600 -> 600*3e-7 + 100*2.5e-6 + 400*3e-8
@@ -281,7 +275,7 @@ class CostServiceTest {
     @ParameterizedTest
     @MethodSource("provideAudioSpeechModels")
     void calculateCostForAudioSpeech(String model, int inputCharacters, String expectedCost) {
-        BigDecimal cost = CostTestUtils.calculateCost(model, "openai",
+        BigDecimal cost = CostService.calculateCost(model, "openai",
                 Map.of("input_characters", inputCharacters), null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
@@ -298,7 +292,7 @@ class CostServiceTest {
     @Test
     void calculateCostForAudioSpeechWithOriginalUsagePrefix() {
         // SDK 1.6.0+ sends usage with original_usage. prefix
-        BigDecimal cost = CostTestUtils.calculateCost("tts-1", "openai",
+        BigDecimal cost = CostService.calculateCost("tts-1", "openai",
                 Map.of("original_usage.input_characters", 1000), null);
 
         assertThat(cost).isEqualByComparingTo("0.015");
@@ -311,7 +305,7 @@ class CostServiceTest {
                 .put("currency", "USD")
                 .put("total_cost", 0.42);
 
-        BigDecimal cost = CostTestUtils.calculateCost("unknown-model", "unknown", Map.of(), metadata);
+        BigDecimal cost = CostService.calculateCost("unknown-model", "unknown", Map.of(), metadata);
 
         assertThat(cost).isEqualByComparingTo("0.42");
     }
@@ -333,7 +327,7 @@ class CostServiceTest {
                 "original_usage.input_tokens", 1000,
                 "original_usage.output_tokens", 500);
 
-        BigDecimal cost = CostTestUtils.calculateCost(modelName, provider, usage, null);
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
 
         if (shouldHaveCost) {
             assertThat(cost).isGreaterThan(BigDecimal.ZERO);
@@ -379,7 +373,7 @@ class CostServiceTest {
                 "prompt_tokens", 1000,
                 "completion_tokens", 500);
 
-        BigDecimal cost = CostTestUtils.calculateCost(modelName, provider, usage, null);
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
 
         assertThat(cost).isGreaterThan(BigDecimal.ZERO);
     }
@@ -390,7 +384,7 @@ class CostServiceTest {
                 "prompt_tokens", 1000,
                 "completion_tokens", 500);
 
-        BigDecimal cost = CostTestUtils.calculateCost("unknown-model-2025-12-17", "openai", usage, null);
+        BigDecimal cost = CostService.calculateCost("unknown-model-2025-12-17", "openai", usage, null);
 
         assertThat(cost).isEqualTo(BigDecimal.ZERO);
     }
@@ -410,8 +404,8 @@ class CostServiceTest {
                 "prompt_tokens", 1000,
                 "completion_tokens", 500);
 
-        BigDecimal datedCost = CostTestUtils.calculateCost(datedModelName, provider, usage, null);
-        BigDecimal baseCost = CostTestUtils.calculateCost(baseModelName, provider, usage, null);
+        BigDecimal datedCost = CostService.calculateCost(datedModelName, provider, usage, null);
+        BigDecimal baseCost = CostService.calculateCost(baseModelName, provider, usage, null);
 
         assertThat(baseCost).isGreaterThan(BigDecimal.ZERO);
         assertThat(datedCost).isEqualByComparingTo(baseCost);
@@ -436,7 +430,7 @@ class CostServiceTest {
                 "prompt_tokens", 1000,
                 "completion_tokens", 500);
 
-        BigDecimal cost = CostTestUtils.calculateCost("unknown-model-20251217", "openai", usage, null);
+        BigDecimal cost = CostService.calculateCost("unknown-model-20251217", "openai", usage, null);
 
         assertThat(cost).isEqualTo(BigDecimal.ZERO);
     }
@@ -452,7 +446,7 @@ class CostServiceTest {
                 "prompt_tokens", 1000,
                 "completion_tokens", 500);
 
-        BigDecimal cost = CostTestUtils.calculateCost(modelName, "openai", usage, null);
+        BigDecimal cost = CostService.calculateCost(modelName, "openai", usage, null);
 
         assertThat(cost).isEqualTo(BigDecimal.ZERO);
     }
@@ -471,7 +465,7 @@ class CostServiceTest {
                 "prompt_tokens", 1000,
                 "completion_tokens", 500);
 
-        BigDecimal cost = CostTestUtils.calculateCost(modelName, provider, usage, null);
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
 
         assertThat(cost).isGreaterThan(BigDecimal.ZERO);
     }
@@ -495,7 +489,7 @@ class CostServiceTest {
     void calculateCost_mapsOnlineEvaluationProviderNames(String modelName, String provider) {
         Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 500);
 
-        BigDecimal cost = CostTestUtils.calculateCost(modelName, provider, usage, null);
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
 
         assertThat(cost).isGreaterThan(BigDecimal.ZERO);
     }
@@ -516,8 +510,8 @@ class CostServiceTest {
                 "prompt_tokens", 1000,
                 "completion_tokens", 500);
 
-        BigDecimal aliasCost = CostTestUtils.calculateCost(aliasName, provider, usage, null);
-        BigDecimal targetCost = CostTestUtils.calculateCost(targetName, provider, usage, null);
+        BigDecimal aliasCost = CostService.calculateCost(aliasName, provider, usage, null);
+        BigDecimal targetCost = CostService.calculateCost(targetName, provider, usage, null);
 
         assertThat(aliasCost).isGreaterThan(BigDecimal.ZERO);
         assertThat(aliasCost).isEqualByComparingTo(targetCost);
@@ -544,8 +538,8 @@ class CostServiceTest {
                 "prompt_tokens", 1000,
                 "completion_tokens", 500);
 
-        BigDecimal dotFormCost = CostTestUtils.calculateCost("claude-4.5-haiku", "anthropic", usage, null);
-        BigDecimal canonicalCost = CostTestUtils.calculateCost("claude-haiku-4-5", "anthropic", usage, null);
+        BigDecimal dotFormCost = CostService.calculateCost("claude-4.5-haiku", "anthropic", usage, null);
+        BigDecimal canonicalCost = CostService.calculateCost("claude-haiku-4-5", "anthropic", usage, null);
 
         assertThat(dotFormCost).isGreaterThan(BigDecimal.ZERO);
         assertThat(dotFormCost).isEqualByComparingTo(canonicalCost);
@@ -561,7 +555,7 @@ class CostServiceTest {
                 "prompt_tokens", 1000,
                 "completion_tokens", 500);
 
-        BigDecimal cost = CostTestUtils.calculateCost(model, provider, usage, null);
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
 
         assertThat(cost).isGreaterThan(BigDecimal.ZERO);
     }
@@ -595,7 +589,7 @@ class CostServiceTest {
     void calculateCostForMistralModels(String model, String expectedCost) {
         Map<String, Integer> usage = Map.of("prompt_tokens", 1_000_000, "completion_tokens", 1_000_000);
 
-        BigDecimal cost = CostTestUtils.calculateCost(model, "mistral", usage, null);
+        BigDecimal cost = CostService.calculateCost(model, "mistral", usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -628,7 +622,7 @@ class CostServiceTest {
     void calculateCost_overrideMicrosoftProviderMapsToAzure() {
         Map<String, Integer> usage = Map.of("prompt_tokens", 1000);
 
-        BigDecimal cost = CostTestUtils.calculateCost("multilingual-e5-large", "azure", usage, null);
+        BigDecimal cost = CostService.calculateCost("multilingual-e5-large", "azure", usage, null);
 
         assertThat(cost).isGreaterThan(BigDecimal.ZERO);
     }
@@ -650,7 +644,7 @@ class CostServiceTest {
     @MethodSource("provideAzureProviderCases")
     void calculateCostHandlesAzureHostedModels(String description, String model, Map<String, Integer> usage,
             String expectedCost) {
-        BigDecimal cost = CostTestUtils.calculateCost(model, "azure", usage, null);
+        BigDecimal cost = CostService.calculateCost(model, "azure", usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -690,7 +684,7 @@ class CostServiceTest {
     @MethodSource("provideXaiProviderCases")
     void calculateCostHandlesXaiModels(String description, String model, Map<String, Integer> usage,
             String expectedCost) {
-        BigDecimal cost = CostTestUtils.calculateCost(model, "xai", usage, null);
+        BigDecimal cost = CostService.calculateCost(model, "xai", usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -732,7 +726,7 @@ class CostServiceTest {
     @MethodSource("provideDeepseekProviderCases")
     void calculateCostHandlesDeepseekModels(String description, String model, Map<String, Integer> usage,
             String expectedCost) {
-        BigDecimal cost = CostTestUtils.calculateCost(model, "deepseek", usage, null);
+        BigDecimal cost = CostService.calculateCost(model, "deepseek", usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -764,7 +758,7 @@ class CostServiceTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("providePerplexityProviderCases")
     void calculateCostHandlesPerplexityModels(String model, Map<String, Integer> usage, String expectedCost) {
-        BigDecimal cost = CostTestUtils.calculateCost(model, "perplexity", usage, null);
+        BigDecimal cost = CostService.calculateCost(model, "perplexity", usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -800,7 +794,7 @@ class CostServiceTest {
     @MethodSource("provideFireworksProviderCases")
     void calculateCostHandlesFireworksModels(String description, String model, Map<String, Integer> usage,
             String expectedCost) {
-        BigDecimal cost = CostTestUtils.calculateCost(model, "fireworks_ai", usage, null);
+        BigDecimal cost = CostService.calculateCost(model, "fireworks_ai", usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -845,7 +839,7 @@ class CostServiceTest {
     @MethodSource("provideMoonshotProviderCases")
     void calculateCostHandlesMoonshotModels(String description, String model, Map<String, Integer> usage,
             String expectedCost) {
-        BigDecimal cost = CostTestUtils.calculateCost(model, "moonshot", usage, null);
+        BigDecimal cost = CostService.calculateCost(model, "moonshot", usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -877,7 +871,7 @@ class CostServiceTest {
         // route through SpanCostCalculator.textGenerationCost.
         // cerebras/llama-3.3-70b: input 8.5e-7, output 1.2e-6
         // 1000 * 8.5e-7 + 200 * 1.2e-6 = 0.00085 + 0.00024 = 0.00109
-        BigDecimal cost = CostTestUtils.calculateCost("cerebras/llama-3.3-70b", "cerebras",
+        BigDecimal cost = CostService.calculateCost("cerebras/llama-3.3-70b", "cerebras",
                 Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
 
         assertThat(cost).isEqualByComparingTo("0.00109");
@@ -895,7 +889,7 @@ class CostServiceTest {
     void calculateCostHandlesSambanovaModels() {
         // sambanova/MiniMax-M2.7: input 6e-7, output 2.4e-6
         // 1000 * 6e-7 + 200 * 2.4e-6 = 0.0006 + 0.00048 = 0.00108
-        BigDecimal cost = CostTestUtils.calculateCost("sambanova/MiniMax-M2.7", "sambanova",
+        BigDecimal cost = CostService.calculateCost("sambanova/MiniMax-M2.7", "sambanova",
                 Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
 
         assertThat(cost).isEqualByComparingTo("0.00108");
@@ -913,7 +907,7 @@ class CostServiceTest {
     void calculateCostHandlesNebiusModels() {
         // nebius/deepseek-ai/DeepSeek-R1: input 8e-7, output 2.4e-6
         // 1000 * 8e-7 + 200 * 2.4e-6 = 0.0008 + 0.00048 = 0.00128
-        BigDecimal cost = CostTestUtils.calculateCost("nebius/deepseek-ai/DeepSeek-R1", "nebius",
+        BigDecimal cost = CostService.calculateCost("nebius/deepseek-ai/DeepSeek-R1", "nebius",
                 Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
 
         assertThat(cost).isEqualByComparingTo("0.00128");
@@ -938,7 +932,7 @@ class CostServiceTest {
     @MethodSource("provideSnowflakeProviderCases")
     void calculateCostHandlesSnowflakeModels(String description, String model, Map<String, Integer> usage,
             String expectedCost) {
-        BigDecimal cost = CostTestUtils.calculateCost(model, "snowflake", usage, null);
+        BigDecimal cost = CostService.calculateCost(model, "snowflake", usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -977,7 +971,7 @@ class CostServiceTest {
             String expectedCost) {
         Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
 
-        BigDecimal cost = CostTestUtils.calculateCost(model, provider, usage, null);
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -1008,7 +1002,7 @@ class CostServiceTest {
             String expectedCost) {
         Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
 
-        BigDecimal cost = CostTestUtils.calculateCost(model, provider, usage, null);
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -1041,7 +1035,7 @@ class CostServiceTest {
                 "prompt_tokens", 1000,
                 "completion_tokens", 500);
 
-        BigDecimal cost = CostTestUtils.calculateCost(modelName, "bedrock", usage, null);
+        BigDecimal cost = CostService.calculateCost(modelName, "bedrock", usage, null);
 
         assertThat(cost).isGreaterThan(BigDecimal.ZERO);
     }
@@ -1098,7 +1092,7 @@ class CostServiceTest {
             String expectedCost) {
         Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
 
-        BigDecimal cost = CostTestUtils.calculateCost(model, provider, usage, null);
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -1144,7 +1138,7 @@ class CostServiceTest {
     @MethodSource("provideDeepinfraProviderCases")
     void calculateCostHandlesDeepinfraModels(String description, String model, Map<String, Integer> usage,
             String expectedCost) {
-        BigDecimal cost = CostTestUtils.calculateCost(model, "deepinfra", usage, null);
+        BigDecimal cost = CostService.calculateCost(model, "deepinfra", usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -1188,7 +1182,7 @@ class CostServiceTest {
                 "original_usage.input_tokens", 1000,
                 "original_usage.output_tokens", 200);
 
-        BigDecimal cost = CostTestUtils.calculateCost(model, "typesafe", usage, null);
+        BigDecimal cost = CostService.calculateCost(model, "typesafe", usage, null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
@@ -1212,7 +1206,7 @@ class CostServiceTest {
     @ParameterizedTest(name = "provider={0}, model={1}")
     @MethodSource("provideNewlyRegisteredProviderCases")
     void calculateCostHandlesNewlyRegisteredProviderModels(String provider, String model, String expectedCost) {
-        BigDecimal cost = CostTestUtils.calculateCost(model, provider,
+        BigDecimal cost = CostService.calculateCost(model, provider,
                 Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
@@ -1285,7 +1279,7 @@ class CostServiceTest {
     void calculateCostPricesEveryProviderInThePriceFile(String provider, List<String> models) {
         Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
 
-        assertThat(models).anySatisfy(model -> assertThat(CostTestUtils.calculateCost(model, provider, usage, null))
+        assertThat(models).anySatisfy(model -> assertThat(CostService.calculateCost(model, provider, usage, null))
                 .isGreaterThan(BigDecimal.ZERO));
     }
 
@@ -1322,7 +1316,7 @@ class CostServiceTest {
     void calculateCostPricesAModelFiledUnderASiblingProvider(String provider, String model) {
         Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
 
-        assertThat(CostTestUtils.calculateCost(model, provider, usage, null)).isPositive();
+        assertThat(CostService.calculateCost(model, provider, usage, null)).isPositive();
     }
 
     @ParameterizedTest
@@ -1330,8 +1324,8 @@ class CostServiceTest {
     void calculateCostResolvesTheProviderIgnoringCaseAndSurroundingSpaces(String provider) {
         Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
 
-        assertThat(CostTestUtils.calculateCost("gpt-4o", provider, usage, null))
-                .isEqualByComparingTo(CostTestUtils.calculateCost("gpt-4o", "openai", usage, null))
+        assertThat(CostService.calculateCost("gpt-4o", provider, usage, null))
+                .isEqualByComparingTo(CostService.calculateCost("gpt-4o", "openai", usage, null))
                 .isPositive();
     }
 
@@ -1341,8 +1335,8 @@ class CostServiceTest {
     void calculateCostTakesTheProviderFromAnExplicitModelPrefixWhenNoneIsSent(String provider) {
         Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
 
-        assertThat(CostTestUtils.calculateCost("anthropic/claude-sonnet-4-5", provider, usage, null))
-                .isEqualByComparingTo(CostTestUtils.calculateCost("claude-sonnet-4-5", "anthropic", usage, null))
+        assertThat(CostService.calculateCost("anthropic/claude-sonnet-4-5", provider, usage, null))
+                .isEqualByComparingTo(CostService.calculateCost("claude-sonnet-4-5", "anthropic", usage, null))
                 .isPositive();
     }
 
@@ -1350,6 +1344,64 @@ class CostServiceTest {
     void calculateCostWithoutProviderNeverInfersItFromTheModelName() {
         Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
 
-        assertThat(CostTestUtils.calculateCost("claude-sonnet-4-5", null, usage, null)).isZero();
+        assertThat(CostService.calculateCost("claude-sonnet-4-5", null, usage, null)).isZero();
+    }
+
+    /** Pricing runs while spans are ingested: a failure leaves the span without an estimated cost, never fails it. */
+    @Test
+    void calculateCostGivesNoEstimateWhenPricingFails() {
+        try (var spanUsageFactory = Mockito.mockStatic(SpanUsageFactory.class)) {
+            spanUsageFactory.when(() -> SpanUsageFactory.create(any(), any()))
+                    .thenThrow(new IllegalStateException("unreadable usage"));
+
+            assertThat(CostService.calculateCost("gpt-4o", "openai", Map.of("prompt_tokens", 1000), null)).isZero();
+        }
+    }
+
+    @Test
+    void calculateCostFallsBackToTheMetadataCostWhenPricingFails() {
+        ObjectNode metadata = new ObjectMapper().createObjectNode();
+        metadata.putObject("cost").put("currency", "USD").put("total_cost", 0.42);
+
+        try (var spanUsageFactory = Mockito.mockStatic(SpanUsageFactory.class)) {
+            spanUsageFactory.when(() -> SpanUsageFactory.create(any(), any()))
+                    .thenThrow(new IllegalStateException("unreadable usage"));
+
+            assertThat(CostService.calculateCost("gpt-4o", "openai", Map.of("prompt_tokens", 1000), metadata))
+                    .isEqualByComparingTo("0.42");
+        }
+    }
+
+    /** Usage clients really send, malformed or extreme, always prices without an error. */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void calculateCostNeverFailsOnOddUsage(String description, String provider, Map<String, Integer> usage) {
+        assertThatCode(() -> CostService.calculateCost("gpt-4o", provider, usage, null)).doesNotThrowAnyException();
+        assertThatCode(() -> CostService.calculateCost("claude-sonnet-4-5", provider, usage, null))
+                .doesNotThrowAnyException();
+    }
+
+    private static Stream<Arguments> calculateCostNeverFailsOnOddUsage() {
+        var nullCounts = new HashMap<String, Integer>();
+        nullCounts.put("prompt_tokens", null);
+        nullCounts.put("original_usage.input_tokens", null);
+        return Stream.of("openai", "anthropic", "gemini", "bedrock", "unknown-provider")
+                .flatMap(provider -> Stream.of(
+                        Arguments.of("null usage", provider, null),
+                        Arguments.of("empty usage", provider, Map.of()),
+                        Arguments.of("null counts", provider, nullCounts),
+                        Arguments.of("negative counts", provider, Map.of("prompt_tokens", -5,
+                                "completion_tokens", -1, "cache_read_input_tokens", -3, "input_tokens", -7)),
+                        Arguments.of("counts at the integer limit", provider, Map.of("prompt_tokens",
+                                Integer.MAX_VALUE, "completion_tokens", Integer.MAX_VALUE, "cache_read_input_tokens",
+                                Integer.MAX_VALUE, "cache_creation_input_tokens", Integer.MAX_VALUE)),
+                        Arguments.of("bare original_usage prefix", provider, Map.of("original_usage.", 5,
+                                "original_usage.original_usage.", 3)),
+                        Arguments.of("non-token keys", provider, Map.of("characters", 10, "latency_ms", 300)),
+                        Arguments.of("malformed list items", provider, Map.of("iterations.x.input_tokens", 5,
+                                "iterations..output_tokens", 2, "iterations.0", 1)),
+                        Arguments.of("cache larger than the prompt", provider, Map.of("prompt_tokens", 1,
+                                "cache_read_input_tokens", 1_000_000, "prompt_tokens_details.cached_tokens", 1_000_000,
+                                "completion_tokens", 1))));
     }
 }

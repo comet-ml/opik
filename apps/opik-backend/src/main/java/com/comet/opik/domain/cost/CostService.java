@@ -3,11 +3,9 @@ package com.comet.opik.domain.cost;
 import com.comet.opik.api.ModelCostData;
 import com.comet.opik.domain.token_usage.SpanUsageFactory;
 import com.comet.opik.domain.token_usage.model.SpanUsage;
-import com.comet.opik.domain.token_usage.model.UsageContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
-import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -66,20 +64,24 @@ public class CostService {
         return providerRegistry;
     }
 
-    /**
-     * Reads a span's usage map in its provider's official format. The provider is resolved the same way as for the
-     * price lookup.
-     */
-    public static SpanUsage toSpanUsage(@Nullable String provider, @Nullable String modelName,
-            @Nullable Map<String, Integer> usage, @NonNull UsageContext context) {
-        return SpanUsageFactory.create(providerRegistry.resolve(provider, modelName).orElse(null), usage, context);
+    /** Prices the usage as its provider's format reads it; the usage itself isn't changed. */
+    public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
+            @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata) {
+        BigDecimal estimatedCost = estimateCost(modelName, provider, usage);
+        return estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? estimatedCost : getCostFromMetadata(metadata);
     }
 
-    public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
-            @NonNull SpanUsage usage, @Nullable JsonNode metadata) {
-        ModelPrice modelPrice = findModelPrice(modelName, provider);
-        BigDecimal estimatedCost = modelPrice.calculator().apply(modelPrice, usage);
-        return estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? estimatedCost : getCostFromMetadata(metadata);
+    // Pricing runs while spans are ingested, so it never fails the caller: an error while pricing gives no estimate.
+    private static BigDecimal estimateCost(String modelName, String provider, Map<String, Integer> usage) {
+        try {
+            ModelPrice modelPrice = findModelPrice(modelName, provider);
+            SpanUsage spanUsage = SpanUsageFactory.create(providerRegistry.resolve(provider, modelName).orElse(null),
+                    usage);
+            return modelPrice.calculator().apply(modelPrice, spanUsage);
+        } catch (RuntimeException exception) {
+            log.warn("Failed to estimate the cost of model '{}', provider '{}'", modelName, provider, exception);
+            return BigDecimal.ZERO;
+        }
     }
 
     /**

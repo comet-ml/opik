@@ -111,6 +111,14 @@ class NativeUsageTest {
             assertThat(nativeUsage.toOpenAiLike()).isEqualTo(OpenAiLikeUsage.of(4000, 1500, 5500, 0));
         }
 
+        // Production: the client sent the total and the candidates, but no prompt.
+        @Test
+        void toOpenAiLikeKeepsAReportedTotalAboveTheCounts() {
+            var nativeUsage = usage.candidatesTokenCount(1113).totalTokenCount(4924).build();
+
+            assertThat(nativeUsage.toOpenAiLike()).isEqualTo(OpenAiLikeUsage.of(0, 1113, 4924, 0));
+        }
+
         @Test
         void toOpenAiLikeWithoutCandidates() {
             assertThat(usage.promptTokenCount(7859).totalTokenCount(7859).build().toOpenAiLike())

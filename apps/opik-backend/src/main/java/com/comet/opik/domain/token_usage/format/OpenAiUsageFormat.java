@@ -6,8 +6,8 @@ import com.comet.opik.domain.token_usage.model.OpenAiNativeUsage;
 import java.util.List;
 
 /**
- * OpenAI usage, and the default for every provider without a format of its own. Every variant counts the cache inside
- * the input, so they differ only in key names.
+ * OpenAI usage, and the default for every provider without a format of its own. Every variant counts the cache, read
+ * and written, inside the input unless the numbers show otherwise, so they differ only in key names.
  */
 final class OpenAiUsageFormat implements UsageFormat {
 
@@ -32,25 +32,34 @@ final class OpenAiUsageFormat implements UsageFormat {
     }
 
     private static NativeUsage fromDeepSeek(VariantInput input) {
-        return chatCompletions(input, input.keys().get("prompt_cache_hit_tokens"));
+        return chatCompletions(input, input.keys().get("prompt_cache_hit_tokens"), 0);
     }
 
     private static NativeUsage fromChatCompletions(VariantInput input) {
-        // Bare cache_read_input_tokens comes from flat OTel spans, bare cached_tokens from flattened detail leaves.
-        return chatCompletions(input, input.keys().first("prompt_tokens_details.cached_tokens",
-                "cache_read_input_tokens", "cached_tokens"));
+        // Bare cache_read_input_tokens comes from flat OTel spans, cache_read.input_tokens from OTel GenAI spans (whose
+        // input_tokens OTel ingestion stores as prompt_tokens), bare cached_tokens from flattened detail leaves.
+        // OpenRouter reports writes for the providers that bill them (Anthropic) in the prompt details.
+        var keys = input.keys();
+        return chatCompletions(input,
+                keys.first("prompt_tokens_details.cached_tokens", "input_tokens_details.cached_tokens",
+                        "cache_read_input_tokens", "cache_read.input_tokens", "cached_tokens", "cache_read_tokens"),
+                keys.first("prompt_tokens_details.cache_write_tokens", "prompt_tokens_details.cache_creation_tokens",
+                        "cache_creation_input_tokens", "cache_creation.input_tokens", "cache_write_tokens",
+                        "cache_creation_tokens"));
     }
 
-    private static NativeUsage chatCompletions(VariantInput input, long cachedTokens) {
+    private static NativeUsage chatCompletions(VariantInput input, long cachedTokens, long cacheWriteTokens) {
         var keys = input.keys();
-        long promptTokens = keys.get("prompt_tokens");
-        input.checkCacheWithinInput(promptTokens, cachedTokens);
+        long promptTokens = input.includingCache(keys.get("prompt_tokens"), cachedTokens + cacheWriteTokens,
+                keys.get("completion_tokens"));
         return builder(input)
                 .promptTokens(promptTokens)
                 .cachedTokens(cachedTokens)
+                .cacheWriteTokens(cacheWriteTokens)
                 .audioPromptTokens(keys.get("prompt_tokens_details.audio_tokens"))
                 .completionTokens(keys.get("completion_tokens"))
-                .reasoningTokens(keys.first("completion_tokens_details.reasoning_tokens", "reasoning_tokens"))
+                .reasoningTokens(keys.first("completion_tokens_details.reasoning_tokens", "reasoning.output_tokens",
+                        "reasoning_tokens"))
                 .audioCompletionTokens(keys.get("completion_tokens_details.audio_tokens"))
                 .totalTokens(keys.get("total_tokens"))
                 .textPromptTokens(keys.find("prompt_tokens_details.text_tokens"))
@@ -60,13 +69,15 @@ final class OpenAiUsageFormat implements UsageFormat {
 
     private static NativeUsage fromResponses(VariantInput input) {
         var keys = input.keys();
-        long promptTokens = keys.get("input_tokens");
         long cachedTokens = keys.first("input_tokens_details.cached_tokens", "cache_read.input_tokens",
                 "cache_read_input_tokens", "cached_tokens");
-        input.checkCacheWithinInput(promptTokens, cachedTokens);
+        long cacheWriteTokens = keys.first("cache_creation.input_tokens", "cache_creation_input_tokens");
+        long promptTokens = input.includingCache(keys.get("input_tokens"), cachedTokens + cacheWriteTokens,
+                keys.get("output_tokens"));
         return builder(input)
                 .promptTokens(promptTokens)
                 .cachedTokens(cachedTokens)
+                .cacheWriteTokens(cacheWriteTokens)
                 .audioPromptTokens(keys.get("input_tokens_details.audio_tokens"))
                 .completionTokens(keys.get("output_tokens"))
                 .reasoningTokens(keys.first("output_tokens_details.reasoning_tokens", "reasoning.output_tokens",
@@ -80,12 +91,14 @@ final class OpenAiUsageFormat implements UsageFormat {
 
     private static NativeUsage fromOpenInference(VariantInput input) {
         var keys = input.keys();
-        long promptTokens = keys.get("prompt");
         long cachedTokens = keys.get("prompt_details.cache_read");
-        input.checkCacheWithinInput(promptTokens, cachedTokens);
+        long cacheWriteTokens = keys.get("prompt_details.cache_write");
+        long promptTokens = input.includingCache(keys.get("prompt"), cachedTokens + cacheWriteTokens,
+                keys.get("completion"));
         return builder(input)
                 .promptTokens(promptTokens)
                 .cachedTokens(cachedTokens)
+                .cacheWriteTokens(cacheWriteTokens)
                 .audioPromptTokens(keys.get("prompt_details.audio"))
                 .completionTokens(keys.get("completion"))
                 .reasoningTokens(keys.get("completion_details.reasoning"))

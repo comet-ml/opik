@@ -36,7 +36,6 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
-import com.comet.opik.domain.cost.CostTestUtils;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -1256,9 +1255,8 @@ class FindSpansResourceTest {
                     .endTime(Instant.now().plusMillis(randomNumber()))
                     .provider(provider)
                     .model(model)
-                    .usage(CostTestUtils.storedUsage(
-                            Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)))))
+                    .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
                     .feedbackScores(null)
                     .totalEstimatedCost(null)
                     .build());
@@ -1306,9 +1304,8 @@ class FindSpansResourceTest {
             spans.set(0, spans.getFirst().toBuilder()
                     .model("gpt-3.5-turbo-1106")
                     .provider("openai")
-                    .usage(CostTestUtils.storedUsage(
-                            Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
-                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)))))
+                    .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
                     .build());
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
@@ -3169,7 +3166,7 @@ class FindSpansResourceTest {
             Span span = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectId(null)
                     .projectName(projectName)
-                    .usage(CostTestUtils.storedUsage(Map.of(usageKey, firstUsage)))
+                    .usage(Map.of(usageKey, firstUsage))
                     .feedbackScores(null)
                     .totalEstimatedCost(BigDecimal.ZERO)
                     .build();
@@ -3180,7 +3177,7 @@ class FindSpansResourceTest {
                     .map(it -> it.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
-                            .usage(CostTestUtils.storedUsage(Map.of(usageKey, randomNumber())))
+                            .usage(Map.of(usageKey, randomNumber()))
                             .feedbackScores(null)
                             .build())
                     .forEach(spans::add);
@@ -3224,13 +3221,13 @@ class FindSpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
-                            .usage(CostTestUtils.storedUsage(Map.of(usageKey, 123)))
+                            .usage(Map.of(usageKey, 123))
                             .feedbackScores(null)
                             .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
-                    .usage(CostTestUtils.storedUsage(Map.of(usageKey, 456)))
+                    .usage(Map.of(usageKey, 456))
                     .build());
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
@@ -3274,13 +3271,13 @@ class FindSpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
-                            .usage(CostTestUtils.storedUsage(Map.of(usageKey, 123)))
+                            .usage(Map.of(usageKey, 123))
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .build())
                     .collect(toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
-                    .usage(CostTestUtils.storedUsage(Map.of(usageKey, 456)))
+                    .usage(Map.of(usageKey, 456))
                     .build());
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
@@ -3323,13 +3320,13 @@ class FindSpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
-                            .usage(CostTestUtils.storedUsage(Map.of(usageKey, 456)))
+                            .usage(Map.of(usageKey, 456))
                             .totalEstimatedCost(BigDecimal.ZERO)
                             .feedbackScores(null)
                             .build())
                     .collect(toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
-                    .usage(CostTestUtils.storedUsage(Map.of(usageKey, 123)))
+                    .usage(Map.of(usageKey, 123))
                     .build());
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
@@ -3371,13 +3368,13 @@ class FindSpansResourceTest {
                     .map(span -> span.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
-                            .usage(CostTestUtils.storedUsage(Map.of(usageKey, 456)))
+                            .usage(Map.of(usageKey, 456))
                             .feedbackScores(null)
                             .totalEstimatedCost(BigDecimal.ZERO)
                             .build())
                     .collect(toCollection(ArrayList::new));
             spans.set(0, spans.getFirst().toBuilder()
-                    .usage(CostTestUtils.storedUsage(Map.of(usageKey, 123)))
+                    .usage(Map.of(usageKey, 123))
                     .build());
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);

@@ -1,7 +1,6 @@
 package com.comet.opik.domain.token_usage;
 
 import com.comet.opik.domain.token_usage.model.OpenAiLikeUsage;
-import com.comet.opik.domain.token_usage.model.UsageContext;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -14,9 +13,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
- * Agreement with the Python SDK's {@code opik.llm_usage} while both compute the totals: the same raw usage gives the
- * SDK's totals, and what the SDK sends after converting it is stored unchanged. The numbers are the SDK's own test
- * expectations; nested objects are flattened the way the SDK flattens them.
+ * Agreement with the Python SDK's {@code opik.llm_usage}: the same raw usage gives the SDK's totals. The numbers are the
+ * SDK's own test expectations; nested objects are flattened the way the SDK flattens them.
  */
 class SdkParityTest {
 
@@ -24,7 +22,7 @@ class SdkParityTest {
     @MethodSource
     void createGivesTheSdkTotals(String description, String provider, Map<String, Integer> usage,
             long promptTokens, long completionTokens, long totalTokens) {
-        var openAiLike = SpanUsageFactory.create(provider, usage, UsageContext.NONE).openAiLike();
+        var openAiLike = SpanUsageFactory.create(provider, usage).openAiLike();
 
         assertThat(openAiLike).usingRecursiveComparison().ignoringFields("cachedPromptTokens")
                 .isEqualTo(new OpenAiLikeUsage(promptTokens, completionTokens, totalTokens, null));
@@ -118,59 +116,5 @@ class SdkParityTest {
                 arguments("TypeSafe", "typesafe", usage("input_tokens", 120, "output_tokens", 12), 120, 12, 132),
                 arguments("Usage of an unknown provider", null,
                         usage("prompt_tokens", 20, "completion_tokens", 10, "some_provider_field", 5), 20, 10, 30));
-    }
-
-    @ParameterizedTest(name = "{0}")
-    @MethodSource
-    void toUsageMapKeepsWhatTheSdkSends(String description, String provider, Map<String, Integer> sdkUsage) {
-        var spanUsage = SpanUsageFactory.create(provider, sdkUsage, UsageContext.NONE);
-
-        assertThat(spanUsage.toUsageMap()).isEqualTo(sdkUsage);
-    }
-
-    static Stream<Arguments> toUsageMapKeepsWhatTheSdkSends() {
-        return Stream.of(
-                arguments("OpenAI Chat Completions", "openai",
-                        usage("completion_tokens", 100, "prompt_tokens", 200, "total_tokens", 300,
-                                "original_usage.completion_tokens", 100, "original_usage.prompt_tokens", 200,
-                                "original_usage.total_tokens", 300,
-                                "original_usage.completion_tokens_details.accepted_prediction_tokens", 50,
-                                "original_usage.completion_tokens_details.audio_tokens", 20,
-                                "original_usage.prompt_tokens_details.audio_tokens", 10,
-                                "original_usage.prompt_tokens_details.cached_tokens", 30)),
-                arguments("Gemini", "gemini",
-                        usage("completion_tokens", 100, "prompt_tokens", 200, "total_tokens", 300,
-                                "original_usage.candidates_token_count", 100,
-                                "original_usage.prompt_token_count", 200, "original_usage.total_token_count", 300,
-                                "original_usage.cached_content_token_count", 50)),
-                arguments("Gemini tool use with thoughts", "gemini",
-                        usage("prompt_tokens", 10336, "completion_tokens", 76, "total_tokens", 10412,
-                                "original_usage.prompt_token_count", 27, "original_usage.candidates_token_count", 45,
-                                "original_usage.thoughts_token_count", 31,
-                                "original_usage.tool_use_prompt_token_count", 10309,
-                                "original_usage.total_token_count", 10412)),
-                arguments("Anthropic", "anthropic",
-                        usage("completion_tokens", 100, "prompt_tokens", 280, "total_tokens", 380,
-                                "original_usage.input_tokens", 200, "original_usage.output_tokens", 100,
-                                "original_usage.cache_creation_input_tokens", 50,
-                                "original_usage.cache_read_input_tokens", 30)),
-                arguments("Bedrock Converse", "bedrock",
-                        usage("completion_tokens", 100, "prompt_tokens", 280, "total_tokens", 380,
-                                "original_usage.inputTokens", 200, "original_usage.outputTokens", 100,
-                                "original_usage.cacheWriteInputTokens", 50, "original_usage.cacheReadInputTokens", 30)),
-                arguments("Mistral", "mistral",
-                        usage("prompt_tokens", 22, "completion_tokens", 3, "total_tokens", 25,
-                                "original_usage.prompt_tokens", 22, "original_usage.completion_tokens", 3,
-                                "original_usage.total_tokens", 25,
-                                "original_usage.prompt_tokens_details.cached_tokens", 0)),
-                arguments("TypeSafe", "typesafe",
-                        usage("prompt_tokens", 120, "completion_tokens", 12, "total_tokens", 132,
-                                "original_usage.input_tokens", 120, "original_usage.output_tokens", 12)),
-                arguments("Unknown provider, no provider sent", null,
-                        usage("completion_tokens", 100, "prompt_tokens", 200, "total_tokens", 300,
-                                "original_usage.prompt_tokens", 200, "original_usage.completion_tokens", 100)),
-                arguments("Unknown provider, provider sent", "groq",
-                        usage("completion_tokens", 100, "prompt_tokens", 200, "total_tokens", 300,
-                                "original_usage.prompt_tokens", 200, "original_usage.completion_tokens", 100)));
     }
 }

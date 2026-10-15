@@ -26,6 +26,13 @@ public record OriginalUsage(
 
     public static final OriginalUsage EMPTY = new OriginalUsage(Map.of(), Map.of(), false);
 
+    /** The provider's usage with the keys the client sent next to it, which fill in the counts it lacks. */
+    public OriginalUsage withOuterKeys() {
+        var merged = new TreeMap<>(outerKeys);
+        merged.putAll(keys);
+        return new OriginalUsage(Collections.unmodifiableMap(merged), Map.of(), false);
+    }
+
     public static OriginalUsage from(@Nullable Map<String, Integer> usage) {
         if (usage == null || usage.isEmpty()) {
             return EMPTY;

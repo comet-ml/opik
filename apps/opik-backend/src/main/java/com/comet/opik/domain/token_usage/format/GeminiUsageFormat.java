@@ -18,7 +18,7 @@ final class GeminiUsageFormat implements UsageFormat {
             new InputVariant("openai_style",
                     keys -> keys.hasAny("prompt_tokens", "completion_tokens"),
                     GeminiUsageFormat::fromOpenAiStyle),
-            // The OpenAI Agents SDK, and OTel ingestion once its renamed keys are restored.
+            // The OpenAI Agents SDK.
             new InputVariant("responses_style",
                     keys -> keys.hasAny("input_tokens", "output_tokens"),
                     GeminiUsageFormat::fromResponsesStyle));
@@ -30,25 +30,40 @@ final class GeminiUsageFormat implements UsageFormat {
 
     private static NativeUsage fromNative(VariantInput input) {
         var keys = input.keys();
-        long promptTokenCount = keys.get("prompt_token_count");
         long cachedContentTokenCount = keys.get("cached_content_token_count");
-        input.checkCacheWithinInput(promptTokenCount, cachedContentTokenCount);
+        long toolUsePromptTokenCount = keys.get("tool_use_prompt_token_count");
+        long thoughtsTokenCount = keys.get("thoughts_token_count");
+        // Counts Gemini left out come from the client's totals: its prompt includes the tool results, and its
+        // completion the thoughts.
+        long reportedPromptTokenCount = keys.has("prompt_token_count")
+                ? keys.get("prompt_token_count")
+                : Math.max(0, keys.get("prompt_tokens") - toolUsePromptTokenCount);
+        long candidatesTokenCount = keys.has("candidates_token_count")
+                ? keys.get("candidates_token_count")
+                : Math.max(0, keys.get("completion_tokens") - thoughtsTokenCount);
+        // The cache covers the tool results fed back as input too. Gemini's own total also counts thoughts, so only the
+        // cache-larger-than-input check applies.
+        long promptTokenCount = input.includingCache(reportedPromptTokenCount + toolUsePromptTokenCount,
+                cachedContentTokenCount, null) - toolUsePromptTokenCount;
         return builder(input)
                 .promptTokenCount(promptTokenCount)
                 .cachedContentTokenCount(cachedContentTokenCount)
-                .toolUsePromptTokenCount(keys.get("tool_use_prompt_token_count"))
-                .candidatesTokenCount(keys.get("candidates_token_count"))
-                .thoughtsTokenCount(keys.get("thoughts_token_count"))
+                .toolUsePromptTokenCount(toolUsePromptTokenCount)
+                .candidatesTokenCount(candidatesTokenCount)
+                .thoughtsTokenCount(thoughtsTokenCount)
                 .totalTokenCount(keys.get("total_token_count"))
                 .build();
     }
 
     private static NativeUsage fromOpenAiStyle(VariantInput input) {
         var keys = input.keys();
+        // cache_read.input_tokens and reasoning.output_tokens come from OTel GenAI spans, whose input_tokens and
+        // output_tokens OTel ingestion stores as prompt_tokens and completion_tokens.
         return fromCompletionWithReasoning(input, keys.get("prompt_tokens"),
-                keys.first("cache_read_input_tokens", "prompt_tokens_details.cached_tokens"),
+                keys.first("cache_read_input_tokens", "prompt_tokens_details.cached_tokens", "cache_read.input_tokens"),
                 keys.get("completion_tokens"),
-                keys.first("completion_tokens_details.reasoning_tokens", "reasoning_tokens"));
+                keys.first("completion_tokens_details.reasoning_tokens", "reasoning_tokens",
+                        "reasoning.output_tokens"));
     }
 
     private static NativeUsage fromResponsesStyle(VariantInput input) {
@@ -59,9 +74,9 @@ final class GeminiUsageFormat implements UsageFormat {
                 keys.first("output_tokens_details.reasoning_tokens", "reasoning.output_tokens"));
     }
 
-    private static NativeUsage fromCompletionWithReasoning(VariantInput input, long promptTokens, long cachedTokens,
-            long completionTokens, long reasoningTokens) {
-        input.checkCacheWithinInput(promptTokens, cachedTokens);
+    private static NativeUsage fromCompletionWithReasoning(VariantInput input, long reportedPromptTokens,
+            long cachedTokens, long completionTokens, long reasoningTokens) {
+        long promptTokens = input.includingCache(reportedPromptTokens, cachedTokens, completionTokens);
         long thoughts = Math.min(reasoningTokens, completionTokens);
         return builder(input)
                 .promptTokenCount(promptTokens)

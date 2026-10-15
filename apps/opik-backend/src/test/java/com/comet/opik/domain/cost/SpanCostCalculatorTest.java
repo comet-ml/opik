@@ -2,7 +2,6 @@ package com.comet.opik.domain.cost;
 
 import com.comet.opik.domain.token_usage.SpanUsageFactory;
 import com.comet.opik.domain.token_usage.model.SpanUsage;
-import com.comet.opik.domain.token_usage.model.UsageContext;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -11,6 +10,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static com.comet.opik.domain.token_usage.UsageCases.usage;
@@ -32,7 +32,7 @@ class SpanCostCalculatorTest {
             .build();
 
     private static SpanUsage spanUsage(String provider, Object... keysAndValues) {
-        return SpanUsageFactory.create(provider, usage(keysAndValues), UsageContext.NONE);
+        return SpanUsageFactory.create(provider, usage(keysAndValues));
     }
 
     private static BigDecimal textCost(ModelPrice modelPrice, SpanUsage usage) {
@@ -130,6 +130,40 @@ class SpanCostCalculatorTest {
                             spanUsage("groq", "prompt_tokens", 1000, "completion_tokens", 100,
                                     "prompt_tokens_details.cached_tokens", 200),
                             "11.00"));
+        }
+
+        /** OpenRouter's Claude rates, against which the production spans below were billed on main. */
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        void textGenerationCostBillsCacheWritesAtTheWriteRate(String description, SpanUsage usage,
+                String expectedCost) {
+            var modelPrice = ModelPrice.defaultBuilder()
+                    .inputPrice(new BigDecimal("0.000002"))
+                    .outputPrice(new BigDecimal("0.00001"))
+                    .cacheReadInputTokenPrice(new BigDecimal("0.0000002"))
+                    .cacheCreationInputTokenPrice(new BigDecimal("0.0000025"))
+                    .build();
+
+            assertThat(textCost(modelPrice, usage)).isEqualByComparingTo(expectedCost);
+        }
+
+        static Stream<Arguments> textGenerationCostBillsCacheWritesAtTheWriteRate() {
+            return Stream.of(
+                    // 4 * 0.000002 + 22,574 * 0.0000025 + 51 * 0.00001
+                    Arguments.of("LiteLLM, whose prompt leaves the writes out",
+                            spanUsage("openrouter", "prompt_tokens", 4, "completion_tokens", 51, "total_tokens", 55,
+                                    "original_usage.prompt_tokens", 4, "original_usage.completion_tokens", 51,
+                                    "original_usage.total_tokens", 55,
+                                    "original_usage.cache_creation_input_tokens", 22574),
+                            "0.056953"),
+                    // 1 * 0.000002 + 66,468 * 0.0000025 + 12,036 * 0.0000002 + 1,540 * 0.00001
+                    Arguments.of("flat detail leaves, whose prompt includes the reads and the writes",
+                            spanUsage("openrouter", "prompt_tokens", 78505, "completion_tokens", 1540,
+                                    "total_tokens", 80045, "cache_creation_input_tokens", 66468,
+                                    "cache_read_input_tokens", 12036, "cached_input_tokens", 12036,
+                                    "reasoning_tokens", 1152, "prompt_tokens_details.audio_tokens", 0,
+                                    "completion_tokens_details.audio_tokens", 0),
+                            "0.1839792"));
         }
 
         @Test
@@ -231,13 +265,14 @@ class SpanCostCalculatorTest {
                                     "original_usage.output_tokens", 100,
                                     "original_usage.cache_read_input_tokens", 200,
                                     "original_usage.cache_creation_input_tokens", 50)),
-                    Arguments.of("LiteLLM, whose prompt includes the cache",
+                    Arguments.of("LiteLLM, whose prompt includes the cache and which details it",
                             spanUsage("anthropic", "prompt_tokens", 1250, "completion_tokens", 100,
+                                    "total_tokens", 1350, "prompt_tokens_details.cached_tokens", 200,
                                     "cache_read_input_tokens", 200, "cache_creation_input_tokens", 50)),
-                    Arguments.of("flat OTel keys, whose prompt excludes the cache",
-                            SpanUsageFactory.create("anthropic", usage("prompt_tokens", 1000,
-                                    "completion_tokens", 100, "cache_read_input_tokens", 200,
-                                    "cache_creation_input_tokens", 50), UsageContext.OTEL_RENAMED_KEYS)),
+                    Arguments.of("Anthropic's input renamed prompt_tokens (OTel ingestion, the judge)",
+                            spanUsage("anthropic", "prompt_tokens", 1000, "completion_tokens", 100,
+                                    "total_tokens", 1100, "cache_read_input_tokens", 200,
+                                    "cache_creation_input_tokens", 50)),
                     Arguments.of("Claude on Vertex",
                             spanUsage("vertex_ai-anthropic_models", "input_tokens", 1000, "output_tokens", 100,
                                     "cache_read_input_tokens", 200, "cache_creation_input_tokens", 50)));
@@ -340,10 +375,6 @@ class SpanCostCalculatorTest {
                             spanUsage("gemini", "prompt_tokens", 1000, "completion_tokens", 100,
                                     "cache_read_input_tokens", 200),
                             "11.00"),
-                    Arguments.of("flat OTel cache key, after OTel ingestion's rename", CACHE_PRICES,
-                            SpanUsageFactory.create("gemini", usage("prompt_tokens", 1000, "completion_tokens", 100,
-                                    "cache_read_input_tokens", 200), UsageContext.OTEL_RENAMED_KEYS),
-                            "11.00"),
                     // (27 + 10309) * 0.01 + (45 + 31) * 0.02 = 103.36 + 1.52
                     Arguments.of("tool-use prompt tokens are input", CACHE_PRICES,
                             spanUsage("gemini", "original_usage.prompt_token_count", 27,
@@ -393,6 +424,180 @@ class SpanCostCalculatorTest {
         void defaultCostIsZero() {
             assertThat(SpanCostCalculator.defaultCost(CACHE_PRICES,
                     spanUsage("openai", "prompt_tokens", 1000, "completion_tokens", 100))).isZero();
+        }
+    }
+
+    /** The SDK's totals next to only some of the provider's keys, which the provider's format can't read alone. */
+    @Nested
+    class SdkTotalsWithSomeProviderKeys {
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        void textGenerationCostBillsTheDetailsAtTheirRates(String description, ModelPrice modelPrice,
+                SpanUsage usage, String expectedCost) {
+            assertThat(textCost(modelPrice, usage)).isEqualByComparingTo(expectedCost);
+        }
+
+        static Stream<Arguments> textGenerationCostBillsTheDetailsAtTheirRates() {
+            ModelPrice geminiLivePrices = ModelPrice.defaultBuilder()
+                    .inputPrice(new BigDecimal("0.00000075"))
+                    .outputPrice(new BigDecimal("0.0000045"))
+                    .inputAudioTokenPrice(new BigDecimal("0.000003"))
+                    .outputAudioTokenPrice(new BigDecimal("0.000012"))
+                    .build();
+            return Stream.of(
+                    // Production: (9,172 - 3,747) * 0.00000075 + 3,747 * 0.000003 + 256 * 0.000012
+                    Arguments.of("Gemini Live audio", geminiLivePrices,
+                            spanUsage("google_ai", "prompt_tokens", 9172, "completion_tokens", 256,
+                                    "total_tokens", 9428, "original_usage.prompt_tokens_details.audio_tokens", 3747,
+                                    "original_usage.completion_tokens_details.audio_tokens", 256,
+                                    "original_usage.thoughtsTokenCount", 539),
+                            "0.01838175"),
+                    // 1000 * 0.01 + (100 - 40) * 0.02 + 40 * 0.003
+                    Arguments.of("reasoning", NO_CACHE_PRICES.toBuilder()
+                            .outputReasoningTokenPrice(new BigDecimal("0.003")).build(),
+                            spanUsage("gemini", "prompt_tokens", 1000, "completion_tokens", 100,
+                                    "original_usage.completion_tokens_details.reasoning_tokens", 40),
+                            "11.32"));
+        }
+    }
+
+    /**
+     * Every text-generation case of {@code main}'s calculator tests, with its usage, rates and expected cost unchanged.
+     * {@code main} picked a calculator by provider: each case runs under the provider whose calculator it covered, and
+     * the cases of its default calculator under OpenAI's format, which every provider without one of its own reads.
+     */
+    @Nested
+    class CasesFromMain {
+
+        private static final ModelPrice NO_CACHE = ModelPrice.defaultBuilder()
+                .inputPrice(new BigDecimal("0.01"))
+                .outputPrice(new BigDecimal("0.02"))
+                .build();
+        private static final ModelPrice CACHE_READ = NO_CACHE.toBuilder()
+                .cacheReadInputTokenPrice(new BigDecimal("0.005"))
+                .build();
+        private static final ModelPrice REASONING = NO_CACHE.toBuilder()
+                .outputReasoningTokenPrice(new BigDecimal("0.003"))
+                .build();
+        private static final ModelPrice REASONING_AND_AUDIO = REASONING.toBuilder()
+                .outputAudioTokenPrice(new BigDecimal("0.08"))
+                .build();
+        private static final ModelPrice CACHE_READ_AND_AUDIO = CACHE_READ.toBuilder()
+                .inputAudioTokenPrice(new BigDecimal("0.05"))
+                .outputAudioTokenPrice(new BigDecimal("0.08"))
+                .build();
+
+        @ParameterizedTest(name = "{0} ({1})")
+        @MethodSource
+        void textGenerationCost(String description, String provider, ModelPrice modelPrice,
+                Map<String, Integer> usage, String expectedCost) {
+            assertThat(textCost(modelPrice, SpanUsageFactory.create(provider, usage)))
+                    .isEqualByComparingTo(expectedCost);
+        }
+
+        static Stream<Arguments> textGenerationCost() {
+            return Stream.of(
+                    // Default calculator: reasoning
+                    Arguments.of("reasoning rate set: bare reasoning key", "openai", REASONING,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 500,
+                                    "completion_tokens_details.reasoning_tokens", 200),
+                            "16.60"),
+                    Arguments.of("reasoning rate set: original_usage.* reasoning key", "openai", REASONING,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 500,
+                                    "original_usage.completion_tokens_details.reasoning_tokens", 200),
+                            "16.60"),
+                    Arguments.of("reasoning and audio rates set", "openai", REASONING_AND_AUDIO,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 500,
+                                    "completion_tokens_details.audio_tokens", 100,
+                                    "completion_tokens_details.reasoning_tokens", 200),
+                            "22.60"),
+                    Arguments.of("reasoning rate unset", "openai", NO_CACHE,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 500,
+                                    "completion_tokens_details.reasoning_tokens", 200),
+                            "20.00"),
+                    Arguments.of("reasoning rate set, no reasoning key", "openai", REASONING,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 500),
+                            "20.00"),
+                    Arguments.of("reasoning equals completion", "openai", REASONING,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 500,
+                                    "completion_tokens_details.reasoning_tokens", 500),
+                            "11.50"),
+                    Arguments.of("over-reported reasoning", "openai", REASONING,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                    "completion_tokens_details.reasoning_tokens", 200),
+                            "10.30"),
+                    Arguments.of("negative reasoning", "openai", REASONING,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 500,
+                                    "completion_tokens_details.reasoning_tokens", -10),
+                            "20.00"),
+                    // OpenAI cache calculator
+                    Arguments.of("OTel cache_read_input_tokens key", "openai", CACHE_READ,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 100, "cache_read_input_tokens", 200),
+                            "11.00"),
+                    Arguments.of("original_usage key takes precedence over OTel key", "openai", CACHE_READ,
+                            Map.of("original_usage.prompt_tokens", 1000, "original_usage.completion_tokens", 100,
+                                    "original_usage.prompt_tokens_details.cached_tokens", 300,
+                                    "cache_read_input_tokens", 200),
+                            "10.50"),
+                    Arguments.of("Responses API input_tokens_details.cached_tokens key", "openai", CACHE_READ,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                    "original_usage.input_tokens_details.cached_tokens", 300),
+                            "10.50"),
+                    Arguments.of("audio rates set: realtime usage", "openai", CACHE_READ_AND_AUDIO,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 500, "cache_read_input_tokens", 200,
+                                    "prompt_tokens_details.audio_tokens", 300,
+                                    "completion_tokens_details.audio_tokens", 100),
+                            "37.00"),
+                    Arguments.of("audio rates unset: audio keys ignored", "openai", CACHE_READ,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 100, "cache_read_input_tokens", 200,
+                                    "prompt_tokens_details.audio_tokens", 300,
+                                    "completion_tokens_details.audio_tokens", 50),
+                            "11.00"),
+                    Arguments.of("audio rates set: original_usage.* keys", "openai", CACHE_READ_AND_AUDIO,
+                            Map.of("original_usage.prompt_tokens", 1000, "original_usage.completion_tokens", 500,
+                                    "original_usage.prompt_tokens_details.cached_tokens", 200,
+                                    "original_usage.prompt_tokens_details.audio_tokens", 300,
+                                    "original_usage.completion_tokens_details.audio_tokens", 100),
+                            "37.00"),
+                    Arguments.of("text_tokens preferred over subtraction", "openai", CACHE_READ_AND_AUDIO,
+                            Map.of("original_usage.prompt_tokens", 1000, "original_usage.completion_tokens", 500,
+                                    "original_usage.prompt_tokens_details.cached_tokens", 200,
+                                    "original_usage.prompt_tokens_details.audio_tokens", 300,
+                                    "original_usage.prompt_tokens_details.text_tokens", 480,
+                                    "original_usage.completion_tokens_details.audio_tokens", 100,
+                                    "original_usage.completion_tokens_details.text_tokens", 400),
+                            "36.80"),
+                    // Google cache calculator
+                    Arguments.of("Gemini cached_content_token_count key", "gemini", CACHE_READ,
+                            Map.of("original_usage.prompt_token_count", 1000, "completion_tokens", 100,
+                                    "original_usage.cached_content_token_count", 300),
+                            "10.50"),
+                    Arguments.of("Gemini OTel cache_read_input_tokens key", "gemini", CACHE_READ,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 100, "cache_read_input_tokens", 200),
+                            "11.00"),
+                    Arguments.of("Gemini tool_use_prompt_token_count counted as input", "gemini", CACHE_READ,
+                            Map.of("original_usage.prompt_token_count", 27, "completion_tokens", 76,
+                                    "original_usage.tool_use_prompt_token_count", 10309),
+                            "104.88"),
+                    Arguments.of("Gemini tool use with cached content", "gemini", CACHE_READ,
+                            Map.of("original_usage.prompt_token_count", 1000, "completion_tokens", 100,
+                                    "original_usage.tool_use_prompt_token_count", 500,
+                                    "original_usage.cached_content_token_count", 300),
+                            "15.50"),
+                    Arguments.of("Gemini prompt_tokens already includes tool use", "gemini", CACHE_READ,
+                            Map.of("prompt_tokens", 10336, "completion_tokens", 76,
+                                    "original_usage.tool_use_prompt_token_count", 10309),
+                            "104.88"),
+                    // Anthropic and Bedrock cache calculators: OTel cache keys next to Anthropic's input as prompt_tokens
+                    Arguments.of("Anthropic OTel cache keys", "anthropic", CACHE_PRICES,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 100, "cache_read_input_tokens", 200,
+                                    "cache_creation_input_tokens", 50),
+                            "13.75"),
+                    Arguments.of("Bedrock OTel cache keys", "bedrock", CACHE_PRICES,
+                            Map.of("prompt_tokens", 1000, "completion_tokens", 100, "cache_read_input_tokens", 200,
+                                    "cache_creation_input_tokens", 50),
+                            "13.75"));
         }
     }
 

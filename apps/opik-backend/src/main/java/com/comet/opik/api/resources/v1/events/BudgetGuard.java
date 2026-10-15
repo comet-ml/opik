@@ -3,7 +3,6 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.evaluation.LlmUsageExtractor;
 import com.comet.opik.domain.llm.LlmProviderFactory;
-import com.comet.opik.domain.token_usage.model.UsageContext;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -95,8 +94,7 @@ public final class BudgetGuard {
             if (usage == null) {
                 return;
             }
-            var cost = CostService.calculateCost(model, provider,
-                    CostService.toSpanUsage(provider, model, usage, UsageContext.NONE), null);
+            var cost = CostService.calculateCost(model, provider, usage, null);
             if (cost.signum() == 0 && !unpricedWarned) {
                 // The model resolved but (model, provider) has no entry in the price table, so every
                 // call prices at zero and the budget can never trip. Unlike the resolution/pricing

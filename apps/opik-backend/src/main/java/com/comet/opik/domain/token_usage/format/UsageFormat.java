@@ -13,11 +13,16 @@ interface UsageFormat {
 
     List<InputVariant> inputVariants();
 
+    /**
+     * The variant is picked from the provider's own keys. Its counts also come from the keys the client sent next to
+     * them, such as the SDK's totals, for the ones the provider's keys lack.
+     */
     default Optional<NativeUsage> normalize(@NonNull String provider, @NonNull OriginalUsage original,
             @NonNull List<UsageWarning> warnings) {
-        var keys = UsageKeys.of(original);
+        var providerKeys = UsageKeys.of(original);
+        var keys = original.nested() ? UsageKeys.of(original.withOuterKeys()) : providerKeys;
         return inputVariants().stream()
-                .filter(variant -> variant.matches().test(keys))
+                .filter(variant -> variant.matches().test(providerKeys))
                 .findFirst()
                 .map(variant -> variant.toNative().apply(new VariantInput(provider, variant.name(), keys, warnings)));
     }

@@ -80,7 +80,8 @@ class SpanCostCalculator {
         // own; otherwise they bill as text.
         long audioPromptTokens = isPositive(modelPrice.inputAudioTokenPrice()) ? usage.audioPromptTokens() : 0;
         long textPromptTokens = Optional.ofNullable(usage.textPromptTokens())
-                .orElse(Math.max(0, usage.promptTokens() - usage.cachedTokens() - audioPromptTokens));
+                .orElse(Math.max(0,
+                        usage.promptTokens() - usage.cachedTokens() - usage.cacheWriteTokens() - audioPromptTokens));
         long audioCompletionTokens = isPositive(modelPrice.outputAudioTokenPrice())
                 ? usage.audioCompletionTokens()
                 : 0;
@@ -94,6 +95,8 @@ class SpanCostCalculator {
                 .add(cost(modelPrice.inputAudioTokenPrice(), audioPromptTokens))
                 .add(cost(orInputPrice(modelPrice.effectiveCacheReadInputTokenPrice(tierBasis), inputPrice),
                         usage.cachedTokens()))
+                .add(cost(orInputPrice(modelPrice.effectiveCacheCreationInputTokenPrice(tierBasis), inputPrice),
+                        usage.cacheWriteTokens()))
                 .add(cost(outputPrice, textCompletionTokens - reasoningTokens))
                 .add(cost(modelPrice.outputAudioTokenPrice(), audioCompletionTokens))
                 .add(cost(modelPrice.outputReasoningTokenPrice(), reasoningTokens));

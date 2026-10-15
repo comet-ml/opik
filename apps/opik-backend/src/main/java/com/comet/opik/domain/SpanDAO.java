@@ -14,7 +14,6 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.stats.StatsMerger;
-import com.comet.opik.domain.token_usage.model.UsageContext;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.domain.workspaces.WorkspacesService;
@@ -2323,8 +2322,8 @@ public class SpanDAO {
             statement.bind("total_estimated_cost_version", "");
         } else if (!isManualCostExist && isUpdateCostRecalculationAvailable(spanUpdate)) {
             // Calculate estimated cost only in case Span doesn't have manually set cost
-            BigDecimal estimatedCost = estimateCost(spanUpdate.model(), spanUpdate.provider(), spanUpdate.usage(),
-                    spanUpdate.metadata());
+            BigDecimal estimatedCost = CostService.calculateCost(spanUpdate.model(), spanUpdate.provider(),
+                    spanUpdate.usage(), spanUpdate.metadata());
             statement.bind("total_estimated_cost", estimatedCost.toString());
             statement.bind("total_estimated_cost_version",
                     estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
@@ -2849,13 +2848,7 @@ public class SpanDAO {
                         .map(metadata -> metadata.get("model"))
                         .map(JsonNode::asText).orElse("");
 
-        return estimateCost(model, span.provider(), span.usage(), span.metadata());
-    }
-
-    private static BigDecimal estimateCost(String model, String provider, Map<String, Integer> usage,
-            JsonNode metadata) {
-        return CostService.calculateCost(model, provider,
-                CostService.toSpanUsage(provider, model, usage, UsageContext.NONE), metadata);
+        return CostService.calculateCost(model, span.provider(), span.usage(), span.metadata());
     }
 
     private Flux<? extends Result> findSpanStream(int limit, SpanSearchCriteria criteria, Connection connection) {
@@ -3344,7 +3337,7 @@ public class SpanDAO {
     }
 
     private boolean isUpdateCostRecalculationAvailable(SpanUpdate spanUpdate) {
-        return estimateCost(spanUpdate.model(), spanUpdate.provider(), spanUpdate.usage(),
+        return CostService.calculateCost(spanUpdate.model(), spanUpdate.provider(), spanUpdate.usage(),
                 spanUpdate.metadata()).compareTo(BigDecimal.ZERO) > 0;
     }
 

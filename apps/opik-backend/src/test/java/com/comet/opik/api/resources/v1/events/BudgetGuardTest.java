@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.domain.cost.CostService;
-import com.comet.opik.domain.cost.CostTestUtils;
 import com.comet.opik.domain.evaluation.LlmUsageExtractor;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import dev.langchain4j.data.message.AiMessage;
@@ -73,7 +72,7 @@ class BudgetGuardTest {
         // Derive the per-call cost from CostService for the same (model, provider, usage) rather than
         // hardcoding it, so a bundled price-table update moves the expectation with it instead of
         // silently breaking this guard test.
-        var perCallCost = CostTestUtils.calculateCost("gpt-4o", "openai",
+        var perCallCost = CostService.calculateCost("gpt-4o", "openai",
                 LlmUsageExtractor.toUsageMap(responseWith(100_000, 0)), null);
         assertThat(perCallCost).isGreaterThan(BigDecimal.ZERO); // guard against an unpriced-model false pass
         var limit = perCallCost.add(perCallCost); // trips exactly on the second identical call

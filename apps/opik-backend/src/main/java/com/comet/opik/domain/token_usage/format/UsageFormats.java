@@ -37,11 +37,16 @@ public class UsageFormats {
 
     /**
      * The provider's native usage, from the first input variant of its format that matches the usage, or empty when
-     * none does.
+     * none does. The SDK keeps whatever provider keys it received under {@code original_usage.*}, which can be only a
+     * few details (cached or audio tokens) next to its own OpenAI-style totals; when its format can't read those, the
+     * two are read together as OpenAI usage.
      */
     public Optional<NativeUsage> normalize(@NonNull String provider, @NonNull OriginalUsage original,
             @NonNull List<UsageWarning> warnings) {
-        return forProvider(provider).normalize(provider, original, warnings);
+        return forProvider(provider).normalize(provider, original, warnings)
+                .or(() -> original.nested()
+                        ? OPENAI.normalize(provider, original.withOuterKeys(), warnings)
+                        : Optional.empty());
     }
 
     UsageFormat forProvider(@NonNull String provider) {

@@ -19,9 +19,10 @@ public record GeminiNativeUsage(
         // Tool results are fed back to the model as input, so they count on the prompt side.
         long promptTokens = promptTokenCount + toolUsePromptTokenCount;
         // Gemini reports thinking outside the candidates and bills it as output. Some integrations' totals leave it
-        // out (LangChain's equals prompt + candidates), so the total is derived rather than taken as reported.
+        // out (LangChain's equals prompt + candidates), so a reported total below the counts gives way to their sum.
+        // One above them covers counts the client didn't send, such as a missing prompt, and is kept.
         long completionTokens = candidatesTokenCount + thoughtsTokenCount;
-        return OpenAiLikeUsage.of(promptTokens, completionTokens, promptTokens + completionTokens,
-                cachedContentTokenCount);
+        return OpenAiLikeUsage.of(promptTokens, completionTokens,
+                Math.max(totalTokenCount, promptTokens + completionTokens), cachedContentTokenCount);
     }
 }

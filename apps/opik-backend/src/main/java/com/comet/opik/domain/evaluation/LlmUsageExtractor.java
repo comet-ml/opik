@@ -39,29 +39,31 @@ public final class LlmUsageExtractor {
             return null;
         }
         var usage = new HashMap<String, Integer>();
-        if (tokenUsage instanceof AnthropicTokenUsage anthropic) {
-            // Anthropic's input count excludes the cache, so it keeps Anthropic's own names: as prompt_tokens it
-            // would be read as including the cache.
-            putIfPresent(usage, "input_tokens", anthropic.inputTokenCount());
-            putIfPresent(usage, "output_tokens", anthropic.outputTokenCount());
-            putPositive(usage, "cache_creation_input_tokens", anthropic.cacheCreationInputTokens());
-            putPositive(usage, "cache_read_input_tokens", anthropic.cacheReadInputTokens());
-            return usage.isEmpty() ? null : usage;
+        if (tokenUsage.inputTokenCount() != null) {
+            usage.put("prompt_tokens", tokenUsage.inputTokenCount());
         }
-        putIfPresent(usage, "prompt_tokens", tokenUsage.inputTokenCount());
-        putIfPresent(usage, "completion_tokens", tokenUsage.outputTokenCount());
-        putIfPresent(usage, "total_tokens", tokenUsage.totalTokenCount());
+        if (tokenUsage.outputTokenCount() != null) {
+            usage.put("completion_tokens", tokenUsage.outputTokenCount());
+        }
+        if (tokenUsage.totalTokenCount() != null) {
+            usage.put("total_tokens", tokenUsage.totalTokenCount());
+        }
         addCacheTokens(tokenUsage, usage);
         return usage.isEmpty() ? null : usage;
     }
 
     /**
-     * Records provider-reported prompt-cache token counts, which the cost calculation bills at the cache-read rate.
-     * Their prompt count includes them. No-op for providers/responses without cache usage, so cost is unchanged when
-     * caching is off (the current default).
+     * Records provider-reported prompt-cache token counts under the keys
+     * {@link com.comet.opik.domain.cost.SpanCostCalculator} prices: cache-read tokens are billed at a
+     * reduced rate and cache-creation tokens at a surcharge. No-op for providers/responses without
+     * cache usage, so cost is unchanged when caching is off (the current default).
      */
     private static void addCacheTokens(TokenUsage tokenUsage, Map<String, Integer> usage) {
         switch (tokenUsage) {
+            case AnthropicTokenUsage anthropic -> {
+                putPositive(usage, "cache_creation_input_tokens", anthropic.cacheCreationInputTokens());
+                putPositive(usage, "cache_read_input_tokens", anthropic.cacheReadInputTokens());
+            }
             // OpenAI-family providers (OpenAI, OpenRouter, custom-llm, Ollama, free) all return this type.
             case OpenAiTokenUsage openai -> {
                 if (openai.inputTokensDetails() != null) {
@@ -80,12 +82,6 @@ public final class LlmUsageExtractor {
                 putPositive(usage, "cache_read_input_tokens", gemini.cachedContentTokenCount());
             default -> {
             }
-        }
-    }
-
-    private static void putIfPresent(Map<String, Integer> usage, String key, Integer value) {
-        if (value != null) {
-            usage.put(key, value);
         }
     }
 
