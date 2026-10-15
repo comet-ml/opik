@@ -77,7 +77,8 @@ class AiLabelRenderDAO {
      */
     private static final String FIND_SPANS = """
             SELECT trace_id, id, parent_span_id, guarded_name AS name, type, guarded_input AS input, guarded_output AS output,
-                guarded_metadata AS metadata, start_time, end_time, model, provider, guarded_error_info AS error_info
+                guarded_metadata AS metadata, start_time, end_time, guarded_model AS model,
+                guarded_provider AS provider, guarded_error_info AS error_info
             FROM (
                 SELECT
                     trace_id,
@@ -94,8 +95,10 @@ class AiLabelRenderDAO {
                         concat('"[', toString(length(metadata)), ' bytes omitted]"'), metadata) AS guarded_metadata,
                     start_time,
                     end_time,
-                    model,
-                    provider,
+                    if(length(model) > :max_field_bytes,
+                        concat('[', toString(length(model)), ' bytes omitted]'), model) AS guarded_model,
+                    if(length(provider) > :max_field_bytes,
+                        concat('[', toString(length(provider)), ' bytes omitted]'), provider) AS guarded_provider,
                     if(length(error_info) > :max_field_bytes,
                         concat('"[', toString(length(error_info)), ' bytes omitted]"'), error_info) AS guarded_error_info
                     <if(spans_v2)>, is_deleted<endif>
