@@ -136,6 +136,14 @@ class PromptServiceImpl implements PromptService {
     private static final String MASK_ENV_NOT_ALLOWED = "environment cannot be set on a mask version";
     private static final String ENV_MASK_MUTUALLY_EXCLUSIVE = "environment and mask_id are mutually exclusive";
 
+    /**
+     * Compares metadata values the way the SDKs' checks do: 1 and 1.0 are the same value, while
+     * {@link JsonNode#equals(Object)} also compares the number's type.
+     */
+    private static final Comparator<JsonNode> METADATA_VALUE_COMPARATOR = (a, b) -> a.isNumber() && b.isNumber()
+            ? a.decimalValue().compareTo(b.decimalValue())
+            : a.equals(b) ? 0 : 1;
+
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate transactionTemplate;
@@ -427,28 +435,22 @@ class PromptServiceImpl implements PromptService {
         });
     }
 
-    // Same check as the SDKs' idempotent create, so a client whose own check misfires doesn't pile up identical
-    // versions. Only a plain content save qualifies: an explicit id, commit, environment, change description or tags
-    // asks for a new version, and masks are versioned on their own.
+    /**
+     * Runs the SDKs' idempotent create check, so a client whose own check misfires doesn't pile up identical versions.
+     *
+     * @return the prompt's latest version when the request is a plain content save with the same content, otherwise
+     *         {@code null} and the caller creates a new version
+     */
     private PromptVersion findUnchangedLatestVersion(String workspaceId, Prompt prompt, PromptVersion request,
             Set<String> environments) {
-        if (request.id() != null || request.commit() != null || request.versionType() == PromptVersionType.MASK
-                || !environments.isEmpty() || StringUtils.isNotBlank(request.changeDescription())
-                || CollectionUtils.isNotEmpty(request.tags())) {
+        if (!isPlainContentSave(request, environments)) {
             return null;
         }
 
-        PromptVersion latest = transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            PromptVersionDAO dao = handle.attach(PromptVersionDAO.class);
-            return dao.findLatestVersionId(workspaceId, prompt.id())
-                    .map(id -> dao.findByIds(List.of(id), workspaceId).getFirst())
-                    .orElse(null);
-        });
+        PromptVersion latest = transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(PromptVersionDAO.class).findLatestVersion(workspaceId, prompt.id()));
 
-        if (latest == null
-                || latest.type() != request.type()
-                || !isSameTemplate(prompt.templateStructure(), latest.template(), request.template())
-                || !isSameMetadata(latest.metadata(), request.metadata())) {
+        if (!hasSameContent(prompt, latest, request)) {
             return null;
         }
 
@@ -457,29 +459,53 @@ class PromptServiceImpl implements PromptService {
                 .build();
     }
 
-    // Chat templates are JSON, so formatting differences alone don't make a new version
-    private static boolean isSameTemplate(TemplateStructure structure, String latest, String requested) {
-        if (structure == TemplateStructure.CHAT) {
+    /**
+     * Whether the request only saves content. An explicit id, commit, environment, change description or tags asks
+     * for a new version, and masks are versioned on their own.
+     */
+    private static boolean isPlainContentSave(PromptVersion request, Set<String> environments) {
+        return request.id() == null
+                && request.commit() == null
+                && request.versionType() != PromptVersionType.MASK
+                && CollectionUtils.isEmpty(environments)
+                && StringUtils.isBlank(request.changeDescription())
+                && CollectionUtils.isEmpty(request.tags());
+    }
+
+    /**
+     * Whether the latest version has the requested type, template and metadata: the fields the SDKs compare.
+     */
+    private static boolean hasSameContent(Prompt prompt, PromptVersion latest, PromptVersion request) {
+        return latest != null
+                && latest.type() == request.type()
+                && isSameTemplate(prompt, latest.template(), request.template())
+                && isSameMetadata(latest.metadata(), request.metadata());
+    }
+
+    /**
+     * Chat templates are compared as parsed JSON, so formatting differences alone don't make a new version.
+     */
+    private static boolean isSameTemplate(Prompt prompt, String latest, String requested) {
+        if (prompt.templateStructure() == TemplateStructure.CHAT) {
             try {
                 return JsonUtils.getJsonNodeFromString(latest).equals(JsonUtils.getJsonNodeFromString(requested));
             } catch (UncheckedIOException e) {
-                // Not both JSON: only the exact text is the same template
+                log.info("Chat template of prompt id '{}' isn't valid JSON, comparing it as text: '{}'", prompt.id(),
+                        e.getMessage());
                 return latest.equals(requested);
             }
         }
         return latest.equals(requested);
     }
 
+    /**
+     * Null and empty metadata are the same, and numbers are compared by value.
+     */
     private static boolean isSameMetadata(JsonNode latest, JsonNode requested) {
         return isEmptyMetadata(latest)
                 ? isEmptyMetadata(requested)
                 : latest.equals(METADATA_VALUE_COMPARATOR, requested);
     }
-
-    // 1 and 1.0 are the same value to the SDKs' checks, while JsonNode.equals also compares the number's type
-    private static final Comparator<JsonNode> METADATA_VALUE_COMPARATOR = (a, b) -> a.isNumber() && b.isNumber()
-            ? a.decimalValue().compareTo(b.decimalValue())
-            : a.equals(b) ? 0 : 1;
 
     private static boolean isEmptyMetadata(JsonNode metadata) {
         return metadata == null || metadata.isNull() || (metadata.isObject() && metadata.isEmpty());

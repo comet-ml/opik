@@ -22,7 +22,6 @@ import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -262,16 +261,29 @@ interface PromptVersionDAO {
             """)
     int findMaxVersionNumber(@Bind("workspace_id") String workspaceId, @Bind("prompt_id") UUID promptId);
 
-    // MAX is answered from the index end, while ORDER BY id DESC LIMIT 1 can be planned as a reverse primary key scan
-    // that reads the whole table's newer rows before reaching an old prompt's latest version.
+    /**
+     * Finds the prompt's latest version: the one with the highest id, as every other "latest" read picks it.
+     *
+     * <p>The id comes from {@code MAX}, which the index answers from its end. {@code ORDER BY id DESC LIMIT 1} can be
+     * planned as a reverse primary key scan instead, reading the whole table's newer rows before it reaches an old
+     * prompt's latest version.
+     */
     @SqlQuery("""
-            SELECT MAX(id)
-            FROM prompt_versions
-            WHERE workspace_id = :workspace_id
-            AND prompt_id = :prompt_id
-            AND version_type = 'prompt_version'
+            SELECT pv.*,
+                p.template_structure,
+                (SELECT JSON_ARRAYAGG(pve.environment) FROM prompt_version_envs pve WHERE pve.workspace_id = pv.workspace_id AND pve.version_id = pv.id AND pve.ended_at IS NULL) AS environments
+            FROM prompt_versions pv
+            INNER JOIN prompts p ON pv.prompt_id = p.id AND p.workspace_id = pv.workspace_id
+            WHERE pv.workspace_id = :workspace_id
+            AND pv.id = (
+                SELECT MAX(id)
+                FROM prompt_versions
+                WHERE workspace_id = :workspace_id
+                AND prompt_id = :prompt_id
+                AND version_type = 'prompt_version'
+            )
             """)
-    Optional<UUID> findLatestVersionId(@Bind("workspace_id") String workspaceId, @Bind("prompt_id") UUID promptId);
+    PromptVersion findLatestVersion(@Bind("workspace_id") String workspaceId, @Bind("prompt_id") UUID promptId);
 
     /**
      * Batch update for multiple prompt versions in a single database operation.

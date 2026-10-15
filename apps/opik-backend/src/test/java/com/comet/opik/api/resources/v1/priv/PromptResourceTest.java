@@ -112,6 +112,7 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.resources.PromptTestAssertions.PROMPT_IGNORED_FIELDS;
+import static com.comet.opik.api.resources.utils.resources.PromptTestAssertions.PROMPT_VERSION_SERVER_SET_FIELDS;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.DESCRIPTION;
@@ -2621,8 +2622,7 @@ class PromptResourceTest {
             assertThat(actualVersion)
                     .usingRecursiveComparison()
                     .ignoringExpectedNullFields()
-                    .ignoringFields("promptId", "versionNumber", "variables", "templateStructure", "createdAt",
-                            "createdBy")
+                    .ignoringFields(PROMPT_VERSION_SERVER_SET_FIELDS)
                     .isEqualTo(requested);
             assertThat(actualVersion.id()).isNotEqualTo(latestVersion.id());
 
@@ -2660,8 +2660,7 @@ class PromptResourceTest {
             assertThat(actualMask)
                     .usingRecursiveComparison()
                     .ignoringExpectedNullFields()
-                    .ignoringFields("promptId", "versionNumber", "variables", "templateStructure", "createdAt",
-                            "createdBy")
+                    .ignoringFields(PROMPT_VERSION_SERVER_SET_FIELDS)
                     .isEqualTo(mask);
             assertThat(actualMask.id()).isNotEqualTo(latestVersion.id());
 
