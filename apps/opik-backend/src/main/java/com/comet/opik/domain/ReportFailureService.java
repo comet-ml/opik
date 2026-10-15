@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.ReportFailure;
 import com.comet.opik.api.ReportFailureType;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -52,22 +51,8 @@ class ReportFailureServiceImpl implements ReportFailureService {
                 failure.type().getValue(), failure.projectId(), workspaceId, failure.reason());
 
         transactionTemplate.inTransaction(WRITE, handle -> {
-            boolean outOfCredits = AgentInsightsJob.FailureReason.OUT_OF_CREDITS.equals(failure.reason());
-            if (outOfCredits) {
-                // The job row is updated below too: lock it before report_failures
-                handle.attach(AgentInsightsJobDAO.class).lockByProject(workspaceId, failure.projectId());
-            }
-            handle.attach(ReportFailureDAO.class).insert(id, workspaceId, failure.type().getValue(),
+            AgentInsightsJobService.recordFailure(handle, id, workspaceId, failure.type().getValue(),
                     failure.projectId(), failure.reason(), failure.detail(), userName);
-            if (outOfCredits
-                    && handle.attach(AgentInsightsJobDAO.class)
-                            .updateStatusIfCurrent(workspaceId, failure.projectId(),
-                                    AgentInsightsJob.Status.ENABLED.getValue(),
-                                    AgentInsightsJob.Status.DISABLED.getValue(),
-                                    RequestContext.SYSTEM_USER) > 0) {
-                log.info("Disabled the Agent Insights schedule for project '{}' in workspace '{}': out of credits",
-                        failure.projectId(), workspaceId);
-            }
             return null;
         });
         return id;

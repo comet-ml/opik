@@ -432,6 +432,26 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
+    @DisplayName("A reaped run that reports back before its retry is dispatched isn't run again")
+    void reapTimedOutAutoFirstRuns__resultLandsBeforeRetry__doesNotRunAgain() {
+        var projectId = createProjectWithClaimedAutoFirstRun();
+        backdateAutoFirstRunClaim(projectId);
+        jobService.reapTimedOutAutoFirstRuns(RUN_TIMEOUT, 1);
+
+        // The original run was only slow: its result lands after the reap cleared the claim for a retry.
+        insightsClient.reportIssues(
+                AgentInsightsReport.builder().projectId(projectId).reportDay(LocalDate.now()).issues(List.of())
+                        .build(),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+        var before = getJob(projectId);
+
+        autoFirstRunJob.runSweep(Instant.now(), SWEEP_ALL).block();
+
+        assertThat(triggerCount(projectId)).isEqualTo(1);
+        assertJob(projectId, before);
+    }
+
+    @Test
     @DisplayName("Reaping stops retrying an automatic run once it has used up its retries")
     void reapTimedOutAutoFirstRuns__givesUpAfterMaxRetries() {
         var projectId = createProjectWithClaimedAutoFirstRun();

@@ -12,8 +12,10 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.jdbi.v3.core.Handle;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -170,22 +172,28 @@ public class AgentInsightsJobService {
     public void markRunFailed(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull String code,
             String detail) {
         transactionTemplate.inTransaction(WRITE, handle -> {
-            boolean outOfCredits = AgentInsightsJob.FailureReason.OUT_OF_CREDITS.equals(code);
-            if (outOfCredits) {
-                // The job row is updated below too: lock it before report_failures
-                handle.attach(AgentInsightsJobDAO.class).lockByProject(workspaceId, projectId);
-            }
-            handle.attach(ReportFailureDAO.class).insert(idGenerator.generateId(), workspaceId,
-                    ReportFailureDAO.AGENT_INSIGHTS_TYPE, projectId, code, detail, RequestContext.SYSTEM_USER);
-            if (outOfCredits
-                    && handle.attach(AgentInsightsJobDAO.class)
-                            .updateStatusIfCurrent(workspaceId, projectId, AgentInsightsJob.Status.ENABLED.getValue(),
-                                    AgentInsightsJob.Status.DISABLED.getValue(), RequestContext.SYSTEM_USER) > 0) {
-                log.info("Disabled the Agent Insights schedule for project '{}' in workspace '{}': out of credits",
-                        projectId, workspaceId);
-            }
+            recordFailure(handle, idGenerator.generateId(), workspaceId, ReportFailureDAO.AGENT_INSIGHTS_TYPE,
+                    projectId, code, detail, RequestContext.SYSTEM_USER);
             return null;
         });
+    }
+
+    // Records a run failure inside the caller's transaction; out_of_credits also switches the daily schedule off
+    static void recordFailure(@NonNull Handle handle, @NonNull UUID id, @NonNull String workspaceId,
+            @NonNull String type, @NonNull UUID projectId, @NonNull String reason, String detail,
+            @NonNull String userName) {
+        var jobs = handle.attach(AgentInsightsJobDAO.class);
+        boolean outOfCredits = AgentInsightsJob.FailureReason.OUT_OF_CREDITS.equals(reason);
+        if (outOfCredits) {
+            jobs.lockByProject(workspaceId, projectId);
+        }
+        handle.attach(ReportFailureDAO.class).insert(id, workspaceId, type, projectId, reason, detail, userName);
+        if (outOfCredits && jobs.updateStatusIfCurrent(workspaceId, projectId,
+                AgentInsightsJob.Status.ENABLED.getValue(), AgentInsightsJob.Status.DISABLED.getValue(),
+                RequestContext.SYSTEM_USER) > 0) {
+            log.info("Disabled the Agent Insights schedule for project '{}' in workspace '{}': out of credits",
+                    projectId, workspaceId);
+        }
     }
 
     // Cross-workspace; the auto-first-run sweep's first step. Records each automatic run that died without
@@ -196,6 +204,7 @@ public class AgentInsightsJobService {
                 reportConfig.getAutoFirstRunMaxRetries());
     }
 
+    @Builder(toBuilder = true)
     private record ReapOutcome(long earlierTimeouts, boolean retry) {
     }
 
@@ -229,7 +238,7 @@ public class AgentInsightsJobService {
             failures.insert(idGenerator.generateId(), job.workspaceId(),
                     ReportFailureDAO.AGENT_INSIGHTS_TYPE, job.projectId(),
                     AgentInsightsJob.FailureReason.TIMED_OUT, null, RequestContext.SYSTEM_USER);
-            return new ReapOutcome(earlier, retry);
+            return ReapOutcome.builder().earlierTimeouts(earlier).retry(retry).build();
         });
         if (outcome == null) {
             log.info("Skipping reap of automatic Agent Insights run for project '{}': it reported back or "
@@ -282,6 +291,7 @@ public class AgentInsightsJobService {
         });
     }
 
+    @Builder(toBuilder = true)
     private record UnenrolOutcome(boolean reset, boolean cleared) {
     }
 
@@ -302,7 +312,7 @@ public class AgentInsightsJobService {
                         runTimeoutSeconds, RequestContext.SYSTEM_USER) > 0;
                 boolean wasCleared = dao.clearEnrolment(job.workspaceId(), job.projectId(),
                         RequestContext.SYSTEM_USER) > 0;
-                return new UnenrolOutcome(wasReset, wasCleared);
+                return UnenrolOutcome.builder().reset(wasReset).cleared(wasCleared).build();
             });
             if (outcome.reset()) {
                 reset.add(job.projectId());

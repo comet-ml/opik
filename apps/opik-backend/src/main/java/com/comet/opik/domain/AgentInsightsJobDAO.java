@@ -82,13 +82,18 @@ interface AgentInsightsJobDAO {
 
     // Stamped when the automatic run is enqueued, so the sweep stops picking the project up and the page
     // can tell that run from a finished one. Manual runs do not set it.
-    // Re-checks the enrolment the candidate was selected by, since the rollout can be cancelled mid-sweep:
-    // returns 0 for a project unenrolled since, and the caller then skips the trigger.
+    // Re-checks what the candidate was selected by (see findAwaitingFirstRun), since it can change mid-sweep: the
+    // rollout can be cancelled, or a reaped run can report back. Returns 0 then, and the caller skips the trigger.
     @SqlUpdate("""
-            UPDATE agent_insights_jobs
-            SET auto_first_run_at = CURRENT_TIMESTAMP(6), last_updated_by = :userName
-            WHERE workspace_id = :workspaceId AND project_id = :projectId
-                AND auto_first_run_enrolled AND auto_first_run_at IS NULL
+            UPDATE agent_insights_jobs j
+            SET j.auto_first_run_at = CURRENT_TIMESTAMP(6), j.last_updated_by = :userName
+            WHERE j.workspace_id = :workspaceId AND j.project_id = :projectId
+                AND j.auto_first_run_enrolled AND j.auto_first_run_at IS NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM report_failures f
+                    WHERE f.workspace_id = j.workspace_id AND f.project_id = j.project_id
+                        AND f.type = 'agent_insights' AND f.reason = 'timed_out' AND f.created_at < j.last_scan_at
+                )
             """)
     int markAutoFirstRun(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
@@ -118,11 +123,19 @@ interface AgentInsightsJobDAO {
     // Cross-workspace — used only by the auto-first-run sweep (system context). Projects enrolled in the
     // rollout that have not had a run enqueued yet. INNER JOIN projects so a deleted project drops out, as
     // in findAllEnabled. Oldest job first (ids are UUIDv7).
+    // A reaped run whose claim was cleared for a retry can still report back: a scan later than one of the
+    // project's timed_out rows means it did, so it isn't run again. Only the reaper writes timed_out, after the
+    // claim, so a scan from before the claim (e.g. a manual run before enrolment) doesn't count.
     @SqlQuery("""
             SELECT j.id, j.workspace_id, j.project_id
             FROM agent_insights_jobs j
             INNER JOIN projects p ON p.id = j.project_id AND p.workspace_id = j.workspace_id
             WHERE j.auto_first_run_enrolled AND j.auto_first_run_at IS NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM report_failures f
+                    WHERE f.workspace_id = j.workspace_id AND f.project_id = j.project_id
+                        AND f.type = 'agent_insights' AND f.reason = 'timed_out' AND f.created_at < j.last_scan_at
+                )
             ORDER BY j.id
             """)
     @RegisterConstructorMapper(EnabledJob.class)
