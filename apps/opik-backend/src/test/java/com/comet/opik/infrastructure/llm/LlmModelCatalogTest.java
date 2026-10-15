@@ -7,7 +7,6 @@ import com.comet.opik.api.ModelParams.NumberParam;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService.CuratedCatalog;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService.ModelEntry;
-import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -18,6 +17,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,14 +35,35 @@ class LlmModelCatalogTest {
 
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
 
+    private static final ModelParams O3 = params("""
+            temperature: {accepted: false}
+            maxOutputTokens: {accepted: true, min: 1, max: 128000, default: 4000}
+            effort: {accepted: true, levels: [low, medium, high], default: high}
+            routes:
+              responses_api:
+                temperature: {accepted: false}
+                maxOutputTokens: {accepted: true, min: 16, max: 128000, default: 4000}
+                effort: {accepted: true, levels: [low, medium, high], default: high}
+            """);
+
+    private static final ModelParams CLAUDE_SONNET_4_6 = params("""
+            temperature: {accepted: true, min: 0, max: 1, default: 0}
+            effort: {accepted: true, levels: [low, medium, high, max], default: high}
+            """);
+
     private static LlmModelRegistryService service(String localOverridePath) {
         return service("llm-models-test.yaml", localOverridePath);
     }
 
     private static LlmModelRegistryService service(String generatedResource, String localOverridePath) {
+        return service(generatedResource, "llm-models-test-curated.yaml", localOverridePath);
+    }
+
+    private static LlmModelRegistryService service(String generatedResource, String curatedResource,
+            String localOverridePath) {
         var config = new LlmModelRegistryConfig();
         config.setDefaultResource(generatedResource);
-        config.setCuratedResource("llm-models-test-curated.yaml");
+        config.setCuratedResource(curatedResource);
         config.setLocalOverridePath(localOverridePath);
         return new LlmModelRegistryService(config);
     }
@@ -51,9 +72,12 @@ class LlmModelCatalogTest {
         return service.getRegistry().get(provider).stream().filter(m -> m.id().equals(id)).findFirst().orElseThrow();
     }
 
-    private static NumberParam range(boolean accepted, int min, int max, int defaultValue) {
-        return new NumberParam(accepted, BigDecimal.valueOf(min), BigDecimal.valueOf(max),
-                BigDecimal.valueOf(defaultValue));
+    private static ModelParams params(String yaml) {
+        try {
+            return YAML_MAPPER.readValue(yaml, ModelParams.class);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     @Nested
@@ -61,71 +85,100 @@ class LlmModelCatalogTest {
 
         @Test
         void aModelWithoutARowTakesItsProviderProfile() {
-            var params = model(service(null), "openai", "gpt-4o").params();
-
-            assertThat(params.temperature()).isEqualTo(range(true, 0, 2, 0));
-            assertThat(params.effort()).isEqualTo(new EffortParam(false, null, null));
-            assertThat(params.routes().get("responses_api").maxOutputTokens()).isEqualTo(range(true, 16, 128000, 4000));
+            assertThat(model(service(null), "openai", "gpt-4o").params()).isEqualTo(params("""
+                    temperature: {accepted: true, min: 0, max: 2, default: 0}
+                    maxOutputTokens: {accepted: true, min: 1, max: 128000, default: 4000}
+                    effort: {accepted: false}
+                    routes:
+                      responses_api:
+                        temperature: {accepted: true, min: 0, max: 2, default: 0}
+                        maxOutputTokens: {accepted: true, min: 16, max: 128000, default: 4000}
+                        effort: {accepted: false}
+                    """));
         }
 
         @Test
         void theRegistryReasoningFlagAddsTheReasoningProfileAndTheRowWins() {
-            var params = model(service(null), "openai", "o3").params();
-
-            assertThat(params.temperature()).isEqualTo(new NumberParam(false, null, null, null));
-            assertThat(params.effort()).isEqualTo(new EffortParam(true, List.of("low", "medium", "high"), "high"));
+            assertThat(model(service(null), "openai", "o3").params()).isEqualTo(O3);
         }
 
         @Test
         void aRowProfileAndParamsOverlayTheProviderProfileFieldByField() {
-            var params = model(service(null), "anthropic", "claude-sonnet-4-6").params();
-
-            assertThat(params.temperature()).isEqualTo(range(true, 0, 1, 0));
-            assertThat(params.effort())
-                    .isEqualTo(new EffortParam(true, List.of("low", "medium", "high", "max"), "high"));
+            assertThat(model(service(null), "anthropic", "claude-sonnet-4-6").params()).isEqualTo(CLAUDE_SONNET_4_6);
         }
 
         @Test
         void aCuratedProfileWinsOverTheParamsTheSyncGenerated() {
-            var params = model(service("llm-models-test-generated-params.yaml", null), "anthropic",
-                    "claude-sonnet-4-6").params();
+            var service = service("llm-models-test-generated-params.yaml", null);
 
-            assertThat(params.temperature()).isEqualTo(range(true, 0, 1, 0));
-            assertThat(params.effort())
-                    .isEqualTo(new EffortParam(true, List.of("low", "medium", "high", "max"), "high"));
+            assertThat(model(service, "anthropic", "claude-sonnet-4-6").params()).isEqualTo(CLAUDE_SONNET_4_6);
         }
 
         @Test
         void aRowWaitingForTheSyncAppliesOnceTheSyncListsTheModel() {
-            var params = model(service("llm-models-test-generated-params.yaml", null), "anthropic",
-                    "claude-not-yet-synced").params();
+            var service = service("llm-models-test-generated-params.yaml", null);
 
-            assertThat(params.effort()).isEqualTo(new EffortParam(true, List.of("low"), "high"));
+            assertThat(model(service, "anthropic", "claude-not-yet-synced").params()).isEqualTo(params("""
+                    temperature: {accepted: false}
+                    effort: {accepted: true, levels: [low], default: high}
+                    """));
         }
 
         @Test
         void aModelsRepeatedCuratedRowsKeepTheFieldsOfBoth() {
-            var generated = Map.of("anthropic", List.of(ModelEntry.builder().id("claude-x").build()));
-            var curated = Map.of("anthropic", List.of(
-                    ModelEntry.builder().id("claude-x").label("from the first row")
-                            .params(ModelParams.builder().temperature(range(true, 0, 1, 0)).build()).build(),
-                    ModelEntry.builder().id("claude-x")
-                            .params(ModelParams.builder().effort(new EffortParam(true, List.of("low"), "low")).build())
-                            .build()));
+            var service = service("llm-models-test.yaml", "llm-models-test-curated-repeated-row.yaml", null);
 
-            var merged = LlmModelRegistryService.applyCurated(generated, curated).get("anthropic");
-
-            assertThat(merged).hasSize(1);
-            assertThat(merged.getFirst().label()).isEqualTo("from the first row");
-            assertThat(merged.getFirst().params().temperature()).isEqualTo(range(true, 0, 1, 0));
-            assertThat(merged.getFirst().params().effort()).isEqualTo(new EffortParam(true, List.of("low"), "low"));
+            assertThat(service.getRegistry().get("anthropic")).containsExactly(LlmModelDefinition.builder()
+                    .id("claude-sonnet-4-6")
+                    .label("from the first row")
+                    .params(params("""
+                            temperature: {accepted: true, min: 0, max: 1, default: 0}
+                            effort: {accepted: true, levels: [low], default: low}
+                            """))
+                    .build());
         }
 
         @Test
         void aCuratedRowNeverAddsAModel() {
-            assertThat(service(null).getRegistry().get("anthropic"))
-                    .extracting(LlmModelDefinition::id)
-                    .containsExactly("claude-sonnet-4-6");
+            assertThat(service(null).getRegistry().get("anthropic")).containsExactly(LlmModelDefinition.builder()
+                    .id("claude-sonnet-4-6")
+                    .params(CLAUDE_SONNET_4_6)
+                    .build());
+        }
+
+        @Test
+        void aCuratedFileNamingAProfileItDoesNotDefineStopsTheLoad() {
+            assertThatThrownBy(
+                    () -> service("llm-models-test.yaml", "llm-models-test-curated-unknown-profile.yaml", null))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("missing-reasoning")
+                    .hasMessageContaining("missing-row-profile");
+        }
+
+        @Test
+        void aLocalOverrideNamingAnUnknownProfileKeepsItsOwnParams(@TempDir Path tempDir) throws IOException {
+            var override = tempDir.resolve("override.yaml");
+            Files.writeString(override, """
+                    anthropic:
+                      - id: "claude-sonnet-4-6"
+                        profile: "no-such-profile"
+                        params:
+                          effort: {default: low}
+                    """);
+
+            assertThat(model(service(override.toString()), "anthropic", "claude-sonnet-4-6").params())
+                    .isEqualTo(CLAUDE_SONNET_4_6.toBuilder()
+                            .effort(CLAUDE_SONNET_4_6.effort().toBuilder().defaultLevel("low").build())
+                            .build());
+        }
+
+        @Test
+        void withoutTheCuratedLayerAModelStillTakesTheProfileOfItsShippedRow() {
+            var params = service("llm-models-test.yaml", "", null).paramsOf("anthropic", "claude-sonnet-4-6");
+
+            assertThat(Stream.of(params.temperature(), params.topP(), params.topK()))
+                    .extracting(NumberParam::accepted)
+                    .containsExactly(true, true, true);
         }
 
         @Test
@@ -147,11 +200,17 @@ class LlmModelCatalogTest {
                     """);
             var service = service(override.toString());
 
-            var claude = model(service, "anthropic", "claude-sonnet-4-6").params();
-            assertThat(claude.effort()).isEqualTo(new EffortParam(true, List.of("low"), "high"));
-            assertThat(claude.temperature()).isEqualTo(range(true, 0, 1, 0));
-            assertThat(model(service, "openai", "o3").params())
-                    .isEqualTo(model(service(null), "openai", "o3").params());
+            assertThat(model(service, "anthropic", "claude-sonnet-4-6").params()).isEqualTo(params("""
+                    temperature: {accepted: true, min: 0, max: 1, default: 0}
+                    effort: {accepted: true, levels: [low], default: high}
+                    """));
+            assertThat(model(service, "openai", "o3")).isEqualTo(LlmModelDefinition.builder()
+                    .id("o3")
+                    .label("o3 from override")
+                    .structuredOutput(true)
+                    .reasoning(true)
+                    .params(O3)
+                    .build());
         }
     }
 
@@ -178,34 +237,13 @@ class LlmModelCatalogTest {
         var routes = new LinkedHashMap<String, ModelParams>();
         routes.put("responses_api", null);
 
-        var params = ModelParams.builder().temperature(range(true, 0, 2, 0)).routes(routes).build();
+        var params = ModelParams.builder()
+                .temperature(new NumberParam(true, BigDecimal.ZERO, BigDecimal.TWO, BigDecimal.ZERO))
+                .routes(routes)
+                .build();
 
         assertThat(params.routes()).isEmpty();
         assertThat(params.settled().routes()).isNull();
-    }
-
-    @Test
-    void theApiNamesParamsFieldsTheWayItNamesTheOtherFields() {
-        var json = JsonUtils.writeValueAsString(model(service(null), "openai", "o3"));
-
-        assertThat(JsonUtils.getJsonNodeFromString(json)).isEqualTo(JsonUtils.getJsonNodeFromString("""
-                {
-                  "id": "o3",
-                  "structured_output": true,
-                  "reasoning": true,
-                  "params": {
-                    "temperature": {"accepted": false},
-                    "max_output_tokens": {"accepted": true, "min": 1, "max": 128000, "default": 4000},
-                    "effort": {"accepted": true, "levels": ["low", "medium", "high"], "default": "high"},
-                    "routes": {
-                      "responses_api": {
-                        "temperature": {"accepted": false},
-                        "max_output_tokens": {"accepted": true, "min": 16, "max": 128000, "default": 4000},
-                        "effort": {"accepted": true, "levels": ["low", "medium", "high"], "default": "high"}
-                      }
-                    }
-                  }
-                }"""));
     }
 
     @Nested
@@ -225,23 +263,6 @@ class LlmModelCatalogTest {
             } catch (IOException e) {
                 throw new IllegalStateException(e);
             }
-        }
-
-        @Test
-        void everyProfileItNamesExists() {
-            var named = new ArrayList<String>();
-            catalog.defaults().values().forEach(d -> {
-                named.add(d.profile());
-                if (d.reasoningProfile() != null) {
-                    named.add(d.reasoningProfile());
-                }
-            });
-            catalog.models().values().forEach(rows -> rows.stream()
-                    .map(ModelEntry::profile)
-                    .filter(profile -> profile != null)
-                    .forEach(named::add));
-
-            assertThat(catalog.profiles().keySet()).containsAll(named);
         }
 
         // A row the sync has since listed passes too: sync PRs are made by a bot, and the loader logs that its

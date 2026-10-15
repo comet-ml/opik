@@ -44,7 +44,7 @@ profiles:
   gemini:
     temperature: {min: 0, max: 2, default: 0}
     topP: {min: 0, max: 1, default: 1}
-    maxOutputTokens: {min: 0, max: 65535, default: 4000}
+    maxOutputTokens: {min: 1, max: 65535, default: 4000}
     effort: {accepted: false}
   gemini-no-sampling:
     temperature: {accepted: false}
@@ -425,6 +425,8 @@ models:
         accepted: true
         levels: [auto, 'off', low, medium, high]
         default: 'off'
+  - {id: gemini-2.0-flash, params: {maxOutputTokens: {max: 8192}}}
+  - {id: gemini-2.0-flash-lite, params: {maxOutputTokens: {max: 8192}}}
   - {id: gemini-flash-latest-high-res-exp, profile: gemini-no-sampling}
   - {id: gemini-omni-1.1-flash, profile: gemini-no-sampling}
   - {id: gemini-3-pro-image, profile: gemini-no-sampling}
@@ -541,3 +543,5 @@ models:
         accepted: true
         levels: [auto, 'off', low, medium, high]
         default: 'off'
+  - {id: gemini-2.0-flash-001, params: {maxOutputTokens: {max: 8192}}}
+  - {id: gemini-2.0-flash-lite-001, params: {maxOutputTokens: {max: 8192}}}
