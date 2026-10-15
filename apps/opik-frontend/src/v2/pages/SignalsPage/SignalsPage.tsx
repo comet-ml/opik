@@ -490,7 +490,6 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
             isStale={isStale}
             staleTraceCount={recentTraceCount}
             staleDays={staleDays}
-            canConfigure={canConfigure}
             canCloseAsNotUseful={guidanceEnabled}
             closedCount={resolvedCount + notUsefulCount}
             onRunDiagnostic={canConfigure ? handleRunDiagnostic : undefined}

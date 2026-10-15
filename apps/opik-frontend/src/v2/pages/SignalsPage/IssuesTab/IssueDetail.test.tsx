@@ -78,12 +78,7 @@ describe("IssueDetail status actions", () => {
 
   const renderWithToggle = () =>
     render(
-      <IssueDetail
-        issue={baseIssue}
-        projectId="p1"
-        canConfigure
-        canCloseAsNotUseful
-      />,
+      <IssueDetail issue={baseIssue} projectId="p1" canCloseAsNotUseful />,
     );
 
   const dialogCloseButton = () =>
@@ -277,7 +272,7 @@ describe("IssueDetail status actions", () => {
   });
 
   it("resolves in one click with a toast when the guidance toggle is off", () => {
-    render(<IssueDetail issue={baseIssue} projectId="p1" canConfigure />);
+    render(<IssueDetail issue={baseIssue} projectId="p1" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Close issue" }));
 
@@ -293,12 +288,7 @@ describe("IssueDetail status actions", () => {
 
   it("shows how a not-useful issue was closed, and Undo of Reopen restores the reason", () => {
     render(
-      <IssueDetail
-        issue={closedIssue}
-        projectId="p1"
-        canConfigure
-        canCloseAsNotUseful
-      />,
+      <IssueDetail issue={closedIssue} projectId="p1" canCloseAsNotUseful />,
     );
 
     expect(
@@ -333,18 +323,21 @@ describe("IssueDetail status actions", () => {
     });
   });
 
-  it("has no status actions without configure permission", () => {
+  it("offers Close issue to every project user", () => {
     render(
-      <IssueDetail
-        issue={baseIssue}
-        projectId="p1"
-        canConfigure={false}
-        canCloseAsNotUseful
-      />,
+      <IssueDetail issue={baseIssue} projectId="p1" canCloseAsNotUseful />,
     );
 
     expect(
-      screen.queryByRole("button", { name: "Close issue" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Close issue" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers Reopen to every project user", () => {
+    render(
+      <IssueDetail issue={closedIssue} projectId="p1" canCloseAsNotUseful />,
+    );
+
+    expect(screen.getByRole("button", { name: "Reopen" })).toBeInTheDocument();
   });
 });
