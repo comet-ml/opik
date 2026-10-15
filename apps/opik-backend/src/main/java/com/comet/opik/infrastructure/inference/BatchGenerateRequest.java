@@ -9,4 +9,8 @@ import java.util.List;
 @Builder(toBuilder = true)
 public record BatchGenerateRequest(@NonNull String orgId, String workspaceId, String requestId, boolean cache,
         @NonNull List<BatchGenerateItem> items) {
+
+    public BatchGenerateRequest {
+        items = List.copyOf(items);
+    }
 }
