@@ -13,7 +13,7 @@ import {
   LLMMessage,
 } from "@/types/llm";
 
-const JEV = "~typesafe/jev-latest";
+const DECISION_MODEL = "~typesafe/jev-latest";
 
 const userMessage = (content: string): LLMMessage => ({
   id: content,
@@ -21,8 +21,8 @@ const userMessage = (content: string): LLMMessage => ({
   content,
 });
 
-const jevDetails = (overrides: Record<string, unknown> = {}) => ({
-  model: JEV,
+const decisionModelDetails = (overrides: Record<string, unknown> = {}) => ({
+  model: DECISION_MODEL,
   config: { temperature: 0.3, seed: 7, custom_parameters: { foo: "bar" } },
   template: LLM_JUDGE.custom,
   messages: [userMessage("Question: {{question}}\nAnswer: {{answer}}")],
@@ -46,19 +46,19 @@ const issueMessages = (result: { success: boolean; error?: unknown }) =>
         (issue) => issue.message,
       );
 
-describe("Jev rule validation", () => {
-  it("accepts a rule Jev can run, on trace and span scope", () => {
-    expect(LLMJudgeDetailsTraceFormSchema.safeParse(jevDetails()).success).toBe(
-      true,
-    );
-    expect(LLMJudgeDetailsSpanFormSchema.safeParse(jevDetails()).success).toBe(
-      true,
-    );
+describe("Decision model rule validation", () => {
+  it("accepts a rule a decision model can run, on trace and span scope", () => {
+    expect(
+      LLMJudgeDetailsTraceFormSchema.safeParse(decisionModelDetails()).success,
+    ).toBe(true);
+    expect(
+      LLMJudgeDetailsSpanFormSchema.safeParse(decisionModelDetails()).success,
+    ).toBe(true);
   });
 
   it("rejects non-Boolean scores", () => {
     const result = LLMJudgeDetailsTraceFormSchema.safeParse(
-      jevDetails({
+      decisionModelDetails({
         schema: [
           {
             name: "quality",
@@ -70,12 +70,14 @@ describe("Jev rule validation", () => {
       }),
     );
 
-    expect(issueMessages(result)).toContain("Jev only supports Boolean scores");
+    expect(issueMessages(result)).toContain(
+      "Decision models only support Boolean scores",
+    );
   });
 
   it("rejects anything but a single user message", () => {
     const withSystemMessage = LLMJudgeDetailsTraceFormSchema.safeParse(
-      jevDetails({
+      decisionModelDetails({
         messages: [
           { id: "s", role: LLM_MESSAGE_ROLE.system, content: "Be strict" },
           userMessage("Answer: {{answer}}"),
@@ -85,21 +87,23 @@ describe("Jev rule validation", () => {
     );
 
     expect(issueMessages(withSystemMessage)).toContain(
-      "Jev needs exactly one user message",
+      "Decision models need exactly one user message",
     );
   });
 
   it("rejects an empty score list", () => {
     const result = LLMJudgeDetailsTraceFormSchema.safeParse(
-      jevDetails({ schema: [] }),
+      decisionModelDetails({ schema: [] }),
     );
 
-    expect(issueMessages(result)).toContain("Jev needs at least one score");
+    expect(issueMessages(result)).toContain(
+      "Decision models need at least one score",
+    );
   });
 
   it("rejects non-text content, including audio the capability check misses", () => {
     const audio = LLMJudgeDetailsTraceFormSchema.safeParse(
-      jevDetails({
+      decisionModelDetails({
         messages: [
           {
             id: "a",
@@ -117,12 +121,14 @@ describe("Jev rule validation", () => {
       }),
     );
 
-    expect(issueMessages(audio)).toContain("Jev only accepts text messages");
+    expect(issueMessages(audio)).toContain(
+      "Decision models only accept text messages",
+    );
   });
 
   it("accepts structured content made only of text parts", () => {
     const result = LLMJudgeDetailsTraceFormSchema.safeParse(
-      jevDetails({
+      decisionModelDetails({
         messages: [
           {
             id: "t",
@@ -139,29 +145,29 @@ describe("Jev rule validation", () => {
 
   it("rejects the structure variable of the scope", () => {
     const trace = LLMJudgeDetailsTraceFormSchema.safeParse(
-      jevDetails({
+      decisionModelDetails({
         messages: [userMessage("{{trace}}")],
         variables: { trace: "trace" },
       }),
     );
     const span = LLMJudgeDetailsSpanFormSchema.safeParse(
-      jevDetails({
+      decisionModelDetails({
         messages: [userMessage("{{span}}")],
         variables: { span: "span" },
       }),
     );
 
     expect(issueMessages(trace).join()).toContain(
-      'Jev doesn\'t support the "trace" variable',
+      'Decision models don\'t support the "trace" variable',
     );
     expect(issueMessages(span).join()).toContain(
-      'Jev doesn\'t support the "span" variable',
+      'Decision models don\'t support the "span" variable',
     );
   });
 
   it("still allows the spans list on trace scope", () => {
     const result = LLMJudgeDetailsTraceFormSchema.safeParse(
-      jevDetails({
+      decisionModelDetails({
         messages: [userMessage("Spans: {{spans}}")],
         variables: { spans: "spans" },
       }),
@@ -170,22 +176,22 @@ describe("Jev rule validation", () => {
     expect(result.success).toBe(true);
   });
 
-  it("rejects Jev on thread scope", () => {
+  it("rejects a decision model on thread scope", () => {
     const result = LLMJudgeDetailsThreadFormSchema.safeParse(
-      jevDetails({
+      decisionModelDetails({
         messages: [userMessage("{{context}}")],
         variables: {},
       }),
     );
 
     expect(issueMessages(result)).toContain(
-      "Thread rules don't support Jev, choose a trace or span scope",
+      "Thread rules don't support decision models, choose a trace or span scope",
     );
   });
 
-  it("applies no Jev rules to other models", () => {
+  it("applies no decision model rules to other models", () => {
     const result = LLMJudgeDetailsTraceFormSchema.safeParse(
-      jevDetails({
+      decisionModelDetails({
         model: "gpt-4o",
         schema: [
           {
@@ -202,12 +208,14 @@ describe("Jev rule validation", () => {
   });
 });
 
-describe("Jev rule on save", () => {
+describe("Decision model rule on save", () => {
   it("sends the model name only and no budget", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const object = convertLLMJudgeDataToLLMJudgeObject(jevDetails() as any);
+    const object = convertLLMJudgeDataToLLMJudgeObject(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      decisionModelDetails() as any,
+    );
 
-    expect(object.model).toEqual({ name: JEV });
+    expect(object.model).toEqual({ name: DECISION_MODEL });
     expect(object.max_cost_usd).toBeNull();
     expect(object.schema).toHaveLength(1);
     expect(object.messages).toEqual([

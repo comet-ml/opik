@@ -22,8 +22,8 @@ import RuleScopeField from "@/v2/pages-shared/automations/RuleEditorPanel/RuleSc
 import FilteringSamplingCard from "@/v2/pages-shared/automations/RuleEditorPanel/FilteringSamplingCard";
 import ScoreConfigurationCard from "@/v2/pages-shared/automations/RuleEditorPanel/ScoreConfigurationCard";
 import CostLimitField from "@/v2/pages-shared/automations/RuleEditorPanel/CostLimitField";
-import JevPromptField from "@/v2/pages-shared/automations/RuleEditorPanel/JevPromptField";
-import JevQuestionsCard from "@/v2/pages-shared/automations/RuleEditorPanel/JevQuestionsCard";
+import DecisionModelPromptField from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelPromptField";
+import DecisionModelQuestionsCard from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelQuestionsCard";
 import CodeEvaluatorField from "@/v2/pages-shared/automations/RuleEditorPanel/CodeEvaluatorField";
 import { RuleDefaultModel } from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleDefaultModel";
 
@@ -110,7 +110,8 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
   ]);
 
   const isLLMJudge = ruleType === UI_EVALUATORS_RULE_TYPE.llm_judge;
-  const isJev = ruleType === UI_EVALUATORS_RULE_TYPE.jev;
+  const isDecisionModelRule =
+    ruleType === UI_EVALUATORS_RULE_TYPE.decision_model;
   const isSpanScope = form.watch("scope") === EVALUATORS_RULE_SCOPE.span;
 
   return (
@@ -132,7 +133,9 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
                       mergeInfo={promptMergeInfo}
                     />
                   )}
-                  {isJev && <JevPromptField form={form} />}
+                  {isDecisionModelRule && (
+                    <DecisionModelPromptField form={form} />
+                  )}
                   {ruleType === UI_EVALUATORS_RULE_TYPE.python_code && (
                     <CodeEvaluatorField
                       form={form}
@@ -157,7 +160,9 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
                   />
                   <FilteringSamplingCard form={form} projectId={projectId} />
                   {isLLMJudge && <ScoreConfigurationCard form={form} />}
-                  {isJev && <JevQuestionsCard form={form} />}
+                  {isDecisionModelRule && (
+                    <DecisionModelQuestionsCard form={form} />
+                  )}
                   {isLLMJudge && !isSpanScope && <CostLimitField form={form} />}
                 </div>
               </div>

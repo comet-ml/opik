@@ -1,6 +1,5 @@
 import React from "react";
 import { UseFormReturn } from "react-hook-form";
-import isString from "lodash/isString";
 import get from "lodash/get";
 
 import { Description } from "@/ui/description";
@@ -17,7 +16,6 @@ import {
 } from "@/v2/pages-shared/automations/RuleEditorPanel/helpers";
 import { SCOPE_ENTITY_LABEL } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 import RuleEditorNotice from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorNotice";
-import JudgeTemplateChips from "@/v2/pages-shared/automations/RuleEditorPanel/JudgeTemplateChips";
 import { LLMPromptTemplate } from "@/types/llm";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 
@@ -70,7 +68,7 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
           {mergeInfo && (
             <RuleEditorNotice>
               <span>
-                {`This evaluator uses ${mergeInfo.messageCount} messages. They will be combined into one prompt when you save this change.`}
+                {`LLM-as-a-Judge is moving to a new format that uses a single prompt. When you save, the ${mergeInfo.messageCount} messages of this evaluator will be combined into one prompt.`}
                 {mergeInfo.hasSystemMedia &&
                   " Media in the system message was removed because it was never sent to the model."}
               </span>
@@ -91,16 +89,7 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
               onBlur={field.onBlur}
               sampleData={sampleData}
               showMedia={scope !== EVALUATORS_RULE_SCOPE.thread}
-            >
-              {onSelectTemplate &&
-                isString(field.value) &&
-                !field.value.trim() && (
-                  <JudgeTemplateChips
-                    scope={scope}
-                    onSelect={onSelectTemplate}
-                  />
-                )}
-            </JudgePromptInput>
+            />
           </RuleEditorCard>
           {sampleData && (
             <Description className="px-0.5">

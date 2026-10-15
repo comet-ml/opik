@@ -38,7 +38,6 @@ type JudgePromptInputProps = {
   onBlur: () => void;
   sampleData: RuleSampleData | null;
   showMedia: boolean;
-  children?: React.ReactNode;
 };
 
 const JudgePromptInput: React.FC<JudgePromptInputProps> = ({
@@ -47,7 +46,6 @@ const JudgePromptInput: React.FC<JudgePromptInputProps> = ({
   onBlur,
   sampleData,
   showMedia,
-  children,
 }) => {
   const editorRef = useRef<PromptVariableEditorHandle>(null);
   const {
@@ -87,7 +85,6 @@ const JudgePromptInput: React.FC<JudgePromptInputProps> = ({
           />
         </div>
       </FormControl>
-      {children}
       {showMedia && (
         <div className="flex flex-col gap-1 px-2 pb-1">
           {hasMedia && (

@@ -59,27 +59,29 @@ export const getBackendRuleType = (
     [EVALUATORS_RULE_SCOPE.trace]: {
       [UI_EVALUATORS_RULE_TYPE.llm_judge]: EVALUATORS_RULE_TYPE.llm_judge,
       [UI_EVALUATORS_RULE_TYPE.python_code]: EVALUATORS_RULE_TYPE.python_code,
-      [UI_EVALUATORS_RULE_TYPE.jev]: EVALUATORS_RULE_TYPE.llm_judge,
+      [UI_EVALUATORS_RULE_TYPE.decision_model]: EVALUATORS_RULE_TYPE.llm_judge,
     },
     [EVALUATORS_RULE_SCOPE.thread]: {
       [UI_EVALUATORS_RULE_TYPE.llm_judge]:
         EVALUATORS_RULE_TYPE.thread_llm_judge,
       [UI_EVALUATORS_RULE_TYPE.python_code]:
         EVALUATORS_RULE_TYPE.thread_python_code,
-      [UI_EVALUATORS_RULE_TYPE.jev]: EVALUATORS_RULE_TYPE.thread_llm_judge,
+      [UI_EVALUATORS_RULE_TYPE.decision_model]:
+        EVALUATORS_RULE_TYPE.thread_llm_judge,
     },
     [EVALUATORS_RULE_SCOPE.span]: {
       [UI_EVALUATORS_RULE_TYPE.llm_judge]: EVALUATORS_RULE_TYPE.span_llm_judge,
       [UI_EVALUATORS_RULE_TYPE.python_code]:
         EVALUATORS_RULE_TYPE.span_python_code,
-      [UI_EVALUATORS_RULE_TYPE.jev]: EVALUATORS_RULE_TYPE.span_llm_judge,
+      [UI_EVALUATORS_RULE_TYPE.decision_model]:
+        EVALUATORS_RULE_TYPE.span_llm_judge,
     },
   })[scope][uiType];
 
 export const getRuleUIType = (rule: EvaluatorsRule) =>
   isLLMJudgeRule(rule) &&
   isDecisionModel((rule.code as LLMJudgeObject).model?.name)
-    ? UI_EVALUATORS_RULE_TYPE.jev
+    ? UI_EVALUATORS_RULE_TYPE.decision_model
     : getUIRuleType(rule.type);
 
 const getFilterTypeByField = (

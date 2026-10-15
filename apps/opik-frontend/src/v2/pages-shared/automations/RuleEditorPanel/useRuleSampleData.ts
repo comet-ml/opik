@@ -23,7 +23,7 @@ const RESERVED_VARIABLES: Partial<Record<EVALUATORS_RULE_SCOPE, JsonObject>> = {
   },
 };
 
-const JEV_RESERVED_VARIABLES: Partial<
+const DECISION_MODEL_RESERVED_VARIABLES: Partial<
   Record<EVALUATORS_RULE_SCOPE, JsonObject>
 > = {
   [EVALUATORS_RULE_SCOPE.trace]: {
@@ -39,7 +39,7 @@ export type RuleSampleData = {
 const useRuleSampleData = (
   projectId: string,
   scope: EVALUATORS_RULE_SCOPE,
-  isJev = false,
+  isDecisionModelRule = false,
 ): RuleSampleData | null => {
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const enabled = Boolean(projectId) && !isThreadScope;
@@ -72,14 +72,24 @@ const useRuleSampleData = (
     return {
       treeData: {
         ...treeData,
-        ...(isJev ? JEV_RESERVED_VARIABLES : RESERVED_VARIABLES)[scope],
+        ...(isDecisionModelRule
+          ? DECISION_MODEL_RESERVED_VARIABLES
+          : RESERVED_VARIABLES)[scope],
       },
       emptyState:
         enabled && isPending
           ? `Loading fields from the latest ${entityLabel}...`
           : `No ${entityLabel} to show fields from yet. Type a path, for example input.question.`,
     };
-  }, [isThreadScope, enabled, isPending, data, entityLabel, scope, isJev]);
+  }, [
+    isThreadScope,
+    enabled,
+    isPending,
+    data,
+    entityLabel,
+    scope,
+    isDecisionModelRule,
+  ]);
 };
 
 export default useRuleSampleData;

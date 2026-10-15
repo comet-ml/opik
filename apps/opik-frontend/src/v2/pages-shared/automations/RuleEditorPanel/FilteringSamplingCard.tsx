@@ -1,14 +1,14 @@
 import React, { useCallback, useState } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { ListFilter, Plus } from "lucide-react";
+import { ListFilter } from "lucide-react";
 import round from "lodash/round";
 
-import { Button } from "@/ui/button";
 import { FormErrorSkeleton, FormField } from "@/ui/form";
 import { Filter } from "@/types/filters";
 import { EVAL_TRIGGER_SCOPE } from "@/types/automations";
 import FiltersContent from "@/shared/FiltersContent/FiltersContent";
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
+import AddItemButton from "@/shared/AddItemButton/AddItemButton";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 import RuleSettingsCard from "@/v2/pages-shared/automations/RuleEditorPanel/RuleSettingsCard";
 import useRuleFiltersConfig from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleFiltersConfig";
@@ -107,16 +107,7 @@ const FilteringSamplingCard: React.FC<FilteringSamplingCardProps> = ({
                   </FormErrorSkeleton>
                 ) : null;
               })}
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                className="self-start pl-1 text-foreground hover:text-primary-hover"
-                onClick={addFilter}
-              >
-                <Plus className="mr-0.5 size-3" />
-                Add filter
-              </Button>
+              <AddItemButton label="Add filter" onClick={addFilter} />
             </div>
           );
         }}

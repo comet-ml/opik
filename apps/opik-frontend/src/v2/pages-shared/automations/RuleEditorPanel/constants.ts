@@ -7,21 +7,13 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { EVALUATORS_RULE_SCOPE, PythonCodeObject } from "@/types/automations";
-import {
-  LLM_JUDGE,
-  LLM_MESSAGE_ROLE,
-  LLM_SCHEMA_TYPE,
-  LLMMessage,
-} from "@/types/llm";
+import { LLM_JUDGE, LLM_MESSAGE_ROLE, LLM_SCHEMA_TYPE } from "@/types/llm";
 import { DECISION_MODELS } from "@/constants/decisionModels";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import {
   DEFAULT_PYTHON_CODE_SPAN_DATA,
   DEFAULT_PYTHON_CODE_THREAD_DATA,
   DEFAULT_PYTHON_CODE_TRACE_DATA,
-  LLM_PROMPT_CUSTOM_SPAN_TEMPLATE,
-  LLM_PROMPT_CUSTOM_THREAD_TEMPLATE,
-  LLM_PROMPT_CUSTOM_TRACE_TEMPLATE,
 } from "@/constants/llm";
 
 export const DEFAULT_SAMPLING_RATE = 1;
@@ -46,41 +38,87 @@ const DEFAULT_LLM_CONFIG = {
   custom_parameters: null,
 };
 
-const EMPTY_PROMPT_MESSAGES: LLMMessage[] = [
-  { id: "rule-prompt", role: LLM_MESSAGE_ROLE.user, content: "" },
-];
+const getTaskCompletionData = (
+  content: string,
+  variables: Record<string, string>,
+) => ({
+  model: "",
+  config: DEFAULT_LLM_CONFIG,
+  template: LLM_JUDGE.custom,
+  messages: [{ id: "rule-prompt", role: LLM_MESSAGE_ROLE.user, content }],
+  variables,
+  schema: [
+    {
+      name: "Task completion",
+      description: "Whether the agent completed the task",
+      type: LLM_SCHEMA_TYPE.BOOLEAN,
+      unsaved: false,
+    },
+  ],
+  maxCostUsd: null,
+});
 
 export const DEFAULT_LLM_AS_JUDGE_DATA = {
-  [EVALUATORS_RULE_SCOPE.trace]: {
-    model: "",
-    config: DEFAULT_LLM_CONFIG,
-    template: LLM_JUDGE.custom,
-    messages: EMPTY_PROMPT_MESSAGES,
-    variables: {},
-    schema: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.schema,
-    maxCostUsd: null,
-  },
-  [EVALUATORS_RULE_SCOPE.thread]: {
-    model: "",
-    config: DEFAULT_LLM_CONFIG,
-    template: LLM_JUDGE.custom,
-    messages: EMPTY_PROMPT_MESSAGES,
-    variables: {},
-    schema: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.schema,
-    maxCostUsd: null,
-  },
-  [EVALUATORS_RULE_SCOPE.span]: {
-    model: "",
-    config: DEFAULT_LLM_CONFIG,
-    template: LLM_JUDGE.custom,
-    messages: EMPTY_PROMPT_MESSAGES,
-    variables: {},
-    schema: LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.schema,
-    maxCostUsd: null,
-  },
+  [EVALUATORS_RULE_SCOPE.trace]: getTaskCompletionData(
+    [
+      "You are an impartial judge. Decide if the agent completed the task the user asked for.",
+      "",
+      "## How to judge",
+      "- Find the user's request in the trace input.",
+      "- Check the steps the agent took and the final output, not only the final answer.",
+      "",
+      "## Score",
+      "- true: the final output achieves the user's goal.",
+      "- false: the task is incomplete, wrong or not attempted, or the agent claims success without doing the work.",
+      "",
+      "Explain the score in one sentence.",
+      "",
+      "## Trace",
+      "{{trace}}",
+    ].join("\n"),
+    { trace: "trace" },
+  ),
+  [EVALUATORS_RULE_SCOPE.thread]: getTaskCompletionData(
+    [
+      "You are an impartial judge. Decide if the agent completed what the user asked for in this conversation.",
+      "",
+      "## How to judge",
+      "- Find what the user wanted, including follow-up requests.",
+      "- Check the agent's replies against each request.",
+      "",
+      "## Score",
+      "- true: the agent achieved the user's goal by the end of the conversation.",
+      "- false: a request is incomplete, answered wrongly or ignored.",
+      "",
+      "Explain the score in one sentence that points to a specific message.",
+      "",
+      "## Conversation",
+      "{{context}}",
+    ].join("\n"),
+    { context: "" },
+  ),
+  [EVALUATORS_RULE_SCOPE.span]: getTaskCompletionData(
+    [
+      "You are an impartial judge. Decide if this step completed the task it was given.",
+      "",
+      "## How to judge",
+      "- Find the task in the span input.",
+      "- Check if the span output does that task.",
+      "",
+      "## Score",
+      "- true: the output completes the task correctly.",
+      "- false: the output is incomplete, wrong, an error, or does not match the input.",
+      "",
+      "Explain the score in one sentence.",
+      "",
+      "## Span",
+      "{{span}}",
+    ].join("\n"),
+    { span: "span" },
+  ),
 };
 
-const JEV_DEFAULT_DATA = {
+const DECISION_MODEL_DEFAULT_DATA = {
   model: DECISION_MODELS[0].value,
   config: DEFAULT_LLM_CONFIG,
   template: LLM_JUDGE.custom,
@@ -103,10 +141,10 @@ const JEV_DEFAULT_DATA = {
   maxCostUsd: null,
 };
 
-export const DEFAULT_JEV_DATA = {
-  [EVALUATORS_RULE_SCOPE.trace]: JEV_DEFAULT_DATA,
-  [EVALUATORS_RULE_SCOPE.thread]: JEV_DEFAULT_DATA,
-  [EVALUATORS_RULE_SCOPE.span]: JEV_DEFAULT_DATA,
+export const DEFAULT_DECISION_MODEL_DATA = {
+  [EVALUATORS_RULE_SCOPE.trace]: DECISION_MODEL_DEFAULT_DATA,
+  [EVALUATORS_RULE_SCOPE.thread]: DECISION_MODEL_DEFAULT_DATA,
+  [EVALUATORS_RULE_SCOPE.span]: DECISION_MODEL_DEFAULT_DATA,
 };
 
 export const DEFAULT_PYTHON_CODE_DATA: Record<

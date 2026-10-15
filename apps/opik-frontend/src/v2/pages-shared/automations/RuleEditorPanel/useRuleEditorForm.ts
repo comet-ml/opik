@@ -51,7 +51,7 @@ import {
   nameInlineVariables,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/inlineVariableMappings";
 import {
-  DEFAULT_JEV_DATA,
+  DEFAULT_DECISION_MODEL_DATA,
   DEFAULT_LLM_AS_JUDGE_DATA,
   FILTER_COLUMNS_BY_SCOPE,
   DEFAULT_PYTHON_CODE_DATA,
@@ -144,8 +144,8 @@ const withDefaultModel = <
       };
 
 const getDefaultJudgeData = (uiType: UI_EVALUATORS_RULE_TYPE) =>
-  uiType === UI_EVALUATORS_RULE_TYPE.jev
-    ? DEFAULT_JEV_DATA
+  uiType === UI_EVALUATORS_RULE_TYPE.decision_model
+    ? DEFAULT_DECISION_MODEL_DATA
     : DEFAULT_LLM_AS_JUDGE_DATA;
 
 const getDefaultValues = (
@@ -308,7 +308,7 @@ const useRuleEditorForm = ({
         ...mainScore,
         name: values.ruleName.trim(),
         description:
-          values.uiType === UI_EVALUATORS_RULE_TYPE.jev
+          values.uiType === UI_EVALUATORS_RULE_TYPE.decision_model
             ? mainScore.description
             : "",
       };

@@ -16,7 +16,7 @@ const RULES_DOCS_LINK = buildDocsUrl("/production/online-evaluation/rules");
 const TITLE_BY_RULE_TYPE: Record<UI_EVALUATORS_RULE_TYPE, string> = {
   [UI_EVALUATORS_RULE_TYPE.llm_judge]: "New LLM-as-a-Judge",
   [UI_EVALUATORS_RULE_TYPE.python_code]: "New code evaluator",
-  [UI_EVALUATORS_RULE_TYPE.jev]: "New Jev evaluator",
+  [UI_EVALUATORS_RULE_TYPE.decision_model]: "New decision model evaluator",
 };
 
 type RuleEditorPanelProps = {

@@ -655,17 +655,15 @@ export const LLM_PROMPT_TEMPLATES: Record<
   [EVALUATORS_RULE_SCOPE.span]: LLM_PROMPT_SPAN_TEMPLATES,
 };
 
-// Trace-scope and span-scope code rules are seeded with the same starting point;
-// the constants below differ only in their form type. Shared so an edit to the
-// template cannot land in one scope and not the other.
-const DEFAULT_PYTHON_CODE_METRIC =
+const getDefaultPythonCodeMetric = (hint: string) =>
   "from opik.evaluation.metrics import base_metric, score_result\n" +
   "\n" +
   "class MyCustomMetric(base_metric.BaseMetric):\n" +
   '    def __init__(self, name: str = "my_custom_metric"):\n' +
   "        self.name = name\n" +
   "\n" +
-  "    def score(self, input, output, **ignored_kwargs):\n" +
+  "    def score(self, input, output, metadata=None, **ignored_kwargs):\n" +
+  hint +
   "        # Add your logic here\n" +
   "\n" +
   "        return score_result.ScoreResult(\n" +
@@ -677,10 +675,13 @@ const DEFAULT_PYTHON_CODE_METRIC =
 const DEFAULT_PYTHON_CODE_ARGUMENTS = {
   input: "input",
   output: "output",
+  metadata: "metadata",
 };
 
 export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceForm = {
-  metric: DEFAULT_PYTHON_CODE_METRIC,
+  metric: getDefaultPythonCodeMetric(
+    "        # Add spans=None to the arguments to get the spans of the trace\n",
+  ),
   arguments: DEFAULT_PYTHON_CODE_ARGUMENTS,
 };
 
@@ -715,6 +716,6 @@ export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
 };
 
 export const DEFAULT_PYTHON_CODE_SPAN_DATA: PythonCodeDetailsSpanForm = {
-  metric: DEFAULT_PYTHON_CODE_METRIC,
+  metric: getDefaultPythonCodeMetric(""),
   arguments: DEFAULT_PYTHON_CODE_ARGUMENTS,
 };

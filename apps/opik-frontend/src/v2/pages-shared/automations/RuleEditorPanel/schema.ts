@@ -183,7 +183,7 @@ const refineDecisionModelRule = (
   if (!data.schema.length) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Jev needs at least one score",
+      message: "Decision models need at least one score",
       path: ["schema"],
     });
   }
@@ -201,7 +201,7 @@ const refineDecisionModelRule = (
   if (data.schema.some((score) => score.type !== LLM_SCHEMA_TYPE.BOOLEAN)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Jev only supports Boolean scores",
+      message: "Decision models only support Boolean scores",
       path: ["schema"],
     });
   }
@@ -209,7 +209,7 @@ const refineDecisionModelRule = (
   if (!hasSingleUserMessage(data.messages)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Jev needs exactly one user message",
+      message: "Decision models need exactly one user message",
       path: ["messages", Math.max(data.messages.length - 1, 0), "content"],
     });
   }
@@ -218,7 +218,7 @@ const refineDecisionModelRule = (
     if (!isTextOnlyMessage(message)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Jev only accepts text messages",
+        message: "Decision models only accept text messages",
         path: ["messages", index, "content"],
       });
     }
@@ -229,7 +229,7 @@ const refineDecisionModelRule = (
     if (forbiddenVariable && value === forbiddenVariable) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `Jev doesn't support the "${forbiddenVariable}" variable, map it to a trace or span field instead`,
+        message: `Decision models don't support the "${forbiddenVariable}" variable, map it to a trace or span field instead`,
         path: ["variables", key],
       });
     }
@@ -430,7 +430,8 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   if (isDecisionModel(data.model)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Thread rules don't support Jev, choose a trace or span scope",
+      message:
+        "Thread rules don't support decision models, choose a trace or span scope",
       path: ["model"],
     });
   }

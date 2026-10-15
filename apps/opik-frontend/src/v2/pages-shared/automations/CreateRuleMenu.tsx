@@ -25,13 +25,13 @@ const CODE_EVALUATOR_OPTION: CreateMenuOption<UI_EVALUATORS_RULE_TYPE> = {
   iconClassName: "bg-[var(--rule-icon-code)]",
 };
 
-const JEV_OPTION: CreateMenuOption<UI_EVALUATORS_RULE_TYPE> = {
-  value: UI_EVALUATORS_RULE_TYPE.jev,
-  label: "Jev",
+const DECISION_MODEL_OPTION: CreateMenuOption<UI_EVALUATORS_RULE_TYPE> = {
+  value: UI_EVALUATORS_RULE_TYPE.decision_model,
+  label: "Decision model",
   description:
     "Answer yes/no questions about your traces, with a probability for each answer.",
   icon: CircleHelp,
-  iconClassName: "bg-[var(--rule-icon-jev)]",
+  iconClassName: "bg-[var(--rule-icon-decision-model)]",
 };
 
 type CreateRuleMenuProps = {
@@ -48,8 +48,8 @@ const CreateRuleMenu: React.FC<CreateRuleMenuProps> = ({ onSelect }) => {
       label="Evaluator"
       options={
         isPythonEvaluatorEnabled
-          ? [LLM_JUDGE_OPTION, JEV_OPTION, CODE_EVALUATOR_OPTION]
-          : [LLM_JUDGE_OPTION, JEV_OPTION]
+          ? [LLM_JUDGE_OPTION, DECISION_MODEL_OPTION, CODE_EVALUATOR_OPTION]
+          : [LLM_JUDGE_OPTION, DECISION_MODEL_OPTION]
       }
       onSelect={onSelect}
       data-testid="online-evaluation-create-rule-button"

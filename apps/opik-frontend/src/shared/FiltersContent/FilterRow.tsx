@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import { Trash, X } from "lucide-react";
+import { X } from "lucide-react";
 import isFunction from "lodash/isFunction";
 
 import { Filter, FilterRowConfig } from "@/types/filters";
@@ -14,8 +14,8 @@ import TimeRow from "@/shared/FiltersContent/rows/TimeRow";
 import DictionaryRow from "@/shared/FiltersContent/rows/DictionaryRow";
 import DefaultRow from "@/shared/FiltersContent/rows/DefaultRow";
 import CategoryRow from "@/shared/FiltersContent/rows/CategoryRow";
+import ConditionCard from "@/shared/ConditionCard/ConditionCard";
 import { createFilter } from "@/lib/filters";
-import { cn } from "@/lib/utils";
 
 export type FilterRowVariant = "table" | "card";
 
@@ -116,38 +116,21 @@ export const FilterRow = <TColumnData,>({
 
   if (variant === "card") {
     return (
-      <div className="flex flex-col gap-1">
-        <div
-          className={cn(
-            "flex overflow-hidden rounded-md border border-border bg-background",
-            CARD_FIELD_CLASSES,
-          )}
-        >
-          <div className="min-w-0 flex-1 p-[3px]">
-            <table className="w-full table-fixed">
-              <tbody>
-                <tr className="[&>td]:p-[3px]">
-                  {columnCell}
-                  {renderByType()}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <button
-            type="button"
-            className="flex w-6 shrink-0 items-center justify-center border-l border-border text-muted-slate hover:text-foreground"
-            onClick={() => onRemove(filter.id)}
-            aria-label="Remove filter"
-          >
-            <Trash className="size-3" />
-          </button>
-        </div>
-        {filter.error && (
-          <p className="comet-body-xs px-0.5 text-destructive">
-            {filter.error}
-          </p>
-        )}
-      </div>
+      <ConditionCard
+        onRemove={() => onRemove(filter.id)}
+        removeLabel="Remove filter"
+        errors={[filter.error]}
+        className={CARD_FIELD_CLASSES}
+      >
+        <table className="w-full table-fixed">
+          <tbody>
+            <tr className="[&>td:first-child]:pl-0 [&>td:last-child]:pr-0 [&>td]:px-1 [&>td]:py-0">
+              {columnCell}
+              {renderByType()}
+            </tr>
+          </tbody>
+        </table>
+      </ConditionCard>
     );
   }
 

@@ -21,7 +21,9 @@ import RuleEditorNotice from "@/v2/pages-shared/automations/RuleEditorPanel/Rule
 import JudgePromptInput from "@/v2/pages-shared/automations/RuleEditorPanel/JudgePromptInput";
 import useRuleSampleData from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleSampleData";
 
-const getJevErrors = (form: UseFormReturn<EvaluationRuleFormType>) => {
+const getDecisionModelErrors = (
+  form: UseFormReturn<EvaluationRuleFormType>,
+) => {
   const errors = form.formState.errors;
   const messages = getRecordErrorKeys(errors, [
     "llmJudgeDetails",
@@ -54,8 +56,8 @@ const OpenRouterNotice: React.FC = () => {
   return (
     <RuleEditorNotice>
       <span>
-        Jev runs through OpenRouter. Connect OpenRouter so that this evaluator
-        can run.
+        Decision models run through OpenRouter. Connect OpenRouter so that this
+        evaluator can run.
       </span>
       {canUpdateAIProviders && (
         <>
@@ -79,13 +81,15 @@ const OpenRouterNotice: React.FC = () => {
   );
 };
 
-type JevPromptFieldProps = {
+type DecisionModelPromptFieldProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
 };
 
-const JevPromptField: React.FC<JevPromptFieldProps> = ({ form }) => {
+const DecisionModelPromptField: React.FC<DecisionModelPromptFieldProps> = ({
+  form,
+}) => {
   const scope = form.watch("scope");
-  const jevErrors = getJevErrors(form);
+  const decisionModelErrors = getDecisionModelErrors(form);
   const sampleData = useRuleSampleData(
     form.watch("projectIds")[0] ?? "",
     scope,
@@ -100,7 +104,9 @@ const JevPromptField: React.FC<JevPromptFieldProps> = ({ form }) => {
         <FormItem className="flex flex-1 flex-col gap-1">
           <OpenRouterNotice />
           <RuleEditorCard
-            hasError={Boolean(fieldState.error) || jevErrors.length > 0}
+            hasError={
+              Boolean(fieldState.error) || decisionModelErrors.length > 0
+            }
             header={
               <SelectBox
                 variant="ghost"
@@ -125,9 +131,9 @@ const JevPromptField: React.FC<JevPromptFieldProps> = ({ form }) => {
           </RuleEditorCard>
           <Description className="px-0.5">
             <span>
-              Jev reads this text and answers each question with yes or no. A
-              score is true when the probability is 0.5 or higher, and the
-              reason shows the probability. Use
+              The decision model reads this text and answers each question with
+              yes or no. A score is true when the probability is 0.5 or higher,
+              and the reason shows the probability. Use
             </span>{" "}
             <Tag variant="green" className="px-1 align-top font-mono">
               {"{{"}
@@ -135,7 +141,7 @@ const JevPromptField: React.FC<JevPromptFieldProps> = ({ form }) => {
             <span>{`to insert data from ${SCOPE_ENTITY_LABEL[scope]}.`}</span>
           </Description>
           <FormMessage />
-          {jevErrors.map((message) => (
+          {decisionModelErrors.map((message) => (
             <FormErrorSkeleton key={message}>{message}</FormErrorSkeleton>
           ))}
         </FormItem>
@@ -144,4 +150,4 @@ const JevPromptField: React.FC<JevPromptFieldProps> = ({ form }) => {
   );
 };
 
-export default JevPromptField;
+export default DecisionModelPromptField;

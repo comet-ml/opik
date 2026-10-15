@@ -7,7 +7,6 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { LLM_JUDGE, LLMPromptTemplate } from "@/types/llm";
 import MenuOptionItems from "@/v2/pages-shared/CreateMenuButton/MenuOptionItems";
@@ -33,14 +32,17 @@ const JudgeTemplateMenu: React.FC<JudgeTemplateMenuProps> = ({
 
   return (
     <DropdownMenu>
-      <TooltipWrapper content="Load a template">
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-2xs" type="button">
-            <FileTerminal />
-          </Button>
-        </DropdownMenuTrigger>
-      </TooltipWrapper>
-      <DropdownMenuContent align="end" className="w-[280px] p-1.5">
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="2xs" type="button" className="gap-1">
+          <FileTerminal className="size-3 shrink-0" />
+          Templates
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="w-[280px] p-1.5"
+        onCloseAutoFocus={(event) => event.preventDefault()}
+      >
         <MenuOptionItems options={options} onSelect={handleSelect} />
       </DropdownMenuContent>
     </DropdownMenu>

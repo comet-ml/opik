@@ -1,13 +1,13 @@
 import React, { useCallback } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { CircleHelp, Plus } from "lucide-react";
+import { CircleHelp } from "lucide-react";
 import get from "lodash/get";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { Textarea } from "@/ui/textarea";
 import { FormErrorSkeleton } from "@/ui/form";
+import AddItemButton from "@/shared/AddItemButton/AddItemButton";
 import { LLM_SCHEMA_TYPE, LLMJudgeSchema } from "@/types/llm";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 import RuleSettingsCard from "@/v2/pages-shared/automations/RuleEditorPanel/RuleSettingsCard";
@@ -20,11 +20,13 @@ const NEW_QUESTION: LLMJudgeSchema = {
   unsaved: false,
 };
 
-type JevQuestionsCardProps = {
+type DecisionModelQuestionsCardProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
 };
 
-const JevQuestionsCard: React.FC<JevQuestionsCardProps> = ({ form }) => {
+const DecisionModelQuestionsCard: React.FC<DecisionModelQuestionsCardProps> = ({
+  form,
+}) => {
   const questions: LLMJudgeSchema[] =
     form.watch("llmJudgeDetails.schema") ?? [];
   const errors = form.formState.errors;
@@ -56,9 +58,9 @@ const JevQuestionsCard: React.FC<JevQuestionsCardProps> = ({ form }) => {
   return (
     <RuleSettingsCard
       icon={CircleHelp}
-      iconClassName="bg-[var(--rule-icon-jev)]"
+      iconClassName="bg-[var(--rule-icon-decision-model)]"
       title="Questions"
-      description="Jev answers each question with yes or no. Each question is one score."
+      description="The decision model answers each question with yes or no. Each question is one score."
     >
       <div className="flex flex-col gap-1.5 p-2">
         {questions.map((question, index) => {
@@ -109,21 +111,13 @@ const JevQuestionsCard: React.FC<JevQuestionsCardProps> = ({ form }) => {
           );
         })}
         {listError && <FormErrorSkeleton>{listError}</FormErrorSkeleton>}
-        <div className="flex h-8 w-full items-center justify-center rounded-md border border-dashed border-border bg-soft-background">
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="text-foreground hover:text-primary-hover"
-            onClick={() => setQuestions([...questions, { ...NEW_QUESTION }])}
-          >
-            <Plus className="mr-0.5 size-3" />
-            Add question
-          </Button>
-        </div>
+        <AddItemButton
+          label="Add question"
+          onClick={() => setQuestions([...questions, { ...NEW_QUESTION }])}
+        />
       </div>
     </RuleSettingsCard>
   );
 };
 
-export default JevQuestionsCard;
+export default DecisionModelQuestionsCard;

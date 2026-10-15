@@ -20,7 +20,7 @@ export enum EVALUATORS_RULE_SCOPE {
 export enum UI_EVALUATORS_RULE_TYPE {
   llm_judge = "llm_judge",
   python_code = "python_code",
-  jev = "jev",
+  decision_model = "decision_model",
 }
 
 export enum EVAL_TRIGGER_SCOPE {

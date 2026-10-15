@@ -1,10 +1,10 @@
 import React, { useCallback } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { BrainCircuit, Plus } from "lucide-react";
+import { BrainCircuit } from "lucide-react";
 import get from "lodash/get";
 
-import { Button } from "@/ui/button";
 import { FormErrorSkeleton } from "@/ui/form";
+import AddItemButton from "@/shared/AddItemButton/AddItemButton";
 import { LLM_SCHEMA_TYPE, LLMJudgeSchema } from "@/types/llm";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 import RuleSettingsCard from "@/v2/pages-shared/automations/RuleEditorPanel/RuleSettingsCard";
@@ -90,18 +90,10 @@ const ScoreConfigurationCard: React.FC<ScoreConfigurationCardProps> = ({
           );
         })}
         {scoresError && <FormErrorSkeleton>{scoresError}</FormErrorSkeleton>}
-        <div className="flex h-8 w-full items-center justify-center rounded-md border border-dashed border-border bg-soft-background">
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="text-foreground hover:text-primary-hover"
-            onClick={() => setScores([...scores, { ...NEW_SCORE }])}
-          >
-            <Plus className="mr-0.5 size-3" />
-            Additional score
-          </Button>
-        </div>
+        <AddItemButton
+          label="Additional score"
+          onClick={() => setScores([...scores, { ...NEW_SCORE }])}
+        />
       </div>
     </RuleSettingsCard>
   );
