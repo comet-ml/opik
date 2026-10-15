@@ -117,6 +117,7 @@ const DecisionModelPromptField: React.FC<DecisionModelPromptFieldProps> = ({
                   })
                 }
                 options={DECISION_MODELS}
+                testId="decision-model-select"
                 className="comet-body-xs h-6 w-auto gap-1 px-1 text-muted-slate"
               />
             }

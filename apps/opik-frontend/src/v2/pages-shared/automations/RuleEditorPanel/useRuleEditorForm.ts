@@ -307,7 +307,7 @@ const useRuleEditorForm = ({
     const llmJudgeDetails = form.getValues("llmJudgeDetails");
 
     const [mainScore, ...additionalScores] = llmJudgeDetails.schema;
-    if (mainScore) {
+    if (mainScore && !isEdit) {
       const nextMainScore = {
         ...mainScore,
         name: values.ruleName.trim(),
@@ -334,7 +334,7 @@ const useRuleEditorForm = ({
       "llmJudgeDetails.parsingVariablesError",
       parsingVariablesError,
     );
-  }, [form]);
+  }, [form, isEdit]);
 
   useEffect(() => {
     const subscription = form.watch((_, { name }) => {
