@@ -22,6 +22,8 @@ import RuleScopeField from "@/v2/pages-shared/automations/RuleEditorPanel/RuleSc
 import FilteringSamplingCard from "@/v2/pages-shared/automations/RuleEditorPanel/FilteringSamplingCard";
 import ScoreConfigurationCard from "@/v2/pages-shared/automations/RuleEditorPanel/ScoreConfigurationCard";
 import CostLimitField from "@/v2/pages-shared/automations/RuleEditorPanel/CostLimitField";
+import JevPromptField from "@/v2/pages-shared/automations/RuleEditorPanel/JevPromptField";
+import JevQuestionsCard from "@/v2/pages-shared/automations/RuleEditorPanel/JevQuestionsCard";
 import CodeEvaluatorField from "@/v2/pages-shared/automations/RuleEditorPanel/CodeEvaluatorField";
 import { RuleDefaultModel } from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleDefaultModel";
 
@@ -108,6 +110,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
   ]);
 
   const isLLMJudge = ruleType === UI_EVALUATORS_RULE_TYPE.llm_judge;
+  const isJev = ruleType === UI_EVALUATORS_RULE_TYPE.jev;
   const isSpanScope = form.watch("scope") === EVALUATORS_RULE_SCOPE.span;
 
   return (
@@ -122,13 +125,15 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
               <div className="h-full overflow-y-auto">
                 <div className="flex min-h-full flex-col gap-4 pb-3 pt-5">
                   <RuleNameField form={form} />
-                  {isLLMJudge ? (
+                  {isLLMJudge && (
                     <JudgePromptField
                       form={form}
                       onSelectTemplate={applyTemplate}
                       mergeInfo={promptMergeInfo}
                     />
-                  ) : (
+                  )}
+                  {isJev && <JevPromptField form={form} />}
+                  {ruleType === UI_EVALUATORS_RULE_TYPE.python_code && (
                     <CodeEvaluatorField
                       form={form}
                       onConvertSignature={convertCodeSignature}
@@ -152,6 +157,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
                   />
                   <FilteringSamplingCard form={form} projectId={projectId} />
                   {isLLMJudge && <ScoreConfigurationCard form={form} />}
+                  {isJev && <JevQuestionsCard form={form} />}
                   {isLLMJudge && !isSpanScope && <CostLimitField form={form} />}
                 </div>
               </div>

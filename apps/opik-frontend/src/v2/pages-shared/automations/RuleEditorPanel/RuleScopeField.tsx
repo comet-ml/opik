@@ -35,13 +35,16 @@ const RuleScopeField: React.FC<RuleScopeFieldProps> = ({
   );
   const uiType = form.watch("uiType");
   const scope = form.watch("scope");
+  const isJev = uiType === UI_EVALUATORS_RULE_TYPE.jev;
   const isSpanScopeEnabled =
-    uiType === UI_EVALUATORS_RULE_TYPE.llm_judge
-      ? isSpanLlmJudgeEnabled
-      : isSpanPythonCodeEnabled;
+    uiType === UI_EVALUATORS_RULE_TYPE.python_code
+      ? isSpanPythonCodeEnabled
+      : isSpanLlmJudgeEnabled;
 
   const scopeOptions = [
-    { value: EVALUATORS_RULE_SCOPE.thread, label: "Threads" },
+    ...(isJev
+      ? []
+      : [{ value: EVALUATORS_RULE_SCOPE.thread, label: "Threads" }]),
     { value: EVALUATORS_RULE_SCOPE.trace, label: "Traces" },
     ...(isSpanScopeEnabled
       ? [{ value: EVALUATORS_RULE_SCOPE.span, label: "Spans" }]

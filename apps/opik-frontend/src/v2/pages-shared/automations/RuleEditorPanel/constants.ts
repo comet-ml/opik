@@ -7,7 +7,13 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { EVALUATORS_RULE_SCOPE, PythonCodeObject } from "@/types/automations";
-import { LLM_JUDGE, LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
+import {
+  LLM_JUDGE,
+  LLM_MESSAGE_ROLE,
+  LLM_SCHEMA_TYPE,
+  LLMMessage,
+} from "@/types/llm";
+import { DECISION_MODELS } from "@/constants/decisionModels";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import {
   DEFAULT_PYTHON_CODE_SPAN_DATA,
@@ -72,6 +78,35 @@ export const DEFAULT_LLM_AS_JUDGE_DATA = {
     schema: LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.schema,
     maxCostUsd: null,
   },
+};
+
+const JEV_DEFAULT_DATA = {
+  model: DECISION_MODELS[0].value,
+  config: DEFAULT_LLM_CONFIG,
+  template: LLM_JUDGE.custom,
+  messages: [
+    {
+      id: "rule-prompt",
+      role: LLM_MESSAGE_ROLE.user,
+      content: "INPUT:\n{{input}}\n\nOUTPUT:\n{{output}}",
+    },
+  ],
+  variables: {},
+  schema: [
+    {
+      name: "",
+      description: "",
+      type: LLM_SCHEMA_TYPE.BOOLEAN,
+      unsaved: false,
+    },
+  ],
+  maxCostUsd: null,
+};
+
+export const DEFAULT_JEV_DATA = {
+  [EVALUATORS_RULE_SCOPE.trace]: JEV_DEFAULT_DATA,
+  [EVALUATORS_RULE_SCOPE.thread]: JEV_DEFAULT_DATA,
+  [EVALUATORS_RULE_SCOPE.span]: JEV_DEFAULT_DATA,
 };
 
 export const DEFAULT_PYTHON_CODE_DATA: Record<

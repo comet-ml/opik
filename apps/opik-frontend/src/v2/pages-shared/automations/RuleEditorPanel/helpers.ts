@@ -6,10 +6,14 @@ import { FieldErrors } from "react-hook-form";
 import {
   EVALUATORS_RULE_SCOPE,
   EVALUATORS_RULE_TYPE,
+  EvaluatorsRule,
+  LLMJudgeObject,
   PythonCodeObject,
   UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
 import { Filter } from "@/types/filters";
+import { isLLMJudgeRule } from "@/lib/rules";
+import { isDecisionModel } from "@/lib/modelCapabilities";
 import { parsePythonMethodParameters } from "@/lib/pythonArgumentsParser";
 import {
   LLM_MESSAGE_ROLE,
@@ -55,19 +59,28 @@ export const getBackendRuleType = (
     [EVALUATORS_RULE_SCOPE.trace]: {
       [UI_EVALUATORS_RULE_TYPE.llm_judge]: EVALUATORS_RULE_TYPE.llm_judge,
       [UI_EVALUATORS_RULE_TYPE.python_code]: EVALUATORS_RULE_TYPE.python_code,
+      [UI_EVALUATORS_RULE_TYPE.jev]: EVALUATORS_RULE_TYPE.llm_judge,
     },
     [EVALUATORS_RULE_SCOPE.thread]: {
       [UI_EVALUATORS_RULE_TYPE.llm_judge]:
         EVALUATORS_RULE_TYPE.thread_llm_judge,
       [UI_EVALUATORS_RULE_TYPE.python_code]:
         EVALUATORS_RULE_TYPE.thread_python_code,
+      [UI_EVALUATORS_RULE_TYPE.jev]: EVALUATORS_RULE_TYPE.thread_llm_judge,
     },
     [EVALUATORS_RULE_SCOPE.span]: {
       [UI_EVALUATORS_RULE_TYPE.llm_judge]: EVALUATORS_RULE_TYPE.span_llm_judge,
       [UI_EVALUATORS_RULE_TYPE.python_code]:
         EVALUATORS_RULE_TYPE.span_python_code,
+      [UI_EVALUATORS_RULE_TYPE.jev]: EVALUATORS_RULE_TYPE.span_llm_judge,
     },
   })[scope][uiType];
+
+export const getRuleUIType = (rule: EvaluatorsRule) =>
+  isLLMJudgeRule(rule) &&
+  isDecisionModel((rule.code as LLMJudgeObject).model?.name)
+    ? UI_EVALUATORS_RULE_TYPE.jev
+    : getUIRuleType(rule.type);
 
 const getFilterTypeByField = (
   field: string,

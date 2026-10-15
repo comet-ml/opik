@@ -1,5 +1,5 @@
 import React from "react";
-import { BrainCircuit, SquareFunction } from "lucide-react";
+import { BrainCircuit, CircleHelp, SquareFunction } from "lucide-react";
 
 import CreateMenuButton, {
   CreateMenuOption,
@@ -25,6 +25,15 @@ const CODE_EVALUATOR_OPTION: CreateMenuOption<UI_EVALUATORS_RULE_TYPE> = {
   iconClassName: "bg-[var(--rule-icon-code)]",
 };
 
+const JEV_OPTION: CreateMenuOption<UI_EVALUATORS_RULE_TYPE> = {
+  value: UI_EVALUATORS_RULE_TYPE.jev,
+  label: "Jev",
+  description:
+    "Answer yes/no questions about your traces, with a probability for each answer.",
+  icon: CircleHelp,
+  iconClassName: "bg-[var(--rule-icon-jev)]",
+};
+
 type CreateRuleMenuProps = {
   onSelect: (type: UI_EVALUATORS_RULE_TYPE) => void;
 };
@@ -39,8 +48,8 @@ const CreateRuleMenu: React.FC<CreateRuleMenuProps> = ({ onSelect }) => {
       label="Evaluator"
       options={
         isPythonEvaluatorEnabled
-          ? [LLM_JUDGE_OPTION, CODE_EVALUATOR_OPTION]
-          : [LLM_JUDGE_OPTION]
+          ? [LLM_JUDGE_OPTION, JEV_OPTION, CODE_EVALUATOR_OPTION]
+          : [LLM_JUDGE_OPTION, JEV_OPTION]
       }
       onSelect={onSelect}
       data-testid="online-evaluation-create-rule-button"

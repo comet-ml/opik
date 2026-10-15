@@ -47,14 +47,16 @@ import emptyOnlineEvalLightUrl from "/images/empty-online-eval-light.svg";
 import emptyOnlineEvalDarkUrl from "/images/empty-online-eval-dark.svg";
 import RuleEditorPanel from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorPanel";
 import CreateRuleMenu from "@/v2/pages-shared/automations/CreateRuleMenu";
-import { isPythonCodeRule } from "@/lib/rules";
 import RulesActionsPanel from "@/v2/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/v2/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/v2/pages-shared/automations/RuleLogsCell";
 import RuleTracesCell from "@/v2/pages-shared/automations/RuleTracesCell";
 import { EvaluationTracesSidebar } from "@/v2/pages-shared/automations/EvaluationTracesSidebar";
 import { capitalizeFirstLetter } from "@/lib/utils";
-import { getUIRuleScope } from "@/v2/pages-shared/automations/RuleEditorPanel/helpers";
+import {
+  getRuleUIType,
+  getUIRuleScope,
+} from "@/v2/pages-shared/automations/RuleEditorPanel/helpers";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 import { useActiveProjectId } from "@/store/AppStore";
@@ -237,9 +239,7 @@ export const OnlineEvaluationPage: React.FC = () => {
 
   const dialogRule = editingRule || cloningRule;
   const dialogRuleType = dialogRule
-    ? isPythonCodeRule(dialogRule)
-      ? UI_EVALUATORS_RULE_TYPE.python_code
-      : UI_EVALUATORS_RULE_TYPE.llm_judge
+    ? getRuleUIType(dialogRule)
     : createRuleType;
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(

@@ -9,13 +9,14 @@ import { EvaluatorsRule, UI_EVALUATORS_RULE_TYPE } from "@/types/automations";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import RuleEditorForm from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorForm";
 import useRuleDefaultModel from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleDefaultModel";
-import { getUIRuleType } from "@/v2/pages-shared/automations/RuleEditorPanel/helpers";
+import { getRuleUIType } from "@/v2/pages-shared/automations/RuleEditorPanel/helpers";
 
 const RULES_DOCS_LINK = buildDocsUrl("/production/online-evaluation/rules");
 
 const TITLE_BY_RULE_TYPE: Record<UI_EVALUATORS_RULE_TYPE, string> = {
   [UI_EVALUATORS_RULE_TYPE.llm_judge]: "New LLM-as-a-Judge",
   [UI_EVALUATORS_RULE_TYPE.python_code]: "New code evaluator",
+  [UI_EVALUATORS_RULE_TYPE.jev]: "New Jev evaluator",
 };
 
 type RuleEditorPanelProps = {
@@ -38,7 +39,7 @@ const RuleEditorPanel: React.FC<RuleEditorPanelProps> = ({
   onRuleCreated,
 }) => {
   const isEdit = Boolean(rule) && !isClone;
-  const ruleType = rule ? getUIRuleType(rule.type) : newRuleType;
+  const ruleType = rule ? getRuleUIType(rule) : newRuleType;
   const { isReady, defaultModel } = useRuleDefaultModel();
   const handleClose = useCallback(() => setOpen(false), [setOpen]);
 
@@ -69,7 +70,7 @@ const RuleEditorPanel: React.FC<RuleEditorPanelProps> = ({
         </ResizableSidePanelTopBar>
       }
     >
-      {isReady || ruleType === UI_EVALUATORS_RULE_TYPE.python_code ? (
+      {isReady || ruleType !== UI_EVALUATORS_RULE_TYPE.llm_judge ? (
         <RuleEditorForm
           onClose={handleClose}
           projectId={projectId}

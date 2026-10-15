@@ -154,7 +154,7 @@ type LLMJudgeRefineData = {
   model: string;
   messages: LLMMessage[];
   variables: Record<string, string>;
-  schema: { type: LLM_SCHEMA_TYPE }[];
+  schema: { type: LLM_SCHEMA_TYPE; description?: string }[];
 };
 
 const DECISION_MODEL_FORBIDDEN_VARIABLE_BY_SCOPE: Partial<
@@ -187,6 +187,16 @@ const refineDecisionModelRule = (
       path: ["schema"],
     });
   }
+
+  data.schema.forEach((score, index) => {
+    if (!score.description?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Write the question for this score",
+        path: ["schema", index, "description"],
+      });
+    }
+  });
 
   if (data.schema.some((score) => score.type !== LLM_SCHEMA_TYPE.BOOLEAN)) {
     ctx.addIssue({

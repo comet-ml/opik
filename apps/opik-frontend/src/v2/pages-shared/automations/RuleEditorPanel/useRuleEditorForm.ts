@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import cloneDeep from "lodash/cloneDeep";
+import isEqual from "lodash/isEqual";
 
 import {
   EVAL_TRIGGER_SCOPE,
@@ -38,7 +39,7 @@ import {
   getBackendRuleType,
   getUIRuleScope,
   getCodeArguments,
-  getUIRuleType,
+  getRuleUIType,
   getPromptMergeInfo,
   getSavedCodeArguments,
   mergeMessagesIntoPrompt,
@@ -50,6 +51,7 @@ import {
   nameInlineVariables,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/inlineVariableMappings";
 import {
+  DEFAULT_JEV_DATA,
   DEFAULT_LLM_AS_JUDGE_DATA,
   FILTER_COLUMNS_BY_SCOPE,
   DEFAULT_PYTHON_CODE_DATA,
@@ -57,7 +59,6 @@ import {
 } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 
 const DERIVED_FIELDS = [
-  "llmJudgeDetails.schema",
   "llmJudgeDetails.variables",
   "llmJudgeDetails.parsingVariablesError",
   "pythonCodeDetails.arguments",
@@ -142,6 +143,11 @@ const withDefaultModel = <
         ),
       };
 
+const getDefaultJudgeData = (uiType: UI_EVALUATORS_RULE_TYPE) =>
+  uiType === UI_EVALUATORS_RULE_TYPE.jev
+    ? DEFAULT_JEV_DATA
+    : DEFAULT_LLM_AS_JUDGE_DATA;
+
 const getDefaultValues = (
   ruleType: UI_EVALUATORS_RULE_TYPE,
   projectId: string | undefined,
@@ -150,7 +156,7 @@ const getDefaultValues = (
   defaultModel: RuleDefaultModel,
   savedJudge: SavedLLMJudgeData | undefined,
 ): EvaluationRuleFormType => {
-  const uiType = rule ? getUIRuleType(rule.type) : ruleType;
+  const uiType = rule ? getRuleUIType(rule) : ruleType;
   const scope = rule ? getUIRuleScope(rule.type) : EVALUATORS_RULE_SCOPE.trace;
   const ruleProjectIds = rule?.projects?.map((p) => p.project_id);
 
@@ -176,7 +182,7 @@ const getDefaultValues = (
     llmJudgeDetails: withDefaultModel(
       savedJudge
         ? toFormLLMJudgeDetails(savedJudge)
-        : cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[scope]),
+        : cloneDeep(getDefaultJudgeData(uiType)[scope]),
       defaultModel,
     ),
     pythonCodeDetails:
@@ -239,7 +245,7 @@ const useRuleEditorForm = ({
       );
       form.setValue("filters", withEmptyRuleFilter([]));
       form.setValue("llmJudgeDetails", {
-        ...cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[scope]),
+        ...cloneDeep(getDefaultJudgeData(form.getValues("uiType"))[scope]),
         model,
         config,
       });
@@ -298,10 +304,20 @@ const useRuleEditorForm = ({
 
     const [mainScore, ...additionalScores] = llmJudgeDetails.schema;
     if (mainScore) {
-      form.setValue("llmJudgeDetails.schema", [
-        { ...mainScore, name: values.ruleName.trim(), description: "" },
-        ...additionalScores,
-      ]);
+      const nextMainScore = {
+        ...mainScore,
+        name: values.ruleName.trim(),
+        description:
+          values.uiType === UI_EVALUATORS_RULE_TYPE.jev
+            ? mainScore.description
+            : "",
+      };
+      if (!isEqual(nextMainScore, mainScore)) {
+        form.setValue("llmJudgeDetails.schema", [
+          nextMainScore,
+          ...additionalScores,
+        ]);
+      }
     }
 
     const { variables, parsingVariablesError } = getPromptVariables(
