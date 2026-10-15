@@ -284,8 +284,7 @@ const useActionButtonActions = ({
       const waiting = usePlaygroundStore.getState().stopPending;
       if (!waiting) return;
 
-      const remaining = waiting.filter((id) => id !== promptId);
-      setStopPending(remaining.length ? remaining : null);
+      setStopPending(waiting.filter((id) => id !== promptId));
     },
     [setStopPending],
   );
@@ -295,14 +294,21 @@ const useActionButtonActions = ({
    * time this runs, so the same cancel path that had nothing to work with now finds the ids.
    * Returns whether the run was stopped, so the caller knows not to start watching it.
    */
-  const applyQueuedStop = useCallback(() => {
-    const queued = usePlaygroundStore.getState().stopPending;
-    if (!queued) return false;
+  const applyQueuedStop = useCallback(
+    (launched: string[]) => {
+      const queued = usePlaygroundStore.getState().stopPending;
+      if (!queued) return false;
 
-    cancelBackendRun(queued);
-    settleRun();
-    return true;
-  }, [cancelBackendRun, settleRun]);
+      // Cleared first: the ids exist now, so the cancel below lands rather than queueing again.
+      setStopPending(null);
+      cancelBackendRun(queued);
+
+      // Only a launch whose every prompt was stopped is over. A stop aimed at one of several
+      // leaves its siblings running on the server, and they still need watching.
+      return launched.every((promptId) => queued.includes(promptId));
+    },
+    [cancelBackendRun, setStopPending],
+  );
 
   /**
    * Leaving the page, as opposed to stopping the run. A server-side run outlives it, so cancelling
@@ -320,17 +326,19 @@ const useActionButtonActions = ({
   }, [stopPolling, settleRun, isBackendRun]);
 
   const stopAll = useCallback(() => {
-    // Read before settling, which empties the map: these are the prompts the stop covers, and a
-    // stop that has to wait for ids needs to name them.
-    const { isRunningMap } = usePlaygroundStore.getState();
+    // Read before settling, which empties both: these are the prompts the stop covers, and a
+    // stop that has to wait for ids needs to name them. A prompt stopped on its own is already
+    // out of the running map with its stop still queued, so carry that across or it is lost.
+    const { isRunningMap, stopPending } = usePlaygroundStore.getState();
     const running = Object.keys(isRunningMap).filter((id) => isRunningMap[id]);
+    const covered = [...new Set([...running, ...(stopPending ?? [])])];
 
     announcePendingRef.current = false;
     scopedAnnounceRef.current.clear();
     settleRun();
     isToStopRef.current = true;
     stopPolling();
-    cancelBackendRun(running);
+    cancelBackendRun(covered);
   }, [settleRun, stopPolling, cancelBackendRun]);
 
   const stopSingle = useCallback(
@@ -721,7 +729,7 @@ const useActionButtonActions = ({
         }
       });
 
-      if (applyQueuedStop()) return;
+      if (applyQueuedStop(promptIds)) return;
 
       setIsRunInFlight(true);
       setProgressPhase("running");
@@ -875,7 +883,22 @@ const useActionButtonActions = ({
       scopedAnnounceRef.current.add(promptId);
       // Until /execute answers, this prompt's previous experiment is the only id on hand, and a
       // stop pressed now would cancel that finished run instead of queueing for this one.
+      const previousExperimentId =
+        usePlaygroundStore.getState().experimentByPromptId?.[promptId];
       forgetExperimentForPrompt(promptId);
+
+      // A launch that never started replaces nothing, so the last run stays on screen. Without
+      // this the cell empties for good: the mapping it reads is persisted, so a reload keeps the
+      // blank rather than restoring it.
+      const keepShowingThePreviousRun = () => {
+        if (!previousExperimentId) return;
+        const current =
+          usePlaygroundStore.getState().experimentByPromptId ?? {};
+        setExperimentByPromptId({
+          ...current,
+          [promptId]: previousExperimentId,
+        });
+      };
 
       const experimentName = getExperimentNameForPrompt(prompt.id);
 
@@ -898,6 +921,7 @@ const useActionButtonActions = ({
         if (!experiment) {
           setPromptRunning(promptId, false);
           dropQueuedStop(promptId);
+          keepShowingThePreviousRun();
           return;
         }
 
@@ -911,7 +935,7 @@ const useActionButtonActions = ({
 
         // Record the id before deciding whether to watch: a run stopped mid-launch still exists on
         // the server, and cancelling it needs the id the stop could not reach.
-        if (applyQueuedStop()) return;
+        if (applyQueuedStop([promptId])) return;
         if (!usePlaygroundStore.getState().isRunningMap[promptId]) {
           return;
         }
@@ -941,6 +965,7 @@ const useActionButtonActions = ({
       } catch {
         setPromptRunning(promptId, false);
         dropQueuedStop(promptId);
+        keepShowingThePreviousRun();
       }
     },
     [
