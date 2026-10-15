@@ -178,11 +178,13 @@ class AiLabelRendererClickHouseTest {
         var outsized = fixtures.trace(30).toBuilder()
                 .input("{\"blob\":\"" + "x".repeat((int) MAX_FIELD_BYTES) + "\"}")
                 .errorInfo("{\"message\":\"" + "e".repeat((int) MAX_FIELD_BYTES) + "\"}")
+                .name("n".repeat((int) MAX_FIELD_BYTES + 1))
                 .endTime(null)
                 .build();
         var outsizedSpans = new ArrayList<>(fixtures.spans(outsized, 3, 2, 20));
         outsizedSpans.set(1, outsizedSpans.get(1).toBuilder()
                 .output("\"" + fixtures.text((int) MAX_FIELD_BYTES) + "\"")
+                .name("n".repeat((int) MAX_FIELD_BYTES + 1))
                 .errorInfo("{\"message\":\"" + "e".repeat((int) MAX_FIELD_BYTES) + "\"}")
                 .build());
         addTrace(outsized, outsizedSpans);
@@ -274,6 +276,7 @@ class AiLabelRendererClickHouseTest {
                         .output(guard(span.output()))
                         .metadata(guard(span.metadata()))
                         .errorInfo(guard(span.errorInfo()))
+                        .name(guardName(span.name()))
                         .build())
                 .toList();
         var guardedTrace = trace.toBuilder()
@@ -281,9 +284,15 @@ class AiLabelRendererClickHouseTest {
                 .output(guard(trace.output()))
                 .metadata(guard(trace.metadata()))
                 .errorInfo(guard(trace.errorInfo()))
+                .name(guardName(trace.name()))
                 .build();
         return canonical(AiLabelRenderer.render(new TraceRef(trace.projectId(), trace.id(), trace.startTime()),
                 guardedTrace, read, BUDGET));
+    }
+
+    private static String guardName(String name) {
+        int bytes = name.getBytes(StandardCharsets.UTF_8).length;
+        return bytes > MAX_FIELD_BYTES ? "[%d bytes omitted]".formatted(bytes) : name;
     }
 
     private static String guard(String value) {

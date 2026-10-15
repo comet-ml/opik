@@ -41,13 +41,14 @@ class AiLabelRenderDAO {
     private static final String LOG_COMMENT = "ai-labels:render";
 
     private static final String FIND_TRACES = """
-            SELECT id, project_id, name, guarded_input AS input, guarded_output AS output,
+            SELECT id, project_id, guarded_name AS name, guarded_input AS input, guarded_output AS output,
                 guarded_metadata AS metadata, start_time, end_time, guarded_error_info AS error_info
             FROM (
                 SELECT
                     id,
                     project_id,
-                    name,
+                    if(length(name) > :max_field_bytes,
+                        concat('[', toString(length(name)), ' bytes omitted]'), name) AS guarded_name,
                     if(length(input) > :max_field_bytes,
                         concat('"[', toString(length(input)), ' bytes omitted]"'), input) AS guarded_input,
                     if(length(output) > :max_field_bytes,
@@ -75,14 +76,15 @@ class AiLabelRenderDAO {
      * spans; it orders by microseconds so the cut is the same on both layouts.
      */
     private static final String FIND_SPANS = """
-            SELECT trace_id, id, parent_span_id, name, type, guarded_input AS input, guarded_output AS output,
+            SELECT trace_id, id, parent_span_id, guarded_name AS name, type, guarded_input AS input, guarded_output AS output,
                 guarded_metadata AS metadata, start_time, end_time, model, provider, guarded_error_info AS error_info
             FROM (
                 SELECT
                     trace_id,
                     id,
                     parent_span_id,
-                    name,
+                    if(length(name) > :max_field_bytes,
+                        concat('[', toString(length(name)), ' bytes omitted]'), name) AS guarded_name,
                     type,
                     if(length(input) > :max_field_bytes,
                         concat('"[', toString(length(input)), ' bytes omitted]"'), input) AS guarded_input,
