@@ -253,6 +253,23 @@ repos:
         require_serial: true
 
   # ---------------------------------------------------------------------------
+  # Backend (Java) — OpenAPI spec resolution. The backend test jobs skip
+  # swagger:resolve, and the image build that still runs it is skipped for fork
+  # PRs, so this is where every PR gets it before merge. It needs a full compile,
+  # too slow for a commit hook: manual stage keeps it CI-only (Code Quality runs
+  # legs with --hook-stage manual). Test sources don't feed the spec.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: swagger-resolve
+        name: ☕ swagger resolve — java backend openapi
+        entry: mvn -B -ntp -q -f apps/opik-backend/pom.xml compile -Dspotless.skip=true
+        language: system
+        files: ^apps/opik-backend/(src/main/|pom\.xml$)
+        pass_filenames: false
+        stages: [manual]
+
+  # ---------------------------------------------------------------------------
   # Self-check: smoke-test the pre-commit wrapper scripts when any of them change,
   # so a broken wrapper (regex/routing/flags) is caught before it ships.
   # ---------------------------------------------------------------------------

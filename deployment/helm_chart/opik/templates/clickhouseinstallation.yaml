@@ -75,6 +75,13 @@ spec:
       {{- toYaml . | nindent 6 }}
       {{- end }}
       {{- end }}
+      {{- if .Values.clickhouse.forceMerge.enabled }}
+      {{- if hasKey ((.Values.clickhouse.configuration | default dict).files | default dict) "conf.d/merge_tree.xml" }}
+      {{- fail "clickhouse.forceMerge.enabled renders conf.d/merge_tree.xml; remove it from clickhouse.configuration.files" }}
+      {{- end }}
+      conf.d/merge_tree.xml: |
+{{ include "opik.clickhouse.mergeTreeXml" . | indent 8 }}
+      {{- end }}
       {{- if .Values.clickhouse.tieredStorage.enabled }}
       conf.d/storage.xml: |
 {{ include "opik.clickhouse.storageXml" . | indent 8 }}
