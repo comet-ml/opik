@@ -14,13 +14,9 @@ import { Card, CardContent } from "@/ui/card";
 import ColoredTagNew from "@/shared/ColoredTag/ColoredTagNew";
 import { cn } from "@/lib/utils";
 import useManualEvaluationMutation from "@/api/automations/useManualEvaluationMutation";
-import {
-  EVALUATORS_RULE_SCOPE,
-  EVALUATORS_RULE_TYPE,
-  EvaluatorsRule,
-} from "@/types/automations";
+import { EVALUATORS_RULE_TYPE, EvaluatorsRule } from "@/types/automations";
 import Loader from "@/shared/Loader/Loader";
-import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
+import RuleEditorPanel from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorPanel";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ManualEvaluationEntityType = "trace" | "thread" | "span";
@@ -263,14 +259,6 @@ const RunEvaluationDialog: React.FunctionComponent<
   const isRunDisabled =
     selectedRuleIds.size === 0 || manualEvaluationMutation.isPending;
 
-  // Map entityType to EVALUATORS_RULE_SCOPE
-  const ruleScope =
-    entityType === "trace"
-      ? EVALUATORS_RULE_SCOPE.trace
-      : entityType === "thread"
-        ? EVALUATORS_RULE_SCOPE.thread
-        : EVALUATORS_RULE_SCOPE.span;
-
   return (
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -312,11 +300,10 @@ const RunEvaluationDialog: React.FunctionComponent<
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <AddEditRuleDialog
+      <RuleEditorPanel
         open={openCreateRuleDialog}
         setOpen={setOpenCreateRuleDialog}
         projectId={projectId}
-        defaultScope={ruleScope}
       />
     </>
   );

@@ -1,4 +1,11 @@
-import { useState, useCallback, useMemo, RefObject } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  RefObject,
+} from "react";
 import { EditorView, keymap, ViewUpdate } from "@codemirror/view";
 import { JsonValue } from "@/types/shared";
 
@@ -170,7 +177,35 @@ interface UseJsonPopoverProps {
   hasJsonData: boolean;
   insertTextAtCursor: (text: string) => void;
   onJsonPathSelect?: (path: string, value: JsonValue) => void;
+  openInsideTag?: boolean;
 }
+
+const PATH_CHARS_REGEX = /^[\w.[\]-]*/;
+
+const findTagAroundCursor = (view: EditorView) => {
+  const cursorPos = view.state.selection.main.head;
+  const line = view.state.doc.lineAt(cursorPos);
+  const before = line.text.slice(0, cursorPos - line.from);
+  const after = line.text.slice(cursorPos - line.from);
+
+  const openIndex = before.lastIndexOf(MUSTACHE_OPEN);
+  if (openIndex === -1) return null;
+  const query = before.slice(openIndex + MUSTACHE_OPEN_LEN);
+  if (/[{}]/.test(query)) return null;
+
+  const closeIndex = after.indexOf(MUSTACHE_CLOSE);
+  const isClosed =
+    closeIndex !== -1 && !/[{}]/.test(after.slice(0, closeIndex));
+  const tagEnd = isClosed
+    ? cursorPos + closeIndex + MUSTACHE_CLOSE_LEN
+    : cursorPos + (after.match(PATH_CHARS_REGEX)?.[0].length ?? 0);
+
+  return {
+    nameStart: line.from + openIndex + MUSTACHE_OPEN_LEN,
+    query,
+    tagEnd,
+  };
+};
 
 interface UseJsonPopoverReturn {
   isJsonPopoverOpen: boolean;
@@ -189,22 +224,29 @@ export const useJsonPopover = ({
   hasJsonData,
   insertTextAtCursor,
   onJsonPathSelect,
+  openInsideTag = false,
 }: UseJsonPopoverProps): UseJsonPopoverReturn => {
   const [isJsonPopoverOpen, setIsJsonPopoverOpen] = useState(false);
   const [jsonSearchQuery, setJsonSearchQuery] = useState("");
   const [braceStartPos, setBraceStartPos] = useState<number | null>(null);
   const [popoverPosition, setPopoverPosition] = useState({ top: 0, left: 0 });
+  const editsExistingTagRef = useRef(false);
+  useEffect(() => {
+    if (!isJsonPopoverOpen) editsExistingTagRef.current = false;
+  }, [isJsonPopoverOpen]);
 
   const handleJsonPathSelect = useCallback(
     (path: string, value: JsonValue) => {
       const view = editorViewRef.current;
       if (view && braceStartPos !== null) {
         const cursorPos = view.state.selection.main.head;
-        // Replace from after MUSTACHE_OPEN to current cursor with the path and closing MUSTACHE_CLOSE
+        const existingTag = editsExistingTagRef.current
+          ? findTagAroundCursor(view)
+          : null;
         view.dispatch({
           changes: {
             from: braceStartPos,
-            to: cursorPos,
+            to: existingTag?.tagEnd ?? cursorPos,
             insert: `${path}${MUSTACHE_CLOSE}`,
           },
           selection: {
@@ -245,6 +287,7 @@ export const useJsonPopover = ({
       setIsJsonPopoverOpen(false);
       setJsonSearchQuery("");
       setBraceStartPos(null);
+      editsExistingTagRef.current = false;
       onJsonPathSelect?.(path, value);
     },
     [braceStartPos, insertTextAtCursor, onJsonPathSelect, editorViewRef],
@@ -255,6 +298,7 @@ export const useJsonPopover = ({
     if (!open) {
       setJsonSearchQuery("");
       setBraceStartPos(null);
+      editsExistingTagRef.current = false;
     }
   }, []);
 
@@ -264,6 +308,38 @@ export const useJsonPopover = ({
     (update: ViewUpdate) => {
       const doc = update.state.doc;
       const cursorPos = update.state.selection.main.head;
+
+      if (
+        openInsideTag &&
+        hasJsonData &&
+        !isJsonPopoverOpen &&
+        update.transactions.some(
+          (tr) => tr.isUserEvent("input") || tr.isUserEvent("delete"),
+        )
+      ) {
+        const tag = findTagAroundCursor(update.view);
+        if (tag) {
+          editsExistingTagRef.current = true;
+          setBraceStartPos(tag.nameStart);
+          setJsonSearchQuery(tag.query);
+          update.view.requestMeasure({
+            read: (view) => ({
+              coords: view.coordsAtPos(tag.nameStart),
+              editorRect: view.dom.getBoundingClientRect(),
+            }),
+            write: ({ coords, editorRect }) => {
+              if (coords && editorRect) {
+                setPopoverPosition({
+                  top: coords.bottom - editorRect.top,
+                  left: coords.left - editorRect.left,
+                });
+              }
+              setIsJsonPopoverOpen(true);
+            },
+          });
+          return;
+        }
+      }
 
       // Detect pasted {{ when popover is open but braceStartPos is null
       if (
@@ -326,7 +402,7 @@ export const useJsonPopover = ({
         }
       }
     },
-    [isJsonPopoverOpen, braceStartPos, hasJsonData],
+    [isJsonPopoverOpen, braceStartPos, hasJsonData, openInsideTag],
   );
 
   const triggerVariableSearch = useCallback(() => {
