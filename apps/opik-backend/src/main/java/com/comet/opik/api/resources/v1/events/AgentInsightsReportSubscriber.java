@@ -137,7 +137,8 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
      */
     private void clearRunGuidanceVersion(AgentInsightsReportMessage message) {
         try {
-            runGuidanceService.markEnqueued(message.workspaceId(), message.projectId(), null);
+            runGuidanceService.clearIfStamped(message.workspaceId(), message.projectId(),
+                    message.guidanceVersion());
         } catch (RuntimeException e) {
             log.warn("Failed to clear the guidance version of a queued Agent Insights run, reportId='{}', "
                     + "project='{}'", message.reportId(), message.projectId(), e);

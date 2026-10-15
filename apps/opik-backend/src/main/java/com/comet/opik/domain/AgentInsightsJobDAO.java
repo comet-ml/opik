@@ -145,6 +145,16 @@ interface AgentInsightsJobDAO {
             @Bind("projectId") UUID projectId,
             @Bind("guidanceVersion") Integer guidanceVersion);
 
+    // Compare-and-clear: only the stamp the caller's run set, so another run's newer stamp is left alone.
+    @SqlUpdate("""
+            UPDATE agent_insights_jobs SET run_guidance_version = NULL, last_updated_at = last_updated_at
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
+                AND run_guidance_version <=> :guidanceVersion
+            """)
+    void clearRunGuidanceVersion(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId,
+            @Bind("guidanceVersion") int guidanceVersion);
+
     // Cross-workspace — used only by the daily sweep (system context), never from a request thread.
     // INNER JOIN projects so jobs whose project was deleted are filtered out at the source (no per-job
     // existence check in the sweep loop).

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RStreamReactive;
@@ -19,11 +20,15 @@ import reactor.test.StepVerifier;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -71,6 +76,44 @@ class AgentInsightsReportPublisherTest {
                 .verifyComplete();
 
         verify(stream).add(any());
+    }
+
+    @Test
+    @DisplayName("The run's guidance version is stamped before the run is on the stream")
+    void enqueue__withGuidance__stampsBeforePublishing() {
+        var projectId = UUID.randomUUID();
+        when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+        when(runGuidanceService.find(WORKSPACE_ID, projectId))
+                .thenReturn(Optional.of(new AgentInsightsJobDAO.RunGuidance("Only billing", 3)));
+        when(redisson.getStream(anyString(), any(Codec.class))).thenReturn(stream);
+        when(stream.add(any())).thenReturn(Mono.just(new StreamMessageId(1, 0)));
+
+        StepVerifier.create(publisher(true, true)
+                .enqueue(projectId, WORKSPACE_ID, PERIOD_START, PERIOD_END, AgentInsightsMetrics.MANUAL))
+                .expectNextCount(1)
+                .verifyComplete();
+
+        InOrder order = inOrder(runGuidanceService, stream);
+        order.verify(runGuidanceService).markEnqueued(WORKSPACE_ID, projectId, 3);
+        order.verify(stream).add(any());
+        verify(runGuidanceService, never()).clearIfStamped(any(), any(), anyInt());
+    }
+
+    @Test
+    @DisplayName("A publish that fails clears the stamp it set: the run never got on the queue")
+    void enqueue__publishFails__clearsStamp() {
+        var projectId = UUID.randomUUID();
+        when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+        when(runGuidanceService.find(WORKSPACE_ID, projectId))
+                .thenReturn(Optional.of(new AgentInsightsJobDAO.RunGuidance("Only billing", 3)));
+        when(redisson.getStream(anyString(), any(Codec.class))).thenReturn(stream);
+        when(stream.add(any())).thenReturn(Mono.error(new IllegalStateException("redis down")));
+
+        StepVerifier.create(publisher(true, true)
+                .enqueue(projectId, WORKSPACE_ID, PERIOD_START, PERIOD_END, AgentInsightsMetrics.MANUAL))
+                .verifyError(IllegalStateException.class);
+
+        verify(runGuidanceService).clearIfStamped(WORKSPACE_ID, projectId, 3);
     }
 
     @ParameterizedTest(name = "ollieEnabled={0}, agentInsightsEnabled={1}")

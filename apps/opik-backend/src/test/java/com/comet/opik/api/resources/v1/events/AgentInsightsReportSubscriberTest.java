@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -149,7 +150,7 @@ class AgentInsightsReportSubscriberTest {
         StepVerifier.create(subscriber.processEvent(message)).verifyComplete();
 
         verify(reportClient).triggerAgentInsights(expectedTrigger(message, "Only report billing failures"));
-        verify(runGuidanceService, never()).markEnqueued(any(), any(), any());
+        verify(runGuidanceService, never()).clearIfStamped(any(), any(), anyInt());
     }
 
     @Test
@@ -162,7 +163,7 @@ class AgentInsightsReportSubscriberTest {
 
         verify(reportClient).triggerAgentInsights(expectedTrigger(message, null));
         // The run was stamped with version 3 at enqueue; it must not claim results produced under that guidance.
-        verify(runGuidanceService).markEnqueued(WORKSPACE_ID, PROJECT_ID, null);
+        verify(runGuidanceService).clearIfStamped(WORKSPACE_ID, PROJECT_ID, 3);
     }
 
     @Test
@@ -172,7 +173,7 @@ class AgentInsightsReportSubscriberTest {
 
         StepVerifier.create(subscriber.processEvent(message())).verifyComplete();
 
-        verify(runGuidanceService, never()).markEnqueued(any(), any(), any());
+        verify(runGuidanceService, never()).clearIfStamped(any(), any(), anyInt());
     }
 
     @Test
@@ -184,7 +185,7 @@ class AgentInsightsReportSubscriberTest {
 
         StepVerifier.create(subscriber.processEvent(message)).verifyComplete();
 
-        verify(runGuidanceService).markEnqueued(WORKSPACE_ID, PROJECT_ID, null);
+        verify(runGuidanceService).clearIfStamped(WORKSPACE_ID, PROJECT_ID, 3);
     }
 
     private static AgentInsightsReportClient.Trigger expectedTrigger(AgentInsightsReportMessage message,

@@ -82,16 +82,20 @@ public class AgentInsightsReportPublisher {
             RStreamReactive<String, AgentInsightsReportMessage> stream = redisson.getStream(
                     config.getStreamName(), config.getCodec());
 
+            // Stamped before the run is on the stream, so the subscriber can't consume it (and clear the stamp)
+            // before the stamp lands and overwrites the clear.
+            markEnqueued(workspaceId, projectId, guidanceVersion, reportId);
+
             return stream.add(RedisStreamUtils.buildAddArgs(
                     AgentInsightsReportConfig.PAYLOAD_FIELD, message, config))
                     .publishOn(Schedulers.boundedElastic())
-                    .map(streamMessageId -> {
-                        markEnqueued(workspaceId, projectId, guidanceVersion, reportId);
-                        return reportId;
-                    })
-                    .doOnError(throwable -> log.error(
-                            "Failed to publish Agent Insights report trigger: reportId='{}', project='{}'",
-                            reportId, projectId, throwable));
+                    .map(streamMessageId -> reportId)
+                    .doOnError(throwable -> {
+                        log.error("Failed to publish Agent Insights report trigger: reportId='{}', project='{}'",
+                                reportId, projectId, throwable);
+                        // The run never got on the queue, so it must not claim its guidance version.
+                        clearStamp(workspaceId, projectId, guidanceVersion, reportId);
+                    });
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
@@ -99,6 +103,18 @@ public class AgentInsightsReportPublisher {
      * Best-effort: the run is already queued, so failing here would report a run that did start as one that did
      * not. A missed stamp only leaves the "guidance changed" callout less precise.
      */
+    private void clearStamp(String workspaceId, UUID projectId, Integer guidanceVersion, String reportId) {
+        if (guidanceVersion == null) {
+            return;
+        }
+        try {
+            runGuidanceService.clearIfStamped(workspaceId, projectId, guidanceVersion);
+        } catch (RuntimeException e) {
+            log.warn("Failed to clear the guidance version of an unqueued Agent Insights run, reportId '{}', "
+                    + "project '{}'", reportId, projectId, e);
+        }
+    }
+
     private void markEnqueued(String workspaceId, UUID projectId, Integer guidanceVersion, String reportId) {
         try {
             runGuidanceService.markEnqueued(workspaceId, projectId, guidanceVersion);
