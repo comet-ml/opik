@@ -836,6 +836,48 @@ class FindSpansResourceTest {
                     List.of());
         }
 
+        private Stream<Arguments> traceScopedReads() {
+            return Stream.of(
+                    Arguments.of("/spans", spansTestAssertion),
+                    Arguments.of("/spans/search", spanStreamTestAssertion));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("traceScopedReads")
+        void findByTraceIdReturnsOnlyThatTracesSpans(String endpoint, SpanPageTestAssertion testAssertion) {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var traceId = generator.generate();
+            var spans = newSpansOnTrace(projectName, traceId);
+            var otherTraceSpans = newSpansOnTrace(projectName, generator.generate());
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            spanResourceClient.batchCreateSpans(otherTraceSpans, apiKey, workspaceName);
+
+            // Both endpoints return the trace's spans newest id first
+            var values = testAssertion.transformTestParams(spans, spans.reversed(), otherTraceSpans);
+
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(), values.all(), List.of(), Map.of("trace_id", traceId.toString()));
+        }
+
+        private List<Span> newSpansOnTrace(String projectName, UUID traceId) {
+            return PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .traceId(traceId)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+        }
+
         @ParameterizedTest
         @EnumSource(SpanType.class)
         void createAndGetByProjectIdAndTraceIdAndType(SpanType expectedType) {

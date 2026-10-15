@@ -827,10 +827,9 @@ public class SpanDAO {
      * re-read carries the same week bounds via the window it re-reads.
      * <p>
      * When the request is scoped to a trace, {@code page_wide} also repeats the {@code trace_id} predicate. The page
-     * ids already belong to that trace, so the result is unchanged, but {@code id} is the last column of the sort key
-     * ({@code workspace_id, project_id, trace_id, parent_span_id, id}): without {@code trace_id} the re-read cannot
-     * use the primary key past {@code project_id} and scans the whole project (measured on a 84M-row self-hosted
-     * {@code spans}: 29.9M rows read for one trace's 60 ids, vs 8.5K with the predicate).
+     * ids already belong to that trace, so the result is unchanged, but {@code id} follows {@code trace_id} in the
+     * {@code spans} sort key: without it the re-read can't use the primary key past {@code project_id} and scans the
+     * whole project.
      * <p>
      * <b>Both</b> operands are the partition expression of 000115, {@code toDate32(E) -
      * toIntervalDay(toDayOfWeek(E, 1))}, and never {@code toMonday(E)} (OPIK-8241): {@code toMonday} returns a 16-bit
