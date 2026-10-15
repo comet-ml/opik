@@ -3153,7 +3153,7 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
-     * Batch-insert rows following the {@code TraceDAO.BATCH_INSERT} shape: {@code created_at} is the row's minted time,
+     * Batch-insert rows following the trace table's column shape: {@code created_at} is the row's minted time,
      * {@code last_updated_at} is whatever {@code lastUpdatedAt} yields (server-now for upserts, a backdated stamp to
      * exercise the delta's {@code created_at} arm).
      *

@@ -1,12 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MutableRefObject } from "react";
 import {
   createBridge,
   createHostListeners,
+  dropStalePending,
   emitHostEvent,
+  PENDING_REQUEST_TTL_MS,
   type BridgeRefs,
   type HostListeners,
 } from "./assistantBridge";
+import useExplainStore from "./explain/explainStore";
 
 // Minimal refs: only `listeners` matters for these tests; the rest are unused
 // no-op handles the bridge reads through.
@@ -82,5 +85,117 @@ describe("assistantBridge — single-subscriber invariant", () => {
 
     unsub();
     expect(listeners["explain:run"].size).toBe(0);
+  });
+});
+
+describe("assistantBridge — requests made before the console subscribes", () => {
+  const setup = (dashboardId?: string) => {
+    const refs: BridgeRefs = {
+      ...makeRefs(createHostListeners()),
+      onRequestVisibility: ref(vi.fn()),
+      context: ref({
+        dashboard: dashboardId ? { id: dashboardId, kind: "dashboard" } : null,
+      } as BridgeRefs["context"]["current"]),
+      pendingChartEdit: ref(null),
+      pendingConversation: ref(null),
+    };
+    return { refs, bridge: createBridge(refs) };
+  };
+
+  const openDashboard = (refs: BridgeRefs, id: string) => {
+    refs.context.current = {
+      ...refs.context.current,
+      dashboard: { id, kind: "dashboard" },
+    };
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("opens the sidebar and delivers a conversation once the console subscribes", () => {
+    const { refs, bridge } = setup("dash-a");
+
+    bridge.startConversation("hello");
+    expect(refs.onRequestVisibility.current).toHaveBeenCalledWith(true);
+
+    const listener = vi.fn();
+    bridge.subscribe("conversation:start", listener);
+    expect(listener).toHaveBeenCalledWith({ message: "hello" });
+  });
+
+  it("drops a request that waited longer than the expiry", () => {
+    vi.useFakeTimers();
+    const { bridge } = setup("dash-a");
+
+    bridge.startConversation("hello");
+    vi.advanceTimersByTime(PENDING_REQUEST_TTL_MS + 1);
+
+    const listener = vi.fn();
+    bridge.subscribe("conversation:start", listener);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("drops a chart edit parked on another dashboard", () => {
+    const { refs, bridge } = setup("dash-a");
+
+    bridge.editChart!({
+      widgetId: "w-1",
+      title: "Cost",
+      spec: {},
+      query: { id: "q-1" },
+    });
+    openDashboard(refs, "dash-b");
+
+    const listener = vi.fn();
+    bridge.subscribe("chart:edit", listener);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("clears parked requests when another dashboard opens", () => {
+    const { refs, bridge } = setup("dash-a");
+
+    bridge.startConversation("hello");
+    dropStalePending([refs.pendingConversation!], refs.context.current);
+    expect(refs.pendingConversation!.current).not.toBeNull();
+
+    openDashboard(refs, "dash-b");
+    dropStalePending([refs.pendingConversation!], refs.context.current);
+    expect(refs.pendingConversation!.current).toBeNull();
+  });
+
+  it("drops a conversation started outside a dashboard once another project opens", () => {
+    const { refs, bridge } = setup();
+    refs.context.current = { ...refs.context.current, projectId: "p-1" };
+
+    bridge.startConversation("fix this issue");
+    refs.context.current = { ...refs.context.current, projectId: "p-2" };
+
+    const listener = vi.fn();
+    bridge.subscribe("conversation:start", listener);
+    expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe("assistantBridge — chart editing capability", () => {
+  afterEach(() => {
+    useExplainStore
+      .getState()
+      .onConsoleReady({ bridgeVersion: 2, capabilities: [] });
+  });
+
+  it("offers chart editing only once the console announces it", () => {
+    const bridge = createBridge(makeRefs(createHostListeners()));
+
+    useExplainStore
+      .getState()
+      .onConsoleReady({ bridgeVersion: 2, capabilities: ["explain"] });
+    expect(bridge.canEditChart!()).toBe(false);
+
+    useExplainStore.getState().onConsoleReady({
+      bridgeVersion: 3,
+      capabilities: ["explain", "charts"],
+    });
+    expect(bridge.canEditChart!()).toBe(true);
   });
 });

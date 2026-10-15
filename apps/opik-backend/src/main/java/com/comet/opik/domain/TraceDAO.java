@@ -2193,8 +2193,8 @@ class TraceDAOImpl implements TraceDAO {
      * {@code :lb_i}, so the single floor never excludes a row that any per-workspace id-range would delete. UTC
      * matches {@code id_at}, and both operands are the Date32 week expression as in {@link #DELETE_FOR_RETENTION}.
      * <p>
-     * The OR-ed predicates are a template loop over {@code getQueryItemPlaceHolder}, matching {@code BATCH_INSERT} and
-     * the other variable-arity queries in this DAO, so the query text is declared once and every value is bound. It was
+     * The OR-ed predicates are a template loop over {@code getQueryItemPlaceHolder}, matching the other
+     * variable-arity queries in this DAO, so the query text is declared once and every value is bound. It was
      * previously assembled with a {@code StringBuilder}, which hid the statement from the declaration site and from the
      * routing guard that reads these constants.
      */

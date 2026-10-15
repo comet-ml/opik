@@ -95,21 +95,6 @@ class AnthropicClientGeneratorTest {
         }
 
         /**
-         * A floating alias has to be read as the model it resolves to. Haiku's newest member takes
-         * sampling params and the other three families' do not, so the aliases must not share one
-         * answer — and claude-haiku-latest must agree with claude-haiku-4-5 under its own id.
-         */
-        @ParameterizedTest
-        @CsvSource({
-                "~anthropic/claude-haiku-latest, false",
-                "~anthropic/claude-opus-latest, true",
-                "~anthropic/claude-sonnet-latest, true",
-                "~anthropic/claude-fable-latest, true"})
-        void readsAFloatingAliasAsTheFamilysNewestMember(String modelName, boolean rejects) {
-            assertThat(ModelCapabilities.rejectsTemperature(modelName, bundledRegistry())).isEqualTo(rejects);
-        }
-
-        /**
          * An Anthropic id we cannot place is assumed to take none. It is far more often a model newer
          * than the capability list than an older one missing from it, and the floating aliases settle
          * it: claude-opus-latest follows the newest model by definition.

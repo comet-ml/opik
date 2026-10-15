@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.google.common.annotations.VisibleForTesting;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
@@ -150,12 +151,17 @@ public class ModelCapabilities {
      * The newest listed member of a family, which is what {@code claude-opus-latest} names.
      *
      * <p>A floating alias has to be read as the model it currently resolves to, not left unplaceable:
-     * {@code claude-haiku-latest} is Haiku 4.5, which does take sampling params, and classifying it
-     * by the unplaceable default would silently drop a temperature someone set — the same model under
-     * its own id keeps one.
+     * when that model takes sampling params, as Haiku 4.5 does, classifying the alias by the
+     * unplaceable default would silently drop a temperature someone set — the same model under its
+     * own id keeps one.
      */
     private Optional<String> newestInFamily(String familyPrefix) {
-        return AnthropicModelName.allModelIds().stream()
+        return newestInFamily(AnthropicModelName.allModelIds(), familyPrefix);
+    }
+
+    @VisibleForTesting
+    Optional<String> newestInFamily(Set<String> modelIds, String familyPrefix) {
+        return modelIds.stream()
                 .filter(id -> id.startsWith(familyPrefix + "-"))
                 .max(Comparator.comparing(ModelCapabilities::versionKey));
     }
