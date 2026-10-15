@@ -1,6 +1,5 @@
 import React, { useLayoutEffect, useRef, useState } from "react";
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
-import { CircleCheck, LucideIcon, ThumbsDown } from "lucide-react";
 import { Button } from "@/ui/button";
 import {
   Dialog,
@@ -13,8 +12,10 @@ import {
 import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
 import { Textarea } from "@/ui/textarea";
+import { Spinner } from "@/ui/spinner";
 import { cn } from "@/lib/utils";
 import { AGENT_INSIGHTS_ISSUE_STATUS } from "@/types/signals";
+import { CLOSED_STATUS_META } from "@/v2/pages/SignalsPage/helpers";
 
 export const CLOSE_NOTE_MAX_LENGTH = 500;
 
@@ -24,21 +25,15 @@ export type CloseIssueStatus =
 
 const OPTIONS: {
   value: CloseIssueStatus;
-  icon: LucideIcon;
-  label: string;
   description: string;
 }[] = [
   {
     value: AGENT_INSIGHTS_ISSUE_STATUS.resolved,
-    icon: CircleCheck,
-    label: "Resolved",
     description:
       "The issue has been fixed. New occurrences are still tracked, but it won’t reopen automatically.",
   },
   {
     value: AGENT_INSIGHTS_ISSUE_STATUS.closed,
-    icon: ThumbsDown,
-    label: "Not useful",
     description:
       "The issue isn’t helpful. Diagnostics will try not to raise it or similar findings in future runs.",
   },
@@ -74,6 +69,12 @@ const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
   }, [open]);
 
   const isNotUseful = status === AGENT_INSIGHTS_ISSUE_STATUS.closed;
+
+  // The request carries the choice made when it was sent; while it's saving the
+  // dialog keeps showing that choice.
+  const select = (value: CloseIssueStatus) => {
+    if (!isPending) setStatus(value);
+  };
 
   const submit = () => {
     if (isPending) return;
@@ -123,15 +124,17 @@ const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
           aria-label="Why are you closing this issue?"
           className="flex flex-col gap-3 pt-2"
           value={status}
-          onValueChange={(value) => setStatus(value as CloseIssueStatus)}
+          disabled={isPending}
+          onValueChange={(value) => select(value as CloseIssueStatus)}
         >
-          {OPTIONS.map(({ value, icon: Icon, label, description }) => {
+          {OPTIONS.map(({ value, description }) => {
+            const { icon: Icon, label } = CLOSED_STATUS_META[value];
             const selected = value === status;
             return (
               <div
                 key={value}
                 // The whole card selects, not only the radio inside its padding.
-                onClick={() => setStatus(value)}
+                onClick={() => select(value)}
                 className={cn(
                   // Figma strokes sit inside the 12/8 padding.
                   "flex flex-col gap-2 rounded-md border px-[11px] py-[7px]",
@@ -156,7 +159,7 @@ const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
                         selected ? "text-primary" : "text-muted-slate",
                       )}
                     />
-                    {label}
+                    <span>{label}</span>
                   </span>
                   <span className="comet-body-xs text-muted-slate">
                     {description}
@@ -179,6 +182,7 @@ const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
                         className="h-[102px] min-h-0 resize-none text-xs leading-4"
                         placeholder="Diagnostics uses this to avoid similar issues"
                         value={note}
+                        readOnly={isPending}
                         maxLength={CLOSE_NOTE_MAX_LENGTH}
                         onChange={(e) => setNote(e.target.value)}
                       />
@@ -199,6 +203,7 @@ const CloseIssueDialog: React.FC<CloseIssueDialogProps> = ({
             Cancel
           </Button>
           <Button size="sm" disabled={isPending} onClick={submit}>
+            {isPending && <Spinner size="small" className="mr-2" />}
             Close issue
           </Button>
         </DialogFooter>

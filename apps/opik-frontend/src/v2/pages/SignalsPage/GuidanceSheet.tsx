@@ -12,7 +12,7 @@ import {
 } from "@/ui/button-with-dropdown";
 import { AgentInsightsJob } from "@/types/signals";
 import { formatDate } from "@/lib/date";
-import { DIAGNOSTICS_DOCS_URL } from "@/v2/pages/SignalsPage/DiagnosticsEmptyState";
+import { DIAGNOSTICS_DOCS_URL } from "@/v2/pages/SignalsPage/helpers";
 import useUpdateAgentInsightsGuidanceMutation from "@/api/signals/useUpdateAgentInsightsGuidanceMutation";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import { useConfirmAction } from "@/shared/ConfirmDialog/useConfirmAction";
@@ -23,6 +23,7 @@ type GuidanceSheetProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   projectId: string;
+  // Undefined while the job is still loading. Null when the project has no job yet.
   job?: AgentInsightsJob | null;
   // Undefined leaves only Save (run in progress, out of credits, no permission to run).
   onRun?: () => void;
@@ -36,18 +37,34 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
   onRun,
 }) => {
   const saved = job?.guidance ?? "";
+  // Until the job loads, the saved text isn't known, so there's nothing to edit
+  // or save (an empty draft saved then would clear the project's guidance).
+  const isLoaded = job !== undefined;
   const [guidance, setGuidance] = useState(saved);
   const { mutate, isPending } = useUpdateAgentInsightsGuidanceMutation();
 
-  // Start from the saved text when the sheet opens, not on every refetch while
-  // it is open (that would wipe what's being typed).
-  const wasOpen = useRef(false);
+  // Start from the saved text once per opening, as soon as it's loaded, not on
+  // every refetch while open (that would wipe what's being typed).
+  const seeded = useRef(false);
   useEffect(() => {
-    if (open && !wasOpen.current) setGuidance(saved);
-    wasOpen.current = open;
-  }, [open, saved]);
+    if (!open) {
+      seeded.current = false;
+      return;
+    }
+    if (!seeded.current && isLoaded) {
+      setGuidance(saved);
+      seeded.current = true;
+    }
+  }, [open, isLoaded, saved]);
 
-  const isDirty = guidance !== saved;
+  // A run started elsewhere while saving (another tab, auto-run) drops onRun,
+  // so "Save and run" checks the latest one, not the one from when it was clicked.
+  const onRunRef = useRef(onRun);
+  useEffect(() => {
+    onRunRef.current = onRun;
+  }, [onRun]);
+
+  const isDirty = isLoaded && guidance !== saved;
 
   // Closing with unsaved edits (Esc, close arrow, outside click, Cancel) asks first.
   const {
@@ -77,7 +94,7 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
       {
         onSuccess: () => {
           setOpen(false);
-          if (andRun) onRun?.();
+          if (andRun) onRunRef.current?.();
         },
       },
     );
@@ -130,7 +147,7 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
             id="diagnosticsGuidance"
             className="comet-body-s min-h-[330px] shrink-0 border-input leading-5"
             value={guidance}
-            readOnly={isPending}
+            readOnly={isPending || !isLoaded}
             maxLength={GUIDANCE_MAX_LENGTH}
             onChange={setGuidance}
           />

@@ -69,7 +69,7 @@ const BillingLink = React.forwardRef<HTMLAnchorElement, BillingLinkProps>(
         className={cn(className, VARIANT_CLASS[variant])}
       >
         {variant === "action" && <Coins className="size-3" />}
-        {label}
+        <span>{label}</span>
         {(variant === "popover" || variant === "menu") && (
           <ArrowUpRight className="size-3 text-light-slate" />
         )}
