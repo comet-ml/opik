@@ -1751,7 +1751,7 @@ class AlertResourceTest {
 
         @Test
         @DisplayName("Success: should send each deleted prompt with its own latest version to webhook")
-        void testDeletePromptsEvent__whenPromptsHaveSeveralVersions__thenPayloadHasEachLatestVersion() {
+        void deletePromptsEvent__whenPromptsHaveSeveralVersions__thenPayloadHasEachLatestVersion() {
             // Given
             var mock = prepareMockWorkspace();
 
@@ -1765,12 +1765,15 @@ class AlertResourceTest {
                     .mapToObj(i -> {
                         var prompt = buildPrompt();
                         var promptId = promptResourceClient.createPrompt(prompt, mock.getLeft(), mock.getRight());
-                        IntStream.range(0, 3).forEach(
-                                j -> promptResourceClient.createPromptVersion(prompt, mock.getLeft(), mock.getRight()));
+                        var lastVersion = IntStream.range(0, 3)
+                                .mapToObj(j -> promptResourceClient.createPromptVersion(prompt, mock.getLeft(),
+                                        mock.getRight()))
+                                .toList()
+                                .getLast();
                         var actualPrompt = promptResourceClient.getPrompt(promptId, mock.getLeft(), mock.getRight());
-                        // The read API's view hides the version's prompt id, the payload carries it
+                        // The latest version is the last one created, not the one a read returns
                         return actualPrompt.toBuilder()
-                                .latestVersion(actualPrompt.latestVersion().toBuilder().promptId(promptId).build())
+                                .latestVersion(lastVersion)
                                 .build();
                     })
                     .toList();
@@ -1786,8 +1789,9 @@ class AlertResourceTest {
             assertThat(prompts)
                     .usingRecursiveFieldByFieldElementComparator(
                             RecursiveComparisonConfiguration.builder()
-                                    // The read API's view hides the prompt type, the payload carries it
-                                    .withIgnoredFields("type")
+                                    // The read API's view hides the prompt type, and the payload's version JSON
+                                    // leaves out the template structure the create response carries
+                                    .withIgnoredFields("type", "latestVersion.templateStructure")
                                     .withComparatorForType(
                                             PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
                                             Instant.class)

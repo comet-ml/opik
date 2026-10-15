@@ -499,12 +499,14 @@ class PromptServiceImpl implements PromptService {
     }
 
     /**
-     * Null and empty metadata are the same, and numbers are compared by value.
+     * Null and empty metadata are the same, and numbers are compared by value. Empty metadata is checked on both sides
+     * first, as the comparator expects two nodes.
      */
     private static boolean isSameMetadata(JsonNode latest, JsonNode requested) {
-        return isEmptyMetadata(latest)
-                ? isEmptyMetadata(requested)
-                : latest.equals(METADATA_VALUE_COMPARATOR, requested);
+        if (isEmptyMetadata(latest) || isEmptyMetadata(requested)) {
+            return isEmptyMetadata(latest) && isEmptyMetadata(requested);
+        }
+        return latest.equals(METADATA_VALUE_COMPARATOR, requested);
     }
 
     private static boolean isEmptyMetadata(JsonNode metadata) {

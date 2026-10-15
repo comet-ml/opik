@@ -2678,6 +2678,11 @@ class PromptResourceTest {
                     arguments(TemplateStructure.TEXT, text,
                             text.toBuilder().template(text.template() + " changed").build()),
                     arguments(TemplateStructure.TEXT, text, text.toBuilder().metadata(randomMetadata()).build()),
+                    // Metadata isn't required to be an object, and a bare number is compared through the comparator
+                    arguments(TemplateStructure.TEXT,
+                            text.toBuilder().metadata(JsonUtils.getJsonNodeFromString(
+                                    String.valueOf(RandomUtils.secure().randomInt(1, 100)))).build(),
+                            text.toBuilder().metadata(null).build()),
                     arguments(TemplateStructure.TEXT, text, text.toBuilder()
                             .type(text.type() == PromptType.MUSTACHE ? PromptType.JINJA2 : PromptType.MUSTACHE)
                             .build()),
