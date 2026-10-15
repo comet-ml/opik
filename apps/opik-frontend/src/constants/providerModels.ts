@@ -139,6 +139,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Claude Opus 5.5",
     },
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5,
+      label: "Claude Sonnet 5.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5,
+      label: "Claude Haiku 5.5",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5,
       label: "Claude Opus 5",
     },
@@ -175,6 +183,22 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Claude Haiku 4.5",
     },
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
+      label: "Claude Opus 4.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4,
+      label: "Claude Opus 4",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4,
+      label: "Claude Sonnet 4",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_3_7,
+      label: "Claude 3.7 Sonnet",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5,
       label: "Claude Fable 5",
     },
@@ -189,10 +213,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1,
       label: "Claude Mythos 5.1",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_PREVIEW,
-      label: "Claude Mythos Preview",
     },
   ],
 
@@ -348,6 +368,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5_BATCH,
       label: "anthropic/claude-haiku-4.5:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_5_5,
+      label: "anthropic/claude-haiku-5.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_5_5_BATCH,
+      label: "anthropic/claude-haiku-5.5:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4,
@@ -534,10 +562,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "baidu/ernie-4.5-vl-28b-a3b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.BAIDU_ERNIE_4_5_VL_424B_A47B,
-      label: "baidu/ernie-4.5-vl-424b-a47b",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.BAIDU_QIANFAN_OCR_FAST,
       label: "baidu/qianfan-ocr-fast",
     },
@@ -626,10 +650,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.DEEPCOGITO_COGITO_V2_1_671B,
       label: "deepcogito/cogito-v2.1-671b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT,
-      label: "deepseek/deepseek-chat",
     },
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT_V3_0324,
@@ -740,6 +760,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4.1-flash:batch",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DOTS_STUDIO_DOTS_3_NOTE_PREVIEW_FREE,
+      label: "dots-studio/dots-3-note-preview:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ELEUTHERAI_LLEMMA_7B,
       label: "eleutherai/llemma_7b",
     },
@@ -750,6 +774,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.FIREWORKS_EMBER_1,
       label: "fireworks/ember-1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_001,
+      label: "google/gemini-2.0-flash-001",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_EXP_FREE,
@@ -902,6 +930,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_8_FLASH_BATCH,
       label: "google/gemini-3.8-flash:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_4_ARGON,
+      label: "google/gemini-4-argon",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_4_ARGON_BATCH,
+      label: "google/gemini-4-argon:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_NANO_BANANA_2_1,
+      label: "google/gemini-nano-banana-2.1",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
@@ -1060,6 +1100,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-3.0-tiny:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_1_FLASH,
+      label: "inclusionai/ling-3.1-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T,
       label: "inclusionai/ring-2.6-1t",
     },
@@ -1122,6 +1166,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.LIQUID_LFM_2_5_2_6B_FREE,
       label: "liquid/lfm-2.5-2.6b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.LIQUID_LFM_2_5_24B_A2B,
+      label: "liquid/lfm-2.5-24b-a2b",
     },
     {
       value: PROVIDER_MODEL_TYPE.LIQUID_LFM2_8B_A1B,
@@ -1248,6 +1296,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meta/muse-spark-1.3-contributor",
     },
     {
+      value: PROVIDER_MODEL_TYPE.META_MUSE_WONDER,
+      label: "meta/muse-wonder",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_MAI_DS_R1,
       label: "microsoft/mai-ds-r1",
     },
@@ -1302,10 +1354,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_HER,
       label: "minimax/minimax-m2-her",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_1,
-      label: "minimax/minimax-m2.1",
     },
     {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_5,
@@ -1438,6 +1486,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_LARGE_2512_BATCH,
       label: "mistralai/mistral-large-2512:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_LARGE_4_0,
+      label: "mistralai/mistral-large-4-0",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM_3,
@@ -1628,16 +1680,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nex-agi/nex-n2.5-mini",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_5_MINI_FREE,
-      label: "nex-agi/nex-n2.5-mini:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_5_PRO,
       label: "nex-agi/nex-n2.5-pro",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_5_PRO_FREE,
-      label: "nex-agi/nex-n2.5-pro:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_DEEPHERMES_3_MISTRAL_24B_PREVIEW,
@@ -1743,6 +1787,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_NANO_9B_V2_FREE,
       label: "nvidia/nemotron-nano-9b-v2:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_SWITCHYARD,
+      label: "nvidia/switchyard",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_CHATGPT_4O_LATEST,
@@ -2409,10 +2457,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen-plus",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_PLUS_2025_07_28,
-      label: "qwen/qwen-plus-2025-07-28",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN_PLUS_2025_07_28_THINKING,
       label: "qwen/qwen-plus-2025-07-28:thinking",
     },
@@ -2445,40 +2489,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen2.5-vl-72b-instruct",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_14B,
-      label: "qwen/qwen3-14b",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_14B_FREE,
       label: "qwen/qwen3-14b:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B,
-      label: "qwen/qwen3-235b-a22b",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_2507,
       label: "qwen/qwen3-235b-a22b-2507",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_THINKING_2507,
-      label: "qwen/qwen3-235b-a22b-thinking-2507",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_FREE,
       label: "qwen/qwen3-235b-a22b:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B,
-      label: "qwen/qwen3-30b-a3b",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B_INSTRUCT_2507,
       label: "qwen/qwen3-30b-a3b-instruct-2507",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B_THINKING_2507,
-      label: "qwen/qwen3-30b-a3b-thinking-2507",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B_FREE,
@@ -2491,10 +2515,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_4B_FREE,
       label: "qwen/qwen3-4b:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8B,
-      label: "qwen/qwen3-8b",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_CODER,
@@ -2513,24 +2533,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3-coder-next",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_CODER_PLUS,
-      label: "qwen/qwen3-coder-plus",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_CODER_EXACTO,
       label: "qwen/qwen3-coder:exacto",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_CODER_FREE,
       label: "qwen/qwen3-coder:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_MAX,
-      label: "qwen/qwen3-max",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_MAX_THINKING,
-      label: "qwen/qwen3-max-thinking",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_NEXT_80B_A3B_INSTRUCT,
@@ -2541,36 +2549,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3-next-80b-a3b-instruct:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_NEXT_80B_A3B_THINKING,
-      label: "qwen/qwen3-next-80b-a3b-thinking",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_235B_A22B_INSTRUCT,
       label: "qwen/qwen3-vl-235b-a22b-instruct",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_235B_A22B_THINKING,
-      label: "qwen/qwen3-vl-235b-a22b-thinking",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_30B_A3B_INSTRUCT,
       label: "qwen/qwen3-vl-30b-a3b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_30B_A3B_THINKING,
-      label: "qwen/qwen3-vl-30b-a3b-thinking",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_32B_INSTRUCT,
-      label: "qwen/qwen3-vl-32b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_8B_INSTRUCT,
-      label: "qwen/qwen3-vl-8b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_8B_THINKING,
-      label: "qwen/qwen3-vl-8b-thinking",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_5_122B_A10B,
@@ -2619,10 +2603,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_FLASH,
       label: "qwen/qwen3.6-flash",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_MAX_PREVIEW,
-      label: "qwen/qwen3.6-max-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_PLUS,
@@ -2749,12 +2729,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "sao10k/l3.3-euryale-70b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.STEALTH_OX_ALPHA,
-      label: "stealth/ox-alpha",
+      value: PROVIDER_MODEL_TYPE.SCALEDOWN_EXTRACT,
+      label: "scaledown/extract",
     },
     {
-      value: PROVIDER_MODEL_TYPE.STEALTH_SPACE_BUNNY_ALPHA,
-      label: "stealth/space-bunny-alpha",
+      value: PROVIDER_MODEL_TYPE.SCALEDOWN_SUMMARIZE,
+      label: "scaledown/summarize",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.STEALTH_OX_ALPHA,
+      label: "stealth/ox-alpha",
     },
     {
       value: PROVIDER_MODEL_TYPE.STEALTH_UNION_ALPHA,
@@ -2775,6 +2759,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.STEPFUN_STEP_3_7_FLASH,
       label: "stepfun/step-3.7-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.STEPFUN_STEP_5_PREVIEW,
+      label: "stepfun/step-5-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.SWITCHPOINT_ROUTER,
@@ -2887,6 +2875,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.UNBIASED_PARETO,
       label: "unbiased/pareto",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.UNBIASED_PARETO_26_10_PREVIEW,
+      label: "unbiased/pareto-26.10-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.UNBIASED_PARETO_26_9,
+      label: "unbiased/pareto-26.9",
     },
     {
       value: PROVIDER_MODEL_TYPE.UNDI95_REMM_SLERP_L2_13B,
@@ -3173,6 +3169,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "~openai/gpt-terra-latest",
     },
     {
+      value: PROVIDER_MODEL_TYPE.UNBIASED_PARETO_LATEST,
+      label: "~unbiased/pareto-latest",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_LATEST,
       label: "~x-ai/grok-latest",
     },
@@ -3187,6 +3187,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.GEMINI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_4_ARGON,
+      label: "Gemini 4 Argon",
+    },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH,
       label: "Gemini 3.8 Flash",
@@ -3220,6 +3224,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 3.1 Flash Lite",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+      label: "Gemini 3 Pro Preview",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
       label: "Gemini 3 Flash Preview",
     },
@@ -3247,12 +3255,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.GEMINI_FLASH_LATEST_HIGH_RES_EXP,
       label: "Gemini Flash Latest High Res Exp",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_NANO_BANANA_2_1,
+      label: "Nano Banana 2.1",
+    },
   ],
 
   [PROVIDER_TYPE.VERTEX_AI]: [
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH,
       label: "Gemini 3.8 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH_CYBER,
+      label: "Gemini 3.8 Flash Cyber",
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
