@@ -28,7 +28,9 @@ class MediaContentUtilsTest {
                 Arguments.of("data:audio/wav;base64," + BASE64_DATA, "audio/wav"),
                 Arguments.of("data:video/mp4;base64," + BASE64_DATA, "video/mp4"),
                 Arguments.of("DATA:IMAGE/PNG;BASE64," + BASE64_DATA, "image/png"),
-                Arguments.of("data:audio/mpeg;name=clip.mp3;base64," + BASE64_DATA, "audio/mpeg"));
+                Arguments.of("data:audio/mpeg;name=clip.mp3;base64," + BASE64_DATA, "audio/mpeg"),
+                Arguments.of("data:image/png;base64," + BASE64_DATA.replaceAll("(.{20})", "$1\n"), "image/png"),
+                Arguments.of("data:image/png;base64," + BASE64_DATA.replaceAll("(.{16})", "$1\r\n "), "image/png"));
     }
 
     @ParameterizedTest(name = "{index}: {1}")
@@ -47,6 +49,7 @@ class MediaContentUtilsTest {
                 "data:image/svg+xml,%3Csvg%3E%3C%2Fsvg%3E",
                 "data:;base64," + BASE64_DATA,
                 "data:image/png;base64,",
+                "data:image/png;base64,\n \r\n",
                 "data:image/png;base64");
     }
 

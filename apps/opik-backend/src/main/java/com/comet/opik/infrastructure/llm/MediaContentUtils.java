@@ -71,9 +71,15 @@ public class MediaContentUtils {
         }
         String[] header = uri.substring(DATA_SCHEME.length(), comma).split(";");
         String mimeType = header[0].trim().toLowerCase(Locale.ROOT);
-        String base64Data = uri.substring(comma + 1);
         boolean isBase64 = header.length > 1 && BASE64_PARAMETER.equalsIgnoreCase(header[header.length - 1].trim());
-        if (!isBase64 || !mimeType.contains("/") || base64Data.isEmpty()) {
+        if (!isBase64 || !mimeType.contains("/")) {
+            return Optional.empty();
+        }
+        // Vertex AI's client decodes the payload with Java's strict decoder, which rejects the line breaks that
+        // MIME-style encoders insert every 76 characters.
+        String payload = uri.substring(comma + 1);
+        String base64Data = StringUtils.containsWhitespace(payload) ? StringUtils.deleteWhitespace(payload) : payload;
+        if (base64Data.isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(Base64DataUri.builder()
@@ -83,12 +89,10 @@ public class MediaContentUtils {
     }
 
     private static Optional<Base64DataUri> parseRawBase64Image(String value) {
-        if (!isBase64(value)) {
-            return Optional.empty();
-        }
         return RAW_BASE64_IMAGE_MIME_TYPES.entrySet().stream()
                 .filter(prefixAndMimeType -> value.startsWith(prefixAndMimeType.getKey()))
                 .findFirst()
+                .filter(prefixAndMimeType -> isBase64(value))
                 .map(prefixAndMimeType -> Base64DataUri.builder()
                         .mimeType(prefixAndMimeType.getValue())
                         .base64Data(value)
