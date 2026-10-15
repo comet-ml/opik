@@ -830,6 +830,27 @@ class CostIntelligenceIngestionTest {
         }
 
         @ParameterizedTest
+        @CsvSource({"true,false", "false,true", "true,true"})
+        @DisplayName("an explicit empty array is a known-empty list: status listed, empty arrays")
+        void explicitEmptyArrayIsListed(boolean emptySkills, boolean emptyFiles) {
+            var row = ingestRepositoryEdit(repository -> {
+                if (emptySkills) {
+                    repository.putArray("skills");
+                }
+                if (emptyFiles) {
+                    repository.putArray("instruction_files");
+                }
+            });
+
+            assertThat(row.skillsStatus()).isEqualTo("listed");
+            assertThat(row.instructionFilesStatus()).isEqualTo("listed");
+            assertThat(row.skillsName()).hasSize(emptySkills ? 0 : 2);
+            assertThat(row.skillsScope()).hasSize(emptySkills ? 0 : 2);
+            assertThat(row.instructionFilesPath()).hasSize(emptyFiles ? 0 : 2);
+            assertThat(row.instructionFilesScope()).hasSize(emptyFiles ? 0 : 2);
+        }
+
+        @ParameterizedTest
         @ValueSource(ints = {255, 256})
         @DisplayName("a list at or under 256 entries is persisted with status listed")
         void listWithinEntryCapIsListed(int size) {
