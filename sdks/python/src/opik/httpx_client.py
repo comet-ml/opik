@@ -177,8 +177,9 @@ def send_prepared_json(
     path: str,
     body: bytes,
     headers: Optional[Dict[str, str]] = None,
+    method: str = "PUT",
 ) -> httpx.Response:
-    """PUT an already-serialised JSON body.
+    """Send an already-serialised JSON body (PUT unless `method` says otherwise).
 
     Exists so a caller that has produced the request body itself can send it without a
     second serialisation pass. Auth and workspace headers ride on `client`, which is the
@@ -198,7 +199,7 @@ def send_prepared_json(
     if body.startswith(_GZIP_MAGIC):
         request_headers["Content-Encoding"] = "gzip"
 
-    return client.request("PUT", url, content=body, headers=request_headers)
+    return client.request(method, url, content=body, headers=request_headers)
 
 
 class OpikHttpxClient(httpx.Client):
