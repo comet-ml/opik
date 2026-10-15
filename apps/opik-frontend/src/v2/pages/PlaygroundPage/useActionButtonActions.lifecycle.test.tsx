@@ -601,6 +601,124 @@ describe("useActionButtonActions lifecycle", () => {
       expect(usePlaygroundStore.getState().stopPending).toEqual([PROMPT_B]);
     });
 
+    const twoPromptsLaunching = () => {
+      usePlaygroundStore.setState({
+        promptIds: [PROMPT_A, PROMPT_B],
+        promptMap: {
+          [PROMPT_A]: { id: PROMPT_A, name: "A", messages: [], configs: {} },
+          [PROMPT_B]: { id: PROMPT_B, name: "B", messages: [], configs: {} },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+      });
+
+      let answer: (value: unknown) => void = () => {};
+      runExperimentExecution.mockReturnValue(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      );
+      return () =>
+        answer({
+          experiments: [
+            { experiment_id: EXPERIMENT_A, prompt_index: 0, total_items: 5 },
+            { experiment_id: EXPERIMENT_B, prompt_index: 1, total_items: 5 },
+          ],
+          total_items: 10,
+        });
+    };
+
+    // A stop aimed at one prompt is not a stop of the batch it was launched with. Settling the
+    // whole run on it leaves its siblings running on the server with nothing watching them, and
+    // their Run buttons back, so the next click dispatches the dataset again alongside them.
+    it("should keep watching the prompts a single stop did not name", async () => {
+      const answerBoth = twoPromptsLaunching();
+      const { result } = renderActions("dataset-1");
+
+      let running: Promise<void>;
+      await act(async () => {
+        running = result.current.runAll();
+      });
+
+      act(() => result.current.stopSingle(PROMPT_A));
+
+      await act(async () => {
+        answerBoth();
+        await running;
+      });
+
+      expect(cancelExperimentRun).toHaveBeenCalledWith({
+        experimentIds: [EXPERIMENT_A],
+      });
+      expect(usePlaygroundStore.getState().isRunInFlight).toBe(true);
+    });
+
+    // Stopping one prompt takes it out of the running map while its own stop is still queued, so
+    // a Stop all that reads only that map cannot see it, and settling forgets it.
+    it("should carry a prompt's queued stop into Stop all", async () => {
+      const answerBoth = twoPromptsLaunching();
+      const { result } = renderActions("dataset-1");
+
+      let running: Promise<void>;
+      await act(async () => {
+        running = result.current.runAll();
+      });
+
+      act(() => result.current.stopSingle(PROMPT_A));
+      act(() => result.current.stopAll());
+
+      await act(async () => {
+        answerBoth();
+        await running;
+      });
+
+      // Order is not part of the contract; both have to be in the one cancel.
+      const lastCall = cancelExperimentRun.mock.calls.at(-1);
+      const { experimentIds } = lastCall![0];
+      expect([...experimentIds].sort()).toEqual([EXPERIMENT_A, EXPERIMENT_B]);
+    });
+
+    // The mapping the cell reads is persisted, so a launch that cleared it and then failed takes
+    // the last run off the screen for good rather than until the next load.
+    it("should keep the last run's results when a rerun never starts", async () => {
+      usePlaygroundStore.setState({
+        experimentByPromptId: { [PROMPT_A]: EXPERIMENT_B },
+      });
+
+      let fail: (reason: unknown) => void = () => {};
+      runExperimentExecution.mockReturnValue(
+        new Promise((_, reject) => {
+          fail = reject;
+        }),
+      );
+
+      const { result } = renderActions("dataset-1");
+
+      let running: Promise<void>;
+      await act(async () => {
+        running = result.current.runSingle(PROMPT_A);
+      });
+      expect(usePlaygroundStore.getState().experimentByPromptId).toEqual({});
+
+      await act(async () => {
+        fail(new Error("execute never answered"));
+        await running;
+      });
+
+      expect(usePlaygroundStore.getState().experimentByPromptId).toEqual({
+        [PROMPT_A]: EXPERIMENT_B,
+      });
+    });
+
+    // An empty set is not null, so every reader takes it for a stop still waiting and the
+    // controls never come back.
+    it("should leave no stop waiting when there was nothing to stop", async () => {
+      const { result } = renderActions("dataset-1");
+
+      act(() => result.current.stopAll());
+
+      expect(usePlaygroundStore.getState().stopPending).toBeNull();
+    });
+
     // Two prompts stopped one after the other in the same window. Both are waiting on the same
     // response, so the second must not take the first one's place in the queue.
     it("should keep both stops when each prompt is stopped on its own", async () => {
