@@ -9,8 +9,10 @@ import { TAG_VARIANTS } from "@/ui/tag";
 import { labelHash } from "@/lib/labelHash";
 import { ExperimentItem } from "@/types/datasets";
 import { Thread, TRACE_VISIBILITY_MODE } from "@/types/traces";
+import { JsonObject } from "@/types/shared";
 import { safelyParseJSON } from "@/lib/utils";
 import isEmpty from "lodash/isEmpty";
+import mergeWith from "lodash/mergeWith";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
 
@@ -693,3 +695,13 @@ export const prettifyMessage = (
     } as PrettifyMessageResponse;
   }
 };
+
+export const mergeSampleEntities = (entities: object[]): JsonObject =>
+  entities.reduce<JsonObject>(
+    (acc, entity) =>
+      mergeWith(acc, entity, (objValue, srcValue) => {
+        if (isObject(objValue) || isObject(srcValue)) return undefined;
+        return objValue === undefined ? srcValue : objValue;
+      }),
+    {},
+  );

@@ -110,6 +110,13 @@
     --metric-icon-numerical: #e5484d;
     --metric-icon-code: #d6409f;
 
+    --rule-icon-llm-judge: #22d3ee;
+    --rule-icon-code: #f5d90a;
+    --judge-template-hallucination: #22d3ee;
+    --judge-template-moderation: #ec4899;
+    --judge-template-answer-relevance: #a3e635;
+    --judge-template-tool-correctness: #f5d90a;
+
     /* Template icon colors */
     --template-icon-metrics: #5899da;
     --template-icon-performance: #ef6868;
@@ -467,6 +474,13 @@
     --accent-magenta: #be48ea;
     --accent-red: #df5a40;
     --accent-indigo: #5356f1;
+
+    --rule-icon-llm-judge: #22d3ee;
+    --rule-icon-code: #f5d90a;
+    --judge-template-hallucination: #22d3ee;
+    --judge-template-moderation: #ec4899;
+    --judge-template-answer-relevance: #a3e635;
+    --judge-template-tool-correctness: #f5d90a;
 
     /* Template icon colors - Dark Mode */
     --template-icon-metrics: #5899da;

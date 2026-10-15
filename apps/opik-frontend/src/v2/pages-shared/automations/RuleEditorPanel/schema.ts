@@ -1,5 +1,6 @@
 import { z } from "zod";
 import has from "lodash/has";
+import isString from "lodash/isString";
 import uniq from "lodash/uniq";
 import omit from "lodash/omit";
 import {
@@ -46,10 +47,9 @@ import {
   supportsVideoInput,
 } from "@/lib/modelCapabilities";
 import {
-  DECISION_MODEL_FORBIDDEN_VARIABLE_BY_SCOPE,
-  hasSingleUserMessage,
-  isTextOnlyMessage,
-} from "@/v2/pages-shared/automations/AddEditRuleDialog/decisionModelRule";
+  RESERVED_SPAN_LLM_JUDGE_VARIABLES,
+  RESERVED_TRACE_LLM_JUDGE_VARIABLES,
+} from "@/constants/llm";
 import {
   hasImagesInContent,
   getTextFromMessageContent,
@@ -100,16 +100,8 @@ export const FiltersSchema = z
   .array(FilterSchema)
   .superRefine((filters, ctx) => {
     filters.forEach((filter, index) => {
-      // Validate field
-      if (!filter.field || filter.field.trim().length === 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Field is required",
-          path: [index, "field"],
-        });
-      }
+      if (!filter.field || filter.field.trim().length === 0) return;
 
-      // Validate operator
       if (!filter.operator || filter.operator.trim().length === 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -118,7 +110,6 @@ export const FiltersSchema = z
         });
       }
 
-      // Validate value (only for operators that require it)
       if (
         filter.operator &&
         filter.operator !== "is_empty" &&
@@ -134,7 +125,6 @@ export const FiltersSchema = z
         }
       }
 
-      // Validate key for dictionary types (optional for input/output)
       const isKeyOptionalField =
         filter.field === "input" || filter.field === "output";
       if (
@@ -150,7 +140,6 @@ export const FiltersSchema = z
         });
       }
 
-      // Add custom error if present
       if (filter.error) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -168,7 +157,20 @@ type LLMJudgeRefineData = {
   schema: { type: LLM_SCHEMA_TYPE }[];
 };
 
-// Mirrors the backend's DecisionModelRuleValidator so a rule it would reject fails here first.
+const DECISION_MODEL_FORBIDDEN_VARIABLE_BY_SCOPE: Partial<
+  Record<EVALUATORS_RULE_SCOPE, string>
+> = {
+  [EVALUATORS_RULE_SCOPE.trace]: RESERVED_TRACE_LLM_JUDGE_VARIABLES.trace,
+  [EVALUATORS_RULE_SCOPE.span]: RESERVED_SPAN_LLM_JUDGE_VARIABLES.span,
+};
+
+const hasSingleUserMessage = (messages: LLMMessage[]) =>
+  messages.length === 1 && messages[0].role === LLM_MESSAGE_ROLE.user;
+
+const isTextOnlyMessage = (message: LLMMessage) =>
+  isString(message.content) ||
+  message.content.every((part) => part.type === "text");
+
 const refineDecisionModelRule = (
   data: LLMJudgeRefineData,
   ctx: z.RefinementCtx,
@@ -202,8 +204,6 @@ const refineDecisionModelRule = (
     });
   }
 
-  // The model-capability check only looks for images and videos; audio, or media kept from another model,
-  // would otherwise reach the backend.
   data.messages.forEach((message, index) => {
     if (!isTextOnlyMessage(message)) {
       ctx.addIssue({
@@ -241,13 +241,9 @@ const LLMJudgeBaseSchema = z.object({
       .optional()
       .nullable(),
     custom_parameters: z.record(z.string(), z.unknown()).optional().nullable(),
-    // Held as its own field so the shared model-config control can drive it, then folded into
-    // custom_parameters.thinking on save — the backend reads it from there.
     thinkingLevel: z
       .enum(["auto", "none", "off", "minimal", "low", "medium", "high"])
       .optional(),
-    // Same arrangement for the Anthropic effort, which the judge reads from
-    // custom_parameters.output_config.effort.
     thinkingEffort: z.enum(ANTHROPIC_THINKING_EFFORT_VALUES).optional(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
@@ -318,10 +314,6 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
     z
       .string()
       .min(1, { message: "Key is required" })
-      // Allow the standard JSONPath form (input/output/metadata.[...]) OR a reserved
-      // bare sentinel like `spans` / `trace` — see RESERVED_TRACE_LLM_JUDGE_VARIABLES.
-      // The backend's OnlineScoringEngine substitutes `spans` with the JSON-serialized
-      // spans list and `trace` with the trace skeleton (ids + attachments) at render time.
       .regex(/^(input|output|metadata)(\.|$)|^spans$|^trace$/, {
         message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), the reserved word "spans" to inject the trace's spans list, or "trace" to inject the trace skeleton with attachments`,
       }),
@@ -375,10 +367,6 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
     z
       .string()
       .min(1, { message: "Key is required" })
-      // Allow the standard JSONPath form (input/output/metadata.[...]) OR the reserved
-      // bare sentinel `span` — see RESERVED_SPAN_LLM_JUDGE_VARIABLES. The backend's
-      // OnlineScoringEngine substitutes `span` with the span structure (span id +
-      // attachment file_names) at render time.
       .regex(/^(input|output|metadata)(\.|$)|^span$/, {
         message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), or the reserved word "span" to inject the span with its attachments`,
       }),
@@ -490,11 +478,6 @@ export const PythonCodeDetailsTraceFormSchema = BasePythonCodeFormSchema.extend(
       z
         .string()
         .min(1, { message: "Key is required" })
-        // Allow the standard JSONPath form (input/output/metadata.[...]) OR a
-        // reserved bare sentinel like `spans` — see
-        // RESERVED_TRACE_EVALUATOR_VARIABLES. The Python scorer opts into the
-        // SpanService fetch when the arguments map carries the `spans` key and
-        // injects a List<Span> as the matching kwarg.
         .regex(/^(input|output|metadata)(\.|$)|^spans$/, {
           message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), or the reserved word "spans" to inject the trace's spans list`,
         }),
@@ -549,10 +532,24 @@ export const LLMJudgeSpanEvaluationRuleFormSchema =
     llmJudgeDetails: LLMJudgeDetailsSpanFormSchema,
   });
 
+const requireScoreMethod = (
+  details: { parsingArgumentsError?: boolean },
+  ctx: z.RefinementCtx,
+) => {
+  if (details.parsingArgumentsError) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["metric"],
+      message: "The code must define a score method.",
+    });
+  }
+};
+
 export const PythonCodeTraceEvaluationRuleFormSchema =
   BaseEvaluationRuleFormSchema.extend({
     type: z.literal(EVALUATORS_RULE_TYPE.python_code),
-    pythonCodeDetails: PythonCodeDetailsTraceFormSchema,
+    pythonCodeDetails:
+      PythonCodeDetailsTraceFormSchema.superRefine(requireScoreMethod),
   });
 
 export const PythonCodeThreadEvaluationRuleFormSchema =
@@ -564,7 +561,8 @@ export const PythonCodeThreadEvaluationRuleFormSchema =
 export const PythonCodeSpanEvaluationRuleFormSchema =
   BaseEvaluationRuleFormSchema.extend({
     type: z.literal(EVALUATORS_RULE_TYPE.span_python_code),
-    pythonCodeDetails: PythonCodeDetailsSpanFormSchema,
+    pythonCodeDetails:
+      PythonCodeDetailsSpanFormSchema.superRefine(requireScoreMethod),
   });
 
 export const EvaluationRuleFormSchema = z.discriminatedUnion("type", [
@@ -600,8 +598,6 @@ const convertLLMToProviderMessages = (
       role: rest.role.toUpperCase() as LLM_MESSAGE_ROLE,
     };
 
-    // For LlmAsJudgeMessage (online scoring), use separate fields
-    // Only set the appropriate field based on content type
     if (typeof content === "string") {
       return { ...base, content };
     } else if (Array.isArray(content)) {
@@ -621,7 +617,6 @@ const convertProviderToLLMMessages = (
   messages.map((m) => ({
     ...m,
     role: m.role.toLowerCase() as LLM_MESSAGE_ROLE,
-    // Convert from separate fields to union type for frontend
     content: m.content_array ?? m.content ?? "",
     id: generateRandomString(),
   }));
@@ -638,18 +633,12 @@ export const updateConfigForModelChange = <
 ): T => {
   const adjusted = updateProviderConfig(config, next) ?? config;
 
-  // Same rule as the playground, which resets a prompt's configs on a provider change: the extra body
-  // belongs to the previous provider. Kept, it is saved with no editor to show it and is sent again
-  // once the rule goes back to a Custom LLM.
   if (previous.provider && previous.provider !== next.provider) {
     return adjusted.custom_parameters == null
       ? adjusted
       : { ...adjusted, custom_parameters: null };
   }
 
-  // updateProviderConfig leaves custom_parameters alone because opening a rule must keep the effort
-  // stored for a Claude model with no row. On a switch that copy belongs to the previous model; the
-  // flat thinkingEffort, already fitted to the next model, is what carries the user's choice.
   if (
     previous.model === next.model ||
     !previous.provider ||
@@ -681,13 +670,10 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
       typeof thinking?.level === "string"
         ? (thinking.level as GeminiThinkingLevel)
         : undefined,
-    // A value outside the enum would fail the form's validation on a field nobody can see.
     thinkingEffort: ANTHROPIC_THINKING_EFFORT_VALUES.find(
       (e) => e === persistedEffort,
     ),
   };
-  // Normalize stale persisted configs (e.g. Opus 4.7 with `temperature: 0`
-  // saved before this PR) so an unedited submit doesn't 400 on Anthropic.
   const config = model
     ? updateProviderConfig(rawConfig, {
         model: model as PROVIDER_MODEL_TYPE,
@@ -725,8 +711,6 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     name: data.model as PROVIDER_MODEL_TYPE,
   };
 
-  // A decisions model takes no model settings and runs no agentic loop, so the settings and budget the
-  // form may still hold from another model are left out rather than sent.
   if (isDecisionModel(data.model)) {
     return {
       model,
@@ -737,10 +721,6 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     };
   }
 
-  // This path never reaches sanitizeConfigForRequest, so the capability check belongs here: the form
-  // keeps a temperature the user set on another model, and the providers that take none reject it at
-  // scoring time. The resolver answers whether this model takes one; the value stays the user's, so
-  // a rule that never had a temperature does not gain the resolver's default.
   const { temperature: resolvedTemperature } = resolveSamplingParams(
     data.model as PROVIDER_MODEL_TYPE,
     data.config,
@@ -758,12 +738,6 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     (custom_parameters ?? {}) as Record<string, unknown>
   ).thinking as Record<string, unknown> | undefined;
 
-  // Merge rather than replace: include_thoughts also lives under `thinking` and is not represented
-  // in the form, so an unchanged load -> save must not drop it. A persisted budget_tokens is dropped:
-  // the backend lets it outrank any level, so the judge would think with that budget while the form
-  // shows Low, or keep thinking under Off.
-  // "auto" is the absence of a setting — the model applies its own dynamic budget — so it is stored
-  // as no thinking block rather than as a level the backend would have to special-case.
   const thinkingCustomParameters =
     thinkingLevel != null &&
     thinkingLevel !== "auto" &&
@@ -779,31 +753,10 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
         }
       : undefined;
 
-  // On a model whose level control owns `thinking`, drop the persisted copy before re-adding the
-  // current selection: otherwise a level rejected above survives in the spread, and a stale "off"
-  // reaches a model that cannot disable thinking.
-  //
-  // Only for those models, though. `custom_parameters.thinking` is not Gemini-only — Anthropic reads
-  // `thinking.{type,budget_tokens}` for extended thinking — so omitting it unconditionally would
-  // silently disable extended thinking on an unedited save of an Anthropic rule.
   const persistedCustomParameters = (custom_parameters ?? {}) as Record<
     string,
     unknown
   >;
-  // Strip the persisted `thinking` when the form is putting one back, and also when the form held a
-  // level this model rejects — a stale "off" carried onto a model that cannot disable thinking has
-  // to go, which is what the level check above is for.
-  //
-  // Otherwise carry the block through untouched. No level at all means "the form has no level of
-  // its own here", not "delete whatever else was in there": budget_tokens and
-  // include_thoughts are not represented in the form, and Anthropic keeps type/budget_tokens under
-  // this same key for extended thinking.
-  // "none" is an explicit "do not think", so it removes a persisted thinking block rather than just
-  // declining to add one — otherwise a level saved earlier keeps being sent. "auto" is the weaker
-  // "let the model decide": it drops the persisted level and budget_tokens, so the judge gets no
-  // thinking config, and keeps the rest (include_thoughts), which the form cannot represent.
-  // Anthropic's type and budget_tokens live under this key too, so this only applies to a model with
-  // a level control.
   const formClearsThinking = thinkingLevel === "none";
   const formRejectedItsLevel =
     thinkingLevel != null &&
@@ -826,8 +779,6 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     ...thinkingCustomParameters,
   };
 
-  // Only an Anthropic rule's effort is the form's to manage. A custom provider's JSON editor may hold
-  // an output_config the user typed for their own gateway, and it must survive a save untouched.
   const formEffort = getAnthropicThinkingEffortOptions(
     data.model as PROVIDER_MODEL_TYPE,
   ).some((o) => o.value === thinkingEffort)

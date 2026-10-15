@@ -14,7 +14,6 @@ import {
   RowSelectionState,
 } from "@tanstack/react-table";
 import round from "lodash/round";
-import { Plus } from "lucide-react";
 
 import {
   COLUMN_ID_ID,
@@ -23,7 +22,7 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { EvaluatorsRule } from "@/types/automations";
+import { EvaluatorsRule, UI_EVALUATORS_RULE_TYPE } from "@/types/automations";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   generateActionsColumDef,
@@ -31,7 +30,6 @@ import {
 } from "@/shared/DataTable/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
@@ -47,14 +45,16 @@ import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyOnlineEvalLightUrl from "/images/empty-online-eval-light.svg";
 import emptyOnlineEvalDarkUrl from "/images/empty-online-eval-dark.svg";
-import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
+import RuleEditorPanel from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorPanel";
+import CreateRuleMenu from "@/v2/pages-shared/automations/CreateRuleMenu";
+import { isPythonCodeRule } from "@/lib/rules";
 import RulesActionsPanel from "@/v2/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/v2/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/v2/pages-shared/automations/RuleLogsCell";
 import RuleTracesCell from "@/v2/pages-shared/automations/RuleTracesCell";
 import { EvaluationTracesSidebar } from "@/v2/pages-shared/automations/EvaluationTracesSidebar";
 import { capitalizeFirstLetter } from "@/lib/utils";
-import { getUIRuleScope } from "@/v2/pages-shared/automations/AddEditRuleDialog/helpers";
+import { getUIRuleScope } from "@/v2/pages-shared/automations/RuleEditorPanel/helpers";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 import { useActiveProjectId } from "@/store/AppStore";
@@ -158,6 +158,9 @@ export const OnlineEvaluationPage: React.FC = () => {
   const resetDialogKeyRef = useRef(0);
   const [openDialogForCreate, setOpenDialogForCreate] =
     useState<boolean>(false);
+  const [createRuleType, setCreateRuleType] = useState<UI_EVALUATORS_RULE_TYPE>(
+    UI_EVALUATORS_RULE_TYPE.llm_judge,
+  );
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -233,7 +236,11 @@ export const OnlineEvaluationPage: React.FC = () => {
     Boolean(editingRule) || Boolean(cloningRule) || openDialogForCreate;
 
   const dialogRule = editingRule || cloningRule;
-  const dialogMode = editingRule ? "edit" : cloningRule ? "clone" : "create";
+  const dialogRuleType = dialogRule
+    ? isPythonCodeRule(dialogRule)
+      ? UI_EVALUATORS_RULE_TYPE.python_code
+      : UI_EVALUATORS_RULE_TYPE.llm_judge
+    : createRuleType;
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY_V2,
@@ -269,6 +276,11 @@ export const OnlineEvaluationPage: React.FC = () => {
       resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
     },
     [setEditRuleId],
+  );
+
+  const handleRowClick = useCallback(
+    (rule: EvaluatorsRule) => handleOpenEditDialog(rule.id),
+    [handleOpenEditDialog],
   );
 
   const handleOpenCloneDialog = useCallback(
@@ -352,10 +364,14 @@ export const OnlineEvaluationPage: React.FC = () => {
     [sortedColumns, setSortedColumns],
   );
 
-  const handleNewRuleClick = useCallback(() => {
-    setOpenDialogForCreate(true);
-    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-  }, []);
+  const handleNewRuleClick = useCallback(
+    (type: UI_EVALUATORS_RULE_TYPE = UI_EVALUATORS_RULE_TYPE.llm_judge) => {
+      setCreateRuleType(type);
+      setOpenDialogForCreate(true);
+      resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+    },
+    [],
+  );
 
   const handleCloseDialog = useCallback(
     (open: boolean) => {
@@ -378,15 +394,7 @@ export const OnlineEvaluationPage: React.FC = () => {
           Online evaluation
         </h1>
         {canUpdateOnlineEvaluationRules && (
-          <Button
-            variant="default"
-            size="xs"
-            onClick={handleNewRuleClick}
-            data-testid="online-evaluation-create-rule-button"
-          >
-            <Plus className="mr-1 size-4" />
-            Create rule
-          </Button>
+          <CreateRuleMenu onSelect={handleNewRuleClick} />
         )}
       </div>
       {isEmpty ? (
@@ -403,7 +411,9 @@ export const OnlineEvaluationPage: React.FC = () => {
               : undefined
           }
           onPrimaryAction={
-            canUpdateOnlineEvaluationRules ? handleNewRuleClick : undefined
+            canUpdateOnlineEvaluationRules
+              ? () => handleNewRuleClick()
+              : undefined
           }
           docsUrl={buildDocsUrl("/production/online-evaluation/rules")}
         />
@@ -451,6 +461,9 @@ export const OnlineEvaluationPage: React.FC = () => {
               setRowSelection,
             }}
             getRowId={getRowId}
+            onRowClick={
+              canUpdateOnlineEvaluationRules ? handleRowClick : undefined
+            }
             columnPinning={DEFAULT_COLUMN_PINNING}
             noData={<DataTableNoData title={noDataText} />}
             showSkeleton={isTableLoading}
@@ -469,13 +482,16 @@ export const OnlineEvaluationPage: React.FC = () => {
           </div>
         </>
       )}
-      <AddEditRuleDialog
-        key={resetDialogKeyRef.current}
+      <RuleEditorPanel
+        key={`${resetDialogKeyRef.current}-${dialogRule?.id ?? ""}-${
+          cloningRule ? "clone" : "edit"
+        }`}
         open={isDialogOpen}
         setOpen={handleCloseDialog}
-        rule={dialogRule}
-        mode={dialogMode}
         projectId={projectId}
+        ruleType={dialogRuleType}
+        rule={dialogRule}
+        isClone={!editingRule && Boolean(cloningRule)}
       />
       <EvaluationTracesSidebar projectId={projectId} />
     </div>
