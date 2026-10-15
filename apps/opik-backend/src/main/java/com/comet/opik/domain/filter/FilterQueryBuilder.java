@@ -1042,7 +1042,31 @@ public class FilterQueryBuilder {
         var template = toAnalyticsDbOperator(filter, filterStrategy);
         var dbField = getAnalyticsDbField(filter.field(), filterStrategy, i, columnsNonNullable);
         var enumFallbackTemplate = ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(FieldType.ENUM);
-        return filter.field().getType().buildFilter(template, dbField, i, filter.value(), enumFallbackTemplate);
+        var condition = filter.field().getType().buildFilter(template, dbField, i, filter.value(),
+                enumFallbackTemplate);
+        if (filter.field().getType() == FieldType.DICTIONARY
+                && StringUtils.isNotBlank(filter.key())
+                && JsonPathUtils.hasAmbiguousDottedPlainKey(filter.key())) {
+            var literalTemplate = template.replace(":filterKey" + i, ":filterKeyLiteral" + i);
+            var literalCondition = filter.field().getType()
+                    .buildFilter(literalTemplate, dbField, i, filter.value(), enumFallbackTemplate);
+            condition = combineAmbiguousDictionaryConditions(filter.operator(), condition, literalCondition);
+        }
+        return condition;
+    }
+
+    /**
+     * Merges nested-path and flat-key interpretations for dictionary filters on ambiguous dotted keys.
+     * Positive match operators succeed when either interpretation matches; negations and emptiness
+     * require every interpretation to agree.
+     */
+    private static String combineAmbiguousDictionaryConditions(
+            Operator operator, String nestedPathCondition, String literalFlatKeyCondition) {
+        return switch (operator) {
+            case IS_EMPTY, NOT_CONTAINS, NOT_EQUAL ->
+                "(%s AND %s)".formatted(nestedPathCondition, literalFlatKeyCondition);
+            default -> "(%s OR %s)".formatted(nestedPathCondition, literalFlatKeyCondition);
+        };
     }
 
     private static String getAnalyticsDbField(
@@ -1218,6 +1242,12 @@ public class FilterQueryBuilder {
                         && KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {
                     var key = getKey(filter);
                     binder.accept("filterKey%d".formatted(i), key);
+                    if (filter.field().getType() == FieldType.DICTIONARY
+                            && JsonPathUtils.hasAmbiguousDottedPlainKey(filter.key())) {
+                        binder.accept(
+                                "filterKeyLiteral%d".formatted(i),
+                                JsonPathUtils.toAnalyticsDbLiteralFlatKeyPath(filter.key()));
+                    }
                 }
             }
         }
@@ -1250,6 +1280,7 @@ public class FilterQueryBuilder {
                     : "String";
             out = out.replace(":dynamicJsonPath" + i, "{dynamicJsonPath" + i + ":String}");
             out = out.replace(":dynamicField" + i, "{dynamicField" + i + ":String}");
+            out = out.replace(":filterKeyLiteral" + i, "{filterKeyLiteral" + i + ":String}");
             out = out.replace(":filterKey" + i, "{filterKey" + i + ":String}");
             out = out.replace(":filter" + i, "{filter" + i + ":" + filterType + "}");
         }
