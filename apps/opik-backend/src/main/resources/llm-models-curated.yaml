@@ -42,7 +42,7 @@ profiles:
   gemini:
     temperature: {min: 0, max: 2, default: 0}
     topP: {min: 0, max: 1, default: 1}
-    maxOutputTokens: {min: 0, max: 65535, default: 4000}
+    maxOutputTokens: {min: 1, max: 65535, default: 4000}
     effort: {accepted: false}
   gemini-no-sampling:
     temperature: {accepted: false}
@@ -55,6 +55,12 @@ models:
         accepted: true
         levels: [low, medium, high]
         default: high
+  - id: o1-2024-12-17
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high]
+        default: medium
   - id: o3
     params:
       effort:
@@ -91,6 +97,12 @@ models:
         accepted: true
         levels: [minimal, low, medium, high]
         default: high
+  - id: gpt-5-pro
+    params:
+      effort:
+        accepted: true
+        levels: [high]
+        default: high
   - id: gpt-5.1
     params:
       effort:
@@ -103,6 +115,24 @@ models:
         accepted: true
         levels: [none, low, medium, high, xhigh]
         default: high
+  - id: gpt-5.2-pro
+    params:
+      effort:
+        accepted: true
+        levels: [medium, high, xhigh]
+        default: medium
+  - id: gpt-5.2-codex
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high, xhigh]
+        default: medium
+  - id: gpt-5.3-codex
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high, xhigh]
+        default: medium
   - id: gpt-5.4
     params:
       effort:
@@ -121,11 +151,23 @@ models:
         accepted: true
         levels: [none, low, medium, high, xhigh]
         default: high
+  - id: gpt-5.4-pro
+    params:
+      effort:
+        accepted: true
+        levels: [medium, high, xhigh]
+        default: medium
   - id: gpt-5.5
     params:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
+        default: high
+  - id: gpt-5.5-pro
+    params:
+      effort:
+        accepted: true
+        levels: [medium, high, xhigh]
         default: high
   - id: gpt-5.6-luna
     params:
@@ -193,6 +235,32 @@ models:
         accepted: true
         levels: [low, medium, high, xhigh]
         default: high
+  # Reasoning models served without an effort control: o1-mini and o1-preview refuse reasoning_effort, and
+  # OpenAI's model pages list no effort levels for the others, so a level we guessed could get a 400.
+  - id: o1-mini
+    params: {effort: {accepted: false}}
+  - id: o1-mini-2024-09-12
+    params: {effort: {accepted: false}}
+  - id: o1-preview
+    params: {effort: {accepted: false}}
+  - id: o1-preview-2024-09-12
+    params: {effort: {accepted: false}}
+  - id: o1-pro
+    params: {effort: {accepted: false}}
+  - id: o3-pro
+    params: {effort: {accepted: false}}
+  - id: o3-deep-research
+    params: {effort: {accepted: false}}
+  - id: o4-mini-deep-research
+    params: {effort: {accepted: false}}
+  - id: gpt-5-codex
+    params: {effort: {accepted: false}}
+  - id: gpt-5.1-codex
+    params: {effort: {accepted: false}}
+  - id: gpt-5.1-codex-max
+    params: {effort: {accepted: false}}
+  - id: gpt-5.1-codex-mini
+    params: {effort: {accepted: false}}
   anthropic:
   - id: claude-opus-5-5
     params:
@@ -355,6 +423,8 @@ models:
         accepted: true
         levels: [auto, 'off', low, medium, high]
         default: 'off'
+  - {id: gemini-2.0-flash, params: {maxOutputTokens: {max: 8192}}}
+  - {id: gemini-2.0-flash-lite, params: {maxOutputTokens: {max: 8192}}}
   - {id: gemini-flash-latest-high-res-exp, profile: gemini-no-sampling}
   - {id: gemini-omni-1.1-flash, profile: gemini-no-sampling}
   - {id: gemini-3-pro-image, profile: gemini-no-sampling}
@@ -471,3 +541,5 @@ models:
         accepted: true
         levels: [auto, 'off', low, medium, high]
         default: 'off'
+  - {id: gemini-2.0-flash-001, params: {maxOutputTokens: {max: 8192}}}
+  - {id: gemini-2.0-flash-lite-001, params: {maxOutputTokens: {max: 8192}}}

@@ -2199,9 +2199,9 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
      * statement's parameter names — so binding is O(n²) and dominates the aggregation job at that batch
      * size. This path was the first to move, measured at ~500× end-to-end on large batches; it has
      * since become the shared helper that the feedback score, experiment item and dataset item writers
-     * use behind {@code bulkInsert.v2ClientEnabled}.
+     * use.
      *
-     * <p>This one is <b>not</b> behind that toggle. It has always been JSONEachRow, so there is no
+     * <p>This one never had an R2DBC counterpart. It has always been JSONEachRow, so there is no
      * second writer to fall back to and nothing to compare against — the flag exists to A/B paths that
      * have an R2DBC equivalent, and this does not.
      *

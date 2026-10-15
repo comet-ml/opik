@@ -24,6 +24,8 @@ export * as automationRuleEvaluators from "./automationRuleEvaluators/index.js";
 export * from "./chatCompletions/client/requests/index.js";
 export * as chatCompletions from "./chatCompletions/index.js";
 export * as check from "./check/index.js";
+export * from "./dashboardSavedQueries/client/requests/index.js";
+export * as dashboardSavedQueries from "./dashboardSavedQueries/index.js";
 export * from "./dashboards/client/requests/index.js";
 export * as dashboards from "./dashboards/index.js";
 export * from "./datasets/client/requests/index.js";

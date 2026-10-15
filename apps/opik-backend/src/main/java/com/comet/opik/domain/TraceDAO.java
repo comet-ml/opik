@@ -127,8 +127,6 @@ public interface TraceDAO {
 
     Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(Set<UUID> traceIds, Connection connection);
 
-    Mono<Long> batchInsert(List<Trace> traces, Connection connection);
-
     /**
      * Batch insert without a caller-supplied connection.
      *
@@ -249,63 +247,6 @@ class TraceDAOImpl implements TraceDAO {
             OR ilike(error_info, :search_text)
             OR arrayExists(element -> ilike(element, :search_text), tags)
             OR ilike(thread_id, :search_text))""";
-
-    private static final String BATCH_INSERT = """
-            INSERT INTO traces(
-                id,
-                project_id,
-                workspace_id,
-                name,
-                start_time,
-                end_time,
-                input,
-                output,
-                metadata,
-                tags,
-                last_updated_at,
-                error_info,
-                created_by,
-                last_updated_by,
-                thread_id,
-                visibility_mode,
-                truncation_threshold,
-                input_slim,
-                output_slim,
-                ttft,
-                source,
-                environment
-            )
-            SETTINGS log_comment = '<log_comment>'
-            FORMAT Values
-                <items:{item |
-                    (
-                        :id<item.index>,
-                        :project_id<item.index>,
-                        :workspace_id,
-                        :name<item.index>,
-                        :start_time<item.index>,
-                        :end_time<item.index>,
-                        :input<item.index>,
-                        :output<item.index>,
-                        :metadata<item.index>,
-                        :tags<item.index>,
-                        :last_updated_at<item.index>,
-                        :error_info<item.index>,
-                        :user_name,
-                        :user_name,
-                        :thread_id<item.index>,
-                        :visibility_mode<item.index>,
-                        :truncation_threshold<item.index>,
-                        :input_slim<item.index>,
-                        :output_slim<item.index>,
-                        :ttft<item.index>,
-                        :source<item.index>,
-                        :environment<item.index>
-                    )
-                    <if(item.hasNext)>,<endif>
-                }>
-            ;
-            """;
 
     /**
      * This query handles the insertion of a new trace into the database in two cases:
@@ -2252,8 +2193,8 @@ class TraceDAOImpl implements TraceDAO {
      * {@code :lb_i}, so the single floor never excludes a row that any per-workspace id-range would delete. UTC
      * matches {@code id_at}, and both operands are the Date32 week expression as in {@link #DELETE_FOR_RETENTION}.
      * <p>
-     * The OR-ed predicates are a template loop over {@code getQueryItemPlaceHolder}, matching {@code BATCH_INSERT} and
-     * the other variable-arity queries in this DAO, so the query text is declared once and every value is bound. It was
+     * The OR-ed predicates are a template loop over {@code getQueryItemPlaceHolder}, matching the other
+     * variable-arity queries in this DAO, so the query text is declared once and every value is bound. It was
      * previously assembled with a {@code StringBuilder}, which hid the statement from the declaration site and from the
      * routing guard that reads these constants.
      */
@@ -4818,32 +4759,16 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Mono<Long> batchInsert(@NonNull List<Trace> traces, @NonNull Connection connection) {
-
-        Preconditions.checkArgument(!traces.isEmpty(), "traces must not be empty");
-
-        return Mono.from(insert(traces, connection))
-                .flatMapMany(Result::getRowsUpdated)
-                .reduce(0L, Long::sum);
-
-    }
-
-    @Override
-    @WithSpan
     public Mono<Long> batchInsert(List<Trace> traces) {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(traces), "traces must not be empty");
 
-        if (configuration.getBulkInsert().v2ClientEnabled()) {
-            return insertJsonEachRow(traces);
-        }
-
-        return asyncTemplate.nonTransaction(connection -> batchInsert(traces, connection));
+        return insertJsonEachRow(traces);
     }
 
     /**
-     * The {@link #BATCH_INSERT} rows streamed as JSONEachRow through the v2 client rather than bound as
-     * 20 named parameters per row. See {@link TraceJsonRowMapper} for the per-column parity notes.
+     * Trace rows streamed as JSONEachRow through the v2 client. Replaced an R2DBC insert that bound 20
+     * named parameters per row. See {@link TraceJsonRowMapper} for the per-column notes.
      */
     private Mono<Long> insertJsonEachRow(List<Trace> traces) {
         return makeMonoContextAware((userName, workspaceId) -> {
@@ -4858,73 +4783,6 @@ class TraceDAOImpl implements TraceDAO {
                     trace -> TraceJsonRowMapper.toJsonRow(trace, userName, workspaceId, nowForBatch,
                             traceColumnsNonNullable(),
                             configuration.getResponseFormatting().getTruncationSize()));
-        });
-    }
-
-    private Publisher<? extends Result> insert(List<Trace> traces, Connection connection) {
-
-        return makeMonoContextAware((userName, workspaceId) -> {
-            List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(traces.size());
-
-            var logComment = getLogComment("batch_insert_traces", workspaceId, userName, traces.size());
-
-            var template = TemplateUtils.newST(BATCH_INSERT)
-                    .add("items", queryItems)
-                    .add("log_comment", logComment);
-
-            Statement statement = connection.createStatement(template.render());
-
-            // Captured once per batch so every row whose client did not provide lastUpdatedAt gets
-            // the same timestamp — matches the prior server-side now64(6) semantics (CH evaluates
-            // it once per query) and avoids timing-sensitive ordering in downstream MAX(...)
-            // aggregations.
-            Instant nowForBatch = Instant.now();
-
-            int i = 0;
-            for (Trace trace : traces) {
-                statement.bind("id" + i, trace.id())
-                        .bind("project_id" + i, trace.projectId())
-                        .bind("name" + i, StringUtils.defaultIfBlank(trace.name(), ""))
-                        .bind("start_time" + i, ClickHouseDateTimeFormat.formatNanos(trace.startTime()))
-                        .bind("tags" + i, trace.tags() != null ? trace.tags().toArray(String[]::new) : new String[]{})
-                        .bind("error_info" + i,
-                                trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "")
-                        .bind("thread_id" + i, StringUtils.defaultIfBlank(trace.threadId(), ""));
-
-                bindInputOutputMetadataAndSlim(statement, trace, i);
-
-                bindEpochSentinel(statement, "end_time" + i, trace.endTime());
-
-                // Format the timestamp client-side so the SQL contains a plain string literal in the
-                // last_updated_at cell. Fall back to "now" when the client did not provide a value —
-                // matches the column's DEFAULT now64(6) but avoids the function call in the tuple
-                // that would trip the FORMAT Values fast-path. See OPIK-5694.
-                statement.bind("last_updated_at" + i, ClickHouseDateTimeFormat.formatMicros(
-                        trace.lastUpdatedAt() != null ? trace.lastUpdatedAt() : nowForBatch));
-
-                statement.bind("visibility_mode" + i, trace.visibilityMode() != null
-                        ? trace.visibilityMode().getValue()
-                        : VisibilityMode.DEFAULT.getValue());
-
-                TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
-
-                bindNanSentinel(statement, "ttft" + i, trace.ttft());
-
-                statement.bind("source" + i, trace.source() == null
-                        ? Source.UNKNOWN_VALUE
-                        : trace.source().getValue());
-
-                statement.bind("environment" + i, StringUtils.defaultString(trace.environment()));
-
-                i++;
-            }
-
-            bindUserNameAndWorkspace(statement, userName, workspaceId);
-
-            Segment segment = startSegment("traces", "Clickhouse", "batch_insert");
-
-            return Mono.from(statement.execute())
-                    .doFinally(signalType -> endSegment(segment));
         });
     }
 

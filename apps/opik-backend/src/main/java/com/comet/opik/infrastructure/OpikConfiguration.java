@@ -37,9 +37,6 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormExtendedSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty
-    private BulkInsertConfig bulkInsert = BulkInsertConfig.builder().build();
-
-    @Valid @NotNull @JsonProperty
     private CustomChartsConfig customCharts = new CustomChartsConfig();
 
     @Valid @NotNull @JsonProperty
@@ -172,6 +169,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private PartitionMetricsConfig partitionMetrics = new PartitionMetricsConfig();
+
+    @Valid @NotNull @JsonProperty
+    private SpanWeeksBackfillConfig spanWeeksBackfill = SpanWeeksBackfillConfig.builder().build();
 
     @Valid @NotNull @JsonProperty
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
