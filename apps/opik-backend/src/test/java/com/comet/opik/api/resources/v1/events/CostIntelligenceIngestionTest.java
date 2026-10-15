@@ -25,6 +25,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.redis.testcontainers.RedisContainer;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +37,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -52,6 +54,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -63,6 +66,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 import static org.awaitility.Awaitility.await;
@@ -736,6 +740,199 @@ class CostIntelligenceIngestionTest {
         }
 
         @Test
+        @DisplayName("repository skills and instruction files land as scoped parallel arrays with status listed")
+        void repositoryListsLand() {
+            var ws = newWorkspace();
+            var trace = traceWithRepositoryKeys(true, true);
+
+            traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxIdentity(trace.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                assertThat(row.get().skillsScope()).containsExactly("repo", "repo");
+                assertThat(row.get().skillsRoot()).containsExactly(".claude/skills", ".agents/skills");
+                assertThat(row.get().skillsName()).containsExactly("opik-review", "plan-first");
+                assertThat(row.get().skillsVersionId()).containsExactly("9f2c0001", "9f2c0002");
+                assertThat(row.get().skillsStatus()).isEqualTo("listed");
+                assertThat(row.get().instructionFilesScope()).containsExactly("repo", "repo");
+                assertThat(row.get().instructionFilesPath()).containsExactly("AGENTS.md", "CLAUDE.md");
+                assertThat(row.get().instructionFilesVersionId()).containsExactly("4be00001", "4be00002");
+                assertThat(row.get().instructionFilesStatus()).isEqualTo("listed");
+            });
+        }
+
+        @Test
+        @DisplayName("repository without either list key stores empty arrays and status ''")
+        void repositoryWithoutListsStoresEmpty() {
+            var ws = newWorkspace();
+            var trace = traceWithRepositoryKeys(false, false);
+
+            traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxIdentity(trace.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                assertThat(row.get().skillsScope()).isEmpty();
+                assertThat(row.get().skillsRoot()).isEmpty();
+                assertThat(row.get().skillsName()).isEmpty();
+                assertThat(row.get().skillsVersionId()).isEmpty();
+                assertThat(row.get().skillsStatus()).isEmpty();
+                assertThat(row.get().instructionFilesScope()).isEmpty();
+                assertThat(row.get().instructionFilesPath()).isEmpty();
+                assertThat(row.get().instructionFilesVersionId()).isEmpty();
+                assertThat(row.get().instructionFilesStatus()).isEmpty();
+            });
+        }
+
+        @Test
+        @DisplayName("repository with only instruction_files leaves skills '' and empty, files listed")
+        void repositoryWithOnlyInstructionFilesListsOnlyFiles() {
+            var row = ingestRepositoryEdit(repository -> repository.remove("skills"));
+
+            assertThat(row.skillsScope()).isEmpty();
+            assertThat(row.skillsName()).isEmpty();
+            assertThat(row.skillsStatus()).isEmpty();
+            assertThat(row.instructionFilesPath()).containsExactly("AGENTS.md", "CLAUDE.md");
+            assertThat(row.instructionFilesStatus()).isEqualTo("listed");
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"null", "\"text\"", "{\"root\": \"x\"}", "7"})
+        @DisplayName("a non-array skills value stores '' and empty lists, instruction_files stays listed")
+        void nonArraySkillsStoresNothing(String rawSkills) {
+            var row = ingestRepositoryEdit(
+                    repository -> repository.set("skills", JsonUtils.getJsonNodeFromString(rawSkills)));
+
+            assertThat(row.skillsStatus()).isEmpty();
+            assertThat(row.skillsScope()).isEmpty();
+            assertThat(row.skillsRoot()).isEmpty();
+            assertThat(row.skillsName()).isEmpty();
+            assertThat(row.skillsVersionId()).isEmpty();
+            assertThat(row.instructionFilesStatus()).isEqualTo("listed");
+            assertThat(row.instructionFilesPath()).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("an element missing a field stores '' in that slot and keeps the lengths equal")
+        void elementMissingAFieldKeepsLengthsEqual() {
+            var row = ingestRepositoryEdit(repository -> {
+                var skills = repository.putArray("skills");
+                skills.addObject().put("root", ".claude/skills").put("tree_id", "9f2c0003");
+                skills.addObject().put("root", ".agents/skills").put("name", "plan-first");
+                skills.add("not-an-object");
+            });
+
+            assertThat(row.skillsScope()).containsExactly("repo", "repo");
+            assertThat(row.skillsRoot()).containsExactly(".claude/skills", ".agents/skills");
+            assertThat(row.skillsName()).containsExactly("", "plan-first");
+            assertThat(row.skillsVersionId()).containsExactly("9f2c0003", "");
+        }
+
+        @Test
+        @DisplayName("a list over 256 entries is stored empty with status truncated")
+        void listOverEntryCapIsTruncated() {
+            var row = ingestRepositoryEdit(repository -> {
+                var skills = repository.putArray("skills");
+                for (int i = 0; i < 257; i++) {
+                    skills.addObject().put("root", "r").put("name", "n" + i).put("tree_id", "t" + i);
+                }
+            });
+
+            assertThat(row.skillsStatus()).isEqualTo("truncated");
+            assertThat(row.skillsScope()).isEmpty();
+            assertThat(row.skillsName()).isEmpty();
+            assertThat(row.instructionFilesStatus()).isEqualTo("listed");
+        }
+
+        @Test
+        @DisplayName("an element string over 512 chars stores that list empty with status truncated")
+        void elementOverLengthCapIsTruncated() {
+            var row = ingestRepositoryEdit(repository -> repository.putArray("instruction_files").addObject()
+                    .put("path", "p".repeat(513)).put("blob_id", "b"));
+
+            assertThat(row.instructionFilesStatus()).isEqualTo("truncated");
+            assertThat(row.instructionFilesPath()).isEmpty();
+            assertThat(row.instructionFilesVersionId()).isEmpty();
+            assertThat(row.skillsStatus()).isEqualTo("listed");
+        }
+
+        @Test
+        @DisplayName("skills and instruction_files groups of different lengths insert side by side")
+        void groupsOfDifferentLengthsInsert() {
+            var ws = newWorkspace();
+            var row = sentinelIdentityRow(4).toBuilder()
+                    .skillsScope(List.of("repo", "repo", "repo"))
+                    .skillsRoot(List.of("r1", "r2", "r3"))
+                    .skillsName(List.of("n1", "n2", "n3"))
+                    .skillsVersionId(List.of("t1", "t2", "t3"))
+                    .instructionFilesScope(List.of("repo"))
+                    .instructionFilesPath(List.of("AGENTS.md"))
+                    .instructionFilesVersionId(List.of("b1"))
+                    .build();
+
+            cipxTraceIdentityDAO.upsert(List.of(row), ws.workspaceId(), USER).block();
+
+            assertEveryIdentityColumnHoldsItsOwnValue(ws.workspaceId(), row);
+        }
+
+        @Test
+        @DisplayName("quotes and backslashes in array values round-trip")
+        void quotesAndBackslashesRoundTrip() {
+            var ws = newWorkspace();
+            var row = sentinelIdentityRow(5).toBuilder()
+                    .skillsName(List.of("o'brien\\skill", "it's \\ \"fine\""))
+                    .instructionFilesPath(List.of("dir\\it's.md", "a'b"))
+                    .build();
+
+            cipxTraceIdentityDAO.upsert(List.of(row), ws.workspaceId(), USER).block();
+
+            assertEveryIdentityColumnHoldsItsOwnValue(ws.workspaceId(), row);
+        }
+
+        @Test
+        @DisplayName("unequal lengths within a group are rejected")
+        void unequalGroupLengthsAreRejected() {
+            var base = sentinelIdentityRow(6);
+
+            assertThatThrownBy(() -> base.toBuilder().skillsName(List.of("only-one")).build())
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> base.toBuilder().instructionFilesPath(List.of("a")).build())
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        private CipxIdentityRow ingestRepositoryEdit(Consumer<ObjectNode> edit) {
+            var ws = newWorkspace();
+            var trace = traceWithRepositoryKeys(edit);
+
+            traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
+
+            return await().atMost(30, SECONDS).until(() -> getCipxIdentity(trace.id(), ws.workspaceId()),
+                    Optional::isPresent).get();
+        }
+
+        private Trace traceWithRepositoryKeys(boolean withSkills, boolean withInstructionFiles) {
+            return traceWithRepositoryKeys(repository -> {
+                if (!withSkills) {
+                    repository.remove("skills");
+                }
+                if (!withInstructionFiles) {
+                    repository.remove("instruction_files");
+                }
+            });
+        }
+
+        private Trace traceWithRepositoryKeys(Consumer<ObjectNode> edit) {
+            var metadata = traceCipxMetadata(UUID.randomUUID().toString(), "dev-" + UUID.randomUUID() + "@acme.com",
+                    "Dev User", "git@github.com:acme/repo.git", "claude_code", 3);
+            edit.accept((ObjectNode) metadata.path("cipx").path("session").path("repository"));
+            return factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName("cipx-" + UUID.randomUUID())
+                    .metadata(metadata)
+                    .build();
+        }
+
+        @Test
         @DisplayName("CIPX-authenticated trace persists the validator-provided device id")
         void cipxAuthenticatedTracePersistsValidatorDeviceId() {
             var ws = newWorkspace();
@@ -1111,6 +1308,15 @@ class CostIntelligenceIngestionTest {
                 .agentsAmbiguous(base + 8)
                 .cipxVersion("sentinel-" + n + "-cipx-version")
                 .lastUpdatedAt(Instant.ofEpochMilli(1_700_000_000_000L + n))
+                .skillsScope(List.of("repo", "user"))
+                .skillsRoot(List.of("sentinel-" + n + "-root-a", "sentinel-" + n + "-root-b"))
+                .skillsName(List.of("sentinel-" + n + "-name-a", "sentinel-" + n + "-name-b"))
+                .skillsVersionId(List.of("sentinel-" + n + "-tree-a", "sentinel-" + n + "-tree-b"))
+                .skillsStatus("sentinel-" + n + "-skills-status")
+                .instructionFilesScope(List.of("repo", "plugin"))
+                .instructionFilesPath(List.of("sentinel-" + n + "-path-a", "sentinel-" + n + "-path-b"))
+                .instructionFilesVersionId(List.of("sentinel-" + n + "-blob-a", "sentinel-" + n + "-blob-b"))
+                .instructionFilesStatus("sentinel-" + n + "-files-status")
                 .build();
     }
 
@@ -1152,6 +1358,19 @@ class CostIntelligenceIngestionTest {
         assertThat(actual.agentsAmbiguous()).as("agents_ambiguous").isEqualTo(expected.agentsAmbiguous());
         assertThat(actual.cipxVersion()).as("cipx_version").isEqualTo(expected.cipxVersion());
         assertThat(actual.lastUpdatedMs()).as("last_updated_at").isEqualTo(expected.lastUpdatedAt().toEpochMilli());
+        assertThat(actual.skillsScope()).as("skills.scope").isEqualTo(expected.skillsScope());
+        assertThat(actual.skillsRoot()).as("skills.root").isEqualTo(expected.skillsRoot());
+        assertThat(actual.skillsName()).as("skills.name").isEqualTo(expected.skillsName());
+        assertThat(actual.skillsVersionId()).as("skills.version_id").isEqualTo(expected.skillsVersionId());
+        assertThat(actual.skillsStatus()).as("skills_status").isEqualTo(expected.skillsStatus());
+        assertThat(actual.instructionFilesScope()).as("instruction_files.scope")
+                .isEqualTo(expected.instructionFilesScope());
+        assertThat(actual.instructionFilesPath()).as("instruction_files.path")
+                .isEqualTo(expected.instructionFilesPath());
+        assertThat(actual.instructionFilesVersionId()).as("instruction_files.version_id")
+                .isEqualTo(expected.instructionFilesVersionId());
+        assertThat(actual.instructionFilesStatus()).as("instruction_files_status")
+                .isEqualTo(expected.instructionFilesStatus());
     }
 
     private Optional<SentinelIdentityRow> getCipxIdentityAllColumns(String traceId, String workspaceId) {
@@ -1167,7 +1386,12 @@ class CostIntelligenceIngestionTest {
                     branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                     files_added, files_deleted, lines_added, lines_deleted,
                     agents_dispatched, agents_linked, agents_ambiguous, cipx_version,
-                    toUnixTimestamp64Milli(last_updated_at) AS last_updated_ms
+                    toUnixTimestamp64Milli(last_updated_at) AS last_updated_ms,
+                    `skills.scope` AS skills_scope, `skills.root` AS skills_root, `skills.name` AS skills_name,
+                    `skills.version_id` AS skills_version_id, skills_status,
+                    `instruction_files.scope` AS instruction_files_scope,
+                    `instruction_files.path` AS instruction_files_path,
+                    `instruction_files.version_id` AS instruction_files_version_id, instruction_files_status
                 FROM cipx_trace_identities FINAL
                 WHERE workspace_id = :workspace_id AND trace_id = :trace_id
                 """;
@@ -1209,6 +1433,16 @@ class CostIntelligenceIngestionTest {
                             .agentsAmbiguous(row.get("agents_ambiguous", Long.class))
                             .cipxVersion(row.get("cipx_version", String.class))
                             .lastUpdatedMs(row.get("last_updated_ms", Long.class))
+                            .skillsScope(List.of(row.get("skills_scope", String[].class)))
+                            .skillsRoot(List.of(row.get("skills_root", String[].class)))
+                            .skillsName(List.of(row.get("skills_name", String[].class)))
+                            .skillsVersionId(List.of(row.get("skills_version_id", String[].class)))
+                            .skillsStatus(row.get("skills_status", String.class))
+                            .instructionFilesScope(List.of(row.get("instruction_files_scope", String[].class)))
+                            .instructionFilesPath(List.of(row.get("instruction_files_path", String[].class)))
+                            .instructionFilesVersionId(
+                                    List.of(row.get("instruction_files_version_id", String[].class)))
+                            .instructionFilesStatus(row.get("instruction_files_status", String.class))
                             .build())));
         }).blockOptional();
     }
@@ -1521,7 +1755,15 @@ class CostIntelligenceIngestionTest {
                         "files_added": 3,
                         "files_deleted": 1,
                         "lines_added": 40,
-                        "lines_deleted": 5
+                        "lines_deleted": 5,
+                        "skills": [
+                          {"root": ".claude/skills", "name": "opik-review", "tree_id": "9f2c0001"},
+                          {"root": ".agents/skills", "name": "plan-first", "tree_id": "9f2c0002"}
+                        ],
+                        "instruction_files": [
+                          {"path": "AGENTS.md", "blob_id": "4be00001"},
+                          {"path": "CLAUDE.md", "blob_id": "4be00002"}
+                        ]
                       },
                       "identity": {
                         "user_uuid": "%s",
@@ -1688,7 +1930,12 @@ class CostIntelligenceIngestionTest {
                     billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                     branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                     files_added, files_deleted, lines_added, lines_deleted,
-                    agents_dispatched, agents_linked, agents_ambiguous, cipx_version
+                    agents_dispatched, agents_linked, agents_ambiguous, cipx_version,
+                    `skills.scope` AS skills_scope, `skills.root` AS skills_root, `skills.name` AS skills_name,
+                    `skills.version_id` AS skills_version_id, skills_status,
+                    `instruction_files.scope` AS instruction_files_scope,
+                    `instruction_files.path` AS instruction_files_path,
+                    `instruction_files.version_id` AS instruction_files_version_id, instruction_files_status
                 FROM cipx_trace_identities FINAL
                 WHERE workspace_id = :workspace_id AND trace_id = :trace_id
                 """;
@@ -1727,6 +1974,16 @@ class CostIntelligenceIngestionTest {
                             .agentsLinked(row.get("agents_linked", Long.class))
                             .agentsAmbiguous(row.get("agents_ambiguous", Long.class))
                             .cipxVersion(row.get("cipx_version", String.class))
+                            .skillsScope(List.of(row.get("skills_scope", String[].class)))
+                            .skillsRoot(List.of(row.get("skills_root", String[].class)))
+                            .skillsName(List.of(row.get("skills_name", String[].class)))
+                            .skillsVersionId(List.of(row.get("skills_version_id", String[].class)))
+                            .skillsStatus(row.get("skills_status", String.class))
+                            .instructionFilesScope(List.of(row.get("instruction_files_scope", String[].class)))
+                            .instructionFilesPath(List.of(row.get("instruction_files_path", String[].class)))
+                            .instructionFilesVersionId(
+                                    List.of(row.get("instruction_files_version_id", String[].class)))
+                            .instructionFilesStatus(row.get("instruction_files_status", String.class))
                             .build())));
         }).blockOptional();
     }
@@ -1785,7 +2042,11 @@ class CostIntelligenceIngestionTest {
             String billingType,
             String branch, String headShaStart, String headShaEnd, Boolean dirty, Long commitsInTrace,
             Long filesAdded, Long filesDeleted, Long linesAdded, Long linesDeleted,
-            Long agentsDispatched, Long agentsLinked, Long agentsAmbiguous, String cipxVersion) {
+            Long agentsDispatched, Long agentsLinked, Long agentsAmbiguous, String cipxVersion,
+            List<String> skillsScope, List<String> skillsRoot, List<String> skillsName,
+            List<String> skillsVersionId, String skillsStatus, List<String> instructionFilesScope,
+            List<String> instructionFilesPath, List<String> instructionFilesVersionId,
+            String instructionFilesStatus) {
     }
 
     @Builder
@@ -1796,6 +2057,10 @@ class CostIntelligenceIngestionTest {
             String organizationType, String seatTier, String billingType, String branch, String headShaStart,
             String headShaEnd, Boolean dirty, Long commitsInTrace, Long filesAdded, Long filesDeleted,
             Long linesAdded, Long linesDeleted, Long agentsDispatched, Long agentsLinked, Long agentsAmbiguous,
-            String cipxVersion, Long lastUpdatedMs) {
+            String cipxVersion, Long lastUpdatedMs,
+            List<String> skillsScope, List<String> skillsRoot, List<String> skillsName,
+            List<String> skillsVersionId, String skillsStatus, List<String> instructionFilesScope,
+            List<String> instructionFilesPath, List<String> instructionFilesVersionId,
+            String instructionFilesStatus) {
     }
 }
