@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import { X } from "lucide-react";
+import { Trash, X } from "lucide-react";
 import isFunction from "lodash/isFunction";
 
 import { Filter, FilterRowConfig } from "@/types/filters";
@@ -15,6 +15,12 @@ import DictionaryRow from "@/shared/FiltersContent/rows/DictionaryRow";
 import DefaultRow from "@/shared/FiltersContent/rows/DefaultRow";
 import CategoryRow from "@/shared/FiltersContent/rows/CategoryRow";
 import { createFilter } from "@/lib/filters";
+import { cn } from "@/lib/utils";
+
+export type FilterRowVariant = "table" | "card";
+
+const CARD_FIELD_CLASSES =
+  "[&_.min-w-32]:min-w-0 [&_.min-w-40]:min-w-0 [&_[role=combobox]]:h-8 [&_input]:h-8";
 
 type FilterRowProps<TColumnData> = {
   prefix: string;
@@ -24,6 +30,7 @@ type FilterRowProps<TColumnData> = {
   filter: Filter;
   onRemove: (id: string) => void;
   onChange: (filter: Filter) => void;
+  variant?: FilterRowVariant;
 };
 
 export const FilterRow = <TColumnData,>({
@@ -34,6 +41,7 @@ export const FilterRow = <TColumnData,>({
   disabledColumns,
   onRemove,
   onChange: onFilterChange,
+  variant = "table",
 }: FilterRowProps<TColumnData>) => {
   const onChange = useCallback(
     (newFilter: Filter) => {
@@ -83,30 +91,71 @@ export const FilterRow = <TColumnData,>({
     }
   };
 
+  const columnCell = (
+    <td className="p-1">
+      <ColumnSelector
+        columns={columns}
+        field={filter.field}
+        onSelect={(column) =>
+          onChange({
+            ...createFilter(),
+            id: filter.id,
+            field: column.id,
+            type: column.type as COLUMN_TYPE,
+            operator:
+              getConfig?.(column.id)?.defaultOperator ??
+              DEFAULT_OPERATOR_MAP[column.type as COLUMN_TYPE] ??
+              OPERATORS_MAP[column.type as COLUMN_TYPE]?.[0]?.value ??
+              "",
+          })
+        }
+        disabledColumns={disabledColumns}
+      ></ColumnSelector>
+    </td>
+  );
+
+  if (variant === "card") {
+    return (
+      <div className="flex flex-col gap-1">
+        <div
+          className={cn(
+            "flex overflow-hidden rounded-md border border-border bg-background",
+            CARD_FIELD_CLASSES,
+          )}
+        >
+          <div className="min-w-0 flex-1 p-[3px]">
+            <table className="w-full table-fixed">
+              <tbody>
+                <tr className="[&>td]:p-[3px]">
+                  {columnCell}
+                  {renderByType()}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <button
+            type="button"
+            className="flex w-6 shrink-0 items-center justify-center border-l border-border text-muted-slate hover:text-foreground"
+            onClick={() => onRemove(filter.id)}
+            aria-label="Remove filter"
+          >
+            <Trash className="size-3" />
+          </button>
+        </div>
+        {filter.error && (
+          <p className="comet-body-xs px-0.5 text-destructive">
+            {filter.error}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <>
       <tr>
         <td className="comet-body-s p-1">{prefix}</td>
-        <td className="p-1">
-          <ColumnSelector
-            columns={columns}
-            field={filter.field}
-            onSelect={(column) =>
-              onChange({
-                ...createFilter(),
-                id: filter.id,
-                field: column.id,
-                type: column.type as COLUMN_TYPE,
-                operator:
-                  getConfig?.(column.id)?.defaultOperator ??
-                  DEFAULT_OPERATOR_MAP[column.type as COLUMN_TYPE] ??
-                  OPERATORS_MAP[column.type as COLUMN_TYPE]?.[0]?.value ??
-                  "",
-              })
-            }
-            disabledColumns={disabledColumns}
-          ></ColumnSelector>
-        </td>
+        {columnCell}
         {renderByType()}
         <td>
           <Button

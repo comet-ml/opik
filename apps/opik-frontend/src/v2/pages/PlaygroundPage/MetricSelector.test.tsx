@@ -20,7 +20,7 @@ vi.mock("@/contexts/PermissionsContext", () => ({
 }));
 
 vi.mock(
-  "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog",
+  "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorPanel",
   () => ({
     default: () => null,
   }),
