@@ -38,6 +38,7 @@ type JudgePromptInputProps = {
   onBlur: () => void;
   sampleData: RuleSampleData | null;
   showMedia: boolean;
+  editorRef?: React.RefObject<PromptVariableEditorHandle>;
 };
 
 const JudgePromptInput: React.FC<JudgePromptInputProps> = ({
@@ -46,8 +47,10 @@ const JudgePromptInput: React.FC<JudgePromptInputProps> = ({
   onBlur,
   sampleData,
   showMedia,
+  editorRef: externalEditorRef,
 }) => {
-  const editorRef = useRef<PromptVariableEditorHandle>(null);
+  const localEditorRef = useRef<PromptVariableEditorHandle>(null);
+  const editorRef = externalEditorRef ?? localEditorRef;
   const {
     localText,
     images,

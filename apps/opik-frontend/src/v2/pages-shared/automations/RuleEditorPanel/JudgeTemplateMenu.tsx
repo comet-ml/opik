@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import { FileTerminal } from "lucide-react";
 
 import { Button } from "@/ui/button";
@@ -15,19 +15,24 @@ import { getJudgeTemplateOptions } from "@/v2/pages-shared/automations/RuleEdito
 type JudgeTemplateMenuProps = {
   scope: EVALUATORS_RULE_SCOPE;
   onSelect: (template: LLMPromptTemplate, label: string) => void;
+  onAfterSelect?: () => void;
 };
 
 const JudgeTemplateMenu: React.FC<JudgeTemplateMenuProps> = ({
   scope,
   onSelect,
+  onAfterSelect,
 }) => {
+  const isSelectedRef = useRef(false);
   const options = getJudgeTemplateOptions(scope);
 
   if (!options.length) return null;
 
   const handleSelect = (value: LLM_JUDGE) => {
     const option = options.find((o) => o.value === value);
-    if (option) onSelect(option.template, option.label);
+    if (!option) return;
+    isSelectedRef.current = true;
+    onSelect(option.template, option.label);
   };
 
   return (
@@ -41,7 +46,11 @@ const JudgeTemplateMenu: React.FC<JudgeTemplateMenuProps> = ({
       <DropdownMenuContent
         align="end"
         className="w-[280px] p-1.5"
-        onCloseAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (isSelectedRef.current) onAfterSelect?.();
+          isSelectedRef.current = false;
+        }}
       >
         <MenuOptionItems options={options} onSelect={handleSelect} />
       </DropdownMenuContent>

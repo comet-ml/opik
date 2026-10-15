@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
 import get from "lodash/get";
 
@@ -9,6 +9,7 @@ import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditor
 import RuleEditorCard from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorCard";
 import JudgePromptToolbar from "@/v2/pages-shared/automations/RuleEditorPanel/JudgePromptToolbar";
 import JudgePromptInput from "@/v2/pages-shared/automations/RuleEditorPanel/JudgePromptInput";
+import { PromptVariableEditorHandle } from "@/v2/pages-shared/llm/PromptVariableEditor/PromptVariableEditor";
 import useRuleSampleData from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleSampleData";
 import {
   getRecordErrorKeys,
@@ -52,6 +53,7 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
   onSelectTemplate,
   mergeInfo,
 }) => {
+  const editorRef = useRef<PromptVariableEditorHandle>(null);
   const scope = form.watch("scope");
   const judgeErrors = getJudgeErrors(form);
   const sampleData = useRuleSampleData(
@@ -80,6 +82,7 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
               <JudgePromptToolbar
                 form={form}
                 onSelectTemplate={onSelectTemplate}
+                onAfterSelectTemplate={() => editorRef.current?.focusAtEnd()}
               />
             }
           >
@@ -88,6 +91,7 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
               onChange={field.onChange}
               onBlur={field.onBlur}
               sampleData={sampleData}
+              editorRef={editorRef}
               showMedia={scope !== EVALUATORS_RULE_SCOPE.thread}
             />
           </RuleEditorCard>

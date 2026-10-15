@@ -24,11 +24,13 @@ import { useCalculateRuleDefaultModel } from "@/v2/pages-shared/automations/Rule
 type JudgePromptToolbarProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
   onSelectTemplate?: (template: LLMPromptTemplate, label: string) => void;
+  onAfterSelectTemplate?: () => void;
 };
 
 const JudgePromptToolbar: React.FC<JudgePromptToolbarProps> = ({
   form,
   onSelectTemplate,
+  onAfterSelectTemplate,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { calculateModelProvider } = useLLMProviderModelsData();
@@ -170,6 +172,7 @@ const JudgePromptToolbar: React.FC<JudgePromptToolbarProps> = ({
           <JudgeTemplateMenu
             scope={form.watch("scope")}
             onSelect={onSelectTemplate}
+            onAfterSelect={onAfterSelectTemplate}
           />
         </div>
       )}
