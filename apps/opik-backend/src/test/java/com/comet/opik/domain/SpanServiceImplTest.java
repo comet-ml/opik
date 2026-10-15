@@ -59,6 +59,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class SpanServiceImplTest {
 
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
+
     private static final LockService DUMMY_LOCK_SERVICE = new DummyLockService();
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
@@ -502,8 +504,6 @@ class SpanServiceImplTest {
     @Nested
     class RegisterWeeks {
 
-        private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
-
         @Test
         void registerWeeks__whenWriteDisabled__thenWritesNothing() {
             var span = podamFactory.manufacturePojo(Span.class).toBuilder()
@@ -557,7 +557,7 @@ class SpanServiceImplTest {
         @Test
         void getWeeksByTraceIds__whenNoTraceIds__thenReturnsEmptyWithoutQuerying() {
             StepVerifier.create(newSpanService(DatabaseAnalyticsDataModelConfig.builder().build())
-                    .getWeeksByTraceIds(List.of()))
+                    .getWeeksByTraceIds(Set.of()))
                     .expectNext(List.of())
                     .verifyComplete();
 

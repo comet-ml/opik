@@ -315,8 +315,8 @@ public class SpanService {
      * (project, trace, week). Spans missing an id, trace or project carry nothing to index and are skipped. A no-op
      * while {@code databaseAnalyticsDataModel.spanWeeksWriteEnabled} is off.
      */
-    public Mono<Void> registerWeeks(@NonNull Collection<Span> spans) {
-        if (!config.getDatabaseAnalyticsDataModel().spanWeeksWriteEnabled()) {
+    public Mono<Void> registerWeeks(List<Span> spans) {
+        if (CollectionUtils.isEmpty(spans) || !config.getDatabaseAnalyticsDataModel().spanWeeksWriteEnabled()) {
             return Mono.empty();
         }
         List<SpanWeek> rows = spans.stream()
@@ -331,11 +331,11 @@ public class SpanService {
         return spanWeeksDAO.insert(rows).then();
     }
 
-    public Mono<List<SpanWeek>> getWeeksByTraceIds(@NonNull Collection<UUID> traceIds) {
-        if (traceIds.isEmpty()) {
+    public Mono<List<SpanWeek>> getWeeksByTraceIds(Set<UUID> traceIds) {
+        if (CollectionUtils.isEmpty(traceIds)) {
             return Mono.just(List.of());
         }
-        return spanWeeksDAO.findByTraceIds(traceIds);
+        return spanWeeksDAO.findByTraceIds(traceIds).collectList();
     }
 
     private Mono<Project> getProjectById(SpanUpdate spanUpdate) {

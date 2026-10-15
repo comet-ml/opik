@@ -822,6 +822,8 @@ databaseAnalyticsDataModel:
   # Register each written span's weekly partition in the span_weeks index. Turn true before the span weeks
   # backfill starts.
   spanWeeksWriteEnabled: false
+  # Run the span weeks backfill job. Turn true only once spanWeeksWriteEnabled is live on every backend instance.
+  spanWeeksBackfillEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
 # lightweight-delete mask and publishes opik.clickhouse.partition.* gauges; a distributed lock keeps
@@ -832,6 +834,21 @@ partitionMetrics:
   interval: 5m
   # Comma-separated tables scanned for lightweight-deleted (masked) rows.
   lwdTables: "traces,spans"
+
+# Publish Opik alerts to an Amazon EventBridge event bus (best-effort, no durable retry). Off by
+# default; while off nothing is rendered. When enabled, sets ALERTS_EVENTBRIDGE_* on the backend; an
+# explicit key under component.backend.env wins. The backend's service account needs
+# `events:PutEvents` on the bus: bind an IAM role through component.backend.serviceAccount.annotations
+# (IRSA) or an EKS Pod Identity association. Inside the comet-ml chart, set
+# comet.alerts.awsEventBridge there instead.
+alerts:
+  awsEventBridge:
+    enabled: false
+    # Bus name or ARN. Required when enabled.
+    eventBus: ""
+    # Optional. When empty, resolved from the ARN or the pod's region. With an ARN bus it must match the
+    # ARN's region.
+    region: ""
 
 clickhouse:
   enabled: true
@@ -949,21 +966,6 @@ clickhouse:
         <clickhouse>
           <timezone>UTC</timezone>
         </clickhouse>
-      # Without these, partitioned tables prune reads but LWD-bloated parts never
-      # self-merge, so masked rows are never physically reclaimed.
-      conf.d/merge_tree.xml: |
-        <clickhouse>
-          <merge_tree>
-            <!-- 400 GiB; month-sized parts outgrow the 150 GiB default permanently. -->
-            <max_bytes_to_merge_at_max_space_in_pool>429496729600</max_bytes_to_merge_at_max_space_in_pool>
-            <!-- 7 days quiet makes a part eligible for the force-merge that reclaims LWD mass. -->
-            <min_age_to_force_merge_seconds>604800</min_age_to_force_merge_seconds>
-            <!-- Per-part: with 1, a partition still taking writes never becomes eligible. -->
-            <min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>
-            <!-- Throttle concurrent big merges so they cannot starve the pool. -->
-            <number_of_free_entries_in_pool_to_lower_max_size_of_merge>8</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
-          </merge_tree>
-        </clickhouse>
       conf.d/profiles.xml: |
         <clickhouse>
           <profiles>
@@ -1055,6 +1057,25 @@ clickhouse:
   # via `clickhouse.extraVolumeClaimTemplates` and referencing it by name in
   # `extraVolumeMounts` above.
   extraVolumes: []
+  # -- LWD reclaim: force-merge parts that stopped taking writes, so lightweight-deleted
+  # rows are physically removed. Renders conf.d/merge_tree.xml. Off by default: the first
+  # rollout makes every old part eligible at once, which on a large install fills the merge
+  # pool for hours and blocks mutations (deletes). Size the backlog first (self-host
+  # Kubernetes docs). Charts 2.2.78 through the release before this flag enabled it by
+  # default; upgrading drops it and rolls ClickHouse once, so set `enabled: true` to keep it.
+  forceMerge:
+    enabled: false
+    # -- (int) A part quiet for this long becomes eligible for force-merge (min_age_to_force_merge_seconds).
+    minAgeSeconds: 604800
+    # -- (bool) false: per part. true: only once the whole partition is quiet, so a partition
+    # still taking writes never becomes eligible (min_age_to_force_merge_on_partition_only).
+    onPartitionOnly: false
+    # -- (int) Largest merge allowed (max_bytes_to_merge_at_max_space_in_pool). 400 GiB:
+    # month-sized parts outgrow the 150 GiB ClickHouse default.
+    maxBytesToMergeAtMaxSpaceInPool: 429496729600
+    # -- (int) Below this many free pool slots, the largest merges are throttled so they
+    # cannot starve the pool (number_of_free_entries_in_pool_to_lower_max_size_of_merge).
+    numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge: 8
   # -- Tiered storage (hot local disk -> cold S3 with a read-through cache).
   # Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold
   # disks) and provisions a per-node EBS cache volume for the S3 cache. This is

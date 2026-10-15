@@ -131,10 +131,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.GPT_O1,
       label: "GPT o1",
     },
-    {
-      value: PROVIDER_MODEL_TYPE.GPT_LIVE_1,
-      label: "GPT Live 1",
-    },
   ],
 
   [PROVIDER_TYPE.ANTHROPIC]: [
@@ -3251,22 +3247,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.GEMINI_FLASH_LATEST_HIGH_RES_EXP,
       label: "Gemini Flash Latest High Res Exp",
     },
-    {
-      value: PROVIDER_MODEL_TYPE.GEMINI_OMNI_1_1_FLASH,
-      label: "Gemini Omni 1.1 Flash",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.LYRIA_3_CLIP_PREVIEW,
-      label: "Lyria 3 Clip Preview",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.LYRIA_3_PRO_PREVIEW,
-      label: "Lyria 3 Pro Preview",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.LYRIA_3_5,
-      label: "Lyria 3.5",
-    },
   ],
 
   [PROVIDER_TYPE.VERTEX_AI]: [
@@ -3325,10 +3305,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH_LITE,
       label: "Gemini 2.0 Flash Lite 001",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_OMNI_1_1_FLASH,
-      label: "Gemini Omni 1.1 Flash",
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_ROBOTICS_ER_2,

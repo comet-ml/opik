@@ -1,0 +1,107 @@
+suite: alerts.awsEventBridge backend env
+
+templates:
+  - templates/configmap-backend.yaml
+
+tests:
+  - it: renders nothing by default
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - notExists:
+          path: data.ALERTS_EVENTBRIDGE_ENABLED
+      - notExists:
+          path: data.ALERTS_EVENTBRIDGE_EVENT_BUS
+      - notExists:
+          path: data.ALERTS_EVENTBRIDGE_REGION
+
+  - it: renders enabled and bus, and leaves region out when empty
+    set:
+      alerts.awsEventBridge.enabled: true
+      alerts.awsEventBridge.eventBus: comet-alerts
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.ALERTS_EVENTBRIDGE_ENABLED
+          value: "true"
+      - equal:
+          path: data.ALERTS_EVENTBRIDGE_EVENT_BUS
+          value: comet-alerts
+      - notExists:
+          path: data.ALERTS_EVENTBRIDGE_REGION
+
+  - it: accepts an ARN bus with a matching region, including non-commercial partitions
+    set:
+      alerts.awsEventBridge.enabled: true
+      alerts.awsEventBridge.eventBus: arn:aws-us-gov:events:us-gov-west-1:000000000000:event-bus/comet-alerts
+      alerts.awsEventBridge.region: us-gov-west-1
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.ALERTS_EVENTBRIDGE_EVENT_BUS
+          value: arn:aws-us-gov:events:us-gov-west-1:000000000000:event-bus/comet-alerts
+      - equal:
+          path: data.ALERTS_EVENTBRIDGE_REGION
+          value: us-gov-west-1
+
+  - it: an explicit component.backend.env key wins
+    set:
+      alerts.awsEventBridge.enabled: true
+      alerts.awsEventBridge.eventBus: comet-alerts
+      component.backend.env.ALERTS_EVENTBRIDGE_EVENT_BUS: other-bus
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.ALERTS_EVENTBRIDGE_EVENT_BUS
+          value: other-bus
+      - equal:
+          path: data.ALERTS_EVENTBRIDGE_ENABLED
+          value: "true"
+
+  - it: fails when enabled without a bus
+    set:
+      alerts.awsEventBridge.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: alerts.awsEventBridge.eventBus is required
+
+  - it: fails when enabled is a string
+    set:
+      alerts.awsEventBridge.enabled: "false"
+      alerts.awsEventBridge.eventBus: comet-alerts
+    asserts:
+      - failedTemplate:
+          errorPattern: alerts.awsEventBridge.enabled must be true or false
+
+  - it: fails on a bus name containing a slash
+    set:
+      alerts.awsEventBridge.enabled: true
+      alerts.awsEventBridge.eventBus: aws.partner/example
+    asserts:
+      - failedTemplate:
+          errorPattern: must be a bus name or an event-bus ARN
+
+  - it: fails on a malformed region
+    set:
+      alerts.awsEventBridge.enabled: true
+      alerts.awsEventBridge.eventBus: comet-alerts
+      alerts.awsEventBridge.region: useast1
+    asserts:
+      - failedTemplate:
+          errorPattern: must be an AWS region
+
+  - it: fails when the region does not match the ARN bus
+    set:
+      alerts.awsEventBridge.enabled: true
+      alerts.awsEventBridge.eventBus: arn:aws:events:us-east-1:000000000000:event-bus/comet-alerts
+      alerts.awsEventBridge.region: eu-west-1
+    asserts:
+      - failedTemplate:
+          errorPattern: does not match the region of eventBus
