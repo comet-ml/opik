@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import first from "lodash/first";
+import isEmpty from "lodash/isEmpty";
+import some from "lodash/some";
 import {
   COMPOSED_PROVIDER_TYPE,
   PROVIDER_MODEL_TYPE,
@@ -30,6 +32,11 @@ export type ModelResolver = (
   setupProviders: COMPOSED_PROVIDER_TYPE[],
   preferredProvider?: COMPOSED_PROVIDER_TYPE | "",
 ) => PROVIDER_MODEL_TYPE | "";
+
+export type DropdownModelCheck = (
+  modelName: PROVIDER_MODEL_TYPE | "",
+  provider: COMPOSED_PROVIDER_TYPE | "",
+) => boolean;
 
 // Re-exported for backwards compatibility with callers that still import
 // PROVIDER_MODELS from this module. Actual location is
@@ -77,7 +84,7 @@ const transformFetched = (
     out[provider] = filtered.map((m) => ({
       value: getRoutableProviderModelValue(
         provider as COMPOSED_PROVIDER_TYPE,
-        m.qualifiedName ?? m.id,
+        m.qualified_name || m.id,
       ),
       label: m.label ?? m.id,
     }));
@@ -105,29 +112,40 @@ const buildFlagsIndex = (
 ): Map<string, ModelFlags> => {
   const index = new Map<string, ModelFlags>();
   for (const [provider, models] of Object.entries(fetched)) {
+    if (!KNOWN_PROVIDER_TYPES.has(provider)) {
+      continue;
+    }
     for (const m of models) {
       const flags: ModelFlags = {
         reasoning: m.reasoning,
-        structuredOutput: m.structuredOutput,
+        structuredOutput: m.structured_output,
       };
-      index.set(m.id, flags);
-      if (m.qualifiedName) {
-        index.set(m.qualifiedName, flags);
-      }
       index.set(
         getRoutableProviderModelValue(
           provider as COMPOSED_PROVIDER_TYPE,
-          m.qualifiedName ?? m.id,
+          m.qualified_name || m.id,
         ),
         flags,
       );
+      // A Vertex AI entry shares its bare id with the Gemini entry of the same name, and the
+      // backend's provider order changes between restarts. The bare id only fills a gap (old
+      // prompts saved a bare Vertex AI id), so it never replaces another entry's own value.
+      if (!index.has(m.id)) {
+        index.set(m.id, flags);
+      }
     }
   }
   return index;
 };
 
 const useLLMProviderModelsData = () => {
-  const { data: fetched, isPending, isError, error } = useLlmModels();
+  const {
+    data: fetched,
+    isPending,
+    isFetched,
+    isError,
+    error,
+  } = useLlmModels();
   const openAICompatibleModels = useOpenAICompatibleModels();
 
   // Dropdown-facing map: only entries that are flagged as visible (i.e.
@@ -274,6 +292,17 @@ const useLLMProviderModelsData = () => {
     [fullProviderModels],
   );
 
+  const isDropdownModel: DropdownModelCheck = useCallback(
+    (modelName, provider) => {
+      if (!modelName || !provider) return false;
+      const routableModel = getRoutableProviderModelValue(provider, modelName);
+      return (providerModels[provider] ?? []).some(
+        (pm) => pm.value === routableModel,
+      );
+    },
+    [providerModels],
+  );
+
   const calculateDefaultModel: ModelResolver = useCallback(
     (lastPickedModel, setupProviders, preferredProvider?) => {
       const lastPickedModelProvider = calculateModelProvider(
@@ -311,9 +340,16 @@ const useLLMProviderModelsData = () => {
     getProviderModels,
     calculateModelProvider,
     calculateDefaultModel,
+    isDropdownModel,
     isPending,
+    isFetched,
     isError,
     error,
+    hasRegistryModels: some(
+      fetched,
+      (models, provider) =>
+        KNOWN_PROVIDER_TYPES.has(provider) && !isEmpty(models),
+    ),
   };
 };
 

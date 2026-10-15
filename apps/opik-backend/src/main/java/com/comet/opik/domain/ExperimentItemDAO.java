@@ -661,12 +661,7 @@ class ExperimentItemDAO {
             return Mono.just(0L);
         }
 
-        if (configuration.getBulkInsert().v2ClientEnabled()) {
-            return insertJsonEachRow(experimentItems);
-        }
-
-        return Mono.from(connectionFactory.create())
-                .flatMap(connection -> insert(experimentItems, connection));
+        return insertJsonEachRow(experimentItems);
     }
 
     /**

@@ -39,6 +39,23 @@ public class SamplingParamsNormalizer {
         return ChatCompletionRequest.builder().from(request).topP(null).build();
     }
 
+    // OpenAI reasoning models accept temperature only at its default ("Only the default (1) value is
+    // supported") and reject top_p and both penalties outright, so omitting all four is the one payload
+    // that always works. Matches what the frontend leaves out for the same models.
+    public ChatCompletionRequest dropOpenAiReasoningModelParams(@NonNull ChatCompletionRequest request) {
+        if (request.temperature() == null && request.topP() == null
+                && request.frequencyPenalty() == null && request.presencePenalty() == null) {
+            return request;
+        }
+        return ChatCompletionRequest.builder()
+                .from(request)
+                .temperature(null)
+                .topP(null)
+                .frequencyPenalty(null)
+                .presencePenalty(null)
+                .build();
+    }
+
     /**
      * Extended thinking counts as enabled only when {@code custom_parameters.thinking.type} is an
      * explicit, non-blank value other than {@code "disabled"} — so {@code "enabled"},

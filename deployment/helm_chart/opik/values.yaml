@@ -758,6 +758,13 @@ redis:
 
 altinity-clickhouse-operator:
   enabled: true
+  # The operator chart's CRD-install hook defaults to bitnami/kubectl:latest. Pin it to the
+  # same official kubectl image this chart uses elsewhere (the hook only runs `kubectl apply`
+  # via /bin/sh), so no Bitnami image is pulled.
+  crdHook:
+    image:
+      repository: alpine/kubectl
+      tag: "1.35.0"
   metrics:
     enabled: false
   serviceMonitor:
@@ -812,6 +819,11 @@ databaseAnalyticsDataModel:
   # disagrees with the actual `spans` engine in either direction, the backend fails readiness at startup with a
   # message naming the flag and the observed engine, and clears on the next probe once the two are back in step.
   spansDistributedWrapEnabled: false
+  # Register each written span's weekly partition in the span_weeks index. Turn true before the span weeks
+  # backfill starts.
+  spanWeeksWriteEnabled: false
+  # Run the span weeks backfill job. Turn true only once spanWeeksWriteEnabled is live on every backend instance.
+  spanWeeksBackfillEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
 # lightweight-delete mask and publishes opik.clickhouse.partition.* gauges; a distributed lock keeps
@@ -947,20 +959,12 @@ clickhouse:
         <yandex>
           <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>
         </yandex>
-      # Without these, partitioned tables prune reads but LWD-bloated parts never
-      # self-merge, so masked rows are never physically reclaimed.
-      conf.d/merge_tree.xml: |
+      # Server default timezone. The backend writes absolute UTC instants but compares against timezone-less
+      # literals such as the epoch end_time sentinel, so a host timezone leaking in misreads unfinished traces.
+      # Only a default: a query can still override it with SETTINGS session_timezone or a timezone argument.
+      conf.d/timezone.xml: |
         <clickhouse>
-          <merge_tree>
-            <!-- 400 GiB; month-sized parts outgrow the 150 GiB default permanently. -->
-            <max_bytes_to_merge_at_max_space_in_pool>429496729600</max_bytes_to_merge_at_max_space_in_pool>
-            <!-- 7 days quiet makes a part eligible for the force-merge that reclaims LWD mass. -->
-            <min_age_to_force_merge_seconds>604800</min_age_to_force_merge_seconds>
-            <!-- Per-part: with 1, a partition still taking writes never becomes eligible. -->
-            <min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>
-            <!-- Throttle concurrent big merges so they cannot starve the pool. -->
-            <number_of_free_entries_in_pool_to_lower_max_size_of_merge>8</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
-          </merge_tree>
+          <timezone>UTC</timezone>
         </clickhouse>
       conf.d/profiles.xml: |
         <clickhouse>
@@ -1053,11 +1057,30 @@ clickhouse:
   # via `clickhouse.extraVolumeClaimTemplates` and referencing it by name in
   # `extraVolumeMounts` above.
   extraVolumes: []
+  # -- LWD reclaim: force-merge parts that stopped taking writes, so lightweight-deleted
+  # rows are physically removed. Renders conf.d/merge_tree.xml. Off by default: the first
+  # rollout makes every old part eligible at once, which on a large install fills the merge
+  # pool for hours and blocks mutations (deletes). Size the backlog first (self-host
+  # Kubernetes docs). Charts 2.2.78 through the release before this flag enabled it by
+  # default; upgrading drops it and rolls ClickHouse once, so set `enabled: true` to keep it.
+  forceMerge:
+    enabled: false
+    # -- (int) A part quiet for this long becomes eligible for force-merge (min_age_to_force_merge_seconds).
+    minAgeSeconds: 604800
+    # -- (bool) false: per part. true: only once the whole partition is quiet, so a partition
+    # still taking writes never becomes eligible (min_age_to_force_merge_on_partition_only).
+    onPartitionOnly: false
+    # -- (int) Largest merge allowed (max_bytes_to_merge_at_max_space_in_pool). 400 GiB:
+    # month-sized parts outgrow the 150 GiB ClickHouse default.
+    maxBytesToMergeAtMaxSpaceInPool: 429496729600
+    # -- (int) Below this many free pool slots, the largest merges are throttled so they
+    # cannot starve the pool (number_of_free_entries_in_pool_to_lower_max_size_of_merge).
+    numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge: 8
   # -- Tiered storage (hot local disk -> cold S3 with a read-through cache).
   # Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold
   # disks) and provisions a per-node EBS cache volume for the S3 cache. This is
-  # pure server-side infrastructure: it stays inert until a migration attaches
-  # the `tiered_replicated` policy to a table, so `enabled: false` (default) is
+  # pure server-side infrastructure: it stays inert until the `tiered_replicated`
+  # policy is attached to a table (see `ttl`), so `enabled: false` (default) is
   # a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros
   # ({shard}/{replica}) cannot be used because the S3 disk is read at server
   # start, before macros bind.
@@ -1114,6 +1137,24 @@ clickhouse:
       # SA with get/list/watch on statefulsets and pods, and get/patch on the
       # altinity operator Deployment (falls back to the chart-created SA).
       serviceAccountName: ""
+      nodeSelector: {}
+      tolerations: []
+    # Post-sync job that puts each listed table on the tiered_replicated policy with a
+    # move-to-cold TTL, idempotently. By default it never moves existing data (see
+    # `materialize`). Tables that do not exist yet are skipped. Off unless turned on per environment.
+    ttl:
+      enabled: false
+      tables:
+        - name: traces_local
+          moveAfterWeeks: 13
+      # Backfill: also run MATERIALIZE TTL, so data written before the TTL existed moves to cold.
+      # It runs only while some part lacks the TTL and no run is in flight, so later syncs are
+      # no-ops and it can stay on. It loads disk I/O, S3 and the move pool: on large installs,
+      # run it by hand at a quiet time instead.
+      materialize:
+        enabled: false
+      activeDeadlineSeconds: 600
+      resources: {}
       nodeSelector: {}
       tolerations: []
   adminUser:

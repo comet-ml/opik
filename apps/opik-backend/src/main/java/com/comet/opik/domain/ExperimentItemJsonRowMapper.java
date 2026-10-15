@@ -8,8 +8,7 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 /**
- * Builds the {@code JSONEachRow} row for an experiment item, for the write path behind
- * {@code bulkInsert.v2ClientEnabled}.
+ * Builds the {@code JSONEachRow} row for an experiment item.
  *
  * <p>The counterpart of the {@code INSERT} template's parameter binding in {@code ExperimentItemDAO}:
  * the two must produce identical cells, since the toggle is meant to be safe to flip either way on a

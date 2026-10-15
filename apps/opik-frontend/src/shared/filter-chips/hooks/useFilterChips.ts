@@ -32,6 +32,7 @@ interface UseFilterChipsArgs {
   definitions: ChipDefinition[];
   defaultPinned: string[];
   onChange?: () => void;
+  persistKey?: string;
 }
 
 interface UseFilterChipsResult {
@@ -55,6 +56,7 @@ export const getPinnedChipsStorageKey = (tableId: string) =>
 
 const EMPTY_VALUES: ChipValueMap = {};
 const EMPTY_FILTERS: Filter[] = [];
+const NON_PERSISTING_STORAGE_KEY = "filter-chips:unused-persist-key";
 
 const useFilterChips = ({
   tableId,
@@ -62,6 +64,7 @@ const useFilterChips = ({
   definitions,
   defaultPinned,
   onChange,
+  persistKey,
 }: UseFilterChipsArgs): UseFilterChipsResult => {
   const [pinnedIds = defaultPinned, setPinnedIds] = useLocalStorageState<
     string[]
@@ -73,9 +76,42 @@ const useFilterChips = ({
     { updateType: "replaceIn" },
   );
 
+  // Hooks can't be conditional, so non-persisting callers read a key that is never written.
+  const [saved, setSaved, { removeItem: removeSaved }] =
+    useLocalStorageState<unknown>(persistKey ?? NON_PERSISTING_STORAGE_KEY, {
+      storageSync: false,
+    });
+  // Saved data may be malformed or obsolete, so only what still sanitizes is restored.
+  const savedFilters = useMemo(() => {
+    if (!persistKey || !Array.isArray(saved)) return undefined;
+    const { values: savedValues } = sanitizeFilters(
+      saved as Filter[],
+      definitions,
+    );
+    const sanitized = chipsToFilters(definitions, savedValues);
+    return sanitized.length > 0 ? sanitized : undefined;
+  }, [persistKey, saved, definitions]);
+
+  // Computed during render so the first render is already filtered.
+  const restored = rawFilters === undefined ? savedFilters : undefined;
+  const sourceFilters = rawFilters ?? restored;
+
+  // Only drop values of the wrong shape: an array that fails sanitizing may just
+  // be missing a definition right now, so it is kept until the next edit.
+  useEffect(() => {
+    if (persistKey && saved !== undefined && !Array.isArray(saved)) {
+      removeSaved();
+    }
+  }, [persistKey, saved, removeSaved]);
+
+  // Re-runs on every URL change: re-clicking the current page's link doesn't remount it.
+  useEffect(() => {
+    if (restored) setRawFilters(restored);
+  }, [restored, setRawFilters]);
+
   const urlFilters: Filter[] = useMemo(
-    () => (Array.isArray(rawFilters) ? rawFilters : EMPTY_FILTERS),
-    [rawFilters],
+    () => (Array.isArray(sourceFilters) ? sourceFilters : EMPTY_FILTERS),
+    [sourceFilters],
   );
 
   const { values, dropped } = useMemo(
@@ -127,10 +163,11 @@ const useFilterChips = ({
       track?: WriteValuesAnalytics,
     ) => {
       setRawFilters((prevRaw) => {
-        const prevValues = sanitizeFilters(
-          Array.isArray(prevRaw) ? prevRaw : EMPTY_FILTERS,
-          definitions,
-        ).values;
+        // An edit before the restore effect has run must build on the remembered filters.
+        const prevFilters = Array.isArray(prevRaw)
+          ? prevRaw
+          : savedFilters ?? EMPTY_FILTERS;
+        const prevValues = sanitizeFilters(prevFilters, definitions).values;
         const nextValues = updater(prevValues);
 
         switch (track?.kind) {
@@ -152,10 +189,23 @@ const useFilterChips = ({
         }
 
         const nextFilters = chipsToFilters(definitions, nextValues);
-        return nextFilters.length > 0 ? nextFilters : undefined;
+        const next = nextFilters.length > 0 ? nextFilters : undefined;
+        if (persistKey) {
+          if (next) setSaved(next);
+          else removeSaved();
+        }
+        return next;
       });
     },
-    [definitions, setRawFilters, analytics],
+    [
+      definitions,
+      setRawFilters,
+      analytics,
+      persistKey,
+      savedFilters,
+      setSaved,
+      removeSaved,
+    ],
   );
 
   const previousFiltersRef = useRef(filters);

@@ -1,5 +1,10 @@
 import React from "react";
-import { resolveSamplingParams } from "@/lib/modelUtils";
+import {
+  getOpenRouterDefaultMaxTokens,
+  getOpenRouterMaxTokensLimit,
+  resolveOpenRouterMaxTokens,
+  resolveSamplingParams,
+} from "@/lib/modelUtils";
 import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 import {
   createSupports,
@@ -14,6 +19,10 @@ import {
 } from "@/types/providers";
 import { DEFAULT_OPEN_ROUTER_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
+import {
+  NO_OUTPUT_LIMIT_TOOLTIP,
+  getNoOutputLimitHint,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/noOutputLimit";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 
 interface OpenRouterModelConfigsProps {
@@ -64,16 +73,20 @@ const OpenRouterModelConfigs = ({
       )}
       {visible.maxTokens && (
         <SliderInputControl
-          value={configs.maxTokens}
+          value={resolveOpenRouterMaxTokens(model, configs.maxTokens)}
           onChange={(v) => onChange({ maxTokens: v })}
           id="maxTokens"
           min={0}
-          max={10000}
+          max={getOpenRouterMaxTokensLimit(model)}
           step={1}
-          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS}
+          integer
+          hint={getNoOutputLimitHint(configs.maxTokens)}
+          defaultValue={getOpenRouterDefaultMaxTokens(model)}
           label="Max tokens"
           tooltip={
-            <PromptModelConfigsTooltipContent text="The maximum number of tokens to generate. The exact limit varies by model. Set to 0 to use the provider's default. (One token is roughly 4 characters for standard English text)." />
+            <PromptModelConfigsTooltipContent
+              text={`The maximum number of tokens to generate. The exact limit varies by model. ${NO_OUTPUT_LIMIT_TOOLTIP} (One token is roughly 4 characters for standard English text).`}
+            />
           }
         />
       )}

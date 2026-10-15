@@ -686,9 +686,11 @@ class TestSuite:
                 an ``"id"`` key.
         """
         for item in items:
-            if "id" not in item:
+            if not str(item.get("id") or "").strip():
+                # covers a missing id as well as None / whitespace-only ids,
+                # which SkipValidation would otherwise carry into the request
                 raise opik_exceptions.DatasetItemUpdateOperationRequiresItemId(
-                    "Missing id for test suite item to update: %s", item
+                    f"Missing id for test suite item to update: {item}"
                 )
 
         self.insert(items, deduplication=deduplication)

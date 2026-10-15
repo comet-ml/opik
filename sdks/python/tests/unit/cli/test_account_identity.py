@@ -20,6 +20,7 @@ def reporting_on(monkeypatch, tmp_path):
     monkeypatch.setattr(account_identity.analytics, "reporting_allowed", lambda: True)
     # Resolution is cached for the process, which outlives a single test.
     account_identity._RESOLVED.clear()
+    account_identity._NOT_SERVED.clear()
     # Away from the developer's own home directory: whoever runs these has the MCP
     # server installed, and the tests would then assert against their machine's id.
     monkeypatch.setattr(
@@ -31,6 +32,7 @@ def _config(
     api_key="key",
     workspace="my-ws",
     cloud=True,
+    local=False,
     analytics_url="https://stats.invalid/notify/event/",
     analytics_enable=True,
 ):
@@ -38,6 +40,7 @@ def _config(
         api_key=api_key,
         workspace=workspace,
         is_cloud_installation=cloud,
+        is_localhost_installation=local,
         url_override="https://www.comet.com/opik/api",
         analytics_url=analytics_url,
         analytics_enable=analytics_enable,
@@ -70,6 +73,24 @@ class TestResolvedAccount:
 
         assert properties["user_id"] == "someone"
         assert properties["identity_lookup"] == "resolved"
+
+    def test_self_hosted_comet_key__login_is_reported_with_its_deployment(self):
+        """Self-hosted Comet serves account-details just as cloud does. A login is
+        unique only within its deployment, so it is joined together with
+        `installation_type`: the configured Opik's, not the process tag's."""
+        config_ = _config(cloud=False)
+        config_.url_override = "https://comet.acme.com/opik/api"
+
+        with mock.patch.object(
+            account_identity.httpx,
+            "Client",
+            return_value=_responding(body={"userName": "someone"}),
+        ):
+            properties = account_identity._properties(config_)
+
+        assert properties["user_id"] == "someone"
+        assert properties["identity_lookup"] == "resolved"
+        assert properties["installation_type"] == "self-hosted"
 
     def test_two_events__cost_one_round_trip(self):
         """A command reports an entry and a result event, not two lookups."""
@@ -106,26 +127,44 @@ class TestUnresolvedAccount:
         assert "user_id" not in properties
         client.assert_not_called()
 
-    def test_self_hosted__reports_none_expected_without_asking(self):
+    def test_local__reports_none_expected_without_asking(self):
         """There is no account-details endpoint to spend a timeout on."""
         with mock.patch.object(account_identity.httpx, "Client") as client:
-            properties = account_identity._properties(_config(cloud=False))
+            properties = account_identity._properties(_config(cloud=False, local=True))
 
         assert properties["identity_lookup"] == "none_expected"
         client.assert_not_called()
 
-    def test_local_install_without_a_key__is_none_expected_rather_than_no_credential(
+    def test_self_hosted_without_a_key__is_none_expected_rather_than_no_credential(
         self,
     ):
-        """A local Opik has no accounts at all, so it is not a run to wait on."""
-        properties = account_identity._properties(_config(api_key=None, cloud=False))
+        """Most likely an open source Opik, which never has a key: not a run to wait
+        on."""
+        with mock.patch.object(account_identity.httpx, "Client") as client:
+            properties = account_identity._properties(
+                _config(api_key=None, cloud=False)
+            )
 
         assert properties["identity_lookup"] == "none_expected"
+        client.assert_not_called()
+
+    def test_open_source_self_hosted__404__none_expected_after_one_request(self):
+        """It has no accounts, so its 404 is the answer, not a failed lookup."""
+        client = _responding(status=404)
+
+        with mock.patch.object(account_identity.httpx, "Client", return_value=client):
+            first = account_identity._properties(_config(cloud=False))
+            second = account_identity._properties(_config(cloud=False))
+
+        assert first["identity_lookup"] == second["identity_lookup"] == "none_expected"
+        assert client.get.call_count == 1
 
     @pytest.mark.parametrize(
         "answer",
         [
             {"status": 401},
+            # Cloud always serves account-details: a 404 there is a fault.
+            {"status": 404},
             {"status": 200, "body": {"defaultWorkspaceName": "their-ws"}},
             {"error": Exception("no route to host")},
         ],
@@ -160,7 +199,7 @@ class TestCredentialBridge:
         expected = hashlib.sha256(b"secret-key").hexdigest()
 
         properties = account_identity._properties(
-            _config(api_key="secret-key", cloud=False)
+            _config(api_key="secret-key", cloud=False, local=True)
         )
 
         assert properties["api_key_sha256"] == expected
@@ -304,6 +343,7 @@ class TestThePublicEntryPoint:
         assert properties == {
             "identity_lookup": "resolved",
             "workspace_kind": "configured",
+            "installation_type": "cloud",
             "user_id": "someone",
             "workspace": "their-ws",
             "api_key_sha256": hashlib.sha256(b"secret-key").hexdigest(),

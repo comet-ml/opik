@@ -127,8 +127,6 @@ public interface TraceDAO {
 
     Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(Set<UUID> traceIds, Connection connection);
 
-    Mono<Long> batchInsert(List<Trace> traces, Connection connection);
-
     /**
      * Batch insert without a caller-supplied connection.
      *
@@ -228,7 +226,6 @@ public interface TraceDAO {
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-// TODO: after v1 drop, remove annotation_queue_filters conditions and keep only annotation_queue_id
 class TraceDAOImpl implements TraceDAO {
 
     /**
@@ -250,63 +247,6 @@ class TraceDAOImpl implements TraceDAO {
             OR ilike(error_info, :search_text)
             OR arrayExists(element -> ilike(element, :search_text), tags)
             OR ilike(thread_id, :search_text))""";
-
-    private static final String BATCH_INSERT = """
-            INSERT INTO traces(
-                id,
-                project_id,
-                workspace_id,
-                name,
-                start_time,
-                end_time,
-                input,
-                output,
-                metadata,
-                tags,
-                last_updated_at,
-                error_info,
-                created_by,
-                last_updated_by,
-                thread_id,
-                visibility_mode,
-                truncation_threshold,
-                input_slim,
-                output_slim,
-                ttft,
-                source,
-                environment
-            )
-            SETTINGS log_comment = '<log_comment>'
-            FORMAT Values
-                <items:{item |
-                    (
-                        :id<item.index>,
-                        :project_id<item.index>,
-                        :workspace_id,
-                        :name<item.index>,
-                        :start_time<item.index>,
-                        :end_time<item.index>,
-                        :input<item.index>,
-                        :output<item.index>,
-                        :metadata<item.index>,
-                        :tags<item.index>,
-                        :last_updated_at<item.index>,
-                        :error_info<item.index>,
-                        :user_name,
-                        :user_name,
-                        :thread_id<item.index>,
-                        :visibility_mode<item.index>,
-                        :truncation_threshold<item.index>,
-                        :input_slim<item.index>,
-                        :output_slim<item.index>,
-                        :ttft<item.index>,
-                        :source<item.index>,
-                        :environment<item.index>
-                    )
-                    <if(item.hasNext)>,<endif>
-                }>
-            ;
-            """;
 
     /**
      * This query handles the insertion of a new trace into the database in two cases:
@@ -569,12 +509,19 @@ class TraceDAOImpl implements TraceDAO {
      * whose partitioning is a separate slice.
      */
     private static final String SELECT_BY_IDS = """
-            WITH target_spans AS (
+            WITH <if(spans_partitioned)>span_weeks AS (
+                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                AND trace_id IN :ids
+            ), <endif>target_spans AS (
                 SELECT id, trace_id, type
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
+                <if(spans_partitioned)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM span_weeks)))<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, id
             ),
@@ -776,6 +723,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
+                <if(spans_partitioned)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM span_weeks)))<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, id
             ), spans_agg AS (
@@ -1051,9 +999,48 @@ class TraceDAOImpl implements TraceDAO {
      * annotation-queue CTE binds {@code queue_id} to the project's trace-scope queues before looking up
      * {@code item_id}. That is what lets the lookup use the full primary key instead of a generic scan of the
      * project's items (OPIK-5592).
+     * <p>
+     * Queue filtering goes through {@code annotation_queue_memberships} (trace id to its live trace-queue ids)
+     * as an id set, never a join on every trace, so it narrows the traces scan and leaves the aggregates free
+     * to be page-keyed. {@code annotation_queue_filters} can test any queue, so with them it holds every queue of
+     * the project; with only {@code annotation_queue_id} it is narrowed to that queue, a primary-key lookup.
+     * {@code annotation_queue_trace_ids} holds the traces passing the queue id and the filters that only keep
+     * queued traces ({@code annotation_queue_narrows}); the stats templates also key their whole-project scans
+     * (spans, scores, guardrails) on it. A trace in no queue is absent from the memberships, which is why filters
+     * whose operators all accept an empty queue list ({@code annotation_queue_filters_match_unqueued}) exclude
+     * the failing traces instead of selecting the passing ones. The same applies to the count and stats
+     * templates.
      */
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
+            WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
+                SELECT item_id AS trace_id, groupUniqArray(queue_id) AS annotation_queue_ids
+                FROM annotation_queue_items
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(!annotation_queue_filters)>AND queue_id = :annotation_queue_id<endif>
+                AND queue_id IN (
+                    SELECT id FROM annotation_queues
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND scope = 'trace'
+                )
+                GROUP BY item_id
+            ), <endif><if(annotation_queue_narrows)>annotation_queue_trace_ids AS (
+                SELECT trace_id
+                FROM annotation_queue_memberships AS taqi
+                WHERE 1 = 1
+                <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
+                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
+            ), <endif><if(span_weeks)>span_weeks AS (
+                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(page_keyed_aggregates)>AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                <elseif(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                <else>
+                <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+                <endif>
+            ), <endif><if(trace_id_prefilter)>trace_id_prefilter AS (
                 SELECT DISTINCT id
                 FROM traces
                 WHERE workspace_id = :workspace_id
@@ -1068,7 +1055,18 @@ class TraceDAOImpl implements TraceDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(filters)> AND <filters> <endif>
+                <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
+                <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(traces_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM traces
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(last_received_id)> AND id \\< :last_received_id<endif>)
+                <endif>
             ), <endif><if(!exclude_feedback_scores)>feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -1228,6 +1226,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                 <endif>
+                <if(span_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM span_weeks)))<endif>
             ),
             span_feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -1376,6 +1375,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                 <endif>
+                <if(span_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM span_weeks)))<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), spans_agg AS (
@@ -1429,7 +1429,6 @@ class TraceDAOImpl implements TraceDAO {
                 LIMIT 1 BY id
             ), trace_annotation_queue_ids AS (
                  SELECT trace_id,
-                        groupArray(id) AS annotation_queue_ids,
                         groupArray(tuple(id, name)) AS annotation_queues
                  FROM (
                     SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as trace_id
@@ -1439,12 +1438,7 @@ class TraceDAOImpl implements TraceDAO {
                         WHERE workspace_id = :workspace_id
                           AND project_id = :project_id
                           AND queue_id IN (SELECT id FROM trace_scope_queues)
-                          <if(annotation_queues_page_keyed)> AND item_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
-                          <elseif(trace_id_prefilter)> AND item_id IN (SELECT id FROM trace_id_prefilter)
-                          <else>
-                          <if(uuid_from_time)> AND item_id >= :uuid_from_time <endif>
-                          <if(uuid_to_time)> AND item_id \\<= :uuid_to_time <endif>
-                          <endif>
+                          AND item_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
                     ) AS aqi
                     JOIN trace_scope_queues AS aq ON aq.id = aqi.queue_id
                  ) AS annotation_queue_ids_with_trace_id
@@ -1523,9 +1517,6 @@ class TraceDAOImpl implements TraceDAO {
                 <if(span_feedback_scores_empty_filters)>
                 LEFT JOIN sfsc ON sfsc.trace_id = t.id
                 <endif>
-                <if(annotation_queue_filters || annotation_queue_id)>
-                LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = t.id
-                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time
@@ -1539,8 +1530,17 @@ class TraceDAOImpl implements TraceDAO {
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
-                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
+                <if(traces_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM traces
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(last_received_id)> AND id \\< :last_received_id<endif>)
+                <endif>
+                <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
+                <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
                 <if(feedback_scores_filters)>
                  AND id IN (
                     SELECT entity_id
@@ -1617,7 +1617,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM traces t
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND id IN (SELECT id FROM page_ids)
+                AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
                 <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -1758,7 +1758,24 @@ class TraceDAOImpl implements TraceDAO {
      * </ul>
      */
     private static final String COUNT_BY_PROJECT_ID = """
-            WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
+            WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
+                SELECT item_id AS trace_id, groupUniqArray(queue_id) AS annotation_queue_ids
+                FROM annotation_queue_items
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(!annotation_queue_filters)>AND queue_id = :annotation_queue_id<endif>
+                AND queue_id IN (
+                    SELECT id FROM annotation_queues
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND scope = 'trace'
+                )
+                GROUP BY item_id
+            ), <endif><if(annotation_queue_narrows)>annotation_queue_trace_ids AS (
+                SELECT trace_id
+                FROM annotation_queue_memberships AS taqi
+                WHERE 1 = 1
+                <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
+                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
+            ), <endif><if(trace_id_prefilter)>trace_id_prefilter AS (
                 SELECT DISTINCT id
                 FROM traces
                 WHERE workspace_id = :workspace_id
@@ -1770,7 +1787,17 @@ class TraceDAOImpl implements TraceDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(filters)> AND <filters> <endif>
+                <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
+                <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <if(traces_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM traces
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
+                <endif>
             ), <endif>feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -1848,23 +1875,6 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY entity_id, id
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
-            ), trace_annotation_queue_ids AS (
-                 SELECT trace_id,
-                        groupArray(id) AS annotation_queue_ids
-                 FROM (
-                    SELECT DISTINCT aq.id as id, aqi.item_id as trace_id
-                    FROM annotation_queue_items aqi
-                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
-                    WHERE aq.scope = 'trace'
-                      AND workspace_id = :workspace_id
-                      AND project_id = :project_id
-                      <if(trace_id_prefilter)> AND aqi.item_id IN (SELECT id FROM trace_id_prefilter)
-                      <else>
-                      <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
-                      <endif>
-                 ) AS annotation_queue_ids_with_trace_id
-                 GROUP BY trace_id
             ), target_spans AS (
                 SELECT DISTINCT id, trace_id
                 FROM spans
@@ -2032,9 +2042,6 @@ class TraceDAOImpl implements TraceDAO {
                     <if(span_feedback_scores_empty_filters)>
                     LEFT JOIN sfsc ON sfsc.trace_id = traces.id
                     <endif>
-                    <if(annotation_queue_filters || annotation_queue_id)>
-                    LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
-                    <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     <if(uuid_from_time)> AND id >= :uuid_from_time
@@ -2045,8 +2052,16 @@ class TraceDAOImpl implements TraceDAO {
                             \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                     <if(filters)> AND <filters> <endif>
                     <if(search_text)> AND <search_text> <endif>
-                    <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
-                    <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
+                    <if(traces_partitioned && search_text)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        FROM traces
+                        WHERE workspace_id = :workspace_id AND project_id = :project_id
+                        <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                        <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
+                    <endif>
+                    <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
+                    <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
                     <if(feedback_scores_filters)>
                     AND id IN (
                         SELECT entity_id
@@ -2178,8 +2193,8 @@ class TraceDAOImpl implements TraceDAO {
      * {@code :lb_i}, so the single floor never excludes a row that any per-workspace id-range would delete. UTC
      * matches {@code id_at}, and both operands are the Date32 week expression as in {@link #DELETE_FOR_RETENTION}.
      * <p>
-     * The OR-ed predicates are a template loop over {@code getQueryItemPlaceHolder}, matching {@code BATCH_INSERT} and
-     * the other variable-arity queries in this DAO, so the query text is declared once and every value is bound. It was
+     * The OR-ed predicates are a template loop over {@code getQueryItemPlaceHolder}, matching the other
+     * variable-arity queries in this DAO, so the query text is declared once and every value is bound. It was
      * previously assembled with a {@code StringBuilder}, which hid the statement from the declaration site and from the
      * routing guard that reads these constants.
      */
@@ -2558,8 +2573,26 @@ class TraceDAOImpl implements TraceDAO {
      * can return is in one of those weeks, so the bound prunes without assuming where a span sits relative to its
      * trace, and a set rather than a min/max range so one far-future id cannot widen it across every week between.
      */
-    private static final String SELECT_TRACES_SPANS_STATS = """
-             WITH <if(spans_partitioned)>
+    @VisibleForTesting
+    static final String SELECT_TRACES_SPANS_STATS = """
+             WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
+                SELECT item_id AS trace_id, groupUniqArray(queue_id) AS annotation_queue_ids
+                FROM annotation_queue_items
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                <if(!annotation_queue_filters)>AND queue_id = :annotation_queue_id<endif>
+                AND queue_id IN (
+                    SELECT id FROM annotation_queues
+                    WHERE workspace_id = :workspace_id AND project_id IN :project_ids AND scope = 'trace'
+                )
+                GROUP BY item_id
+            ), <endif><if(annotation_queue_narrows)>annotation_queue_trace_ids AS (
+                SELECT trace_id
+                FROM annotation_queue_memberships AS taqi
+                WHERE 1 = 1
+                <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
+                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
+            ), <endif><if(spans_partitioned)>
             span_weeks AS (
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
@@ -2567,6 +2600,7 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                <if(annotation_queue_narrows)> AND trace_id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
             ),
             <endif>
              spans_data AS (
@@ -2583,6 +2617,7 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                <if(annotation_queue_narrows)> AND trace_id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                 <if(spans_partitioned)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT week FROM span_weeks)
                 <endif>
@@ -2633,6 +2668,7 @@ class TraceDAOImpl implements TraceDAO {
                       AND project_id IN :project_ids
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                      <if(annotation_queue_narrows)> AND entity_id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                     UNION ALL
                     <endif>
                     SELECT
@@ -2657,6 +2693,7 @@ class TraceDAOImpl implements TraceDAO {
                        <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                        <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                       <if(annotation_queue_narrows)> AND entity_id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
@@ -2713,24 +2750,11 @@ class TraceDAOImpl implements TraceDAO {
                     AND project_id IN :project_ids
                     <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                    <if(annotation_queue_narrows)> AND entity_id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, id
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
-            ), trace_annotation_queue_ids AS (
-                 SELECT trace_id,
-                        groupArray(id) AS annotation_queue_ids
-                 FROM (
-                    SELECT DISTINCT aq.id as id, aqi.item_id as trace_id
-                    FROM annotation_queue_items aqi
-                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
-                    WHERE aq.scope = 'trace'
-                      AND workspace_id = :workspace_id
-                      AND project_id IN :project_ids
-                      <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
-                 ) AS annotation_queue_ids_with_trace_id
-                 GROUP BY trace_id
             ),
             span_feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -2895,9 +2919,6 @@ class TraceDAOImpl implements TraceDAO {
                 <if(span_feedback_scores_empty_filters)>
                 LEFT JOIN sfsc ON sfsc.trace_id = traces.id
                 <endif>
-                <if(annotation_queue_filters || annotation_queue_id)>
-                LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
-                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(uuid_from_time)>AND id >= :uuid_from_time
@@ -2908,8 +2929,16 @@ class TraceDAOImpl implements TraceDAO {
                     \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
-                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
+                <if(traces_partitioned && search_text)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    FROM traces
+                    WHERE workspace_id = :workspace_id AND project_id IN :project_ids
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
+                <endif>
+                <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
+                <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
                     SELECT entity_id
@@ -3008,9 +3037,27 @@ class TraceDAOImpl implements TraceDAO {
     // value. Emitted only once spans is that partitioned successor (spans_partitioned): the legacy table has no
     // partitions to prune, so there the subquery would be pure cost. Non-v7 ids never reach spans (ingestion rejects
     // them).
-    private static final String SELECT_FEEDBACK_SCORES_STATS = """
+    @VisibleForTesting
+    static final String SELECT_FEEDBACK_SCORES_STATS = """
             <if(filters_present)>
-            WITH <if(spans_partitioned)>
+            WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
+                SELECT item_id AS trace_id, groupUniqArray(queue_id) AS annotation_queue_ids
+                FROM annotation_queue_items
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                <if(!annotation_queue_filters)>AND queue_id = :annotation_queue_id<endif>
+                AND queue_id IN (
+                    SELECT id FROM annotation_queues
+                    WHERE workspace_id = :workspace_id AND project_id IN :project_ids AND scope = 'trace'
+                )
+                GROUP BY item_id
+            ), <endif><if(annotation_queue_narrows)>annotation_queue_trace_ids AS (
+                SELECT trace_id
+                FROM annotation_queue_memberships AS taqi
+                WHERE 1 = 1
+                <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
+                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
+            ), <endif><if(spans_partitioned)>
             span_weeks AS (
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
@@ -3018,6 +3065,7 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                <if(annotation_queue_narrows)> AND trace_id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
             ),
             <endif>
             spans_data AS (
@@ -3034,6 +3082,7 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                <if(annotation_queue_narrows)> AND trace_id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                 <if(spans_partitioned)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT week FROM span_weeks)
                 <endif>
@@ -3084,6 +3133,7 @@ class TraceDAOImpl implements TraceDAO {
                       AND project_id IN :project_ids
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                      <if(annotation_queue_narrows)> AND entity_id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                     UNION ALL
                     <endif>
                     SELECT
@@ -3108,6 +3158,7 @@ class TraceDAOImpl implements TraceDAO {
                        <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                        <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                       <if(annotation_queue_narrows)> AND entity_id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
@@ -3144,24 +3195,11 @@ class TraceDAOImpl implements TraceDAO {
                     AND project_id IN :project_ids
                     <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                    <if(annotation_queue_narrows)> AND entity_id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, id
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
-            ), trace_annotation_queue_ids AS (
-                 SELECT trace_id,
-                        groupArray(id) AS annotation_queue_ids
-                 FROM (
-                    SELECT DISTINCT aq.id as id, aqi.item_id as trace_id
-                    FROM annotation_queue_items aqi
-                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
-                    WHERE aq.scope = 'trace'
-                      AND workspace_id = :workspace_id
-                      AND project_id IN :project_ids
-                      <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
-                 ) AS annotation_queue_ids_with_trace_id
-                 GROUP BY trace_id
             ),
             span_feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -3260,9 +3298,6 @@ class TraceDAOImpl implements TraceDAO {
                 <if(span_feedback_scores_empty_filters)>
                 LEFT JOIN sfsc ON sfsc.trace_id = traces.id
                 <endif>
-                <if(annotation_queue_filters || annotation_queue_id)>
-                LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
-                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(uuid_from_time)>AND id >= :uuid_from_time
@@ -3290,8 +3325,8 @@ class TraceDAOImpl implements TraceDAO {
                     AND <filters>
                 )
                 <endif>
-                <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
-                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
+                <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
+                <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
                     SELECT entity_id
@@ -3382,7 +3417,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                 <if(filters_present)> AND trace_id IN (SELECT id FROM trace_final) <endif>
             ), trace_fs AS (
-                <if(has_legacy_scores)>
+                <if(has_legacy_scores && !annotation_queue_id)>
                 SELECT project_id, entity_id, name, value,
                        feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
@@ -3399,6 +3434,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
+                  <if(annotation_queue_id)> AND source_queue_id = :annotation_queue_id <endif>
                   <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                   <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                   <if(filters_present)> AND entity_id IN (SELECT id FROM trace_final) <endif>
@@ -3682,6 +3718,17 @@ class TraceDAOImpl implements TraceDAO {
      * unpartitioned legacy one. {@code spanColumnsNonNullable} flips with the EXCHANGE that puts the partitioned
      * successor behind the name, which is how {@code SpanDAO#deleteBatch} already reads it.
      */
+    /**
+     * Enables the traces week hint on the search scans: a key-only pre-pass collects the weeks the project's traces
+     * fall in within the scan's own id bounds, so the read of the large text columns opens only those partitions.
+     * Pure cost on the unpartitioned legacy table, so gated like the spans hint.
+     */
+    private void addTracesPartitionedFlag(ST template) {
+        if (traceColumnsNonNullable()) {
+            template.add("traces_partitioned", true);
+        }
+    }
+
     private void addSpansPartitionedFlag(ST template) {
         if (configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable()) {
             template.add("spans_partitioned", true);
@@ -4067,6 +4114,8 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("include_annotation_queues", true);
                     }
 
+                    addSpansPartitionedFlag(template);
+
                     var idWeeks = idWeeks(ids);
                     idWeeks.ifPresent(_ -> template.add("id_weeks", true));
 
@@ -4443,8 +4492,8 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     /**
-     * Determines whether the aggregate CTEs (feedback scores, spans, comments, guardrails, annotation queues,
-     * experiments) can be keyed on the page ids instead of the full filtered trace id set.
+     * Determines whether the aggregate CTEs (feedback scores, spans, comments, guardrails, experiments) can be
+     * keyed on the page ids instead of the full filtered trace id set.
      *
      * <p>Those CTEs are joined to {@code page_wide} only to enrich the returned rows, so whenever neither
      * filtering nor sorting reads them, computing them for every candidate trace is wasted work that grows with
@@ -4458,9 +4507,9 @@ class TraceDAOImpl implements TraceDAO {
      *
      * <p>Must stay disabled whenever page selection depends on an aggregate: feedback-score filters
      * ({@code traces_deduped} filters on feedback_scores_final/fsc/sfsc), guardrails filters (join on
-     * guardrails_agg), trace aggregation filters (spans_agg), annotation queue filters/id (join on
-     * trace_annotation_queue_ids), or sorting by feedback scores, span statistics, or experiments
-     * ({@code page_ids} joins those aggregates).
+     * guardrails_agg), trace aggregation filters (spans_agg), or sorting by feedback scores, span statistics, or
+     * experiments ({@code page_ids} joins those aggregates). Annotation queue filters and the queue id do not
+     * count: they select trace ids straight from annotation_queue_items, independently of any aggregate.
      */
     /**
      * Applies the aggregate-keying decision shared by {@code getTracesByProjectId} and
@@ -4469,20 +4518,31 @@ class TraceDAOImpl implements TraceDAO {
      */
     private void addAggregateKeyingFlags(ST template, TraceSearchCriteria criteria, boolean sortHasFeedbackScores,
             boolean sortHasSpanStatistics, boolean sortHasExperiment) {
+        // When the request only keeps the traces of an annotation queue, the prefilter holds just those traces,
+        // so keying the aggregates on it is cheap and complete for any sort. That covers sorting by a feedback
+        // score, which otherwise skips the prefilter and computes scores for the whole project. Guardrails
+        // filters are excluded for the same reason as in shouldUseTraceIdPrefilter: they cannot be evaluated
+        // inside the prefilter.
+        boolean annotationQueuePrefilter = template.getAttribute("annotation_queue_narrows") != null
+                && template.getAttribute("guardrails_filters") == null;
+        boolean usePrefilter = annotationQueuePrefilter
+                || (shouldUseTraceIdPrefilter(criteria, template) && !sortHasFeedbackScores);
+
         if (shouldPageKeyAggregates(template, sortHasFeedbackScores, sortHasSpanStatistics, sortHasExperiment)) {
             template.add("page_keyed_aggregates", true);
-        } else if (shouldUseTraceIdPrefilter(criteria, template) && !sortHasFeedbackScores) {
+        } else if (usePrefilter) {
             template.add("trace_id_prefilter", true);
         }
 
-        // Without a queue filter the annotation-queue CTE is display-only: it is joined at the final
-        // SELECT over page_wide and never feeds page selection, so it can be keyed to page_ids even
-        // when the other aggregates cannot be (e.g. sorting by feedback score or experiment). With a
-        // queue filter it drives traces_deduped, so keying it to page_ids would be circular
-        // (OPIK-5592 review).
-        if (template.getAttribute("annotation_queue_filters") == null
-                && template.getAttribute("annotation_queue_id") == null) {
-            template.add("annotation_queues_page_keyed", true);
+        addSpanWeeksFlag(template);
+    }
+
+    private void addSpanWeeksFlag(ST template) {
+        // Unbounded, span_weeks is every week the project has spans in, so the pre-pass costs more than it prunes.
+        if (configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable()
+                && Stream.of("page_keyed_aggregates", "trace_id_prefilter", "uuid_from_time", "uuid_to_time")
+                        .anyMatch(name -> template.getAttribute(name) != null)) {
+            template.add("span_weeks", true);
         }
     }
 
@@ -4491,8 +4551,6 @@ class TraceDAOImpl implements TraceDAO {
         boolean aggregatesDrivePageSelection = hasFeedbackScoreFilters(template)
                 || template.getAttribute("guardrails_filters") != null
                 || template.getAttribute("trace_aggregation_filters") != null
-                || template.getAttribute("annotation_queue_filters") != null
-                || template.getAttribute("annotation_queue_id") != null
                 || sortHasFeedbackScores
                 || sortHasSpanStatistics
                 || sortHasExperiment;
@@ -4509,6 +4567,7 @@ class TraceDAOImpl implements TraceDAO {
                     "page:" + page + ":size:" + size + ":" + traceSearchCriteria.toString());
             var template = newTraceThreadFindTemplate(
                     SELECT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
+            addTracesPartitionedFlag(template);
 
             bindTemplateExcludeFieldVariables(traceSearchCriteria, template);
 
@@ -4647,9 +4706,14 @@ class TraceDAOImpl implements TraceDAO {
                     traceSearchCriteria.toString());
             var template = newTraceThreadFindTemplate(
                     COUNT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
+            addTracesPartitionedFlag(template);
             template.add("log_comment", logComment);
 
-            if (shouldUseTraceIdPrefilter(traceSearchCriteria, template)) {
+            // As in addAggregateKeyingFlags: with a queue that only keeps queued traces, the prefilter is the
+            // queue's traces, so score and span-score filters read the queue's scores instead of the project's.
+            boolean annotationQueuePrefilter = template.getAttribute("annotation_queue_narrows") != null
+                    && template.getAttribute("guardrails_filters") == null;
+            if (shouldUseTraceIdPrefilter(traceSearchCriteria, template) || annotationQueuePrefilter) {
                 template.add("trace_id_prefilter", true);
             }
 
@@ -4695,32 +4759,16 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Mono<Long> batchInsert(@NonNull List<Trace> traces, @NonNull Connection connection) {
-
-        Preconditions.checkArgument(!traces.isEmpty(), "traces must not be empty");
-
-        return Mono.from(insert(traces, connection))
-                .flatMapMany(Result::getRowsUpdated)
-                .reduce(0L, Long::sum);
-
-    }
-
-    @Override
-    @WithSpan
     public Mono<Long> batchInsert(List<Trace> traces) {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(traces), "traces must not be empty");
 
-        if (configuration.getBulkInsert().v2ClientEnabled()) {
-            return insertJsonEachRow(traces);
-        }
-
-        return asyncTemplate.nonTransaction(connection -> batchInsert(traces, connection));
+        return insertJsonEachRow(traces);
     }
 
     /**
-     * The {@link #BATCH_INSERT} rows streamed as JSONEachRow through the v2 client rather than bound as
-     * 20 named parameters per row. See {@link TraceJsonRowMapper} for the per-column parity notes.
+     * Trace rows streamed as JSONEachRow through the v2 client. Replaced an R2DBC insert that bound 20
+     * named parameters per row. See {@link TraceJsonRowMapper} for the per-column notes.
      */
     private Mono<Long> insertJsonEachRow(List<Trace> traces) {
         return makeMonoContextAware((userName, workspaceId) -> {
@@ -4735,73 +4783,6 @@ class TraceDAOImpl implements TraceDAO {
                     trace -> TraceJsonRowMapper.toJsonRow(trace, userName, workspaceId, nowForBatch,
                             traceColumnsNonNullable(),
                             configuration.getResponseFormatting().getTruncationSize()));
-        });
-    }
-
-    private Publisher<? extends Result> insert(List<Trace> traces, Connection connection) {
-
-        return makeMonoContextAware((userName, workspaceId) -> {
-            List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(traces.size());
-
-            var logComment = getLogComment("batch_insert_traces", workspaceId, userName, traces.size());
-
-            var template = TemplateUtils.newST(BATCH_INSERT)
-                    .add("items", queryItems)
-                    .add("log_comment", logComment);
-
-            Statement statement = connection.createStatement(template.render());
-
-            // Captured once per batch so every row whose client did not provide lastUpdatedAt gets
-            // the same timestamp — matches the prior server-side now64(6) semantics (CH evaluates
-            // it once per query) and avoids timing-sensitive ordering in downstream MAX(...)
-            // aggregations.
-            Instant nowForBatch = Instant.now();
-
-            int i = 0;
-            for (Trace trace : traces) {
-                statement.bind("id" + i, trace.id())
-                        .bind("project_id" + i, trace.projectId())
-                        .bind("name" + i, StringUtils.defaultIfBlank(trace.name(), ""))
-                        .bind("start_time" + i, ClickHouseDateTimeFormat.formatNanos(trace.startTime()))
-                        .bind("tags" + i, trace.tags() != null ? trace.tags().toArray(String[]::new) : new String[]{})
-                        .bind("error_info" + i,
-                                trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "")
-                        .bind("thread_id" + i, StringUtils.defaultIfBlank(trace.threadId(), ""));
-
-                bindInputOutputMetadataAndSlim(statement, trace, i);
-
-                bindEpochSentinel(statement, "end_time" + i, trace.endTime());
-
-                // Format the timestamp client-side so the SQL contains a plain string literal in the
-                // last_updated_at cell. Fall back to "now" when the client did not provide a value —
-                // matches the column's DEFAULT now64(6) but avoids the function call in the tuple
-                // that would trip the FORMAT Values fast-path. See OPIK-5694.
-                statement.bind("last_updated_at" + i, ClickHouseDateTimeFormat.formatMicros(
-                        trace.lastUpdatedAt() != null ? trace.lastUpdatedAt() : nowForBatch));
-
-                statement.bind("visibility_mode" + i, trace.visibilityMode() != null
-                        ? trace.visibilityMode().getValue()
-                        : VisibilityMode.DEFAULT.getValue());
-
-                TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
-
-                bindNanSentinel(statement, "ttft" + i, trace.ttft());
-
-                statement.bind("source" + i, trace.source() == null
-                        ? Source.UNKNOWN_VALUE
-                        : trace.source().getValue());
-
-                statement.bind("environment" + i, StringUtils.defaultString(trace.environment()));
-
-                i++;
-            }
-
-            bindUserNameAndWorkspace(statement, userName, workspaceId);
-
-            Segment segment = startSegment("traces", "Clickhouse", "batch_insert");
-
-            return Mono.from(statement.execute())
-                    .doFinally(signalType -> endSegment(segment));
         });
     }
 
@@ -4849,6 +4830,7 @@ class TraceDAOImpl implements TraceDAO {
                         var logComment = getLogComment("get_trace_stats_traces_spans", workspaceId, userName, "");
                         var template = newTraceThreadFindTemplate(
                                 SELECT_TRACES_SPANS_STATS, criteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
+                        addTracesPartitionedFlag(template);
                         template.add("log_comment", logComment);
                         template.add("has_legacy_scores", hasLegacyScores);
                         addSpansPartitionedFlag(template);
@@ -5437,6 +5419,7 @@ class TraceDAOImpl implements TraceDAO {
                     "limit:" + limit + ":" + criteria);
             var template = newTraceThreadFindTemplate(
                     SELECT_BY_PROJECT_ID, criteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
+            addTracesPartitionedFlag(template);
             template.add("log_comment", logComment);
 
             bindTemplateExcludeFieldVariables(criteria, template);

@@ -75,3 +75,23 @@ describe("the OpenAI reasoning effort dropdown", () => {
     expect(openEffortDropdown()).toEqual(["Low", "Medium", "High", "xHigh"]);
   });
 });
+
+describe("the OpenAI penalty sliders", () => {
+  it("are not rendered on a Responses API key", () => {
+    renderPanel(PROVIDER_MODEL_TYPE.GPT_4O, "responses_api");
+
+    expect(screen.getByText("Temperature")).toBeInTheDocument();
+    expect(screen.queryByText("Frequency penalty")).not.toBeInTheDocument();
+    expect(screen.queryByText("Presence penalty")).not.toBeInTheDocument();
+  });
+
+  it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
+    "are rendered when the mode is %s",
+    (mode) => {
+      renderPanel(PROVIDER_MODEL_TYPE.GPT_4O, mode);
+
+      expect(screen.getByText("Frequency penalty")).toBeInTheDocument();
+      expect(screen.getByText("Presence penalty")).toBeInTheDocument();
+    },
+  );
+});

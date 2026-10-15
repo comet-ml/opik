@@ -110,21 +110,35 @@ const PlaygroundPage = () => {
   const lastActiveProjectId = useLastActiveProjectId();
   const setLastActiveProjectId = useSetLastActiveProjectId();
 
-  const { data: providerKeysData, isPending: isPendingProviderKeys } =
-    useProviderKeys({ workspaceName });
+  const {
+    data: providerKeysData,
+    isPending: isPendingProviderKeys,
+    isFetched: isFetchedProviderKeys,
+  } = useProviderKeys({ workspaceName });
 
   const providerKeys: COMPOSED_PROVIDER_TYPE[] = useMemo(() => {
     return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
   }, [providerKeysData]);
+  const hasLoadedProviderKeys = !!providerKeysData;
 
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
-  const { calculateModelProvider, calculateDefaultModel } =
-    useLLMProviderModelsData();
+  const {
+    calculateModelProvider,
+    calculateDefaultModel,
+    isDropdownModel,
+    isFetched: isFetchedModels,
+  } = useLLMProviderModelsData();
+
+  // Prompts created or validated before the model registry lands get an empty provider, so the
+  // prompts mount only once the keys and the registry have each answered. isFetched, not !isPending:
+  // a query that failed without data goes back to pending whenever a new observer mounts, and the
+  // prompts mount observers of both, so an isPending gate unmounts them and refetches in a loop.
+  const isPendingPlaygroundSetup = !isFetchedProviderKeys || !isFetchedModels;
 
   const resetPrompts = useCallback(() => {
-    if (isPendingProviderKeys) {
+    if (isPendingPlaygroundSetup) {
       setPromptMap([], {});
       return;
     }
@@ -134,14 +148,16 @@ const PlaygroundPage = () => {
       lastPickedModel,
       providerResolver: calculateModelProvider,
       modelResolver: calculateDefaultModel,
+      isDropdownModel,
     });
     setPromptMap([prompt.id], { [prompt.id]: prompt });
   }, [
-    isPendingProviderKeys,
+    isPendingPlaygroundSetup,
     providerKeys,
     lastPickedModel,
     calculateModelProvider,
     calculateDefaultModel,
+    isDropdownModel,
     setPromptMap,
   ]);
 
@@ -204,13 +220,13 @@ const PlaygroundPage = () => {
 
   // Auto-open setup dialog when no providers configured (only on initial load)
   useEffect(() => {
-    if (!isPendingProviderKeys && !hasCheckedInitialProviders) {
+    if (hasLoadedProviderKeys && !hasCheckedInitialProviders) {
       setHasCheckedInitialProviders(true);
       if (providerKeys.length === 0) {
         setSetupDialogOpen(true);
       }
     }
-  }, [isPendingProviderKeys, hasCheckedInitialProviders, providerKeys.length]);
+  }, [hasLoadedProviderKeys, hasCheckedInitialProviders, providerKeys.length]);
 
   // Handle provider addition - trigger validation for all prompts
   const handleProviderAdded = useCallback(() => {
@@ -275,7 +291,7 @@ const PlaygroundPage = () => {
     return () => stopAll();
   }, [stopAll]);
 
-  const headerMaxWidth = isPendingProviderKeys
+  const headerMaxWidth = isPendingPlaygroundSetup
     ? undefined
     : `calc(${promptCount} * var(--max-prompt-width) + var(--add-variant-width))`;
 
@@ -307,7 +323,7 @@ const PlaygroundPage = () => {
 
         <Separator />
 
-        {isPendingProviderKeys ? (
+        {isPendingPlaygroundSetup ? (
           renderPlaygroundLoadingSkeleton()
         ) : isExperimentMode ? (
           <>
@@ -323,6 +339,7 @@ const PlaygroundPage = () => {
                   workspaceName={workspaceName}
                   providerKeys={providerKeys}
                   isPendingProviderKeys={isPendingProviderKeys}
+                  hasLoadedProviderKeys={hasLoadedProviderKeys}
                   runSingle={runSingle}
                   stopSingle={stopSingle}
                 />
@@ -352,6 +369,7 @@ const PlaygroundPage = () => {
                   workspaceName={workspaceName}
                   providerKeys={providerKeys}
                   isPendingProviderKeys={isPendingProviderKeys}
+                  hasLoadedProviderKeys={hasLoadedProviderKeys}
                 />
               </div>
 

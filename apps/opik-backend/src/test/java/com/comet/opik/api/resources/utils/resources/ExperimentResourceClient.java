@@ -3,6 +3,8 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentBatchUpdate;
+import com.comet.opik.api.ExperimentExecutionRequest;
+import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
@@ -116,6 +118,19 @@ public class ExperimentResourceClient {
     public UUID create(String apiKey, String workspaceName) {
         var experiment = createPartialExperiment().build();
         return create(experiment, apiKey, workspaceName);
+    }
+
+    public ExperimentExecutionResponse execute(ExperimentExecutionRequest request, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("execute")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
+            return response.readEntity(ExperimentExecutionResponse.class);
+        }
     }
 
     public Experiment getExperiment(UUID experimentId, String apiKey, String workspaceName) {

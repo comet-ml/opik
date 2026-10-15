@@ -57,6 +57,34 @@ component: clickhouse
 {{- end }}
 
 {{/*
+ClickHouse LWD-reclaim merge settings (conf.d/merge_tree.xml), from clickhouse.forceMerge.
+*/}}
+{{- define "opik.clickhouse.mergeTreeXml" -}}
+{{- $fm := .Values.clickhouse.forceMerge -}}
+{{- /* A malformed value would render 0, which ClickHouse reads as "off", so fail instead. */ -}}
+{{- range $key, $min := dict "minAgeSeconds" 1 "maxBytesToMergeAtMaxSpaceInPool" 1 "numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge" 0 -}}
+{{- $v := get $fm $key -}}
+{{- if not (or (kindIs "float64" $v) (kindIs "int" $v) (kindIs "int64" $v)) -}}
+{{- fail (printf "clickhouse.forceMerge.%s must be a number, got %v" $key $v) -}}
+{{- end -}}
+{{- if or (ne (float64 $v) (float64 (int64 $v))) (lt (int64 $v) (int64 $min)) -}}
+{{- fail (printf "clickhouse.forceMerge.%s must be an integer >= %d, got %v" $key $min $v) -}}
+{{- end -}}
+{{- end -}}
+{{- if not (kindIs "bool" $fm.onPartitionOnly) -}}
+{{- fail (printf "clickhouse.forceMerge.onPartitionOnly must be true or false, got %v" $fm.onPartitionOnly) -}}
+{{- end -}}
+<clickhouse>
+  <merge_tree>
+    <max_bytes_to_merge_at_max_space_in_pool>{{ int64 $fm.maxBytesToMergeAtMaxSpaceInPool }}</max_bytes_to_merge_at_max_space_in_pool>
+    <min_age_to_force_merge_seconds>{{ int64 $fm.minAgeSeconds }}</min_age_to_force_merge_seconds>
+    <min_age_to_force_merge_on_partition_only>{{ ternary 1 0 $fm.onPartitionOnly }}</min_age_to_force_merge_on_partition_only>
+    <number_of_free_entries_in_pool_to_lower_max_size_of_merge>{{ int64 $fm.numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge }}</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
+  </merge_tree>
+</clickhouse>
+{{- end }}
+
+{{/*
 ClickHouse tiered-storage server config (conf.d/storage.xml).
 
 Renders the hot -> cold storage policy per Section 5.3 of the Hyperscale plan.

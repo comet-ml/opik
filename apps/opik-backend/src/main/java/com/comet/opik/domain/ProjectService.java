@@ -6,6 +6,7 @@ import com.comet.opik.api.Project.ProjectPage;
 import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
+import com.comet.opik.api.UsageProjectsResponse.WorkspaceProjectName;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
@@ -39,6 +40,8 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -80,6 +83,9 @@ public interface ProjectService {
 
     List<Project> findByIds(String workspaceId, Set<UUID> ids);
 
+    List<WorkspaceProjectName> findAcrossWorkspaces(Set<String> workspaceIds, Set<UUID> projectIds, String name,
+            int limit);
+
     Mono<Set<UUID>> findProjectIdsByWorkspace();
 
     List<Project> findByNames(String workspaceId, List<String> names);
@@ -89,6 +95,11 @@ public interface ProjectService {
     Mono<Optional<UUID>> resolveProjectId(String projectName);
 
     Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids);
+
+    Mono<Map<UUID, String>> findNamesByIdsAcrossWorkspaces(Set<UUID> ids);
+
+    /** UTC date the install was created, from its earliest project; empty when there are no projects. */
+    Mono<Optional<LocalDate>> findInstallationDate();
 
     Mono<Set<UUID>> getDemoProjectIdsInWorkspaces(Set<String> workspaceIds);
 
@@ -144,6 +155,7 @@ class ProjectServiceImpl implements ProjectService {
             SortableFields.LAST_UPDATED_TRACE_AT, LAST_UPDATED_TRACE_AT_SORT);
 
     private static final int DEMO_PROJECT_WORKSPACE_CHUNK_SIZE = 1_000;
+    private static final int ID_LOOKUP_CHUNK_SIZE = 1_000;
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator idGenerator;
@@ -408,6 +420,44 @@ class ProjectServiceImpl implements ProjectService {
         }
 
         return template.inTransaction(READ_ONLY, handle -> handle.attach(ProjectDAO.class).findByIds(ids, workspaceId));
+    }
+
+    @Override
+    public List<WorkspaceProjectName> findAcrossWorkspaces(@NonNull Set<String> workspaceIds, Set<UUID> projectIds,
+            String name, int limit) {
+        if (workspaceIds.isEmpty()) {
+            return List.of();
+        }
+        String escapedName = StringUtils.isBlank(name) ? null : escapeLike(name.strip());
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(ProjectDAO.class)
+                .findAcrossWorkspaces(workspaceIds, projectIds, escapedName, limit));
+    }
+
+    private static String escapeLike(String value) {
+        return value.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+    }
+
+    @Override
+    public Mono<Optional<LocalDate>> findInstallationDate() {
+        return Mono.fromCallable(() -> Optional.ofNullable(template.inTransaction(READ_ONLY,
+                handle -> handle.attach(ProjectDAO.class).findInstallationTime()))
+                .map(time -> time.atZone(ZoneOffset.UTC).toLocalDate()))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<Map<UUID, String>> findNamesByIdsAcrossWorkspaces(Set<UUID> ids) {
+        if (CollectionUtils.isEmpty(ids)) {
+            return Mono.just(Map.of());
+        }
+        return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+            var repository = handle.attach(ProjectDAO.class);
+            return Lists.partition(List.copyOf(ids), ID_LOOKUP_CHUNK_SIZE)
+                    .stream()
+                    .flatMap(chunk -> repository.findNamesByIds(chunk).stream())
+                    .collect(Collectors.toUnmodifiableMap(WorkspaceProjectName::projectId,
+                            WorkspaceProjectName::name));
+        })).subscribeOn(Schedulers.boundedElastic());
     }
 
     @Override

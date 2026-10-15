@@ -46,7 +46,8 @@ what the model answered, which tools ran, how subagents nested, and what each tu
   This guide covers telemetry flowing **from Claude Code to Opik**. For the other direction,
   letting Claude Code read your traces, score outputs and run evaluations from chat, register the
   [Opik MCP server](/mcp-server) with it. One command, `uvx opik mcp configure`, installs the server
-  and the Opik skills. The two are independent, and you can use either or both.
+  and the Opik skills; a coding agent doing it for a user runs `uvx opik-mcp@latest --help` first
+  and follows its steps. The two are independent, and you can use either or both.
 </Callout>
 
 <Tip title="Looking to reduce Claude Code spend rather than review sessions?">

@@ -58,74 +58,14 @@ import {
 import { CHART_TYPE } from "@/constants/chart";
 import { Filter } from "@/types/filters";
 import { BREAKDOWN_FIELD } from "@/types/dashboard";
+import { getMetricEntityType } from "./breakdown";
+import { METRIC_LABELS } from "./helpers";
 
-const METRIC_OPTIONS = [
-  {
-    value: METRIC_NAME_TYPE.FEEDBACK_SCORES,
-    label: "Trace metrics",
-    filterType: "trace" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.TRACE_COUNT,
-    label: "Number of traces",
-    filterType: "trace" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.TRACE_DURATION,
-    label: "Trace duration",
-    filterType: "trace" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.TOKEN_USAGE,
-    label: "Token usage",
-    filterType: "trace" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.COST,
-    label: "Estimated cost",
-    filterType: "trace" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.FAILED_GUARDRAILS,
-    label: "Failed guardrails",
-    filterType: "trace" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.THREAD_COUNT,
-    label: "Number of threads",
-    filterType: "thread" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.THREAD_DURATION,
-    label: "Thread duration",
-    filterType: "thread" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES,
-    label: "Thread metrics",
-    filterType: "thread" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.SPAN_COUNT,
-    label: "Number of spans",
-    filterType: "span" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.SPAN_DURATION,
-    label: "Span duration",
-    filterType: "span" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES,
-    label: "Span metrics",
-    filterType: "span" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.SPAN_TOKEN_USAGE,
-    label: "Span token usage",
-    filterType: "span" as const,
-  },
-];
+const METRIC_OPTIONS = Object.entries(METRIC_LABELS).map(([value, label]) => ({
+  value,
+  label,
+  filterType: getMetricEntityType(value),
+}));
 
 const DURATION_METRIC_OPTIONS = [
   { value: "p50", label: "P50 (Median)" },
