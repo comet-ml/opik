@@ -49,7 +49,7 @@ _You can find the full backend codebase in GitHub under the [`apps/opik-backend`
 
 Opik includes a Python backend service (Flask + Gunicorn) that handles workloads requiring Python execution:
 
-- **Evaluators**: Executes custom Python evaluation code, such as Python metrics in online evaluation rules. How that code is isolated depends on the execution strategy (see below).
+- **Evaluators**: Executes custom Python evaluation code in sandboxed subprocesses with configurable timeouts, memory limits, and network isolation. See [Code execution strategies](#code-execution-strategies) below for the full list.
 - **Optimization Studio**: Runs LLM-based optimization and prompt engineering workflows with concurrent job management.
 - **Background jobs**: Uses Redis Queue (RQ) for asynchronous job processing, including evaluation runs and optimization tasks.
 
