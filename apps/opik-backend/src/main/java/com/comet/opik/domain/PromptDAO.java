@@ -175,7 +175,9 @@ public interface PromptDAO {
      *
      * <p>Grouping by the whole {@code (workspace_id, prompt_id, version_type)} index prefix lets {@code MAX(id)}
      * skip-scan to each prompt's last index entry. Grouping by {@code prompt_id} alone, or a {@code ROW_NUMBER}
-     * window, reads every version.
+     * window, reads every version. The prompts are joined on {@code latest_ids.prompt_id}: joined on the version's own
+     * {@code prompt_id}, MySQL reads every version of each prompt through the prompt id index and probes
+     * {@code latest_ids} for each one.
      */
     @SqlQuery("""
             WITH selected_prompts AS (
@@ -198,7 +200,7 @@ public interface PromptDAO {
                 <if(ids)> AND prompt_id IN (<ids>) <endif>
                 GROUP BY workspace_id, prompt_id, version_type
             ), pv_latest AS (
-                SELECT pv.*
+                SELECT li.prompt_id AS latest_prompt_id, pv.*
                 FROM latest_ids li
                 INNER JOIN prompt_versions pv ON pv.id = li.id AND pv.workspace_id = :workspace_id
             ), active_envs AS (
@@ -229,7 +231,7 @@ public interface PromptDAO {
                 'last_updated_at', pvr.last_updated_at,
                 'last_updated_by', pvr.last_updated_by
               ) AS latest_version,
-              pvr.prompt_id
+              pvr.latest_prompt_id AS prompt_id
               FROM pv_latest pvr
               LEFT JOIN ver_envs ve ON ve.version_id = pvr.id
             )
