@@ -185,6 +185,8 @@ class AiLabelRendererClickHouseTest {
         outsizedSpans.set(1, outsizedSpans.get(1).toBuilder()
                 .output("\"" + fixtures.text((int) MAX_FIELD_BYTES) + "\"")
                 .name("n".repeat((int) MAX_FIELD_BYTES + 1))
+                .model("m".repeat((int) MAX_FIELD_BYTES + 1))
+                .provider("p".repeat((int) MAX_FIELD_BYTES + 1))
                 .errorInfo("{\"message\":\"" + "e".repeat((int) MAX_FIELD_BYTES) + "\"}")
                 .build());
         addTrace(outsized, outsizedSpans);
@@ -277,6 +279,8 @@ class AiLabelRendererClickHouseTest {
                         .metadata(guard(span.metadata()))
                         .errorInfo(guard(span.errorInfo()))
                         .name(guardName(span.name()))
+                        .model(guardName(span.model()))
+                        .provider(guardName(span.provider()))
                         .build())
                 .toList();
         var guardedTrace = trace.toBuilder()
@@ -291,6 +295,9 @@ class AiLabelRendererClickHouseTest {
     }
 
     private static String guardName(String name) {
+        if (name == null) {
+            return null;
+        }
         int bytes = name.getBytes(StandardCharsets.UTF_8).length;
         return bytes > MAX_FIELD_BYTES ? "[%d bytes omitted]".formatted(bytes) : name;
     }
