@@ -1,8 +1,9 @@
 package com.comet.opik.domain.cost;
 
 import com.comet.opik.api.ModelCostData;
+import com.comet.opik.domain.token_usage.SpanUsageFactory;
+import com.comet.opik.domain.token_usage.model.SpanUsage;
 import com.comet.opik.utils.JsonUtils;
-import com.comet.opik.utils.UsageUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
@@ -17,82 +18,27 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 public class CostService {
     private static final char MODEL_PROVIDER_SEPARATOR = '/';
     private static final Map<String, ModelPrice> modelProviderPrices;
-    private static final Map<String, String> PROVIDERS_MAPPING = Map.ofEntries(
-            Map.entry("openai", "openai"),
-            Map.entry("vertex_ai-language-models", "google_vertexai"),
-            Map.entry("gemini", "google_ai"),
-            Map.entry("anthropic", "anthropic"),
-            Map.entry("vertex_ai-anthropic_models", "anthropic_vertexai"),
-            Map.entry("bedrock", "bedrock"),
-            Map.entry("bedrock_converse", "bedrock"),
-            Map.entry("groq", "groq"),
-            Map.entry("jina_ai", "jina_ai"),
-            Map.entry("elastic", "elastic"),
-            Map.entry("microsoft", "azure"),
-            Map.entry("azure", "azure"),
-            Map.entry("mistral", "mistral"),
-            Map.entry("xai", "xai"),
-            Map.entry("deepseek", "deepseek"),
-            Map.entry("perplexity", "perplexity"),
-            Map.entry("fireworks_ai", "fireworks_ai"),
-            Map.entry("moonshot", "moonshot"),
-            Map.entry("moonshotai", "moonshot"),
-            Map.entry("ai21", "ai21"),
-            Map.entry("morph", "morph"),
-            Map.entry("inception", "inception"),
-            Map.entry("meta", "meta"),
-            Map.entry("zai", "zai"),
-            Map.entry("z-ai", "zai"),
-            Map.entry("sambanova", "sambanova"),
-            Map.entry("nebius", "nebius"),
-            Map.entry("snowflake", "snowflake"),
-            Map.entry("deepinfra", "deepinfra"),
-            Map.entry("cerebras", "cerebras"),
-            Map.entry("typesafe", "typesafe"),
-            Map.entry("hyperbolic", "hyperbolic"),
-            Map.entry("baseten", "baseten"),
-            Map.entry("lambda_ai", "lambda_ai"),
-            Map.entry("nscale", "nscale"),
-            Map.entry("oci", "oci"),
-            Map.entry("replicate", "replicate"),
-            Map.entry("watsonx", "watsonx"),
-            Map.entry("cohere", "cohere"),
-            Map.entry("cohere_chat", "cohere"),
-            Map.entry("novita", "novita"),
-            Map.entry("cloudflare", "cloudflare"),
-            Map.entry("anyscale", "anyscale"),
-            Map.entry("scaleway", "scaleway"),
-            Map.entry("ovhcloud", "ovhcloud"),
-            Map.entry("gmi", "gmi"),
-            Map.entry("gradient_ai", "gradient_ai"),
-            Map.entry("libertai", "libertai"),
-            Map.entry("azure_ai", "azure_ai"),
-            Map.entry("vercel_ai_gateway", "vercel_ai_gateway"),
-            Map.entry("openrouter", "openrouter"));
-
-    // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
-    // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider
-    // at lookup so cost tracking and the per-evaluation spend budget work for every provider selectable
-    // for online evaluation. Only providers whose name actually differs need an entry: openai / anthropic
-    // / bedrock already equal their canonical name, and self-hosted providers (ollama, custom-llm) have no
-    // public pricing to map to. Vertex is unambiguous here because only Gemini models are offered on
-    // Vertex for online evaluation. Canonical names (and any not listed) pass through unchanged.
-    private static final Map<String, String> RUNTIME_PROVIDER_MAPPING = Map.of(
-            "gemini", "google_ai",
-            "vertex-ai", "google_vertexai");
+    // Every row is priced under its own litellm_provider name; span providers are resolved to those names.
+    private static final ProviderRegistry providerRegistry;
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
+    // The price file's sample_spec entry documents its fields instead of pricing a model.
+    private static final String SAMPLE_SPEC_ENTRY = "sample_spec";
     // Both hyphen-separated (2025-12-17) and compact (20251217) date suffixes. Anthropic ships
     // compact dates on every dated model id (claude-haiku-4-5-20251001), so without the optional
     // separators a compact-dated name only ever prices when it is present verbatim in the price
@@ -100,26 +46,12 @@ public class CostService {
     // daily LiteLLM sync has not picked up yet) silently fell through to a zero cost.
     private static final String DATE_SUFFIX_PATTERN = "-\\d{4}-?(0[1-9]|1[0-2])-?(0[1-9]|[12]\\d|3[01])$";
     private static final String VERSION_SUFFIX_PATTERN = ":\\d+$";
-    private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
-            .ofEntries(
-                    Map.entry("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic),
-                    Map.entry("openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
-                    Map.entry("azure", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
-                    Map.entry("xai", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
-                    Map.entry("deepseek", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
-                    Map.entry("fireworks_ai", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
-                    Map.entry("moonshot", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
-                    Map.entry("snowflake", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
-                    Map.entry("deepinfra", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
-                    Map.entry("bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock),
-                    Map.entry("bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock),
-                    Map.entry("vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle),
-                    Map.entry("gemini", SpanCostCalculator::textGenerationWithCacheCostGoogle),
-                    Map.entry("vertex_ai-anthropic_models", SpanCostCalculator::textGenerationWithCacheCostAnthropic));
 
     static {
         try {
-            modelProviderPrices = Collections.unmodifiableMap(parseModelPrices());
+            var priceTable = parseModelPrices();
+            modelProviderPrices = Collections.unmodifiableMap(priceTable.prices());
+            providerRegistry = new ProviderRegistry(priceTable.providers());
         } catch (IOException e) {
             log.error("Failed to load model prices", e);
             throw new UncheckedIOException(e);
@@ -128,16 +60,28 @@ public class CostService {
 
     private static final ModelPrice DEFAULT_COST = ModelPrice.empty();
 
+    public static ProviderRegistry providerRegistry() {
+        return providerRegistry;
+    }
+
+    /** Prices the usage as its provider's format reads it; the usage itself isn't changed. */
     public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
             @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata) {
-        ModelPrice modelPrice = findModelPrice(modelName, provider);
-
-        // Drop null token counts before pricing: calculators read usage via getOrDefault(key, 0),
-        // which returns null (not the default) for a key present with a null value, then NPEs
-        // unboxing it in BigDecimal.valueOf(...).
-        BigDecimal estimatedCost = modelPrice.calculator().apply(modelPrice, UsageUtils.sanitizeUsage(usage));
-
+        BigDecimal estimatedCost = estimateCost(modelName, provider, usage);
         return estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? estimatedCost : getCostFromMetadata(metadata);
+    }
+
+    // Pricing runs while spans are ingested, so it never fails the caller: an error while pricing gives no estimate.
+    private static BigDecimal estimateCost(String modelName, String provider, Map<String, Integer> usage) {
+        try {
+            ModelPrice modelPrice = findModelPrice(modelName, provider);
+            SpanUsage spanUsage = SpanUsageFactory.create(providerRegistry.resolve(provider, modelName).orElse(null),
+                    usage);
+            return modelPrice.calculator().apply(modelPrice, spanUsage);
+        } catch (RuntimeException exception) {
+            log.warn("Failed to estimate the cost of model '{}', provider '{}'", modelName, provider, exception);
+            return BigDecimal.ZERO;
+        }
     }
 
     /**
@@ -158,18 +102,22 @@ public class CostService {
      * "anthropic.claude-opus-4-6-v1:0" by stripping the ":N" pin and falling back to the
      * base model name (e.g. "anthropic.claude-opus-4-6-v1") used in the pricing database.
      *
+     * The provider is resolved through {@link ProviderRegistry}, and the providers LiteLLM files the same vendor's
+     * other models under are searched after it.
+     *
      * @param modelName The model name (may contain dots or provider prefix, e.g., "openai/gpt-4o")
      * @param provider The provider name (e.g., "anthropic")
      * @return ModelPrice for the model, or DEFAULT_COST if not found
      */
     private static ModelPrice findModelPrice(String modelName, String provider) {
-        if (StringUtils.isBlank(modelName) || StringUtils.isBlank(provider)) {
+        if (StringUtils.isBlank(modelName)) {
             return DEFAULT_COST;
         }
-
-        // Normalize runtime provider names ("gemini", "vertex-ai") to the canonical price-table provider
-        // so callers holding an LlmProvider value hit the same rows as callers passing the canonical name.
-        provider = RUNTIME_PROVIDER_MAPPING.getOrDefault(provider, provider);
+        var resolvedProvider = providerRegistry.resolve(provider, modelName);
+        if (resolvedProvider.isEmpty()) {
+            return DEFAULT_COST;
+        }
+        var lookupOrder = providerRegistry.priceLookupOrder(resolvedProvider.get());
 
         // Preserve the original name so the provider-prefix fallback below can inspect it after
         // all primary lookups have missed under the caller-supplied provider.
@@ -183,6 +131,47 @@ public class CostService {
         // the same prefix-free name that was used as the key when the map was populated.
         modelName = parseModelName(modelName);
 
+        for (String candidateProvider : lookupOrder) {
+            ModelPrice price = findModelPriceUnderProvider(modelName, candidateProvider);
+            if (price != null) {
+                return price;
+            }
+        }
+
+        // Provider-prefix fallback: when every primary lookup misses and the model name carries a
+        // provider prefix (e.g. "perplexity/sonar"), retry the lookup under that prefix's provider.
+        // A prefix that names no provider in the price file finds nothing. This covers models
+        // that a caller routes through an aggregator (LlmProviderFactoryImpl enumerates
+        // "perplexity/*", "xai/*", "deepseek/*" under OpenRouter, so BudgetGuard invokes
+        // calculateCost with provider="openrouter" — the pricing row itself lives under the
+        // model's actual origin provider, e.g. litellm_provider: "perplexity"). Only kicks in as
+        // a fallback, so no existing lookup semantics change for callers that already pass a
+        // matching provider directly.
+        int prefixSlash = originalModelName.indexOf('/');
+        if (prefixSlash > 0) {
+            String providerFromPrefix = providerRegistry.toLiteLlmName(originalModelName.substring(0, prefixSlash));
+            if (!lookupOrder.contains(providerFromPrefix)) {
+                for (String candidateProvider : providerRegistry.priceLookupOrder(providerFromPrefix)) {
+                    ModelPrice prefixMatch = modelProviderPrices.get(createModelProviderKey(modelName,
+                            candidateProvider));
+                    if (prefixMatch != null) {
+                        log.debug(
+                                "Found model price using model-name provider prefix. Original model: '{}', supplied provider: '{}', prefix-derived provider: '{}'",
+                                originalModelName, provider, candidateProvider);
+                        return prefixMatch;
+                    }
+                }
+            }
+        }
+
+        log.debug("No model price found for model: '{}' with provider: '{}'", modelName, provider);
+        return DEFAULT_COST;
+    }
+
+    /**
+     * Tries the exact model name under one provider, then its normalized variations. Returns null if none is priced.
+     */
+    private static ModelPrice findModelPriceUnderProvider(String modelName, String provider) {
         // Try exact match first (backwards compatibility)
         String exactKey = createModelProviderKey(modelName, provider);
         ModelPrice exactMatch = modelProviderPrices.get(exactKey);
@@ -256,33 +245,7 @@ public class CostService {
             }
         }
 
-        // Provider-prefix fallback: when every primary lookup misses and the model name carries a
-        // provider prefix (e.g. "perplexity/sonar") that maps to a canonical provider we know
-        // pricing for, retry the lookup under that prefix's canonical provider. This covers models
-        // that a caller routes through an aggregator (LlmProviderFactoryImpl enumerates
-        // "perplexity/*", "xai/*", "deepseek/*" under OpenRouter, so BudgetGuard invokes
-        // calculateCost with provider="openrouter" — the pricing row itself lives under the
-        // model's actual origin provider, e.g. litellm_provider: "perplexity"). Only kicks in as
-        // a fallback, so no existing lookup semantics change for callers that already pass a
-        // matching provider directly.
-        int prefixSlash = originalModelName.indexOf('/');
-        if (prefixSlash > 0) {
-            String modelPrefix = originalModelName.substring(0, prefixSlash);
-            String canonicalFromPrefix = PROVIDERS_MAPPING.get(modelPrefix);
-            if (canonicalFromPrefix != null && !canonicalFromPrefix.equalsIgnoreCase(provider)) {
-                String prefixKey = createModelProviderKey(modelName, canonicalFromPrefix);
-                ModelPrice prefixMatch = modelProviderPrices.get(prefixKey);
-                if (prefixMatch != null) {
-                    log.debug(
-                            "Found model price using model-name provider prefix. Original model: '{}', supplied provider: '{}', prefix-derived provider: '{}'",
-                            originalModelName, provider, canonicalFromPrefix);
-                    return prefixMatch;
-                }
-            }
-        }
-
-        log.debug("No model price found for model: '{}' with provider: '{}'", modelName, provider);
-        return DEFAULT_COST;
+        return null;
     }
 
     /**
@@ -342,12 +305,17 @@ public class CostService {
                 .orElse(BigDecimal.ZERO);
     }
 
-    private static Map<String, ModelPrice> parseModelPrices() throws IOException {
-        Map<String, ModelCostData> modelCosts = JsonUtils.readJsonFile(MODEL_PRICES_FILE, new TypeReference<>() {
-        });
+    private record PriceTable(Map<String, ModelPrice> prices, Set<String> providers) {
+    }
+
+    private static PriceTable parseModelPrices() throws IOException {
+        Map<String, ModelCostData> modelCosts = new LinkedHashMap<>(JsonUtils.readJsonFile(MODEL_PRICES_FILE,
+                new TypeReference<Map<String, ModelCostData>>() {
+                }));
         if (modelCosts.isEmpty()) {
             throw new UncheckedIOException(new IOException("Failed to load model prices"));
         }
+        modelCosts.remove(SAMPLE_SPEC_ENTRY);
 
         Map<String, ModelPrice> parsedModelPrices = new HashMap<>();
         modelCosts.forEach((modelName, modelCost) -> {
@@ -364,29 +332,38 @@ public class CostService {
         // Apply Opik-owned overrides that survive the daily LiteLLM sync workflow.
         // Three flavors are supported in the overrides file: aliases (`alias_of` pointing at an
         // upstream key), brand-new models, and price overrides for existing keys.
-        applyOverrides(parsedModelPrices, modelCosts);
+        Map<String, ModelCostData> overrides = readOverrides();
+        applyOverrides(parsedModelPrices, modelCosts, overrides);
 
-        return parsedModelPrices;
+        Set<String> providers = Stream.of(modelCosts, overrides)
+                .flatMap(costsByModel -> costsByModel.values().stream())
+                .map(ModelCostData::litellmProvider)
+                .filter(StringUtils::isNotBlank)
+                .collect(Collectors.toSet());
+        return new PriceTable(parsedModelPrices, providers);
     }
 
     /**
-     * Loads {@link #MODEL_PRICES_OVERRIDES_FILE} if present and merges its entries into the
-     * given price map. Missing or malformed overrides files are tolerated with a log message.
+     * Loads {@link #MODEL_PRICES_OVERRIDES_FILE} if present. Missing or malformed overrides files
+     * are tolerated with a log message.
      */
-    private static void applyOverrides(Map<String, ModelPrice> prices,
-            Map<String, ModelCostData> upstream) {
-        Map<String, ModelCostData> overrides;
+    private static Map<String, ModelCostData> readOverrides() {
         try {
-            overrides = JsonUtils.readJsonFile(MODEL_PRICES_OVERRIDES_FILE, new TypeReference<>() {
-            });
+            Map<String, ModelCostData> overrides = JsonUtils.readJsonFile(MODEL_PRICES_OVERRIDES_FILE,
+                    new TypeReference<>() {
+                    });
+            return overrides == null ? Map.of() : overrides;
         } catch (IOException | NullPointerException e) {
             log.warn("No model price overrides loaded ('{}'): '{}'", MODEL_PRICES_OVERRIDES_FILE, e.getMessage());
-            return;
+            return Map.of();
         }
-        if (overrides == null || overrides.isEmpty()) {
-            return;
-        }
+    }
 
+    /**
+     * Merges the overrides' entries into the given price map.
+     */
+    private static void applyOverrides(Map<String, ModelPrice> prices, Map<String, ModelCostData> upstream,
+            Map<String, ModelCostData> overrides) {
         // Apply direct overrides first, then aliases. Aliases resolve their target against `upstream`
         // (they exist to reuse an upstream LiteLLM row under a different name), but their *price* is
         // read from the merged `prices` map — so a direct override that re-prices an upstream key
@@ -437,7 +414,7 @@ public class CostService {
     private static void applyDirectOverride(Map<String, ModelPrice> prices, String modelName, ModelCostData override) {
         String runtimeKey = buildRuntimeKey(modelName, override);
         if (runtimeKey == null) {
-            log.warn("Override entry '{}' has unknown provider '{}'; skipping",
+            log.warn("Override entry '{}' has a blank provider or a legacy Bedrock name (provider '{}'); skipping",
                     modelName, override.litellmProvider());
             return;
         }
@@ -448,25 +425,21 @@ public class CostService {
     }
 
     /**
-     * Computes the runtime key {@code <parsedModel>/<canonicalProvider>} for a price-map entry.
-     * Returns null if the provider isn't in {@link #PROVIDERS_MAPPING} or the entry is invalid
-     * for the resolved provider (e.g. legacy Bedrock paths).
+     * Computes the runtime key {@code <parsedModel>/<litellmProvider>} for a price-map entry.
+     * Returns null if the provider is blank or the entry is invalid for the provider
+     * (e.g. legacy Bedrock paths).
      */
     private static String buildRuntimeKey(String modelName, ModelCostData modelCost) {
         String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
-        String canonical = PROVIDERS_MAPPING.get(provider);
-        if (canonical == null) {
+        if (provider.isBlank() || !isValidModelProvider(modelName, provider)) {
             return null;
         }
-        if (!isValidModelProvider(modelName, canonical)) {
-            return null;
-        }
-        return createModelProviderKey(parseModelName(modelName), canonical);
+        return createModelProviderKey(parseModelName(modelName), provider);
     }
 
     private static ModelPrice buildModelPrice(ModelCostData modelCost) {
         String provider = Optional.ofNullable(modelCost.litellmProvider()).orElse("");
-        if (!PROVIDERS_MAPPING.containsKey(provider)) {
+        if (provider.isBlank()) {
             return null;
         }
 
@@ -516,15 +489,18 @@ public class CostService {
 
         ModelMode mode = ModelMode.fromValue(modelCost.mode());
 
-        BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = resolveCalculator(provider, mode,
-                inputPrice, outputPrice, cacheCreationInputTokenPrice, cacheReadInputTokenPrice,
-                videoOutputPrice, audioInputCharacterPrice);
+        BiFunction<ModelPrice, SpanUsage, BigDecimal> calculator = resolveCalculator(mode, inputPrice, outputPrice,
+                cacheCreationInputTokenPrice, cacheReadInputTokenPrice, videoOutputPrice, audioInputCharacterPrice);
 
         return ModelPrice.builder()
                 .inputPrice(inputPrice)
                 .outputPrice(outputPrice)
                 .cacheCreationInputTokenPrice(cacheCreationInputTokenPrice)
                 .cacheReadInputTokenPrice(cacheReadInputTokenPrice)
+                .cacheCreationInputTokenPriceAbove1hr(
+                        Optional.ofNullable(modelCost.cacheCreationInputTokenCostAbove1hr())
+                                .map(BigDecimal::new)
+                                .orElse(BigDecimal.ZERO))
                 .videoOutputPrice(videoOutputPrice)
                 .audioInputCharacterPrice(audioInputCharacterPrice)
                 .inputAudioTokenPrice(inputAudioTokenPrice)
@@ -581,8 +557,7 @@ public class CostService {
         return true;
     }
 
-    private static BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> resolveCalculator(
-            String provider,
+    private static BiFunction<ModelPrice, SpanUsage, BigDecimal> resolveCalculator(
             ModelMode mode,
             BigDecimal inputPrice,
             BigDecimal outputPrice,
@@ -599,11 +574,8 @@ public class CostService {
             return SpanCostCalculator::audioSpeechCost;
         }
 
-        if (isPositive(cacheCreationInputTokenPrice) || isPositive(cacheReadInputTokenPrice)) {
-            return PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider, SpanCostCalculator::textGenerationCost);
-        }
-
-        if (isPositive(inputPrice) || isPositive(outputPrice)) {
+        if (isPositive(inputPrice) || isPositive(outputPrice) || isPositive(cacheCreationInputTokenPrice)
+                || isPositive(cacheReadInputTokenPrice)) {
             return SpanCostCalculator::textGenerationCost;
         }
 

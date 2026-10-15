@@ -1,18 +1,33 @@
 package com.comet.opik.domain.cost;
 
+import com.comet.opik.api.ModelCostData;
+import com.comet.opik.domain.token_usage.SpanUsageFactory;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.Mockito;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
 
 class CostServiceTest {
 
@@ -564,7 +579,7 @@ class CostServiceTest {
     }
 
     /**
-     * Mistral cost tracking: until `mistral` was added to PROVIDERS_MAPPING the entire set of
+     * Mistral cost tracking: until `mistral` was registered in CostService the entire set of
      * upstream LiteLLM `litellm_provider: "mistral"` rows was dropped at startup, so every
      * Mistral span returned cost = 0. This locks in both the upstream-sourced rows and the
      * two override-only rows (Medium 3.5, Small 4) added alongside the registry fix.
@@ -599,9 +614,9 @@ class CostServiceTest {
     }
 
     /**
-     * Overrides file: `litellm_provider: "microsoft"` is remapped to canonical `azure` via
-     * PROVIDERS_MAPPING. A span emitted with provider=`azure` and the model name must hit
-     * the override row for `azure/multilingual-e5-large`.
+     * Overrides file: the Elastic Inference Service resolver stores `microsoft` models under
+     * provider=`azure`, so the override row for `azure/multilingual-e5-large` is filed under
+     * `azure` and a span emitted with provider=`azure` and the model name must hit it.
      */
     @Test
     void calculateCost_overrideMicrosoftProviderMapsToAzure() {
@@ -975,12 +990,11 @@ class CostServiceTest {
      * OpenRouter exposes Moonshot's Kimi family under a different namespace prefix
      * ({@code moonshotai/*}) than LiteLLM's canonical ({@code moonshot/*}) — see the
      * {@code MOONSHOTAI_*} entries in {@code OpenRouterModelName}. Without a
-     * {@code moonshotai -> moonshot} alias in {@link CostService#PROVIDERS_MAPPING}, the
+     * {@code moonshotai -> moonshot} alias in {@link ProviderRegistry}, the
      * provider-prefix fallback returns null and the aggregator-routed request resolves to
      * {@code DEFAULT_COST}, silently under-charging every Kimi call routed through OpenRouter.
      * With the alias, the fallback maps {@code moonshotai} to the canonical {@code moonshot}
-     * and the pricing row is found. Mirrors the existing {@code microsoft -> azure} override
-     * pattern in the same map.
+     * and the pricing row is found.
      */
     @ParameterizedTest(name = "{0} via provider={1}")
     @MethodSource("provideAggregatorRoutedMoonshotCases")
@@ -1057,15 +1071,14 @@ class CostServiceTest {
     /**
      * Same gap as the {@code moonshotai} alias, for five more vendors OpenRouter resells.
      * {@code ai21}, {@code morph}, {@code inception}, {@code meta} and {@code zai} all carry
-     * non-zero-cost rows in {@code model_prices_and_context_window.json}, but none were in
-     * {@link CostService#PROVIDERS_MAPPING}, so {@code buildModelPrice} dropped every one of
-     * them at load time and the provider-prefix fallback had nothing to resolve against. Any
-     * call routed through OpenRouter fell through to {@code DEFAULT_COST}.
+     * non-zero-cost rows in {@code model_prices_and_context_window.json}, but none were registered
+     * in {@link CostService}, so {@code buildModelPrice} dropped every one of them at load time and
+     * the provider-prefix fallback had nothing to resolve against. Any call routed through
+     * OpenRouter fell through to {@code DEFAULT_COST}.
      * <p>
-     * {@code z-ai} needs two entries for the same reason {@code moonshot} does: the map is read
-     * both with the price file's {@code litellm_provider} ({@code zai}) when loading rows, and
-     * with the model-name prefix OpenRouter uses ({@code z-ai}) when resolving the fallback.
-     * The other four spell both the same way, so one entry each.
+     * Every provider in the price file now loads under its own name. {@code z-ai} still needs an
+     * alias for the same reason {@code moonshotai} does: OpenRouter's model-name prefix
+     * ({@code z-ai}) differs from the price file's {@code litellm_provider} ({@code zai}).
      * <p>
      * All of these take the {@link SpanCostCalculator#textGenerationCost} path. Four of the
      * models below publish a {@code cache_read_input_token_cost}, but none of these providers is
@@ -1183,8 +1196,8 @@ class CostServiceTest {
     }
 
     /**
-     * Covers registering the canonical providers added here, plus the {@code cohere_chat} alias that
-     * maps onto {@code cohere}, so that their entries in
+     * Covers providers that were once registered by hand, plus {@code cohere_chat}, which prices
+     * {@code cohere} spans as its sibling provider, so that their entries in
      * {@code model_prices_and_context_window.json} load instead of being silently dropped at startup.
      * Each case pins one representative token-priced model routed through
      * {@link SpanCostCalculator#textGenerationCost}. Image, duration and per-second priced models
@@ -1219,8 +1232,8 @@ class CostServiceTest {
                 // command-nightly: input 1e-06, output 2e-06 -> 1000*1e-06 + 200*2e-06 = 0.0014
                 Arguments.of("cohere", "command-nightly", "0.0014"),
                 // The price file splits Cohere across two litellm_provider values: `cohere` and
-                // `cohere_chat` (including command-r and command-r-plus). Registering only `cohere`
-                // left the chat rows dropped at load time, so this case pins the alias.
+                // `cohere_chat` (including command-r and command-r-plus). A `cohere` span finds the chat
+                // rows because the two are sibling providers, which this case pins.
                 // command-r-08-2024: input 1.5e-07, output 6e-07 -> 1000*1.5e-07 + 200*6e-07 = 0.00027
                 Arguments.of("cohere", "command-r-08-2024", "0.00027"),
                 // novita/zai-org/autoglm-phone-9b-multilingual: input 3.5e-08, output 1.38e-07
@@ -1252,5 +1265,143 @@ class CostServiceTest {
                 // openrouter/anthropic/claude-3.5-sonnet: input 3e-06, output 1.5e-05
                 // -> 1000*3e-06 + 200*1.5e-05 = 0.006
                 Arguments.of("openrouter", "openrouter/anthropic/claude-3.5-sonnet", "0.006"));
+    }
+
+    /**
+     * Every provider in the bundled LiteLLM price file is priced under its exact
+     * {@code litellm_provider} name, with no per-provider registration in {@link CostService}.
+     * Covers providers that used to be dropped at load time, and price-file names that used to be
+     * folded into another provider ({@code bedrock_converse}, {@code vertex_ai-language-models}, ...).
+     * Each provider with a token-priced row must price at least one of its rows.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideTokenPricedProviders")
+    void calculateCostPricesEveryProviderInThePriceFile(String provider, List<String> models) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
+
+        assertThat(models).anySatisfy(model -> assertThat(CostService.calculateCost(model, provider, usage, null))
+                .isGreaterThan(BigDecimal.ZERO));
+    }
+
+    private static Stream<Arguments> provideTokenPricedProviders() throws IOException {
+        Map<String, ModelCostData> prices = JsonUtils.readJsonFile(CostService.MODEL_PRICES_FILE,
+                new TypeReference<>() {
+                });
+        Map<String, List<String>> modelsByProvider = prices.entrySet().stream()
+                .filter(entry -> StringUtils.isNotBlank(entry.getValue().litellmProvider()))
+                .filter(entry -> isPositivePrice(entry.getValue().inputCostPerToken())
+                        || isPositivePrice(entry.getValue().outputCostPerToken()))
+                .collect(Collectors.groupingBy(entry -> entry.getValue().litellmProvider(), TreeMap::new,
+                        Collectors.mapping(Map.Entry::getKey, Collectors.toList())));
+        return modelsByProvider.entrySet().stream()
+                .map(entry -> Arguments.of(entry.getKey(), entry.getValue()));
+    }
+
+    private static boolean isPositivePrice(String price) {
+        return StringUtils.isNotBlank(price) && new BigDecimal(price).signum() > 0;
+    }
+
+    /**
+     * LiteLLM files some of a vendor's models under a sibling provider only, so a span is priced from its provider's
+     * siblings when the model isn't under the provider itself.
+     */
+    @ParameterizedTest(name = "{0} span, {1}")
+    @CsvSource({
+            // Most Bedrock models are only under bedrock_converse.
+            "bedrock, anthropic.claude-haiku-4-5-20251001-v1:0",
+            // The newer Vertex Gemini models are only under vertex_ai, which used to be dropped at load time.
+            "google_vertexai, gemini-2.0-flash",
+            "vertex_ai-language-models, gemini-2.0-flash",
+            "vertex-ai, gemini-2.0-flash"})
+    void calculateCostPricesAModelFiledUnderASiblingProvider(String provider, String model) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
+
+        assertThat(CostService.calculateCost(model, provider, usage, null)).isPositive();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"OpenAI", "OPENAI", " openai "})
+    void calculateCostResolvesTheProviderIgnoringCaseAndSurroundingSpaces(String provider) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
+
+        assertThat(CostService.calculateCost("gpt-4o", provider, usage, null))
+                .isEqualByComparingTo(CostService.calculateCost("gpt-4o", "openai", usage, null))
+                .isPositive();
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"  "})
+    void calculateCostTakesTheProviderFromAnExplicitModelPrefixWhenNoneIsSent(String provider) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
+
+        assertThat(CostService.calculateCost("anthropic/claude-sonnet-4-5", provider, usage, null))
+                .isEqualByComparingTo(CostService.calculateCost("claude-sonnet-4-5", "anthropic", usage, null))
+                .isPositive();
+    }
+
+    @Test
+    void calculateCostWithoutProviderNeverInfersItFromTheModelName() {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
+
+        assertThat(CostService.calculateCost("claude-sonnet-4-5", null, usage, null)).isZero();
+    }
+
+    /** Pricing runs while spans are ingested: a failure leaves the span without an estimated cost, never fails it. */
+    @Test
+    void calculateCostGivesNoEstimateWhenPricingFails() {
+        try (var spanUsageFactory = Mockito.mockStatic(SpanUsageFactory.class)) {
+            spanUsageFactory.when(() -> SpanUsageFactory.create(any(), any()))
+                    .thenThrow(new IllegalStateException("unreadable usage"));
+
+            assertThat(CostService.calculateCost("gpt-4o", "openai", Map.of("prompt_tokens", 1000), null)).isZero();
+        }
+    }
+
+    @Test
+    void calculateCostFallsBackToTheMetadataCostWhenPricingFails() {
+        ObjectNode metadata = new ObjectMapper().createObjectNode();
+        metadata.putObject("cost").put("currency", "USD").put("total_cost", 0.42);
+
+        try (var spanUsageFactory = Mockito.mockStatic(SpanUsageFactory.class)) {
+            spanUsageFactory.when(() -> SpanUsageFactory.create(any(), any()))
+                    .thenThrow(new IllegalStateException("unreadable usage"));
+
+            assertThat(CostService.calculateCost("gpt-4o", "openai", Map.of("prompt_tokens", 1000), metadata))
+                    .isEqualByComparingTo("0.42");
+        }
+    }
+
+    /** Usage clients really send, malformed or extreme, always prices without an error. */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void calculateCostNeverFailsOnOddUsage(String description, String provider, Map<String, Integer> usage) {
+        assertThatCode(() -> CostService.calculateCost("gpt-4o", provider, usage, null)).doesNotThrowAnyException();
+        assertThatCode(() -> CostService.calculateCost("claude-sonnet-4-5", provider, usage, null))
+                .doesNotThrowAnyException();
+    }
+
+    private static Stream<Arguments> calculateCostNeverFailsOnOddUsage() {
+        var nullCounts = new HashMap<String, Integer>();
+        nullCounts.put("prompt_tokens", null);
+        nullCounts.put("original_usage.input_tokens", null);
+        return Stream.of("openai", "anthropic", "gemini", "bedrock", "unknown-provider")
+                .flatMap(provider -> Stream.of(
+                        Arguments.of("null usage", provider, null),
+                        Arguments.of("empty usage", provider, Map.of()),
+                        Arguments.of("null counts", provider, nullCounts),
+                        Arguments.of("negative counts", provider, Map.of("prompt_tokens", -5,
+                                "completion_tokens", -1, "cache_read_input_tokens", -3, "input_tokens", -7)),
+                        Arguments.of("counts at the integer limit", provider, Map.of("prompt_tokens",
+                                Integer.MAX_VALUE, "completion_tokens", Integer.MAX_VALUE, "cache_read_input_tokens",
+                                Integer.MAX_VALUE, "cache_creation_input_tokens", Integer.MAX_VALUE)),
+                        Arguments.of("bare original_usage prefix", provider, Map.of("original_usage.", 5,
+                                "original_usage.original_usage.", 3)),
+                        Arguments.of("non-token keys", provider, Map.of("characters", 10, "latency_ms", 300)),
+                        Arguments.of("malformed list items", provider, Map.of("iterations.x.input_tokens", 5,
+                                "iterations..output_tokens", 2, "iterations.0", 1)),
+                        Arguments.of("cache larger than the prompt", provider, Map.of("prompt_tokens", 1,
+                                "cache_read_input_tokens", 1_000_000, "prompt_tokens_details.cached_tokens", 1_000_000,
+                                "completion_tokens", 1))));
     }
 }
