@@ -4,8 +4,16 @@ of suppressing spans, and is idempotent across re-patching (deep-copy /
 ``__setstate__``).
 """
 
+import asyncio
+from typing import AsyncGenerator
+
 import google.adk.telemetry as adk_telemetry
 import pytest
+from google.adk import agents as adk_agents
+from google.adk import runners as adk_runners
+from google.adk.models import base_llm, llm_request, llm_response
+from google.adk.sessions import in_memory_session_service
+from google.genai import types as genai_types
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -266,3 +274,72 @@ def test_adk_otel_patching__start_span_skip_listed_name__no_opik_bookkeeping(
     assert fake_backend.trace_trees == []
     exported_names = [s.name for s in otel_exporter.get_finished_spans()]
     assert "invocation" in exported_names
+
+
+class _FailingModel(base_llm.BaseLlm):
+    model: str = "fake-gemini"
+
+    async def generate_content_async(
+        self, request: llm_request.LlmRequest, stream: bool = False
+    ) -> AsyncGenerator[llm_response.LlmResponse, None]:
+        raise RuntimeError("model boom")
+        yield  # makes this an async generator, as ADK expects
+
+
+def test_adk_otel_patching__agent_fails_without_tracer_provider__trace_has_error_info(
+    opik_tracer_with_otel, monkeypatch, fake_backend
+):
+    """Without an app-installed TracerProvider ADK's spans are NonRecordingSpans,
+    and google-adk >= 2.12.0 records an escaping exception only when
+    span.is_recording() is true. The Opik trace must still get the error.
+
+    The module fixture installs a global TracerProvider, so the inner tracer is
+    swapped for a no-op one to reproduce the Opik-only setup."""
+    no_op_tracer = trace.NoOpTracer()
+    wrapper = OpikADKOtelTracer(
+        inner_start_as_current_span=no_op_tracer.start_as_current_span,
+        inner_start_span=no_op_tracer.start_span,
+        distributed_headers=None,
+    )
+    monkeypatch.setattr(
+        adk_telemetry.tracer, "start_as_current_span", wrapper.start_as_current_span
+    )
+    monkeypatch.setattr(adk_telemetry.tracer, "start_span", wrapper.start_span)
+
+    agent = adk_agents.LlmAgent(
+        name="weather_agent",
+        model=_FailingModel(),
+        instruction="Answer the weather question.",
+        before_agent_callback=opik_tracer_with_otel.before_agent_callback,
+        after_agent_callback=opik_tracer_with_otel.after_agent_callback,
+        before_model_callback=opik_tracer_with_otel.before_model_callback,
+        after_model_callback=opik_tracer_with_otel.after_model_callback,
+    )
+    session_service = in_memory_session_service.InMemorySessionService()
+    runner = adk_runners.Runner(
+        agent=agent, app_name="error-probe", session_service=session_service
+    )
+
+    async def _run() -> None:
+        await session_service.create_session(
+            app_name="error-probe", user_id="u1", session_id="s1"
+        )
+        async for _ in runner.run_async(
+            user_id="u1",
+            session_id="s1",
+            new_message=genai_types.Content(
+                role="user", parts=[genai_types.Part(text="weather?")]
+            ),
+        ):
+            pass
+
+    with pytest.raises(RuntimeError, match="model boom"):
+        asyncio.run(_run())
+    opik_tracer_with_otel.flush()
+
+    assert len(fake_backend.trace_trees) == 1
+    assert fake_backend.trace_trees[0].error_info == {
+        "exception_type": "RuntimeError",
+        "message": ANY_STRING,
+        "traceback": ANY_STRING,
+    }

@@ -427,7 +427,10 @@ class _OpikFinalizingSpan(opentelemetry.trace.Span):
         self._inner_span.update_name(name)
 
     def is_recording(self) -> bool:
-        return self._inner_span.is_recording()
+        # ADK records an escaping exception only on a recording span. Opik is
+        # recording this span even when the inner one is a NonRecordingSpan
+        # (no TracerProvider installed), whose writes are no-ops anyway.
+        return not self._ended
 
     def set_status(
         self,
