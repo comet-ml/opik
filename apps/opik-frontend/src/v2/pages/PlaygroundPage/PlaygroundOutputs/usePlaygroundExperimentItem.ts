@@ -4,6 +4,7 @@ import get from "lodash/get";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useExperimentById from "@/api/datasets/useExperimentById";
 import useAppStore from "@/store/AppStore";
+import { isPastWatchAge } from "@/lib/experiments";
 import {
   useDatasetFilters,
   useDatasetPage,
@@ -23,11 +24,12 @@ const ROWS_REFETCH_INTERVAL = 3000;
  */
 const hasFinished = (experiment: Experiment | undefined) =>
   !!experiment?.finished_at ||
-  // Transitional, for runs predating migration 000130, whose stamp is null for ever: remove once
-  // they are gone or backfilled. CANCELLED stays out — it is written when the stop is asked for,
-  // so it would settle rows whose calls are still landing.
+  // Transitional, for runs predating migration 000134, whose stamp is null forever: remove once
+  // they are gone or backfilled.
   experiment?.status === EXPERIMENT_STATUS.COMPLETED ||
-  experiment?.status === EXPERIMENT_STATUS.FAILED;
+  experiment?.status === EXPERIMENT_STATUS.FAILED ||
+  (experiment?.status === EXPERIMENT_STATUS.CANCELLED &&
+    isPastWatchAge(experiment));
 
 export type PlaygroundExperimentItem = {
   /** False while the row is still being processed, which is what the cell shows a loader for. */

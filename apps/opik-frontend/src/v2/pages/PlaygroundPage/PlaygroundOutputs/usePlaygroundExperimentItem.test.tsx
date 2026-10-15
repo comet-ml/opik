@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
@@ -12,19 +12,23 @@ const DATASET_ITEM_ID = "item-1";
 
 let experimentStatus: string;
 let finishedAt: string | null;
+let createdAt: string;
 /** When the rows and the finish stamp were each read, which the hook orders against each other. */
 let rowsReadAt: number;
 let experimentReadAt: number;
 
+const experimentByIdSpy: Mock = vi.fn(() => ({
+  data: {
+    id: EXPERIMENT_ID,
+    status: experimentStatus,
+    finished_at: finishedAt,
+    created_at: createdAt,
+  },
+  dataUpdatedAt: experimentReadAt,
+}));
+
 vi.mock("@/api/datasets/useExperimentById", () => ({
-  default: () => ({
-    data: {
-      id: EXPERIMENT_ID,
-      status: experimentStatus,
-      finished_at: finishedAt,
-    },
-    dataUpdatedAt: experimentReadAt,
-  }),
+  default: (...args: unknown[]) => experimentByIdSpy(...args),
 }));
 
 // Empty by default: the shape a stopped run leaves behind for everything it never reached.
@@ -68,6 +72,7 @@ describe("usePlaygroundExperimentItem", () => {
     vi.restoreAllMocks();
     experimentStatus = EXPERIMENT_STATUS.CANCELLED;
     finishedAt = new Date().toISOString();
+    createdAt = new Date().toISOString();
     experimentReadAt = Date.now();
     rowsReadAt = experimentReadAt + 1_000;
     rows = [];
@@ -93,7 +98,7 @@ describe("usePlaygroundExperimentItem", () => {
     await waitFor(() => expect(result.current.notRun).toBe(true));
   });
 
-  // Runs from before the stamp existed have it null for ever, and the prompt map is persisted, so a
+  // Runs from before the stamp existed have it null forever, and the prompt map is persisted, so a
   // stored playground pointing at one would poll its rows with no end.
   it("should settle a run that finished before the stamp existed", async () => {
     finishedAt = null;
@@ -135,6 +140,54 @@ describe("usePlaygroundExperimentItem", () => {
 
     await waitFor(() => expect(result.current.hasItem).toBe(false));
     expect(result.current.notRun).toBe(false);
+  });
+
+  // A cancelled run can carry a null stamp for good: purgeIfCancelledWhilePublishing swallows a
+  // failed write, and a drained run has no consumer left to make it again (OPIK_8785, items 1 and
+  // 4). Without this the status is re-read every second for as long as the tab is open.
+  it("should settle a run cancelled too long ago for anything to still be landing", async () => {
+    finishedAt = null;
+    createdAt = new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString();
+
+    const { result } = renderItem();
+
+    await waitFor(() => expect(result.current.notRun).toBe(true));
+  });
+
+  // The cases above prove the cell stops waiting. This is the other half of the same read: a run
+  // that can never be seen to finish is re-read every second for as long as the tab is open.
+  describe("how long the run keeps being read for", () => {
+    const interval = () => {
+      renderItem();
+      const options = experimentByIdSpy.mock.calls.at(-1)?.[1];
+      return options?.refetchInterval?.({
+        state: {
+          data: {
+            status: experimentStatus,
+            finished_at: finishedAt,
+            created_at: createdAt,
+          },
+        },
+      });
+    };
+
+    it("should stop reading a run cancelled too long ago to still be landing items", () => {
+      finishedAt = null;
+      createdAt = new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString();
+
+      expect(interval()).toBe(false);
+    });
+
+    it("should keep reading one stopped recently enough that items may still arrive", () => {
+      finishedAt = null;
+      createdAt = new Date().toISOString();
+
+      expect(interval()).toBe(1000);
+    });
+
+    it("should stop reading a run that recorded its finish", () => {
+      expect(interval()).toBe(false);
+    });
   });
 
   it("should keep waiting while the run is still going", async () => {
