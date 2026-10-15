@@ -125,6 +125,47 @@ describe("GuidanceSheet", () => {
     );
   });
 
+  it("lets the first guidance be written when the project has no job yet", () => {
+    renderSheet({ job: null });
+
+    const field = screen.getByLabelText("About this project");
+    expect(field).not.toHaveAttribute("readonly");
+    fireEvent.change(field, { target: { value: "Retries are expected." } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save and run diagnostic" }),
+    );
+
+    expect(mutate).toHaveBeenCalledWith(
+      { projectId: "p1", guidance: "Retries are expected." },
+      expect.anything(),
+    );
+  });
+
+  it("follows a newer save while the draft is untouched, but keeps edits", () => {
+    const { rerender } = renderSheet({});
+    const newer = { ...job, guidance: "Only report billing failures." };
+    rerender(
+      <GuidanceSheet open setOpen={vi.fn()} projectId="p1" job={newer} />,
+    );
+
+    const field = screen.getByLabelText("About this project");
+    expect(field).toHaveValue("Only report billing failures.");
+    expect(
+      screen.getByRole("button", { name: "Save guidance" }),
+    ).toBeDisabled();
+
+    fireEvent.change(field, { target: { value: "My edit" } });
+    rerender(
+      <GuidanceSheet
+        open
+        setOpen={vi.fn()}
+        projectId="p1"
+        job={{ ...job, guidance: "Yet another save." }}
+      />,
+    );
+    expect(field).toHaveValue("My edit");
+  });
+
   it("doesn't run after saving when a run started in the meantime", () => {
     let finishSave: () => void = () => {};
     mutate.mockImplementation((_vars, options) => {
