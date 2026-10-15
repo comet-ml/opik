@@ -174,6 +174,11 @@ class ThreadDAOImpl implements ThreadDAO {
             ;
             """;
 
+    /**
+     * The span_weeks lookup repeats the read's {@code groupArray(traces_final_ids)} form on purpose: ClickHouse caches
+     * that scalar subquery, so the lookup costs no extra read, whereas {@code IN (SELECT id FROM traces_final_ids)}
+     * re-reads the set.
+     */
     @VisibleForTesting
     static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
@@ -320,6 +325,21 @@ class ThreadDAOImpl implements ThreadDAO {
                           <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                       <endif>
                   <endif>
+                  <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                      SELECT id_week FROM span_weeks
+                      WHERE workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      <if(page_pushdown)>
+                          AND trace_id IN (SELECT id FROM traces_final)
+                      <else>
+                          <if(traces_final_ids)>
+                              AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
+                          <else>
+                              <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                              <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                          <endif>
+                      <endif>
+                  )<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), spans_agg AS (
@@ -973,6 +993,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
                   AND trace_id IN (SELECT DISTINCT id FROM traces_ids)
+                  <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN (SELECT DISTINCT id FROM traces_ids))<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), spans_agg AS (
@@ -1255,6 +1276,11 @@ class ThreadDAOImpl implements ThreadDAO {
     // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
     // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
     // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
+    /**
+     * The span_weeks lookup repeats the read's {@code groupArray(traces_final_ids)} form on purpose: ClickHouse caches
+     * that scalar subquery, so the lookup costs no extra read, whereas {@code IN (SELECT id FROM traces_final_ids)}
+     * re-reads the set.
+     */
     @VisibleForTesting
     static final String SELECT_TRACE_THREADS_STATS = """
             SELECT
@@ -1382,6 +1408,17 @@ class ThreadDAOImpl implements ThreadDAO {
                           <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                           <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                       <endif>
+                      <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                          SELECT id_week FROM span_weeks
+                          WHERE workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          <if(traces_final_ids)>
+                              AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
+                          <else>
+                              <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                              <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                          <endif>
+                      )<endif>
                     ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ), spans_agg AS (
@@ -1704,6 +1741,7 @@ class ThreadDAOImpl implements ThreadDAO {
                                     criteria,
                                     THREAD_SEARCH_CLAUSE,
                                     traceColumnsNonNullable());
+                            addSpanWeeksBound(template);
 
                             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
                             addExcludeFlags(template, criteria);
@@ -1822,6 +1860,7 @@ class ThreadDAOImpl implements ThreadDAO {
     public Mono<TraceThread> findById(@NonNull UUID projectId, @NonNull String threadId, boolean truncate) {
         return makeMonoContextAware((userName, workspaceId) -> asyncTemplate.nonTransaction(connection -> {
             var template = TemplateUtils.newST(SELECT_TRACES_THREAD_BY_ID);
+            addSpanWeeksBound(template);
             template.add("truncate", truncate)
                     .add("log_comment",
                             getLogComment("find_thread_by_id", workspaceId, userName, threadId));
@@ -1868,6 +1907,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     criteria,
                     THREAD_SEARCH_CLAUSE,
                     traceColumnsNonNullable());
+            addSpanWeeksBound(template);
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
             addExcludeFlags(template, criteria);
 
@@ -1907,6 +1947,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     criteria,
                     THREAD_SEARCH_CLAUSE,
                     traceColumnsNonNullable());
+            addSpanWeeksBound(statsSQL);
             statsSQL.add("log_comment", getLogComment("thread_stats", workspaceId, userName, ""));
             addTracesPartitionedFlag(statsSQL);
 
@@ -2031,5 +2072,11 @@ class ThreadDAOImpl implements ThreadDAO {
     private Instant readEpochSentinel(Row row, String fieldName) {
         var value = row.get(fieldName, Instant.class);
         return traceColumnsNonNullable() ? epochToNull(value) : value;
+    }
+
+    private void addSpanWeeksBound(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
+        }
     }
 }
