@@ -42,6 +42,13 @@ class AiLabelSweepDAO {
      */
     @Builder(toBuilder = true)
     record SweepTask(@NonNull String name, @NonNull List<Integer> versions, @NonNull List<Instant> appliesFrom) {
+
+        static SweepTask of(AiLabelTask task) {
+            var versions = task.versions();
+            return new SweepTask(task.name(),
+                    versions.stream().map(AiLabelTask.Version::version).toList(),
+                    versions.stream().map(AiLabelTask.Version::appliesFrom).toList());
+        }
     }
 
     record Candidate(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID traceId,
@@ -198,14 +205,7 @@ class AiLabelSweepDAO {
                             .bind("max_attempts", config.getRetry().getMaxAttempts())
                             .bind("retry_delay_seconds", config.getRetry().getDelay().toSeconds())
                             .bind("pending_orphan_seconds", config.getPendingOrphanAge().toSeconds());
-                    for (int i = 0; i < tasks.size(); i++) {
-                        var task = tasks.get(i);
-                        statement.bind("task_name_" + i, task.name())
-                                .bind("versions_" + i, task.versions().toArray(Integer[]::new))
-                                .bind("applies_" + i, task.appliesFrom().stream()
-                                        .map(AiLabelSweepDAO::toEpochMicros)
-                                        .toArray(Long[]::new));
-                    }
+                    bindTasks(statement, tasks);
                     extraBinds.accept(statement);
                     return statement.execute();
                 });
@@ -236,6 +236,19 @@ class AiLabelSweepDAO {
                         .formatted(taskExpr, createdAtExpr, i))
                 .collect(Collectors.joining(", "));
         return "multiIf(%s, 0)".formatted(branches);
+    }
+
+    /** Binds what {@link #required} reads, by task index. */
+    static Statement bindTasks(Statement statement, List<SweepTask> tasks) {
+        for (int i = 0; i < tasks.size(); i++) {
+            var task = tasks.get(i);
+            statement.bind("task_name_" + i, task.name())
+                    .bind("versions_" + i, task.versions().toArray(Integer[]::new))
+                    .bind("applies_" + i, task.appliesFrom().stream()
+                            .map(AiLabelSweepDAO::toEpochMicros)
+                            .toArray(Long[]::new));
+        }
+        return statement;
     }
 
     private static long toEpochMicros(Instant instant) {

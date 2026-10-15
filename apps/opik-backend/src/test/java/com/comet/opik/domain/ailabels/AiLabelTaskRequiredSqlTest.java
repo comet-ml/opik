@@ -14,23 +14,21 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Java's {@link AiLabelTask#required(Instant)} and the sweep's SQL over {@link AiLabelTask#sqlVersions()} must agree,
- * or the sweep would ask for a version the tick never labels with (or the reverse).
+ * Java's {@link AiLabelTask#required(Instant)} and the sweep's SQL {@link AiLabelSweepDAO#required} must agree, or the
+ * sweep would ask for a version the tick never labels with (or the reverse).
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class AiLabelTaskRequiredSqlTest {
 
-    /** The spec 05 expression, with {@code applies_from} bound as ISO-8601 strings, as the DAOs bind timestamps. */
-    private static final String REQUIRED = """
-            SELECT arrayMax(arrayFilter((v, a) -> a <= parseDateTime64BestEffort(:created_at, 6),
-                                        :versions,
-                                        arrayMap(s -> parseDateTime64BestEffort(s, 6), :applies_from))) AS required
-            """;
+    private static final String REQUIRED = "SELECT %s AS required FROM (SELECT 'summary' AS task, %s AS created_at)"
+            .formatted(AiLabelSweepDAO.required("task", "created_at", 1),
+                    "parseDateTime64BestEffort(:created_at, 6)");
 
     private static final Instant BASE = Instant.parse("2026-10-01T00:00:00Z");
 
@@ -73,12 +71,10 @@ class AiLabelTaskRequiredSqlTest {
     }
 
     private Mono<Integer> sqlRequired(Case testCase) {
-        var sqlVersions = testCase.task().sqlVersions();
         return Mono.usingWhen(Mono.from(connectionFactory.create()),
-                connection -> Mono.from(connection.createStatement(REQUIRED)
+                connection -> Mono.from(AiLabelSweepDAO.bindTasks(connection.createStatement(REQUIRED),
+                        List.of(AiLabelSweepDAO.SweepTask.of(testCase.task())))
                         .bind("created_at", testCase.createdAt().toString())
-                        .bind("versions", sqlVersions.versions())
-                        .bind("applies_from", sqlVersions.appliesFrom())
                         .execute())
                         .flatMap(result -> Mono.from(result.map(
                                 (row, metadata) -> row.get("required", Number.class).intValue()))),
