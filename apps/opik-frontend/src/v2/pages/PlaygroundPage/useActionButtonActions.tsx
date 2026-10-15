@@ -42,6 +42,8 @@ import usePlaygroundStore, {
   useSetProgressPhase,
   useResetProgress,
   useSetWatchPaused,
+  useSetStopPending,
+  useForgetExperimentForPrompt,
   useUpdateOutputTraceId,
   useDatasetType,
   useDatasetFilters,
@@ -203,6 +205,8 @@ const useActionButtonActions = ({
   const setProgressPhase = useSetProgressPhase();
   const resetProgress = useResetProgress();
   const setWatchPaused = useSetWatchPaused();
+  const setStopPending = useSetStopPending();
+  const forgetExperimentForPrompt = useForgetExperimentForPrompt();
 
   const stopPolling = useCallback(() => {
     abortControllersRef.current.forEach(({ controller }) => controller.abort());
@@ -240,48 +244,94 @@ const useActionButtonActions = ({
   }, [setIsRunInFlight]);
 
   const cancelBackendRun = useCallback(
-    (promptIds?: string[]) => {
+    (promptIds: string[]) => {
       if (!isBackendRun) return;
 
       const experimentByPromptId =
         usePlaygroundStore.getState().experimentByPromptId ?? {};
-      const experimentIds = (promptIds ?? Object.keys(experimentByPromptId))
+      const experimentIds = promptIds
         .map((promptId) => experimentByPromptId[promptId])
         .filter(Boolean);
 
-      if (experimentIds.length === 0) return;
+      // Nothing to cancel by id yet: /execute has not answered, so the run exists on the server
+      // but this tab cannot name it. Remember the stop and replay it when the ids arrive, keeping
+      // any stop already waiting so a second one does not drop the first.
+      if (experimentIds.length === 0) {
+        const waiting = usePlaygroundStore.getState().stopPending ?? [];
+        setStopPending([...new Set([...waiting, ...promptIds])]);
+        return;
+      }
 
       releaseRunInFlight();
       cancelExperimentRun({ experimentIds });
       refreshRunViews();
     },
-    [isBackendRun, cancelExperimentRun, releaseRunInFlight, refreshRunViews],
+    [
+      isBackendRun,
+      cancelExperimentRun,
+      releaseRunInFlight,
+      refreshRunViews,
+      setStopPending,
+    ],
   );
+
+  /**
+   * The launch failed, so a stop waiting on its ids has nothing left to cancel. Dropping only this
+   * prompt leaves a stop queued against a sibling launch that is still open.
+   */
+  const dropQueuedStop = useCallback(
+    (promptId: string) => {
+      const waiting = usePlaygroundStore.getState().stopPending;
+      if (!waiting) return;
+
+      const remaining = waiting.filter((id) => id !== promptId);
+      setStopPending(remaining.length ? remaining : null);
+    },
+    [setStopPending],
+  );
+
+  /**
+   * Applies a stop that was pressed before /execute answered. The mapping is in the store by the
+   * time this runs, so the same cancel path that had nothing to work with now finds the ids.
+   * Returns whether the run was stopped, so the caller knows not to start watching it.
+   */
+  const applyQueuedStop = useCallback(() => {
+    const queued = usePlaygroundStore.getState().stopPending;
+    if (!queued) return false;
+
+    cancelBackendRun(queued);
+    settleRun();
+    return true;
+  }, [cancelBackendRun, settleRun]);
 
   /**
    * Leaving the page, as opposed to stopping the run. A server-side run outlives it, so cancelling
    * here would end the run, and clearing the in-flight flag would stop the sidebar watching for it.
    */
   const stopWatching = useCallback(() => {
-    abortControllersRef.current.forEach(({ controller }) => controller.abort());
-    abortControllersRef.current.clear();
     // The poll is a timeout chain and outlives the page; left running it settles the run here.
+    // A scoped poll ignores isToStopRef by design, so moving the generation is what reaches it.
+    stopPolling();
     isToStopRef.current = true;
 
     if (!isBackendRun) {
       settleRun();
     }
-  }, [settleRun, isBackendRun]);
+  }, [stopPolling, settleRun, isBackendRun]);
 
   const stopAll = useCallback(() => {
+    // Read before settling, which empties the map: these are the prompts the stop covers, and a
+    // stop that has to wait for ids needs to name them.
+    const { isRunningMap } = usePlaygroundStore.getState();
+    const running = Object.keys(isRunningMap).filter((id) => isRunningMap[id]);
+
     announcePendingRef.current = false;
     scopedAnnounceRef.current.clear();
     settleRun();
     isToStopRef.current = true;
-    abortControllersRef.current.forEach(({ controller }) => controller.abort());
-    abortControllersRef.current.clear();
-    cancelBackendRun();
-  }, [settleRun, cancelBackendRun]);
+    stopPolling();
+    cancelBackendRun(running);
+  }, [settleRun, stopPolling, cancelBackendRun]);
 
   const stopSingle = useCallback(
     (promptId: string) => {
@@ -671,6 +721,8 @@ const useActionButtonActions = ({
         }
       });
 
+      if (applyQueuedStop()) return;
+
       setIsRunInFlight(true);
       setProgressPhase("running");
       setProgress(0, response.total_items);
@@ -687,6 +739,7 @@ const useActionButtonActions = ({
       isToStopRef.current = false;
     }
   }, [
+    applyQueuedStop,
     datasetName,
     datasetId,
     datasetVersionId,
@@ -820,6 +873,9 @@ const useActionButtonActions = ({
 
       setPromptRunning(promptId, true);
       scopedAnnounceRef.current.add(promptId);
+      // Until /execute answers, this prompt's previous experiment is the only id on hand, and a
+      // stop pressed now would cancel that finished run instead of queueing for this one.
+      forgetExperimentForPrompt(promptId);
 
       const experimentName = getExperimentNameForPrompt(prompt.id);
 
@@ -841,10 +897,7 @@ const useActionButtonActions = ({
         const experiment = response.experiments[0];
         if (!experiment) {
           setPromptRunning(promptId, false);
-          return;
-        }
-
-        if (!usePlaygroundStore.getState().isRunningMap[promptId]) {
+          dropQueuedStop(promptId);
           return;
         }
 
@@ -855,6 +908,14 @@ const useActionButtonActions = ({
           [promptId]: experiment.experiment_id,
         });
         setRunTotalItemsForPrompts([promptId], experiment.total_items);
+
+        // Record the id before deciding whether to watch: a run stopped mid-launch still exists on
+        // the server, and cancelling it needs the id the stop could not reach.
+        if (applyQueuedStop()) return;
+        if (!usePlaygroundStore.getState().isRunningMap[promptId]) {
+          return;
+        }
+
         setIsRunInFlight(true);
 
         queryClient.invalidateQueries({ queryKey: ["experiments"] });
@@ -879,6 +940,7 @@ const useActionButtonActions = ({
         );
       } catch {
         setPromptRunning(promptId, false);
+        dropQueuedStop(promptId);
       }
     },
     [
@@ -900,6 +962,9 @@ const useActionButtonActions = ({
       selectedRuleIds,
       datasetItemFilters,
       evaluationMethod,
+      applyQueuedStop,
+      forgetExperimentForPrompt,
+      dropQueuedStop,
     ],
   );
 

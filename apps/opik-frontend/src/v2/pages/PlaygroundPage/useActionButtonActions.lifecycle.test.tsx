@@ -139,6 +139,74 @@ describe("useActionButtonActions lifecycle", () => {
     });
   });
 
+  // A single-prompt run polls with a scope, and a scoped poll ignores isToStopRef on purpose, so
+  // that stopping one prompt leaves its siblings watching. Nothing else reached it, so its timer
+  // chain outlived the page: an orphan still reading experiments, and a second one beside it after
+  // the next run started.
+  describe("a scoped run the page stops following", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      runExperimentExecution.mockReset();
+      runExperimentExecution.mockResolvedValue({
+        experiments: [{ experiment_id: EXPERIMENT_A }],
+        total_items: 1,
+      });
+      getExperimentById.mockReset();
+      getExperimentById.mockResolvedValue({
+        status: EXPERIMENT_STATUS.RUNNING,
+        trace_count: 0,
+      });
+      usePlaygroundStore.setState({
+        promptIds: [PROMPT_A],
+        promptMap: {
+          [PROMPT_A]: { id: PROMPT_A, name: "A", messages: [], configs: {} },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+      });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const watchUntilItPolls = async () => {
+      const rendered = renderActions("dataset-1");
+      await act(async () => {
+        await rendered.result.current.runSingle(PROMPT_A);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(EXPERIMENT_POLL_INTERVAL_MS);
+      });
+      expect(getExperimentById).toHaveBeenCalled();
+      getExperimentById.mockClear();
+      return rendered;
+    };
+
+    const keepTheClockRunning = async () => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(EXPERIMENT_POLL_INTERVAL_MS * 5);
+      });
+    };
+
+    it("should stop reading experiments once the page leaves", async () => {
+      const { result } = await watchUntilItPolls();
+
+      act(() => result.current.stopWatching());
+      await keepTheClockRunning();
+
+      expect(getExperimentById).not.toHaveBeenCalled();
+    });
+
+    it("should stop reading experiments once the user stops everything", async () => {
+      const { result } = await watchUntilItPolls();
+
+      act(() => result.current.stopAll());
+      await keepTheClockRunning();
+
+      expect(getExperimentById).not.toHaveBeenCalled();
+    });
+  });
+
   // Keyed by prompt and taken per variant. Keying by experiment id instead leaves every lookup in
   // the resume missing, and dividing the batch total assumes every variant ran the same items.
   describe("recording what a run dispatched", () => {
@@ -365,6 +433,217 @@ describe("useActionButtonActions lifecycle", () => {
       await runScoped(result.current.runSingle, PROMPT_B, EXPERIMENT_B);
 
       expect(usePlaygroundStore.getState().isRunInFlight).toBe(false);
+    });
+  });
+
+  // Stop pressed between Run and the server answering. There is nothing to cancel by id yet, so the
+  // old code returned and the run carried on — started, unstoppable from here, and unwatched.
+  describe("stopped before the server names the run", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      getExperimentById.mockReset();
+      getExperimentById.mockResolvedValue({
+        status: EXPERIMENT_STATUS.RUNNING,
+        trace_count: 0,
+      });
+      usePlaygroundStore.setState({
+        promptIds: [PROMPT_A],
+        promptMap: {
+          [PROMPT_A]: { id: PROMPT_A, name: "A", messages: [], configs: {} },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+      });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("should cancel the run as soon as the response names it", async () => {
+      let answer: (value: unknown) => void = () => {};
+      runExperimentExecution.mockReturnValue(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      );
+
+      const { result } = renderActions("dataset-1");
+
+      let running: Promise<void>;
+      await act(async () => {
+        running = result.current.runAll();
+      });
+
+      // Stop lands while the request is still open: no ids exist anywhere yet.
+      act(() => result.current.stopAll());
+      expect(cancelExperimentRun).not.toHaveBeenCalled();
+
+      await act(async () => {
+        answer({
+          experiments: [
+            { experiment_id: EXPERIMENT_A, prompt_index: 0, total_items: 5 },
+          ],
+          total_items: 5,
+        });
+        await running;
+      });
+
+      expect(cancelExperimentRun).toHaveBeenCalledWith({
+        experimentIds: [EXPERIMENT_A],
+      });
+      expect(usePlaygroundStore.getState().isRunInFlight).toBe(false);
+    });
+
+    // Re-running one prompt is the common case, and the id of its previous run is still in the
+    // store. A stop in the launch window must reach the run that is going, not the one that ended.
+    it("should cancel the new run rather than the one the prompt ran last", async () => {
+      usePlaygroundStore.setState({
+        experimentByPromptId: { [PROMPT_A]: EXPERIMENT_B },
+      });
+
+      let answer: (value: unknown) => void = () => {};
+      runExperimentExecution.mockReturnValue(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      );
+
+      const { result } = renderActions("dataset-1");
+
+      let running: Promise<void>;
+      await act(async () => {
+        running = result.current.runSingle(PROMPT_A);
+      });
+
+      act(() => result.current.stopSingle(PROMPT_A));
+      expect(cancelExperimentRun).not.toHaveBeenCalled();
+
+      await act(async () => {
+        answer({
+          experiments: [
+            { experiment_id: EXPERIMENT_A, prompt_index: 0, total_items: 5 },
+          ],
+          total_items: 5,
+        });
+        await running;
+      });
+
+      expect(cancelExperimentRun).toHaveBeenCalledWith({
+        experimentIds: [EXPERIMENT_A],
+      });
+    });
+
+    // A stop waits on ids the launch was going to bring. When the launch fails instead they never
+    // come, and a stop left queued holds the prompt on a Stopping it can never finish.
+    it("should let the prompt run again when the launch it was stopping never started", async () => {
+      let fail: (reason: unknown) => void = () => {};
+      runExperimentExecution.mockReturnValue(
+        new Promise((_, reject) => {
+          fail = reject;
+        }),
+      );
+
+      const { result } = renderActions("dataset-1");
+
+      let running: Promise<void>;
+      await act(async () => {
+        running = result.current.runSingle(PROMPT_A);
+      });
+
+      act(() => result.current.stopSingle(PROMPT_A));
+      expect(usePlaygroundStore.getState().stopPending).toEqual([PROMPT_A]);
+
+      await act(async () => {
+        fail(new Error("execute never answered"));
+        await running;
+      });
+
+      expect(usePlaygroundStore.getState().stopPending).toBeNull();
+    });
+
+    // Each prompt launches on its own request, so one failing says nothing about the other. Its
+    // sibling's stop is still waiting on a response that is still coming.
+    it("should keep a sibling's stop when only one launch fails", async () => {
+      usePlaygroundStore.setState({
+        promptIds: [PROMPT_A, PROMPT_B],
+        promptMap: {
+          [PROMPT_A]: { id: PROMPT_A, name: "A", messages: [], configs: {} },
+          [PROMPT_B]: { id: PROMPT_B, name: "B", messages: [], configs: {} },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+      });
+
+      let failA: (reason: unknown) => void = () => {};
+      runExperimentExecution
+        .mockReturnValueOnce(
+          new Promise((_, reject) => {
+            failA = reject;
+          }),
+        )
+        .mockReturnValueOnce(new Promise(() => {}));
+
+      const { result } = renderActions("dataset-1");
+
+      let runningA: Promise<void>;
+      await act(async () => {
+        runningA = result.current.runSingle(PROMPT_A);
+        result.current.runSingle(PROMPT_B);
+      });
+
+      act(() => result.current.stopSingle(PROMPT_A));
+      act(() => result.current.stopSingle(PROMPT_B));
+
+      await act(async () => {
+        failA(new Error("execute never answered"));
+        await runningA;
+      });
+
+      expect(usePlaygroundStore.getState().stopPending).toEqual([PROMPT_B]);
+    });
+
+    // Two prompts stopped one after the other in the same window. Both are waiting on the same
+    // response, so the second must not take the first one's place in the queue.
+    it("should keep both stops when each prompt is stopped on its own", async () => {
+      usePlaygroundStore.setState({
+        promptIds: [PROMPT_A, PROMPT_B],
+        promptMap: {
+          [PROMPT_A]: { id: PROMPT_A, name: "A", messages: [], configs: {} },
+          [PROMPT_B]: { id: PROMPT_B, name: "B", messages: [], configs: {} },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+      });
+
+      let answer: (value: unknown) => void = () => {};
+      runExperimentExecution.mockReturnValue(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      );
+
+      const { result } = renderActions("dataset-1");
+
+      let running: Promise<void>;
+      await act(async () => {
+        running = result.current.runAll();
+      });
+
+      act(() => result.current.stopSingle(PROMPT_A));
+      act(() => result.current.stopSingle(PROMPT_B));
+
+      await act(async () => {
+        answer({
+          experiments: [
+            { experiment_id: EXPERIMENT_A, prompt_index: 0, total_items: 5 },
+            { experiment_id: EXPERIMENT_B, prompt_index: 1, total_items: 5 },
+          ],
+          total_items: 10,
+        });
+        await running;
+      });
+
+      expect(cancelExperimentRun).toHaveBeenCalledWith({
+        experimentIds: [EXPERIMENT_A, EXPERIMENT_B],
+      });
     });
   });
 
