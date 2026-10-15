@@ -1256,6 +1256,14 @@ def test_span_oql__in_not_in_operators__happyflow(filter_string, expected):
             "environment not_in ()",
             r"Expected at least one item inside.*",
         ),
+        (
+            'environment in ("hello,world")',
+            r"Array element values cannot contain commas.*",
+        ),
+        (
+            'environment not_in ("a", "b,c")',
+            r"Array element values cannot contain commas.*",
+        ),
     ],
 )
 def test_oql__in_operator__invalid_array_syntax(filter_string, error_pattern):
