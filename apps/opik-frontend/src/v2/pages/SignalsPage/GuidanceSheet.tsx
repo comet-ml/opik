@@ -43,19 +43,21 @@ const GuidanceSheet: React.FC<GuidanceSheetProps> = ({
   const [guidance, setGuidance] = useState(saved);
   const { mutate, isPending } = useUpdateAgentInsightsGuidanceMutation();
 
-  // Start from the saved text once per opening, as soon as it's loaded, not on
-  // every refetch while open (that would wipe what's being typed).
-  const seeded = useRef(false);
+  // Start from the saved text as soon as it's loaded, and follow newer saves
+  // (someone else saving) while the draft is untouched; once edited, a refetch
+  // never wipes what's being typed. Null = nothing seeded in this opening yet.
+  const seededText = useRef<string | null>(null);
   useEffect(() => {
     if (!open) {
-      seeded.current = false;
+      seededText.current = null;
       return;
     }
-    if (!seeded.current && isLoaded) {
-      setGuidance(saved);
-      seeded.current = true;
-    }
-  }, [open, isLoaded, saved]);
+    if (!isLoaded) return;
+    const untouched =
+      seededText.current === null || guidance === seededText.current;
+    if (untouched && guidance !== saved) setGuidance(saved);
+    if (untouched) seededText.current = saved;
+  }, [open, isLoaded, saved, guidance]);
 
   // A run started elsewhere while saving (another tab, auto-run) drops onRun,
   // so "Save and run" checks the latest one, not the one from when it was clicked.
