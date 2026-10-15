@@ -66,15 +66,6 @@ The Java backend calls the Python backend for evaluator execution, and both serv
 
 The limits other than the timeout apply only to the `docker` strategy.
 
-<Warning>
-  With the `process` strategy, anyone who can create an online evaluation rule can run code with the Python backend's
-  privileges and reach everything it can, including its environment variables and the internal network. Use it only
-  when everyone who can reach the Opik API is trusted with that access. In open-source deployments, which have
-  authentication disabled, that means everyone who can reach the instance. Use the `docker` strategy when
-  evaluator code comes from people you do not trust with that access. See
-  [SECURITY.md](https://github.com/comet-ml/opik/blob/main/SECURITY.md) for how we scope reports about this feature.
-</Warning>
-
 _You can find the full Python backend codebase in GitHub under the [`apps/opik-python-backend`](https://github.com/comet-ml/opik/tree/main/apps/opik-python-backend) folder._
 
 ## Frontend Application
