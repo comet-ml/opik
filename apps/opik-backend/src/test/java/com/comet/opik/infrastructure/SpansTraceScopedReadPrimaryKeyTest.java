@@ -13,6 +13,8 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -65,6 +67,9 @@ class SpansTraceScopedReadPrimaryKeyTest {
     private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
+
+    /** Ingest only accepts UUIDv7 trace ids. */
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private static final String FIND_SPANS = "find_spans_by_project_id";
     private static final String FIND_SPAN_STREAM = "find_span_stream";
@@ -188,7 +193,7 @@ class SpansTraceScopedReadPrimaryKeyTest {
 
     /** Creates {@code count} spans in a new trace and returns them in creation (ascending id) order. */
     private List<Span> createSpans(String projectName, int count) {
-        var traceId = UUID.randomUUID();
+        var traceId = ID_GENERATOR.generateId();
         var spans = IntStream.range(0, count)
                 .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
                         .projectId(null)
