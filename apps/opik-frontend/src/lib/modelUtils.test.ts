@@ -717,6 +717,51 @@ describe("penalties on an OpenAI key set to the Responses API", () => {
 // `requesty/openai/*` ids reach OpenAI unchanged, so they must follow the same reasoning rules as
 // the bare OpenAI ids, while the wire model id keeps its `requesty/` prefix.
 describe("Requesty models", () => {
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  // The pipeline mode belongs to the OpenAI key: Requesty is always reached through Chat
+  // Completions, so a Responses API only effort is never offered for its ids.
+  const REQUESTY_GPT_5_6_LUNA =
+    "requesty/openai/gpt-5.6-luna" as PROVIDER_MODEL_TYPE;
+
+  it("ignores the OpenAI key's Responses API mode for a requesty/openai id", () => {
+    const snapshot = getLatestProviderModelsSnapshot();
+    setLatestProviderModelsSnapshot({
+      ...snapshot,
+      [PROVIDER_TYPE.REQUESTY]: [
+        ...(snapshot[PROVIDER_TYPE.REQUESTY] ?? []),
+        { value: REQUESTY_GPT_5_6_LUNA, label: "openai/gpt-5.6-luna" },
+      ],
+    });
+
+    expect(
+      resolveEffort(
+        REQUESTY_GPT_5_6_LUNA,
+        { reasoningEffort: "max" },
+        "responses_api",
+      ),
+    ).toEqual({ reasoningEffort: "high" });
+    expect(
+      sanitizeConfigForRequest(
+        REQUESTY_GPT_5_6_LUNA,
+        { reasoningEffort: "max" },
+        "responses_api",
+      ).reasoningEffort,
+    ).toBe("high");
+    expect(
+      updateProviderConfig(
+        { reasoningEffort: "max" as OpenAIReasoningEffort },
+        {
+          model: REQUESTY_GPT_5_6_LUNA,
+          provider: REQUESTY,
+          openAiPipelineMode: "responses_api",
+        },
+      )?.reasoningEffort,
+    ).toBe("high");
+  });
+
   it("resolves to the Requesty provider from the static registry seed", () => {
     expect(
       getProviderFromModel(PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5),

@@ -70,7 +70,8 @@ const PromptModelConfigs = ({
     parseComposedProviderType(composedProviderType);
 
   const getProviderForm = () => {
-    // Requesty forwards the OpenAI chat completions parameters, so it shares the OpenAI form.
+    // Requesty forwards the OpenAI chat completions parameters, so it shares the OpenAI form. It
+    // always uses Chat Completions, so the OpenAI key's pipeline mode is not passed for it.
     if (
       provider === PROVIDER_TYPE.OPEN_AI ||
       provider === PROVIDER_TYPE.REQUESTY
@@ -81,7 +82,9 @@ const PromptModelConfigs = ({
           unsupportedParams={unsupportedParams}
           model={model}
           onChange={onChange}
-          openAiPipelineMode={openAiPipelineMode}
+          openAiPipelineMode={
+            provider === PROVIDER_TYPE.OPEN_AI ? openAiPipelineMode : undefined
+          }
         />
       );
     }
