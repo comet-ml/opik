@@ -19,13 +19,16 @@ let playgroundDataset: { datasetId: string | null; itemsTotal?: number } = {
 let datasetItemsTotal: number | null = null;
 
 let isResumingRun = false;
+let isPromptRunning = false;
+let isStopPending = false;
 
 vi.mock("@/store/PlaygroundStore", () => ({
   usePromptById: () => prompt,
-  useIsPromptRunning: () => false,
+  useIsPromptRunning: () => isPromptRunning,
+  useIsResumingRun: () => isResumingRun,
+  useIsStopPending: () => isStopPending,
   useDatasetType: () => datasetType,
   useDatasetItemsTotal: () => datasetItemsTotal,
-  useIsResumingRun: () => isResumingRun,
 }));
 
 vi.mock("@/hooks/usePlaygroundDataset", () => ({
@@ -60,11 +63,12 @@ const audioContent: MessageContent = [
 ];
 
 const onRun = vi.fn();
+const onStop = vi.fn();
 
 const renderButton = () =>
   render(
     <TooltipProvider delayDuration={0}>
-      <PlaygroundRunButton promptId="prompt-1" onRun={onRun} onStop={vi.fn()} />
+      <PlaygroundRunButton promptId="prompt-1" onRun={onRun} onStop={onStop} />
     </TooltipProvider>,
   );
 
@@ -77,10 +81,13 @@ const hoverRunButton = () =>
 
 beforeEach(() => {
   onRun.mockClear();
+  onStop.mockClear();
   datasetType = null;
   playgroundDataset = { datasetId: null };
   datasetItemsTotal = null;
   isResumingRun = false;
+  isPromptRunning = false;
+  isStopPending = false;
 });
 
 describe("PlaygroundRunButton", () => {
@@ -261,5 +268,33 @@ describe("PlaygroundRunButton", () => {
         "Message is empty. Please add some text to proceed",
       );
     });
+  });
+});
+
+describe("PlaygroundRunButton stop state", () => {
+  it("offers Stop while the prompt runs", () => {
+    prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4O, "Hello");
+    isPromptRunning = true;
+    renderButton();
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+
+    expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
+  // A stop pressed before /execute answers cannot cancel anything yet, so the button says so
+  // rather than offering a Stop that looks ignored.
+  it("says Stopping... and refuses a second press while the stop waits for ids", () => {
+    prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4O, "Hello");
+    isPromptRunning = true;
+    isStopPending = true;
+    renderButton();
+
+    const button = screen.getByRole("button", { name: "Stopping..." });
+    fireEvent.click(button);
+
+    expect(button).toBeDisabled();
+    expect(onStop).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
   });
 });

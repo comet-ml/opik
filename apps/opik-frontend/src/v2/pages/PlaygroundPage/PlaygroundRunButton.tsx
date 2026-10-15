@@ -1,5 +1,5 @@
 import React from "react";
-import { Pause, Play } from "lucide-react";
+import { Loader2, Pause, Play } from "lucide-react";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/ui/button";
@@ -9,6 +9,7 @@ import {
   useIsResumingRun,
   usePromptById,
   useDatasetItemsTotal,
+  useIsStopPending,
 } from "@/store/PlaygroundStore";
 import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
@@ -30,6 +31,7 @@ const PlaygroundRunButton = ({
   const prompt = usePromptById(promptId);
   const isPromptRunning = useIsPromptRunning(promptId);
   const isResumingRun = useIsResumingRun();
+  const isStopPending = useIsStopPending(promptId);
 
   const { datasetId, itemsTotal } = usePlaygroundDataset();
   const datasetType = useDatasetType();
@@ -71,7 +73,12 @@ const PlaygroundRunButton = ({
         className ?? "flex items-center justify-end border-b px-4 py-2"
       }
     >
-      {isPromptRunning ? (
+      {isStopPending ? (
+        <Button size="2xs" variant="outline" disabled>
+          <Loader2 className="mr-1 size-3.5 animate-spin" />
+          Stopping...
+        </Button>
+      ) : isPromptRunning ? (
         <Button size="2xs" variant="outline" onClick={onStop}>
           <Pause className="mr-1 size-3.5" />
           Stop

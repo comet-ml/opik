@@ -152,6 +152,7 @@ export type PlaygroundStore = {
   progressCompleted: number;
   progressPhase: "running" | "evaluating" | null;
   watchPaused: boolean;
+  stopPending: string[] | null;
   experimentName: string | null;
   lastSuggestedExperimentName: string | null;
   datasetType: DATASET_TYPE | null;
@@ -204,9 +205,11 @@ export type PlaygroundStore = {
   setProgressPhase: (phase: "running" | "evaluating" | null) => void;
   resetProgress: () => void;
   setWatchPaused: (paused: boolean) => void;
+  setStopPending: (promptIds: string[] | null) => void;
   setLastActiveProjectId: (projectId: string | null) => void;
   setDatasetType: (type: DATASET_TYPE | null) => void;
   setExperimentByPromptId: (map: Record<string, string>) => void;
+  forgetExperimentForPrompt: (promptId: string) => void;
   setScoresForDataset: (datasetId: string, ruleIds: string[] | null) => void;
 };
 
@@ -231,6 +234,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       progressCompleted: 0,
       progressPhase: null,
       watchPaused: false,
+      stopPending: null,
       experimentName: null,
       lastSuggestedExperimentName: null,
       datasetType: null,
@@ -441,6 +445,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           isRunInFlight: false,
           isResumingRun: false,
           watchPaused: false,
+          stopPending: null,
         }));
       },
       setIsResumingRun: (value) => {
@@ -520,6 +525,9 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       setWatchPaused: (paused) => {
         set((state) => ({ ...state, watchPaused: paused }));
       },
+      setStopPending: (promptIds) => {
+        set((state) => ({ ...state, stopPending: promptIds }));
+      },
       setLastActiveProjectId: (projectId) => {
         set((state) => ({ ...state, lastActiveProjectId: projectId }));
       },
@@ -545,6 +553,16 @@ const usePlaygroundStore = create<PlaygroundStore>()(
             outputMap: newOutputMap,
           };
         });
+      },
+      forgetExperimentForPrompt: (promptId) => {
+        set((state) => ({
+          ...state,
+          experimentByPromptId: Object.fromEntries(
+            Object.entries(state.experimentByPromptId).filter(
+              ([id]) => id !== promptId,
+            ),
+          ),
+        }));
       },
       setScoresForDataset: (datasetId, ruleIds) => {
         set((state) => ({
@@ -604,6 +622,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           isRunningMap,
           isResumingRun,
           watchPaused,
+          stopPending,
           ...rest
         } = state;
         /* eslint-enable @typescript-eslint/no-unused-vars */
@@ -802,6 +821,19 @@ export const useWatchPaused = () =>
 
 export const useSetWatchPaused = () =>
   usePlaygroundStore((state) => state.setWatchPaused);
+
+export const useSetStopPending = () =>
+  usePlaygroundStore((state) => state.setStopPending);
+
+export const useForgetExperimentForPrompt = () =>
+  usePlaygroundStore((state) => state.forgetExperimentForPrompt);
+
+export const useIsStopPending = (promptId?: string) =>
+  usePlaygroundStore((state) =>
+    promptId === undefined
+      ? state.stopPending !== null
+      : state.stopPending?.includes(promptId) ?? false,
+  );
 
 export const useResetProgress = () =>
   usePlaygroundStore((state) => state.resetProgress);
