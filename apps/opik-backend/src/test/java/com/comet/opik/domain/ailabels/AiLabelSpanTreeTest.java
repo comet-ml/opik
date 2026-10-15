@@ -1,0 +1,114 @@
+package com.comet.opik.domain.ailabels;
+
+import com.comet.opik.domain.ailabels.AiLabelRenderDAO.SpanRow;
+import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Random;
+import java.util.UUID;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class AiLabelSpanTreeTest {
+
+    private static final UUID TRACE_ID = UUID.randomUUID();
+    private static final Instant T0 = Instant.parse("2026-10-15T12:00:00Z");
+
+    @Test
+    void buildOrdersSiblingsByStartTimeThenId() {
+        var spans = List.of(
+                span("b", null, 1),
+                span("a", null, 1),
+                span("c", null, 0),
+                span("b2", "b", 5),
+                span("b1", "b", 5),
+                span("b0", "b", 9));
+
+        var tree = AiLabelSpanTree.build(spans);
+
+        assertThat(names(tree)).containsExactly("c", "a", "b");
+        assertThat(names(tree.getLast().spans())).containsExactly("b1", "b2", "b0");
+    }
+
+    @Test
+    void buildAttachesSpansWithAMissingParentToTheRootInStartOrder() {
+        var spans = List.of(
+                span("root", null, 0),
+                span("child", "root", 1),
+                span("orphan-late", "cut-off", 7),
+                span("orphan-early", "cut-off", 2),
+                span("orphan-child", "orphan-early", 3));
+
+        var tree = AiLabelSpanTree.build(spans);
+
+        assertThat(names(tree)).containsExactly("root", "orphan-early", "orphan-late");
+        assertThat(names(tree.get(1).spans())).containsExactly("orphan-child");
+    }
+
+    @Test
+    void buildBreaksAParentCycleAtItsEarliestSpan() {
+        var spans = List.of(
+                span("root", null, 0),
+                span("x", "z", 4),
+                span("y", "x", 5),
+                span("z", "y", 3),
+                span("self", "self", 9));
+
+        var tree = AiLabelSpanTree.build(spans);
+
+        assertThat(names(tree)).containsExactly("root", "z", "self");
+        assertThat(names(tree.get(1).spans())).containsExactly("x");
+        assertThat(names(tree.get(1).spans().getFirst().spans())).containsExactly("y");
+        assertThat(tree.get(1).spans().getFirst().spans().getFirst().spans()).isNull();
+        assertThat(tree.get(2).spans()).isNull();
+    }
+
+    @Test
+    void buildGivesTheSameTreeWhateverTheInputOrder() {
+        var fixtures = new AiLabelRenderFixtures(7, true);
+        var trace = fixtures.trace(10);
+        var spans = fixtures.spans(trace, 300, 8, 20);
+        var expected = AiLabelSpanTree.build(spans);
+
+        var random = new Random(11);
+        for (int i = 0; i < 5; i++) {
+            var shuffled = new ArrayList<>(spans);
+            Collections.shuffle(shuffled, random);
+            assertThat(AiLabelSpanTree.build(shuffled)).isEqualTo(expected);
+        }
+    }
+
+    @Test
+    void buildRendersEverySpanOnce() {
+        var fixtures = new AiLabelRenderFixtures(3, false);
+        var trace = fixtures.trace(10);
+        var spans = new ArrayList<>(fixtures.spans(trace, 500, 20, 5));
+        // Drop a few parents, as the per-trace span cap does.
+        spans.subList(0, 50).clear();
+
+        assertThat(count(AiLabelSpanTree.build(spans))).isEqualTo(spans.size());
+    }
+
+    private static long count(List<AiLabelSpan> spans) {
+        return spans == null ? 0 : spans.stream().mapToLong(span -> 1 + count(span.spans())).sum();
+    }
+
+    private static List<String> names(List<AiLabelSpan> spans) {
+        return Stream.ofNullable(spans).flatMap(List::stream).map(AiLabelSpan::name).toList();
+    }
+
+    private static SpanRow span(String id, String parentSpanId, int startSecond) {
+        return SpanRow.builder()
+                .traceId(TRACE_ID)
+                .id(id)
+                .parentSpanId(parentSpanId)
+                .name(id)
+                .type("general")
+                .startTime(T0.plusSeconds(startSecond))
+                .build();
+    }
+}
