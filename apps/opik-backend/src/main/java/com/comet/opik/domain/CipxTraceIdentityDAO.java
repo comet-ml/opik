@@ -87,16 +87,16 @@ public class CipxTraceIdentityDAO {
             List<String> instructionFilesVersionId,
             String instructionFilesStatus) {
 
-        // Lists and statuses default to empty so rows built without them stay valid.
+        // Lists and statuses default to empty so rows built without them stay valid; lists are copied.
         public TraceIdentityRow {
-            skillsScope = skillsScope == null ? List.of() : skillsScope;
-            skillsRoot = skillsRoot == null ? List.of() : skillsRoot;
-            skillsName = skillsName == null ? List.of() : skillsName;
-            skillsVersionId = skillsVersionId == null ? List.of() : skillsVersionId;
+            skillsScope = copyOrEmpty(skillsScope);
+            skillsRoot = copyOrEmpty(skillsRoot);
+            skillsName = copyOrEmpty(skillsName);
+            skillsVersionId = copyOrEmpty(skillsVersionId);
             skillsStatus = skillsStatus == null ? "" : skillsStatus;
-            instructionFilesScope = instructionFilesScope == null ? List.of() : instructionFilesScope;
-            instructionFilesPath = instructionFilesPath == null ? List.of() : instructionFilesPath;
-            instructionFilesVersionId = instructionFilesVersionId == null ? List.of() : instructionFilesVersionId;
+            instructionFilesScope = copyOrEmpty(instructionFilesScope);
+            instructionFilesPath = copyOrEmpty(instructionFilesPath);
+            instructionFilesVersionId = copyOrEmpty(instructionFilesVersionId);
             instructionFilesStatus = instructionFilesStatus == null ? "" : instructionFilesStatus;
             // ClickHouse treats each dotted group as one Nested column and rejects unequal lengths.
             if (skillsScope.size() != skillsRoot.size() || skillsRoot.size() != skillsName.size()
@@ -107,6 +107,14 @@ public class CipxTraceIdentityDAO {
                     || instructionFilesPath.size() != instructionFilesVersionId.size()) {
                 throw new IllegalArgumentException("instruction_files.* lists must have equal sizes");
             }
+        }
+
+        // Null list becomes empty; null elements become "" since List.copyOf rejects them.
+        private static List<String> copyOrEmpty(List<String> values) {
+            if (values == null) {
+                return List.of();
+            }
+            return values.stream().map(value -> value == null ? "" : value).toList();
         }
 
         public static TraceIdentityRow from(UUID traceId, UUID projectId, JsonNode metadata, Instant startTime,

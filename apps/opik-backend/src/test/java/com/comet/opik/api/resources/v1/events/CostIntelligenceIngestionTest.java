@@ -829,20 +829,35 @@ class CostIntelligenceIngestionTest {
             assertThat(row.skillsVersionId()).containsExactly("9f2c0003", "");
         }
 
+        @ParameterizedTest
+        @ValueSource(ints = {255, 256})
+        @DisplayName("a list at or under 256 entries is persisted with status listed")
+        void listWithinEntryCapIsListed(int size) {
+            var row = ingestRepositoryEdit(repository -> fillSkills(repository, size));
+
+            assertThat(row.skillsStatus()).isEqualTo("listed");
+            assertThat(row.skillsScope()).hasSize(size);
+            assertThat(row.skillsName()).hasSize(size).startsWith("n0").endsWith("n" + (size - 1));
+            assertThat(row.skillsVersionId()).hasSize(size);
+            assertThat(row.instructionFilesStatus()).isEqualTo("listed");
+        }
+
         @Test
         @DisplayName("a list over 256 entries is stored empty with status truncated")
         void listOverEntryCapIsTruncated() {
-            var row = ingestRepositoryEdit(repository -> {
-                var skills = repository.putArray("skills");
-                for (int i = 0; i < 257; i++) {
-                    skills.addObject().put("root", "r").put("name", "n" + i).put("tree_id", "t" + i);
-                }
-            });
+            var row = ingestRepositoryEdit(repository -> fillSkills(repository, 257));
 
             assertThat(row.skillsStatus()).isEqualTo("truncated");
             assertThat(row.skillsScope()).isEmpty();
             assertThat(row.skillsName()).isEmpty();
             assertThat(row.instructionFilesStatus()).isEqualTo("listed");
+        }
+
+        private static void fillSkills(ObjectNode repository, int size) {
+            var skills = repository.putArray("skills");
+            for (int i = 0; i < size; i++) {
+                skills.addObject().put("root", "r").put("name", "n" + i).put("tree_id", "t" + i);
+            }
         }
 
         @Test
