@@ -3,6 +3,7 @@ package com.comet.opik.domain.ailabels;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import io.dropwizard.lifecycle.Managed;
 import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,9 +16,11 @@ import java.util.Optional;
 
 /**
  * The tasks to label with. They are loaded and validated at startup when ai-labels is enabled, so an invalid task stops
- * the process instead of failing every job it would be in.
+ * the process instead of failing every job it would be in. {@code @EagerSingleton} alone is not a scope: without
+ * {@code @Singleton}, every injection point would get its own instance, and its own load.
  */
 @Slf4j
+@Singleton
 @EagerSingleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class AiLabelTaskRegistry implements Managed {

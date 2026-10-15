@@ -30,6 +30,7 @@ class AiLabelsWiringTest {
         var registry = injector.getInstance(AiLabelTaskRegistry.class);
 
         assertThat(injector.getInstance(InferenceClient.class)).isSameAs(client);
+        assertThat(injector.getInstance(AiLabelTaskRegistry.class)).isSameAs(registry);
         assertThat(injector.getInstance(AiLabelItemBuilder.class)).isNotNull();
         assertThat(injector.getInstance(AiLabelResultMapper.class)).isNotNull();
         assertThatCode(registry::start).doesNotThrowAnyException();
