@@ -9,4 +9,8 @@ import java.util.List;
 @Builder(toBuilder = true)
 public record BatchDecideRequest(@NonNull String orgId, String workspaceId, String requestId, boolean cache,
         @NonNull List<BatchDecideItem> items) {
+
+    public BatchDecideRequest {
+        items = List.copyOf(items);
+    }
 }

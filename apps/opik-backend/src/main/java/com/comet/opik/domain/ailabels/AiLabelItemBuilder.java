@@ -22,7 +22,8 @@ import java.util.UUID;
 
 /**
  * Builds batch items from a rendered trace and the tasks it is missing. Each trace is rendered once and shared by all
- * its items: its decide tasks that share a {@code cache} setting go into as few items as possible, and each generate
+ * its items: its decide tasks that share a {@code cache} setting are packed first-fit into items of at most 32 questions
+ * (deterministic, though not always the fewest items), and each generate
  * task is an item of its own.
  */
 @Singleton

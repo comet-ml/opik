@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.inference.BatchDecideItem;
 import com.comet.opik.infrastructure.inference.BatchGenerateItem;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.inference.Question;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -45,7 +46,9 @@ public class AiLabelTaskLoader {
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory())
             .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
             .registerModule(new JavaTimeModule())
-            .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+            .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            // A repeated key would otherwise silently replace the first, e.g. a question or a version.
+            .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
 
     /** The tasks in {@code tasksDir} when it is set, otherwise the ones bundled on the classpath. */
     public static List<AiLabelTask> load(@NonNull AiLabelsConfig config) {
