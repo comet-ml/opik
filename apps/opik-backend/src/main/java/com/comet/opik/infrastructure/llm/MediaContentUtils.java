@@ -8,10 +8,11 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
+import java.net.URI;
 import java.util.Locale;
 import java.util.Optional;
 
-// langchain4j-google-genai (Vertex AI) reads a media URL's MIME type from its path, and a data: URI has no path,
+// langchain4j-google-genai (Vertex AI) reads a media URI's MIME type from its path, and a data: URI has no path,
 // so it throws a NullPointerException. Handing over base64 data with an explicit MIME type avoids that code path.
 @UtilityClass
 public class MediaContentUtils {
@@ -23,35 +24,39 @@ public class MediaContentUtils {
     public record Base64DataUri(@NonNull String mimeType, @NonNull String base64Data) {
     }
 
-    public static ImageContent toImageContent(@NonNull String url) {
-        return parseBase64DataUri(url)
+    public static ImageContent toImageContent(@NonNull String uri) {
+        return parseBase64DataUri(uri)
                 .map(dataUri -> ImageContent.from(dataUri.base64Data(), dataUri.mimeType()))
-                .orElseGet(() -> ImageContent.from(url));
+                .orElseGet(() -> ImageContent.from(uri));
     }
 
-    public static AudioContent toAudioContent(@NonNull String url) {
-        return parseBase64DataUri(url)
+    public static AudioContent toAudioContent(@NonNull String uri) {
+        return parseBase64DataUri(uri)
                 .map(dataUri -> AudioContent.from(dataUri.base64Data(), dataUri.mimeType()))
-                .orElseGet(() -> AudioContent.from(url));
+                .orElseGet(() -> AudioContent.from(uri));
     }
 
-    public static VideoContent toVideoContent(@NonNull String url) {
-        return parseBase64DataUri(url)
+    public static VideoContent toVideoContent(@NonNull String uri) {
+        return parseBase64DataUri(uri)
                 .map(dataUri -> VideoContent.from(dataUri.base64Data(), dataUri.mimeType()))
-                .orElseGet(() -> VideoContent.from(url));
+                .orElseGet(() -> VideoContent.from(uri));
     }
 
-    public static Optional<Base64DataUri> parseBase64DataUri(@NonNull String url) {
-        if (!StringUtils.startsWithIgnoreCase(url, DATA_SCHEME)) {
+    public static String toUriString(URI uri, String mimeType, String base64Data) {
+        return uri != null ? uri.toString() : DATA_SCHEME + mimeType + ";" + BASE64_PARAMETER + "," + base64Data;
+    }
+
+    public static Optional<Base64DataUri> parseBase64DataUri(@NonNull String uri) {
+        if (!StringUtils.startsWithIgnoreCase(uri, DATA_SCHEME)) {
             return Optional.empty();
         }
-        int comma = url.indexOf(',');
+        int comma = uri.indexOf(',');
         if (comma < 0) {
             return Optional.empty();
         }
-        String[] header = url.substring(DATA_SCHEME.length(), comma).split(";");
+        String[] header = uri.substring(DATA_SCHEME.length(), comma).split(";");
         String mimeType = header[0].trim().toLowerCase(Locale.ROOT);
-        String base64Data = url.substring(comma + 1);
+        String base64Data = uri.substring(comma + 1);
         boolean isBase64 = header.length > 1 && BASE64_PARAMETER.equalsIgnoreCase(header[header.length - 1].trim());
         if (!isBase64 || !mimeType.contains("/") || base64Data.isEmpty()) {
             return Optional.empty();

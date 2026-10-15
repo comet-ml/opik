@@ -6,10 +6,12 @@ import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.VideoContent;
 import org.junit.jupiter.api.Named;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.net.URI;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -76,5 +78,13 @@ class MediaContentUtilsTest {
             Function<String, Content> toContent, String mimeType, Content expectedInline, Content expectedUrl) {
         assertThat(toContent.apply("data:" + mimeType + ";base64," + BASE64_DATA)).isEqualTo(expectedInline);
         assertThat(toContent.apply("https://example.com/media")).isEqualTo(expectedUrl);
+    }
+
+    @Test
+    void toUriStringKeepsAUrlAndRebuildsADataUriFromInlineData() {
+        assertThat(MediaContentUtils.toUriString(URI.create("https://example.com/a.png"), null, null))
+                .isEqualTo("https://example.com/a.png");
+        assertThat(MediaContentUtils.toUriString(null, "audio/wav", BASE64_DATA))
+                .isEqualTo("data:audio/wav;base64," + BASE64_DATA);
     }
 }
