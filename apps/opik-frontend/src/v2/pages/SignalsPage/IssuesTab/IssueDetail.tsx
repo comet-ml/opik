@@ -132,8 +132,13 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
   // re-sends the previous status and note.
   const changeStatus = (
     change: StatusChange,
-    undoToast?: { title: string; description?: string },
-    onSuccess?: () => void,
+    {
+      undoToast,
+      onSuccess,
+    }: {
+      undoToast?: { title: string; description?: string };
+      onSuccess?: () => void;
+    } = {},
   ) => {
     const previous: StatusChange = {
       status: issue.status,
@@ -183,8 +188,7 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
     });
     changeStatus(
       { status: AGENT_INSIGHTS_ISSUE_STATUS.resolved },
-      { title: "Issue was resolved" },
-      onSuccess,
+      { undoToast: { title: "Issue was resolved" }, onSuccess },
     );
   };
 
@@ -197,10 +201,12 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
     changeStatus(
       { status: AGENT_INSIGHTS_ISSUE_STATUS.closed, closeNote },
       {
-        title: "Issue was closed as Not useful",
-        description: "This will help future runs avoid similar issues",
+        undoToast: {
+          title: "Issue was closed as Not useful",
+          description: "This will help future runs avoid similar issues",
+        },
+        onSuccess: closeDialog,
       },
-      closeDialog,
     );
   };
 
@@ -212,13 +218,16 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
     });
     changeStatus(
       { status: AGENT_INSIGHTS_ISSUE_STATUS.open },
-      issue.status === AGENT_INSIGHTS_ISSUE_STATUS.closed
-        ? {
-            title: "Issue was reopened",
-            description:
-              "The issue is open again and will no longer guide future runs",
-          }
-        : { title: "Issue was reopened" },
+      {
+        undoToast:
+          issue.status === AGENT_INSIGHTS_ISSUE_STATUS.closed
+            ? {
+                title: "Issue was reopened",
+                description:
+                  "The issue is open again and will no longer guide future runs",
+              }
+            : { title: "Issue was reopened" },
+      },
     );
   };
 

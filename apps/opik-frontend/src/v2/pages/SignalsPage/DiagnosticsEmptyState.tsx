@@ -1,16 +1,14 @@
 import React from "react";
 import { ArrowUpRight, Eye, Play } from "lucide-react";
-import { buildDocsUrl } from "@/v2/lib/utils";
 import { Button } from "@/ui/button";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import OutOfCreditsButton from "@/v2/pages/SignalsPage/OutOfCreditsButton";
+import { DIAGNOSTICS_DOCS_URL } from "@/v2/pages/SignalsPage/helpers";
 import sampleIssuesLightUrl from "/images/diagnostics-sample-issues-light.svg";
 import sampleIssuesDarkUrl from "/images/diagnostics-sample-issues-dark.svg";
 
 import { AUTO_FIRST_RUN_MIN_TRACES as TRACE_THRESHOLD } from "@/constants/diagnostics";
-
-export const DIAGNOSTICS_DOCS_URL = buildDocsUrl("/tracing/diagnostics");
 
 type DiagnosticsEmptyStateProps = {
   awaitsAutoFirstRun: boolean;

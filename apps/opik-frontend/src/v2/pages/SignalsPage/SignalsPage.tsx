@@ -115,8 +115,8 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
     FeatureToggleKeys.AGENT_INSIGHTS_GUIDANCE_ENABLED,
   );
 
-  // Running / enabling diagnostics and changing issue status are gated on
-  // workspace-settings permission; viewing issues and editing guidance stay open to all.
+  // Running and enabling diagnostics are gated on workspace-settings permission;
+  // viewing issues, changing their status and editing guidance stay open to all.
   const {
     permissions: { canConfigureWorkspaceSettings: canConfigure },
   } = usePermissions();
@@ -389,7 +389,7 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
           className="h-6 flex-1 gap-1"
         >
           <CircleCheck className="size-3" />
-          Resolved ({resolvedCount})
+          <span>Resolved ({resolvedCount})</span>
         </TabsTrigger>
         {guidanceEnabled && (
           <TabsTrigger
@@ -399,7 +399,7 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
             className="h-6 flex-1 gap-1"
           >
             <ThumbsDown className="size-3" />
-            Not useful ({notUsefulCount})
+            <span>Not useful ({notUsefulCount})</span>
           </TabsTrigger>
         )}
       </TabsList>

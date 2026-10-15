@@ -72,6 +72,52 @@ describe("GuidanceSheet", () => {
     expect(onRun).toHaveBeenCalledTimes(1);
   });
 
+  it("waits for the job before showing or saving guidance", () => {
+    const { rerender } = renderSheet({ job: undefined });
+
+    const field = screen.getByLabelText("About this project");
+    expect(field).toHaveValue("");
+    expect(field).toHaveAttribute("readonly");
+    expect(
+      screen.getByRole("button", { name: "Save and run diagnostic" }),
+    ).toBeDisabled();
+
+    rerender(
+      <GuidanceSheet
+        open
+        setOpen={vi.fn()}
+        projectId="p1"
+        job={job}
+        onRun={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("About this project")).toHaveValue(
+      "Retries are expected.",
+    );
+  });
+
+  it("doesn't run after saving when a run started in the meantime", () => {
+    let finishSave: () => void = () => {};
+    mutate.mockImplementation((_vars, options) => {
+      finishSave = () => options?.onSuccess?.();
+    });
+    const onRun = vi.fn();
+    const { rerender } = renderSheet({ onRun });
+
+    fireEvent.change(screen.getByLabelText("About this project"), {
+      target: { value: "Only report tool failures." },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save and run diagnostic" }),
+    );
+    // A run starts before the save lands, so the page no longer offers onRun.
+    rerender(<GuidanceSheet open setOpen={vi.fn()} projectId="p1" job={job} />);
+    finishSave();
+
+    expect(onRun).not.toHaveBeenCalled();
+  });
+
   it("doesn't run a diagnostic when saving fails", () => {
     mutate.mockImplementation(() => undefined);
     const setOpen = vi.fn();

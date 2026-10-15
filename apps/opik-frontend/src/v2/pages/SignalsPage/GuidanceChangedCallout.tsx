@@ -15,23 +15,28 @@ const GuidanceChangedCallout: React.FC<GuidanceChangedCalloutProps> = ({
   const BillingLink = usePluginsStore((state) => state.BillingLink);
 
   return (
-    <div className="comet-body-xs shrink-0 rounded-md border border-[var(--chart-orange)] bg-[#FEE8D7] p-3 text-foreground-secondary dark:bg-[#FB934126]">
-      Guidance changed since the last diagnostic run and results might be
-      outdated.
+    <div className="comet-body-xs shrink-0 rounded-md border border-[var(--chart-orange)] bg-guidance-callout-bg p-3 text-foreground-secondary">
+      {/* Each sentence and link is its own element: browser translation re-parents bare text nodes. */}
+      <span>
+        Guidance changed since the last diagnostic run and results might be
+        outdated.
+      </span>
       {outOfCredits ? (
         <>
-          {" "}
-          There aren&rsquo;t enough Ollie credits for a new diagnostic.
+          <span>
+            {" "}
+            There aren&rsquo;t enough Ollie credits for a new diagnostic.
+          </span>
           {BillingLink && (
-            <>
+            <span>
               {" "}
               <BillingLink label="View billing" />
-            </>
+            </span>
           )}
         </>
       ) : (
         onRun && (
-          <>
+          <span>
             {" "}
             <button
               type="button"
@@ -40,7 +45,7 @@ const GuidanceChangedCallout: React.FC<GuidanceChangedCalloutProps> = ({
             >
               Run a new diagnostic
             </button>
-          </>
+          </span>
         )
       )}
     </div>

@@ -1,9 +1,28 @@
+import { CircleCheck, LucideIcon, ThumbsDown } from "lucide-react";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import {
   AGENT_INSIGHTS_ISSUE_SEVERITY,
   AGENT_INSIGHTS_ISSUE_STATUS,
   AgentInsightsIssue,
   AgentInsightsJob,
 } from "@/types/signals";
+
+export const DIAGNOSTICS_DOCS_URL = buildDocsUrl("/tracing/diagnostics");
+
+// How each closed status is shown wherever it appears (close dialog, list, tabs).
+export const CLOSED_STATUS_META: Record<
+  AGENT_INSIGHTS_ISSUE_STATUS.resolved | AGENT_INSIGHTS_ISSUE_STATUS.closed,
+  { icon: LucideIcon; label: string }
+> = {
+  [AGENT_INSIGHTS_ISSUE_STATUS.resolved]: {
+    icon: CircleCheck,
+    label: "Resolved",
+  },
+  [AGENT_INSIGHTS_ISSUE_STATUS.closed]: {
+    icon: ThumbsDown,
+    label: "Not useful",
+  },
+};
 
 export const SEVERITY_LABEL_MAP: Record<AGENT_INSIGHTS_ISSUE_SEVERITY, string> =
   {
@@ -47,9 +66,6 @@ export const countAffectedTraces = (issues: AgentInsightsIssue[]): number =>
     .filter((i) => i.status !== AGENT_INSIGHTS_ISSUE_STATUS.closed)
     .reduce((sum, i) => sum + i.total_occurrences, 0);
 
-// Settings is there from the start, even before the first run: auto-run for
-// configurers, guidance for everyone on the project. Run waits until the job has
-// something to show.
 // What the guidance-changed callout offers: run, the out-of-credits popover, or nothing
 // (no permission to run, or a run that can't start right now).
 export const getGuidanceCalloutAction = ({
@@ -66,6 +82,9 @@ export const getGuidanceCalloutAction = ({
   return canRun ? "run" : null;
 };
 
+// Settings is there from the start, even before the first run: auto-run for
+// configurers, guidance for everyone on the project. Run waits until the job has
+// something to show.
 export const getHeaderControls = ({
   showClosed,
   canConfigure,

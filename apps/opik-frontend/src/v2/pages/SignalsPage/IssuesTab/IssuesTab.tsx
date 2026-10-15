@@ -102,7 +102,7 @@ const ClosedIssuesButton: React.FC<{ count: number; onClick: () => void }> = ({
     className="h-7 w-full shrink-0 justify-between rounded px-2"
     onClick={onClick}
   >
-    Closed issues{count > 0 && ` (${count})`}
+    <span>Closed issues{count > 0 && ` (${count})`}</span>
     <ArrowUpRight className="size-3" />
   </Button>
 );

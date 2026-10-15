@@ -25,6 +25,15 @@ describe("CloseIssueDialog", () => {
     expect(setOpen).not.toHaveBeenCalled();
   });
 
+  it("keeps the sent choice while the close is saving", () => {
+    renderDialog(true);
+
+    fireEvent.click(screen.getByText("Not useful"));
+
+    expect(screen.getByRole("radio", { name: /Resolved/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Not useful/ })).toBeDisabled();
+  });
+
   it("dismisses with Esc otherwise", () => {
     const setOpen = renderDialog(false);
 
