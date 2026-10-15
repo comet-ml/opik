@@ -498,7 +498,12 @@ const usePlaygroundStore = create<PlaygroundStore>()(
         set((state) => ({ ...state, watchPaused: paused }));
       },
       setStopPending: (promptIds) => {
-        set((state) => ({ ...state, stopPending: promptIds }));
+        // Normalised here so no caller can leave an empty set behind: it is not null, so every
+        // reader takes it for a stop still waiting, and the controls never come back.
+        set((state) => ({
+          ...state,
+          stopPending: promptIds?.length ? promptIds : null,
+        }));
       },
       setLastActiveProjectId: (projectId) => {
         set((state) => ({ ...state, lastActiveProjectId: projectId }));
