@@ -5,7 +5,6 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
 import com.comet.opik.infrastructure.SpanWeeksBackfillConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.util.Duration;
-import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,11 +40,11 @@ class SpanWeeksBackfillJobTest {
     @BeforeEach
     void setUp() {
         config = SpanWeeksBackfillConfig.builder()
-                .interval(Duration.minutes(RandomUtils.secure().randomInt(31, 61)))
-                .weeksPerChunk(RandomUtils.secure().randomInt(1, 53))
-                .maxThreads(RandomUtils.secure().randomInt(1, 17))
-                .queryTimeout(Duration.minutes(RandomUtils.secure().randomInt(1, 31)))
-                .lockWaitTime(Duration.seconds(RandomUtils.secure().randomInt(0, 61)))
+                .interval(Duration.minutes(5))
+                .weeksPerChunk(4)
+                .maxThreads(4)
+                .queryTimeout(Duration.minutes(4))
+                .lockWaitTime(Duration.seconds(1))
                 .build();
         job = newJob(true);
     }
