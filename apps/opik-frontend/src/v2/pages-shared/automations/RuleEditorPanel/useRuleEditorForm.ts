@@ -155,9 +155,10 @@ const getDefaultValues = (
   isClone: boolean,
   defaultModel: RuleDefaultModel,
   savedJudge: SavedLLMJudgeData | undefined,
+  defaultScope: EVALUATORS_RULE_SCOPE,
 ): EvaluationRuleFormType => {
   const uiType = rule ? getRuleUIType(rule) : ruleType;
-  const scope = rule ? getUIRuleScope(rule.type) : EVALUATORS_RULE_SCOPE.trace;
+  const scope = rule ? getUIRuleScope(rule.type) : defaultScope;
   const ruleProjectIds = rule?.projects?.map((p) => p.project_id);
 
   return {
@@ -198,6 +199,7 @@ type UseRuleEditorFormParams = {
   rule?: EvaluatorsRule;
   isClone?: boolean;
   defaultModel: RuleDefaultModel;
+  defaultScope?: EVALUATORS_RULE_SCOPE;
 };
 
 const useRuleEditorForm = ({
@@ -206,6 +208,7 @@ const useRuleEditorForm = ({
   rule,
   isClone = false,
   defaultModel,
+  defaultScope = EVALUATORS_RULE_SCOPE.trace,
 }: UseRuleEditorFormParams) => {
   const isEdit = Boolean(rule) && !isClone;
   const savedJudge = useMemo(
@@ -223,6 +226,7 @@ const useRuleEditorForm = ({
       isClone,
       defaultModel,
       savedJudge,
+      defaultScope,
     ),
   );
   const form = useForm<EvaluationRuleFormType>({

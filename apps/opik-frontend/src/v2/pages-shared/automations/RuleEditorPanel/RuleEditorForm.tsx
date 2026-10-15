@@ -35,6 +35,7 @@ type RuleEditorFormProps = {
   isClone: boolean;
   isEdit: boolean;
   defaultModel: RuleDefaultModel;
+  defaultScope?: EVALUATORS_RULE_SCOPE;
   onRuleCreated?: (rule: EvaluatorsRule) => void;
 };
 
@@ -46,6 +47,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
   isClone,
   isEdit,
   defaultModel,
+  defaultScope,
   onRuleCreated,
 }) => {
   const {
@@ -62,6 +64,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     rule,
     isClone,
     defaultModel,
+    defaultScope,
   });
   const { mutate: createRule, isPending: isCreatePending } =
     useRuleCreateMutation();

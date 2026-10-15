@@ -5,7 +5,11 @@ import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import Loader from "@/shared/Loader/Loader";
 import { Button } from "@/ui/button";
-import { EvaluatorsRule, UI_EVALUATORS_RULE_TYPE } from "@/types/automations";
+import {
+  EVALUATORS_RULE_SCOPE,
+  EvaluatorsRule,
+  UI_EVALUATORS_RULE_TYPE,
+} from "@/types/automations";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import RuleEditorForm from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorForm";
 import useRuleDefaultModel from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleDefaultModel";
@@ -26,6 +30,7 @@ type RuleEditorPanelProps = {
   ruleType?: UI_EVALUATORS_RULE_TYPE;
   rule?: EvaluatorsRule;
   isClone?: boolean;
+  defaultScope?: EVALUATORS_RULE_SCOPE;
   onRuleCreated?: (rule: EvaluatorsRule) => void;
 };
 
@@ -36,6 +41,7 @@ const RuleEditorPanel: React.FC<RuleEditorPanelProps> = ({
   ruleType: newRuleType = UI_EVALUATORS_RULE_TYPE.llm_judge,
   rule,
   isClone = false,
+  defaultScope,
   onRuleCreated,
 }) => {
   const isEdit = Boolean(rule) && !isClone;
@@ -79,6 +85,7 @@ const RuleEditorPanel: React.FC<RuleEditorPanelProps> = ({
           isClone={isClone}
           isEdit={isEdit}
           defaultModel={defaultModel}
+          defaultScope={defaultScope}
           onRuleCreated={onRuleCreated}
         />
       ) : (
