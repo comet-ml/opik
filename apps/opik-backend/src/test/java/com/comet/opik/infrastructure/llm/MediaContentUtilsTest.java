@@ -87,4 +87,42 @@ class MediaContentUtilsTest {
         assertThat(MediaContentUtils.toUriString(null, "audio/wav", BASE64_DATA))
                 .isEqualTo("data:audio/wav;base64," + BASE64_DATA);
     }
+
+    static Stream<Arguments> rawBase64Images() {
+        return Stream.of(
+                Arguments.of(BASE64_DATA, "image/png"),
+                Arguments.of("/9j/4AAQSkZJRgABAQAAAQABAAD", "image/jpeg"),
+                Arguments.of("R0lGODlhAQABAIAAAP", "image/gif"),
+                Arguments.of("R0lGODdhAQABAIAAAP", "image/gif"),
+                Arguments.of("UklGRiQAAABXRUJQVlA4", "image/webp"),
+                Arguments.of("Qk06AAAAAAAAADYAAAAo", "image/bmp"),
+                Arguments.of("SUkqAAgAAAA=", "image/tiff"),
+                Arguments.of("TU0AKgAAAAg=", "image/tiff"));
+    }
+
+    @ParameterizedTest(name = "{index}: {1}")
+    @MethodSource("rawBase64Images")
+    void toImageContentWhenRawBase64ImageReturnsInlineImage(String rawBase64, String expectedMimeType) {
+        assertThat(MediaContentUtils.toImageContent(rawBase64))
+                .isEqualTo(ImageContent.from(rawBase64, expectedMimeType));
+    }
+
+    static Stream<String> notRawBase64Images() {
+        return Stream.of(
+                "iVBORw0KGgo.png",
+                "Qk:not-base64",
+                "/9j/photos/room.jpg",
+                "AAAAIGZ0eXBpc29tAAACAGlzb21pc28y");
+    }
+
+    @ParameterizedTest
+    @MethodSource("notRawBase64Images")
+    void toImageContentWhenNotARawBase64ImageKeepsUrl(String value) {
+        assertThat(MediaContentUtils.toImageContent(value)).isEqualTo(ImageContent.from(value));
+    }
+
+    @Test
+    void toVideoContentDoesNotTreatRawBase64AsInlineData() {
+        assertThat(MediaContentUtils.toVideoContent(BASE64_DATA)).isEqualTo(VideoContent.from(BASE64_DATA));
+    }
 }
