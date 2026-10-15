@@ -224,7 +224,7 @@ public class AiLabelsTickService {
         // Planned from all of the job's rows, not only the pending ones, so the item ids are the ones submitted even
         // when an earlier, interrupted load already settled some of its items; those are skipped.
         var jobRows = statusDAO.jobTraceTasks(job.workspaceId(), job.jobId()).collectList().block();
-        var items = itemsOf(job, jobRows);
+        var items = plannedItems(job, jobRows);
         items.values().removeIf(item -> item.pending().stream()
                 .anyMatch(row -> row.status() != AiLabelStatus.Status.PENDING));
         var pending = jobRows.stream().filter(row -> row.status() == AiLabelStatus.Status.PENDING).toList();
@@ -274,7 +274,7 @@ public class AiLabelsTickService {
      * The job's items, rebuilt from its rows: a trace's items for one job are always submitted together, so planning
      * that trace's tasks in the job again gives the same items and ids.
      */
-    private Map<String, PendingItem> itemsOf(AiLabelJob job, List<AiLabelStatus> rows) {
+    private Map<String, PendingItem> plannedItems(AiLabelJob job, List<AiLabelStatus> rows) {
         var jobKey = new JobKey(job.endpoint(), job.cache());
         var items = new HashMap<String, PendingItem>();
         rows.stream()

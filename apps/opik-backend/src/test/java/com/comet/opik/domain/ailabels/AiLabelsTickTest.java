@@ -827,7 +827,7 @@ class AiLabelsTickTest {
             tick();
 
             assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
-            assertThat(statuses(workspaceId, List.of(first, second)))
+            assertThat(statuses(workspaceId, List.of(first, second))).hasSize(4)
                     .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.DONE));
         }
 
