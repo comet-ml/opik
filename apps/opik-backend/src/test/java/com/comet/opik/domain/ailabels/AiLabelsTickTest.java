@@ -687,6 +687,31 @@ class AiLabelsTickTest {
                     .containsExactly(AiLabelStatus.Status.FAILED, true, 1, AiLabelsTickService.MISSING_RESULT);
             assertThat(status(workspaceId, unreported, GENERATE_TASK).status()).isEqualTo(AiLabelStatus.Status.DONE);
         }
+
+        @Test
+        @DisplayName("a pending pair of a task this pod doesn't know is retryable missing_result, not left pending")
+        void unknownTaskPendingRow() {
+            var workspaceId = enabledWorkspace();
+            var projectId = UUID.randomUUID();
+            var traceId = trace(workspaceId, projectId, 0);
+
+            tick();
+            var jobs = jobs(workspaceId);
+            var generateJob = job(jobs, "generate");
+            statusDAO.insert(List.of(status(workspaceId, traceId, GENERATE_TASK).toBuilder()
+                    .task("retired_task")
+                    .build())).block();
+            completeJobs(workspaceId);
+            tick();
+
+            assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
+            assertThat(status(workspaceId, traceId, GENERATE_TASK).status()).isEqualTo(AiLabelStatus.Status.DONE);
+            assertThat(status(workspaceId, traceId, "retired_task"))
+                    .extracting(AiLabelStatus::status, AiLabelStatus::retryable, AiLabelStatus::jobId,
+                            AiLabelStatus::errorCode)
+                    .containsExactly(AiLabelStatus.Status.FAILED, true, generateJob.jobId(),
+                            AiLabelsTickService.MISSING_RESULT);
+        }
     }
 
     @Nested
