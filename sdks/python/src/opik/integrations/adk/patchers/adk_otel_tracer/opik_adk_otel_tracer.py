@@ -128,7 +128,7 @@ class OpikADKOtelTracer:
                 set_status_on_exception=set_status_on_exception,
             )
 
-        trace_to_close, span_to_close = self._start_opik_span_or_trace(name)
+        # Delegate first so a failure here leaves no Opik trace/span open.
         inner_span = self._inner_start_span(
             name,
             context=context,
@@ -139,6 +139,7 @@ class OpikADKOtelTracer:
             record_exception=record_exception,
             set_status_on_exception=set_status_on_exception,
         )
+        trace_to_close, span_to_close = self._start_opik_span_or_trace(name)
         return _OpikFinalizingSpan(
             inner_span=inner_span,
             on_exception=lambda exception: _record_error_info(

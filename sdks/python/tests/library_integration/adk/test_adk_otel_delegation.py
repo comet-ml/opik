@@ -206,6 +206,25 @@ def test_adk_otel_patching__start_span__ended_twice__opik_trace_logged_once(
     assert len(fake_backend.trace_trees) == 1
 
 
+def test_adk_otel_patching__start_span__inner_start_span_raises__no_opik_trace_left_open(
+    opik_tracer_with_otel,
+):
+    def failing_start_span(*args, **kwargs):
+        raise RuntimeError("inner start_span failed")
+
+    wrapper = OpikADKOtelTracer(
+        inner_start_as_current_span=adk_telemetry.tracer.start_as_current_span,
+        inner_start_span=failing_start_span,
+        distributed_headers=None,
+    )
+
+    with pytest.raises(RuntimeError):
+        wrapper.start_span("invoke_agent weather_agent")
+
+    assert opik.context_storage.get_trace_data() is None
+    assert opik.context_storage.top_span_data() is None
+
+
 def test_adk_otel_patching__real_sdk_tracer__each_span_tracked_once(
     opik_tracer_with_otel, fake_backend
 ):
