@@ -49,14 +49,6 @@ public record AiLabelTask(
     public record Prompt(String system, @NonNull String user) {
     }
 
-    /**
-     * {@link #required(Instant)} as two parallel arrays, ready to bind for the sweep's SQL:
-     * {@code arrayMax(arrayFilter((v, a) -> a <= created_at, versions, applies_from))}, with {@code applies_from}
-     * parsed by {@code parseDateTime64BestEffort}. Both come from {@link #versions()}, as {@code required} does.
-     */
-    public record SqlVersions(@NonNull Integer[] versions, @NonNull String[] appliesFrom) {
-    }
-
     /** The current version and its history, newest version first. */
     public List<Version> versions() {
         return Stream.concat(Stream.of(new Version(version, appliesFrom)), history.stream())
@@ -71,13 +63,6 @@ public record AiLabelTask(
                 .mapToInt(Version::version)
                 .max()
                 .orElse(0);
-    }
-
-    public SqlVersions sqlVersions() {
-        var versions = versions();
-        return new SqlVersions(
-                versions.stream().map(Version::version).toArray(Integer[]::new),
-                versions.stream().map(candidate -> candidate.appliesFrom().toString()).toArray(String[]::new));
     }
 
     /** A decide task's question id on the wire: {@code <task>.<question>}. */
