@@ -221,8 +221,13 @@ public class AiLabelsTickService {
      * {@code done} row always has its values. A crash only means the job is loaded again; the writes are idempotent.
      */
     private void loadJob(AiLabelJob job) {
-        var pending = statusDAO.pendingTraceTasks(job.workspaceId(), job.jobId()).collectList().block();
-        var items = itemsOf(job, pending);
+        // Planned from all of the job's rows, not only the pending ones, so the item ids are the ones submitted even
+        // when an earlier, interrupted load already settled some of its items; those are skipped.
+        var jobRows = statusDAO.jobTraceTasks(job.workspaceId(), job.jobId()).collectList().block();
+        var items = itemsOf(job, jobRows);
+        items.values().removeIf(item -> item.pending().stream()
+                .anyMatch(row -> row.status() != AiLabelStatus.Status.PENDING));
+        var pending = jobRows.stream().filter(row -> row.status() == AiLabelStatus.Status.PENDING).toList();
         var seen = new HashSet<String>();
         Integer cursor = 0;
         while (cursor != null) {
@@ -266,16 +271,16 @@ public class AiLabelsTickService {
     }
 
     /**
-     * The job's items, rebuilt from its pending rows: a trace's items for one job are always submitted together, so
-     * planning that trace's pending tasks again gives the same items and ids.
+     * The job's items, rebuilt from its rows: a trace's items for one job are always submitted together, so planning
+     * that trace's tasks in the job again gives the same items and ids.
      */
-    private Map<String, PendingItem> itemsOf(AiLabelJob job, List<AiLabelStatus> pending) {
+    private Map<String, PendingItem> itemsOf(AiLabelJob job, List<AiLabelStatus> rows) {
         var jobKey = new JobKey(job.endpoint(), job.cache());
         var items = new HashMap<String, PendingItem>();
-        pending.stream()
+        rows.stream()
                 .collect(Collectors.groupingBy(AiLabelStatus::traceId))
-                .forEach((traceId, rows) -> {
-                    var rowsByTask = rows.stream()
+                .forEach((traceId, traceRows) -> {
+                    var rowsByTask = traceRows.stream()
                             .collect(Collectors.toMap(AiLabelStatus::task, Function.identity()));
                     var tasks = rowsByTask.keySet().stream()
                             .map(registry::find)
@@ -310,6 +315,7 @@ public class AiLabelsTickService {
     private void markLoaded(AiLabelJob job) {
         var now = Instant.now();
         template.inTransaction(WRITE, handle -> handle.attach(AiLabelJobDAO.class).markLoaded(job.jobId(), now));
+        inFlight.addAndGet(-job.engineCalls());
         jobAge.record(Duration.between(job.submittedAt(), now).toMillis() / 1_000.0,
                 Attributes.of(stringKey("endpoint"), job.endpoint().getValue()));
     }
@@ -378,6 +384,9 @@ public class AiLabelsTickService {
                 } catch (RuntimeException exception) {
                     log.error("ai-labels failed to submit a chunk, workspace '{}', traces '{}'", turn.getKey(),
                             chunk.size(), exception);
+                    // Jobs it got accepted before failing still count: take the budget from the job rows again.
+                    free = config.getBudgetEngineCalls() - template.inTransaction(READ_ONLY,
+                            handle -> handle.attach(AiLabelJobDAO.class).inFlightEngineCalls());
                 }
             }
         }
@@ -556,6 +565,7 @@ public class AiLabelsTickService {
                 .toList();
         statusDAO.insert(pending).block();
         itemsSubmitted.add(items.size(), Attributes.of(stringKey("endpoint"), jobKey.endpoint().getValue()));
+        inFlight.addAndGet(engineCalls);
         return SubmitOutcome.ACCEPTED;
     }
 

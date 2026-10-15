@@ -83,6 +83,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
+import static com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
@@ -791,6 +792,43 @@ class AiLabelsTickTest {
 
             assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
             assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a load interrupted after its first page resumes: settled items are skipped, the rest load")
+        void interruptedLoadResumes() {
+            var workspaceId = enabledWorkspace();
+            var projectId = UUID.randomUUID();
+            var first = trace(workspaceId, projectId, 0);
+            var second = trace(workspaceId, projectId, 0);
+
+            tick();
+            var jobs = jobs(workspaceId);
+            completeJob(job(jobs, "generate"), List.of(List.of(generateResult(first), generateResult(second))));
+            var decide = job(jobs, "decide");
+            completeJob(decide, List.of(List.of(decideResult(first)), List.of(decideResult(second))));
+            // The second page fails once, with an error the client doesn't retry, so the first load stops after page 1.
+            var secondPage = urlEqualTo(JOB_PATH + decide.jobId() + "?cursor=1");
+            wireMock.server().stubFor(get(secondPage).inScenario("interrupted").whenScenarioStateIs(STARTED)
+                    .willReturn(json(400, InferenceJson.MAPPER.createObjectNode().set("error",
+                            InferenceJson.MAPPER.createObjectNode().put("code", "invalid_request")
+                                    .put("message", "test").put("retryable", false))))
+                    .willSetStateTo("recovered"));
+            wireMock.server().stubFor(get(secondPage).inScenario("interrupted").whenScenarioStateIs("recovered")
+                    .willReturn(json(200, jobView(decide.jobId(), "decide", "completed",
+                            List.of(decideResult(second)), null))));
+
+            tick();
+
+            assertThat(status(workspaceId, first, DECIDE_TASK).status()).isEqualTo(AiLabelStatus.Status.DONE);
+            assertThat(status(workspaceId, second, DECIDE_TASK).status()).isEqualTo(AiLabelStatus.Status.PENDING);
+
+            pauseUntil(Instant.now().plusMillis(1_500));
+            tick();
+
+            assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
+            assertThat(statuses(workspaceId, List.of(first, second)))
+                    .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.DONE));
         }
 
         /** Completes whatever is in flight, loads it, and checks a further sweep finds nothing. */
