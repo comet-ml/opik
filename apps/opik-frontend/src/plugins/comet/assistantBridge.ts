@@ -3,6 +3,7 @@ import {
   AssistantSidebarBridge,
   BRIDGE_PROTOCOL_VERSION,
   BridgeContext,
+  ChartEditRequest,
   HostEventMap,
   RunnerBridgeState,
   SidebarEventMap,
@@ -43,8 +44,48 @@ export function createHostListeners(): HostListeners {
     "explain:run": new Set(),
     "explain:cancel": new Set(),
     "chat:continue": new Set(),
+    "chart:edit": new Set(),
   };
 }
+
+/** A request made before the console subscribed (sidebar closed or still loading), delivered once it does. */
+export interface PendingRequest<T> {
+  data: T;
+  // Where it was made (workspace, project, dashboard); it is dropped anywhere else.
+  scope: string;
+  at: number;
+}
+
+// Older requests are dropped instead of firing long after the click, out of context.
+export const PENDING_REQUEST_TTL_MS = 30_000;
+
+const scopeOf = (context: BridgeContext) =>
+  JSON.stringify([
+    context.workspaceName ?? null,
+    context.projectId ?? null,
+    context.dashboard?.id ?? null,
+  ]);
+
+const isPendingCurrent = (
+  pending: PendingRequest<unknown>,
+  context: BridgeContext,
+) =>
+  Date.now() - pending.at <= PENDING_REQUEST_TTL_MS &&
+  pending.scope === scopeOf(context);
+
+/** Drops parked requests made in another workspace, project or dashboard. */
+export function dropStalePending(
+  pending: MutableRefObject<PendingRequest<unknown> | null>[],
+  context: BridgeContext,
+) {
+  pending.forEach((ref) => {
+    if (ref.current && !isPendingCurrent(ref.current, context)) {
+      ref.current = null;
+    }
+  });
+}
+
+type ParkableEvent = "conversation:start" | "chart:edit";
 
 /** The live values `createBridge` reads through (kept current by the component). */
 export interface BridgeRefs {
@@ -61,8 +102,43 @@ export interface BridgeRefs {
   >;
   context: MutableRefObject<BridgeContext>;
   listeners: MutableRefObject<HostListeners>;
+  onDashboardUpdated?: MutableRefObject<
+    (data: SidebarEventMap["dashboard:updated"]) => void
+  >;
   lastRunnerState: MutableRefObject<RunnerBridgeState | null>;
+  pendingChartEdit?: MutableRefObject<PendingRequest<ChartEditRequest> | null>;
+  pendingConversation?: MutableRefObject<PendingRequest<
+    HostEventMap["conversation:start"]
+  > | null>;
 }
+
+const pendingRefFor = <E extends ParkableEvent>(refs: BridgeRefs, event: E) =>
+  (event === "chart:edit"
+    ? refs.pendingChartEdit
+    : refs.pendingConversation) as
+    | MutableRefObject<PendingRequest<HostEventMap[E]> | null>
+    | undefined;
+
+/** Opens the sidebar and delivers the request, or parks it until the console subscribes. */
+const sendOrPark = <E extends ParkableEvent>(
+  refs: BridgeRefs,
+  event: E,
+  data: HostEventMap[E],
+) => {
+  refs.onRequestVisibility.current(true);
+  if (refs.listeners.current[event].size > 0) {
+    emitHostEvent(refs.listeners, event, data);
+    return;
+  }
+  const pending = pendingRefFor(refs, event);
+  if (pending) {
+    pending.current = {
+      data,
+      scope: scopeOf(refs.context.current),
+      at: Date.now(),
+    };
+  }
+};
 
 /**
  * Host→shell events handled by exactly ONE live console subscriber. A second
@@ -79,6 +155,7 @@ const SINGLE_SUBSCRIBER_EVENTS: ReadonlySet<keyof HostEventMap> = new Set([
   "explain:cancel",
   "chat:continue",
   "conversation:start",
+  "chart:edit",
 ]);
 
 export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
@@ -118,6 +195,18 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
       );
     }
 
+    // A request made before the console subscribed (sidebar was closed or still loading) is delivered now.
+    if (event === "chart:edit" || event === "conversation:start") {
+      const pendingRef = pendingRefFor(refs, event);
+      const pending = pendingRef?.current;
+      if (pendingRef && pending) {
+        pendingRef.current = null;
+        if (isPendingCurrent(pending, refs.context.current)) {
+          (callback as (data: unknown) => void)(pending.data);
+        }
+      }
+    }
+
     return () => {
       set.delete(callback);
     };
@@ -143,6 +232,11 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
       case "sidebar:request-close":
         refs.onRequestVisibility.current(false);
         break;
+      case "dashboard:updated":
+        refs.onDashboardUpdated?.current(
+          data as SidebarEventMap["dashboard:updated"],
+        );
+        break;
       case "runner:request-pair":
         refs.onRequestPair.current(
           data as SidebarEventMap["runner:request-pair"],
@@ -160,8 +254,13 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
     }
   },
   startConversation: (message: string) => {
-    emitHostEvent(refs.listeners, "conversation:start", { message });
+    sendOrPark(refs, "conversation:start", { message });
   },
+  editChart: (request: ChartEditRequest) => {
+    sendOrPark(refs, "chart:edit", request);
+  },
+  canEditChart: () =>
+    useExplainStore.getState().capabilities.includes("charts"),
 });
 
 /** Emit a host event to all subscribed sidebar listeners. */

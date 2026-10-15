@@ -26,7 +26,7 @@ const PlaygroundAddVariant = ({ providerKeys }: PlaygroundAddVariantProps) => {
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
-  const { calculateModelProvider, calculateDefaultModel } =
+  const { calculateModelProvider, calculateDefaultModel, isDropdownModel } =
     useLLMProviderModelsData();
 
   const [addVariantOpen, setAddVariantOpen] = useState(false);
@@ -48,6 +48,7 @@ const PlaygroundAddVariant = ({ providerKeys }: PlaygroundAddVariantProps) => {
       lastPickedModel,
       providerResolver: calculateModelProvider,
       modelResolver: calculateDefaultModel,
+      isDropdownModel,
     });
     addPrompt(newPrompt);
     setAddVariantOpen(false);
@@ -64,6 +65,7 @@ const PlaygroundAddVariant = ({ providerKeys }: PlaygroundAddVariantProps) => {
       setupProviders: providerKeys,
       providerResolver: calculateModelProvider,
       modelResolver: calculateDefaultModel,
+      isDropdownModel,
     });
     addPrompt(newPrompt);
     setAddVariantOpen(false);

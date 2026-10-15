@@ -714,6 +714,7 @@ describe("generateDefaultPrompt", () => {
       setupProviders: [],
       providerResolver: () => "",
       modelResolver: () => "",
+      isDropdownModel: () => false,
     });
 
   it("starts with an empty system message and an empty user message", () => {

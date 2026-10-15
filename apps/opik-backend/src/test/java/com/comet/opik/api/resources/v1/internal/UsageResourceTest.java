@@ -493,8 +493,8 @@ class UsageResourceTest {
 
         /**
          * An id reused across projects is two entities, not one counted twice: {@code project_id} is in the sorting
-         * key, so it is part of the identity {@code ReplacingMergeTree} deduplicates on. {@code BULK_INSERT} is the
-         * path that can produce it, binding the project the request asked for without reading the stored row. The
+         * key, so it is part of the identity {@code ReplacingMergeTree} deduplicates on. {@code SpanDAO.batchInsert} is the
+         * path that can produce it, writing the project the request asked for without reading the stored row. The
          * count and the breakdown are asserted together because the two agreeing is the point — the breakdown has
          * always grouped by project and reported two, and the workspace-grouped count this fold replaced collapsed
          * on id alone and reported one.
