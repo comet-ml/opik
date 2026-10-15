@@ -110,15 +110,13 @@ const ClosedIssuesButton: React.FC<{ count: number; onClick: () => void }> = ({
 const DetailColumn: React.FC<{
   issue?: AgentInsightsIssue;
   projectId: string;
-  canConfigure: boolean;
   canCloseAsNotUseful: boolean;
-}> = ({ issue, projectId, canConfigure, canCloseAsNotUseful }) => (
+}> = ({ issue, projectId, canCloseAsNotUseful }) => (
   <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border bg-background">
     {issue ? (
       <IssueDetail
         issue={issue}
         projectId={projectId}
-        canConfigure={canConfigure}
         canCloseAsNotUseful={canCloseAsNotUseful}
       />
     ) : (
@@ -308,7 +306,6 @@ type IssuesTabProps = {
   isStale?: boolean;
   staleTraceCount?: number;
   staleDays?: number;
-  canConfigure?: boolean;
   canCloseAsNotUseful?: boolean;
   closedCount?: number;
   onRunDiagnostic?: () => void;
@@ -328,7 +325,6 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   isStale = false,
   staleTraceCount = 0,
   staleDays = 0,
-  canConfigure = false,
   canCloseAsNotUseful = false,
   closedCount = 0,
   onRunDiagnostic,
@@ -588,7 +584,6 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
     <DetailColumn
       issue={activeIssue}
       projectId={projectId}
-      canConfigure={canConfigure}
       canCloseAsNotUseful={canCloseAsNotUseful}
     />
   );

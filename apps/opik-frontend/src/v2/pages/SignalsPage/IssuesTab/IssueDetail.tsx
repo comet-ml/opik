@@ -37,7 +37,6 @@ import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 type IssueDetailProps = {
   issue: AgentInsightsIssue;
   projectId: string;
-  canConfigure: boolean;
   // Enables "Close as Not useful" (guidance feature toggle): Close then asks
   // Resolved or Not useful; without it, Close resolves in one click.
   canCloseAsNotUseful?: boolean;
@@ -116,7 +115,6 @@ const ClosedInfo: React.FC<{ issue: AgentInsightsIssue }> = ({ issue }) => {
 const IssueDetail: React.FC<IssueDetailProps> = ({
   issue,
   projectId,
-  canConfigure,
   canCloseAsNotUseful = false,
 }) => {
   const { data: detail } = useAgentInsightsIssue({
@@ -291,9 +289,7 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
             </span>
           </TooltipWrapper>
         </div>
-        {canConfigure && (
-          <div className="flex shrink-0 items-center">{renderActions()}</div>
-        )}
+        <div className="flex shrink-0 items-center">{renderActions()}</div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
