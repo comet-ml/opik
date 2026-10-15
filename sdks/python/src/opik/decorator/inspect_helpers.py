@@ -55,13 +55,20 @@ def is_generator_function(obj: Any) -> bool:
 
 
 def is_async(func: Callable) -> bool:
-    if inspect.iscoroutinefunction(func):
-        return True
-
-    # Usual iscoroutinefunction might not work correctly if
-    # async function is wrapped.
-    if hasattr(func, "__wrapped__") and inspect.iscoroutinefunction(func.__wrapped__):
-        return True
+    # Walk the full __wrapped__ chain so that async functions decorated with
+    # one or more synchronous wrappers (e.g. functools.wraps-based decorators)
+    # are still detected correctly.  Python 3.12+ handles this inside
+    # inspect.iscoroutinefunction itself, but Python 3.11 does not, so we do
+    # the traversal here to stay compatible.
+    seen = set()
+    current: Any = func
+    while current is not None:
+        if id(current) in seen:
+            break
+        seen.add(id(current))
+        if inspect.iscoroutinefunction(current):
+            return True
+        current = getattr(current, "__wrapped__", None)
 
     return False
 
