@@ -89,14 +89,14 @@ public class CipxTraceIdentityDAO {
 
         // Lists and statuses default to empty so rows built without them stay valid; lists are copied.
         public TraceIdentityRow {
-            skillsScope = copyOrEmpty(skillsScope);
-            skillsRoot = copyOrEmpty(skillsRoot);
-            skillsName = copyOrEmpty(skillsName);
-            skillsVersionId = copyOrEmpty(skillsVersionId);
+            skillsScope = copyWithNullsAsEmpty(skillsScope);
+            skillsRoot = copyWithNullsAsEmpty(skillsRoot);
+            skillsName = copyWithNullsAsEmpty(skillsName);
+            skillsVersionId = copyWithNullsAsEmpty(skillsVersionId);
             skillsStatus = skillsStatus == null ? "" : skillsStatus;
-            instructionFilesScope = copyOrEmpty(instructionFilesScope);
-            instructionFilesPath = copyOrEmpty(instructionFilesPath);
-            instructionFilesVersionId = copyOrEmpty(instructionFilesVersionId);
+            instructionFilesScope = copyWithNullsAsEmpty(instructionFilesScope);
+            instructionFilesPath = copyWithNullsAsEmpty(instructionFilesPath);
+            instructionFilesVersionId = copyWithNullsAsEmpty(instructionFilesVersionId);
             instructionFilesStatus = instructionFilesStatus == null ? "" : instructionFilesStatus;
             // ClickHouse treats each dotted group as one Nested column and rejects unequal lengths.
             if (skillsScope.size() != skillsRoot.size() || skillsRoot.size() != skillsName.size()
@@ -110,7 +110,7 @@ public class CipxTraceIdentityDAO {
         }
 
         // Null list becomes empty; null elements become "" since List.copyOf rejects them.
-        private static List<String> copyOrEmpty(List<String> values) {
+        private static List<String> copyWithNullsAsEmpty(List<String> values) {
             if (values == null) {
                 return List.of();
             }
