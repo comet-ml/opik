@@ -67,9 +67,12 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions.EXPERIMENT_IGNORED_FIELDS;
@@ -197,7 +200,7 @@ class SpanWeeksReadBoundTest {
         var trace = fixtures.createFarFutureTrace();
         var created = fixtures.createExperiment(trace.trace().id(), null);
 
-        experimentResourceClient.finishExperiments(java.util.Set.of(created.experiment().id()), API_KEY,
+        experimentResourceClient.finishExperiments(Set.of(created.experiment().id()), API_KEY,
                 WORKSPACE_NAME);
 
         // The aggregate row itself: the API falls back to raw span sums while it is missing. The row does not
@@ -292,7 +295,8 @@ class SpanWeeksReadBoundTest {
         var expected = StatsUtils.getProjectThreadStatItems(List.of(trace.trace()), trace.spans(), null)
                 .stream().<ProjectStats.ProjectStatItem<?>>map(stat -> switch (stat.getName()) {
                     case "total_estimated_cost", "total_estimated_cost_sum" ->
-                        new ProjectStats.AvgValueStat(stat.getName(), trace.totalCost().doubleValue());
+                        ProjectStats.AvgValueStat.builder().name(stat.getName()).value(trace.totalCost().doubleValue())
+                                .type(ProjectStats.StatsType.AVG).build();
                     default -> stat;
                 })
                 .toList();
@@ -314,10 +318,11 @@ class SpanWeeksReadBoundTest {
 
     /** One trace, so the per-trace averages are the trace's own totals. */
     private static Experiment expectedExperiment(Experiment experiment, FarFutureTrace trace) {
-        var quantiles = ExperimentsTestUtils.getQuantities(java.util.stream.Stream.of(trace.trace()));
+        var quantiles = ExperimentsTestUtils.getQuantities(Stream.of(trace.trace()));
         return experiment.toBuilder()
                 .projectId(trace.projectId())
-                .duration(new PercentageValues(quantiles.get(0), quantiles.get(1), quantiles.get(2)))
+                .duration(PercentageValues.builder().p50(quantiles.get(0)).p90(quantiles.get(1)).p99(quantiles.get(2))
+                        .build())
                 .totalEstimatedCost(trace.totalCost())
                 .totalEstimatedCostAvg(trace.totalCost())
                 .usage(StatsUtils.calculateUsageAverage(List.of(trace.totalUsage())))
@@ -340,21 +345,29 @@ class SpanWeeksReadBoundTest {
                 trace.trace().endTime());
         var durationPercentiles = StatsUtils.calculateQuantiles(List.of(duration), List.of(0.50, 0.90, 0.99));
         var costPercentiles = StatsUtils.calculateQuantiles(List.of(cost), List.of(0.50, 0.90, 0.99));
-        var stats = new java.util.ArrayList<ProjectStats.ProjectStatItem<?>>(List.of(
-                new ProjectStats.CountValueStat(StatsMapper.EXPERIMENT_ITEMS_COUNT, 1L),
-                new ProjectStats.CountValueStat(StatsMapper.TRACE_COUNT, 1L),
-                new ProjectStats.AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, cost),
-                new ProjectStats.PercentageValueStat(StatsMapper.TOTAL_ESTIMATED_COST,
-                        new PercentageValues(costPercentiles.get(0), costPercentiles.get(1), costPercentiles.get(2))),
-                new ProjectStats.PercentageValueStat(StatsMapper.DURATION,
-                        new PercentageValues(durationPercentiles.get(0), durationPercentiles.get(1),
-                                durationPercentiles.get(2)))));
+        var stats = new ArrayList<ProjectStats.ProjectStatItem<?>>(List.of(
+                ProjectStats.CountValueStat.builder().name(StatsMapper.EXPERIMENT_ITEMS_COUNT).value(1L)
+                        .type(ProjectStats.StatsType.COUNT).build(),
+                ProjectStats.CountValueStat.builder().name(StatsMapper.TRACE_COUNT).value(1L)
+                        .type(ProjectStats.StatsType.COUNT).build(),
+                ProjectStats.AvgValueStat.builder().name(StatsMapper.TOTAL_ESTIMATED_COST).value(cost)
+                        .type(ProjectStats.StatsType.AVG).build(),
+                ProjectStats.PercentageValueStat.builder().name(StatsMapper.TOTAL_ESTIMATED_COST)
+                        .value(PercentageValues.builder().p50(costPercentiles.get(0)).p90(costPercentiles.get(1))
+                                .p99(costPercentiles.get(2)).build())
+                        .type(ProjectStats.StatsType.PERCENTAGE).build(),
+                ProjectStats.PercentageValueStat.builder().name(StatsMapper.DURATION)
+                        .value(PercentageValues.builder().p50(durationPercentiles.get(0))
+                                .p90(durationPercentiles.get(1)).p99(durationPercentiles.get(2)).build())
+                        .type(ProjectStats.StatsType.PERCENTAGE).build()));
         trace.totalUsage().forEach((key, value) -> stats.add(
-                new ProjectStats.AvgValueStat("%s.%s".formatted(StatsMapper.USAGE, key), value.doubleValue())));
+                ProjectStats.AvgValueStat.builder().name("%s.%s".formatted(StatsMapper.USAGE, key))
+                        .value(value.doubleValue()).type(ProjectStats.StatsType.AVG).build()));
         // Always reported, 0 when no span carries a total_tokens usage.
         var totalTokens = BigDecimal.valueOf(trace.totalUsage().getOrDefault("total_tokens", 0L));
-        stats.add(new ProjectStats.PercentageValueStat("%s.total_tokens".formatted(StatsMapper.USAGE),
-                new PercentageValues(totalTokens, totalTokens, totalTokens)));
+        stats.add(ProjectStats.PercentageValueStat.builder().name("%s.total_tokens".formatted(StatsMapper.USAGE))
+                .value(PercentageValues.builder().p50(totalTokens).p90(totalTokens).p99(totalTokens).build())
+                .type(ProjectStats.StatsType.PERCENTAGE).build());
         return stats;
     }
 

@@ -74,9 +74,9 @@ public class RetryUtils {
      */
     public static RetryBackoffSpec handleHttpErrors(int maxAttempts, Duration minBackoff, Duration maxBackoff) {
         return exponentialBackoff(maxAttempts, minBackoff, maxBackoff, throwable -> {
-            log.debug("Filtering for retry: {}", throwable.getMessage());
+            log.debug("Filtering for retry", throwable);
             return isRetriableException(throwable);
-        }).doBeforeRetry(retrySignal -> log.warn("Retrying due to: {}", retrySignal.failure().getMessage()));
+        }).doBeforeRetry(retrySignal -> log.warn("Retrying due to", retrySignal.failure()));
     }
 
     /**
