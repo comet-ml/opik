@@ -18,9 +18,10 @@ final class GeminiUsageFormat implements UsageFormat {
             new InputVariant("openai_style",
                     keys -> keys.hasAny("prompt_tokens", "completion_tokens"),
                     GeminiUsageFormat::fromOpenAiStyle),
-            new InputVariant("agents_sdk",
+            // The OpenAI Agents SDK, and OTel ingestion once its renamed keys are restored.
+            new InputVariant("responses_style",
                     keys -> keys.hasAny("input_tokens", "output_tokens"),
-                    GeminiUsageFormat::fromAgentsSdk));
+                    GeminiUsageFormat::fromResponsesStyle));
 
     @Override
     public List<InputVariant> inputVariants() {
@@ -50,12 +51,12 @@ final class GeminiUsageFormat implements UsageFormat {
                 keys.first("completion_tokens_details.reasoning_tokens", "reasoning_tokens"));
     }
 
-    private static NativeUsage fromAgentsSdk(VariantInput input) {
+    private static NativeUsage fromResponsesStyle(VariantInput input) {
         var keys = input.keys();
         return fromCompletionWithReasoning(input, keys.get("input_tokens"),
-                keys.get("input_tokens_details.cached_tokens"),
+                keys.first("input_tokens_details.cached_tokens", "cache_read.input_tokens", "cache_read_input_tokens"),
                 keys.get("output_tokens"),
-                keys.get("output_tokens_details.reasoning_tokens"));
+                keys.first("output_tokens_details.reasoning_tokens", "reasoning.output_tokens"));
     }
 
     private static NativeUsage fromCompletionWithReasoning(VariantInput input, long promptTokens, long cachedTokens,

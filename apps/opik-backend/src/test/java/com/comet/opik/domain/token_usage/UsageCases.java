@@ -260,8 +260,14 @@ public final class UsageCases {
                         usage("input_tokens", 4000, "output_tokens", 1500, "total_tokens", 5500,
                                 "input_tokens_details.cached_tokens", 3000, "output_tokens_details.reasoning_tokens",
                                 900),
-                        gemini("agents_sdk").promptTokenCount(4000).cachedContentTokenCount(3000)
+                        gemini("responses_style").promptTokenCount(4000).cachedContentTokenCount(3000)
                                 .candidatesTokenCount(600).thoughtsTokenCount(900).totalTokenCount(5500).build()),
+                new UsageCase("Gemini through the OTel GenAI standard", "gemini",
+                        usage("gen_ai.usage.input_tokens", 4000, "gen_ai.usage.output_tokens", 1500,
+                                "gen_ai.usage.cache_read.input_tokens", 3000,
+                                "gen_ai.usage.reasoning.output_tokens", 900),
+                        gemini("responses_style").promptTokenCount(4000).cachedContentTokenCount(3000)
+                                .candidatesTokenCount(600).thoughtsTokenCount(900).build()),
                 new UsageCase("Gemini under LiteLLM's Vertex provider", "vertex_ai",
                         usage("prompt_token_count", 20, "candidates_token_count", 10, "total_token_count", 30),
                         GeminiNativeUsage.builder().provider("vertex_ai").variant("gemini_native").promptTokenCount(20)

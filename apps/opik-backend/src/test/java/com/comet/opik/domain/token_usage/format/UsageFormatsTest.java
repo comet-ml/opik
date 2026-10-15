@@ -309,10 +309,10 @@ class UsageFormatsTest {
         }
 
         @Test
-        void agentsSdkWithCacheAboveTheInputReportsIt() {
+        void responsesStyleWithCacheAboveTheInputReportsIt() {
             normalize("gemini", usage("input_tokens", 10, "input_tokens_details.cached_tokens", 20));
 
-            assertThat(warnings).containsExactly(UsageWarning.cacheExceedsInput("gemini", "agents_sdk", 10, 20));
+            assertThat(warnings).containsExactly(UsageWarning.cacheExceedsInput("gemini", "responses_style", 10, 20));
         }
     }
 

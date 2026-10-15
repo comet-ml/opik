@@ -340,6 +340,10 @@ class SpanCostCalculatorTest {
                             spanUsage("gemini", "prompt_tokens", 1000, "completion_tokens", 100,
                                     "cache_read_input_tokens", 200),
                             "11.00"),
+                    Arguments.of("flat OTel cache key, after OTel ingestion's rename", CACHE_PRICES,
+                            SpanUsageFactory.create("gemini", usage("prompt_tokens", 1000, "completion_tokens", 100,
+                                    "cache_read_input_tokens", 200), UsageContext.OTEL_RENAMED_KEYS),
+                            "11.00"),
                     // (27 + 10309) * 0.01 + (45 + 31) * 0.02 = 103.36 + 1.52
                     Arguments.of("tool-use prompt tokens are input", CACHE_PRICES,
                             spanUsage("gemini", "original_usage.prompt_token_count", 27,

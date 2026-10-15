@@ -2,6 +2,7 @@ package com.comet.opik.domain.token_usage;
 
 import com.comet.opik.domain.token_usage.UsageCases.UsageCase;
 import com.comet.opik.domain.token_usage.model.AnthropicNativeUsage;
+import com.comet.opik.domain.token_usage.model.GeminiNativeUsage;
 import com.comet.opik.domain.token_usage.model.OpenAiLikeUsage;
 import com.comet.opik.domain.token_usage.model.OpenAiNativeUsage;
 import com.comet.opik.domain.token_usage.model.OriginalUsage;
@@ -241,6 +242,18 @@ class SpanUsageFactoryTest {
             assertThat(withoutHint.nativeUsage().variant()).isEqualTo("chat_completions");
             assertThat(withHint.openAiLike()).isEqualTo(OpenAiLikeUsage.of(12000, 500, 12500, 10000));
             assertThat(withoutHint.openAiLike()).isEqualTo(withHint.openAiLike());
+        }
+
+        @Test
+        void createReadsTheGeminiCacheUnderTheRestoredNames() {
+            // What OTel ingestion stores for gen_ai.usage.input_tokens=4000, output_tokens=500, cache_read_tokens=3000.
+            var usage = usage("prompt_tokens", 4000, "completion_tokens", 500, "cache_read_input_tokens", 3000);
+
+            var spanUsage = SpanUsageFactory.create("gemini", usage, OTEL_RENAMED);
+
+            assertThat(spanUsage.nativeUsage()).isEqualTo(GeminiNativeUsage.builder().provider("gemini")
+                    .variant("responses_style").promptTokenCount(4000).cachedContentTokenCount(3000)
+                    .candidatesTokenCount(500).build());
         }
 
         @Test
