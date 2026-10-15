@@ -72,7 +72,8 @@ public class LlmModelRegistryService {
     // layer leaves out from an explicit false.
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record ModelEntry(String id, String qualifiedName, String label, Boolean structuredOutput, Boolean reasoning) {
+    record ModelEntry(String id, String qualifiedName, String label, Boolean structuredOutput, Boolean reasoning,
+            List<String> supportedParameters, List<String> reasoningEfforts) {
 
         LlmModelDefinition toDefinition() {
             return LlmModelDefinition.builder()
@@ -81,6 +82,8 @@ public class LlmModelRegistryService {
                     .label(label)
                     .structuredOutput(BooleanUtils.isTrue(structuredOutput))
                     .reasoning(BooleanUtils.isTrue(reasoning))
+                    .supportedParameters(supportedParameters)
+                    .reasoningEfforts(reasoningEfforts)
                     .build();
         }
     }
@@ -267,13 +270,16 @@ public class LlmModelRegistryService {
 
     // An upper layer can lag the classpath file a release ships (the remote copy) or set only a few fields
     // (a local override). A field it leaves out keeps the lower layer's value, so only an entry that sets a
-    // field may change it.
+    // field may change it. An empty list is set: it says the model takes none of the panel's parameters.
     private static ModelEntry inheritUnsetFields(ModelEntry existing, ModelEntry override) {
         return override.toBuilder()
                 .qualifiedName(ObjectUtils.getIfNull(override.qualifiedName(), existing.qualifiedName()))
                 .label(ObjectUtils.getIfNull(override.label(), existing.label()))
                 .structuredOutput(ObjectUtils.getIfNull(override.structuredOutput(), existing.structuredOutput()))
                 .reasoning(ObjectUtils.getIfNull(override.reasoning(), existing.reasoning()))
+                .supportedParameters(
+                        ObjectUtils.getIfNull(override.supportedParameters(), existing.supportedParameters()))
+                .reasoningEfforts(ObjectUtils.getIfNull(override.reasoningEfforts(), existing.reasoningEfforts()))
                 .build();
     }
 }
