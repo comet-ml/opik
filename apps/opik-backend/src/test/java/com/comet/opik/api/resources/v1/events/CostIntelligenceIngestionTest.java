@@ -846,18 +846,6 @@ class CostIntelligenceIngestionTest {
         }
 
         @Test
-        @DisplayName("an element string over 512 chars stores that list empty with status truncated")
-        void elementOverLengthCapIsTruncated() {
-            var row = ingestRepositoryEdit(repository -> repository.putArray("instruction_files").addObject()
-                    .put("path", "p".repeat(513)).put("blob_id", "b"));
-
-            assertThat(row.instructionFilesStatus()).isEqualTo("truncated");
-            assertThat(row.instructionFilesPath()).isEmpty();
-            assertThat(row.instructionFilesVersionId()).isEmpty();
-            assertThat(row.skillsStatus()).isEqualTo("listed");
-        }
-
-        @Test
         @DisplayName("skills and instruction_files groups of different lengths insert side by side")
         void groupsOfDifferentLengthsInsert() {
             var ws = newWorkspace();

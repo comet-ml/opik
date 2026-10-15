@@ -40,7 +40,6 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 public class CipxTraceIdentityDAO {
 
     private static final int MAX_LIST_ENTRIES = 256;
-    private static final int MAX_TEXT_CHARS = 512;
     private static final String STATUS_LISTED = "listed";
     private static final String STATUS_TRUNCATED = "truncated";
 
@@ -124,8 +123,8 @@ public class CipxTraceIdentityDAO {
             JsonNode instructionFiles = repository.path("instruction_files");
             // cipx drops an oversized skills list but still sends instruction_files, so status is per list.
             // A trace update without the lists re-writes '' and empty; readers take the latest listed trace.
-            String skillsStatus = listStatus(skills, "root", "name", "tree_id");
-            String filesStatus = listStatus(instructionFiles, "path", "blob_id");
+            String skillsStatus = listStatus(skills);
+            String filesStatus = listStatus(instructionFiles);
             List<String> skillsRoot = textField(skills, skillsStatus, "root");
             List<String> filesPath = textField(instructionFiles, filesStatus, "path");
             var row = TraceIdentityRow.builder()
@@ -176,20 +175,13 @@ public class CipxTraceIdentityDAO {
             return row;
         }
 
-        // 'listed' only for an array within the caps; over them 'truncated' (stored empty); else ''.
-        private static String listStatus(JsonNode array, String... fields) {
+        // 'listed' only for an array within the entry cap; over it 'truncated' (stored empty); else ''.
+        private static String listStatus(JsonNode array) {
             if (!array.isArray()) {
                 return "";
             }
             if (array.size() > MAX_LIST_ENTRIES) {
                 return STATUS_TRUNCATED;
-            }
-            for (JsonNode element : array) {
-                for (String field : fields) {
-                    if (element.isObject() && element.path(field).asText("").length() > MAX_TEXT_CHARS) {
-                        return STATUS_TRUNCATED;
-                    }
-                }
             }
             return STATUS_LISTED;
         }
