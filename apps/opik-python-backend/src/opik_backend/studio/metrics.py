@@ -223,7 +223,7 @@ def _missing_reference_result(metric_name: str, reference_key: str) -> "ScoreRes
 
 
 # Environment variable to control execution strategy (same as evaluator.py)
-EXECUTION_STRATEGY = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "process")
+EXECUTION_STRATEGY = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "docker")
 
 # Singleton executor for code metrics (only for docker strategy)
 _code_metric_executor: Optional[CodeExecutorBase] = None
