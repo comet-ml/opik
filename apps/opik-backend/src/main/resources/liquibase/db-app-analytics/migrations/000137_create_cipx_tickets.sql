@@ -26,3 +26,4 @@ ENGINE = ReplicatedReplacingMergeTree(
 ORDER BY (workspace_id, project_id, key);
 
 --rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.cipx_tickets ON CLUSTER '{cluster}';
+

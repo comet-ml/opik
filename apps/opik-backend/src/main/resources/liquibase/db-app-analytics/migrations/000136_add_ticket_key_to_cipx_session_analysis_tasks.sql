@@ -10,3 +10,4 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_session_analysis ON CLUSTER '{clu
     ADD COLUMN IF NOT EXISTS `tasks.ticket_key` Array(String);
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_session_analysis ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS `tasks.ticket_key`;
+
