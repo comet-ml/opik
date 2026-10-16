@@ -165,7 +165,7 @@ public class MigrationUtils {
                         CLICKHOUSE_CHANGELOG_FILE));
     }
 
-    /** Number of changesets from the start of the changelog up to the first one declared in {@code migrationFileName}. */
+    /** Number of changesets before the first one declared in {@code migrationFileName}. */
     private static int countChangeSetsBefore(Liquibase liquibase, String migrationFileName)
             throws LiquibaseException {
         var changeSets = liquibase.getDatabaseChangeLog().getChangeSets();
