@@ -1,7 +1,7 @@
 import type OpenAI from "openai";
 
 import {
-  getToolCallOutput,
+  buildStreamOutput,
   parseChunk,
   parseCompletionOutput,
   parseInputArgs,
@@ -163,12 +163,7 @@ const processResponseChunk = (
 ): {
   output?: Record<string, unknown>;
   usage: ChunkUsage;
-  chunkData: {
-    isToolCall: boolean;
-    data:
-      | string
-      | OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta.ToolCall;
-  };
+  chunkData: ReturnType<typeof parseChunk>;
   updatedObservationData: ObservationData;
 } => {
   let output;
@@ -245,10 +240,7 @@ function wrapAsyncIterable<T>(
       observationData = updatedObservationData;
 
       if (chunkData.isToolCall) {
-        toolCallChunks = [
-          ...toolCallChunks,
-          chunkData.data as OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta.ToolCall,
-        ];
+        toolCallChunks = [...toolCallChunks, ...chunkData.data];
       } else {
         textChunks = [...textChunks, chunkData.data as string];
       }
@@ -257,10 +249,7 @@ function wrapAsyncIterable<T>(
     }
 
     const finalOutput =
-      outputFromChunks ??
-      (toolCallChunks.length > 0
-        ? getToolCallOutput(toolCallChunks)
-        : { message: textChunks.join("") });
+      outputFromChunks ?? buildStreamOutput(textChunks, toolCallChunks);
 
     const usageData = parseUsage({ usage });
 
