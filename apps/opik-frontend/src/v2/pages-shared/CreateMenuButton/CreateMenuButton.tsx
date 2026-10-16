@@ -31,11 +31,11 @@ const CreateMenuButton = <T extends string>({
   const button = (
     <Button
       variant="default"
-      size="2xs"
+      size="xs"
       data-testid={dataTestId}
       onClick={hasMenu ? undefined : () => onSelect(options[0].value)}
     >
-      <Plus className="mr-1 size-3" />
+      <Plus className="mr-1 size-4" />
       <span>{label}</span>
     </Button>
   );
