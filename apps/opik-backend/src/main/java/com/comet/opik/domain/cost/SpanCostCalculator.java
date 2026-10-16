@@ -79,14 +79,14 @@ class SpanCostCalculator {
         // Audio and reasoning are subsets of the prompt and completion, split out only when they have a rate of their
         // own; otherwise they bill as text.
         long audioPromptTokens = isPositive(modelPrice.inputAudioTokenPrice()) ? usage.audioPromptTokens() : 0;
-        long textPromptTokens = Optional.ofNullable(usage.textPromptTokens())
-                .orElse(Math.max(0,
-                        usage.promptTokens() - usage.cachedTokens() - usage.cacheWriteTokens() - audioPromptTokens));
+        // A reported text count is used as sent, so a negative one (corrupt input) is clamped like a derived one.
+        long textPromptTokens = Math.max(0, Optional.ofNullable(usage.textPromptTokens())
+                .orElse(usage.promptTokens() - usage.cachedTokens() - usage.cacheWriteTokens() - audioPromptTokens));
         long audioCompletionTokens = isPositive(modelPrice.outputAudioTokenPrice())
                 ? usage.audioCompletionTokens()
                 : 0;
-        long textCompletionTokens = Optional.ofNullable(usage.textCompletionTokens())
-                .orElse(Math.max(0, usage.completionTokens() - audioCompletionTokens));
+        long textCompletionTokens = Math.max(0, Optional.ofNullable(usage.textCompletionTokens())
+                .orElse(usage.completionTokens() - audioCompletionTokens));
         long reasoningTokens = isPositive(modelPrice.outputReasoningTokenPrice())
                 ? Math.clamp(usage.reasoningTokens(), 0, textCompletionTokens)
                 : 0;

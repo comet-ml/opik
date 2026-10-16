@@ -2,23 +2,24 @@ package com.comet.opik.domain.cost;
 
 import jakarta.annotation.Nullable;
 import lombok.NonNull;
+import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * The LLM providers Opik prices, named as in LiteLLM's price file. Every provider in that file is supported under its
- * own name, so a provider LiteLLM adds needs no code change. Other spellings clients send are aliases of one of them.
- * The provider is never inferred from usage keys or from model-name patterns.
- *
- * @param providers every {@code litellm_provider} of the price file and of Opik's overrides file.
+ * Maps the provider a span names onto the providers of LiteLLM's price file, under whose names Opik prices models.
+ * Every provider in that file is priced under its own name, so a provider LiteLLM adds needs no code change. Other
+ * spellings clients send are aliases of one of them. The provider is never inferred from usage keys or from model-name
+ * patterns.
  */
-public record ProviderRegistry(@NonNull Set<String> providers) {
+@UtilityClass
+public class ProviderRegistry {
 
     // Names clients send that aren't in the price file, each mapped to the provider it means.
     private static final Map<String, String> LITELLM_NAME_BY_ALIAS = Map.of(
@@ -39,9 +40,11 @@ public record ProviderRegistry(@NonNull Set<String> providers) {
             List.of("vertex_ai-language-models", "vertex_ai"),
             List.of("cohere", "cohere_chat"));
 
-    public ProviderRegistry {
-        providers = Set.copyOf(providers);
-    }
+    // Built once, as every priced span reads it.
+    private static final Map<String, List<String>> PRICE_LOOKUP_ORDER_BY_PROVIDER = SIBLING_GROUPS.stream()
+            .flatMap(group -> group.stream().map(provider -> Map.entry(provider, Stream.concat(Stream.of(provider),
+                    group.stream().filter(sibling -> !sibling.equals(provider))).toList())))
+            .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
 
     /**
      * The provider field as sent, or the provider its alias means. Only when the field is blank can an explicit vendor
@@ -62,12 +65,7 @@ public record ProviderRegistry(@NonNull Set<String> providers) {
 
     /** The provider first, then the providers LiteLLM files the same vendor's other models under. */
     public List<String> priceLookupOrder(@NonNull String provider) {
-        return SIBLING_GROUPS.stream()
-                .filter(group -> group.contains(provider))
-                .findFirst()
-                .map(group -> Stream.concat(Stream.of(provider),
-                        group.stream().filter(sibling -> !sibling.equals(provider))).toList())
-                .orElse(List.of(provider));
+        return PRICE_LOOKUP_ORDER_BY_PROVIDER.getOrDefault(provider, List.of(provider));
     }
 
     String toLiteLlmName(@NonNull String name) {
@@ -75,11 +73,11 @@ public record ProviderRegistry(@NonNull Set<String> providers) {
         return LITELLM_NAME_BY_ALIAS.getOrDefault(normalized, normalized);
     }
 
-    static Map<String, String> aliases() {
+    Map<String, String> aliases() {
         return LITELLM_NAME_BY_ALIAS;
     }
 
-    static List<List<String>> siblingGroups() {
+    List<List<String>> siblingGroups() {
         return SIBLING_GROUPS;
     }
 }

@@ -26,11 +26,17 @@ public record OriginalUsage(
 
     public static final OriginalUsage EMPTY = new OriginalUsage(Map.of(), Map.of(), false);
 
+    // Copies keep the keys sorted: when two spellings normalize to the same name, the first one wins.
+    public OriginalUsage {
+        keys = Collections.unmodifiableMap(new TreeMap<>(keys));
+        outerKeys = Collections.unmodifiableMap(new TreeMap<>(outerKeys));
+    }
+
     /** The provider's usage with the keys the client sent next to it, which fill in the counts it lacks. */
     public OriginalUsage withOuterKeys() {
         var merged = new TreeMap<>(outerKeys);
         merged.putAll(keys);
-        return new OriginalUsage(Collections.unmodifiableMap(merged), Map.of(), false);
+        return new OriginalUsage(merged, Map.of(), false);
     }
 
     public static OriginalUsage from(@Nullable Map<String, Integer> usage) {
@@ -43,12 +49,14 @@ public record OriginalUsage(
             if (key == null || value == null) {
                 return;
             }
+            // One substring at the end: stripping one prefix at a time copies the rest of the key every time.
             int depth = 0;
-            String name = key;
-            while (name.startsWith(ORIGINAL_USAGE_PREFIX)) {
-                name = name.substring(ORIGINAL_USAGE_PREFIX.length());
+            int nameStart = 0;
+            while (key.startsWith(ORIGINAL_USAGE_PREFIX, nameStart)) {
+                nameStart += ORIGINAL_USAGE_PREFIX.length();
                 depth++;
             }
+            String name = key.substring(nameStart);
             if (name.isEmpty()) {
                 return;
             }
@@ -59,11 +67,10 @@ public record OriginalUsage(
             }
         });
         if (keysByDepth.isEmpty()) {
-            return new OriginalUsage(Collections.unmodifiableMap(outerKeys), Map.of(), false);
+            return new OriginalUsage(outerKeys, Map.of(), false);
         }
         // Usage that was already converted and then logged as provider usage again nests two or three levels deep.
         // Only the deepest level is the provider's own usage; the shallower ones hold the earlier conversion's totals.
-        return new OriginalUsage(Collections.unmodifiableMap(keysByDepth.lastEntry().getValue()),
-                Collections.unmodifiableMap(outerKeys), true);
+        return new OriginalUsage(keysByDepth.lastEntry().getValue(), outerKeys, true);
     }
 }

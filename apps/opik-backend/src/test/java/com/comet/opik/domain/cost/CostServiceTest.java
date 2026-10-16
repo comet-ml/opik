@@ -19,7 +19,6 @@ import org.mockito.Mockito;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -1272,33 +1271,36 @@ class CostServiceTest {
      * {@code litellm_provider} name, with no per-provider registration in {@link CostService}.
      * Covers providers that used to be dropped at load time, and price-file names that used to be
      * folded into another provider ({@code bedrock_converse}, {@code vertex_ai-language-models}, ...).
-     * Each provider with a token-priced row must price at least one of its rows.
+     * Each provider with a token-priced row must price at least one of its models at exactly that row's
+     * rates, so a provider resolved to the wrong rows fails too.
      */
     @ParameterizedTest(name = "{0}")
     @MethodSource("provideTokenPricedProviders")
-    void calculateCostPricesEveryProviderInThePriceFile(String provider, List<String> models) {
+    void calculateCostPricesEveryProviderInThePriceFile(String provider, Map<String, ModelCostData> rowsByModel) {
         Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
 
-        assertThat(models).anySatisfy(model -> assertThat(CostService.calculateCost(model, provider, usage, null))
-                .isGreaterThan(BigDecimal.ZERO));
+        assertThat(rowsByModel).anySatisfy((model, row) -> assertThat(
+                CostService.calculateCost(model, provider, usage, null))
+                .isEqualByComparingTo(price(row.inputCostPerToken()).add(price(row.outputCostPerToken()))
+                        .multiply(BigDecimal.valueOf(1000))));
     }
 
     private static Stream<Arguments> provideTokenPricedProviders() throws IOException {
         Map<String, ModelCostData> prices = JsonUtils.readJsonFile(CostService.MODEL_PRICES_FILE,
                 new TypeReference<>() {
                 });
-        Map<String, List<String>> modelsByProvider = prices.entrySet().stream()
+        Map<String, Map<String, ModelCostData>> rowsByModelByProvider = prices.entrySet().stream()
                 .filter(entry -> StringUtils.isNotBlank(entry.getValue().litellmProvider()))
-                .filter(entry -> isPositivePrice(entry.getValue().inputCostPerToken())
-                        || isPositivePrice(entry.getValue().outputCostPerToken()))
+                .filter(entry -> price(entry.getValue().inputCostPerToken()).signum() > 0
+                        || price(entry.getValue().outputCostPerToken()).signum() > 0)
                 .collect(Collectors.groupingBy(entry -> entry.getValue().litellmProvider(), TreeMap::new,
-                        Collectors.mapping(Map.Entry::getKey, Collectors.toList())));
-        return modelsByProvider.entrySet().stream()
+                        Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
+        return rowsByModelByProvider.entrySet().stream()
                 .map(entry -> Arguments.of(entry.getKey(), entry.getValue()));
     }
 
-    private static boolean isPositivePrice(String price) {
-        return StringUtils.isNotBlank(price) && new BigDecimal(price).signum() > 0;
+    private static BigDecimal price(String price) {
+        return StringUtils.isBlank(price) ? BigDecimal.ZERO : new BigDecimal(price);
     }
 
     /**
@@ -1403,5 +1405,18 @@ class CostServiceTest {
                         Arguments.of("cache larger than the prompt", provider, Map.of("prompt_tokens", 1,
                                 "cache_read_input_tokens", 1_000_000, "prompt_tokens_details.cached_tokens", 1_000_000,
                                 "completion_tokens", 1))));
+    }
+
+    /**
+     * A model routed through an aggregator is priced under the provider its prefix names, with the same name
+     * normalization as a direct lookup: a dated release name finds its base model.
+     */
+    @Test
+    void calculateCostNormalizesTheModelNameUnderTheProviderItsPrefixNames() {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
+
+        // perplexity/sonar-pro: input 3e-6, output 1.5e-5 -> 1000 * 3e-6 + 1000 * 1.5e-5 = 0.018
+        assertThat(CostService.calculateCost("perplexity/sonar-pro-2025-06-01", "openrouter", usage, null))
+                .isEqualByComparingTo("0.018");
     }
 }

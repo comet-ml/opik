@@ -6,6 +6,10 @@ import com.comet.opik.domain.token_usage.model.SpanUsage;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -23,17 +27,18 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.BiFunction;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Slf4j
 public class CostService {
     private static final char MODEL_PROVIDER_SEPARATOR = '/';
     private static final Map<String, ModelPrice> modelProviderPrices;
-    // Every row is priced under its own litellm_provider name; span providers are resolved to those names.
-    private static final ProviderRegistry providerRegistry;
+    // Usage priced although it contradicts its provider's format: shapes no format reads yet, or numbers that disagree.
+    private static final LongCounter USAGE_WARNINGS = GlobalOpenTelemetry.get().getMeter("opik.cost")
+            .counterBuilder("opik.cost.usage.warnings")
+            .setDescription("Span usage priced despite not matching its provider's usage format (tagged by type)")
+            .build();
+    private static final AttributeKey<String> WARNING_TYPE_KEY = AttributeKey.stringKey("type");
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
@@ -49,9 +54,7 @@ public class CostService {
 
     static {
         try {
-            var priceTable = parseModelPrices();
-            modelProviderPrices = Collections.unmodifiableMap(priceTable.prices());
-            providerRegistry = new ProviderRegistry(priceTable.providers());
+            modelProviderPrices = Collections.unmodifiableMap(parseModelPrices());
         } catch (IOException e) {
             log.error("Failed to load model prices", e);
             throw new UncheckedIOException(e);
@@ -59,10 +62,6 @@ public class CostService {
     }
 
     private static final ModelPrice DEFAULT_COST = ModelPrice.empty();
-
-    public static ProviderRegistry providerRegistry() {
-        return providerRegistry;
-    }
 
     /** Prices the usage as its provider's format reads it; the usage itself isn't changed. */
     public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
@@ -72,11 +71,14 @@ public class CostService {
     }
 
     // Pricing runs while spans are ingested, so it never fails the caller: an error while pricing gives no estimate.
-    private static BigDecimal estimateCost(String modelName, String provider, Map<String, Integer> usage) {
+    private static BigDecimal estimateCost(@Nullable String modelName, @Nullable String provider,
+            @Nullable Map<String, Integer> usage) {
         try {
             ModelPrice modelPrice = findModelPrice(modelName, provider);
-            SpanUsage spanUsage = SpanUsageFactory.create(providerRegistry.resolve(provider, modelName).orElse(null),
+            SpanUsage spanUsage = SpanUsageFactory.create(ProviderRegistry.resolve(provider, modelName).orElse(null),
                     usage);
+            spanUsage.warnings().forEach(warning -> USAGE_WARNINGS.add(1,
+                    Attributes.of(WARNING_TYPE_KEY, warning.type().name())));
             return modelPrice.calculator().apply(modelPrice, spanUsage);
         } catch (RuntimeException exception) {
             log.warn("Failed to estimate the cost of model '{}', provider '{}'", modelName, provider, exception);
@@ -113,11 +115,11 @@ public class CostService {
         if (StringUtils.isBlank(modelName)) {
             return DEFAULT_COST;
         }
-        var resolvedProvider = providerRegistry.resolve(provider, modelName);
+        var resolvedProvider = ProviderRegistry.resolve(provider, modelName);
         if (resolvedProvider.isEmpty()) {
             return DEFAULT_COST;
         }
-        var lookupOrder = providerRegistry.priceLookupOrder(resolvedProvider.get());
+        var lookupOrder = ProviderRegistry.priceLookupOrder(resolvedProvider.get());
 
         // Preserve the original name so the provider-prefix fallback below can inspect it after
         // all primary lookups have missed under the caller-supplied provider.
@@ -149,11 +151,10 @@ public class CostService {
         // matching provider directly.
         int prefixSlash = originalModelName.indexOf('/');
         if (prefixSlash > 0) {
-            String providerFromPrefix = providerRegistry.toLiteLlmName(originalModelName.substring(0, prefixSlash));
+            String providerFromPrefix = ProviderRegistry.toLiteLlmName(originalModelName.substring(0, prefixSlash));
             if (!lookupOrder.contains(providerFromPrefix)) {
-                for (String candidateProvider : providerRegistry.priceLookupOrder(providerFromPrefix)) {
-                    ModelPrice prefixMatch = modelProviderPrices.get(createModelProviderKey(modelName,
-                            candidateProvider));
+                for (String candidateProvider : ProviderRegistry.priceLookupOrder(providerFromPrefix)) {
+                    ModelPrice prefixMatch = findModelPriceUnderProvider(modelName, candidateProvider);
                     if (prefixMatch != null) {
                         log.debug(
                                 "Found model price using model-name provider prefix. Original model: '{}', supplied provider: '{}', prefix-derived provider: '{}'",
@@ -305,10 +306,7 @@ public class CostService {
                 .orElse(BigDecimal.ZERO);
     }
 
-    private record PriceTable(Map<String, ModelPrice> prices, Set<String> providers) {
-    }
-
-    private static PriceTable parseModelPrices() throws IOException {
+    private static Map<String, ModelPrice> parseModelPrices() throws IOException {
         Map<String, ModelCostData> modelCosts = new LinkedHashMap<>(JsonUtils.readJsonFile(MODEL_PRICES_FILE,
                 new TypeReference<Map<String, ModelCostData>>() {
                 }));
@@ -334,13 +332,7 @@ public class CostService {
         // upstream key), brand-new models, and price overrides for existing keys.
         Map<String, ModelCostData> overrides = readOverrides();
         applyOverrides(parsedModelPrices, modelCosts, overrides);
-
-        Set<String> providers = Stream.of(modelCosts, overrides)
-                .flatMap(costsByModel -> costsByModel.values().stream())
-                .map(ModelCostData::litellmProvider)
-                .filter(StringUtils::isNotBlank)
-                .collect(Collectors.toSet());
-        return new PriceTable(parsedModelPrices, providers);
+        return parsedModelPrices;
     }
 
     /**

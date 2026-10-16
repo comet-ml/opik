@@ -166,6 +166,17 @@ class SpanCostCalculatorTest {
                             "0.1839792"));
         }
 
+        // A reported text count is used as sent; a negative one bills no text instead of failing the estimate.
+        @Test
+        void textGenerationCostTreatsANegativeReportedTextCountAsNone() {
+            var modelPrice = NO_CACHE_PRICES.toBuilder().outputReasoningTokenPrice(new BigDecimal("0.003")).build();
+            var usage = spanUsage("openai", "prompt_tokens", 1000, "completion_tokens", 100,
+                    "completion_tokens_details.text_tokens", -5, "completion_tokens_details.reasoning_tokens", 10);
+
+            // 1000 * 0.01; no text or reasoning completion tokens
+            assertThat(textCost(modelPrice, usage)).isEqualByComparingTo("10.00");
+        }
+
         @Test
         void textGenerationCostBillsCachedTokensAsInputWithoutACacheRate() {
             var usage = spanUsage("openai", "prompt_tokens", 1000, "completion_tokens", 100,

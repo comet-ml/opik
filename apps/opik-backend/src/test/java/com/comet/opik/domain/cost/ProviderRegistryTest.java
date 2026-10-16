@@ -15,9 +15,11 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,48 +30,51 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ProviderRegistryTest {
 
-    private static final ProviderRegistry REGISTRY = CostService.providerRegistry();
+    // Every litellm_provider of the price file and of Opik's overrides file.
+    private static final Set<String> PRICE_FILE_PROVIDERS = priceFileProviders();
 
-    @Test
-    void providersAreEveryProviderOfThePriceFileAndTheOverrides() throws IOException {
-        var expected = new TreeSet<String>();
+    private static Set<String> priceFileProviders() {
+        var providers = new TreeSet<String>();
         for (var file : List.of(CostService.MODEL_PRICES_FILE, CostService.MODEL_PRICES_OVERRIDES_FILE)) {
-            Map<String, ModelCostData> costsByModel = JsonUtils.readJsonFile(file, new TypeReference<>() {
-            });
-            costsByModel.forEach((model, cost) -> {
-                if (!model.equals("sample_spec") && StringUtils.isNotBlank(cost.litellmProvider())) {
-                    expected.add(cost.litellmProvider());
-                }
-            });
+            try {
+                Map<String, ModelCostData> costsByModel = JsonUtils.readJsonFile(file, new TypeReference<>() {
+                });
+                costsByModel.forEach((model, cost) -> {
+                    if (!model.equals("sample_spec") && StringUtils.isNotBlank(cost.litellmProvider())) {
+                        providers.add(cost.litellmProvider());
+                    }
+                });
+            } catch (IOException exception) {
+                throw new UncheckedIOException(exception);
+            }
         }
-
-        assertThat(REGISTRY.providers()).hasSizeGreaterThan(100).containsExactlyInAnyOrderElementsOf(expected);
+        return providers;
     }
 
     @Test
-    void resolveKeepsEveryProviderUnderItsOwnName() {
-        assertThat(REGISTRY.providers())
-                .allSatisfy(provider -> assertThat(REGISTRY.resolve(provider, null)).contains(provider));
+    void resolveKeepsEveryProviderOfThePriceFileUnderItsOwnName() {
+        assertThat(PRICE_FILE_PROVIDERS).hasSizeGreaterThan(100)
+                .allSatisfy(provider -> assertThat(ProviderRegistry.resolve(provider, null)).contains(provider));
     }
 
     @Test
     void aliasesMapNamesOutsideThePriceFileToProvidersInIt() {
         assertThat(ProviderRegistry.aliases()).allSatisfy((alias, provider) -> {
-            assertThat(REGISTRY.providers()).doesNotContain(alias).contains(provider);
-            assertThat(REGISTRY.resolve(alias, null)).contains(provider);
+            assertThat(PRICE_FILE_PROVIDERS).doesNotContain(alias).contains(provider);
+            assertThat(ProviderRegistry.resolve(alias, null)).contains(provider);
         });
     }
 
     @Test
     void siblingGroupsHoldOnlyProvidersOfThePriceFile() {
         assertThat(ProviderRegistry.siblingGroups())
-                .allSatisfy(group -> assertThat(REGISTRY.providers()).containsAll(group));
+                .allSatisfy(group -> assertThat(PRICE_FILE_PROVIDERS).containsAll(group));
     }
 
     @ParameterizedTest
     @EnumSource(value = LlmProvider.class, names = {"CUSTOM_LLM", "OPIK_FREE"}, mode = EnumSource.Mode.EXCLUDE)
     void resolveMapsEveryPlaygroundProviderToAProviderOfThePriceFile(LlmProvider provider) {
-        assertThat(REGISTRY.resolve(provider.getValue(), null)).get().isIn(REGISTRY.providers());
+        assertThat(ProviderRegistry.resolve(provider.getValue(), null)).get().isIn(PRICE_FILE_PROVIDERS);
     }
 
     @ParameterizedTest
@@ -77,7 +82,7 @@ class ProviderRegistryTest {
             VertexAnthropicResolver.ANTHROPIC_VERTEX_AI, "azure", "bedrock", "mistral", "xai", "openai", "jina_ai",
             "elastic"})
     void resolveMapsEveryNameOtelIngestionStoresToAProviderOfThePriceFile(String provider) {
-        assertThat(REGISTRY.resolve(provider, null)).get().isIn(REGISTRY.providers());
+        assertThat(ProviderRegistry.resolve(provider, null)).get().isIn(PRICE_FILE_PROVIDERS);
     }
 
     @ParameterizedTest
@@ -89,12 +94,12 @@ class ProviderRegistryTest {
             "together_ai, together_ai",
             "my-gateway, my-gateway"})
     void resolveTrimsAndLowercasesTheProvider(String provider, String expected) {
-        assertThat(REGISTRY.resolve(provider, null)).contains(expected);
+        assertThat(ProviderRegistry.resolve(provider, null)).contains(expected);
     }
 
     @Test
     void resolvePrefersTheProviderFieldOverTheModelPrefix() {
-        assertThat(REGISTRY.resolve("openrouter", "anthropic/claude-sonnet-4-5")).contains("openrouter");
+        assertThat(ProviderRegistry.resolve("openrouter", "anthropic/claude-sonnet-4-5")).contains("openrouter");
     }
 
     @ParameterizedTest
@@ -112,8 +117,8 @@ class ProviderRegistryTest {
             "Anthropic/claude-3-5-sonnet, anthropic",
             "openrouter/anthropic/claude-sonnet-4-5, openrouter"})
     void resolveTakesAnExplicitVendorPrefixWhenTheProviderIsBlank(String model, String expected) {
-        assertThat(REGISTRY.resolve(null, model)).contains(expected);
-        assertThat(REGISTRY.resolve("  ", model)).contains(expected);
+        assertThat(ProviderRegistry.resolve(null, model)).contains(expected);
+        assertThat(ProviderRegistry.resolve("  ", model)).contains(expected);
     }
 
     @ParameterizedTest
@@ -121,7 +126,7 @@ class ProviderRegistryTest {
     @ValueSource(strings = {"gpt-4o", "claude-3-5-sonnet", "gemini-2.5-pro", "anthropic.claude-3-haiku", "/gpt-4o",
             " /gpt-4o"})
     void resolveNeverInfersTheProviderFromTheModelName(String model) {
-        assertThat(REGISTRY.resolve(null, model)).isEqualTo(Optional.empty());
+        assertThat(ProviderRegistry.resolve(null, model)).isEqualTo(Optional.empty());
     }
 
     @ParameterizedTest
@@ -134,6 +139,6 @@ class ProviderRegistryTest {
             "openai, openai",
             "my-gateway, my-gateway"})
     void priceLookupOrderPutsTheProviderFirstThenItsSiblings(String provider, String expected) {
-        assertThat(REGISTRY.priceLookupOrder(provider)).containsExactly(expected.split("\\|"));
+        assertThat(ProviderRegistry.priceLookupOrder(provider)).containsExactly(expected.split("\\|"));
     }
 }

@@ -9,6 +9,7 @@ import java.util.Map;
 
 import static com.comet.opik.domain.token_usage.UsageCases.usage;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 
 class OriginalUsageTest {
 
@@ -107,5 +108,27 @@ class OriginalUsageTest {
         usage.put("output_tokens", 2);
 
         assertThat(original.keys()).isEqualTo(Map.of("input_tokens", 1));
+    }
+
+    @Test
+    void fromReadsTheDeepestLevelOfAKeyWithManyPrefixes() {
+        var original = OriginalUsage.from(usage(OriginalUsage.ORIGINAL_USAGE_PREFIX.repeat(3_000) + "input_tokens", 5));
+
+        assertThat(original.keys()).isEqualTo(usage("input_tokens", 5));
+        assertThat(original.nested()).isTrue();
+    }
+
+    @Test
+    void constructionCopiesTheMapsItIsGiven() {
+        var keys = new HashMap<>(usage("output_tokens", 2, "input_tokens", 1));
+        var outerKeys = new HashMap<>(usage("total_tokens", 3));
+
+        var original = OriginalUsage.builder().keys(keys).outerKeys(outerKeys).nested(true).build();
+        keys.put("cache_read_input_tokens", 7);
+        outerKeys.clear();
+
+        assertThat(original.keys()).containsExactly(entry("input_tokens", 1), entry("output_tokens", 2));
+        assertThat(original.outerKeys()).isEqualTo(usage("total_tokens", 3));
+        assertThat(original.keys()).isUnmodifiable();
     }
 }

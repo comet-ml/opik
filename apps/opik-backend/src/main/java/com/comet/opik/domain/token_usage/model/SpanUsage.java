@@ -21,4 +21,8 @@ public record SpanUsage(
         @Nullable NativeUsage nativeUsage,
         @NonNull OpenAiLikeUsage openAiLike,
         @NonNull List<UsageWarning> warnings) {
+
+    public SpanUsage {
+        warnings = List.copyOf(warnings);
+    }
 }

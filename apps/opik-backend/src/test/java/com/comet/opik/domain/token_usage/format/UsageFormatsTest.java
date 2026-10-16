@@ -1,5 +1,6 @@
 package com.comet.opik.domain.token_usage.format;
 
+import com.comet.opik.api.ModelCostData;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.token_usage.UsageCases;
 import com.comet.opik.domain.token_usage.model.AnthropicNativeUsage;
@@ -9,13 +10,17 @@ import com.comet.opik.domain.token_usage.model.NativeUsage;
 import com.comet.opik.domain.token_usage.model.OpenAiNativeUsage;
 import com.comet.opik.domain.token_usage.model.OriginalUsage;
 import com.comet.opik.domain.token_usage.model.UsageWarning;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -66,9 +71,15 @@ class UsageFormatsTest {
         }
 
         @Test
-        void everyProviderWithItsOwnFormatIsAProviderOfThePriceFile() {
-            assertThat(CostService.providerRegistry().providers())
-                    .containsAll(UsageFormats.providersWithOwnFormat());
+        void everyProviderWithItsOwnFormatIsAProviderOfThePriceFile() throws IOException {
+            var priceFileProviders = new HashSet<String>();
+            for (var file : List.of(CostService.MODEL_PRICES_FILE, CostService.MODEL_PRICES_OVERRIDES_FILE)) {
+                Map<String, ModelCostData> costsByModel = JsonUtils.readJsonFile(file, new TypeReference<>() {
+                });
+                costsByModel.values().forEach(cost -> priceFileProviders.add(cost.litellmProvider()));
+            }
+
+            assertThat(priceFileProviders).containsAll(UsageFormats.providersWithOwnFormat());
         }
 
         @Test
