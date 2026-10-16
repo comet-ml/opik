@@ -19,7 +19,7 @@ import Logo from "@/shared/Logo/Logo";
 import { identifyReoUser } from "./analytics/reo";
 import useSegment from "./analytics/useSegment";
 import { ORGANIZATION_ROLE_TYPE, Organization, Workspace } from "./types";
-import { isHiddenSpendWorkspace } from "./lib/aiSpend";
+import { isHiddenSpendWorkspace, pickLandingWorkspace } from "./lib/aiSpend";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import { buildUrl } from "./utils";
@@ -186,9 +186,7 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
 
     useAppStore.getState().setActiveWorkspaceName(workspace.workspaceName);
   } else {
-    const defaultWorkspace =
-      allWorkspaces.find((workspace) => workspace.default) ??
-      allWorkspaces?.[0];
+    const defaultWorkspace = pickLandingWorkspace(allWorkspaces);
 
     if (defaultWorkspace) {
       if (
