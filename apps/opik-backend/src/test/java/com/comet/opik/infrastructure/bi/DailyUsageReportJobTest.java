@@ -51,8 +51,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamUtils;
 
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -709,12 +707,12 @@ class DailyUsageReportJobTest {
         }
 
         @Test
-        @DisplayName("Daily usage report counts distinct active clients")
+        @DisplayName("Daily usage report counts distinct clients")
         void dailyUsageReportCountsActiveClients() throws Exception {
             var sdkClient = "a".repeat(64);
             var browser = UUID.randomUUID().toString();
 
-            // The filter records today's clients: repeats count once and malformed IDs are ignored
+            // The filter records clients from request headers: repeats count once and malformed IDs are ignored
             for (var clientId : List.of(sdkClient, sdkClient, "not-a-client-id")) {
                 try (var response = client.target("%s/v1/private/projects".formatted(baseURI))
                         .request()
@@ -725,39 +723,29 @@ class DailyUsageReportJobTest {
                     assertThat(response.getStatus()).isEqualTo(200);
                 }
             }
-            var today = LocalDate.now(ZoneOffset.UTC);
             Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
-                assertThat(redisCli("PFCOUNT", activeClientsKey("sdk", today))).isEqualTo("1");
-                assertThat(redisCli("PFCOUNT", activeClientsKey("ui", today))).isEqualTo("1");
+                assertThat(redisCli("PFCOUNT", "opik:active_clients:sdk")).isEqualTo("1");
+                assertThat(redisCli("PFCOUNT", "opik:active_clients:ui")).isEqualTo("1");
             });
+            redisCli("PFADD", "opik:active_clients:sdk", "b", "c");
 
-            // The report covers windows ending yesterday; a client seen on several days counts once
-            var yesterday = today.minusDays(1);
-            redisCli("PFADD", activeClientsKey("sdk", yesterday), "a", "b");
-            redisCli("PFADD", activeClientsKey("sdk", yesterday.minusDays(3)), "b", "c");
-            redisCli("PFADD", activeClientsKey("sdk", yesterday.minusDays(20)), "d");
-            redisCli("PFADD", activeClientsKey("sdk", yesterday.minusDays(40)), "e");
-            redisCli("PFADD", activeClientsKey("ui", yesterday.minusDays(3)), "u");
+            // The totals only ride along with a report; yesterday's activity is what sends it
+            var projectName = UUID.randomUUID().toString();
+            projectResourceClient.createProject(projectName, "", "default");
+            traceResourceClient.batchCreateTraces(
+                    List.of(factory.manufacturePojo(Trace.class).toBuilder().projectName(projectName).build()),
+                    "", "default");
+            updateTraces(ProjectService.DEFAULT_WORKSPACE_ID, templateAsync, false);
 
             var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
             guiceJobManager.getScheduler().scheduleJob(TriggerBuilder.newTrigger().startNow().forJob(key).build());
 
-            // No traces were created: the client counts alone are enough for the report to be sent
             Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> wireMock.server().verify(
                     postRequestedFor(urlPathEqualTo("/v1/notify/event"))
                             .withRequestBody(matchingJsonPath("$.event_type",
                                     equalTo(DailyUsageReportJob.STATISTICS_BE))
-                                    .and(matchingJsonPath("$.event_properties.daily_sdk_clients", equalTo("2")))
-                                    .and(matchingJsonPath("$.event_properties.weekly_sdk_clients", equalTo("3")))
-                                    .and(matchingJsonPath("$.event_properties.monthly_sdk_clients", equalTo("4")))
-                                    .and(matchingJsonPath("$.event_properties.daily_ui_clients", equalTo("0")))
-                                    .and(matchingJsonPath("$.event_properties.weekly_ui_clients", equalTo("1")))
-                                    .and(matchingJsonPath("$.event_properties.monthly_ui_clients",
-                                            equalTo("1"))))));
-        }
-
-        private String activeClientsKey(String type, LocalDate day) {
-            return "opik:active_clients:%s:%s".formatted(type, day);
+                                    .and(matchingJsonPath("$.event_properties.total_sdk_clients", equalTo("3")))
+                                    .and(matchingJsonPath("$.event_properties.total_ui_clients", equalTo("1"))))));
         }
 
         private String redisCli(String... command) throws Exception {

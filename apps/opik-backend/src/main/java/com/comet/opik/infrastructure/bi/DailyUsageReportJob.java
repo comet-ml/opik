@@ -149,6 +149,11 @@ public class DailyUsageReportJob extends Job implements InterruptableJob {
 
     private boolean hasNoDataToSubmit(BiEvent biEvent) {
         return biEvent.eventProperties().entrySet().stream().allMatch(e -> {
+            // All-time totals never return to zero, so on their own they would send a report every idle day
+            if (ActiveClientsService.TOTAL_COUNTS.contains(e.getKey())) {
+                return true;
+            }
+
             if (!e.getKey().equals("opik_app_version") && !e.getKey().equals("total_users")) {
                 return e.getValue().equals("0");
             }
