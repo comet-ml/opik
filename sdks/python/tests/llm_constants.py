@@ -82,3 +82,10 @@ LITELLM_BEDROCK_CLAUDE_SONNET = f"bedrock/{BEDROCK_CLAUDE_SONNET}"
 # ---------------------------------------------------------------------------
 # Default chat model: mistral-small-latest — the cheap+fast tier.
 MISTRAL_SMALL = "mistral-small-latest"
+
+# ---------------------------------------------------------------------------
+# Together AI
+# ---------------------------------------------------------------------------
+# The integration tests mock the transport and never reach Together, but this
+# is still the id the client is called with and the value asserted on the span.
+TOGETHER_LLAMA = "meta-llama/Llama-3.3-70B-Instruct-Turbo"

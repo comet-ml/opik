@@ -36,8 +36,8 @@ public class ServiceTogglesResource {
             @ApiResponse(responseCode = "200", description = "Service Toggles", content = @Content(schema = @Schema(implementation = ServiceTogglesConfig.class)))})
     public Response getToggles() {
         ServiceTogglesConfig toggles = config.getServiceToggles();
-        boolean customChartsEnabledForWorkspace = toggles.isOllieEnabled()
-                && config.getCustomCharts().enabledWorkspaceIds().contains(requestContext.get().getWorkspaceId());
+        boolean customChartsEnabledForWorkspace = config.getCustomCharts()
+                .isEnabledFor(toggles, requestContext.get().getWorkspaceId());
         return Response.ok()
                 .entity(toggles.withCustomChartsEnabledForWorkspace(customChartsEnabledForWorkspace))
                 .build();

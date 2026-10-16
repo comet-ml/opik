@@ -1208,6 +1208,54 @@ paths:
           description: Run accepted
         "404":
           description: Job not found
+  /v1/private/agent-insights/jobs/{projectId}/guidance:
+    put:
+      tags:
+      - Agent Insights Jobs
+      summary: Update Agent Insights project guidance
+      description: "Saves the project guidance sent to every Agent Insights run, creating\
+        \ the job (disabled) if the project has none. Empty or whitespace-only clears\
+        \ it. The guidance version is bumped only when the text changes. 404 while\
+        \ guidance is not enabled."
+      operationId: updateAgentInsightsGuidance
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentInsightsGuidanceUpdate"
+        required: true
+      responses:
+        "200":
+          description: Job with the saved guidance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsJob"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: "Project not found, or guidance not enabled"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Guidance missing or over the length limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/agent-insights/issues:
     get:
       tags:
@@ -1382,7 +1430,8 @@ paths:
       tags:
       - Agent Insights
       summary: Update agent insights issue status
-      description: "Moves an issue through its lifecycle: open, resolved or closed"
+      description: "Moves an issue through its lifecycle: open, resolved or closed.\
+        \ close_note is kept only with closed; any other status clears it"
       operationId: updateAgentInsightsIssue
       parameters:
       - name: issue_id
@@ -1405,8 +1454,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: "Missing project_id or status, or close_note over the length\
+            \ limit"
           content:
             application/json:
               schema:
@@ -10644,6 +10706,30 @@ components:
           type: string
           format: date-time
           readOnly: true
+        guidance:
+          type: string
+          description: Project guidance sent to every run; null when none
+          readOnly: true
+        guidance_updated_by:
+          type: string
+          description: Who last saved the guidance
+          readOnly: true
+        guidance_updated_at:
+          type: string
+          description: When the guidance was last saved
+          format: date-time
+          readOnly: true
+        guidance_version:
+          type: integer
+          description: Bumped each time the guidance text changes; 0 = never saved
+          format: int32
+          readOnly: true
+        results_guidance_version:
+          type: integer
+          description: Guidance version the current results were produced with; null
+            = no run since guidance existed
+          format: int32
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -10669,6 +10755,17 @@ components:
           enum:
           - enabled
           - disabled
+    AgentInsightsGuidanceUpdate:
+      required:
+      - guidance
+      type: object
+      properties:
+        guidance:
+          maxLength: 5000
+          minLength: 0
+          type: string
+          description: Project guidance for Agent Insights runs. Empty or whitespace-only
+            clears it
     AgentInsightsIssue:
       type: object
       properties:
@@ -10733,6 +10830,17 @@ components:
           type: integer
           description: COUNT(DISTINCT report_day) in the requested window
           format: int64
+        close_note:
+          type: string
+          description: The team's reason for closing the issue as not useful; set
+            only while status is closed
+        status_changed_by:
+          type: string
+          description: Who last changed the status
+        status_changed_at:
+          type: string
+          description: When the status was last changed
+          format: date-time
         created_by:
           type: string
         created_at:
@@ -10810,6 +10918,17 @@ components:
           - low
         traces_query:
           type: string
+        close_note:
+          type: string
+          description: The team's reason for closing the issue as not useful; set
+            only while status is closed
+        status_changed_by:
+          type: string
+          description: Who last changed the status
+        status_changed_at:
+          type: string
+          description: When the status was last changed
+          format: date-time
         created_by:
           type: string
         created_at:
@@ -10904,6 +11023,12 @@ components:
           - open
           - resolved
           - closed
+        close_note:
+          maxLength: 500
+          minLength: 0
+          type: string
+          description: Why the issue is closed as not useful. Stored only with status
+            closed; any other status clears it
     Alert:
       required:
       - webhook
@@ -22005,6 +22130,7 @@ components:
     ServiceTogglesConfig:
       required:
       - agentInsightsEnabled
+      - agentInsightsGuidanceEnabled
       - alertsEnabled
       - annotationQueueAutomationEnabled
       - anthropicProviderEnabled
@@ -22079,6 +22205,8 @@ components:
           type: boolean
         agentInsightsEnabled:
           type: boolean
+        agentInsightsGuidanceEnabled:
+          type: boolean
         projectHomepageEnabled:
           type: boolean
         onlineScoringTracingEnabled:
@@ -22092,6 +22220,9 @@ components:
           minimum: 5
           type: integer
           format: int32
+        customChartsEnabledForWorkspace:
+          type: boolean
+          readOnly: true
     SpanBatchUpdate:
       required:
       - ids
