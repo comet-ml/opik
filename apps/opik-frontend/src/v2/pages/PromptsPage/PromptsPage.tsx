@@ -6,7 +6,7 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { ExternalLink, FileText, MessagesSquare, PlusIcon } from "lucide-react";
+import { ExternalLink, FileText, MessagesSquare } from "lucide-react";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import { buildDocsUrl } from "@/v2/lib/utils";
@@ -23,12 +23,9 @@ import TextCell from "@/shared/DataTableCells/TextCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import PromptTypeCell from "@/v2/pages/PromptsPage/PromptTypeCell";
 import { Button } from "@/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
+import CreateMenuButton, {
+  CreateMenuOption,
+} from "@/v2/pages-shared/CreateMenuButton/CreateMenuButton";
 import { Separator } from "@/ui/separator";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import SearchInput from "@/shared/SearchInput/SearchInput";
@@ -202,6 +199,23 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "created_by",
 ];
 
+const CREATE_PROMPT_OPTIONS: CreateMenuOption<PROMPT_TEMPLATE_STRUCTURE>[] = [
+  {
+    value: PROMPT_TEMPLATE_STRUCTURE.TEXT,
+    label: "Text prompt",
+    description: "Simple prompts with variable substitution.",
+    icon: FileText,
+    iconClassName: "bg-[var(--color-turquoise)]",
+  },
+  {
+    value: PROMPT_TEMPLATE_STRUCTURE.CHAT,
+    label: "Chat prompt",
+    description: "Message-based prompts for conversational AI.",
+    icon: MessagesSquare,
+    iconClassName: "bg-[var(--color-burgundy)]",
+  },
+];
+
 const PromptsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -361,42 +375,11 @@ const PromptsPage: React.FunctionComponent = () => {
           Prompt library
         </h1>
         {canCreatePrompts && !isEmpty && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="default" size="xs">
-                <PlusIcon className="mr-1 size-4" />
-                Prompt
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-96">
-              <DropdownMenuItem
-                onClick={() =>
-                  handleNewPromptClick(PROMPT_TEMPLATE_STRUCTURE.TEXT)
-                }
-              >
-                <FileText className="mr-2 size-4 shrink-0 text-[var(--color-turquoise)]" />
-                <div className="flex flex-col">
-                  <span className="comet-body-s-accented">Text prompt</span>
-                  <span className="comet-body-xs text-light-slate">
-                    Simple prompts with variable substitution.
-                  </span>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  handleNewPromptClick(PROMPT_TEMPLATE_STRUCTURE.CHAT)
-                }
-              >
-                <MessagesSquare className="mr-2 size-4 shrink-0 text-[var(--color-burgundy)]" />
-                <div className="flex flex-col">
-                  <span className="comet-body-s-accented">Chat prompt</span>
-                  <span className="comet-body-xs text-light-slate">
-                    Message-based prompts for conversational AI.
-                  </span>
-                </div>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <CreateMenuButton
+            label="Prompt"
+            options={CREATE_PROMPT_OPTIONS}
+            onSelect={handleNewPromptClick}
+          />
         )}
       </div>
       {isEmpty ? (

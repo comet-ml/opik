@@ -577,7 +577,10 @@ describe("AddToDatasetDialog", () => {
 
   const navigateToPath = (stepsDown: number) => {
     fireEvent.keyDown(document, { key: "ArrowDown" });
-    fireEvent.keyDown(document, { key: "ArrowRight" });
+    const focusedNode = document.querySelector<HTMLElement>(
+      '[data-testid^="json-tree-node-"][data-focused="true"]',
+    );
+    fireEvent.click(within(focusedNode!).getByRole("button"));
     for (let i = 0; i < stepsDown; i += 1) {
       fireEvent.keyDown(document, { key: "ArrowDown" });
     }
