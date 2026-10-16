@@ -52,6 +52,8 @@ export const suggestNextExperimentName = (
  * prompt name plus its version (e.g. "My Prompt (v3)"). Prefers the sequential
  * version number, falls back to the commit hash when it's unavailable, and
  * omits the parenthetical entirely when neither is present (OPIK-6838).
+ * Undefined for a deleted prompt (the backend omits its name), which every
+ * ResourceLink consumer renders as its disabled "Deleted prompt" state.
  *
  * Single source of truth so the experiments table, the single-experiment
  * Configuration tab, and the dashboard leaderboard widget stay consistent.
@@ -61,11 +63,58 @@ export const formatPromptVersionLabel = (
     ExperimentPromptVersion,
     "prompt_name" | "version_number" | "commit"
   >,
-): string => {
+): string | undefined => {
+  if (!promptVersion.prompt_name) return undefined;
+
   const version = promptVersion.version_number ?? promptVersion.commit;
   return version
     ? `${promptVersion.prompt_name} (${version})`
     : promptVersion.prompt_name;
+};
+
+// The compare row's text needs a word for a deleted prompt where links use
+// ResourceLink's deleted state.
+const toComparableLabel = (promptVersion: ExperimentPromptVersion) =>
+  formatPromptVersionLabel(promptVersion) ?? "Deleted prompt";
+
+/**
+ * Prompt versions in label order: case-insensitive, with version numbers
+ * compared numerically so v2 comes before v10. Ties (prompt names are only
+ * unique per project, and every deleted prompt reads the same) fall back to
+ * ids so the order never depends on the order the backend returns. The
+ * compare view renders these as tags alongside the text it diffs on, so both
+ * must share one order.
+ */
+export const sortPromptVersions = (
+  promptVersions: ExperimentPromptVersion[],
+): ExperimentPromptVersion[] =>
+  [...promptVersions].sort(
+    (a, b) =>
+      toComparableLabel(a).localeCompare(toComparableLabel(b), undefined, {
+        sensitivity: "base",
+        numeric: true,
+      }) ||
+      a.prompt_id.localeCompare(b.prompt_id) ||
+      a.id.localeCompare(b.id),
+  );
+
+/**
+ * Every prompt version linked to an experiment, as one comparable string
+ * (e.g. "Guardrail (v1), My Prompt (v3)"). Returns undefined when the
+ * experiment has no linked prompt, which the compare table renders as
+ * "No value" like any other absent field.
+ *
+ * Labels are sorted so the compare view diffs on content rather than on the
+ * order the backend happened to return: two experiments linked to the same
+ * prompt versions must read as identical.
+ */
+export const formatExperimentPromptVersions = (
+  experiment: Pick<Experiment, "prompt_versions"> | undefined,
+): string | undefined => {
+  const promptVersions = experiment?.prompt_versions;
+  if (!promptVersions?.length) return undefined;
+
+  return sortPromptVersions(promptVersions).map(toComparableLabel).join(", ");
 };
 
 export const isExperimentTerminal = (

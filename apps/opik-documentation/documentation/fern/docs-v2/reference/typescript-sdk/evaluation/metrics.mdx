@@ -258,7 +258,7 @@ const metric = new AnswerRelevance();
 
 // With custom model ID
 const metricWithModel = new AnswerRelevance({
-  model: "claude-3-5-sonnet-latest",
+  model: "claude-sonnet-4-6",
 });
 
 // With LanguageModel instance
@@ -620,7 +620,7 @@ import { Hallucination } from "opik";
 
 // Using model ID string
 const metric1 = new Hallucination({ model: "gpt-5-nano" });
-const metric2 = new Hallucination({ model: "claude-3-5-sonnet-latest" });
+const metric2 = new Hallucination({ model: "claude-sonnet-4-6" });
 const metric3 = new Hallucination({ model: "gemini-2.0-flash" });
 
 // Using LanguageModel instance
@@ -688,7 +688,7 @@ const relevanceMetric = new AnswerRelevance({
 
 // Use Claude for hallucination detection
 const hallucinationMetric = new Hallucination({
-  model: anthropic("claude-3-5-sonnet-latest"),
+  model: anthropic("claude-sonnet-4-6"),
 });
 
 await evaluate({
@@ -837,7 +837,7 @@ const metric = new Hallucination({
 
 // Different settings for different metrics
 const relevanceMetric = new AnswerRelevance({
-  model: "claude-3-5-sonnet-latest",
+  model: "claude-sonnet-4-6",
   temperature: 0.7, // Higher = more creative
   seed: 12345,
 });
@@ -883,7 +883,7 @@ const openaiModel = openai("gpt-5-nano", {
 });
 
 // Anthropic with cache control
-const anthropicModel = anthropic("claude-3-5-sonnet-latest", {
+const anthropicModel = anthropic("claude-sonnet-4-6", {
   cacheControl: true,
 });
 

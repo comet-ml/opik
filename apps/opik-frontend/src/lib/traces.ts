@@ -1,4 +1,3 @@
-import md5 from "md5";
 import get from "lodash/get";
 import last from "lodash/last";
 import findLast from "lodash/findLast";
@@ -7,6 +6,7 @@ import isNumber from "lodash/isNumber";
 import isObject from "lodash/isObject";
 import isString from "lodash/isString";
 import { TAG_VARIANTS } from "@/ui/tag";
+import { labelHash } from "@/lib/labelHash";
 import { ExperimentItem } from "@/types/datasets";
 import { Thread, TRACE_VISIBILITY_MODE } from "@/types/traces";
 import { safelyParseJSON } from "@/lib/utils";
@@ -14,11 +14,8 @@ import isEmpty from "lodash/isEmpty";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
 
-export const generateTagVariant = (label: string) => {
-  const hash = md5(label);
-  const index = parseInt(hash.slice(-8), 16);
-  return TAG_VARIANTS[index % TAG_VARIANTS.length];
-};
+export const generateTagVariant = (label: string) =>
+  TAG_VARIANTS[labelHash(label) % TAG_VARIANTS.length];
 
 export const isObjectSpan = (object: object) =>
   Boolean(get(object, "trace_id", false));
@@ -139,6 +136,27 @@ const prettifyOpenAIMessageLogic = (
       lastChoice.message.content.length > 0
     ) {
       return lastChoice.message.content;
+    }
+  } else if (
+    config.type === "output" &&
+    isObject(message) &&
+    "messages" in message &&
+    isArray(message.messages)
+  ) {
+    // A conversation logged as output (e.g. by the Open WebUI Opik filter):
+    // show the last assistant reply, mirroring the input branch above
+    const lastAssistantMessage = findLast(
+      message.messages,
+      (m) => isObject(m) && "role" in m && m.role === "assistant",
+    );
+    if (
+      lastAssistantMessage &&
+      isObject(lastAssistantMessage) &&
+      "content" in lastAssistantMessage &&
+      isString(lastAssistantMessage.content) &&
+      lastAssistantMessage.content.length > 0
+    ) {
+      return lastAssistantMessage.content;
     }
   }
 };

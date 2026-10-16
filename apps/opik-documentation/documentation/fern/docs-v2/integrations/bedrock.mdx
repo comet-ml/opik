@@ -145,7 +145,7 @@ The Invoke Model API uses model-specific request and response formats. Here are 
         }
 
         response = bedrock_client.invoke_model(
-            modelId="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+            modelId="us.anthropic.claude-sonnet-4-6",
             body=json.dumps(request_body),
             contentType="application/json",
             accept="application/json"
@@ -397,7 +397,7 @@ The `invoke_model_with_response_stream` method supports streaming with model-spe
         }
 
         response = bedrock_client.invoke_model_with_response_stream(
-            modelId="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+            modelId="us.anthropic.claude-sonnet-4-6",
             body=json.dumps(request_body),
             contentType="application/json",
             accept="application/json"
@@ -552,7 +552,7 @@ from opik.integrations.bedrock import track_bedrock
 bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
 bedrock_client = track_bedrock(bedrock_client, project_name="bedrock-integration-demo")
 
-MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+MODEL_ID = "us.anthropic.claude-sonnet-4-6"
 
 @track
 def generate_story(prompt):

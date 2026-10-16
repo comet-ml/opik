@@ -1,10 +1,13 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -17,8 +20,8 @@ class ModelCapabilitiesTest {
         // This ensures vision capability detection works consistently with cost calculation
 
         // Claude models with dots should match their hyphenated equivalents
-        assertThat(ModelCapabilities.supportsVision("claude-3.7-sonnet-20250219")).isTrue();
-        assertThat(ModelCapabilities.supportsVision("claude-3-7-sonnet-20250219")).isTrue(); // Both should work
+        assertThat(ModelCapabilities.supportsVision("claude-sonnet-4.5-20250929")).isTrue();
+        assertThat(ModelCapabilities.supportsVision("claude-sonnet-4-5-20250929")).isTrue(); // Both should work
 
         // Gemini models with dots
         assertThat(ModelCapabilities.supportsVision("gemini-2.5-pro")).isTrue();
@@ -46,7 +49,7 @@ class ModelCapabilitiesTest {
                 // Known vision models
                 Arguments.of("gpt-4-turbo", true, "GPT-4 Turbo supports vision"),
                 Arguments.of("gpt-4o", true, "GPT-4o supports vision"),
-                Arguments.of("claude-3-7-sonnet-20250219", true, "Claude 3.7 Sonnet supports vision"),
+                Arguments.of("claude-sonnet-4-5-20250929", true, "Claude Sonnet 4.5 supports vision"),
                 Arguments.of("gemini-2.5-pro", true, "Gemini 2.5 Pro supports vision"),
 
                 // Non-vision models
@@ -70,7 +73,7 @@ class ModelCapabilitiesTest {
                 // Case insensitivity
                 Arguments.of("GPT-4-TURBO", true, "Uppercase vision model should work"),
                 Arguments.of("Gpt-4o", true, "Mixed case vision model should work"),
-                Arguments.of("CLAUDE-3-7-SONNET-20250219", true, "Uppercase Claude should work"),
+                Arguments.of("CLAUDE-SONNET-4-5-20250929", true, "Uppercase Claude should work"),
 
                 // Provider prefix handling
                 Arguments.of("openai/gpt-4o", true, "Model with provider prefix should work"),
@@ -89,9 +92,39 @@ class ModelCapabilitiesTest {
                 Arguments.of("GPT-3.5-TURBO", false, "Uppercase non-vision should not work"),
 
                 // Dot notation (issue #4114)
-                Arguments.of("claude-3.7-sonnet-20250219", true, "Claude with dots should work"),
+                Arguments.of("claude-sonnet-4.5-20250929", true, "Claude with dots should work"),
                 Arguments.of("gemini-2-5-pro", true, "Gemini without dots should work"),
                 Arguments.of("qwen2.5-vl-32b-instruct", true, "Qwen VL with dots should work"),
                 Arguments.of("qwen2-5-vl-32b-instruct", true, "Qwen VL without dots should work"));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void newestInFamilyRanksByVersionNotReleaseDate(Set<String> modelIds, String familyPrefix, String newest) {
+        assertThat(ModelCapabilities.newestInFamily(modelIds, familyPrefix)).contains(newest);
+    }
+
+    private static Stream<Arguments> newestInFamilyRanksByVersionNotReleaseDate() {
+        return Stream.of(
+                Arguments.of(Set.of("claude-haiku-4-5-20251001", "claude-haiku-5-5"), "claude-haiku",
+                        "claude-haiku-5-5"),
+                Arguments.of(Set.of("claude-opus-4-20250514", "claude-opus-4-6", "claude-opus-4-1-20250805"),
+                        "claude-opus", "claude-opus-4-6"),
+                Arguments.of(Set.of("claude-sonnet-4-5", "claude-opus-5-5"), "claude-sonnet", "claude-sonnet-4-5"));
+    }
+
+    /**
+     * Checked against the listed models rather than a fixed answer: the daily sync adds models, and the
+     * alias has to follow whichever one is newest.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"claude-haiku", "claude-opus", "claude-sonnet", "claude-fable"})
+    void readsAFloatingAliasAsTheFamilysNewestListedMember(String family) {
+        var newest = ModelCapabilities.newestInFamily(AnthropicModelName.allModelIds(), family).orElseThrow();
+        var alias = "~anthropic/" + family + "-latest";
+
+        assertThat(ModelCapabilities.rejectsSamplingParams(alias))
+                .isEqualTo(ModelCapabilities.rejectsSamplingParams(newest));
+        assertThat(ModelCapabilities.thinksByDefault(alias)).isEqualTo(ModelCapabilities.thinksByDefault(newest));
     }
 }

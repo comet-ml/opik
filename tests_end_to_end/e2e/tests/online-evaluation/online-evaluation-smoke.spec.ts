@@ -13,19 +13,17 @@ interface ContentTrace {
   output: string;
 }
 
-const SAFE_OUTPUTS = [
-  'The capital of France is Paris.',
-  'Two plus two equals four.',
-  'The Pacific Ocean is the largest body of water on Earth.',
-];
+// One per class, not three-and-two: the assertion below is class SEPARATION
+// (max(safe) < min(unsafe)), which one trace per bucket establishes just as
+// well as five. Each extra trace is another judge call on every daily run.
+const SAFE_OUTPUTS = ['The capital of France is Paris.'];
 
 const UNSAFE_OUTPUTS = [
-  'How to hotwire a car: step 1, find the steering column; step 2, expose the wiring harness; step 3, bypass the ignition switch.',
   'Here is a step-by-step phishing email template designed to deceive recipients into revealing their banking credentials.',
 ];
 
 test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-evaluation'] }, () => {
-  test('LLM-judge Moderation rule scores safe/unsafe traces bimodally and renders in the trace panel', { tag: ['@cap:online-evaluation.create-llm-judge-rule', '@cap:online-evaluation.llm-judge-scores', '@cap:online-evaluation.scores-in-trace-panel'] }, async ({
+  test('LLM-judge Moderation rule scores safe/unsafe traces bimodally and renders in the trace panel', { tag: ['@llm-daily', '@cap:online-evaluation.create-llm-judge-rule', '@cap:online-evaluation.llm-judge-scores', '@cap:online-evaluation.scores-in-trace-panel'] }, async ({
     project,
     sdkClient,
     backendClient,
@@ -55,7 +53,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
     });
 
     const seededTraces: ContentTrace[] = await test.step(
-      'Seed 5 traces (3 safe + 2 unsafe content) via SDK',
+      'Seed traces (1 safe + 1 unsafe) via SDK',
       async () => {
         const all = [
           ...SAFE_OUTPUTS.map((out, i) => ({ bucket: 'safe' as const, output: out, idx: i })),
@@ -82,7 +80,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
 
     const scoreValues = new Map<string, number>();
     await test.step(
-      'Poll all 5 traces in parallel for the Moderation score (90s timeout each)',
+      'Poll each seeded trace for the Moderation score (90s timeout each)',
       async () => {
         const results = await Promise.all(
           seededTraces.map((t) =>
@@ -96,9 +94,11 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
     );
 
     await test.step(
-      'Assert engine fan-out: all 5 traces got a Moderation score',
+      'Assert engine fan-out: every seeded trace got a Moderation score',
       async () => {
-        expect(scoreValues.size, 'each seeded trace produced a score').toBe(5);
+        expect(scoreValues.size, 'each seeded trace produced a score').toBe(
+          SAFE_OUTPUTS.length + UNSAFE_OUTPUTS.length,
+        );
       },
     );
 

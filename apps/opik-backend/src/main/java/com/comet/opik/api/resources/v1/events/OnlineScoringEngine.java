@@ -86,6 +86,11 @@ public class OnlineScoringEngine {
     private static final int MAX_REPORTED_FIELD_NAMES = 10;
     private static final int MAX_LOGGED_VALUE_CHARS = 100;
     private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
+    // Values trail so the leading sentence is a fixed prefix to grep on; the entity label is one of them
+    // because it differs per scorer and would otherwise split that prefix in two.
+    private static final String UNRESOLVED_ARGUMENTS_LOG = "None of the metric's declared arguments resolved,"
+            + " so there is no data to evaluate. Check the declared paths against the input, output and"
+            + " metadata present on the entity. {} '{}', rule '{}', unresolved arguments: {}";
 
     private static final Map<String, Boolean> PASS_FAIL_SCORES = Map.of(
             "pass", true, "passed", true, "fail", false, "failed", false);
@@ -135,13 +140,24 @@ public class OnlineScoringEngine {
             @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
             StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
             @NonNull List<Span> spans, String traceStructureJson) {
+        var renderedMessages = renderTraceMessages(evaluatorCode, trace, promptType, spans, traceStructureJson);
+        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    /**
+     * Renders the rule's messages with the trace variables (and {@code {{spans}}} / {@code {{trace}}} when the
+     * template references them), without building a chat request. Used directly by decisions models, which
+     * read the rendered text as their state.
+     */
+    public static List<ChatMessage> renderTraceMessages(
+            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace, @NonNull PromptType promptType,
+            @NonNull List<Span> spans, String traceStructureJson) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
         injectSpansIntoReplacements(replacements, evaluatorCode.variables(),
                 evaluatorCode.messages(), promptType, spans);
         injectTraceIntoReplacements(replacements, evaluatorCode.variables(),
                 evaluatorCode.messages(), promptType, traceStructureJson);
-        var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
-        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+        return renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
     }
 
     /**
@@ -1507,6 +1523,40 @@ public class OnlineScoringEngine {
             TraceSection traceSection, String variableName, String jsonPath, String valueToReplace) {
     }
 
+    // Paths and names are rule configuration the user controls, so they are sanitized like judge-supplied
+    // text: a newline must not forge an entry in the persisted log, nor one rule decide how much it carries.
+    public static void logUnresolvedEvaluatorArguments(
+            @NonNull Logger userFacingLogger,
+            @NonNull Logger internalLogger,
+            @NonNull Map<String, String> mdc,
+            @NonNull String entityLabel,
+            @NonNull Object entityId,
+            String ruleName,
+            @NonNull Map<String, String> declaredArguments) {
+        // Each half capped separately so a long name cannot crowd out the path, the actionable half.
+        var reported = declaredArguments.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .limit(MAX_REPORTED_FIELD_NAMES)
+                .map(argument -> "'%s' -> '%s'".formatted(sanitize(argument.getKey()), sanitize(argument.getValue())))
+                .toList();
+        var omitted = declaredArguments.size() - reported.size();
+        var renderedArguments = reported.isEmpty()
+                ? "(none declared)"
+                : renderPairs(reported, omitted);
+        var safeRuleName = sanitize(String.valueOf(ruleName));
+        // Only the user-facing logger needs the scope: the ClickHouse appender fills its columns from the MDC.
+        try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
+            userFacingLogger.warn(UNRESOLVED_ARGUMENTS_LOG, entityLabel, entityId, safeRuleName, renderedArguments);
+        }
+        internalLogger.warn(UNRESOLVED_ARGUMENTS_LOG, entityLabel, entityId, safeRuleName, renderedArguments);
+    }
+
+    /** Mirrors {@link #renderNames}' "and N more" shape for entries that carry their own quoting. */
+    private static String renderPairs(List<String> pairs, int omitted) {
+        var shown = String.join(", ", pairs);
+        return omitted == 0 ? shown : "%s and %,d more".formatted(shown, omitted);
+    }
+
     /**
      * Shared "evaluate → prepare → log" wrapper used by the trace and span Python scorers.
      * Eliminates the boilerplate that duplicated the MDC scope, the "Evaluating X 'id' sampled
@@ -1532,7 +1582,9 @@ public class OnlineScoringEngine {
             userFacingLogger.info("Evaluating {} '{}' sampled by rule '{}'", entityLabel, entityId, ruleName);
             try {
                 Map<String, Object> data = dataSupplier.get();
-                if (userFacingLogger.isInfoEnabled()) {
+                // Both callers fail an empty map instead of calling the evaluator, so claiming a send
+                // here would contradict the warning that follows it in the same sink.
+                if (!data.isEmpty() && userFacingLogger.isInfoEnabled()) {
                     userFacingLogger.info("Sending {} '{}' to Python evaluator: '{}'",
                             entityLabel, entityId, summarizeEvaluatorInput(data));
                 }

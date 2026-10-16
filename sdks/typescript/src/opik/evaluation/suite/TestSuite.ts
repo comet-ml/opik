@@ -299,9 +299,13 @@ export class TestSuite {
    * Use this when you need to inspect or forward the stored evaluator
    * config or per-item execution policy as-is.
    *
+   * To look at a test suite's items without writing code, AI coding assistants connected to the
+   * Opik MCP server can call `list("dataset_item", dataset_id=...)`.
+   *
    * @param nbSamples Max items to retrieve. Omit to return all items.
    * @param lastRetrievedId Opaque cursor for pagination (last `id` from a previous call).
    * @returns Array of {@link RawTestSuiteItem} objects.
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   async getRawItems(
     nbSamples?: number,

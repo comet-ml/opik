@@ -5,6 +5,7 @@ import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.google.common.annotations.VisibleForTesting;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
@@ -108,12 +109,24 @@ public class ModelCapabilities {
      * <p>A name that is not an Anthropic id at all is left alone — see {@link #canonicalAnthropicId}.
      */
     public boolean rejectsSamplingParams(String modelName) {
+        return isAnthropicIdOutside(modelName, AnthropicModelName.samplingCapableModelIds());
+    }
+
+    /**
+     * Whether the model thinks when a request does not mention thinking. An Anthropic id we cannot place is
+     * assumed to, for the reason given on {@link #rejectsSamplingParams}.
+     */
+    public boolean thinksByDefault(String modelName) {
+        return isAnthropicIdOutside(modelName, AnthropicModelName.thinkingOffByDefaultModelIds());
+    }
+
+    private boolean isAnthropicIdOutside(String modelName, Set<String> earlierBehaviourModelIds) {
         var canonical = canonicalAnthropicId(modelName);
         if (canonical.isEmpty() || isLegacyGeneration(canonical)) {
             return false;
         }
         return knownAnthropicId(canonical)
-                .map(id -> !AnthropicModelName.samplingCapableModelIds().contains(id))
+                .map(id -> !earlierBehaviourModelIds.contains(id))
                 .orElse(true);
     }
 
@@ -121,12 +134,17 @@ public class ModelCapabilities {
      * The newest listed member of a family, which is what {@code claude-opus-latest} names.
      *
      * <p>A floating alias has to be read as the model it currently resolves to, not left unplaceable:
-     * {@code claude-haiku-latest} is Haiku 4.5, which does take sampling params, and classifying it
-     * by the unplaceable default would silently drop a temperature someone set — the same model under
-     * its own id keeps one.
+     * when that model takes sampling params, as Haiku 4.5 does, classifying the alias by the
+     * unplaceable default would silently drop a temperature someone set — the same model under its
+     * own id keeps one.
      */
     private Optional<String> newestInFamily(String familyPrefix) {
-        return AnthropicModelName.allModelIds().stream()
+        return newestInFamily(AnthropicModelName.allModelIds(), familyPrefix);
+    }
+
+    @VisibleForTesting
+    Optional<String> newestInFamily(Set<String> modelIds, String familyPrefix) {
+        return modelIds.stream()
                 .filter(id -> id.startsWith(familyPrefix + "-"))
                 .max(Comparator.comparing(ModelCapabilities::versionKey));
     }
@@ -155,6 +173,11 @@ public class ModelCapabilities {
     private Optional<String> knownAnthropicId(String canonical) {
         if (canonical.endsWith(LATEST_ALIAS_SUFFIX)) {
             return newestInFamily(StringUtils.removeEnd(canonical, LATEST_ALIAS_SUFFIX));
+        }
+        // A listed id is itself, even once a dated build of it is listed too — otherwise the longer
+        // dated id would win and a sync adding it would silently reclassify the undated model.
+        if (AnthropicModelName.allModelIds().contains(canonical)) {
+            return Optional.of(canonical);
         }
         return AnthropicModelName.allModelIds().stream()
                 .filter(id -> namesModel(canonical, id))

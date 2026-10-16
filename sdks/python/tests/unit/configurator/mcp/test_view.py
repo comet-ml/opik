@@ -1,85 +1,9 @@
-import pathlib
 from unittest import mock
 
 import pytest
 
+from opik.configurator.mcp import targets
 from opik.configurator.mcp import view as mcp_view
-
-
-def _targets():
-    return [
-        mcp_view.PlannedTarget("Cursor", "~/.cursor/mcp.json"),
-        mcp_view.PlannedTarget("Claude Code", "via `claude mcp add`"),
-    ]
-
-
-class TestLoggingInstallView:
-    """The default view keeps `opik.configure()` a well-behaved library call."""
-
-    @pytest.fixture
-    def logger(self, monkeypatch):
-        # Opik's logging setup disables propagation, so caplog sees nothing;
-        # asserting on the logger itself is both reliable and more precise.
-        spy = mock.Mock()
-        monkeypatch.setattr(mcp_view, "LOGGER", spy)
-        return spy
-
-    def test_plan__goes_to_the_logger_not_stdout(self, logger, capsys):
-        mcp_view.LoggingInstallView().plan("Opik Cloud", "Local server", _targets())
-
-        assert "Cursor" in str(logger.info.call_args)
-        # A library must not paint on the caller's stdout.
-        assert capsys.readouterr().out == ""
-
-    def test_step__logs_and_yields(self, logger):
-        entered = False
-        with mcp_view.LoggingInstallView().step("Checking the connection"):
-            entered = True
-
-        assert entered
-        assert "Checking the connection" in str(logger.info.call_args)
-
-    def test_step__propagates_exceptions(self, logger):
-        """A spinner must never swallow the failure it was covering."""
-        with pytest.raises(ValueError):
-            with mcp_view.LoggingInstallView().step("probing"):
-                raise ValueError("boom")
-
-    def test_results__success_is_info_and_failure_is_warning(self, logger):
-        mcp_view.LoggingInstallView().results(
-            [
-                mcp_view.TargetResult("Cursor", "Added 'opik-mcp'", True, "Added"),
-                mcp_view.TargetResult("Codex", "no codex CLI", False),
-            ]
-        )
-
-        assert logger.info.call_count == 1
-        assert "no codex CLI" in str(logger.warning.call_args)
-
-    def test_verification__failure_is_a_warning(self, logger):
-        mcp_view.LoggingInstallView().verification(False, "HTTP 401")
-
-        logger.info.assert_not_called()
-        assert "HTTP 401" in str(logger.warning.call_args)
-
-    def test_verification__success_is_info(self, logger):
-        mcp_view.LoggingInstallView().verification(True, "7 projects visible")
-
-        logger.warning.assert_not_called()
-        assert "7 projects visible" in str(logger.info.call_args)
-
-    def test_done__no_assistants__still_reads(self, logger):
-        mcp_view.LoggingInstallView().done(["MCP server"], [])
-
-        assert "your AI client" in str(logger.info.call_args)
-
-    def test_done__names_what_was_set_up(self, logger):
-        mcp_view.LoggingInstallView().done(["MCP server", "skill pack"], ["Cursor"])
-
-        logged = str(logger.info.call_args)
-        assert "MCP server" in logged
-        assert "skill pack" in logged
-        assert "Cursor" in logged
 
 
 class TestSingleCandidateMenu:
@@ -127,6 +51,39 @@ class TestSingleCandidateMenu:
         assert chosen == ["cursor"]
 
 
+class TestNumberedMenuCancel:
+    """Ctrl-C at the fallback means what it means at the picker it stands in for.
+
+    The picker answers it with ``None``, which the flow reports as a cancelled
+    run. `input()` raised instead, so the same key on a terminal without the
+    picker aborted the command before it could report anything.
+    """
+
+    @staticmethod
+    def _interrupt(prompt):
+        raise KeyboardInterrupt
+
+    def test_one_client__ctrl_c__is_a_cancel(self):
+        with mock.patch("builtins.input", self._interrupt):
+            chosen = mcp_view.numbered_menu(
+                "pick", [mcp_view.HostChoice("cursor", "Cursor")]
+            )
+
+        assert chosen is None
+
+    def test_several_clients__ctrl_c__is_a_cancel(self):
+        with mock.patch("builtins.input", self._interrupt):
+            chosen = mcp_view.numbered_menu(
+                "pick",
+                [
+                    mcp_view.HostChoice("cursor", "Cursor"),
+                    mcp_view.HostChoice("codex", "Codex"),
+                ],
+            )
+
+        assert chosen is None
+
+
 class TestTargetResult:
     def test_short__prefers_the_summary(self):
         result = mcp_view.TargetResult(
@@ -139,21 +96,76 @@ class TestTargetResult:
         assert result.short == "no codex CLI on PATH"
 
 
-class TestDisplayPath:
-    def test_display_path__collapses_home(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: tmp_path))
-        assert mcp_view.display_path(tmp_path / ".cursor" / "mcp.json") == (
-            "~/.cursor/mcp.json"
+def _registered(*keys, signed_in=(), pending=()):
+    """Install results for real clients, as the installer hands them over."""
+    return [
+        (
+            targets.find_target(key),
+            targets.InstallResult(
+                key,
+                True,
+                "Added",
+                sign_in_attempted=key in signed_in or key in pending,
+                sign_in_failed=key in pending,
+            ),
+        )
+        for key in keys
+    ]
+
+
+class TestNextSteps:
+    """What an unattended run leaves for each client, read by whoever ran it."""
+
+    def test_hosted__claude_code_not_signed_in__a_step_for_the_user(self):
+        """`claude mcp login` refuses to run without a terminal, so an agent
+        cannot run it; `/mcp` also covers builds without the command."""
+        [step] = mcp_view.next_steps(True, _registered("claude-code"))
+
+        assert "from a terminal with `claude mcp login opik-mcp`" in step
+        assert "`/mcp`" in step
+
+    @pytest.mark.parametrize("key", ["claude-code", "codex"])
+    def test_hosted__signed_in_by_the_run__only_a_check(self, key):
+        [step] = mcp_view.next_steps(True, _registered(key, signed_in=[key]))
+
+        assert "signed in; check with" in step
+        assert "login" not in step
+
+    def test_hosted__a_sign_in_that_did_not_finish__comes_first(self):
+        [step] = mcp_view.next_steps(True, _registered("codex", pending=["codex"]))
+
+        assert "the sign-in did not finish" in step
+        assert step.index("codex mcp login opik-mcp") < step.index("codex mcp list")
+
+    def test_hosted__each_client_its_own_way_in(self):
+        opencode, cursor = mcp_view.next_steps(True, _registered("opencode", "cursor"))
+
+        assert "`opencode mcp auth opik-mcp`" in opencode
+        assert cursor == "Cursor: sign in from its MCP settings when it asks."
+
+    def test_local__nothing_to_sign_in_to(self):
+        steps = mcp_view.next_steps(
+            False, _registered("claude-code", "codex", "cursor", "opencode")
         )
 
-    def test_display_path__outside_home__is_left_alone(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: tmp_path))
-        assert mcp_view.display_path(pathlib.Path("/etc/opik.json")) == "/etc/opik.json"
+        assert steps == [
+            "Claude Code: check with `claude mcp list`.",
+            "Codex: check with `codex mcp list`.",
+            "opencode: check with `opencode mcp list`.",
+        ]
 
+    @pytest.mark.parametrize("hosted", [True, False])
+    def test_never_claude_mcp_get__it_prints_the_api_key(self, hosted):
+        steps = mcp_view.next_steps(hosted, _registered("claude-code"))
 
-class TestDefaultView:
-    def test_default_view__is_the_logging_one(self):
-        assert isinstance(mcp_view.default_view(), mcp_view.LoggingInstallView)
+        assert not any("claude mcp get" in step for step in steps)
 
-    def test_default_view__is_reused(self):
-        assert mcp_view.default_view() is mcp_view.default_view()
+    @pytest.mark.parametrize(
+        "client, command",
+        [
+            ("Claude Code", "`claude mcp login opik-mcp`"),
+            ("Codex", "`codex mcp login opik-mcp`"),
+        ],
+    )
+    def test_sign_in_failed__names_that_clients_own_command(self, client, command):
+        assert command in mcp_view.sign_in_failed_message(client)

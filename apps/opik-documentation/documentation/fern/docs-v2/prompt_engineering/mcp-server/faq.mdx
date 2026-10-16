@@ -127,8 +127,9 @@ client. Most problems end there.
   </Accordion>
   <Accordion title="Can I work with several workspaces?">
     One workspace per client config. On the hosted server you pick it at sign-in.
-    On the local server, `uvx opik configure` switches it, then run
-    `uvx opik mcp configure` again.
+    Otherwise, `uvx opik mcp configure --ignore-opik-config` asks which Opik and
+    workspace to connect to, without changing `~/.opik.config`. To switch the SDK
+    too, run `uvx opik configure`, then `uvx opik mcp configure` again.
   </Accordion>
   <Accordion title="How do I update?">
     `uvx opik@latest mcp configure`. It re-runs setup for each client, reports the

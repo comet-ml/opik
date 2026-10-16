@@ -2,6 +2,9 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentBatchUpdate;
+import com.comet.opik.api.ExperimentExecutionRequest;
+import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
@@ -23,6 +26,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.net.HttpHeaders;
+import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.GenericType;
@@ -116,6 +120,19 @@ public class ExperimentResourceClient {
         return create(experiment, apiKey, workspaceName);
     }
 
+    public ExperimentExecutionResponse execute(ExperimentExecutionRequest request, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("execute")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
+            return response.readEntity(ExperimentExecutionResponse.class);
+        }
+    }
+
     public Experiment getExperiment(UUID experimentId, String apiKey, String workspaceName) {
         try (var response = callGetExperiment(experimentId, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
@@ -149,6 +166,18 @@ public class ExperimentResourceClient {
                 .post(Entity.json(experimentStreamRequest));
         assertThat(response.getStatus()).isEqualTo(expectedStatus);
         return response;
+    }
+
+    public void batchUpdate(ExperimentBatchUpdate batchUpdate, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(batchUpdate))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
     }
 
     public void createExperimentItem(Set<ExperimentItem> experimentItems, String apiKey, String workspaceName) {

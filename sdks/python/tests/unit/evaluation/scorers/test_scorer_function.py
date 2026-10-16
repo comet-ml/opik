@@ -156,3 +156,122 @@ def test_validate_scorer_function_with_all_params():
 
     # Should not raise any exception
     validate_scorer_function(scorer_with_all_params)
+
+
+def test_wrap_scorer_functions__partial_and_callable_object__named_and_scored():
+    # Both are accepted by validate_scorer_function but have no __name__, which
+    # used to raise AttributeError while wrapping.
+    import functools
+
+    from opik.evaluation.scorers.scorer_wrapper_metric import wrap_scorer_functions
+
+    def length_above(
+        dataset_item: Dict[str, Any], task_outputs: Dict[str, Any], threshold: int
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            name="length_above", value=float(len(task_outputs) > threshold)
+        )
+
+    class ExactMatch:
+        def __call__(
+            self, dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]
+        ) -> score_result.ScoreResult:
+            return score_result.ScoreResult(name="exact_match", value=1.0)
+
+    metrics = wrap_scorer_functions(
+        [functools.partial(length_above, threshold=0), ExactMatch()],
+        project_name=None,
+    )
+
+    assert [metric.name for metric in metrics] == ["length_above", "ExactMatch"]
+    for metric in metrics:
+        result = metric.score(dataset_item={}, task_outputs={"output": "x"})
+        assert result.value == 1.0
+
+
+def test_wrap_scorer_functions__non_string_name_attribute__falls_back_to_class_name():
+    from opik.evaluation.scorers.scorer_wrapper_metric import wrap_scorer_functions
+
+    class OddlyNamed:
+        __name__ = 123
+
+        def __call__(
+            self, dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]
+        ) -> score_result.ScoreResult:
+            return score_result.ScoreResult(name="odd", value=1.0)
+
+    [metric] = wrap_scorer_functions([OddlyNamed()], project_name=None)
+
+    assert metric.name == "OddlyNamed"
+
+
+def _task_span() -> models.SpanModel:
+    import datetime
+
+    return models.SpanModel(
+        id="span-id", start_time=datetime.datetime.now(), source="sdk"
+    )
+
+
+@pytest.mark.parametrize("task_span", [None, _task_span()], ids=["no-span", "span"])
+def test_wrap_scorer_functions__task_span_only_scorer__called_without_unknown_kwargs(
+    task_span,
+):
+    from opik.evaluation.scorers.scorer_wrapper_metric import wrap_scorer_functions
+
+    def spans_are_present(
+        task_span: Optional[models.SpanModel] = None,
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            name="spans_are_present", value=1.0 if task_span else 0.0
+        )
+
+    [metric] = wrap_scorer_functions([spans_are_present], project_name=None)
+
+    result = metric.score(
+        dataset_item={"input": "hi"},
+        task_outputs={"output": "hello"},
+        task_span=task_span,
+    )
+
+    assert result.value == (1.0 if task_span else 0.0)
+
+
+def test_wrap_scorer_functions__scorer_with_var_kwargs__receives_all_arguments():
+    from opik.evaluation.scorers.scorer_wrapper_metric import wrap_scorer_functions
+
+    received: Dict[str, Any] = {}
+
+    def scorer(task_span=None, **kwargs) -> score_result.ScoreResult:
+        received.update(kwargs, task_span=task_span)
+        return score_result.ScoreResult(name="scorer", value=1.0)
+
+    [metric] = wrap_scorer_functions([scorer], project_name=None)
+    span = _task_span()
+
+    metric.score(dataset_item={"a": 1}, task_outputs={"b": 2}, task_span=span)
+
+    assert received == {
+        "dataset_item": {"a": 1},
+        "task_outputs": {"b": 2},
+        "task_span": span,
+    }
+
+
+def test_wrap_scorer_functions__required_task_span_and_no_span__called_with_none():
+    from opik.evaluation.scorers.scorer_wrapper_metric import wrap_scorer_functions
+
+    def spans_are_present(
+        task_span: Optional[models.SpanModel],
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            name="spans_are_present", value=1.0 if task_span else 0.0
+        )
+
+    [metric] = wrap_scorer_functions([spans_are_present], project_name=None)
+
+    result = metric.score(
+        dataset_item={"input": "hi"}, task_outputs={"output": "hello"}
+    )
+
+    assert result.value == 0.0

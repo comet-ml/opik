@@ -8,6 +8,13 @@ dependencies = [
     "uvicorn[standard]>=0.34.0",
     "pydantic>=2.9.0",
     "opik>=2.0.0",
+    # `Readability` is the one metric the estate drives whose backend is an
+    # OPTIONAL opik dependency: without textstat the constructor raises
+    # ImportError rather than scoring. The SDK declares it the same way, in
+    # tests/unit/test_requirements.txt, and deliberately leaves it unpinned —
+    # so the readability spec asserts locale SEPARATION and error type, never
+    # absolute Flesch numbers, which drift with textstat/pyphen releases.
+    "textstat",
 ]
 
 # Resolve `opik` from this repo rather than PyPI. The bridge exists so SDK

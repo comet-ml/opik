@@ -1,5 +1,6 @@
 import { UseQueryOptions } from "@tanstack/react-query";
 import axios from "axios";
+import { v4 as uuidv4 } from "uuid";
 
 export const BASE_API_URL = import.meta.env.VITE_BASE_API_URL || "/api";
 export const BASE_OPIK_AI_URL = import.meta.env.VITE_BASE_OPIK_AI_URL || "";
@@ -8,6 +9,33 @@ const axiosInstance = axios.create({
 });
 
 axiosInstance.defaults.withCredentials = true;
+
+// Lets an installation count the distinct browsers using it. Random, so it identifies no one.
+const BROWSER_ID_KEY = "opik-browser-id";
+const getBrowserId = () => {
+  try {
+    const stored = localStorage.getItem(BROWSER_ID_KEY);
+    if (stored) return stored;
+    const id = uuidv4();
+    localStorage.setItem(BROWSER_ID_KEY, id);
+    return id;
+  } catch {
+    // Storage blocked (private mode, disabled site data): count this page load on its own.
+    return uuidv4();
+  }
+};
+const browserId = getBrowserId();
+// Opik backend only: other services reached through this instance (BASE_OPIK_AI_URL)
+// may be cross-origin, and an unknown header would fail their CORS preflight.
+axiosInstance.interceptors.request.use((config) => {
+  const isOpikBackend =
+    (config.baseURL ?? BASE_API_URL) === BASE_API_URL &&
+    !/^https?:\/\//.test(config.url ?? "");
+  if (isOpikBackend) {
+    config.headers.set("X-Opik-Browser-Id", browserId);
+  }
+  return config;
+});
 
 export const CODE_EXECUTOR_SERVICE_URL = import.meta.env
   .VITE_GET_STARTED_API_URL;

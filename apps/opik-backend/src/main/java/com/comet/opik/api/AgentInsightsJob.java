@@ -29,6 +29,12 @@ public record AgentInsightsJob(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastFailureReason,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastFailureDetail,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastFailedAt,
+        // The guidance fields are left out (null) while the guidance toggle is off.
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Project guidance sent to every run; null when none") String guidance,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Who last saved the guidance") String guidanceUpdatedBy,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "When the guidance was last saved") Instant guidanceUpdatedAt,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Bumped each time the guidance text changes; 0 = never saved") Integer guidanceVersion,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Guidance version the current results were produced with; null = no run since guidance existed") Integer resultsGuidanceVersion,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,

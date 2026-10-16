@@ -67,7 +67,7 @@ class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         super().__init__(settings_cls, self.ini_data)
 
     def _read_file(self, file_path: pathlib.Path) -> Dict[str, Any]:
-        config = configparser.ConfigParser()
+        config = configparser.ConfigParser(interpolation=None)
         config.read(file_path)
         config_values = {
             section: dict(config.items(section)) for section in config.sections()
@@ -453,7 +453,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
         Raises:
             OSError: If there is an issue writing to the file.
         """
-        config_file_content = configparser.ConfigParser()
+        config_file_content = configparser.ConfigParser(interpolation=None)
 
         config_file_content["opik"] = {
             "url_override": self.url_override,
@@ -469,7 +469,6 @@ class OpikConfig(pydantic_settings.BaseSettings):
                 self.config_file_fullpath, mode="w+", encoding="utf-8"
             ) as config_file:
                 config_file_content.write(config_file)
-            LOGGER.info(f"Configuration saved to file: {self.config_file_fullpath}")
         except OSError as e:
             LOGGER.error(f"Failed to save configuration: {e}")
             raise

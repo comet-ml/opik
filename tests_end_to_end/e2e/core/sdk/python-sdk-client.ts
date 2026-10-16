@@ -22,6 +22,20 @@ export type SpanSeedUsage = {
  * before `Dataset.insert` sees it. `value` is the JSON form the object is built
  * FROM — never what it has to store as, which is the caller's assertion.
  */
+/**
+ * One `search_traces` / `search_spans` read's paging arguments.
+ *
+ * `maxBatchSize` omitted means the SDK's own default (`MAX_ENDPOINT_BATCH_SIZE`,
+ * 2000) — itself a shape worth asserting, since a single-page read has to agree
+ * with the many-page ones over the same population.
+ */
+export type StreamReadShape = {
+  /** Echoed back, so a result can be matched to its shape without relying on order. */
+  key: string;
+  max_results: number;
+  max_batch_size?: number;
+};
+
 export type TypedValueSpec = {
   kind: 'float' | 'uuid' | 'enum' | 'datetime' | 'set' | 'tuple';
   value: unknown;
@@ -254,6 +268,55 @@ export interface PythonSdkClient {
     }>;
   }>;
   /**
+   * Seed one dataset and score it with several `Readability` locales in a
+   * SINGLE `evaluate()` run — the only shape that reaches textstat's
+   * module-wide locale state from the scoring thread pool (opik#8318).
+   *
+   * Every score comes back with the uncontended `serial_value` for the same
+   * text and language, so the caller can tell "the locale stopped being
+   * applied" (languages stop differing) apart from "the lock stopped holding"
+   * (a language differs from its own sequential score).
+   */
+  readabilityEvaluate(args: {
+    project_name: string;
+    dataset_name: string;
+    experiment_name: string;
+    items: Array<{ key: string; text: string }>;
+    languages: string[];
+    task_threads?: number;
+    dataset_description?: string;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string;
+    experiment_name: string;
+    dataset_id: string;
+    item_count: number;
+    scored_item_count: number;
+    scores: Array<{
+      dataset_item_id: string;
+      key: string;
+      language: string;
+      metric_name: string;
+      evaluated_value: number;
+      serial_value: number;
+      scoring_failed: boolean;
+    }>;
+  }>;
+  /**
+   * Score one text with one locale, with the failure reported rather than
+   * raised. `error_type` is the exception's own class name, so an unknown
+   * locale regressing from `MetricComputationError` back to pyphen's bare
+   * `KeyError` is an assertion diff instead of a 500.
+   */
+  readabilityScore(args: { text: string; language: string }): Promise<{
+    language: string;
+    scored: boolean;
+    value: number | null;
+    reading_ease: number | null;
+    error_type: string | null;
+    error_message: string | null;
+  }>;
+  /**
    * `Experiment.get_items()` — the SDK read the estate has never driven.
    *
    * Every knob is optional so an omitted one exercises the SDK's own default
@@ -261,6 +324,27 @@ export interface PythonSdkClient {
    * the caller wrote onto each dataset item, echoed back so a read can be
    * checked for order, gaps and duplicates without transferring whole rows.
    */
+  /**
+   * Several multi-page `search_traces` / `search_spans` reads of one project,
+   * each with its own `max_batch_size`, reduced to the ids they returned.
+   *
+   * `max_batch_size` is why this exists: it is the only cheap way to make
+   * `read_and_parse_full_stream` actually page. Every other estate call through
+   * that function asks for fewer rows than one page holds, so the cursor
+   * arithmetic opik#8411 rewrote has never run.
+   *
+   * Ids come back in the order the SDK assembled them and duplicates are NOT
+   * collapsed — a re-served page is a duplicate, which is a finding.
+   */
+  streamReads(args: {
+    project_name: string;
+    trace_shapes?: StreamReadShape[];
+    span_shapes?: StreamReadShape[];
+    workspace?: string;
+  }): Promise<{
+    traces: Array<{ key: string; ids: string[] }>;
+    spans: Array<{ key: string; ids: string[] }>;
+  }>;
   readExperimentItems(args: {
     experiment_id: string;
     max_results?: number;
@@ -591,6 +675,50 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
           }>;
         }>;
       }>('POST', '/experiments/compare-seed', args);
+    },
+    async readabilityEvaluate(args) {
+      return request<{
+        experiment_id: string;
+        experiment_name: string;
+        dataset_id: string;
+        item_count: number;
+        scored_item_count: number;
+        scores: Array<{
+          dataset_item_id: string;
+          key: string;
+          language: string;
+          metric_name: string;
+          evaluated_value: number;
+          serial_value: number;
+          scoring_failed: boolean;
+        }>;
+      }>('POST', '/experiments/readability-evaluate', args, {
+        // One evaluate() plus one sequential reference score per (item,
+        // language). All local computation, but it runs behind a dataset
+        // create and an experiment write against a cloud backend.
+        timeoutMs: 120_000,
+      });
+    },
+    async readabilityScore(args) {
+      return request<{
+        language: string;
+        scored: boolean;
+        value: number | null;
+        reading_ease: number | null;
+        error_type: string | null;
+        error_message: string | null;
+      }>('POST', '/metrics/readability-score', args);
+    },
+    async streamReads(args) {
+      // Several whole multi-page reads of one project on a single request, and
+      // against a cloud backend each of them is a burst of paged reads under a
+      // per-workspace rate limit. The SDK backs off internally, which is slow
+      // rather than a failure — aborting at the default 30s would turn a
+      // throttled read into a red test.
+      return request<{
+        traces: Array<{ key: string; ids: string[] }>;
+        spans: Array<{ key: string; ids: string[] }>;
+      }>('POST', '/traces/stream-reads', args, { timeoutMs: 300_000 });
     },
     async readExperimentItems(args) {
       return request<{

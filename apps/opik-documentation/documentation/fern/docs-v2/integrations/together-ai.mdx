@@ -2,8 +2,8 @@
 description: Start here to integrate Opik into your Together AI-based genai application
   for end-to-end LLM observability, unit testing, and optimization.
 headline: Together AI
-og:description: Configure Opik to track Together AI calls, enabling easy evaluation
-  of models like Llama and Mistral in your projects.
+og:description: Trace Together AI calls with Opik using track_together. Log prompts,
+  responses, token usage and streaming for Llama, Qwen, Mistral and other models.
 og:site_name: Opik Documentation
 og:title: Integrate Together AI with Opik - Fast Inference
 title: Observability for Together AI with Opik
@@ -11,11 +11,135 @@ title: Observability for Together AI with Opik
 
 [Together AI](https://www.together.ai/) provides fast inference for leading open-source models including Llama, Mistral, Qwen, and many others.
 
-This guide explains how to integrate Opik with Together AI via LiteLLM. By using the LiteLLM integration provided by Opik, you can easily track and evaluate your Together AI calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
+Wrap your Together client with `track_together` and every chat completion is logged to Opik with its messages, response, model and token usage. Streaming and the async client work out of the box.
+
+Together's SDK is OpenAI-shaped but defines its own client and stream classes, so `track_openai` cannot patch it — use `track_together` instead.
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=together&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=together&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](/self-host/overview) for more information.
 
 ## Getting Started
 
+### Installation
+
+```bash
+pip install opik together
+```
+
 ### Configuring Opik
+
+Run `opik configure` and follow the prompts. See the [Python SDK Configuration guide](/tracing/advanced/sdk_configuration) for other options, such as configuring Opik in code or with environment variables.
+
+### Configuring Together AI
+
+Set your Together AI API key as an environment variable:
+
+```bash
+export TOGETHER_API_KEY="YOUR_API_KEY"
+```
+
+## Logging LLM calls
+
+Create a Together client, wrap it with `track_together`, and use it as usual:
+
+```python
+import together
+from opik.integrations.together import track_together
+
+client = track_together(together.Together())
+
+response = client.chat.completions.create(
+    model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    messages=[{"role": "user", "content": "Why is the sky blue?"}],
+)
+
+print(response.choices[0].message.content)
+```
+
+## Advanced Usage
+
+### Using with the `@track` decorator
+
+Calls made with a tracked client inside a function decorated with [`@track`](/tracing/advanced/log_traces#using-function-decorators) are nested under that function's trace:
+
+```python
+import together
+from opik import track
+from opik.integrations.together import track_together
+
+client = track_together(together.Together())
+
+
+@track
+def generate_story(prompt: str) -> str:
+    response = client.chat.completions.create(
+        model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.choices[0].message.content
+
+
+generate_story("Write a short story about Opik.")
+```
+
+### Streaming
+
+Pass `stream=True` and iterate as usual. The span is ended once the stream is fully consumed, and the chunks are aggregated into a single logged response:
+
+```python
+stream = client.chat.completions.create(
+    model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    messages=[{"role": "user", "content": "Why is the sky blue?"}],
+    stream=True,
+)
+
+for chunk in stream:
+    if chunk.choices and chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+### Async client
+
+`track_together` works with `together.AsyncTogether` as well, including streaming:
+
+```python
+import asyncio
+
+import together
+from opik.integrations.together import track_together
+
+async_client = track_together(together.AsyncTogether())
+
+
+async def main():
+    response = await async_client.chat.completions.create(
+        model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        messages=[{"role": "user", "content": "Why is the sky blue?"}],
+    )
+    print(response.choices[0].message.content)
+
+
+asyncio.run(main())
+```
+
+## Cost Tracking
+
+Opik records the token usage Together returns on each call. Cost is not estimated for Together spans yet, so they show token counts without a price.
+
+## Supported Methods
+
+`track_together` logs `chat.completions.create()` on both `together.Together` and `together.AsyncTogether`, with and without streaming. Other methods aren't logged; to trace them, call them inside a function decorated with [`@track`](/tracing/advanced/log_traces#using-function-decorators).
+
+## Using Together AI through LiteLLM
+
+If you call Together AI through LiteLLM rather than the Together SDK, use the LiteLLM integration instead of `track_together`.
+
+### Configuring Opik and LiteLLM
+
+#### Configuring Opik
 
 To start tracking your Together AI calls, you'll need to have both `opik` and `litellm` installed. You can install them using pip:
 
@@ -29,7 +153,7 @@ In addition, you can configure Opik using the `opik configure` command which wil
 opik configure
 ```
 
-### Configuring Together AI
+#### Configuring Together AI
 
 You'll need to set your Together AI API key as an environment variable:
 
@@ -37,7 +161,7 @@ You'll need to set your Together AI API key as an environment variable:
 export TOGETHER_API_KEY="YOUR_API_KEY"
 ```
 
-## Logging LLM calls
+### Logging LLM calls through LiteLLM
 
 In order to log the LLM calls to Opik, you will need to create the OpikLogger callback. Once the OpikLogger callback is created and added to LiteLLM, you can make calls to LiteLLM as you normally would:
 
@@ -56,7 +180,7 @@ response = litellm.completion(
 )
 ```
 
-## Logging LLM calls within a tracked function
+### Logging LiteLLM calls within a tracked function
 
 If you are using LiteLLM within a function tracked with the [`@track`](/tracing/advanced/log_traces#using-function-decorators) decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
 

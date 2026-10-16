@@ -42,6 +42,7 @@ import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -98,7 +99,7 @@ class MetricsAlertJobTest {
         lenient().when(idGenerator.generateId()).thenReturn(EVENT_ID);
         lenient().when(projectService.findByIds(anyString(), any())).thenReturn(List.of());
         lenient().when(alertWebhookSender.createAndSendWebhook(
-                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList()))
+                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString(), any()))
                 .thenReturn(Mono.empty());
 
         job = new MetricsAlertJob(webhookConfig, lockService, alertService, projectMetricsDAO,
@@ -118,7 +119,8 @@ class MetricsAlertJobTest {
         job.doJob(null);
 
         verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
-                any(), eq(WORKSPACE_ID), anyString(), eq(eventType), anyList(), anyList(), anyList());
+                any(), eq(WORKSPACE_ID), anyString(), eq(eventType), anyList(), anyList(), anyList(),
+                eq(alert.id() + ":" + EVENT_ID), any());
     }
 
     @ParameterizedTest
@@ -134,7 +136,7 @@ class MetricsAlertJobTest {
         job.doJob(null);
 
         verify(alertWebhookSender, after(NO_CALL_WINDOW_MS).never()).createAndSendWebhook(
-                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList());
+                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString(), any());
     }
 
     @ParameterizedTest
@@ -154,7 +156,7 @@ class MetricsAlertJobTest {
         job.doJob(null);
 
         verify(alertWebhookSender, after(NO_CALL_WINDOW_MS).never()).createAndSendWebhook(
-                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList());
+                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString(), any());
     }
 
     @ParameterizedTest
@@ -172,7 +174,7 @@ class MetricsAlertJobTest {
         ArgumentCaptor<List<String>> payloadCaptor = listCaptor();
         verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
                 any(), eq(WORKSPACE_ID), anyString(), eq(eventType), anyList(),
-                payloadCaptor.capture(), anyList());
+                payloadCaptor.capture(), anyList(), anyString(), any());
 
         List<String> payloads = payloadCaptor.getValue();
         assertThat(payloads).hasSize(1);
@@ -222,7 +224,7 @@ class MetricsAlertJobTest {
         ArgumentCaptor<List<String>> payloadCaptor = listCaptor();
         verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
                 any(), eq(WORKSPACE_ID), anyString(), eq(eventType), anyList(),
-                payloadCaptor.capture(), anyList());
+                payloadCaptor.capture(), anyList(), anyString(), any());
 
         JsonNode payload = JsonUtils.readValue(payloadCaptor.getValue().getFirst(), JsonNode.class);
 
@@ -241,7 +243,7 @@ class MetricsAlertJobTest {
 
         verify(alertService, never()).findAllByWorkspaceAndEventTypes(any(), any());
         verify(alertWebhookSender, never()).createAndSendWebhook(
-                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList());
+                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString(), any());
     }
 
     /**
@@ -281,7 +283,7 @@ class MetricsAlertJobTest {
 
         verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
                 any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
-                anyList(), anyList(), anyList());
+                anyList(), anyList(), anyList(), anyString(), any());
         assertThat(windowSecondsPassedToDao()).isEqualTo(expectedSeconds);
     }
 
@@ -305,7 +307,7 @@ class MetricsAlertJobTest {
 
         verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
                 any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
-                anyList(), anyList(), anyList());
+                anyList(), anyList(), anyList(), anyString(), any());
         assertThat(windowSecondsPassedToDao()).isEqualTo(1800L);
     }
 
@@ -327,8 +329,34 @@ class MetricsAlertJobTest {
         job.doJob(null);
 
         verify(alertWebhookSender, after(NO_CALL_WINDOW_MS).never()).createAndSendWebhook(
-                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList());
+                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList(), anyString(), any());
         verify(lockService, never()).lockUsingToken(any(), any(java.time.Duration.class));
+    }
+
+    static Stream<Arguments> operatorForms() {
+        return Stream.of(
+                // the symbol this enum serialises as
+                arguments("<", MetricsAlertJob.Operator.LESS_THAN),
+                arguments(">", MetricsAlertJob.Operator.GREATER_THAN),
+                // the enum-name form found in stored production configs, which used to be unparseable and
+                // left the alert throwing on every run, unable to ever fire (OPIK-8555)
+                arguments("less_than", MetricsAlertJob.Operator.LESS_THAN),
+                arguments("greater_than", MetricsAlertJob.Operator.GREATER_THAN),
+                arguments("LESS_THAN", MetricsAlertJob.Operator.LESS_THAN),
+                arguments("GREATER_THAN", MetricsAlertJob.Operator.GREATER_THAN));
+    }
+
+    @ParameterizedTest
+    @MethodSource("operatorForms")
+    void operatorAcceptsBothTheSymbolAndTheEnumName(String stored, MetricsAlertJob.Operator expected) {
+        assertThat(MetricsAlertJob.Operator.fromString(stored)).isEqualTo(expected);
+    }
+
+    @Test
+    void operatorStillRejectsAnUnknownValue() {
+        assertThatThrownBy(() -> MetricsAlertJob.Operator.fromString("not_an_operator"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Unknown Operator 'not_an_operator'");
     }
 
     // --- helpers ---------------------------------------------------------

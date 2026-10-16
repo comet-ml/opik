@@ -288,7 +288,10 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                                     trigger.eventType(),
                                     List.of(payload.eventId()),
                                     List.of(payload.json()),
-                                    List.of("system"))); // System user for automated alerts
+                                    List.of("system"), // System user for automated alerts
+                                    // eventId is generated once per firing and the job never reprocesses a firing
+                                    "%s:%s".formatted(alert.id(), payload.eventId()),
+                                    payload.firedAt()));
                 })
                 .contextWrite(context -> AsyncUtils.setRequestContext(context, "system", alert.workspaceId()))
                 .subscribeOn(Schedulers.boundedElastic());
@@ -322,9 +325,10 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                 : config.threshold();
     }
 
-    private PayloadAndId buildAndSerializePayload(Alert alert, AlertTrigger trigger, TriggerConfigGroup group,
+    private PayloadAndFiringTime buildAndSerializePayload(Alert alert, AlertTrigger trigger, TriggerConfigGroup group,
             List<ConditionResult> results) {
         String eventId = idGenerator.generateId().toString();
+        Instant firedAt = Instant.now();
 
         List<MetricsAlertPayload.Condition> conditions = results.stream()
                 .map(r -> {
@@ -372,7 +376,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                 .build();
 
         String payloadJson = JsonUtils.writeValueAsString(metricsPayload);
-        return new PayloadAndId(eventId, payloadJson);
+        return new PayloadAndFiringTime(eventId, payloadJson, firedAt);
     }
 
     private boolean compareMetric(BigDecimal metricValue, BigDecimal threshold, Operator operator) {
@@ -478,7 +482,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
     private record IndexedTriggerConfig(Integer groupIndex, TriggerConfig config) {
     }
 
-    private record PayloadAndId(String eventId, String json) {
+    private record PayloadAndFiringTime(String eventId, String json, Instant firedAt) {
     }
 
     @RequiredArgsConstructor
@@ -491,10 +495,22 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         @JsonValue
         private final String value;
 
+        /**
+         * Accepts either the symbol this enum serialises as ({@code >}, {@code <}) or the enum name
+         * ({@code GREATER_THAN}, {@code less_than}, case-insensitively), through
+         * {@link AlertTriggerConfig#normalizedOperator} so the accepted spellings are stated in one place
+         * rather than here and in the persistence normalisation separately.
+         * <p>
+         * Matching the symbol alone left stored configs written in the name form permanently unparseable:
+         * the job threw on every run, so the alert could never fire and nothing surfaced to its owner
+         * (OPIK-8555). Accepting both unbreaks those rows. It does not change what this enum serialises
+         * as, which is still the symbol.
+         */
         @JsonCreator
         public static Operator fromString(String value) {
+            var canonical = AlertTriggerConfig.normalizedOperator(value);
             return Arrays.stream(values())
-                    .filter(enumValue -> enumValue.value.equals(value))
+                    .filter(enumValue -> enumValue.value.equals(canonical))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Unknown Operator '%s'".formatted(value)));
         }

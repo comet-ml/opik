@@ -2,6 +2,15 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
 
+/**
+ * Column ids from the frontend's own definitions — `AUTOMATION_COLUMN_ID` in
+ * `AnnotationQueuesPage.tsx` and `QUEUE_ITEM_SOURCE_COLUMN_ID` in
+ * `queueItemSourceColumn.ts`. They form the second half of DataTable's
+ * `data-cell-id`, so a rename there is what should break these locators.
+ */
+const AUTOMATION_COLUMN_ID = 'automation';
+const QUEUE_ITEM_SOURCE_COLUMN_ID = 'queue_item_source';
+
 /** The project-scoped queues list at /projects/$projectId/annotation-queues. */
 export class AnnotationQueuesPage {
   constructor(private readonly page: Page) {}
@@ -41,6 +50,24 @@ export class AnnotationQueuesPage {
 
   get emptyState(): Locator {
     return this.page.getByText('No annotation queues yet');
+  }
+
+  /**
+   * The row's Automation cell — `AutomationCell`'s pill, which reads `On`,
+   * `Off`, or `Cap reached`.
+   *
+   * Addressed by `data-cell-id` (`<rowId>_<columnId>`, stamped by DataTable)
+   * rather than by position: the queues list's column order is user-configurable
+   * and persisted in local storage, so an `nth-child` would be reading whichever
+   * column happened to sit there.
+   *
+   * The pill is worth asserting separately from the API's own numbers because
+   * the frontend DERIVES it — `items_count >= max_items_in_queue` — so a queue
+   * that has hit its ceiling server-side can still render `On`, and that
+   * disagreement is invisible to any API-level check.
+   */
+  automationCell(queueId: string): Locator {
+    return this.page.locator(`td[data-cell-id="${queueId}_${AUTOMATION_COLUMN_ID}"]`);
   }
 
   /**
@@ -101,6 +128,53 @@ export class AnnotationQueuePage {
    */
   get queueItemsTab(): Locator {
     return this.page.getByRole('tab', { name: 'Queue items' });
+  }
+
+  /**
+   * Wait for the items tab to have settled on either rows or its empty state.
+   *
+   * `waitForReady` above only proves the tab strip mounted — the tabs render
+   * independently of the queue fetch, so it resolves for a queue id that does
+   * not exist. A spec asserting a row is ABSENT needs to know the table
+   * finished, which is what racing a real row against "No items to review"
+   * establishes.
+   */
+  async waitForItemsReady(): Promise<void> {
+    return test.step('Wait for the queue items table ready', async () => {
+      await this.queueItemsTab.waitFor({ state: 'visible' });
+      const realRow = this.page.locator('tbody tr[data-row-id]').first();
+      await Promise.race([
+        realRow.waitFor({ state: 'visible' }),
+        this.itemsEmptyState.waitFor({ state: 'visible' }),
+      ]);
+    });
+  }
+
+  /** The items table's own empty state, from `TraceQueueItemsTab`'s `noData`. */
+  get itemsEmptyState(): Locator {
+    return this.page.getByText('No items to review');
+  }
+
+  /**
+   * An item row, scoped by the id of the trace (or thread) behind it — the
+   * table's `getRowId` is the entity's own id, so this pins the row even while
+   * sibling rows come and go as automation fills the queue.
+   */
+  itemRow(entityId: string): Locator {
+    return this.page.locator(`tbody tr[data-row-id="${entityId}"]`);
+  }
+
+  /**
+   * An item row's Source cell — `QueueItemSourceCell`'s pill, `Manual` or
+   * `Automated`.
+   *
+   * Note the cell renders EMPTY while the membership lookup is in flight and
+   * stays empty if it fails, so asserting its text (rather than merely that the
+   * cell exists) is what distinguishes "the column says Automated" from "the
+   * column never loaded".
+   */
+  itemSourceCell(entityId: string): Locator {
+    return this.page.locator(`td[data-cell-id="${entityId}_${QUEUE_ITEM_SOURCE_COLUMN_ID}"]`);
   }
 
   /**

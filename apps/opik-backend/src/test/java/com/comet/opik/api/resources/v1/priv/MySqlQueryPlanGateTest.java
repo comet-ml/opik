@@ -40,8 +40,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code SELECT} and fails on any plan that materializes a subquery / uses an internal temporary table (the OPIK-7198
  * {@code SQLSyntaxErrorException: Table '#sql...' doesn't exist} class) or full-scans a tenant-growing table.</p>
  *
- * <p>The read paths are exercised against empty tables: MySQL plans a query the same way regardless of row count, so
- * the plan shape the gate inspects is identical to production's. Enforcement is <b>net-new only</b> vs. the checked-in
+ * <p>The read paths are exercised against empty tables, on a MySQL container of the gate's own: the optimizer's
+ * choice depends on table statistics, so rows other test classes leave in the reused container can change a plan's
+ * shape on unchanged SQL. Enforcement is <b>net-new only</b> vs. the checked-in
  * {@code planshape/mysql-baseline.json} allowlist, which is ratcheted down as legacy offenders are fixed. A follow-up
  * will move capture into the shared test wiring so every resource test contributes queries passively.</p>
  */
@@ -76,9 +77,9 @@ class MySqlQueryPlanGateTest {
      * Shared container + app bootstrap: starts Redis/MySQL/ClickHouse/Zookeeper, runs the migrations and builds the
      * Dropwizard app. The gate needs a booted app backed by a real MySQL to install the {@link CapturingSqlLogger} on
      * the app's {@link Jdbi} and to run {@code EXPLAIN} on the live connection, so it reuses the same fixture as the
-     * resource ITs rather than duplicating the container wiring inline.
+     * resource ITs rather than duplicating the container wiring inline. MySQL is not reused, so its tables are empty.
      */
-    private final TestContainersSetup setup = new TestContainersSetup();
+    private final TestContainersSetup setup = new TestContainersSetup(null, false);
 
     @RegisterApp
     private final TestDropwizardAppExtension APP = setup.APP;
@@ -103,6 +104,10 @@ class MySqlQueryPlanGateTest {
     @AfterAll
     void tearDownAll() {
         setup.wireMock.server().stop();
+        // A reused MySQL is shared with other test classes; only a dedicated one is this class's to stop.
+        if (!setup.MYSQL.isShouldBeReused()) {
+            setup.MYSQL.stop();
+        }
     }
 
     @Test

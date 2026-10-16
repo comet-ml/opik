@@ -6,6 +6,36 @@ import { AddToDatasetDialogPage } from './add-to-dataset-dialog.page';
 
 export type ExplainKind = 'error' | 'duration' | 'cost';
 
+/**
+ * The Logs table's row-height setting — `ROW_HEIGHT` in
+ * apps/opik-frontend/src/types/shared.ts, labelled Compact / Medium / Detailed
+ * in the selector.
+ *
+ * It matters to more than line count: cells switch RENDER PATH on it. At
+ * small/medium a feedback score's reason goes into a hover tooltip; at large it
+ * is written inline into the cell (`FeedbackScoreCell`), which is a different
+ * element with a different white-space rule.
+ */
+export type LogsRowHeight = 'small' | 'medium' | 'large';
+
+/**
+ * One filter as the Logs URL carries it (`traces_filters` / `spans_filters`).
+ *
+ * Every field is optional because the shape is what is under test: a quick
+ * filter on a span's `provider` must produce a `string` filter with NO `key`,
+ * while one on a metadata attribute must produce a `dictionary` filter WITH
+ * one. A type that required `key` could not express the first, and a spec
+ * reading through it could not tell the two apart.
+ */
+export type LogsUrlFilter = {
+  id?: string;
+  field?: string;
+  type?: string;
+  key?: string;
+  operator?: string;
+  value?: string;
+};
+
 // Maps an explain kind to the Traces table column id (used in data-cell-id)
 // and the owl trigger's aria-label, per apps/opik-frontend/src/plugins/comet/explain/registry.ts.
 const EXPLAIN_COLUMN: Record<ExplainKind, string> = {
@@ -24,12 +54,18 @@ export class LogsPage {
 
   constructor(private readonly page: Page) {}
 
-  async goto(projectId: string): Promise<void> {
-    return test.step(`Open Logs for project ${projectId}`, async () => {
-      this.projectId = projectId;
-      const env = loadEnvConfig();
-      await this.page.goto(`${env.baseUrl}/${env.workspace}/projects/${projectId}/logs`);
-    });
+  async goto(projectId: string, opts: { rowHeight?: LogsRowHeight } = {}): Promise<void> {
+    return test.step(
+      `Open Logs for project ${projectId}${opts.rowHeight ? ` at ${opts.rowHeight} row height` : ''}`,
+      async () => {
+        this.projectId = projectId;
+        const env = loadEnvConfig();
+        const query = opts.rowHeight ? `?height=${opts.rowHeight}` : '';
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs${query}`,
+        );
+      },
+    );
   }
 
   /**
@@ -63,9 +99,128 @@ export class LogsPage {
     });
   }
 
+  /**
+   * Open Logs with the Traces tab active, optionally at a chosen date range.
+   *
+   * The sibling of `gotoSpans` and `gotoThreads`, and not the same thing as
+   * `goto()`: that one states no `logsType` at all, so the active tab is
+   * whatever localStorage last persisted for the project — and a bare `/logs`
+   * on a fresh profile resolves to Threads, not Traces (`useLogsType`). A spec
+   * about the Traces table has to say so.
+   *
+   * `timeRange` is the page's own `time_range` query param, the same one the
+   * other two take. It is also persisted per project, and it decides whether
+   * the read is windowed at all — so an unstated range is whichever one the
+   * profile last stored.
+   */
+  async gotoTraces(projectId: string, opts: { timeRange?: string } = {}): Promise<void> {
+    return test.step(
+      `Open Logs (Traces) for project ${projectId}${opts.timeRange ? ` over ${opts.timeRange}` : ''}`,
+      async () => {
+        this.projectId = projectId;
+        const env = loadEnvConfig();
+        const params = new URLSearchParams({ logsType: 'traces' });
+        if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
+        );
+      },
+    );
+  }
+
   /** The Threads/Traces/Spans tab toggle for "Spans". */
   get spansTab(): Locator {
     return this.page.getByRole('radio', { name: 'Spans' });
+  }
+
+  /** The Threads/Traces/Spans tab toggle for "Traces". */
+  get tracesTab(): Locator {
+    return this.page.getByRole('radio', { name: 'Traces' });
+  }
+
+  /**
+   * Which entity table is on screen, read from the toggle itself.
+   *
+   * Asserted rather than assumed by every spec that cares: `logsType` is
+   * persisted per project in localStorage, so the active tab survives between
+   * visits and a spec that inherited it would silently be driving the other
+   * table.
+   */
+  async activeLogsTab(): Promise<'threads' | 'traces' | 'spans'> {
+    return test.step('Read which entity tab is active', async () => {
+      const checked = async (tab: Locator) =>
+        (await tab.getAttribute('aria-checked')) === 'true';
+      if (await checked(this.tracesTab)) return 'traces';
+      if (await checked(this.spansTab)) return 'spans';
+      if (await checked(this.threadsTab)) return 'threads';
+      throw new Error('LogsPage.activeLogsTab: no entity toggle reported itself selected');
+    });
+  }
+
+  /**
+   * The filters the URL carries for one of the two tables, parsed.
+   *
+   * `null` when the param is absent, which is deliberately distinct from `[]`:
+   * "the Traces filter was never written" is the assertion that separates a
+   * quick filter correctly routed to the Spans table from one that wrote to
+   * both, and an empty array would be a write.
+   *
+   * Read from the URL rather than from the chip bar because the URL is where
+   * the filter's wire shape lives — field, type, operator and key, exactly as
+   * the table will send them.
+   */
+  async readUrlFilters(type: 'traces' | 'spans'): Promise<LogsUrlFilter[] | null> {
+    return test.step(`Read the ${type} filters from the URL`, async () => {
+      const raw = new URL(this.page.url()).searchParams.get(`${type}_filters`);
+      if (raw === null) return null;
+      return JSON.parse(raw) as LogsUrlFilter[];
+    });
+  }
+
+  /**
+   * Wait until the URL carries filters for `type` that satisfy `predicate`.
+   *
+   * The quick filter writes the param with `replaceIn`, so there is no
+   * navigation to await — the settle point is the param itself holding the
+   * expected shape. Polling the parsed value (rather than string-matching the
+   * URL) keeps the wait honest about JSON key order and encoding.
+   */
+  async waitForUrlFilters(
+    type: 'traces' | 'spans',
+    predicate: (filters: LogsUrlFilter[]) => boolean,
+  ): Promise<LogsUrlFilter[]> {
+    return test.step(`Wait for the ${type} filters in the URL`, async () => {
+      await expect
+        .poll(
+          async () => {
+            const filters = await this.readUrlFilters(type);
+            return filters !== null && predicate(filters);
+          },
+          { message: `${type}_filters in the URL`, timeout: 15_000 },
+        )
+        .toBe(true);
+      return (await this.readUrlFilters(type))!;
+    });
+  }
+
+  /**
+   * The chip ids currently pinned to one table's chip bar, read from the store
+   * that owns them.
+   *
+   * `null` when nothing has been stored yet, which is the state a chip bar
+   * showing its defaults is in — and the precondition that makes "the filter
+   * pinned a chip that was not pinned before" mean something. Read from
+   * localStorage because the bar renders a chip for a default and for a pinned
+   * id identically, so the DOM cannot distinguish "already there" from
+   * "just added".
+   */
+  async readPinnedChipIds(type: 'traces' | 'spans'): Promise<string[] | null> {
+    return test.step(`Read the pinned chips stored for the ${type} table`, async () => {
+      const key = `chips:pinnedConfig:logs.${type}`;
+      const raw = await this.page.evaluate((k) => window.localStorage.getItem(k), key);
+      if (raw === null) return null;
+      return JSON.parse(raw) as string[];
+    });
   }
 
   /**
@@ -266,15 +421,30 @@ export class LogsPage {
     });
   }
 
-  /** Open Logs with the Threads tab active for the given project. */
-  async gotoThreads(projectId: string): Promise<void> {
-    return test.step(`Open Logs (Threads) for project ${projectId}`, async () => {
-      this.projectId = projectId;
-      const env = loadEnvConfig();
-      await this.page.goto(
-        `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?logsType=threads`,
-      );
-    });
+  /**
+   * Open Logs with the Threads tab active for the given project.
+   *
+   * `timeRange` is the page's own `time_range` query param, the same one
+   * `gotoSpans` takes. Two reasons a spec states it rather than inheriting the
+   * default: the value is also persisted in localStorage and the URL is what
+   * outranks it, so an unstated range is whatever the profile last stored; and
+   * it decides whether the read is windowed at all — `alltime` sends no
+   * `from_time`, and only a windowed read takes the `trace_threads` inner-join
+   * branch. A spec about that branch has to say which range it means.
+   */
+  async gotoThreads(projectId: string, opts: { timeRange?: string } = {}): Promise<void> {
+    return test.step(
+      `Open Logs (Threads) for project ${projectId}${opts.timeRange ? ` over ${opts.timeRange}` : ''}`,
+      async () => {
+        this.projectId = projectId;
+        const env = loadEnvConfig();
+        const params = new URLSearchParams({ logsType: 'threads' });
+        if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
+        );
+      },
+    );
   }
 
   async waitForReady(): Promise<void> {
@@ -523,6 +693,77 @@ export class LogsPage {
    */
   durationCell(traceId: string): Locator {
     return this.page.locator(`[data-cell-id="${traceId}_duration"]`);
+  }
+
+  /**
+   * A trace row's cell for ONE named feedback score.
+   *
+   * Each score in the project is its own dynamic column, and every score the
+   * project has ever carried is auto-selected into the table on a fresh profile
+   * (`useDynamicColumnsCache`), so a seeded score needs no column configuration
+   * to be visible.
+   *
+   * The column is declared with `id: 'feedback_scores.<name>'`, which
+   * `mapColumnDataFields` hands to TanStack as an `accessorKey` and no explicit
+   * id — and TanStack derives the id from an accessorKey by replacing the first
+   * `.` with `_`. Hence `feedback_scores_<name>` here while the wire-level
+   * `sorting`/`filters` params still take the dotted form. Same idiom as
+   * `CompareExperimentsPage.readItemScore`.
+   */
+  feedbackScoreCell(traceId: string, scoreName: string): Locator {
+    return this.page.locator(`td[data-cell-id="${traceId}_feedback_scores_${scoreName}"]`);
+  }
+
+  /**
+   * A feedback-score cell's text AS RENDERED, and its height.
+   *
+   * `innerText`, never `textContent`, and that is the whole point of this
+   * helper: the reason is seeded with a real `\n`, so a `textContent` read
+   * reports the newline back from the DOM even on a build whose CSS collapsed it
+   * on screen — and the spec would pass having verified nothing. `innerText` is
+   * computed from the rendered box, so `white-space: normal` shows up in it as a
+   * space.
+   *
+   * The height comes back with it because the two are one observation: at
+   * Detailed row height the reason is written inline into the cell, so "the
+   * newline survived" and "the cell grew to hold two lines" are the same claim
+   * seen twice, and a caller that reads them in separate round-trips could have
+   * them straddle a re-render.
+   *
+   * Counted before reading: a dynamic feedback-score column is named by the
+   * score, so an ambiguous match would mean the table is rendering two columns
+   * for one score — worth failing on rather than silently taking `.first()`.
+   */
+  async readFeedbackScoreCell(
+    traceId: string,
+    scoreName: string,
+  ): Promise<{ text: string; height: number }> {
+    return test.step(`read the rendered "${scoreName}" cell of trace ${traceId}`, async () => {
+      const cell = this.feedbackScoreCell(traceId, scoreName);
+      await expect(cell, `exactly one "${scoreName}" cell for trace ${traceId}`).toHaveCount(1);
+      await expect(cell, `the "${scoreName}" cell for trace ${traceId}`).toBeVisible();
+      return cell.evaluate((el) => ({
+        text: (el as HTMLElement).innerText,
+        height: el.getBoundingClientRect().height,
+      }));
+    });
+  }
+
+  /**
+   * The hover trigger that holds a feedback score's reason at Compact/Medium
+   * height — `FeedbackScoreReasonTooltip`'s `MessageSquareMore` icon.
+   *
+   * Addressed by the Lucide icon class because the trigger is a bare `div` with
+   * no role, name or `data-testid`; the same idiom `CompareExperimentsPage` uses
+   * for the shared table's icon-only controls, and for the same reason — these
+   * specs run against a pre-built deployment, so a front-end attribute added
+   * beside them would not exist in the build under test.
+   *
+   * Only ever used to tell the two render paths apart: its presence is what says
+   * the cell took the tooltip branch rather than the inline one.
+   */
+  feedbackScoreReasonTooltipTrigger(traceId: string, scoreName: string): Locator {
+    return this.feedbackScoreCell(traceId, scoreName).locator('svg.lucide-message-square-more');
   }
 
   /** The Errors/Duration/Estimated cost cell for a trace row, keyed by Ollie explain kind. */

@@ -1549,6 +1549,29 @@ class OpenTelemetryMapperTest {
         }
 
         /**
+         * quarkus-langchain4j reports LangChain4j's {@code ModelProvider} enum, lowercased, in
+         * {@code gen_ai.provider.name} ({@code open_ai}, not {@code openai}). Unaliased, those match
+         * no price row and the span costs 0.
+         */
+        @ParameterizedTest(name = "[{index}] {0} -> {1}")
+        @CsvSource({
+                "open_ai,          openai",
+                "amazon_bedrock,   bedrock",
+                "google_ai_gemini, google_ai",
+        })
+        void quarkusLangChain4jProviderIsAliasedToCanonicalProvider(String wireValue, String expected) {
+            assertThat(map(attr("gen_ai.provider.name", wireValue)).provider()).isEqualTo(expected);
+        }
+
+        /**
+         * {@code google_genai} fronts either the Gemini API or Vertex, so it cannot be aliased to one.
+         */
+        @Test
+        void quarkusLangChain4jGoogleGenAiIsNotAliased() {
+            assertThat(map(attr("gen_ai.provider.name", "google_genai")).provider()).isEqualTo("google_genai");
+        }
+
+        /**
          * The Azure AI Inference endpoint fronts both Azure OpenAI and Foundry models (Claude,
          * Llama), which LiteLLM prices under a separate {@code azure_ai} provider. Aliasing it to
          * {@code azure} would price a Foundry model against the OpenAI table, so it stays untouched.

@@ -25,6 +25,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.redis.testcontainers.RedisContainer;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +37,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -52,6 +54,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -63,6 +66,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 import static org.awaitility.Awaitility.await;
 
@@ -174,6 +179,8 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().contextManagement()).isEqualTo("clear_thinking_20251015");
                 // speed: selects the rate table, so it must survive ingestion
                 assertThat(row.get().speed()).isEqualTo("fast");
+                // session_mode: how the harness invoked the call
+                assertThat(row.get().sessionMode()).isEqualTo("background");
                 assertThat(row.get().aiuNano()).isNull();
                 assertThat(row.get().trigger()).isEqualTo("subagent");
                 assertThat(row.get().triggerDetail()).isEqualTo("code-reviewer");
@@ -484,6 +491,46 @@ class CostIntelligenceIngestionTest {
         }
 
         @Test
+        @DisplayName("MCP instructions and deferred listings land on their server's breakdown row")
+        void mcpSectionsLandOnTheirServerRow() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(mcpSectionsCipxMetadata("claude-opus-5-5", 400))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var rows = getCipxBlocks(span.id(), ws.workspaceId());
+                assertThat(rows).hasSize(5);
+
+                assertThat(rows).allSatisfy(row -> {
+                    assertThat(row.lane()).isEqualTo("mcp_servers");
+                    assertThat(row.isDefinition()).isEqualTo(1);
+                });
+                // Server-named blocks ride that server's row; one naming no server stays out of the
+                // breakdown rather than becoming a pseudo-server (OPIK-8721).
+                assertThat(rows).extracting(CipxBlockRow::category, CipxBlockRow::bdLane, CipxBlockRow::label)
+                        .containsExactly(
+                                tuple("mcp_tools_active", "mcp_servers", "GitHub"),
+                                tuple("mcp_server_instructions", "mcp_servers", "GitHub"),
+                                tuple("mcp_tools_deferred", "mcp_servers", "claude.ai Notion"),
+                                tuple("mcp_server_instructions", "", ""),
+                                tuple("mcp_tools_deferred", "", ""));
+
+                // The ticket's claim: the per-server rows sum to the lane, short only of what
+                // names no server.
+                double rowsTotal = rows.stream().filter(r -> r.bdLane().equals("mcp_servers"))
+                        .mapToDouble(CipxBlockRow::alloc).sum();
+                double namedTotal = rows.stream().filter(r -> !r.toolServer().isEmpty())
+                        .mapToDouble(CipxBlockRow::alloc).sum();
+                assertThat(rowsTotal).isPositive().isCloseTo(namedTotal, within(1e-6));
+            });
+        }
+
+        @Test
         @DisplayName("slash_command lands in user_prompts keyed by command name; identity_context framing lands in static_overhead")
         void slashCommandAndIdentityContextLanes() {
             var ws = newWorkspace();
@@ -541,6 +588,8 @@ class CostIntelligenceIngestionTest {
                 assertThat(row).isPresent();
                 assertThat(row.get().model()).isEqualTo("github_copilot:claude-sonnet-5");
                 assertThat(row.get().aiuNano()).isEqualTo(5_919_822_000L);
+                // this provider doesn't stamp session_mode, so it must read the '' default.
+                assertThat(row.get().sessionMode()).isEmpty();
 
                 // alloc x the tier's per-token rate: the read tier splits across its two blocks by
                 // chars, the write and output blocks absorb their tiers, input lands on a residual row.
@@ -688,6 +737,223 @@ class CostIntelligenceIngestionTest {
             });
 
             assertThat(getCipxIdentity(plainTrace.id(), ws.workspaceId())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("repository skills and instruction files land as scoped parallel arrays with status listed")
+        void repositoryListsLand() {
+            var ws = newWorkspace();
+            var trace = traceWithRepositoryKeys(true, true);
+
+            traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxIdentity(trace.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                assertThat(row.get().skillsScope()).containsExactly("repo", "repo");
+                assertThat(row.get().skillsRoot()).containsExactly(".claude/skills", ".agents/skills");
+                assertThat(row.get().skillsName()).containsExactly("opik-review", "plan-first");
+                assertThat(row.get().skillsVersionId()).containsExactly("9f2c0001", "9f2c0002");
+                assertThat(row.get().skillsStatus()).isEqualTo("listed");
+                assertThat(row.get().instructionFilesScope()).containsExactly("repo", "repo");
+                assertThat(row.get().instructionFilesPath()).containsExactly("AGENTS.md", "CLAUDE.md");
+                assertThat(row.get().instructionFilesVersionId()).containsExactly("4be00001", "4be00002");
+                assertThat(row.get().instructionFilesStatus()).isEqualTo("listed");
+            });
+        }
+
+        @Test
+        @DisplayName("repository without either list key stores empty arrays and status ''")
+        void repositoryWithoutListsStoresEmpty() {
+            var ws = newWorkspace();
+            var trace = traceWithRepositoryKeys(false, false);
+
+            traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxIdentity(trace.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                assertThat(row.get().skillsScope()).isEmpty();
+                assertThat(row.get().skillsRoot()).isEmpty();
+                assertThat(row.get().skillsName()).isEmpty();
+                assertThat(row.get().skillsVersionId()).isEmpty();
+                assertThat(row.get().skillsStatus()).isEmpty();
+                assertThat(row.get().instructionFilesScope()).isEmpty();
+                assertThat(row.get().instructionFilesPath()).isEmpty();
+                assertThat(row.get().instructionFilesVersionId()).isEmpty();
+                assertThat(row.get().instructionFilesStatus()).isEmpty();
+            });
+        }
+
+        @Test
+        @DisplayName("repository with only instruction_files leaves skills '' and empty, files listed")
+        void repositoryWithOnlyInstructionFilesListsOnlyFiles() {
+            var row = ingestRepositoryEdit(repository -> repository.remove("skills"));
+
+            assertThat(row.skillsScope()).isEmpty();
+            assertThat(row.skillsName()).isEmpty();
+            assertThat(row.skillsStatus()).isEmpty();
+            assertThat(row.instructionFilesPath()).containsExactly("AGENTS.md", "CLAUDE.md");
+            assertThat(row.instructionFilesStatus()).isEqualTo("listed");
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"null", "\"text\"", "{\"root\": \"x\"}", "7"})
+        @DisplayName("a non-array skills value stores '' and empty lists, instruction_files stays listed")
+        void nonArraySkillsStoresNothing(String rawSkills) {
+            var row = ingestRepositoryEdit(
+                    repository -> repository.set("skills", JsonUtils.getJsonNodeFromString(rawSkills)));
+
+            assertThat(row.skillsStatus()).isEmpty();
+            assertThat(row.skillsScope()).isEmpty();
+            assertThat(row.skillsRoot()).isEmpty();
+            assertThat(row.skillsName()).isEmpty();
+            assertThat(row.skillsVersionId()).isEmpty();
+            assertThat(row.instructionFilesStatus()).isEqualTo("listed");
+            assertThat(row.instructionFilesPath()).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("an element missing a field stores '' in that slot and keeps the lengths equal")
+        void elementMissingAFieldKeepsLengthsEqual() {
+            var row = ingestRepositoryEdit(repository -> {
+                var skills = repository.putArray("skills");
+                skills.addObject().put("root", ".claude/skills").put("tree_id", "9f2c0003");
+                skills.addObject().put("root", ".agents/skills").put("name", "plan-first");
+                skills.add("not-an-object");
+            });
+
+            assertThat(row.skillsScope()).containsExactly("repo", "repo");
+            assertThat(row.skillsRoot()).containsExactly(".claude/skills", ".agents/skills");
+            assertThat(row.skillsName()).containsExactly("", "plan-first");
+            assertThat(row.skillsVersionId()).containsExactly("9f2c0003", "");
+        }
+
+        @ParameterizedTest
+        @CsvSource({"true,false", "false,true", "true,true"})
+        @DisplayName("an explicit empty array is a known-empty list: status listed, empty arrays")
+        void explicitEmptyArrayIsListed(boolean emptySkills, boolean emptyFiles) {
+            var row = ingestRepositoryEdit(repository -> {
+                if (emptySkills) {
+                    repository.putArray("skills");
+                }
+                if (emptyFiles) {
+                    repository.putArray("instruction_files");
+                }
+            });
+
+            assertThat(row.skillsStatus()).isEqualTo("listed");
+            assertThat(row.instructionFilesStatus()).isEqualTo("listed");
+            assertThat(row.skillsName()).hasSize(emptySkills ? 0 : 2);
+            assertThat(row.skillsScope()).hasSize(emptySkills ? 0 : 2);
+            assertThat(row.instructionFilesPath()).hasSize(emptyFiles ? 0 : 2);
+            assertThat(row.instructionFilesScope()).hasSize(emptyFiles ? 0 : 2);
+        }
+
+        @ParameterizedTest
+        @ValueSource(ints = {255, 256})
+        @DisplayName("a list at or under 256 entries is persisted with status listed")
+        void listWithinEntryCapIsListed(int size) {
+            var row = ingestRepositoryEdit(repository -> fillSkills(repository, size));
+
+            assertThat(row.skillsStatus()).isEqualTo("listed");
+            assertThat(row.skillsScope()).hasSize(size);
+            assertThat(row.skillsName()).hasSize(size).startsWith("n0").endsWith("n" + (size - 1));
+            assertThat(row.skillsVersionId()).hasSize(size);
+            assertThat(row.instructionFilesStatus()).isEqualTo("listed");
+        }
+
+        @Test
+        @DisplayName("a list over 256 entries is stored empty with status truncated")
+        void listOverEntryCapIsTruncated() {
+            var row = ingestRepositoryEdit(repository -> fillSkills(repository, 257));
+
+            assertThat(row.skillsStatus()).isEqualTo("truncated");
+            assertThat(row.skillsScope()).isEmpty();
+            assertThat(row.skillsName()).isEmpty();
+            assertThat(row.instructionFilesStatus()).isEqualTo("listed");
+        }
+
+        private static void fillSkills(ObjectNode repository, int size) {
+            var skills = repository.putArray("skills");
+            for (int i = 0; i < size; i++) {
+                skills.addObject().put("root", "r").put("name", "n" + i).put("tree_id", "t" + i);
+            }
+        }
+
+        @Test
+        @DisplayName("skills and instruction_files groups of different lengths insert side by side")
+        void groupsOfDifferentLengthsInsert() {
+            var ws = newWorkspace();
+            var row = sentinelIdentityRow(4).toBuilder()
+                    .skillsScope(List.of("repo", "repo", "repo"))
+                    .skillsRoot(List.of("r1", "r2", "r3"))
+                    .skillsName(List.of("n1", "n2", "n3"))
+                    .skillsVersionId(List.of("t1", "t2", "t3"))
+                    .instructionFilesScope(List.of("repo"))
+                    .instructionFilesPath(List.of("AGENTS.md"))
+                    .instructionFilesVersionId(List.of("b1"))
+                    .build();
+
+            cipxTraceIdentityDAO.upsert(List.of(row), ws.workspaceId(), USER).block();
+
+            assertEveryIdentityColumnHoldsItsOwnValue(ws.workspaceId(), row);
+        }
+
+        @Test
+        @DisplayName("quotes and backslashes in array values round-trip")
+        void quotesAndBackslashesRoundTrip() {
+            var ws = newWorkspace();
+            var row = sentinelIdentityRow(5).toBuilder()
+                    .skillsName(List.of("o'brien\\skill", "it's \\ \"fine\""))
+                    .instructionFilesPath(List.of("dir\\it's.md", "a'b"))
+                    .build();
+
+            cipxTraceIdentityDAO.upsert(List.of(row), ws.workspaceId(), USER).block();
+
+            assertEveryIdentityColumnHoldsItsOwnValue(ws.workspaceId(), row);
+        }
+
+        @Test
+        @DisplayName("unequal lengths within a group are rejected")
+        void unequalGroupLengthsAreRejected() {
+            var base = sentinelIdentityRow(6);
+
+            assertThatThrownBy(() -> base.toBuilder().skillsName(List.of("only-one")).build())
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> base.toBuilder().instructionFilesPath(List.of("a")).build())
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        private CipxIdentityRow ingestRepositoryEdit(Consumer<ObjectNode> edit) {
+            var ws = newWorkspace();
+            var trace = traceWithRepositoryKeys(edit);
+
+            traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
+
+            return await().atMost(30, SECONDS).until(() -> getCipxIdentity(trace.id(), ws.workspaceId()),
+                    Optional::isPresent).get();
+        }
+
+        private Trace traceWithRepositoryKeys(boolean withSkills, boolean withInstructionFiles) {
+            return traceWithRepositoryKeys(repository -> {
+                if (!withSkills) {
+                    repository.remove("skills");
+                }
+                if (!withInstructionFiles) {
+                    repository.remove("instruction_files");
+                }
+            });
+        }
+
+        private Trace traceWithRepositoryKeys(Consumer<ObjectNode> edit) {
+            var metadata = traceCipxMetadata(UUID.randomUUID().toString(), "dev-" + UUID.randomUUID() + "@acme.com",
+                    "Dev User", "git@github.com:acme/repo.git", "claude_code", 3);
+            edit.accept((ObjectNode) metadata.path("cipx").path("session").path("repository"));
+            return factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName("cipx-" + UUID.randomUUID())
+                    .metadata(metadata)
+                    .build();
         }
 
         @Test
@@ -942,6 +1208,7 @@ class CostIntelligenceIngestionTest {
                 .maxTokens(base + 7)
                 .contextManagement("sentinel-" + n + "-context-management")
                 .speed("sentinel-" + n + "-speed")
+                .sessionMode("sentinel-" + n + "-session-mode")
                 .aiuNano(base + 8)
                 .trigger("sentinel-" + n + "-trigger")
                 .triggerDetail("sentinel-" + n + "-trigger-detail")
@@ -973,6 +1240,7 @@ class CostIntelligenceIngestionTest {
         assertThat(actual.maxTokens()).as("max_tokens").isEqualTo(expected.maxTokens());
         assertThat(actual.contextManagement()).as("context_management").isEqualTo(expected.contextManagement());
         assertThat(actual.speed()).as("speed").isEqualTo(expected.speed());
+        assertThat(actual.sessionMode()).as("session_mode").isEqualTo(expected.sessionMode());
         assertThat(actual.aiuNano()).as("aiu_nano").isEqualTo(expected.aiuNano());
         assertThat(actual.trigger()).as("trigger").isEqualTo(expected.trigger());
         assertThat(actual.triggerDetail()).as("trigger_detail").isEqualTo(expected.triggerDetail());
@@ -991,7 +1259,7 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management, speed, aiu_nano,
+                    effort, thinking_type, max_tokens, context_management, speed, session_mode, aiu_nano,
                     `trigger` AS trigger_kind, trigger_detail, turn_key, parent_tool_use_id,
                     link_failure_reason
                 FROM cipx_spends FINAL
@@ -1020,6 +1288,7 @@ class CostIntelligenceIngestionTest {
                             row.get("max_tokens", Long.class),
                             row.get("context_management", String.class),
                             row.get("speed", String.class),
+                            row.get("session_mode", String.class),
                             row.get("aiu_nano", Long.class),
                             row.get("trigger_kind", String.class),
                             row.get("trigger_detail", String.class),
@@ -1063,6 +1332,15 @@ class CostIntelligenceIngestionTest {
                 .agentsAmbiguous(base + 8)
                 .cipxVersion("sentinel-" + n + "-cipx-version")
                 .lastUpdatedAt(Instant.ofEpochMilli(1_700_000_000_000L + n))
+                .skillsScope(List.of("repo", "user"))
+                .skillsRoot(List.of("sentinel-" + n + "-root-a", "sentinel-" + n + "-root-b"))
+                .skillsName(List.of("sentinel-" + n + "-name-a", "sentinel-" + n + "-name-b"))
+                .skillsVersionId(List.of("sentinel-" + n + "-tree-a", "sentinel-" + n + "-tree-b"))
+                .skillsStatus("sentinel-" + n + "-skills-status")
+                .instructionFilesScope(List.of("repo", "plugin"))
+                .instructionFilesPath(List.of("sentinel-" + n + "-path-a", "sentinel-" + n + "-path-b"))
+                .instructionFilesVersionId(List.of("sentinel-" + n + "-blob-a", "sentinel-" + n + "-blob-b"))
+                .instructionFilesStatus("sentinel-" + n + "-files-status")
                 .build();
     }
 
@@ -1104,6 +1382,19 @@ class CostIntelligenceIngestionTest {
         assertThat(actual.agentsAmbiguous()).as("agents_ambiguous").isEqualTo(expected.agentsAmbiguous());
         assertThat(actual.cipxVersion()).as("cipx_version").isEqualTo(expected.cipxVersion());
         assertThat(actual.lastUpdatedMs()).as("last_updated_at").isEqualTo(expected.lastUpdatedAt().toEpochMilli());
+        assertThat(actual.skillsScope()).as("skills.scope").isEqualTo(expected.skillsScope());
+        assertThat(actual.skillsRoot()).as("skills.root").isEqualTo(expected.skillsRoot());
+        assertThat(actual.skillsName()).as("skills.name").isEqualTo(expected.skillsName());
+        assertThat(actual.skillsVersionId()).as("skills.version_id").isEqualTo(expected.skillsVersionId());
+        assertThat(actual.skillsStatus()).as("skills_status").isEqualTo(expected.skillsStatus());
+        assertThat(actual.instructionFilesScope()).as("instruction_files.scope")
+                .isEqualTo(expected.instructionFilesScope());
+        assertThat(actual.instructionFilesPath()).as("instruction_files.path")
+                .isEqualTo(expected.instructionFilesPath());
+        assertThat(actual.instructionFilesVersionId()).as("instruction_files.version_id")
+                .isEqualTo(expected.instructionFilesVersionId());
+        assertThat(actual.instructionFilesStatus()).as("instruction_files_status")
+                .isEqualTo(expected.instructionFilesStatus());
     }
 
     private Optional<SentinelIdentityRow> getCipxIdentityAllColumns(String traceId, String workspaceId) {
@@ -1119,7 +1410,12 @@ class CostIntelligenceIngestionTest {
                     branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                     files_added, files_deleted, lines_added, lines_deleted,
                     agents_dispatched, agents_linked, agents_ambiguous, cipx_version,
-                    toUnixTimestamp64Milli(last_updated_at) AS last_updated_ms
+                    toUnixTimestamp64Milli(last_updated_at) AS last_updated_ms,
+                    `skills.scope` AS skills_scope, `skills.root` AS skills_root, `skills.name` AS skills_name,
+                    `skills.version_id` AS skills_version_id, skills_status,
+                    `instruction_files.scope` AS instruction_files_scope,
+                    `instruction_files.path` AS instruction_files_path,
+                    `instruction_files.version_id` AS instruction_files_version_id, instruction_files_status
                 FROM cipx_trace_identities FINAL
                 WHERE workspace_id = :workspace_id AND trace_id = :trace_id
                 """;
@@ -1161,6 +1457,16 @@ class CostIntelligenceIngestionTest {
                             .agentsAmbiguous(row.get("agents_ambiguous", Long.class))
                             .cipxVersion(row.get("cipx_version", String.class))
                             .lastUpdatedMs(row.get("last_updated_ms", Long.class))
+                            .skillsScope(List.of(row.get("skills_scope", String[].class)))
+                            .skillsRoot(List.of(row.get("skills_root", String[].class)))
+                            .skillsName(List.of(row.get("skills_name", String[].class)))
+                            .skillsVersionId(List.of(row.get("skills_version_id", String[].class)))
+                            .skillsStatus(row.get("skills_status", String.class))
+                            .instructionFilesScope(List.of(row.get("instruction_files_scope", String[].class)))
+                            .instructionFilesPath(List.of(row.get("instruction_files_path", String[].class)))
+                            .instructionFilesVersionId(
+                                    List.of(row.get("instruction_files_version_id", String[].class)))
+                            .instructionFilesStatus(row.get("instruction_files_status", String.class))
                             .build())));
         }).blockOptional();
     }
@@ -1242,7 +1548,8 @@ class CostIntelligenceIngestionTest {
                               "trigger": "subagent",
                               "trigger_detail": "code-reviewer",
                               "turn_key": "abc123turnkey",
-                              "parent_tool_use_id": "toolu_parent_agent"
+                              "parent_tool_use_id": "toolu_parent_agent",
+                              "session_mode": "background"
                             },
                             "blocks": [
                               {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text","subcategory":"auto_memory","sha256":"a1b2c3"},
@@ -1397,6 +1704,33 @@ class CostIntelligenceIngestionTest {
                         .formatted(model, cacheRead));
     }
 
+    private static JsonNode mcpSectionsCipxMetadata(String model, long cacheRead) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "cipx": {
+                            "call": {
+                              "model": "%s",
+                              "usage": {
+                                "input_tokens": 0,
+                                "cache_read_input_tokens": %d,
+                                "cache_creation_input_tokens": 0,
+                                "output_tokens": 0
+                              }
+                            },
+                            "blocks": [
+                              {"category":"mcp_tools_active","side":"input","cache_status":"read","chars":200,"tool_name":"create_branch","tool_server":"GitHub","tool_use_id":"","resource":"","kind":"tool_schema"},
+                              {"category":"mcp_server_instructions","side":"input","cache_status":"read","parent_category":"mcp_server_instructions","chars":100,"tool_name":"","tool_server":"GitHub","tool_use_id":"","resource":"","kind":"system_text"},
+                              {"category":"mcp_tools_deferred","side":"input","cache_status":"read","parent_category":"mcp_tools_deferred","chars":60,"tool_name":"","tool_server":"claude.ai Notion","tool_use_id":"","resource":"","kind":"system_text"},
+                              {"category":"mcp_server_instructions","side":"input","cache_status":"read","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"system_text"},
+                              {"category":"mcp_tools_deferred","side":"input","cache_status":"read","chars":30,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
+                            ]
+                          }
+                        }
+                        """
+                        .formatted(model, cacheRead));
+    }
+
     private static JsonNode slashCommandCipxMetadata(String model, long cacheRead) {
         return JsonUtils.getJsonNodeFromString(
                 """
@@ -1445,7 +1779,15 @@ class CostIntelligenceIngestionTest {
                         "files_added": 3,
                         "files_deleted": 1,
                         "lines_added": 40,
-                        "lines_deleted": 5
+                        "lines_deleted": 5,
+                        "skills": [
+                          {"root": ".claude/skills", "name": "opik-review", "tree_id": "9f2c0001"},
+                          {"root": ".agents/skills", "name": "plan-first", "tree_id": "9f2c0002"}
+                        ],
+                        "instruction_files": [
+                          {"path": "AGENTS.md", "blob_id": "4be00001"},
+                          {"path": "CLAUDE.md", "blob_id": "4be00002"}
+                        ]
                       },
                       "identity": {
                         "user_uuid": "%s",
@@ -1514,7 +1856,7 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management, speed, aiu_nano,
+                    effort, thinking_type, max_tokens, context_management, speed, session_mode, aiu_nano,
                     `trigger` AS trigger_kind, trigger_detail, turn_key, parent_tool_use_id,
                     link_failure_reason
                 FROM cipx_spends FINAL
@@ -1540,6 +1882,7 @@ class CostIntelligenceIngestionTest {
                             row.get("max_tokens", Long.class),
                             row.get("context_management", String.class),
                             row.get("speed", String.class),
+                            row.get("session_mode", String.class),
                             row.get("aiu_nano", Long.class),
                             row.get("trigger_kind", String.class),
                             row.get("trigger_detail", String.class),
@@ -1611,7 +1954,12 @@ class CostIntelligenceIngestionTest {
                     billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                     branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                     files_added, files_deleted, lines_added, lines_deleted,
-                    agents_dispatched, agents_linked, agents_ambiguous, cipx_version
+                    agents_dispatched, agents_linked, agents_ambiguous, cipx_version,
+                    `skills.scope` AS skills_scope, `skills.root` AS skills_root, `skills.name` AS skills_name,
+                    `skills.version_id` AS skills_version_id, skills_status,
+                    `instruction_files.scope` AS instruction_files_scope,
+                    `instruction_files.path` AS instruction_files_path,
+                    `instruction_files.version_id` AS instruction_files_version_id, instruction_files_status
                 FROM cipx_trace_identities FINAL
                 WHERE workspace_id = :workspace_id AND trace_id = :trace_id
                 """;
@@ -1650,6 +1998,16 @@ class CostIntelligenceIngestionTest {
                             .agentsLinked(row.get("agents_linked", Long.class))
                             .agentsAmbiguous(row.get("agents_ambiguous", Long.class))
                             .cipxVersion(row.get("cipx_version", String.class))
+                            .skillsScope(List.of(row.get("skills_scope", String[].class)))
+                            .skillsRoot(List.of(row.get("skills_root", String[].class)))
+                            .skillsName(List.of(row.get("skills_name", String[].class)))
+                            .skillsVersionId(List.of(row.get("skills_version_id", String[].class)))
+                            .skillsStatus(row.get("skills_status", String.class))
+                            .instructionFilesScope(List.of(row.get("instruction_files_scope", String[].class)))
+                            .instructionFilesPath(List.of(row.get("instruction_files_path", String[].class)))
+                            .instructionFilesVersionId(
+                                    List.of(row.get("instruction_files_version_id", String[].class)))
+                            .instructionFilesStatus(row.get("instruction_files_status", String.class))
                             .build())));
         }).blockOptional();
     }
@@ -1679,7 +2037,8 @@ class CostIntelligenceIngestionTest {
 
     private record CipxSpendRow(String projectId, Long startMs, String model, Long uInput, Long uCacheRead,
             Long uCacheCreation, Long uCacheCreation5m, Long uCacheCreation1h, Long uOutput, String effort,
-            String thinkingType, Long maxTokens, String contextManagement, String speed, Long aiuNano,
+            String thinkingType, Long maxTokens, String contextManagement, String speed, String sessionMode,
+            Long aiuNano,
             String trigger, String triggerDetail, String turnKey, String parentToolUseId,
             String linkFailureReason) {
     }
@@ -1687,8 +2046,8 @@ class CostIntelligenceIngestionTest {
     private record SentinelSpendRow(String workspaceId, String projectId, String traceId, String spanId,
             Long startMs, String model, Long uInput, Long uCacheRead, Long uCacheCreation, Long uCacheCreation5m,
             Long uCacheCreation1h, Long uOutput, String effort, String thinkingType, Long maxTokens,
-            String contextManagement, String speed, Long aiuNano, String trigger, String triggerDetail,
-            String turnKey, String parentToolUseId, String linkFailureReason) {
+            String contextManagement, String speed, String sessionMode, Long aiuNano, String trigger,
+            String triggerDetail, String turnKey, String parentToolUseId, String linkFailureReason) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
@@ -1707,7 +2066,11 @@ class CostIntelligenceIngestionTest {
             String billingType,
             String branch, String headShaStart, String headShaEnd, Boolean dirty, Long commitsInTrace,
             Long filesAdded, Long filesDeleted, Long linesAdded, Long linesDeleted,
-            Long agentsDispatched, Long agentsLinked, Long agentsAmbiguous, String cipxVersion) {
+            Long agentsDispatched, Long agentsLinked, Long agentsAmbiguous, String cipxVersion,
+            List<String> skillsScope, List<String> skillsRoot, List<String> skillsName,
+            List<String> skillsVersionId, String skillsStatus, List<String> instructionFilesScope,
+            List<String> instructionFilesPath, List<String> instructionFilesVersionId,
+            String instructionFilesStatus) {
     }
 
     @Builder
@@ -1718,6 +2081,10 @@ class CostIntelligenceIngestionTest {
             String organizationType, String seatTier, String billingType, String branch, String headShaStart,
             String headShaEnd, Boolean dirty, Long commitsInTrace, Long filesAdded, Long filesDeleted,
             Long linesAdded, Long linesDeleted, Long agentsDispatched, Long agentsLinked, Long agentsAmbiguous,
-            String cipxVersion, Long lastUpdatedMs) {
+            String cipxVersion, Long lastUpdatedMs,
+            List<String> skillsScope, List<String> skillsRoot, List<String> skillsName,
+            List<String> skillsVersionId, String skillsStatus, List<String> instructionFilesScope,
+            List<String> instructionFilesPath, List<String> instructionFilesVersionId,
+            String instructionFilesStatus) {
     }
 }

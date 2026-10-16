@@ -135,8 +135,6 @@ class Opik:
         Returns:
             None
         """
-        analytics.track_event("client", "init")
-
         config_ = opik_config.get_from_user_inputs(
             project_name=project_name,
             workspace=workspace,
@@ -337,6 +335,7 @@ class Opik:
             environment=environment,
         )
 
+    @analytics.internal
     def __internal_api__trace__(
         self,
         id: Optional[str] = None,
@@ -561,6 +560,7 @@ class Opik:
             source="sdk",
         )
 
+    @analytics.internal
     def __internal_api__span__(
         self,
         trace_id: Optional[str] = None,
@@ -1048,6 +1048,13 @@ class Opik:
             >>>     filter_string='id = "thread_123"',
             >>>     max_results=10,
             >>> )
+
+        Note:
+            AI coding assistants connected to the Opik MCP server can run this search
+            without writing code: ``list("thread", project_name=..., filters=...)``
+            takes the same OQL as ``filter_string``, and
+            ``read("thread", id, project_name=...)`` returns one thread's messages.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "search_threads")
         return self.get_threads_client().search_threads(
@@ -1191,6 +1198,12 @@ class Opik:
 
         Returns:
             dataset.Dataset: dataset object associated with the name passed.
+
+        Note:
+            To look at a dataset without writing code, AI coding assistants connected
+            to the Opik MCP server can call ``read("dataset", name)`` and page through
+            its items with ``list("dataset_item", dataset_id=...)``.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_dataset")
         project_name = self._resolve_project_name(project_name)
@@ -1225,6 +1238,12 @@ class Opik:
 
         Returns:
             List[dataset.Dataset]: A list of dataset objects that match the filter string.
+
+        Note:
+            To look at datasets without writing code, AI coding assistants connected to
+            the Opik MCP server can call ``list("dataset", name=...)``, which lists
+            datasets and test suites filtered by a name substring.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_datasets")
         datasets = dataset_rest_operations.get_datasets(
@@ -1253,6 +1272,12 @@ class Opik:
 
         Returns:
             List[experiment.Experiment]: A list of experiment objects.
+
+        Note:
+            To look at a dataset's experiments without writing code, AI coding
+            assistants connected to the Opik MCP server can call
+            ``list("experiment", filters='dataset_id = "..."')``.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_dataset_experiments")
         project_name = self._resolve_project_name(project_name)
@@ -1610,6 +1635,12 @@ class Opik:
 
         Raises:
             ApiError: If no dataset with the given name exists (404).
+
+        Note:
+            To look at a test suite without writing code, AI coding assistants
+            connected to the Opik MCP server can call ``read("dataset", name)`` and
+            page through its items with ``list("dataset_item", dataset_id=...)``.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_test_suite")
         project_name = self._resolve_project_name(project_name)
@@ -1706,6 +1737,12 @@ class Opik:
 
         Returns:
             List[TestSuite]: A list of test suite objects.
+
+        Note:
+            To look at test suites without writing code, AI coding assistants connected
+            to the Opik MCP server can call ``list("dataset", name=...)``, which lists
+            datasets and test suites filtered by a name substring.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_test_suites")
         from .dataset import rest_operations
@@ -1733,6 +1770,12 @@ class Opik:
 
         Returns:
             List[Experiment]: A list of experiment objects.
+
+        Note:
+            To look at a test suite's experiments without writing code, AI coding
+            assistants connected to the Opik MCP server can call
+            ``list("experiment", filters='dataset_id = "..."')``.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_test_suite_experiments")
         from .dataset import rest_operations as dataset_rest_operations
@@ -1880,6 +1923,11 @@ class Opik:
 
         Returns:
             experiment.Experiment: the API object for an existing experiment.
+
+        Note:
+            To look at an experiment without writing code, AI coding assistants
+            connected to the Opik MCP server can call ``read("experiment", name)``.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_experiment_by_name")
         LOGGER.warning(
@@ -1914,6 +1962,12 @@ class Opik:
 
         Returns:
             List[experiment.Experiment]: List of existing experiments.
+
+        Note:
+            To look at experiments without writing code, AI coding assistants connected
+            to the Opik MCP server can call ``list("experiment", name=...)``, and
+            ``list("dataset_item", experiment_ids=[...])`` compares runs case by case.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_experiments_by_name")
         project_name = self._resolve_project_name(project_name)
@@ -1946,6 +2000,12 @@ class Opik:
 
         Returns:
             experiment.Experiment: the API object for an existing experiment.
+
+        Note:
+            To look at an experiment without writing code, AI coding assistants
+            connected to the Opik MCP server can call ``read("experiment", id)``, and
+            ``list("dataset_item", experiment_ids=[...])`` compares runs case by case.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_experiment_by_id")
         try:
@@ -2010,7 +2070,6 @@ class Opik:
             The flush outcome (including any data-loss detail) when ``flush`` is
             True; ``None`` when ``flush`` is False (nothing was flushed).
         """
-        analytics.track_event("client", "end")
         timeout = timeout if timeout is not None else self._flush_timeout
         marker = self._flush_reporter.marker()
         # Explicit teardown on a user thread, so close on the last reference
@@ -2054,7 +2113,6 @@ class Opik:
             True if all messages were delivered within the timeout with no data
             loss; False if the timeout was hit or any message was dropped.
         """
-        analytics.track_event("client", "flush")
         timeout = timeout if timeout is not None else self._flush_timeout
         try:
             marker = self._flush_reporter.marker()
@@ -2195,6 +2253,13 @@ class Opik:
 
         Raises:
             exceptions.SearchTimeoutError if wait_for_at_least traces are not found within the specified timeout.
+
+        Note:
+            AI coding assistants connected to the Opik MCP server can run this search
+            without writing code: ``list("trace", project_name=..., filters=...)``
+            takes the same OQL as ``filter_string``, and also sorts and limits by time
+            (``sort="duration desc"``, ``since="24h"``).
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "search_traces")
         filters_ = helpers.parse_filter_expressions(
@@ -2308,6 +2373,13 @@ class Opik:
 
         Raises:
             exceptions.SearchTimeoutError if wait_for_at_least spans are not found within the specified timeout.
+
+        Note:
+            AI coding assistants connected to the Opik MCP server can run this search
+            without writing code: ``list("span", project_name=..., filters=...)``
+            takes the same OQL as ``filter_string``, and ``read("trace", trace_id)``
+            returns a trace together with all of its spans.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "search_spans")
         filters = helpers.parse_filter_expressions(
@@ -2353,6 +2425,11 @@ class Opik:
         Returns:
             trace_public.TracePublic: pydantic model object with all the data associated with the trace found.
             Raises an error if trace was not found.
+
+        Note:
+            To look at a trace without writing code, AI coding assistants connected to
+            the Opik MCP server can call ``read("trace", id)``, which returns the trace
+            together with its spans. See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_trace_content")
         return self._rest_client.traces.get_trace_by_id(id)
@@ -2364,6 +2441,11 @@ class Opik:
         Returns:
             span_public.SpanPublic: pydantic model object with all the data associated with the span found.
             Raises an error if span was not found.
+
+        Note:
+            To look at a span without writing code, AI coding assistants connected to
+            the Opik MCP server can call ``read("span", id)``.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_span_content")
         return self._rest_client.spans.get_span_by_id(id)
@@ -2378,6 +2460,12 @@ class Opik:
         Returns:
             project_public.ProjectPublic: pydantic model object with all the data associated with the project found.
             Raises an error if project was not found
+
+        Note:
+            AI coding assistants connected to the Opik MCP server can call
+            ``read("project", id)``, which also summarizes the project's last 7 days
+            (trace count, error rate, duration and cost) against the 7 days before.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_project")
         return self._rest_client.projects.get_project_by_id(id)
@@ -2394,6 +2482,14 @@ class Opik:
 
         Returns:
             str: URL
+
+        Note:
+            AI coding assistants connected to the Opik MCP server can call
+            ``read("project", name)``, which returns a project's URL along with a
+            summary of its last 7 days. Unlike this method, it looks the name up: it
+            fails for a project that does not exist, and a partial name returns the
+            existing project it matches.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_project_url")
 
@@ -2626,6 +2722,12 @@ class Opik:
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
             ValueError: If both ``version`` and ``environment`` are provided.
+
+        Note:
+            To look at a prompt without writing code, AI coding assistants connected
+            to the Opik MCP server can call ``read("prompt", name)``, which returns the
+            prompt together with its version history.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_prompt")
         return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
@@ -2672,6 +2774,12 @@ class Opik:
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
             ValueError: If both ``version`` and ``environment`` are provided.
+
+        Note:
+            To look at a prompt without writing code, AI coding assistants connected
+            to the Opik MCP server can call ``read("prompt", name)``, which returns the
+            prompt together with its version history.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_chat_prompt")
         return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
@@ -2820,6 +2928,13 @@ class Opik:
                     search="customer",
                     filter_string='tags contains "production"'
                 )
+
+        Note:
+            To look at a prompt's history without writing code, AI coding assistants
+            connected to the Opik MCP server can call ``read("prompt", name)``, which
+            returns the prompt together with its versions, or page through them with
+            ``list("prompt_version", prompt_id=...)``.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_prompt_history")
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
@@ -2915,6 +3030,13 @@ class Opik:
                     search="helpful assistant",
                     filter_string='tags contains "production"'
                 )
+
+        Note:
+            To look at a prompt's history without writing code, AI coding assistants
+            connected to the Opik MCP server can call ``read("prompt", name)``, which
+            returns the prompt together with its versions, or page through them with
+            ``list("prompt_version", prompt_id=...)``.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_chat_prompt_history")
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
@@ -2958,6 +3080,12 @@ class Opik:
 
         Returns:
             List[prompt_module.Prompt]: A list of Prompt instances for the given name.
+
+        Note:
+            To look at a prompt's history without writing code, AI coding assistants
+            connected to the Opik MCP server can call ``read("prompt", name)``, which
+            returns the prompt together with its versions.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "get_all_prompts")
         LOGGER.warning(
@@ -3002,6 +3130,11 @@ class Opik:
 
         Returns:
             List[Union[Prompt, ChatPrompt]]: A list of Prompt and/or ChatPrompt instances found.
+
+        Note:
+            To look for prompts without writing code, AI coding assistants connected to
+            the Opik MCP server can call ``list("prompt", name=...)``, which filters by
+            a name substring. See https://www.comet.com/docs/opik/mcp-server
         """
         analytics.track_event("client", "search_prompts")
         oql = opik_query_language.OpikQueryLanguage.for_traces(filter_string or "")

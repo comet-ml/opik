@@ -433,11 +433,14 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    On tiered storage this whole-node floor is necessary but not sufficient — validate per-volume (hot) headroom too,
    since new parts land hot before they tier, and `backfill.sh` refuses a tiered policy without
    `--confirm-tiered-headroom`.
-9. **The pre-write audits, run and recorded** — `estimate.sh` (without `--skip-audits`) reports two numbers the
+9. **The pre-write audits, run and recorded** — `estimate.sh` (without `--skip-audits`) reports four numbers the
    Go/No-Go gates on and that nothing later in the procedure can recover: the table's total id-derived weekly partition
-   count (which **sizes `--max-partitions-per-insert-block`** and is a hard upper bound, not an estimate), and the
+   count (which **sizes `--max-partitions-per-insert-block`** and is a hard upper bound, not an estimate), the
    count of `parent_span_id` values the copy
-   will normalize to the root sentinel. They read the whole `id` column, so schedule them rather than running them
+   will normalize to the root sentinel, the count of ids no deletion replay can derive a partition for (audit 3 — a
+   non-zero there means a replay may fall back to the unbounded statement this procedure cannot run), and the partition
+   keys the replays scope against (audit 4 — a mismatch there is a driver refusing mid-window). They read the whole
+   `id` column, so schedule them rather than running them
    casually — but run them **before the first write**, because two of them decide settings the first INSERT uses.
 10. **Schema parity of source and successor** — `spans` and `spans_local_v2` must stay equivalent for as long as both
    exist: the same base (stored) columns (which the cutover must copy) and the same materialized columns (which each
@@ -471,24 +474,26 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
     so it is a functional no-op against the data — while still proving the migration user can actually perform every kind
     of statement the cutover needs. Do this on a least-privilege user and you catch grant gaps in seconds instead of
     mid-window.
-    > This is not hypothetical. On the first real-cluster run the deletion replay failed with
-    > `Code: 497 … necessary to have the grant ALTER UPDATE(_row_exists)`: ClickHouse implements a lightweight `DELETE`
-    > as `ALTER UPDATE _row_exists = 0`, so it authorises it as **`ALTER UPDATE` on that hidden column, not
-    > `ALTER DELETE`**. The read-only drivers (`estimate.sh`, `verify.sh`) cannot surface this — only executing a
-    > mutation can. Grant it **column-scoped** (`ALTER UPDATE(_row_exists)`) so the user can flip the delete mask
-    > without being able to modify any real data column.
+    > This is not hypothetical. Two separate real-cluster runs failed the deletion replay with `Code: 497`, once for
+    > each half of the pair a lightweight `DELETE` requires: **`ALTER DELETE` *and* `ALTER UPDATE(_row_exists)` on the
+    > same table, both**. ClickHouse checks the first for the `DELETE FROM` statement and the second for the hidden
+    > column the mutation writes; either alone gets `ACCESS_DENIED` (measured on 26.3). The read-only drivers
+    > (`estimate.sh`, `verify.sh`) cannot surface this — only executing a mutation can. Keep the `ALTER UPDATE` half
+    > **column-scoped** so the user can flip the delete mask without being able to modify any real data column;
+    > `ALTER DELETE` takes no column list.
     >
     > **The smoke test covers the pre-swap shape only.** The post-swap reconciliation mutates the LIVE name, so it also
-    > needs `ALTER UPDATE(_row_exists)` and `INSERT` on `spans` (or `spans_local` on a wrapped estate) plus `SELECT` on
+    > needs both delete grants and `INSERT` on `spans` (or `spans_local` on a wrapped estate) plus `SELECT` on
     > `spans_pre_cutover_backup` — grants this no-op run cannot exercise, because those objects do not hold those roles
     > yet. Provision them from the privileges table before the window and confirm them on the prod-clone rehearsal: a
     > grant gap found there lands with the cutover already committed and the write gap still open.
 15. **A dedicated, spans-scoped migration user, provisioned and revocable** — see
     ["Required privileges"](#required-privileges-provision-these-before-the-window). The traces cutover ran under a
     write exception that **OPIK-8263** is closing out; do not reuse it, and do not widen it. What is reusable is its
-    *shape*: the same least-privilege split, the same column-scoped `ALTER UPDATE(_row_exists)`, the same
-    "all four privileges per `RENAME`/`EXCHANGE` name" rule. **Plan the revocation with the grant**, not after the
-    window: OPIK-8263 exists because that half was left to be done later last time.
+    *shape*: the same least-privilege split, the same delete-grant pair (`ALTER DELETE` plus column-scoped
+    `ALTER UPDATE(_row_exists)`), the same "all four privileges per `RENAME`/`EXCHANGE` name" rule. **Plan the
+    revocation with the grant**, not after the window: OPIK-8263 exists because that half was left to be done later
+    last time.
 16. **Decide, and record, that the `Distributed` wrap is not part of this window.** It is now reachable — OPIK-7799
     shipped `spansDistributedWrapEnabled` (default `false`) and the `SpanDAO` routing — so this is a choice rather
     than a constraint. Stopping at the `EXCHANGE` is the supported resting state and the recommended one for this
@@ -500,13 +505,24 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
     once — "writes and reads speak sentinel" and "the mutation target is weekly-partitioned" — which is the same
     coupling `traceColumnsNonNullable` has on traces. See ["Span-delete partition pruning rides the sentinel
     flag"](#span-delete-partition-pruning-rides-the-sentinel-flag) for what that costs between the flip and the swap.
-18. Schedule during off-peak hours — and budget **days**, not hours, for the backfill. `estimate.sh` will say how many.
+18. **Know that two successor columns change how the app *reads* a span, and that neither is gated by
+    `spanColumnsNonNullable`.** Migration 000115 stores `parent_span_id` as `FixedString(36)`, where a root span's
+    absent parent is NUL-padded rather than `''`, and widens `usage` to `Map(String, Int64)`. OPIK-8551 has landed both
+    read mappings; a build without them breaks on the EXCHANGE itself, whatever the flag says — and the two fail
+    differently. The parent is **silent**: the driver discards a row whose mapping throws, so every trace loses its root
+    span while the API still answers `200`, with a page whose `total` exceeds its `content`. The counts are **loud**:
+    any response carrying a span with usage fails to serialise. **Confirm the deployed build carries the fix**, and
+    assert it positively after the swap — read a trace that has a root span, and check the root span comes back with no
+    parent and the page `total` equals the number of items returned.
+19. Schedule during off-peak hours — and budget **days**, not hours, for the backfill. `estimate.sh` will say how many.
 
 ## The sequence
 
 > **Capture BOTH streams, and keep the log.** Every driver writes its narrative to **stdout** and every statement's
 > wall time — `clickhouse-client --time` — to **stderr**. Several of the numbers this runbook later asks you to record
-> are the stderr ones: the deletion replay's time (step 2), the rollback's per-statement times, the reconciliation's.
+> are the stderr ones: the deletion replay's times (step 2 — one per scoped statement now, see
+> [Partition-scoped deletion replays](#partition-scoped-deletion-replays-opik-8607)), the rollback's per-statement
+> times, and the reconciliation's per-statement times.
 > A plain `> run.log` keeps the narrative and silently drops all of them. Run each step as
 > `./scripts/<driver>.sh ... 2>&1 | tee -a cutover.log` — and detached (`nohup` / `screen`) for the backfill, which
 > runs for days.
@@ -517,7 +533,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 
 0. **Survey and audit — run [`scripts/estimate.sh`](scripts/estimate.sh)** before anything writes. It is read-only, and
    it produces three things nothing later can: the **headroom verdict** against the projected destination size (the
-   gate `backfill.sh` will enforce), the **two pre-write audits** — one sizing `--max-partitions-per-insert-block`,
+   gate `backfill.sh` will enforce), the **four pre-write audits** — one sizing `--max-partitions-per-insert-block`,
    one counting the `parent_span_id` values the copy normalizes — and the ETA. Record all of it; those numbers set
    settings the first INSERT uses. See ["Blocker 1"](#blocker-1--disk-headroom) and
    ["Partition spread"](#partition-spread-and-the-one-setting-that-matters).
@@ -554,10 +570,13 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    — delta-insert (anchored at `backfill_start`), then **deletion replay**. The replay runs with
    `lightweight_deletes_sync = 2`, so it returns only once the delete mutation has applied on **every** replica.
    No config change precedes this step — the procedure takes no hold on writes.
-   The driver passes `--time`, so clickhouse-client prints each statement's wall time in seconds (delta-insert first,
-   deletion replay second) — **record the second value**: it is the *first half* of the final-delta→`EXCHANGE` gap,
-   which is the window step 5 sweeps back. The second half is `exchange_and_wrap.sh`'s own run through the swap, which
-   that driver reports (step 4). Without `--time` a bare `--query` prints no timing at all.
+   The driver passes `--time`, so clickhouse-client prints each statement's wall time in seconds — the delta-insert
+   first, then **one figure per deletion-replay statement**, because the replay is now emitted once per partition
+   (see [Partition-scoped deletion replays](#partition-scoped-deletion-replays-opik-8607)). **Record the sum of
+   everything after the first value**; the driver prints how many statements it emitted, so the two can be matched
+   up. That sum is the *first half* of the final-delta→`EXCHANGE` gap, which is the window step 5 sweeps back. The
+   second half is `exchange_and_wrap.sh`'s own run through the swap, which that driver reports (step 4). Without
+   `--time` a bare `--query` prints no timing at all.
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/delta_replay.sh --database opik --backfill-start '<ts> UTC'
    ```
@@ -1228,7 +1247,7 @@ a window's merge backlog is spread over far more part sets. Size it from the obs
 prod-test.
 
 **Estimate and audit first.** [`scripts/estimate.sh`](scripts/estimate.sh) does three jobs (its header lists them): the
-**headroom verdict** against the projected destination size, the **two pre-write audits** the Go/No-Go gates on, and
+**headroom verdict** against the projected destination size, the **four pre-write audits** the Go/No-Go gates on, and
 the backfill ETA. It reads the live row/byte counts of `spans`, estimates copy throughput with an **on-the-fly read
 probe** (`SELECT … FORMAT Null` — it creates no table), derates it by `--write-cost-factor`, and reports the projected
 window count, copy time, throttle idle, and total. Run it with the same `--max-rows-per-insert` and
@@ -1260,8 +1279,10 @@ check what you are about to run — `grep -n '\${' <your-statements>.sql` must p
 does not implement the split, so those statements are hand-written, and the second arm
 (`last_updated_at >= backfill_start AND created_at < backfill_start`) is the updates-to-old-rows arm that carries
 far-future ids, so it is the pass that most needs `max_partitions_per_insert_block` and the easiest one to write without
-it. The **deletion replay** is a lightweight `DELETE`, and with retention disabled it is user-scale — a single
-mutation; `000002` / `000004` note how to bound it by partition if it is ever large.
+it. The **deletion replay** is a lightweight `DELETE`, and with retention disabled it is user-scale — a handful of
+mutations, one per partition its bridged ids resolve to
+(see [Partition-scoped deletion replays](#partition-scoped-deletion-replays-opik-8607)); `000002` / `000004` note how
+to bound it further by `created_at` week if it is ever large.
 
 ## Why slice by `created_at` (and not `id` or workspace)
 
@@ -1404,6 +1425,8 @@ on spans the same number decides a setting the first INSERT uses, so it belongs 
 |---|---|---|
 | 1 | total / far-future / far-past id-derived weekly partitions, and their row counts | `--max-partitions-per-insert-block` |
 | 2 | `parent_span_id` values outside {0, 36} bytes | the normalization the Go/No-Go records |
+| 3 | ids past the `DateTime64` ceiling, in the table and already in the bridge | whether any replay will fall back to the **unbounded** statement (OPIK-8607) |
+| 4 | the partition keys the replays scope against | whether a driver will **refuse** mid-window rather than scope |
 
 Every one derives its timestamp from `id` via `UUIDv7ToDateTime` rather than reading the stored `spans.id_at`, which
 migration 000105 typed as a 32-bit `DateTime` that **wraps** mod-2^32 past 2106 — so a wrapped `toMonday(id_at)` would
@@ -1424,6 +1447,105 @@ the rows arrive in a compatible order anyway; and reconciliation uses order-inde
 ["The dedup keys differ"](#the-dedup-keys-differ-and-it-changes-every-comparison-in-this-runbook)). An explicit
 `ORDER BY` would only add sort cost/memory on a large backfill for no gain — and on a copy this size that cost would
 not be small.
+
+## Partition-scoped deletion replays (OPIK-8607)
+
+**Every deletion replay in this runbook is emitted as one statement per partition its bridged ids resolve to, never as
+a single unbounded one.** That is not a tuning choice; without it the replay cannot run at all once the successor has
+accumulated enough weekly partitions.
+
+**What breaks unscoped.** To run a mutation on a `ReplicatedMergeTree`, ClickHouse allocates a block number in every
+**affected** partition, as ephemeral znodes written in a **single atomic** ZooKeeper `tryMulti`. A `DELETE` carrying no
+partition bound affects every partition, so the request grows with the table's partition **count** rather than with the
+rows it removes — and the replay's predicate is a subquery over `deletion_events_local` under
+`allow_nondeterministic_mutations = 1`, which ClickHouse cannot prune. Past ZooKeeper's `jute.maxbuffer` (1 MB by
+default) ZK rejects the packet, drops the connection and the session expires:
+
+```
+ClickHouse: Code: 999. Coordination::Exception: Connection loss. (KEEPER_EXCEPTION)
+            DB::EphemeralLocksInAllPartitions
+            -> DB::StorageReplicatedMergeTree::allocateBlockNumbersInAffectedPartitions
+            ... followed by: Session expired
+ZooKeeper:  java.io.IOException: Len error. A message ... is either a malformed message or too large to process
+```
+
+The replays delete a handful of user-cascade ids, which resolve to very few partitions — so the mutation was locking
+the whole table to affect almost none of it.
+
+**Raising `jute.maxbuffer` was considered and rejected as the fix.** Partitions grow weekly, forever, so any fixed
+ceiling is crossed again and the next crossing would be mid-window; it would make the cutover depend on ZooKeeper
+tuning to run its own procedure; and it leaves the waste in place, since locking every partition to delete from one
+serialises against every other writer to them. A defensive increase may still be worth an infra ticket on its own
+merits, but it must not substitute for scoping.
+
+**How the scope is derived.** [`000002_delete_partition_scope.sql`](scripts/db-app-analytics/000002_delete_partition_scope.sql)
+is the single source, read by **four** drivers (`delta_replay.sh`, `exchange_and_wrap.sh`, `rollback.sh`,
+`reconcile.sh`). It reads the replay's own bridge window and returns three numbers: how many distinct ids are bridged,
+how many of them it cannot derive a partition for, and the derivable ones' weeks. It names **both** weeks a far-future
+id resolves to — the honest one on the `DateTime64` successor and the wrapped one on the legacy 32-bit `id_at` — for
+the same reason `WeeklyPartitions` does on the application's own delete path (OPIK-8364).
+
+**The window is passed in, and the same pass checks itself afterwards.** The driver reads one instant from the server
+clock, derives the scope over `[anchor, that instant)`, and renders the *same* value into the replay's own bridge
+match. Without a shared upper bound an id bridged between the two reads would be matched by the predicate while its
+partition was absent from the scope — and a scoped statement cannot mask a row outside the partitions it names.
+
+That bound is a clock, not a visibility watermark, and the difference is the one gap scoping introduces:
+
+- The scope is derived from what **one replica** can see at that instant.
+- `deletion_events_local` is a `ReplicatedMergeTree` whose `event_time` is stamped by whichever replica accepted the
+  insert, and the replay's `IN (SELECT …)` is re-evaluated by **each** replica when it runs the mutation.
+- So a delete written on another replica just before the bound can become visible here only afterwards: its
+  `event_time` is *inside* the replayed window, its partition was never in the scope, and it is silently skipped. The
+  unbounded form had no such gap.
+
+So every driver re-runs the derivation over the **same fixed window** after its replay and reports any partition the
+scope did not name (`verify_delete_scope`). It is a plain `SELECT` needing no privilege beyond the one already in use.
+It runs for the scoped form **and for the empty one** — a pass that emitted no statement covers a late-visible delete
+no better than one that named the wrong partitions — but not for the unbounded form, which carries no upper bound and
+therefore masks whatever was visible when it ran. **Treat a warning here as a reason to run the driver again**; the
+window is fixed, so it converges, and quiescing user trace deletes across the window is what stops it recurring.
+
+**What each driver then emits**, from that one answer:
+
+| the answer | what is sent | why |
+|---|---|---|
+| nothing bridged | **no statement at all** | the replay's predicate is an `AND` over the bridge set, so it can match no row — and an unbounded `DELETE` that deletes nothing still locks every partition |
+| any id whose partition cannot be derived exactly | **exactly one unbounded statement** | all-or-nothing, never per id: a partially derived scope is a scope the remaining ids' rows are not in, i.e. a delete that reports success and silently skips them |
+| the target is not partitioned by `id_at` | **exactly one unbounded statement** | `IN PARTITION` against a table with no partition key is a hard `INVALID_PARTITION_VALUE`, not a no-op |
+| otherwise | **one `DELETE ... IN PARTITION <p>` per derived partition** | the row-matching predicate is identical in every copy, so the union removes exactly what the one unbounded statement removed |
+
+The partition value is **interpolated, never bound** — `IN PARTITION {p:UInt32}` is a ClickHouse syntax error. The
+drivers shape-check every derived value (`^[0-9]{8}$`) before it reaches a statement, and send the rendered statements
+over stdin rather than as `--query`, which caps a single argument string.
+
+**`000004_rollback_reverse_replay.sql` renders unbounded today, and that is correct.** Its target is the RESTORED
+ORIGINAL `spans`, which `000001_init_script` created with no `PARTITION BY` — one partition, so an unbounded mutation
+locks one block number and ZooKeeper never sees the request that broke the forward replay. The driver does not
+hard-code that: it asks `system.tables.partition_key` for the table the statement actually names, which is what makes
+the same code correct the day `spans` itself becomes weekly-partitioned (OPIK-6900), with no edit to the file.
+
+**What it costs — measured, on a local rehearsal.** A stack with 43 weekly partitions and 52 active parts, seeded
+across 40 weeks with the four special populations, with write and trace-delete traffic flowing throughout, and the
+bridge filled by real cascades. Both forms were run through their own shipped `delta_replay.sh` — the unbounded one
+from the pre-change revision — against the same table:
+
+| | statements | partitions locked (the atomic ZK request) | parts rewritten |
+|---|---|---|---|
+| unbounded | 1 | **43** — every partition | **52** — every part |
+| scoped | 1 | **1** | **4** — exactly that partition's parts |
+
+The unbounded figure is not an artefact of how much there was to mask: re-running it with almost nothing left to delete
+still locked 43 partitions and rewrote all 52 parts, because a mutation's cost follows its *scope*, not its matches.
+So scoping is **cheaper as well as runnable** — N scoped statements cost the parts of those N partitions — and it is
+cheaper by the same ratio that makes the ZooKeeper request small. That also bounds how freely the scope may be widened.
+
+Note the shape the rehearsal reproduced: **1,864 bridged ids resolved to one partition.** Cascade deletes cluster in the
+current week, which is why the unbounded form was locking the whole table to affect almost none of it.
+
+> **Still to record against a realistic partition count**: the resulting ZooKeeper request size, and the replay's wall
+> time as the sum of the `--time` figures (each driver prints the statement count before running them). The rehearsal
+> above settles the *mechanism* and the cost *shape*; it cannot settle the absolute numbers.
 
 ## Delta and replay correctness
 
@@ -1510,9 +1632,10 @@ run by hand.** Each `.sql` file is the single source its driver reads those stat
 
 | Step | Reference SQL | Driver |
 |------|---------------|--------|
-| plan — headroom verdict, the two pre-write audits, backfill ETA | — | `estimate.sh` |
+| plan — headroom verdict, the four pre-write audits, backfill ETA | — | `estimate.sh` |
 | 1 — backfill | `000001_backfill_spans_local_v2.sql` (`backfill`) | `backfill.sh` |
-| 2 — delta + replay | `000002_delta_and_deletion_replay.sql` | `delta_replay.sh` |
+| 2 — delta + replay | `000002_delta_and_deletion_replay.sql`, whose `deletion-replay` block is expanded per partition from `000002_delete_partition_scope.sql` | `delta_replay.sh` |
+| — the partition scope every deletion replay is expanded with (read by four drivers) | `000002_delete_partition_scope.sql` | `delta_replay.sh`, `exchange_and_wrap.sh`, `rollback.sh`, `reconcile.sh` |
 | 3 — settle gate, EXCHANGE + wrap (+ the final pre-swap replay, from `000002`'s `deletion-replay` block) | `000003_exchange_and_wrap.sql` | `exchange_and_wrap.sh` |
 | 4 — **post-swap reconciliation**, forward and reverse | `000006_post_swap_reconciliation.sql` (`forward-sweep` + `forward-deletion-replay`, or `reverse-usage-range-check` then `reverse-sweep` followed by the unchanged `000004_rollback_reverse_replay.sql` + `000004_rollback_verify_replay.sql`) + its postcondition `000006_verify_reconciliation.sql` (`verify-forward` / `verify-reverse`, plus the advisory `leak-check-forward`), and `000003`'s three `settle-*` blocks for its own gate. **In the reverse direction `000004_rollback_verify_replay.sql` gates too**, and it is the only check that can: the four counts are computed from the parked table's keys, and a resurrected span is absent there by construction | `reconcile.sh` |
 | QA — fidelity compare, weekly or over one window (+ `--drill-down`) | `000005_verify_migration.sql` | `verify.sh` |
@@ -1615,7 +1738,8 @@ at all and the read-only drivers cannot surface a mutation-privilege gap by cons
 >
 > - the same least-privilege split (no `ALTER UPDATE` on any real data column in the forward path, no `TRUNCATE`
 >   anywhere in it);
-> - the same column-scoped `ALTER UPDATE(_row_exists)` for the lightweight deletes;
+> - the same delete-grant pair for the lightweight deletes — `ALTER DELETE` plus column-scoped
+>   `ALTER UPDATE(_row_exists)`, both required;
 > - the same **"all four privileges per `RENAME`/`EXCHANGE` name"** rule (see the note below the table — it is the one
 >   that bites on names that do not exist yet);
 > - the same `readonly = 2` requirement for a read-only assessor, because every driver sets `log_comment`.
@@ -1636,16 +1760,16 @@ at all and the read-only drivers cannot surface a mutation-privilege gap by cons
 | all drivers | any query | able to set `log_comment` → **not** a `readonly = 1` profile (`readonly = 2` for a read-only assessor) |
 | `estimate.sh`, guards, settle gate | `SELECT` on `system.*`, `clusterAllReplicas(...)` | `SELECT ON system.*`, plus `REMOTE` and `CLUSTER` |
 | backfill / delta | `INSERT INTO <shadow> SELECT … FROM <source>` | `SELECT` on source, `INSERT` on shadow |
-| deletion replay | lightweight `DELETE FROM <shadow>` | **`ALTER UPDATE(_row_exists)`** on the shadow — *not* `ALTER DELETE`. A lightweight delete is implemented as `ALTER UPDATE _row_exists = 0`. Grant it **column-scoped** so the user can flip the delete mask without being able to rewrite any real column. |
+| deletion replay | lightweight `DELETE FROM <shadow>` | **`ALTER DELETE` *and* `ALTER UPDATE(_row_exists)`** on the shadow — both, not either. ClickHouse checks the first for the `DELETE FROM` statement and the second for the hidden column the mutation writes. Keep the `ALTER UPDATE` half **column-scoped** so the user can flip the delete mask without being able to rewrite any real column; `ALTER DELETE` takes no column list. |
 | `EXCHANGE` | `EXCHANGE TABLES <source> AND <shadow> ON CLUSTER` | **`INSERT` + `CREATE TABLE` + `DROP TABLE` on BOTH names** — `INSERT` is required even though the swap is metadata-only and moves no rows. |
 | post-swap `RENAME` | `RENAME TABLE <shadow> TO <backup>` | `CREATE TABLE` + `DROP TABLE` (grant `INSERT` on the backup name too, so the rename cannot trip the same check) |
-| **post-swap reconciliation** (`reconcile.sh`, forward — **required on every cutover**) | `INSERT INTO spans SELECT … FROM spans_pre_cutover_backup`, then the lightweight `DELETE FROM spans` | **`INSERT` and `ALTER UPDATE(_row_exists)` on `spans`** (or `spans_local` on a wrapped estate), plus **`SELECT` on `spans_pre_cutover_backup`**. This is the grant set that widens the forward path's blast radius — see the boundary note below, which it deliberately rewrites. `INSERT` on `spans` is already required by the `EXCHANGE`; the mutation grant is new. Column-scoped `ALTER UPDATE(_row_exists)`, as for the shadow, so the user can flip the delete mask without rewriting any real column. |
-| **post-swap reconciliation** (`reconcile.sh`, reverse — only after a rollback) | `INSERT INTO spans SELECT … FROM spans_post_rollback_backup`, then the reverse replay | `INSERT` and `ALTER UPDATE(_row_exists)` on `spans` (the latter already in the rollback set), plus `SELECT` on `spans_post_rollback_backup`. |
+| **post-swap reconciliation** (`reconcile.sh`, forward — **required on every cutover**) | `INSERT INTO spans SELECT … FROM spans_pre_cutover_backup`, then the lightweight `DELETE FROM spans` | **`INSERT`, `ALTER DELETE` and `ALTER UPDATE(_row_exists)` on `spans`** (or `spans_local` on a wrapped estate), plus **`SELECT` on `spans_pre_cutover_backup`**. This is the grant set that widens the forward path's blast radius — see the boundary note below, which it deliberately rewrites. `INSERT` on `spans` is already required by the `EXCHANGE`; the two mutation grants are new. Same pair as the shadow, `ALTER UPDATE` column-scoped. |
+| **post-swap reconciliation** (`reconcile.sh`, reverse — only after a rollback) | `INSERT INTO spans SELECT … FROM spans_post_rollback_backup`, then the reverse replay | `INSERT`, `ALTER DELETE` and `ALTER UPDATE(_row_exists)` on `spans` (the delete pair already in the rollback set), plus `SELECT` on `spans_post_rollback_backup`. |
 | **wrap** (sharding) | `CREATE TABLE spans_dist … ENGINE = Distributed(…)`, then `RENAME spans → spans_local, spans_dist → spans` | `CREATE TABLE` + `DROP TABLE` on **`spans_dist`** and **`spans_local`** — two names that **do not exist yet**, so a grant set scoped to the cutover's three names will NOT cover the wrap. Plus `SELECT` on `spans_local` (post-wrap reads route through the wrapper to it) and `REMOTE` for the `Distributed` engine. |
-| rollback stage A/B (if in scope) | stage A `TRUNCATE`; stage B 2-way `RENAME` + reverse replay | `TRUNCATE` on the shadow, and `ALTER UPDATE(_row_exists)` on the **source** (the reverse replay masks rows on the restored original). **Stage B also renames**, so it needs **`INSERT` + `CREATE TABLE`** on **`spans_post_rollback_backup`** — a destination that **does not exist yet**, so a set without `INSERT` fails `Code: 497` at the rename (see the four-privileges note below) — and **`SELECT` + `DROP TABLE`** on **`spans_pre_cutover_backup`**, its source. Note stage B is the *likelier* rollback, not the exotic one: the wrap is deferred by default, so the post-`EXCHANGE` resting state is the one stage B reverses, and reaching it needs no extra step. Withhold unless a rollback is actually planned. |
-| rollback stage C (if the wrap is applied) | 3-way `RENAME` + `DROP` of the ex-wrapper | **`INSERT` + `CREATE TABLE`** on **`spans_dist_old`** and **`spans_post_rollback_backup`** — both `RENAME` destinations, so a set without `INSERT` fails `Code: 497` at the rename (see the four-privileges note below) — plus `DROP TABLE` on `spans_dist_old`, which is dropped after the rotation. `DROP TABLE` on `spans_local`, plus `ALTER UPDATE(_row_exists)` on the restored `spans`. **Decide this before applying the wrap:** without these grants there is no way back to the pre-cutover table until another grant change lands. (The *wrap itself* stays reversible via the un-wrap row below, which needs no extra grants — but that returns to the successor, not to the original.) |
+| rollback stage A/B (if in scope) | stage A `TRUNCATE`; stage B 2-way `RENAME` + reverse replay | `TRUNCATE` on the shadow, and `ALTER DELETE` + `ALTER UPDATE(_row_exists)` on the **source** (the reverse replay masks rows on the restored original). **Stage B also renames**, so it needs **`INSERT` + `CREATE TABLE`** on **`spans_post_rollback_backup`** — a destination that **does not exist yet**, so a set without `INSERT` fails `Code: 497` at the rename (see the four-privileges note below) — and **`SELECT` + `DROP TABLE`** on **`spans_pre_cutover_backup`**, its source. Note stage B is the *likelier* rollback, not the exotic one: the wrap is deferred by default, so the post-`EXCHANGE` resting state is the one stage B reverses, and reaching it needs no extra step. Withhold unless a rollback is actually planned. |
+| rollback stage C (if the wrap is applied) | 3-way `RENAME` + `DROP` of the ex-wrapper | **`INSERT` + `CREATE TABLE`** on **`spans_dist_old`** and **`spans_post_rollback_backup`** — both `RENAME` destinations, so a set without `INSERT` fails `Code: 497` at the rename (see the four-privileges note below) — plus `DROP TABLE` on `spans_dist_old`, which is dropped after the rotation. `DROP TABLE` on `spans_local`, plus `ALTER DELETE` + `ALTER UPDATE(_row_exists)` on the restored `spans`. **Decide this before applying the wrap:** without these grants there is no way back to the pre-cutover table until another grant change lands. (The *wrap itself* stays reversible via the un-wrap row below, which needs no extra grants — but that returns to the successor, not to the original.) |
 | **un-wrap** (`--unwrap-only`, if the wrap is applied) | 2-way `RENAME` + `DROP` of the ex-wrapper | `CREATE TABLE`/`DROP TABLE` on **`spans`**, **`spans_local`** and **`spans_dist_old`**, plus **`INSERT` + `CREATE TABLE`** on **`spans_dist_old`** as the `RENAME` destination — a **subset of what stage C's statements require** (same source and destination names, minus `spans_pre_cutover_backup` and `spans_post_rollback_backup`), so a grant set that genuinely covers stage C covers this with nothing added. No `ALTER UPDATE` and no `TRUNCATE`: it promotes no backup and replays nothing. Grant it even when stage C is out of scope — it is the only wrap recovery once `finalize.sh` has dropped the parked original. |
-| sentinel repair (`--sentinel-repair-only`, after a stage B/C promote **or** a cutover abandoned pre-`EXCHANGE`) | one `ALTER TABLE spans` carrying `UPDATE end_time = NULL …` and `UPDATE ttft = NULL …` | `ALTER UPDATE(end_time)` and `ALTER UPDATE(ttft)` on **`spans`** — **column privileges the rows above do NOT include.** The reverse replay needs only `ALTER UPDATE(_row_exists)`, so a user scoped to the rollback set gets `ACCESS_DENIED` here. Both commands travel in one mutation, so a missing grant on either applies neither. Either grant these two columns with the rollback grants (and revoke them after), or plan to run the repair as a more privileged user. |
+| sentinel repair (`--sentinel-repair-only`, after a stage B/C promote **or** a cutover abandoned pre-`EXCHANGE`) | one `ALTER TABLE spans` carrying `UPDATE end_time = NULL …` and `UPDATE ttft = NULL …` | `ALTER UPDATE(end_time)` and `ALTER UPDATE(ttft)` on **`spans`** — **column privileges the rows above do NOT include.** The reverse replay's `ALTER UPDATE` is scoped to `_row_exists`, so a user scoped to the rollback set gets `ACCESS_DENIED` here. Both commands travel in one mutation, so a missing grant on either applies neither. Either grant these two columns with the rollback grants (and revoke them after), or plan to run the repair as a more privileged user. |
 | `finalize.sh` (if in scope) | `TRUNCATE` / `DROP TABLE` | `TRUNCATE`, `DROP TABLE`, and `max_table_size_to_drop` override |
 
 > **`RENAME` and `EXCHANGE` check four privileges per name, not two.** Verified against a real server (26.3): a
@@ -1658,10 +1782,10 @@ at all and the read-only drivers cannot surface a mutation-privilege gap by cons
 
 **The boundary worth preserving — and how the post-swap reconciliation widened it (OPIK-8238).** The forward path ends
 with `reconcile.sh`, which mutates the live name: it re-applies bridged deletes onto `spans` with a lightweight
-`DELETE`. So the forward-only grant set now includes **`ALTER UPDATE(_row_exists)` on `spans`**, where it previously
-needed no mutation grant on the live table at all and the worst it could do to live data was add rows. That widening is
-deliberate — the delete side of the cutover cannot be completed without it — and is called out here so it is reviewed as
-such rather than inherited silently.
+`DELETE`. So the forward-only grant set now includes **`ALTER DELETE` and `ALTER UPDATE(_row_exists)` on `spans`**,
+where it previously needed no mutation grant on the live table at all and the worst it could do to live data was add
+rows. That widening is deliberate — the delete side of the cutover cannot be completed without it — and is called
+out here so it is reviewed as such rather than inherited silently.
 
 What still holds, and is worth keeping:
 
@@ -1669,8 +1793,10 @@ What still holds, and is worth keeping:
   `_row_exists`, so the user can flip the delete mask but cannot rewrite a value. (`--sentinel-repair-only` is the only
   step that needs real-column grants, and it is a rollback-tail step, granted and revoked around itself.)
 - **No `TRUNCATE` anywhere** in the forward path, so it cannot empty a table.
-- So the worst it can do to live data is **add rows, or mask them** — and the masking is bounded by the replay's two
-  guards, which delete only keys the frozen backup shows as deleted and only rows written before the swap.
+- So the worst it can do to live data is **add rows, or delete them**. The drivers only ever mask, bounded by the
+  replay's two guards — delete only keys the frozen backup shows as deleted, and only rows written before the swap —
+  but `ALTER DELETE` cannot be column-scoped and alone authorises the heavy `ALTER TABLE … DELETE` form, so that bound
+  is the drivers', not the grant set's.
 
 Keep the rest: grant rollback/finalize privileges only when those steps are in scope, as a separate reviewed change.
 
@@ -2171,7 +2297,7 @@ exists (`Code 60`). That is the second of the two flags the stage comparison tab
    waiting for it would look like a failed repair forever.
 
    > **It needs column privileges the rollback grant set omits** — `ALTER UPDATE(end_time)` and `ALTER UPDATE(ttft)`,
-   > where that set carries only `ALTER UPDATE(_row_exists)`. Both commands travel in one mutation, so a missing grant on
+   > where that set's `ALTER UPDATE` is scoped to `_row_exists`. Both commands travel in one mutation, so a missing grant on
    > either applies neither and nothing is half-repaired; the mode explains the `ACCESS_DENIED` if you hit it. Grant the
    > two columns alongside the rollback grants and revoke them afterwards, or run the repair as a more privileged user.
 
