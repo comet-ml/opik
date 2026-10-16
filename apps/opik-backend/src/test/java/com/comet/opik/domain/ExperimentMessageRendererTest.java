@@ -264,6 +264,22 @@ class ExperimentMessageRendererTest {
         }
 
         @Test
+        void buildChatCompletionRequestSendsVideoAndAudioAsMediaParts() {
+            var rendered = renderer.renderMessages(List.of(userMessage(textPart("Describe these"),
+                    mediaPart("video_url", "https://example.com/clip.mp4"),
+                    mediaPart("audio_url", "https://example.com/voice.wav"))), Map.of());
+            var prompt = new ExperimentExecutionRequest.PromptVariant("gemini-3.8-flash", rendered, null, null, null);
+
+            var request = JsonUtils.valueToTree(renderer.buildChatCompletionRequest(prompt, rendered));
+
+            var sentContent = request.get("messages").get(0).get("content");
+            assertThat(sentContent.findValuesAsText("type")).containsExactly("text", "video_url", "audio_url");
+            assertThat(sentContent.findValuesAsText("text")).containsExactly("Describe these");
+            assertThat(sentContent.findValuesAsText("url"))
+                    .containsExactly("https://example.com/clip.mp4", "https://example.com/voice.wav");
+        }
+
+        @Test
         @DisplayName("should return message unchanged when content is neither text nor array")
         void returnUnchangedForOtherContentTypes() {
             var objectContent = JsonUtils.createObjectNode();
