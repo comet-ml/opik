@@ -401,19 +401,22 @@ describe("containsTruncatedMedia", () => {
     });
   });
 
-  describe("truncated lists stored as JSON text", () => {
+  describe("cut lists", () => {
     it.each([
+      ['["data:video/mp4;base64,AAAAIGZ0eXBpc29t'],
+      ['["https://example.com/a.png", "https://example.com/b'],
       ['"[\\"data:image/png;base64,iVBORw0KGgo'],
       ['"[\\n  \\"data:image/png;base64,iVBORw0KGgo'],
-      ['" [\\"https://example.com/a.png\\", \\"https://example.com/b'],
     ])("should detect %s", (value) => {
       expect(containsTruncatedMedia(value)).toBe(true);
     });
 
-    it("should not match a complete list stored as JSON text", () => {
-      expect(
-        containsTruncatedMedia('["data:image/png;base64,iVBORw0KGgo="]'),
-      ).toBe(false);
+    it.each([
+      ['["data:image/png;base64,iVBORw0KGgo="]'],
+      ['[\n  "https://example.com/a.png"\n]'],
+      ["[link] to the docs"],
+    ])("should not match the complete or non-list value %s", (value) => {
+      expect(containsTruncatedMedia(value)).toBe(false);
     });
   });
 
