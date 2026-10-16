@@ -114,24 +114,31 @@ class AiLabelSweepDAOTest {
 
         static Stream<Arguments> latestStatus() {
             // X = 2 attempts, D = 15 min, P = 24 h (the config defaults); a value of -1 means the pair is settled.
+            // Each case has an older row first: pending, except where a settled older row must not win.
             return Stream.of(
-                    Arguments.of("done", "done", false, 1, 1, 60, -1),
-                    Arguments.of("failed, not retryable", "failed", false, 1, 1, 60 * 60, -1),
-                    Arguments.of("failed, retryable, X attempts made", "failed", true, 2, 1, 60 * 60, -1),
-                    Arguments.of("failed, retryable, below X, D elapsed", "failed", true, 1, 1, 16 * 60, 1),
-                    Arguments.of("failed, retryable, below X, inside D", "failed", true, 1, 1, 14 * 60, -1),
-                    Arguments.of("pending, inside P", "pending", false, 1, 1, 23 * 3600, -1),
-                    Arguments.of("pending, P elapsed (an orphan)", "pending", false, 1, 1, 25 * 3600, 1),
-                    Arguments.of("done at a version below the one required", "done", false, 1, 0, 60, 0));
+                    Arguments.of("done", "pending", 0, "done", false, 1, 1, 60, -1),
+                    Arguments.of("failed, not retryable", "pending", 0, "failed", false, 1, 1, 60 * 60, -1),
+                    Arguments.of("failed, retryable, X attempts made", "pending", 0, "failed", true, 2, 1, 60 * 60,
+                            -1),
+                    Arguments.of("failed, retryable, below X, D elapsed", "pending", 0, "failed", true, 1, 1, 16 * 60,
+                            1),
+                    Arguments.of("failed, retryable, below X, inside D", "pending", 0, "failed", true, 1, 1, 14 * 60,
+                            -1),
+                    Arguments.of("pending, inside P", "pending", 0, "pending", false, 1, 1, 23 * 3600, -1),
+                    Arguments.of("pending, P elapsed (an orphan)", "pending", 0, "pending", false, 1, 1, 25 * 3600, 1),
+                    Arguments.of("done at a version below the one required", "pending", 0, "done", false, 1, 0, 60,
+                            0),
+                    Arguments.of("done, then a newer orphaned pending row", "done", 1, "pending", false, 2, 1,
+                            25 * 3600, 2));
         }
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("latestStatus")
-        void latestStatusDecides(String description, String status, boolean retryable, int attempt, int taskVersion,
-                long updatedSecondsAgo, int expectedAttempt) {
+        void latestStatusDecides(String description, String olderStatus, int olderAttempt, String status,
+                boolean retryable, int attempt, int taskVersion, long updatedSecondsAgo, int expectedAttempt) {
             var workspaceId = workspace();
             var trace = trace(workspaceId).build().insert();
-            status(trace, "summary", "pending", false, 0, taskVersion, updatedSecondsAgo + 60);
+            status(trace, "summary", olderStatus, false, olderAttempt, taskVersion, updatedSecondsAgo + 60);
             status(trace, "summary", status, retryable, attempt, taskVersion, updatedSecondsAgo);
 
             var candidates = sweep(workspaceId, List.of(SUMMARY.toBuilder().versions(List.of(1)).build()));
@@ -262,16 +269,13 @@ class AiLabelSweepDAOTest {
         }
     }
 
+    /** Pinned values, so a change to the hash or to its input moves every workspace's bucket visibly. */
     @Test
-    @DisplayName("bucket assignment is stable and spreads workspaces")
+    @DisplayName("a workspace's bucket is murmur3_32 of its id mod N")
     void bucketAssignment() {
-        var workspaceIds = IntStream.range(0, 1_000).mapToObj(i -> UUID.randomUUID().toString()).toList();
-
-        var first = workspaceIds.stream().map(id -> AiLabelSweepService.bucketOf(id, 8)).toList();
-        var second = workspaceIds.stream().map(id -> AiLabelSweepService.bucketOf(id, 8)).toList();
-
-        assertThat(first).isEqualTo(second).allSatisfy(bucket -> assertThat(bucket).isBetween(0, 7));
-        assertThat(first.stream().distinct().count()).isEqualTo(8);
+        assertThat(AiLabelSweepService.bucketOf("0192f0c4-4d1e-7a6b-9c3d-2e1f0a9b8c7d", 8)).isEqualTo(5);
+        assertThat(AiLabelSweepService.bucketOf("7e3c1a90-55d2-4b1f-9a8e-0d4c6b2e1f3a", 8)).isEqualTo(2);
+        assertThat(AiLabelSweepService.bucketOf("a0000000-0000-4000-8000-000000000000", 8)).isEqualTo(3);
     }
 
     private AiLabelSweepDAO dao() {
