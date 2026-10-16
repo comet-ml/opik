@@ -61,6 +61,12 @@ An LLM-as-a-Judge evaluator sends a prompt to a model and reads back the scores.
 
 ### Agent-as-a-Judge
 
+We carefully optimized agent-as-a-judge to avoid runaway costs, so the cost of an evaluation stays predictable even on very large traces:
+
+- **Adaptive truncation.** A small trace goes into the prompt as it is. For a larger trace, Opik shortens long text values and marks where they were cut, so the judge can fetch the full value when it needs it. A very large trace becomes an outline of its spans.
+- **Bounded exploration.** The judge can call tools for a limited number of rounds, then it must return its scores.
+- **Cost limit.** Set a [cost limit](#cost-limit) to stop the judge when an evaluation reaches a budget. It then returns the scores collected so far.
+
 Put the variable for the whole item in your prompt. The judge receives the item, whatever its shape, so you don't need to know which fields hold the data.
 
 | Variable      | Scope   | What the judge receives                   |
@@ -79,7 +85,7 @@ With a model that supports tool calling, the judge can inspect the item with the
 - `get_trace_spans`: list the trace's spans
 - `get_attachment`: fetch an attached file as image, audio or text
 
-Opik truncates large items in the prompt, and the judge reads only the parts it needs. A small trace fits in the prompt, so the judge answers in one call. On a model without tool calling, the judge gets the truncated item in a single call.
+On a model without tool calling, the judge gets the truncated item in a single call.
 
 This is the best fit for agents: the judge can check which tools ran, in which order, and what they returned, not only the final answer.
 
