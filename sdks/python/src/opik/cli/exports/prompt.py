@@ -253,7 +253,7 @@ def export_single_prompt(
 
     except Exception as e:
         console.print(f"[red]Error exporting prompt {prompt.name}: {e}[/red]")
-        return 0
+        raise
 
 
 def export_prompt_by_name(
