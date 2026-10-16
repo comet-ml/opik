@@ -135,7 +135,6 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                         return Mono.empty();
                     }
                     return cancellationService.discardQueued(message.workspaceId(), message.experimentId())
-                            .then(itemLedger.expireAfterDrain(message.experimentId()))
                             .then(itemLedger.failures(message.experimentId()))
                             .flatMap(failures -> {
                                 if (failures > 0) {

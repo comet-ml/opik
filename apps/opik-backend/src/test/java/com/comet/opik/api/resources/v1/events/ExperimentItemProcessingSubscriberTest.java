@@ -82,7 +82,6 @@ class ExperimentItemProcessingSubscriberTest {
         // these tests and they describe the skip alone.
         lenient().when(itemLedger.remaining(any(UUID.class))).thenReturn(Mono.just(5L));
         lenient().when(itemLedger.failures(any(UUID.class))).thenReturn(Mono.just(0L));
-        lenient().when(itemLedger.expireAfterDrain(any(UUID.class))).thenReturn(Mono.empty());
         // The drain hands the finish to one caller; these tests are always that caller.
         lenient().when(cancellationService.claimFinish(anyString(), any(UUID.class)))
                 .thenReturn(Mono.just(true));
@@ -468,20 +467,5 @@ class ExperimentItemProcessingSubscriberTest {
         subscriber.processEvent(buildMessage(experimentId).toBuilder().testSuite(true).build(), ENTRY).block();
 
         verify(testSuiteAssertionCounterService, never()).decrementAndFinishIfComplete(any(), any());
-    }
-
-    @Test
-    @DisplayName("should shorten the outcomes of a run once it has drained")
-    void expireOutcomesOnDrain() {
-        var experimentId = UUID.randomUUID();
-        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
-        when(itemProcessor.process(any())).thenReturn(Mono.empty());
-        when(itemLedger.remaining(experimentId)).thenReturn(Mono.just(0L));
-        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
-        when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
-
-        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
-
-        verify(itemLedger).expireAfterDrain(experimentId);
     }
 }
