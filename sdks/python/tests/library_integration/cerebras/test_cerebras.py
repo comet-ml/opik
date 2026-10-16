@@ -3,6 +3,7 @@ import asyncio
 import cerebras.cloud.sdk as cerebras
 import pytest
 from cerebras.cloud.sdk.types.chat.chat_completion import (
+    ChatChunkResponse,
     ChatCompletionResponse,
     ChatCompletionResponseChoice,
     ChatCompletionResponseChoiceMessage,
@@ -12,7 +13,7 @@ from cerebras.cloud.sdk.types.chat.chat_completion import (
 
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
-from opik.integrations.cerebras import track_cerebras
+from opik.integrations.cerebras import chat_completion_chunks_aggregator, track_cerebras
 
 from ...testlib import (
     ANY_BUT_NONE,
@@ -160,3 +161,78 @@ def test_cerebras_chat_completions_create__error__span_and_trace_finished_gracef
     trace_tree = fake_backend.trace_trees[0]
     assert trace_tree.spans[0].error_info is not None
     assert trace_tree.spans[0].provider == "cerebras"
+
+
+def _stream_chunk(delta, finish_reason=None):
+    return ChatChunkResponse.model_validate(
+        {
+            "id": "c1",
+            "object": "chat.completion.chunk",
+            "created": 0,
+            "model": MODEL,
+            "system_fingerprint": "fp_test",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+        }
+    )
+
+
+def test_aggregate__streamed_tool_call__kept_in_message():
+    aggregated = chat_completion_chunks_aggregator.aggregate(
+        [
+            _stream_chunk({"role": "assistant"}),
+            _stream_chunk(
+                {
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "get_weather",
+                                "arguments": '{"city": ',
+                            },
+                        }
+                    ]
+                }
+            ),
+            _stream_chunk(
+                {
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "type": "function",
+                            "function": {"arguments": '"Paris"}'},
+                        }
+                    ]
+                }
+            ),
+            _stream_chunk({}, finish_reason="tool_calls"),
+        ]
+    )
+
+    choice = aggregated.choices[0]
+    assert choice["finish_reason"] == "tool_calls"
+    assert choice["message"]["tool_calls"] == [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "get_weather", "arguments": '{"city": "Paris"}'},
+        }
+    ]
+
+
+def test_aggregate__reasoning_deltas__kept_alongside_content():
+    aggregated = chat_completion_chunks_aggregator.aggregate(
+        [
+            _stream_chunk({"role": "assistant"}),
+            _stream_chunk({"reasoning": "Short wavelengths "}),
+            _stream_chunk({"reasoning": "scatter more."}),
+            _stream_chunk({"content": "Blue."}),
+            _stream_chunk({}, finish_reason="stop"),
+        ]
+    )
+
+    message = aggregated.choices[0]["message"]
+    assert message["content"] == "Blue."
+    assert message["reasoning"] == "Short wavelengths scatter more."
+    assert "tool_calls" not in message

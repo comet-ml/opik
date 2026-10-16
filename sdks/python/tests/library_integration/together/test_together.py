@@ -321,6 +321,65 @@ def test_aggregate__no_reasoning_deltas__reasoning_key_absent():
     assert "reasoning" not in aggregated.choices[0]["message"]
 
 
+def test_aggregate__streamed_tool_calls__kept_in_message():
+    """Together sends each tool call whole, in one delta, with its index."""
+    aggregated = chat_completion_chunks_aggregator.aggregate(
+        [
+            _chunk(role="assistant"),
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "t1",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": MODEL,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call_1",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "get_weather",
+                                            "arguments": '{"city": "Paris"}',
+                                        },
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                }
+            ),
+            _chunk(finish_reason="tool_calls"),
+        ]
+    )
+
+    choice = aggregated.choices[0]
+    assert choice["finish_reason"] == "tool_calls"
+    assert choice["message"]["tool_calls"] == [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "get_weather", "arguments": '{"city": "Paris"}'},
+        }
+    ]
+
+
+def test_aggregate__no_tool_call_deltas__tool_calls_key_absent():
+    aggregated = chat_completion_chunks_aggregator.aggregate(
+        [
+            _chunk(role="assistant"),
+            _chunk(content="Blue."),
+            _chunk(finish_reason="stop"),
+        ]
+    )
+
+    assert "tool_calls" not in aggregated.choices[0]["message"]
+
+
 def test_extract_metadata_from_client__credentials_in_base_url__stripped():
     """base_url reaches span metadata, so userinfo and query must not ride along."""
     client = together.Together(
