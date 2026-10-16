@@ -44,6 +44,7 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.DayOfWeek;
 import java.time.Duration;
@@ -59,6 +60,7 @@ import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -709,40 +711,55 @@ class RetentionPolicyServiceTest {
         }
 
         /**
-         * The bounded sweep directly, since a rule's own floor is its creation time and so cannot sit in the past
-         * through the API: each workspace deletes from its own floor up to the cutoff, and nothing else.
+         * applyToPast=false: each workspace deletes only from its rule's creation up to the cutoff. The API stamps a
+         * rule's creation as now, so the rules are backdated in MySQL to put their floors before the cutoff.
          */
         @Test
-        @DisplayName("The bounded delete honors each workspace's own floor and the cutoff")
-        void boundedDeleteHonorsEachWorkspaceFloor() {
+        @DisplayName("A bounded retention cycle deletes ai-labels from each workspace's own floor up to the cutoff")
+        void boundedRetentionCycleHonorsEachWorkspaceFloor(TransactionTemplate template) {
             Instant now = Instant.now();
+            var cutoff = LocalDate.ofInstant(now, ZoneOffset.UTC).minusDays(RetentionPeriod.BASE_60D.getDays())
+                    .atStartOfDay(ZoneOffset.UTC).toInstant();
+            // One id prefix, so all three workspaces fall into the same fraction and one cycle covers them.
             var wsLowFloor = UUID.randomUUID().toString();
-            var wsHighFloor = UUID.randomUUID().toString();
-            var wsWithoutRule = UUID.randomUUID().toString();
-            var lowFloor = idGenerator.generateId(now.minus(70, ChronoUnit.DAYS));
-            var highFloor = idGenerator.generateId(now.minus(62, ChronoUnit.DAYS));
-            var cutoff = idGenerator.generateId(now.minus(60, ChronoUnit.DAYS));
+            var wsHighFloor = wsLowFloor.substring(0, 8) + UUID.randomUUID().toString().substring(8);
+            var wsWithoutRule = wsLowFloor.substring(0, 8) + UUID.randomUUID().toString().substring(8);
+            // Both floors sit inside the 3-day sliding window, so the rule's creation is what bounds each one.
+            createBoundedRule(wsLowFloor, cutoff.minus(2, ChronoUnit.DAYS), template);
+            createBoundedRule(wsHighFloor, cutoff.minus(1, ChronoUnit.DAYS), template);
 
-            var deletedAboveLowFloor = idGenerator.generateId(now.minus(65, ChronoUnit.DAYS));
-            var keptAfterCutoff = idGenerator.generateId(now.minus(59, ChronoUnit.DAYS));
-            var keptBelowHighFloor = idGenerator.generateId(now.minus(65, ChronoUnit.DAYS));
-            var deletedAboveHighFloor = idGenerator.generateId(now.minus(61, ChronoUnit.DAYS));
-            var keptWithoutRule = idGenerator.generateId(now.minus(65, ChronoUnit.DAYS));
+            var deletedAboveLowFloor = idGenerator.generateId(cutoff.minus(36, ChronoUnit.HOURS));
+            var keptAfterCutoff = idGenerator.generateId(cutoff.plus(1, ChronoUnit.HOURS));
+            var keptBelowHighFloor = idGenerator.generateId(cutoff.minus(36, ChronoUnit.HOURS));
+            var deletedAboveHighFloor = idGenerator.generateId(cutoff.minus(12, ChronoUnit.HOURS));
+            var keptWithoutRule = idGenerator.generateId(cutoff.minus(12, ChronoUnit.HOURS));
             insertAiLabels(wsLowFloor, deletedAboveLowFloor);
             insertAiLabels(wsLowFloor, keptAfterCutoff);
             insertAiLabels(wsHighFloor, keptBelowHighFloor);
             insertAiLabels(wsHighFloor, deletedAboveHighFloor);
             insertAiLabels(wsWithoutRule, keptWithoutRule);
 
-            var floors = Map.of(wsLowFloor, lowFloor, wsHighFloor, highFloor);
-            aiLabelsDAO.deleteForRetentionBounded(floors, cutoff, lowFloor).block();
-            aiLabelStatusDAO.deleteForRetentionBounded(floors, cutoff, lowFloor).block();
+            var fraction = Math.min(
+                    (int) (Long.parseLong(wsLowFloor.substring(0, 8), 16) / ((0xFFFFFFFFL + 1) / 48)), 47);
+            retentionPolicyService.executeRetentionCycle(fraction, now).block();
 
             assertAiLabelRows(wsLowFloor, deletedAboveLowFloor, 0);
             assertAiLabelRows(wsLowFloor, keptAfterCutoff, 1);
             assertAiLabelRows(wsHighFloor, keptBelowHighFloor, 1);
             assertAiLabelRows(wsHighFloor, deletedAboveHighFloor, 0);
             assertAiLabelRows(wsWithoutRule, keptWithoutRule, 1);
+        }
+
+        private void createBoundedRule(String wsId, Instant createdAt, TransactionTemplate template) {
+            var wsName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName, wsId, USER);
+            var ruleId = retentionClient.create(retentionClient.buildWorkspaceRule(RetentionPeriod.BASE_60D)
+                    .applyToPast(false).build(), API_KEY, wsName);
+            template.inTransaction(WRITE, handle -> handle
+                    .createUpdate("UPDATE retention_rules SET created_at = :created_at WHERE id = :id")
+                    .bind("created_at", createdAt)
+                    .bind("id", ruleId.toString())
+                    .execute());
         }
     }
 

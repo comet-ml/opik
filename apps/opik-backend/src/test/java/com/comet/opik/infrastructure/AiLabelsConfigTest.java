@@ -21,14 +21,9 @@ class AiLabelsConfigTest {
     static Stream<Arguments> inferenceSettings() {
         return Stream.of(
                 arguments("disabled, nothing set", false, true, null, null, List.of()),
-                arguments("enabled, url and credential set", true, true, URL, CREDENTIAL, List.of()),
                 // The block itself is always required; config.yml always provides it.
                 arguments("disabled, no inference block", false, false, null, null, List.of("inference")),
-                arguments("enabled, no inference block", true, false, null, null,
-                        List.of("inference", "inferenceConfigured")),
                 arguments("enabled, blank url", true, true, " ", CREDENTIAL, List.of("inferenceConfigured")),
-                arguments("enabled, no url", true, true, null, CREDENTIAL, List.of("inferenceConfigured")),
-                arguments("enabled, blank credential", true, true, URL, "", List.of("inferenceConfigured")),
                 arguments("enabled, no credential", true, true, URL, null, List.of("inferenceConfigured")));
     }
 

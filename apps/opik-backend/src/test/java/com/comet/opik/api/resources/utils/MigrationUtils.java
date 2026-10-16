@@ -117,48 +117,6 @@ public class MigrationUtils {
     }
 
     /**
-     * Rolls back the last {@code changeSets} changesets the database applied, running their {@code --rollback}
-     * statements. Pair it with {@link #runClickhouseDbMigrationThrough} so the changesets it undoes are known.
-     */
-    public static void rollbackClickhouseDbMigration(ClickHouseContainer container, int changeSets) {
-        try (var connection = container.createConnection("")) {
-            DatabaseConnection dbConnection = new JdbcConnection(
-                    new ClickHouseConnectionImpl(connection.getMetaData().getURL()));
-            rollback(CLICKHOUSE_CHANGELOG_FILE, ClickHouseContainerUtils.migrationParameters(), dbConnection,
-                    changeSets);
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to roll back ClickHouse DB migration", e);
-        }
-    }
-
-    /** The MySQL counterpart of {@link #runClickhouseDbMigrationThrough}. */
-    public static void runMysqlDbMigrationThrough(MySQLContainer container, String migrationFileName) {
-        try (var connection = container.createConnection("")) {
-            var database = DatabaseFactory.getInstance()
-                    .findCorrectDatabaseImplementation(new JdbcConnection(connection));
-            try (var liquibase = new Liquibase(MYSQL_CHANGELOG_FILE, new ClassLoaderResourceAccessor(), database)) {
-                MySQLContainerUtils.migrationParameters().forEach(liquibase::setChangeLogParameter);
-                liquibase.update(countChangeSetsThrough(liquibase, migrationFileName), new Contexts(),
-                        new LabelExpression());
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to run MySQL DB migration", e);
-        } catch (LiquibaseException e) {
-            throw new UnexpectedLiquibaseException(e);
-        }
-    }
-
-    /** The MySQL counterpart of {@link #rollbackClickhouseDbMigration}. */
-    public static void rollbackMysqlDbMigration(MySQLContainer container, int changeSets) {
-        try (var connection = container.createConnection("")) {
-            rollback(MYSQL_CHANGELOG_FILE, MySQLContainerUtils.migrationParameters(), new JdbcConnection(connection),
-                    changeSets);
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to roll back MySQL DB migration", e);
-        }
-    }
-
-    /**
      * Identifiers of the ClickHouse changesets the database has <b>not</b> applied. Empty means the changelog is fully
      * applied — which is the assertion a topology gate needs after resuming a spliced apply, because a changeset the
      * extension skipped (a precondition evaluating to {@code MARK_RAN} is recorded as run; an unsupported statement is
@@ -204,20 +162,7 @@ public class MigrationUtils {
         }
         throw new IllegalArgumentException(
                 "No changeset found for migration file '%s' in %s".formatted(migrationFileName,
-                        liquibase.getChangeLogFile()));
-    }
-
-    private static void rollback(String changeLogFile, Map<String, String> parameters, DatabaseConnection connection,
-            int changeSets) {
-        try {
-            var database = DatabaseFactory.getInstance().findCorrectDatabaseImplementation(connection);
-            try (var liquibase = new Liquibase(changeLogFile, new ClassLoaderResourceAccessor(), database)) {
-                parameters.forEach(liquibase::setChangeLogParameter);
-                liquibase.rollback(changeSets, (String) null);
-            }
-        } catch (LiquibaseException e) {
-            throw new UnexpectedLiquibaseException(e);
-        }
+                        CLICKHOUSE_CHANGELOG_FILE));
     }
 
     /** Number of changesets before the first one declared in {@code migrationFileName}. */
