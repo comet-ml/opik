@@ -15,12 +15,13 @@ import DictionaryRow from "@/shared/FiltersContent/rows/DictionaryRow";
 import DefaultRow from "@/shared/FiltersContent/rows/DefaultRow";
 import CategoryRow from "@/shared/FiltersContent/rows/CategoryRow";
 import ConditionCard from "@/shared/ConditionCard/ConditionCard";
+import FieldOverflowTooltip from "@/shared/FiltersContent/FieldOverflowTooltip";
 import { createFilter } from "@/lib/filters";
 
 export type FilterRowVariant = "table" | "card";
 
 const CARD_FIELD_CLASSES =
-  "[&_.min-w-32]:min-w-0 [&_.min-w-40]:min-w-0 [&_[role=combobox]]:h-8 [&_input]:h-8";
+  "[&_[class*=min-w-]]:min-w-0 [&_[class*=max-w-]]:max-w-none [&_[role=combobox]]:h-8 [&_input]:h-8 [&_[role=combobox]>span]:block [&_[role=combobox]>span]:min-w-0 [&_[role=combobox]>span]:truncate";
 
 type FilterRowProps<TColumnData> = {
   prefix: string;
@@ -122,14 +123,16 @@ export const FilterRow = <TColumnData,>({
         errors={[filter.error]}
         className={CARD_FIELD_CLASSES}
       >
-        <table className="w-full table-fixed">
-          <tbody>
-            <tr className="[&>td:first-child]:pl-0 [&>td:last-child]:pr-0 [&>td]:px-1 [&>td]:py-0">
-              {columnCell}
-              {renderByType()}
-            </tr>
-          </tbody>
-        </table>
+        <FieldOverflowTooltip>
+          <table className="w-full">
+            <tbody>
+              <tr className="grid auto-cols-fr grid-flow-col gap-2 [&>td.flex>*]:min-w-0 [&>td.flex]:contents [&>td]:min-w-0 [&>td]:p-0">
+                {columnCell}
+                {renderByType()}
+              </tr>
+            </tbody>
+          </table>
+        </FieldOverflowTooltip>
       </ConditionCard>
     );
   }

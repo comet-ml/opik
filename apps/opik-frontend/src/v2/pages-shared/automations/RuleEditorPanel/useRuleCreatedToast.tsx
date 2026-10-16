@@ -4,17 +4,30 @@ import { useNavigate } from "@tanstack/react-router";
 import { ToastAction } from "@/ui/toast";
 import { useToast } from "@/ui/use-toast";
 import useAppStore from "@/store/AppStore";
-import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
+import { EVAL_TRIGGER_SCOPE, EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { LOGS_TYPE } from "@/constants/traces";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
-const EXPLAINER_ID_BY_SCOPE: Record<EVALUATORS_RULE_SCOPE, EXPLAINER_ID> = {
-  [EVALUATORS_RULE_SCOPE.trace]:
-    EXPLAINER_ID.i_added_edited_a_new_online_evaluation_rule_now_what,
-  [EVALUATORS_RULE_SCOPE.thread]:
-    EXPLAINER_ID.i_added_edited_a_new_online_evaluation_thread_level_rule_now_what,
-  [EVALUATORS_RULE_SCOPE.span]:
-    EXPLAINER_ID.i_added_edited_a_new_online_evaluation_span_level_rule_now_what,
+const LOGS_PAGE = "See the scores on the Logs page.";
+
+const TRACE_DESCRIPTION_BY_TRIGGER_SCOPE: Record<EVAL_TRIGGER_SCOPE, string> = {
+  [EVAL_TRIGGER_SCOPE.production]: `This rule now scores new production traces. ${LOGS_PAGE}`,
+  [EVAL_TRIGGER_SCOPE.experiment]:
+    "This rule now scores new experiment traces. See the scores in the experiment results.",
+  [EVAL_TRIGGER_SCOPE.both]:
+    "This rule now scores new production and experiment traces. See the scores on the Logs page and in the experiment results.",
+};
+
+const getDescription = (
+  scope: EVALUATORS_RULE_SCOPE,
+  triggerScope: EVAL_TRIGGER_SCOPE,
+) => {
+  if (scope === EVALUATORS_RULE_SCOPE.thread) {
+    return `This rule now scores new threads. ${LOGS_PAGE}`;
+  }
+  if (scope === EVALUATORS_RULE_SCOPE.span) {
+    return `This rule now scores new spans. ${LOGS_PAGE}`;
+  }
+  return TRACE_DESCRIPTION_BY_TRIGGER_SCOPE[triggerScope];
 };
 
 const LOGS_TYPE_BY_SCOPE: Record<EVALUATORS_RULE_SCOPE, LOGS_TYPE> = {
@@ -29,17 +42,23 @@ const useRuleCreatedToast = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   return useCallback(
-    (scope: EVALUATORS_RULE_SCOPE, projectIds: string[]) => {
-      const explainer = EXPLAINERS_MAP[EXPLAINER_ID_BY_SCOPE[scope]];
+    (
+      scope: EVALUATORS_RULE_SCOPE,
+      triggerScope: EVAL_TRIGGER_SCOPE,
+      projectIds: string[],
+    ) => {
+      const hasLogs =
+        scope !== EVALUATORS_RULE_SCOPE.trace ||
+        triggerScope !== EVAL_TRIGGER_SCOPE.experiment;
       const actions =
-        projectIds.length === 1
+        hasLogs && projectIds.length === 1
           ? [
               <ToastAction
                 variant="link"
                 size="sm"
                 className="px-0"
-                altText="Go to project"
-                key="Go to project"
+                altText="Go to logs"
+                key="Go to logs"
                 onClick={() =>
                   navigate({
                     to: "/$workspaceName/projects/$projectId/logs",
@@ -48,14 +67,14 @@ const useRuleCreatedToast = () => {
                   })
                 }
               >
-                Go to project
+                Go to logs
               </ToastAction>,
             ]
           : undefined;
 
       toast({
-        title: explainer.title,
-        description: explainer.description,
+        title: "Evaluation rule set",
+        description: getDescription(scope, triggerScope),
         actions,
       });
     },

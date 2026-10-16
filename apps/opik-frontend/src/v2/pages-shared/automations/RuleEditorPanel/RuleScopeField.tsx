@@ -1,5 +1,6 @@
 import React from "react";
 import { UseFormReturn } from "react-hook-form";
+import { CornerDownRight } from "lucide-react";
 
 import { FormControl, FormField, FormItem, FormLabel } from "@/ui/form";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
@@ -80,7 +81,7 @@ const RuleScopeField: React.FC<RuleScopeFieldProps> = ({
                     key={option.value}
                     value={option.value}
                     size="sm"
-                    className="comet-body-xs h-6 flex-1 hover:bg-upload-icon-bg data-[state=on]:bg-muted data-[state=on]:text-foreground"
+                    className="flex-1"
                   >
                     {option.label}
                   </ToggleGroupItem>
@@ -95,11 +96,12 @@ const RuleScopeField: React.FC<RuleScopeFieldProps> = ({
           control={form.control}
           name="triggerScope"
           render={({ field }) => (
-            <FormItem className="flex-row items-center gap-0 px-0.5">
+            <FormItem className="flex-row items-center gap-0 pl-1 pr-0.5">
               <FormLabel
                 htmlFor={SCORED_TRACES_SELECT_ID}
-                className="comet-body-s font-normal"
+                className="comet-body-s flex items-center gap-1 font-normal"
               >
+                <CornerDownRight className="size-3 shrink-0 text-muted-slate" />
                 Score
               </FormLabel>
               <FormControl>
@@ -109,7 +111,7 @@ const RuleScopeField: React.FC<RuleScopeFieldProps> = ({
                   onChange={field.onChange}
                   options={SCORED_TRACES_OPTIONS}
                   variant="ghost"
-                  className="comet-body-s h-6 w-auto gap-1 px-1 font-normal"
+                  className="comet-body-s h-6 w-auto gap-1 px-1 font-normal underline underline-offset-4 hover:text-primary data-[state=open]:text-primary"
                 />
               </FormControl>
             </FormItem>

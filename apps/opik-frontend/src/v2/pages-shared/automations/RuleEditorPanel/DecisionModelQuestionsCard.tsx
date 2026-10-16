@@ -72,6 +72,8 @@ const DecisionModelQuestionsCard: React.FC<DecisionModelQuestionsCardProps> = ({
             <ScoreBlock
               key={index}
               title={isMain ? "Main question" : `Question ${index + 1}`}
+              icon={CircleHelp}
+              iconClassName="bg-[var(--rule-icon-decision-model)]"
               heading={
                 <ScoreNameTitle
                   name={question.name}

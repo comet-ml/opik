@@ -25,12 +25,19 @@ import PopoverFooter from "./PopoverFooter";
 
 const MAX_HEIGHT = "320px";
 
+const KEY_COMPLETE = "Tab";
 const KEY_FOCUS_NEXT = "ArrowDown";
 const KEY_FOCUS_PREV = "ArrowUp";
 const KEY_SELECT = "Enter";
 const KEY_CLOSE = "Escape";
 
-const NAVIGATION_KEYS = [KEY_FOCUS_NEXT, KEY_FOCUS_PREV, KEY_SELECT, KEY_CLOSE];
+const NAVIGATION_KEYS = [
+  KEY_COMPLETE,
+  KEY_FOCUS_NEXT,
+  KEY_FOCUS_PREV,
+  KEY_SELECT,
+  KEY_CLOSE,
+];
 
 const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
   data,
@@ -244,7 +251,15 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
           handleFocusPath(filteredVisiblePaths[prevIndex].path);
           break;
         }
+        case KEY_COMPLETE:
         case KEY_SELECT: {
+          if (!focusedPath && e.key === KEY_COMPLETE) {
+            e.preventDefault();
+            if (filteredVisiblePaths.length > 0) {
+              handleFocusPath(filteredVisiblePaths[0].path);
+            }
+            break;
+          }
           if (focusedPath) {
             e.preventDefault();
             const item = filteredVisiblePaths.find(

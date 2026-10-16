@@ -1,5 +1,5 @@
 import React from "react";
-import { Hash, LucideIcon, ToggleRight } from "lucide-react";
+import { ChartBarBig, Hash, LucideIcon, ToggleRight } from "lucide-react";
 
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { SelectItem } from "@/ui/select";
@@ -11,7 +11,7 @@ const SCORE_TYPE_OPTIONS: {
   icon: LucideIcon;
 }[] = [
   { value: LLM_SCHEMA_TYPE.INTEGER, label: "Integer", icon: Hash },
-  { value: LLM_SCHEMA_TYPE.DOUBLE, label: "Number", icon: Hash },
+  { value: LLM_SCHEMA_TYPE.DOUBLE, label: "Number", icon: ChartBarBig },
   { value: LLM_SCHEMA_TYPE.BOOLEAN, label: "Boolean", icon: ToggleRight },
 ];
 

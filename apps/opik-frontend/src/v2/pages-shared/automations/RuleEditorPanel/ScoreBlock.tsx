@@ -1,5 +1,5 @@
 import React from "react";
-import { BrainCircuit, Trash } from "lucide-react";
+import { BrainCircuit, LucideIcon, Trash } from "lucide-react";
 
 import { Button } from "@/ui/button";
 import IconTag from "@/v2/pages-shared/IconTag/IconTag";
@@ -7,6 +7,8 @@ import IconTag from "@/v2/pages-shared/IconTag/IconTag";
 type ScoreBlockProps = {
   title: string;
   heading?: React.ReactNode;
+  icon?: LucideIcon;
+  iconClassName?: string;
   onRemove?: () => void;
   children: React.ReactNode;
 };
@@ -14,15 +16,14 @@ type ScoreBlockProps = {
 const ScoreBlock: React.FC<ScoreBlockProps> = ({
   title,
   heading,
+  icon = BrainCircuit,
+  iconClassName = "bg-[var(--rule-icon-llm-judge)]",
   onRemove,
   children,
 }) => (
   <div className="overflow-hidden rounded-md border border-border bg-soft-background">
     <div className="flex h-8 items-center gap-1.5 pl-2 pr-3">
-      <IconTag
-        icon={BrainCircuit}
-        className="bg-[var(--rule-icon-llm-judge)]"
-      />
+      <IconTag icon={icon} className={iconClassName} />
       {heading ?? (
         <span className="comet-body-xs-accented flex-1 text-muted-slate">
           {title}

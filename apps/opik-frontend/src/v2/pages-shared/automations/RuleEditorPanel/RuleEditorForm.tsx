@@ -75,13 +75,13 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
   const handleSubmit = useCallback(async () => {
     prepareForSubmit();
     await form.handleSubmit(() => {
-      const { scope, projectIds } = form.getValues();
+      const { scope, triggerScope, projectIds } = form.getValues();
       if (rule && isEdit) {
         updateRule(
           { ruleId: rule.id, rule: buildRule() },
           {
             onSuccess: () => {
-              showRuleCreatedToast(scope, projectIds);
+              showRuleCreatedToast(scope, triggerScope, projectIds);
               onClose();
             },
           },
@@ -92,7 +92,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
         { rule: buildRule() },
         {
           onSuccess: (rule: EvaluatorsRule) => {
-            showRuleCreatedToast(scope, projectIds);
+            showRuleCreatedToast(scope, triggerScope, projectIds);
             onRuleCreated?.(rule);
             onClose();
           },

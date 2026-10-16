@@ -133,7 +133,8 @@ const DECISION_MODEL_DEFAULT_DATA = {
   schema: [
     {
       name: "",
-      description: "",
+      description:
+        "Does the output complete the task the user asked for in the input?",
       type: LLM_SCHEMA_TYPE.BOOLEAN,
       unsaved: false,
     },
