@@ -41,7 +41,7 @@ record VariantInput(
         if (total != null && outputTokens != null && total == input + cacheTokens + outputTokens) {
             return false;
         }
-        Long clientPromptTokens = keys.clientPromptTokens();
-        return clientPromptTokens == null || clientPromptTokens != input + cacheTokens;
+        Long outerPromptTokens = keys.outerPromptTokens();
+        return outerPromptTokens == null || outerPromptTokens != input + cacheTokens;
     }
 }

@@ -33,7 +33,7 @@ final class UsageKeys {
 
     private final Map<String, Long> countsByName;
     private final @Nullable Long reportedTotal;
-    private final @Nullable Long clientPromptTokens;
+    private final @Nullable Long outerPromptTokens;
 
     /** The provider's own keys. */
     static UsageKeys of(@NonNull OriginalUsage original) {
@@ -43,11 +43,11 @@ final class UsageKeys {
         return new UsageKeys(countsByName, reportedTotal, asLong(original.outerKeys().get("prompt_tokens")));
     }
 
-    /** The provider's keys, with the keys the client sent next to them filling the counts they lack. */
-    static UsageKeys withClientKeys(@NonNull OriginalUsage original) {
+    /** The provider's keys, with the outer keys the SDK sent next to them filling the counts they lack. */
+    static UsageKeys withOuterKeys(@NonNull OriginalUsage original) {
         var providerKeys = of(original);
         return new UsageKeys(countsByName(original.withOuterKeys().keys()), providerKeys.reportedTotal,
-                providerKeys.clientPromptTokens);
+                providerKeys.outerPromptTokens);
     }
 
     private static Map<String, Long> countsByName(Map<String, Integer> keys) {
@@ -100,8 +100,8 @@ final class UsageKeys {
     }
 
     /** The prompt count the SDK sent next to the provider's usage it converted, or null when it converted none. */
-    @Nullable Long clientPromptTokens() {
-        return clientPromptTokens;
+    @Nullable Long outerPromptTokens() {
+        return outerPromptTokens;
     }
 
     /** The count under the first of the names that is present, or 0. */

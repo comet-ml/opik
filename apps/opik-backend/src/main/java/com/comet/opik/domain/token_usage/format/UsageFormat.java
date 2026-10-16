@@ -20,7 +20,7 @@ interface UsageFormat {
     default Optional<NativeUsage> normalize(@NonNull String provider, @NonNull OriginalUsage original,
             @NonNull List<UsageWarning> warnings) {
         var providerKeys = UsageKeys.of(original);
-        var combinedKeys = original.nested() ? UsageKeys.withClientKeys(original) : providerKeys;
+        var combinedKeys = original.nested() ? UsageKeys.withOuterKeys(original) : providerKeys;
         return inputVariants().stream()
                 .filter(variant -> variant.matches().test(providerKeys))
                 .findFirst()
