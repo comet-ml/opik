@@ -196,9 +196,14 @@ clickhouse:
 
 ## Use S3 bucket for Opik
 
+The chart deploys MinIO by default and configures the backend for it (`S3_URL` points to the in-cluster MinIO and `IS_MINIO` stays `true`). To use S3 you must also set `minio.enabled: false`, otherwise the backend is not configured for S3 even when `S3_BUCKET` is set.
+
 ### Using AWS key and secret keys
 
 ```yaml
+minio:
+  enabled: false
+
 component:
   backend:
     env:
@@ -213,6 +218,9 @@ component:
 If your IAM role is configured for the k8s nodes, the only things you will need is to set for opik-backend:
 
 ```yaml
+minio:
+  enabled: false
+
 component:
   backend:
     env:

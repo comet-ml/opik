@@ -190,7 +190,7 @@ prompts = {
 optimizer = MetaPromptOptimizer(model="openai/gpt-4o")
 result = optimizer.optimize_prompt(
     prompt=prompts,  # Pass dict of prompts
-    agent_class=AnalyzeRespondAgent,  # Use your custom agent
+    agent=AnalyzeRespondAgent(),  # Pass an instance of your custom agent
     dataset=dataset,
     metric=levenshtein_ratio,
     max_trials=5,
@@ -203,7 +203,7 @@ result.display()
 The optimizer will optimize both prompts in the dictionary, trying different combinations to improve performance.
 
 <Note>
-  The prompts dict keys (like "analyze" and "respond") are used to identify which prompt to optimize. The optimizer can optimize all prompts or specific ones based on the `optimize_prompt` parameter.
+  The prompts dict keys (like "analyze" and "respond") are used to identify which prompt to optimize. The optimizer can optimize all prompts or specific ones based on the `optimize_prompts` parameter.
 </Note>
 
 ## Key implementation details
@@ -369,7 +369,7 @@ optimizer = HRPO(
 
 result = optimizer.optimize_prompt(
     prompt=prompts,
-    agent_class=TwoStepAgent,
+    agent=TwoStepAgent(),
     dataset=dataset,
     metric=metric,
     max_trials=5,

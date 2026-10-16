@@ -655,7 +655,6 @@ result = evaluate(
     dataset=dataset,
     task=my_task_function,
     scoring_metrics=[my_metric],
-    project_name="my-project",
 )
 
 # Run experiment on a specific version
@@ -665,7 +664,6 @@ result = evaluate(
     dataset=v1_view,  # Pass the DatasetVersion object
     task=my_task_function,
     scoring_metrics=[my_metric],
-    project_name="my-project",
 )
 ```
 
