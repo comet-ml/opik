@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure;
 
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -46,5 +47,21 @@ class AiLabelsConfigTest {
                 .toList();
 
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
+    }
+
+    @Test
+    void enabledRequiresTraceColumnsNonNullable() {
+        var config = new OpikConfiguration();
+        config.getAiLabels().setEnabled(true);
+
+        assertThat(VALIDATOR.validateProperty(config, "aiLabelsDataModelSupported")).singleElement()
+                .satisfies(violation -> assertThat(violation.getMessage())
+                        .contains("databaseAnalyticsDataModel.traceColumnsNonNullable"));
+
+        config.setDatabaseAnalyticsDataModel(config.getDatabaseAnalyticsDataModel().toBuilder()
+                .traceColumnsNonNullable(true)
+                .build());
+
+        assertThat(VALIDATOR.validateProperty(config, "aiLabelsDataModelSupported")).isEmpty();
     }
 }

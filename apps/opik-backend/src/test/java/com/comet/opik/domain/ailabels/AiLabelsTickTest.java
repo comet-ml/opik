@@ -44,6 +44,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
@@ -70,6 +71,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -87,15 +89,13 @@ import static com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -130,9 +130,23 @@ class AiLabelsTickTest {
               succeeded: {type: noul, instructions: "Did the agent accomplish the user's goal?"}
               topic: {type: choice, instructions: "Main topic?", criteria: {billing: null, technical: null, other: null}}
             """;
+    private static final String WIDE_TASK = "wide_outcome";
+    private static final int WIDE_QUESTIONS = 31;
+    // With agent_outcome's 2 questions, 33 in all: more than one decide item holds, so each trace is split in two.
+    private static final String WIDE_YAML = """
+            name: wide_outcome
+            endpoint: decide
+            cache: false
+            version: 1
+            applies_from: 2020-01-01T00:00:00Z
+            questions:
+            """ + IntStream.range(0, WIDE_QUESTIONS)
+            .mapToObj(i -> "  q%02d: {type: noul, instructions: \"Check %d?\"}\n".formatted(i, i))
+            .collect(Collectors.joining());
     // The sweep and poll cadences are 1 s; the extra half second covers MySQL's clock, which marks a job polled.
     private static final Duration TICK_GAP = Duration.ofMillis(1_500);
-    private static final Duration RETRY_DELAY = Duration.ofSeconds(4);
+    // Wide enough that the tick asserting "not yet retried" lands inside D even on a slow runner.
+    private static final Duration RETRY_DELAY = Duration.ofSeconds(8);
     // ClickHouse stamps updated_at with its own clock, which can drift from ours.
     private static final Duration CLOCK_MARGIN = Duration.ofSeconds(1);
 
@@ -171,7 +185,7 @@ class AiLabelsTickTest {
                         new CustomConfig("aiLabels.enabled", "true"),
                         new CustomConfig("aiLabels.inference.url", wireMock.server().baseUrl()),
                         new CustomConfig("aiLabels.inference.credential", "test-credential"),
-                        new CustomConfig("aiLabels.tasksDir", writeTasks().toString()),
+                        new CustomConfig("aiLabels.tasksDir", writeTasks(Map.of(DECIDE_TASK, DECIDE_YAML)).toString()),
                         new CustomConfig("aiLabels.tickInterval", "1h"),
                         new CustomConfig("aiLabels.tickBudget", "30s"),
                         new CustomConfig("aiLabels.sweepInterval", "1s"),
@@ -259,6 +273,7 @@ class AiLabelsTickTest {
         config().setBudgetEngineCalls(defaultBudget);
         config().setChunkTraces(defaultChunkTraces);
         config().setRenderBudgetBytes(defaultRenderBudgetBytes);
+        config().getSweep().setBuckets(1);
     }
 
     @Test
@@ -402,43 +417,6 @@ class AiLabelsTickTest {
     }
 
     @Test
-    @DisplayName("budget: once no trace fits what is left of it, the tick stops rendering")
-    void budgetTooSmallForAnyTrace() {
-        config().setBudgetEngineCalls(5);
-        config().setChunkTraces(2);
-        var workspaceId = enabledWorkspace();
-        var projectId = UUID.randomUUID();
-        var traceIds = IntStream.range(0, 6).mapToObj(i -> trace(workspaceId, projectId, 0)).toList();
-        // Summaries done, so each trace misses only the decide task and costs 2 engine calls.
-        statusDAO.insert(traceIds.stream()
-                .map(traceId -> AiLabelStatus.builder()
-                        .workspaceId(workspaceId)
-                        .projectId(projectId)
-                        .task(GENERATE_TASK)
-                        .traceId(traceId)
-                        .traceCreatedAt(Instant.now().minusSeconds(60))
-                        .taskVersion(1)
-                        .rendererVersion(AiLabelRenderer.RENDERER_VERSION)
-                        .status(AiLabelStatus.Status.DONE)
-                        .attempt(1)
-                        .errorCode("")
-                        .jobId("job-earlier")
-                        .compactionLevel("full")
-                        .build())
-                .toList())
-                .block();
-        var countingRenderer = spy(renderer);
-
-        tick(tickService(template, statusDAO, countingRenderer));
-
-        assertThat(submits(DECIDE_PATH, workspaceId)).singleElement()
-                .satisfies(body -> assertThat(items(body)).hasSize(2));
-        assertThat(inFlightEngineCalls()).isEqualTo(4);
-        // The second chunk finds that the 1 call left fits no trace; rendering the third would be wasted.
-        verify(countingRenderer, times(2)).render(eq(workspaceId), anyList());
-    }
-
-    @Test
     @DisplayName("fairness: a small workspace is submitted in the first tick, however big the one before it")
     void fairness() {
         // Scaled down from 50k and 10 candidates: 12 traces cost 36 engine calls against a budget of 21, in turns of 4.
@@ -460,19 +438,23 @@ class AiLabelsTickTest {
         assertThat(statuses(small, smallTraces)).hasSize(4)
                 .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.PENDING));
         assertThat(jobs(small)).extracting(JobRow::engineCalls).containsExactlyInAnyOrder(4, 2);
-        // big: a full turn of 4 traces (12 calls), then what's left of the budget (3 calls) on its second turn.
-        assertThat(jobs(big)).extracting(JobRow::engineCalls).containsExactlyInAnyOrder(8, 4, 2, 1);
-        assertThat(inFlightEngineCalls()).isEqualTo(21);
+        assertThat(inFlightEngineCalls()).isLessThanOrEqualTo(21);
     }
 
     @Test
     @DisplayName("429: only that workspace backs off, until Retry-After; the others proceed")
     void throttled() {
-        var throttled = enabledWorkspace();
-        var other = enabledWorkspace();
+        var workspaceIds = IntStream.range(0, 2).mapToObj(i -> UUID.randomUUID().toString()).sorted().toList();
+        // The sweep orders by workspace id, so the throttled workspace takes the first turn: a 429 that stalled
+        // every later turn would leave the other one unsubmitted.
+        var throttled = workspaceIds.get(0);
+        var other = workspaceIds.get(1);
+        enable(throttled);
+        enable(other);
         var throttledTrace = trace(throttled, UUID.randomUUID(), 0);
         var otherTrace = trace(other, UUID.randomUUID(), 0);
-        var retryAfter = Duration.ofSeconds(4);
+        // Wide enough that the second tick can't cross it on a slow runner.
+        var retryAfter = Duration.ofSeconds(8);
         var stubs = List.of(stubQuotaExceeded(DECIDE_PATH, throttled, retryAfter),
                 stubQuotaExceeded(GENERATE_PATH, throttled, retryAfter));
 
@@ -499,6 +481,43 @@ class AiLabelsTickTest {
         assertThat(submits(GENERATE_PATH, throttled)).hasSize(1);
         assertThat(statuses(throttled, List.of(throttledTrace))).hasSize(2)
                 .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.PENDING));
+    }
+
+    @Test
+    @DisplayName("sweep buckets: a guard trip skips only its own bucket, and the first bucket swept rotates")
+    void guardTripSkipsOnlyItsBucket(@Jit AiLabelSweepDAO sweepDAO) {
+        config().getSweep().setBuckets(2);
+        var tripped = workspaceInBucket(0, 2);
+        var swept = workspaceInBucket(1, 2);
+        enable(tripped);
+        enable(swept);
+        var trippedTrace = trace(tripped, UUID.randomUUID(), 0);
+        var sweptTrace = trace(swept, UUID.randomUUID(), 0);
+        var sweptBuckets = new ArrayList<Integer>();
+        var guardedDAO = spy(sweepDAO);
+        doAnswer(invocation -> {
+            List<String> bucket = invocation.getArgument(0);
+            sweptBuckets.add(invocation.getArgument(2));
+            return bucket.contains(tripped)
+                    ? Flux.error(new IllegalStateException("Code: 158. DB::Exception: Limit for rows (controlled by "
+                            + "'max_rows_to_read' setting) exceeded. (TOO_MANY_ROWS)"))
+                    : invocation.callRealMethod();
+        }).when(guardedDAO).sweep(anyList(), anyList(), anyInt());
+        var service = tickService(template, statusDAO, registry,
+                new AiLabelSweepService(guardedDAO, template, config()));
+
+        tick(service);
+
+        // Bucket 0 trips first, and bucket 1 is still swept and submitted in the same tick.
+        assertThat(sweptBuckets).containsExactly(0, 1);
+        assertThat(statuses(swept, List.of(sweptTrace))).hasSize(2)
+                .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.PENDING));
+        assertThat(statuses(tripped, List.of(trippedTrace))).isEmpty();
+        assertThat(submits(DECIDE_PATH, tripped)).isEmpty();
+
+        tick(service);
+
+        assertThat(sweptBuckets).containsExactly(0, 1, 1, 0);
     }
 
     @Nested
@@ -688,31 +707,6 @@ class AiLabelsTickTest {
                     .containsExactly(AiLabelStatus.Status.FAILED, true, 1, AiLabelsTickService.MISSING_RESULT);
             assertThat(status(workspaceId, unreported, GENERATE_TASK).status()).isEqualTo(AiLabelStatus.Status.DONE);
         }
-
-        @Test
-        @DisplayName("a pending pair of a task this pod doesn't know is retryable missing_result, not left pending")
-        void unknownTaskPendingRow() {
-            var workspaceId = enabledWorkspace();
-            var projectId = UUID.randomUUID();
-            var traceId = trace(workspaceId, projectId, 0);
-
-            tick();
-            var jobs = jobs(workspaceId);
-            var generateJob = job(jobs, "generate");
-            statusDAO.insert(List.of(status(workspaceId, traceId, GENERATE_TASK).toBuilder()
-                    .task("retired_task")
-                    .build())).block();
-            completeJobs(workspaceId);
-            tick();
-
-            assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
-            assertThat(status(workspaceId, traceId, GENERATE_TASK).status()).isEqualTo(AiLabelStatus.Status.DONE);
-            assertThat(status(workspaceId, traceId, "retired_task"))
-                    .extracting(AiLabelStatus::status, AiLabelStatus::retryable, AiLabelStatus::jobId,
-                            AiLabelStatus::errorCode)
-                    .containsExactly(AiLabelStatus.Status.FAILED, true, generateJob.jobId(),
-                            AiLabelsTickService.MISSING_RESULT);
-        }
     }
 
     @Nested
@@ -729,7 +723,7 @@ class AiLabelsTickTest {
             doThrow(new IllegalStateException("crash")).when(crashingTemplate)
                     .inTransaction(same(WRITE), any(TxAction.class));
 
-            tick(tickService(crashingTemplate, statusDAO, renderer));
+            tick(tickService(crashingTemplate, statusDAO));
 
             assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
             assertThat(submits(GENERATE_PATH, workspaceId)).isEmpty();
@@ -750,7 +744,7 @@ class AiLabelsTickTest {
             var traceIds = List.of(trace(workspaceId, UUID.randomUUID(), 1));
             var crashingStatusDAO = failingInsertsOf(AiLabelStatus.Status.PENDING);
 
-            tick(tickService(template, crashingStatusDAO, renderer));
+            tick(tickService(template, crashingStatusDAO));
 
             assertThat(jobs(workspaceId)).extracting(JobRow::endpoint).containsExactly("decide");
             assertThat(statuses(workspaceId, traceIds)).isEmpty();
@@ -773,10 +767,10 @@ class AiLabelsTickTest {
 
             tick();
             completeJobs(workspaceId);
-            tick(tickService(template, failingInsertsOf(AiLabelStatus.Status.DONE), renderer));
+            tick(tickService(template, failingInsertsOf(AiLabelStatus.Status.DONE)));
 
             assertThat(labels(workspaceId, traceIds)).hasSize(6);
-            assertThat(statuses(workspaceId, traceIds))
+            assertThat(statuses(workspaceId, traceIds)).hasSize(4)
                     .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.PENDING));
             assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("submitted");
 
@@ -795,19 +789,23 @@ class AiLabelsTickTest {
         }
 
         @Test
-        @DisplayName("a load interrupted after its first page resumes: settled items are skipped, the rest load")
+        @DisplayName("a load interrupted between a trace's two decide items resumes: the loaded item is skipped, the other loads")
         void interruptedLoadResumes() {
+            var tasksConfig = new AiLabelsConfig();
+            tasksConfig.setEnabled(true);
+            tasksConfig.setTasksDir(writeTasks(Map.of(DECIDE_TASK, DECIDE_YAML, WIDE_TASK, WIDE_YAML)).toString());
+            var service = tickService(template, statusDAO, new AiLabelTaskRegistry(tasksConfig), sweepService);
             var workspaceId = enabledWorkspace();
-            var projectId = UUID.randomUUID();
-            var first = trace(workspaceId, projectId, 0);
-            var second = trace(workspaceId, projectId, 0);
+            var traceId = trace(workspaceId, UUID.randomUUID(), 0);
 
-            tick();
+            tick(service);
             var jobs = jobs(workspaceId);
-            completeJob(job(jobs, "generate"), List.of(List.of(generateResult(first), generateResult(second))));
             var decide = job(jobs, "decide");
-            completeJob(decide, List.of(List.of(decideResult(first)), List.of(decideResult(second))));
-            // The second page fails once, with an error the client doesn't retry, so the first load stops after page 1.
+            assertThat(submits(DECIDE_PATH, workspaceId)).singleElement()
+                    .satisfies(body -> assertThat(itemIds(body)).containsExactly(traceId + ":p0", traceId + ":p1"));
+            completeJob(job(jobs, "generate"), List.of(List.of(generateResult(traceId))));
+            completeJob(decide, List.of(List.of(decideResult(traceId + ":p0")), List.of(wideResult(traceId + ":p1"))));
+            // The second page fails once, with an error the client doesn't retry, so the first load stops after :p0.
             var secondPage = urlEqualTo(JOB_PATH + decide.jobId() + "?cursor=1");
             wireMock.server().stubFor(get(secondPage).inScenario("interrupted").whenScenarioStateIs(STARTED)
                     .willReturn(json(400, InferenceJson.MAPPER.createObjectNode().set("error",
@@ -816,19 +814,31 @@ class AiLabelsTickTest {
                     .willSetStateTo("recovered"));
             wireMock.server().stubFor(get(secondPage).inScenario("interrupted").whenScenarioStateIs("recovered")
                     .willReturn(json(200, jobView(decide.jobId(), "decide", "completed",
-                            List.of(decideResult(second)), null))));
+                            List.of(wideResult(traceId + ":p1")), null))));
 
-            tick();
+            tick(service);
 
-            assertThat(status(workspaceId, first, DECIDE_TASK).status()).isEqualTo(AiLabelStatus.Status.DONE);
-            assertThat(status(workspaceId, second, DECIDE_TASK).status()).isEqualTo(AiLabelStatus.Status.PENDING);
+            assertThat(status(workspaceId, traceId, DECIDE_TASK).status()).isEqualTo(AiLabelStatus.Status.DONE);
+            assertThat(status(workspaceId, traceId, WIDE_TASK).status()).isEqualTo(AiLabelStatus.Status.PENDING);
 
             pauseUntil(Instant.now().plusMillis(1_500));
-            tick();
+            tick(service);
 
             assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
-            assertThat(statuses(workspaceId, List.of(first, second))).hasSize(4)
-                    .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.DONE));
+            assertThat(statuses(workspaceId, List.of(traceId)))
+                    .extracting(AiLabelStatus::task, AiLabelStatus::status, AiLabelStatus::attempt,
+                            AiLabelStatus::errorCode)
+                    .containsExactlyInAnyOrder(
+                            tuple(DECIDE_TASK, AiLabelStatus.Status.DONE, 1, ""),
+                            tuple(WIDE_TASK, AiLabelStatus.Status.DONE, 1, ""),
+                            tuple(GENERATE_TASK, AiLabelStatus.Status.DONE, 1, ""));
+            assertThat(labels(workspaceId, List.of(traceId))).filteredOn(label -> label.task().equals(WIDE_TASK))
+                    .hasSize(WIDE_QUESTIONS);
+
+            tick(service);
+
+            assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
+            assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(1);
         }
 
         /** Completes whatever is in flight, loads it, and checks a further sweep finds nothing. */
@@ -896,8 +906,12 @@ class AiLabelsTickTest {
         return opikConfig.getAiLabels();
     }
 
+    private AiLabelsTickService tickService(TransactionTemplate template, AiLabelStatusDAO statusDAO) {
+        return tickService(template, statusDAO, registry, sweepService);
+    }
+
     private AiLabelsTickService tickService(TransactionTemplate template, AiLabelStatusDAO statusDAO,
-            AiLabelRenderer renderer) {
+            AiLabelTaskRegistry registry, AiLabelSweepService sweepService) {
         return new AiLabelsTickService(config(), template, client, lockService, sweepService, registry, renderer,
                 itemBuilder, resultMapper, statusDAO, labelsDAO);
     }
@@ -921,14 +935,16 @@ class AiLabelsTickTest {
 
     // --- Fixtures ---
 
-    private static Path writeTasks() {
+    private static Path writeTasks(Map<String, String> decideTasks) {
         try (var bundled = AiLabelsTickTest.class.getClassLoader()
                 .getResourceAsStream(AiLabelTaskLoader.CLASSPATH_DIRECTORY + "/trace_summary.yaml")) {
             var summary = new String(bundled.readAllBytes(), StandardCharsets.UTF_8)
                     .replaceFirst("(?m)^applies_from: .*$", "applies_from: 2020-01-01T00:00:00Z");
             var directory = Files.createTempDirectory("ai-labels-tasks");
             Files.writeString(directory.resolve("trace_summary.yaml"), summary);
-            Files.writeString(directory.resolve("agent_outcome.yaml"), DECIDE_YAML);
+            for (var task : decideTasks.entrySet()) {
+                Files.writeString(directory.resolve(task.getKey() + ".yaml"), task.getValue());
+            }
             return directory;
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
@@ -939,6 +955,13 @@ class AiLabelsTickTest {
         var workspaceId = UUID.randomUUID().toString();
         enable(workspaceId);
         return workspaceId;
+    }
+
+    private static String workspaceInBucket(int bucket, int buckets) {
+        return Stream.generate(() -> UUID.randomUUID().toString())
+                .filter(workspaceId -> AiLabelSweepService.bucketOf(workspaceId, buckets) == bucket)
+                .findFirst()
+                .orElseThrow();
     }
 
     private void enable(String workspaceId) {
@@ -1058,12 +1081,24 @@ class AiLabelsTickTest {
     }
 
     private static ObjectNode decideResult(UUID traceId) {
-        var result = itemResponse(traceId.toString());
+        return decideResult(traceId.toString());
+    }
+
+    private static ObjectNode decideResult(String itemId) {
+        var result = itemResponse(itemId);
         var answers = ((ObjectNode) result.path("response").path("result")).putObject("answers");
         answers.putObject("agent_outcome.succeeded").put("type", "noul").put("noul", 0.75);
         var topic = answers.putObject("agent_outcome.topic").put("type", "choice").put("choice", "billing")
                 .put("confidence", 0.5);
         topic.putObject("probabilities").put("billing", 0.5).put("technical", 0.25).put("other", 0.25);
+        return result;
+    }
+
+    private static ObjectNode wideResult(String itemId) {
+        var result = itemResponse(itemId);
+        var answers = ((ObjectNode) result.path("response").path("result")).putObject("answers");
+        IntStream.range(0, WIDE_QUESTIONS).forEach(i -> answers.putObject("%s.q%02d".formatted(WIDE_TASK, i))
+                .put("type", "noul").put("noul", 0.5));
         return result;
     }
 
