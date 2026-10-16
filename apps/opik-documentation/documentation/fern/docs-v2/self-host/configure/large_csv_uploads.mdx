@@ -24,7 +24,7 @@ CSV upload supports:
 
 Large file uploads require more time to transfer. Increase the server idle timeout:
 
-```bash
+```bash wordWrap
 SERVER_IDLE_TIMEOUT: 10m
 ```
 
@@ -34,7 +34,7 @@ The default timeout is 1 minute, which is insufficient for large file uploads. W
 
 If you're using the Helm chart deployment, add the following configuration to your `values.yaml`:
 
-```yaml
+```yaml wordWrap
 component:
   frontend:
     # Increase client body size limit to 2GB
@@ -59,7 +59,7 @@ The backend service temporarily buffers uploaded CSV files to disk before proces
 
 You can optionally configure the batch size for CSV processing:
 
-```bash
+```bash wordWrap
 BATCH_OPERATIONS_CSV_BATCH_SIZE: 1000
 ```
 
@@ -76,7 +76,7 @@ For Docker Compose deployments, the configuration is slightly different:
 
 Add the environment variables to the backend service:
 
-```yaml
+```yaml wordWrap
 services:
   backend:
     environment:
@@ -92,7 +92,7 @@ The nginx configuration files already include the 2GB limit for local deployment
 
 Here's a complete example for Helm chart deployments:
 
-```yaml
+```yaml wordWrap
 # values.yaml
 component:
   backend:
@@ -117,7 +117,7 @@ component:
 
 Then upgrade your Helm release:
 
-```bash
+```bash wordWrap
 helm upgrade opik opik/opik -n opik -f values.yaml
 ```
 
@@ -129,7 +129,7 @@ After applying the configuration:
 2. **Test with a small CSV** first (< 100MB) to verify the feature works
 3. **Monitor logs** during upload to ensure proper processing:
 
-```bash
+```bash wordWrap
 # Kubernetes
 kubectl logs -n opik deployment/opik-backend -f | grep CSV
 

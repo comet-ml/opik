@@ -14,7 +14,7 @@ to use and request headers used for authentication.
     <Tab title="Open-Source">
     If you are using the Open-Source platform you can simply use the `http://localhost:5173/api/v1/<endpoint_path>`:
 
-    ```bash
+    ```bash wordWrap
     curl -X GET 'http://localhost:5173/api/v1/private/projects'
     ```
 
@@ -23,7 +23,7 @@ to use and request headers used for authentication.
     If you are using Opik Cloud or a on-premise installation of the Comet platform, you will need to specify the Opik
     API Key and Opik Workspace in the header:
 
-    ```bash
+    ```bash wordWrap
     curl -X GET 'https://www.comet.com/opik/api/v1/private/projects' \
     -H 'Accept: application/json' \
     -H 'Comet-Workspace: <your-workspace-name>' \

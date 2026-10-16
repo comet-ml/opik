@@ -48,7 +48,7 @@ The optimizer is open-source, you can check out the root cause analysis code and
 
 You can use `HRPO` to optimize a prompt:
 
-```python maxLines=1000
+```python maxLines=1000 wordWrap
 from opik_optimizer import HRPO, ChatPrompt, datasets
 from opik.evaluation.metrics.score_result import ScoreResult
 
@@ -161,7 +161,7 @@ The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o
 `"anthropic/claude-opus-4-7"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
 using the `model_parameters` parameter:
 
-```python
+```python wordWrap
 optimizer = HRPO(
     model="anthropic/claude-sonnet-4-6",
     model_parameters={

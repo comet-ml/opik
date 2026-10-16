@@ -28,7 +28,7 @@ Optimizers work seamlessly with both approaches. The optimizer calls your agent'
 
 For most optimization tasks, you can use `ChatPrompt` directly without creating a custom agent. The optimizer uses a default LiteLLM-based agent under the hood.
 
-```python
+```python wordWrap
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer.datasets import hotpot
@@ -65,7 +65,7 @@ When integrating with specific agent frameworks (Google ADK, LangGraph, CrewAI, 
 
 Here's an example for Google ADK:
 
-```python
+```python wordWrap
 from typing import Any, TYPE_CHECKING
 from opik_optimizer import OptimizableAgent
 
@@ -119,7 +119,7 @@ For multi-step agent workflows, you **must** use `OptimizableAgent` because `Cha
 
 Here's a simple example of a two-step workflow that analyzes input and then generates a response:
 
-```python
+```python wordWrap
 from typing import Any
 from opik_optimizer import ChatPrompt, OptimizableAgent
 from openai import OpenAI
@@ -169,7 +169,7 @@ class AnalyzeRespondAgent(OptimizableAgent):
 
 When optimizing, pass a dictionary of prompts instead of a single prompt:
 
-```python
+```python wordWrap
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik.evaluation.metrics import LevenshteinRatio
 
@@ -212,7 +212,7 @@ The optimizer will optimize both prompts in the dictionary, trying different com
 
 All `OptimizableAgent` subclasses must implement `invoke_agent()`:
 
-```python
+```python wordWrap
 def invoke_agent(
     self,
     prompts: dict[str, ChatPrompt],
@@ -236,14 +236,14 @@ def invoke_agent(
 
 Use `ChatPrompt.get_messages()` to format the prompt with dataset values:
 
-```python
+```python wordWrap
 messages = prompt.get_messages(dataset_item)
 # Returns list of message dicts: [{"role": "system", "content": "..."}, ...]
 ```
 
 For multi-prompt workflows, pass additional context when calling `get_messages()`:
 
-```python
+```python wordWrap
 # Pass intermediate results to subsequent prompts
 context = {**dataset_item, "intermediate_result": some_value}
 messages = prompt.get_messages(context)
@@ -260,7 +260,7 @@ messages = prompt.get_messages(context)
 
 ### Single-prompt with ChatPrompt (default)
 
-```python
+```python wordWrap
 from opik_optimizer import ChatPrompt, EvolutionaryOptimizer
 from opik_optimizer.datasets import hotpot
 from opik.evaluation.metrics import LevenshteinRatio
@@ -297,7 +297,7 @@ result.display()
 
 ### Multi-prompt workflow
 
-```python
+```python wordWrap
 from typing import Any
 from opik_optimizer import ChatPrompt, OptimizableAgent, HRPO
 from opik.evaluation.metrics import LevenshteinRatio

@@ -170,7 +170,7 @@ For more complex integrations or custom formatting requirements, you can use a m
 
 #### Example middleware for Slack with custom formatting
 
-```python
+```python wordWrap
 import requests
 
 def transform_to_slack(opik_payload):
@@ -262,7 +262,7 @@ These tools also provide built-in monitoring, retries, and visual flow editors, 
 
 Build a custom monitoring dashboard that receives alerts using the **General** destination type:
 
-```python
+```python wordWrap
 from fastapi import FastAPI, Request
 from datetime import datetime
 
@@ -426,7 +426,7 @@ If you need additional event types for your use case, please [create an issue on
 
 All webhook events follow a consistent payload structure. The top-level keys are snake_case (`event_type`, `alert_id`, `created_at`), while the keys inside `payload` are camelCase (`alertName`, `eventCount`):
 
-```json
+```json wordWrap
 {
   "id": "webhook-event-id",
   "event_type": "trace:errors",
@@ -486,7 +486,7 @@ Each example below shows the `payload.metadata` value for one event type.
 
 ### Trace errors threshold exceeded payload
 
-```json
+```json wordWrap
 {
   "metadata": [
     {
@@ -504,7 +504,7 @@ Each example below shows the `payload.metadata` value for one event type.
 
 ### Trace feedback score threshold exceeded payload
 
-```json
+```json wordWrap
 {
   "metadata": [
     {
@@ -522,7 +522,7 @@ Each example below shows the `payload.metadata` value for one event type.
 
 ### Thread feedback score threshold exceeded payload
 
-```json
+```json wordWrap
 {
   "metadata": [
     {
@@ -540,7 +540,7 @@ Each example below shows the `payload.metadata` value for one event type.
 
 ### Prompt created payload
 
-```json
+```json wordWrap
 {
   "metadata": [
     {
@@ -561,7 +561,7 @@ Each example below shows the `payload.metadata` value for one event type.
 
 ### Prompt version created payload
 
-```json
+```json wordWrap
 {
   "metadata": [
     {
@@ -584,7 +584,7 @@ Each example below shows the `payload.metadata` value for one event type.
 
 ### Prompt deleted payload
 
-```json
+```json wordWrap
 {
   "metadata": [
     [
@@ -616,7 +616,7 @@ Each example below shows the `payload.metadata` value for one event type.
 
 ### Guardrails triggered payload
 
-```json
+```json wordWrap
 {
   "metadata": [
     [
@@ -639,7 +639,7 @@ Each example below shows the `payload.metadata` value for one event type.
 
 ### Experiment finished payload
 
-```json
+```json wordWrap
 {
   "metadata": [
     [
@@ -659,7 +659,7 @@ Each example below shows the `payload.metadata` value for one event type.
 
 ### Cost threshold exceeded payload
 
-```json
+```json wordWrap
 {
   "metadata": [
     {
@@ -677,7 +677,7 @@ Each example below shows the `payload.metadata` value for one event type.
 
 ### Latency threshold exceeded payload
 
-```json
+```json wordWrap
 {
   "metadata": [
     {
@@ -706,7 +706,7 @@ Add a secret token to your webhook configuration to verify that incoming request
 
 ### Example validation (Python/Flask)
 
-```python
+```python wordWrap
 from flask import Flask, request, abort
 import hmac
 
@@ -743,7 +743,7 @@ def handle_webhook():
 
 You can add custom headers for additional authentication or routing:
 
-```python
+```python wordWrap
 # In your webhook handler
 api_key = request.headers.get('X-API-Key')
 environment = request.headers.get('X-Environment')
@@ -787,7 +787,7 @@ Opik expects webhooks to respond within the configured timeout (10 seconds by de
 - Use a queue system (e.g., Celery, RabbitMQ) for long-running tasks
 
 **Example async processing:**
-```python
+```python wordWrap
 from flask import Flask
 from threading import Thread
 
@@ -821,7 +821,7 @@ If you receive duplicate webhooks:
 - Implement idempotency using the webhook `id` field
 
 **Example idempotent handler:**
-```python
+```python wordWrap
 processed_webhook_ids = set()
 
 @app.route('/webhook', methods=['POST'])

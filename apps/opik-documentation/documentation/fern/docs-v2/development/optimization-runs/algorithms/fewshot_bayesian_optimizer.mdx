@@ -34,7 +34,7 @@ optimal set and number of few-shot examples.
 
 You can use the `FewShotBayesianOptimizer` to optimize a prompt by following these steps:
 
-```python maxLines=1000
+```python maxLines=1000 wordWrap
 from opik_optimizer import FewShotBayesianOptimizer
 from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer import datasets, ChatPrompt
@@ -122,7 +122,7 @@ The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o
 `"anthropic/claude-opus-4-7"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
 using the `model_parameters` parameter:
 
-```python
+```python wordWrap
 optimizer = FewShotBayesianOptimizer(
     model="anthropic/claude-sonnet-4-6",
     model_parameters={

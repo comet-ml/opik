@@ -19,13 +19,13 @@ This guide explains how to integrate Opik with Cohere using the OpenAI SDK Compa
 
 To start tracking your Cohere LLM calls, you'll need to have both `opik` and `openai` packages installed. You can install them using pip:
 
-```bash
+```bash wordWrap
 pip install opik openai
 ```
 
 In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
 
-```bash
+```bash wordWrap
 opik configure
 ```
 
@@ -33,7 +33,7 @@ opik configure
 
 You'll need to set your Cohere API key as an environment variable:
 
-```bash
+```bash wordWrap
 export COHERE_API_KEY="YOUR_API_KEY"
 ```
 
@@ -41,7 +41,7 @@ export COHERE_API_KEY="YOUR_API_KEY"
 
 Leverage the OpenAI Compatibility API by replacing the base URL with Cohere's endpoint when initializing the client:
 
-```python
+```python wordWrap
 import os
 from opik.integrations.openai import track_openai
 from openai import OpenAI
@@ -76,7 +76,7 @@ The `track_openai` will automatically track and log the API call, including the 
 
 If you are using Cohere within a function tracked with the [`@track`](/tracing/advanced/log_traces#using-function-decorators) decorator, you can use the tracked client as normal:
 
-```python
+```python wordWrap
 from opik import track
 from opik.integrations.openai import track_openai
 from openai import OpenAI
