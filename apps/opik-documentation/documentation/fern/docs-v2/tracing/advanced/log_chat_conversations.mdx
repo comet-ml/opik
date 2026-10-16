@@ -419,30 +419,28 @@ You can also manage threads programmatically using the Opik SDK:
     client = opik.Opik()
 
     # Search for threads by various criteria
-    threads = client.search_traces(
+    threads = client.search_threads(
         project_name="my-chatbot",
-        filter_string='thread_id contains "user-session"'
+        filter_string='id contains "user-session"'
     )
 
     # Get specific thread content
-    for trace in threads:
-        if trace.thread_id:
-            thread_content = client.get_trace_content(trace.id)
-            print(f"Thread: {trace.thread_id}")
-            print(f"Input: {thread_content.input}")
-            print(f"Output: {thread_content.output}")
+    for thread in threads:
+        print(f"Thread: {thread.id} ({thread.number_of_messages} messages)")
+        print(f"First message: {thread.first_message}")
+        print(f"Last message: {thread.last_message}")
 
-    # Add feedback scores to thread traces
-    client.log_traces_feedback_scores(
+    # Add feedback scores to the threads
+    client.log_threads_feedback_scores(
         scores=[
             {
-                "id": trace.id,
+                "id": thread.id,
                 "name": "conversation_quality",
                 "value": 0.8,
                 "reason": "Good multi-turn conversation flow",
                 "project_name": "my-chatbot",
             }
-            for trace in threads
+            for thread in threads
         ]
     )
     ```
