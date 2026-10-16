@@ -43,6 +43,7 @@ type ChunkResult =
   | {
       isToolCall: true;
       data: ToolCallDelta[];
+      text: string;
     };
 
 interface StreamedToolCall {
@@ -423,6 +424,7 @@ export const parseChunk = (rawChunk: unknown): ChunkResult => {
       return {
         isToolCall: true,
         data: chunkData.delta.tool_calls,
+        text: chunkData.delta.content || "",
       };
     }
 
@@ -450,6 +452,7 @@ const isToolCallDelta = (
   chunkData: unknown
 ): chunkData is {
   delta: {
+    content?: string | null;
     tool_calls: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta.ToolCall[];
   };
 } => {
@@ -505,7 +508,11 @@ export const getToolCallOutput = (
     toolCalls.set(index, toolCall);
   }
 
-  return { tool_calls: [...toolCalls.values()] };
+  return {
+    tool_calls: [...toolCalls.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([, toolCall]) => toolCall),
+  };
 };
 
 export const buildStreamOutput = (

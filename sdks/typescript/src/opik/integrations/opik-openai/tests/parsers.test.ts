@@ -434,6 +434,47 @@ describe("OpenAI Parsers", () => {
       });
     });
 
+    it("orders tool calls by index when fragments arrive out of order", () => {
+      const fragments = collectToolCalls([
+        toolCallChunk([
+          {
+            index: 1,
+            id: "call_2",
+            type: "function",
+            function: { name: "get_time", arguments: "{}" },
+          },
+        ]),
+        toolCallChunk([
+          {
+            index: 0,
+            id: "call_1",
+            type: "function",
+            function: { name: "get_weather", arguments: "{}" },
+          },
+        ]),
+      ]);
+
+      expect(
+        getToolCallOutput(fragments).tool_calls.map((call) => call.id)
+      ).toEqual(["call_1", "call_2"]);
+    });
+
+    it("keeps the text of a chunk that also carries tool calls", () => {
+      const chunk = toolCallChunk([
+        {
+          index: 0,
+          id: "call_1",
+          type: "function",
+          function: { name: "get_weather", arguments: "{}" },
+        },
+      ]);
+      chunk.choices[0].delta.content = "Checking the weather.";
+
+      const parsed = parseChunk(chunk);
+
+      expect(parsed.isToolCall && parsed.text).toBe("Checking the weather.");
+    });
+
     it("returns only the message for a text stream", () => {
       expect(buildStreamOutput(["Hello", "!"], [])).toEqual({
         message: "Hello!",

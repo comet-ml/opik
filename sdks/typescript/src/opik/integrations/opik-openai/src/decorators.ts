@@ -241,6 +241,7 @@ function wrapAsyncIterable<T>(
 
       if (chunkData.isToolCall) {
         toolCallChunks = [...toolCallChunks, ...chunkData.data];
+        if (chunkData.text) textChunks = [...textChunks, chunkData.text];
       } else {
         textChunks = [...textChunks, chunkData.data as string];
       }
