@@ -8,6 +8,7 @@ import {
   useSetPromptMap,
   useSetDatasetType,
   useSetExperimentName,
+  useSetLastActiveProjectId,
 } from "@/store/PlaygroundStore";
 import { generateDefaultPrompt, isEmptyMessage } from "@/lib/playground";
 import { DATASET_TYPE } from "@/types/datasets";
@@ -53,6 +54,7 @@ function useLoadPlayground() {
   const setPromptMap = useSetPromptMap();
   const setDatasetType = useSetDatasetType();
   const setExperimentName = useSetExperimentName();
+  const setLastActiveProjectId = useSetLastActiveProjectId();
 
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
@@ -76,7 +78,9 @@ function useLoadPlayground() {
     const keys = Object.keys(promptMap);
 
     return (
-      keys.length === 1 && !!promptMap[keys[0]]?.messages?.every(isEmptyMessage)
+      keys.length === 0 ||
+      (keys.length === 1 &&
+        !!promptMap[keys[0]]?.messages?.every(isEmptyMessage))
     );
   }, [promptMap]);
 
@@ -223,6 +227,8 @@ function useLoadPlayground() {
 
       setDatasetType(datasetType ?? null);
       setExperimentName(null);
+      // Otherwise the Playground reads the arrival as a project switch and resets what was loaded.
+      setLastActiveProjectId(activeProjectId);
 
       navigate({
         to: "/$workspaceName/projects/$projectId/playground",
@@ -239,6 +245,7 @@ function useLoadPlayground() {
       setDatasetVersionKey,
       setDatasetType,
       setExperimentName,
+      setLastActiveProjectId,
       workspaceName,
       activeProjectId,
     ],
