@@ -201,7 +201,7 @@ type ScopeDraftField =
 
 type ScopeDraft = {
   [K in ScopeDraftField]: FieldPathValue<EvaluationRuleFormType, K>;
-};
+} & { autoName: string };
 
 type UseRuleEditorFormParams = {
   ruleType: UI_EVALUATORS_RULE_TYPE;
@@ -252,6 +252,20 @@ const useRuleEditorForm = ({
   const scopeDraftsRef = useRef<
     Partial<Record<EVALUATORS_RULE_SCOPE, ScopeDraft>>
   >({});
+  const autoNameRef = useRef("");
+
+  const isDefaultName = useCallback(() => {
+    const name = form.getValues("ruleName").trim();
+    return !name || name === autoNameRef.current;
+  }, [form]);
+
+  const setAutoName = useCallback(
+    (name: string) => {
+      autoNameRef.current = name;
+      form.setValue("ruleName", name, { shouldDirty: true });
+    },
+    [form],
+  );
 
   const changeScope = useCallback(
     (scope: EVALUATORS_RULE_SCOPE) => {
@@ -262,8 +276,11 @@ const useRuleEditorForm = ({
         filters: form.getValues("filters"),
         llmJudgeDetails,
         pythonCodeDetails: form.getValues("pythonCodeDetails"),
+        autoName: autoNameRef.current,
       });
       const draft = scopeDraftsRef.current[scope];
+
+      if (isDefaultName()) setAutoName(draft?.autoName ?? "");
 
       form.setValue("scope", scope);
       form.setValue("type", getBackendRuleType(scope, uiType));
@@ -283,7 +300,7 @@ const useRuleEditorForm = ({
         draft?.pythonCodeDetails ?? cloneDeep(DEFAULT_PYTHON_CODE_DATA[scope]),
       );
     },
-    [form],
+    [form, isDefaultName, setAutoName],
   );
 
   const applyTemplate = useCallback(
@@ -300,9 +317,9 @@ const useRuleEditorForm = ({
         { shouldDirty: true },
       );
       form.clearErrors("llmJudgeDetails");
-      if (!isEdit) form.setValue("ruleName", label, { shouldDirty: true });
+      if (!isEdit && isDefaultName()) setAutoName(label);
     },
-    [form, isEdit],
+    [form, isEdit, isDefaultName, setAutoName],
   );
 
   const prepareForSubmit = useCallback(() => {
