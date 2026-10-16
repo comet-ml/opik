@@ -4,7 +4,9 @@
 
 -- A ticket is identified by its external key (e.g. OPIK-1234, stored upper-case), so rows for
 -- one key merge however many analyses write it. Its tasks are the cipx_session_analysis tasks
--- whose `tasks.ticket_key` is this key; spend, sessions and engineers are derived from them.
+-- whose `tasks.ticket_keys` include this key; spend, sessions and engineers are derived from them.
+-- A task on several tickets counts its full spend on each, so totals across tickets count each
+-- task once.
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.cipx_tickets ON CLUSTER '{cluster}'
 (
     workspace_id    String,
