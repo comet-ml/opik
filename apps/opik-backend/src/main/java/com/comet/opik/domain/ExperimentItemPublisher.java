@@ -42,8 +42,8 @@ public class ExperimentItemPublisher {
     }
 
     /**
-     * Starts counting a run down, before anything of it is published or made visible. A stop reaches
-     * only what this service is counting down, and the experiments become stoppable the moment they
+     * Starts tracking a run, before anything of it is published or made visible. A stop reaches
+     * only what this service is tracking, and the experiments become stoppable the moment they
      * are persisted — so a run tracked any later than this has a window where a stop finds nothing to
      * stop, returns as though it had, and the run goes on to queue every item.
      */
@@ -103,7 +103,7 @@ public class ExperimentItemPublisher {
         return Flux.fromIterable(experimentIds)
                 .flatMap(experimentId -> Flux.just(
                         ExperimentExecutionConfig.itemCounterKey(workspaceId, experimentId),
-                        ExperimentExecutionConfig.itemFailureCounterKey(workspaceId, experimentId))
+                        ExperimentExecutionConfig.itemEntriesKey(workspaceId, experimentId))
                         .flatMap(key -> redisClient.getAtomicLong(key).delete()))
                 .then()
                 .onErrorResume(error -> {
@@ -114,8 +114,8 @@ public class ExperimentItemPublisher {
     }
 
     /**
-     * One counter per prompt variant, all set before the first message is published so a fast
-     * consumer cannot drain a variant before its own counter exists.
+     * One total per prompt variant, all set before the first message is published so a fast
+     * consumer cannot drain a variant before its own total exists.
      */
     private Mono<Void> setItemCounters(List<ExperimentItemToProcess> messages) {
         var workspaceId = messages.getFirst().workspaceId();
