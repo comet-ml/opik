@@ -71,7 +71,6 @@ public interface ThreadDAO {
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-// TODO: after v1 drop, remove annotation_queue_filters conditions and keep only annotation_queue_id
 class ThreadDAOImpl implements ThreadDAO {
 
     private static final String THREAD_SEARCH_CLAUSE = """
@@ -175,9 +174,31 @@ class ThreadDAOImpl implements ThreadDAO {
             ;
             """;
 
+    /**
+     * The span_weeks lookup repeats the read's {@code groupArray(traces_final_ids)} form on purpose: ClickHouse caches
+     * that scalar subquery, so the lookup costs no extra read, whereas {@code IN (SELECT id FROM traces_final_ids)}
+     * re-reads the set.
+     */
     @VisibleForTesting
     static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
-            WITH <if(traces_final_ids)>traces_final_ids AS (
+            WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
+                SELECT item_id AS thread_model_id, groupUniqArray(queue_id) AS annotation_queue_ids
+                FROM annotation_queue_items
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(!annotation_queue_filters)>AND queue_id = :annotation_queue_id<endif>
+                AND queue_id IN (
+                    SELECT id FROM annotation_queues
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND scope = 'thread'
+                )
+                GROUP BY item_id
+            ), <endif><if(annotation_queue_narrows)>annotation_queue_thread_model_ids AS (
+                SELECT thread_model_id
+                FROM annotation_queue_memberships AS ttaqi
+                WHERE 1 = 1
+                <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
+                <if(annotation_queue_id)> AND has(ttaqi.annotation_queue_ids, :annotation_queue_id)<endif>
+            ), <endif><if(traces_final_ids)>traces_final_ids AS (
                 SELECT id, thread_id
                 FROM traces FINAL
                 WHERE workspace_id = :workspace_id
@@ -188,6 +209,10 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                <if(annotation_queue_narrows)> AND thread_id IN (
+                    SELECT thread_id FROM trace_threads
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    AND id IN (SELECT thread_model_id FROM annotation_queue_thread_model_ids)) <endif>
                 <if(traces_partitioned && search_text)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -300,6 +325,21 @@ class ThreadDAOImpl implements ThreadDAO {
                           <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                       <endif>
                   <endif>
+                  <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                      SELECT id_week FROM span_weeks
+                      WHERE workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      <if(page_pushdown)>
+                          AND trace_id IN (SELECT id FROM traces_final)
+                      <else>
+                          <if(traces_final_ids)>
+                              AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
+                          <else>
+                              <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                              <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                          <endif>
+                      <endif>
+                  )<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), spans_agg AS (
@@ -471,7 +511,6 @@ class ThreadDAOImpl implements ThreadDAO {
                 LIMIT 1 BY id
             ), thread_annotation_queue_ids AS (
                  SELECT thread_id,
-                        groupArray(id) AS annotation_queue_ids,
                         groupArray(tuple(id, name)) AS annotation_queues
                  FROM (
                     SELECT DISTINCT aqi.queue_id as id, aq.name as name, aqi.item_id as thread_id
@@ -563,7 +602,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 AND t.id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
-            <if(!exclude_annotation_queues || annotation_queue_filters || annotation_queue_id)>
+            <if(!exclude_annotation_queues)>
             LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
             <endif>
             WHERE workspace_id = :workspace_id
@@ -589,8 +628,8 @@ class ThreadDAOImpl implements ThreadDAO {
             )
             <endif>
             <if(trace_thread_filters)>AND<trace_thread_filters><endif>
-            <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
-            <if(annotation_queue_id)> AND has(ttaqi.annotation_queue_ids, :annotation_queue_id) <endif>
+            <if(annotation_queue_narrows)> AND tt.thread_model_id IN (SELECT thread_model_id FROM annotation_queue_thread_model_ids) <endif>
+            <if(annotation_queue_filters_match_unqueued)> AND tt.thread_model_id NOT IN (SELECT thread_model_id FROM annotation_queue_memberships AS ttaqi WHERE NOT (<annotation_queue_filters>)) <endif>
             <if(last_received_id)> AND thread_model_id \\< :last_received_id<endif>
             <if(stream)>
             ORDER BY workspace_id, project_id, thread_model_id DESC
@@ -610,7 +649,24 @@ class ThreadDAOImpl implements ThreadDAO {
     // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
     @VisibleForTesting
     static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
-            WITH <if(traces_final_ids)>traces_final_ids AS (
+            WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
+                SELECT item_id AS thread_model_id, groupUniqArray(queue_id) AS annotation_queue_ids
+                FROM annotation_queue_items
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(!annotation_queue_filters)>AND queue_id = :annotation_queue_id<endif>
+                AND queue_id IN (
+                    SELECT id FROM annotation_queues
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND scope = 'thread'
+                )
+                GROUP BY item_id
+            ), <endif><if(annotation_queue_narrows)>annotation_queue_thread_model_ids AS (
+                SELECT thread_model_id
+                FROM annotation_queue_memberships AS ttaqi
+                WHERE 1 = 1
+                <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
+                <if(annotation_queue_id)> AND has(ttaqi.annotation_queue_ids, :annotation_queue_id)<endif>
+            ), <endif><if(traces_final_ids)>traces_final_ids AS (
                 SELECT id, thread_id
                 FROM traces FINAL
                 WHERE workspace_id = :workspace_id
@@ -621,6 +677,10 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                <if(annotation_queue_narrows)> AND thread_id IN (
+                    SELECT thread_id FROM trace_threads
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    AND id IN (SELECT thread_model_id FROM annotation_queue_thread_model_ids)) <endif>
                 <if(traces_partitioned && search_text)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -772,21 +832,6 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM feedback_scores_grouped
             )
             <endif>
-            <if(annotation_queue_filters || annotation_queue_id)>
-            , thread_annotation_queue_ids AS (
-                 SELECT thread_id,
-                        groupArray(id) AS annotation_queue_ids
-                 FROM (
-                    SELECT DISTINCT aq.id as id, aqi.item_id as thread_id
-                    FROM annotation_queue_items aqi
-                    JOIN annotation_queues aq ON aq.id = aqi.queue_id
-                    WHERE aq.scope = 'thread'
-                      AND workspace_id = :workspace_id
-                      AND project_id = :project_id
-                 ) AS annotation_queue_ids_with_thread_id
-                 GROUP BY thread_id
-            )
-            <endif>
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
@@ -845,9 +890,6 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(uuid_from_time || uuid_to_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
-                <if(annotation_queue_filters || annotation_queue_id)>
-                LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
-                <endif>
                 WHERE workspace_id = :workspace_id
                 <if(feedback_scores_filters)>
                 AND thread_model_id IN (
@@ -871,8 +913,8 @@ class ThreadDAOImpl implements ThreadDAO {
                 )
                 <endif>
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
-                <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
-            <if(annotation_queue_id)> AND has(ttaqi.annotation_queue_ids, :annotation_queue_id) <endif>
+                <if(annotation_queue_narrows)> AND tt.thread_model_id IN (SELECT thread_model_id FROM annotation_queue_thread_model_ids) <endif>
+                <if(annotation_queue_filters_match_unqueued)> AND tt.thread_model_id NOT IN (SELECT thread_model_id FROM annotation_queue_memberships AS ttaqi WHERE NOT (<annotation_queue_filters>)) <endif>
             ) AS t
             SETTINGS log_comment = '<log_comment>'
             """;
@@ -951,6 +993,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
                   AND trace_id IN (SELECT DISTINCT id FROM traces_ids)
+                  <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN (SELECT DISTINCT id FROM traces_ids))<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), spans_agg AS (
@@ -1233,6 +1276,11 @@ class ThreadDAOImpl implements ThreadDAO {
     // query_plan_join_swap_table=false: spans_agg is 1:1 in rows with traces but orders of magnitude smaller in
     // bytes, so 'auto' ranks them as a tie and can pick the traces payload as the hash build side (OPIK-8511).
     // Dedupe before <filters> so source/environment read each trace's latest row, as FINAL does in the chart and KPI.
+    /**
+     * The span_weeks lookup repeats the read's {@code groupArray(traces_final_ids)} form on purpose: ClickHouse caches
+     * that scalar subquery, so the lookup costs no extra read, whereas {@code IN (SELECT id FROM traces_final_ids)}
+     * re-reads the set.
+     */
     @VisibleForTesting
     static final String SELECT_TRACE_THREADS_STATS = """
             SELECT
@@ -1265,7 +1313,24 @@ class ThreadDAOImpl implements ThreadDAO {
                 toInt64(0) AS guardrails_failed_count,
                 toInt64(0) AS error_count
             FROM (
-                WITH <if(traces_final_ids)>traces_final_ids AS (
+                WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
+                SELECT item_id AS thread_model_id, groupUniqArray(queue_id) AS annotation_queue_ids
+                FROM annotation_queue_items
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(!annotation_queue_filters)>AND queue_id = :annotation_queue_id<endif>
+                AND queue_id IN (
+                    SELECT id FROM annotation_queues
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND scope = 'thread'
+                )
+                GROUP BY item_id
+            ), <endif><if(annotation_queue_narrows)>annotation_queue_thread_model_ids AS (
+                SELECT thread_model_id
+                FROM annotation_queue_memberships AS ttaqi
+                WHERE 1 = 1
+                <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
+                <if(annotation_queue_id)> AND has(ttaqi.annotation_queue_ids, :annotation_queue_id)<endif>
+            ), <endif><if(traces_final_ids)>traces_final_ids AS (
                     SELECT id, thread_id
                     FROM traces FINAL
                     WHERE workspace_id = :workspace_id
@@ -1276,6 +1341,10 @@ class ThreadDAOImpl implements ThreadDAO {
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                    <if(annotation_queue_narrows)> AND thread_id IN (
+                        SELECT thread_id FROM trace_threads
+                        WHERE workspace_id = :workspace_id AND project_id = :project_id
+                        AND id IN (SELECT thread_model_id FROM annotation_queue_thread_model_ids)) <endif>
                     <if(traces_partitioned && search_text)>
                     AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                         SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -1339,6 +1408,17 @@ class ThreadDAOImpl implements ThreadDAO {
                           <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                           <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                       <endif>
+                      <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                          SELECT id_week FROM span_weeks
+                          WHERE workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          <if(traces_final_ids)>
+                              AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))
+                          <else>
+                              <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                              <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                          <endif>
+                      )<endif>
                     ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ), spans_agg AS (
@@ -1461,18 +1541,6 @@ class ThreadDAOImpl implements ThreadDAO {
                         ) AS feedback_scores
                     FROM feedback_scores_final
                     GROUP BY workspace_id, project_id, entity_id
-                ), thread_annotation_queue_ids AS (
-                     SELECT thread_id,
-                            groupArray(id) AS annotation_queue_ids
-                     FROM (
-                        SELECT DISTINCT aq.id as id, aqi.item_id as thread_id
-                        FROM annotation_queue_items aqi
-                        JOIN annotation_queues aq ON aq.id = aqi.queue_id
-                        WHERE aq.scope = 'thread'
-                          AND workspace_id = :workspace_id
-                          AND project_id = :project_id
-                     ) AS annotation_queue_ids_with_thread_id
-                     GROUP BY thread_id
                 )
                 <if(feedback_scores_empty_filters)>
                  , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -1536,9 +1604,6 @@ class ThreadDAOImpl implements ThreadDAO {
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
-                <if(annotation_queue_filters || annotation_queue_id)>
-                LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
-                <endif>
                 WHERE workspace_id = :workspace_id
                 <if(feedback_scores_filters)>
                 AND thread_model_id IN (
@@ -1562,8 +1627,8 @@ class ThreadDAOImpl implements ThreadDAO {
                 )
                 <endif>
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
-                <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
-                <if(annotation_queue_id)> AND has(ttaqi.annotation_queue_ids, :annotation_queue_id) <endif>
+                <if(annotation_queue_narrows)> AND tt.thread_model_id IN (SELECT thread_model_id FROM annotation_queue_thread_model_ids) <endif>
+                <if(annotation_queue_filters_match_unqueued)> AND tt.thread_model_id NOT IN (SELECT thread_model_id FROM annotation_queue_memberships AS ttaqi WHERE NOT (<annotation_queue_filters>)) <endif>
             ) AS threads
             GROUP BY threads.workspace_id, threads.project_id
             SETTINGS query_plan_join_swap_table = false, log_comment = '<log_comment>'
@@ -1603,12 +1668,17 @@ class ThreadDAOImpl implements ThreadDAO {
      * <p>Only {@code traces_pushdown_filter} is included, not {@code trace_thread_filters} at large: the
      * other TRACE_THREAD filters (status, tags, ...) are applied by the outer query, not inside
      * traces_final_ids, so they would not narrow the prefilter scan and would pay for it for nothing.
+     *
+     * <p>An annotation queue that only keeps queued threads ({@code annotation_queue_narrows}) also activates
+     * it: traces_final_ids then reads only the traces of the queue's threads, so opening a queue no longer
+     * reads every trace's input/output and every span of the project.
      */
     @VisibleForTesting
     static boolean shouldUseTracesFinalIdsPrefilter(TraceSearchCriteria criteria, ST template) {
         return criteria.searchText() != null
                 || template.getAttribute("filters") != null
-                || template.getAttribute("traces_pushdown_filter") != null;
+                || template.getAttribute("traces_pushdown_filter") != null
+                || template.getAttribute("annotation_queue_narrows") != null;
     }
 
     /**
@@ -1671,6 +1741,7 @@ class ThreadDAOImpl implements ThreadDAO {
                                     criteria,
                                     THREAD_SEARCH_CLAUSE,
                                     traceColumnsNonNullable());
+                            addSpanWeeksBound(template);
 
                             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
                             addExcludeFlags(template, criteria);
@@ -1789,6 +1860,7 @@ class ThreadDAOImpl implements ThreadDAO {
     public Mono<TraceThread> findById(@NonNull UUID projectId, @NonNull String threadId, boolean truncate) {
         return makeMonoContextAware((userName, workspaceId) -> asyncTemplate.nonTransaction(connection -> {
             var template = TemplateUtils.newST(SELECT_TRACES_THREAD_BY_ID);
+            addSpanWeeksBound(template);
             template.add("truncate", truncate)
                     .add("log_comment",
                             getLogComment("find_thread_by_id", workspaceId, userName, threadId));
@@ -1835,6 +1907,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     criteria,
                     THREAD_SEARCH_CLAUSE,
                     traceColumnsNonNullable());
+            addSpanWeeksBound(template);
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
             addExcludeFlags(template, criteria);
 
@@ -1874,6 +1947,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     criteria,
                     THREAD_SEARCH_CLAUSE,
                     traceColumnsNonNullable());
+            addSpanWeeksBound(statsSQL);
             statsSQL.add("log_comment", getLogComment("thread_stats", workspaceId, userName, ""));
             addTracesPartitionedFlag(statsSQL);
 
@@ -1998,5 +2072,11 @@ class ThreadDAOImpl implements ThreadDAO {
     private Instant readEpochSentinel(Row row, String fieldName) {
         var value = row.get(fieldName, Instant.class);
         return traceColumnsNonNullable() ? epochToNull(value) : value;
+    }
+
+    private void addSpanWeeksBound(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
+        }
     }
 }

@@ -16,9 +16,7 @@ from opik.integrations.openai import track_openai
 from ... import llm_constants
 from .constants import MODEL_FOR_TESTS
 
-pytestmark = pytest.mark.usefixtures(
-    "ensure_openai_configured", "opik_logs_reach_caplog"
-)
+pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
 CHAT_MESSAGES = [{"role": "user", "content": "Say hi"}]
 RESPONSES_INPUT = "Say hi"
@@ -53,16 +51,9 @@ def _span(fake_backend, name_prefix):
     )
 
 
-@pytest.fixture
-def opik_logs_reach_caplog(monkeypatch):
-    # Opik's root logger doesn't propagate, so caplog would never see its errors.
-    monkeypatch.setattr(logging.getLogger("opik"), "propagate", True)
-
-
 def _error_records(caplog):
-    # Only Opik's own errors count. An unclosed AsyncOpenAI client left by an
-    # earlier test can be garbage-collected mid-test; its aclose() then runs
-    # against that test's closed event loop and logs an unrelated asyncio error.
+    # Only Opik's own errors count: `caplog` also sees third-party noise, such as
+    # asyncio reporting the cleanup of async clients leaked by other tests.
     return [
         record
         for record in caplog.records
@@ -122,6 +113,7 @@ async def test_openai_async_chat_stream__responses_stream_created_before_it_is_r
         async for _ in chat_stream:
             pass
     await other_stream.close()
+    await client.close()
 
     opik.flush_tracker()
 
@@ -143,6 +135,7 @@ async def test_openai_async_responses_stream__chat_stream_created_before_it_is_r
         async for _ in responses_stream:
             pass
     await other_stream.close()
+    await client.close()
 
     opik.flush_tracker()
 

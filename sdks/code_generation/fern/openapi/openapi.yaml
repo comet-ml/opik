@@ -40,6 +40,8 @@ tags:
   description: Internal auto-first-run rollout enrollment
 - name: System analytics queries
   description: Internal endpoints to run free-form analytics SQL
+- name: Dashboard saved queries
+  description: Internal endpoints for the queries Ollie chart widgets run
 - name: System usage
   description: System usage related resource
 - name: Agent Configs
@@ -431,6 +433,66 @@ paths:
         "501":
           description: "Agent Insights is disabled, or Custom Charts is not enabled\
             \ for this workspace"
+  /v1/internal/dashboard-saved-queries:
+    post:
+      tags:
+      - Dashboard saved queries
+      summary: Save a chart query
+      description: Saves the query of an Ollie chart so a dashboard widget can reference
+        it by id.
+      operationId: createDashboardSavedQuery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardSavedQuery"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/internal/dashboard-saved-queries/{id}"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSavedQuery"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Ollie or Custom Charts is not enabled for this workspace
+  /v1/internal/dashboard-saved-queries/{id}:
+    get:
+      tags:
+      - Dashboard saved queries
+      summary: Get a chart query
+      description: Gets a dashboard saved query by id.
+      operationId: getDashboardSavedQuery
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Dashboard saved query
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSavedQuery"
+        "404":
+          description: Not found
+        "501":
+          description: Ollie or Custom Charts is not enabled for this workspace
   /v1/internal/usage/projects:
     post:
       tags:
@@ -2586,6 +2648,63 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/dashboards/{dashboardId}/widgets/{widgetId}/query:
+    post:
+      tags:
+      - Dashboards
+      summary: Run a saved widget query
+      description: Runs the query saved on an Ollie chart widget of this dashboard
+        over the given date range and returns its rows. The query is read from the
+        saved widget; the request carries no SQL. Returns 501 when Ollie or Custom
+        Charts is not enabled for the workspace.
+      operationId: runDashboardWidgetQuery
+      parameters:
+      - name: dashboardId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: widgetId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardWidgetQueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsQueryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: "Dashboard not found, or the widget has no dashboard saved\
+            \ query"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many queries are running; retry after the Retry-After delay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Ollie or Custom Charts is not enabled for this workspace
   /v1/private/datasets/{id}/items/changes:
     post:
       tags:
@@ -4612,6 +4731,63 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/insights-views/{insightsViewId}/widgets/{widgetId}/query:
+    post:
+      tags:
+      - Insights Views
+      summary: Run a saved widget query
+      description: Runs the query saved on an Ollie chart widget of this insights
+        view over the given date range and returns its rows. The query is read from
+        the saved widget; the request carries no SQL. Returns 501 when Ollie or Custom
+        Charts is not enabled for the workspace.
+      operationId: runInsightsViewWidgetQuery
+      parameters:
+      - name: insightsViewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: widgetId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardWidgetQueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsQueryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: "Insights view not found, or the widget has no dashboard saved\
+            \ query"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many queries are running; retry after the Retry-After delay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Ollie or Custom Charts is not enabled for this workspace
   /v1/private/llm/models:
     get:
       tags:
@@ -8771,6 +8947,13 @@ paths:
           description: "Filter traces created up to this time (ISO-8601 format). If\
             \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
+      - name: annotation_queue_id
+        in: query
+        schema:
+          type: string
+          description: Compute stats over the traces belonging to this annotation
+            queue and scope feedback scores to it
+          format: uuid
       responses:
         "200":
           description: Trace stats resource
@@ -9959,6 +10142,31 @@ components:
           type: string
           description: Restrict query to this project. Omit to query the whole workspace.
           format: uuid
+    DashboardSavedQuery:
+      required:
+      - sql
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          description: Project the query is bounded to. Omit for every project in
+            the workspace.
+          format: uuid
+        sql:
+          maxLength: 65536
+          minLength: 0
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
     UsageProjectsResponse:
       type: object
       properties:
@@ -14095,6 +14303,19 @@ components:
           type: array
           items:
             type: string
+    DashboardWidgetQueryRequest:
+      type: object
+      properties:
+        interval_start:
+          type: string
+          description: "Start of the date range, bound to {{window_start}} in the\
+            \ dashboard saved query. Omit for all time."
+          format: date-time
+        interval_end:
+          type: string
+          description: "End of the date range, bound to {{window_end}} in the dashboard\
+            \ saved query. Omit for now."
+          format: date-time
     DashboardUpdate_Public:
       type: object
       properties:
@@ -21793,6 +22014,7 @@ components:
       - datasetExportEnabled
       - datasetVersioningEnabled
       - demoDataEnabled
+      - eventBridgeAlertsEnabled
       - exportEnabled
       - geminiProviderEnabled
       - guardrailsEnabled
@@ -21863,11 +22085,16 @@ components:
           type: boolean
         annotationQueueAutomationEnabled:
           type: boolean
+        eventBridgeAlertsEnabled:
+          type: boolean
         defaultPageSize:
           maximum: 100
           minimum: 5
           type: integer
           format: int32
+        customChartsEnabledForWorkspace:
+          type: boolean
+          readOnly: true
     SpanBatchUpdate:
       required:
       - ids

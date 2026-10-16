@@ -52,16 +52,18 @@ public class AlertPayloadAdapter {
         @SuppressWarnings("unchecked")
         List<String> metadatas = (List<String>) payload.getOrDefault("metadata", List.of());
 
-        var deserializeMetadata = metadatas.stream()
-                .map(metadata -> JsonUtils.readValue(metadata, payloadTypePerEventType(event.getEventType())))
-                .toList();
-
         Map<String, Object> updatedPayload = new HashMap<>(payload);
-        updatedPayload.put("metadata", deserializeMetadata);
+        updatedPayload.put("metadata", deserializeMetadata(metadatas, event.getEventType()));
 
         return event.toBuilder()
                 .payload(updatedPayload)
                 .build();
+    }
+
+    public static List<?> deserializeMetadata(@NonNull List<String> metadatas, @NonNull AlertEventType eventType) {
+        return metadatas.stream()
+                .map(metadata -> JsonUtils.readValue(metadata, payloadTypePerEventType(eventType)))
+                .toList();
     }
 
     public static WebhookEvent<Map<String, Object>> prepareWebhookJsonPayload(

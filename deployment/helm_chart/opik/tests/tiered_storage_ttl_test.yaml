@@ -38,19 +38,42 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: applies the default table and TTL, and never materializes it
+  - it: applies the default table and TTL, and does not materialize by default
     asserts:
       - isKind:
           of: Job
-      - matchRegex:
-          path: spec.template.spec.containers[0].args[0]
-          pattern: "apply traces_local 13"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TTL_TABLES, value: "traces_local:13"}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TTL_MATERIALIZE, value: "false"}
       - matchRegex:
           path: spec.template.spec.containers[0].args[0]
           pattern: "materialize_ttl_after_modify = 0"
-      - notMatchRegex:
-          path: spec.template.spec.containers[0].args[0]
-          pattern: "ALTER TABLE [^\"]* MATERIALIZE TTL"
+
+  - it: turns the backfill on with materialize.enabled
+    set:
+      clickhouse.tieredStorage.ttl.materialize.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TTL_MATERIALIZE, value: "true"}
+
+  - it: fails the render when materialize.enabled is a string, not a boolean
+    set:
+      clickhouse.tieredStorage.ttl.materialize.enabled: "false"
+    asserts:
+      - failedTemplate:
+          errorMessage: "clickhouse.tieredStorage.ttl.materialize.enabled (false) must be true or false"
+
+  - it: does not materialize when materialize is removed from the values
+    set:
+      clickhouse.tieredStorage.ttl.materialize: null
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TTL_MATERIALIZE, value: "false"}
 
   - it: renders one apply per configured table
     set:
@@ -60,18 +83,18 @@ tests:
         - name: spans_local
           moveAfterWeeks: 26
     asserts:
-      - matchRegex:
-          path: spec.template.spec.containers[0].args[0]
-          pattern: "apply traces_local 13\\s+apply spans_local 26"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TTL_TABLES, value: "traces_local:13 spans_local:26"}
 
-  - it: takes only its four settings from the backend's sources, never the whole env
+  - it: takes only its four settings from the backend's sources (plus its own config), never the whole env
     asserts:
       - equal:
           path: spec.template.spec.containers[0].env[0].valueFrom.configMapKeyRef
           value: {name: opik-backend, key: ANALYTICS_DB_HOST, optional: true}
       - lengthEqual:
           path: spec.template.spec.containers[0].env
-          count: 4
+          count: 7
       - notExists:
           path: spec.template.spec.containers[0].envFrom
 
@@ -82,7 +105,7 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.containers[0].env
-          count: 8
+          count: 11
       - equal:
           path: spec.template.spec.containers[0].env[7]
           value:
@@ -141,7 +164,7 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.containers[0].env
-          count: 8
+          count: 11
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -169,7 +192,7 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.containers[0].env
-          count: 4
+          count: 7
 
   - it: renders the default deadline
     asserts:

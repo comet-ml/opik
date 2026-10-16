@@ -1,8 +1,11 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
 import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.utils.JsonUtils;
@@ -30,13 +33,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
-import java.util.stream.Stream;
 
 @Slf4j
 @RequiredArgsConstructor
 public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
 
     private final @NonNull LlmProviderClientConfig clientConfig;
+    private final @NonNull LlmModelRegistryService registryService;
 
     CloseableVertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
         return buildOwnedClient(apiKey, request, (client, model) -> {
@@ -49,7 +52,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             Optional.ofNullable(request.stop()).ifPresent(builder::stopSequences);
             Optional.ofNullable(request.presencePenalty()).ifPresent(builder::presencePenalty);
             Optional.ofNullable(request.frequencyPenalty()).ifPresent(builder::frequencyPenalty);
-            maxOutputTokens(request).ifPresent(builder::maxOutputTokens);
+            GeminiMaxOutputTokens.firstPositive(request).ifPresent(builder::maxOutputTokens);
             Optional.ofNullable(request.seed()).ifPresent(builder::seed);
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
@@ -70,21 +73,13 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             Optional.ofNullable(request.stop()).ifPresent(builder::stopSequences);
             Optional.ofNullable(request.presencePenalty()).ifPresent(builder::presencePenalty);
             Optional.ofNullable(request.frequencyPenalty()).ifPresent(builder::frequencyPenalty);
-            maxOutputTokens(request).ifPresent(builder::maxOutputTokens);
+            GeminiMaxOutputTokens.firstPositive(request).ifPresent(builder::maxOutputTokens);
             Optional.ofNullable(request.seed()).ifPresent(builder::seed);
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
 
             return new CloseableVertexAiStreamingChatModel(builder.build(), client);
         });
-    }
-
-    // Zero is never sent: the slider goes down to 0, and a zero cap could only ever produce an empty answer.
-    static Optional<Integer> maxOutputTokens(ChatCompletionRequest request) {
-        return Stream.of(request.maxCompletionTokens(), request.maxTokens())
-                .filter(Objects::nonNull)
-                .filter(tokens -> tokens > 0)
-                .findFirst();
     }
 
     /**
@@ -106,12 +101,16 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     // Built here rather than by the model builder, which keeps its client private and is not closeable.
     private <T> T buildOwnedClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
             OwnedClientFactory<T> factory) {
-        var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
+        // The enum fallback mirrors LlmProviderFactoryImpl's routing, so every model it sends here can be built here.
+        var modelId = registryService.findModel(request.model())
+                .filter(result -> result.provider() == LlmProvider.VERTEX_AI)
+                .map(result -> result.model().id())
+                .or(() -> VertexAIModelName.byQualifiedName(request.model()).map(VertexAIModelName::toString))
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported model: %s".formatted(request.model())));
 
         Client client = buildClient(apiKey);
         try {
-            return factory.create(client, vertexAIModelName.toString());
+            return factory.create(client, modelId);
         } catch (RuntimeException e) {
             closeSuppressing(client, e);
             throw e;

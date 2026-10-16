@@ -34,7 +34,9 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     projectHomepageEnabled: core.serialization.boolean(),
     onlineScoringTracingEnabled: core.serialization.boolean(),
     annotationQueueAutomationEnabled: core.serialization.boolean(),
+    eventBridgeAlertsEnabled: core.serialization.boolean(),
     defaultPageSize: core.serialization.number().optional(),
+    customChartsEnabledForWorkspace: core.serialization.boolean().optional(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -65,6 +67,8 @@ export declare namespace ServiceTogglesConfig {
         projectHomepageEnabled: boolean;
         onlineScoringTracingEnabled: boolean;
         annotationQueueAutomationEnabled: boolean;
+        eventBridgeAlertsEnabled: boolean;
         defaultPageSize?: number | null;
+        customChartsEnabledForWorkspace?: boolean | null;
     }
 }

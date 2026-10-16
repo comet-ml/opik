@@ -49,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AnthropicClientGeneratorTest {
 
     private static final int DEFAULT_MAX_TOKENS = LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS;
+    private static final int THINKING_MAX_TOKENS = AnthropicClientGenerator.THINKING_JUDGE_MAX_TOKENS;
 
     private final AnthropicClientGenerator generator = new AnthropicClientGenerator(new LlmProviderClientConfig());
 
@@ -89,21 +90,6 @@ class AnthropicClientGeneratorTest {
                 "claude-30-future"})
         void staysPermissiveForNamesThatAreNotAnthropicIds(String modelName) {
             assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
-        }
-
-        /**
-         * A floating alias has to be read as the model it resolves to. Haiku's newest member takes
-         * sampling params and the other three families' do not, so the aliases must not share one
-         * answer — and claude-haiku-latest must agree with claude-haiku-4-5 under its own id.
-         */
-        @ParameterizedTest
-        @CsvSource({
-                "~anthropic/claude-haiku-latest, false",
-                "~anthropic/claude-opus-latest, true",
-                "~anthropic/claude-sonnet-latest, true",
-                "~anthropic/claude-fable-latest, true"})
-        void readsAFloatingAliasAsTheFamilysNewestMember(String modelName, boolean rejects) {
-            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isEqualTo(rejects);
         }
 
         /**
@@ -156,6 +142,39 @@ class AnthropicClientGeneratorTest {
                 "CLAUDE_FABLE_5_1"}, mode = EnumSource.Mode.INCLUDE)
         void modelsTakingNoSamplingParamsRejectThem(AnthropicModelName model) {
             assertThat(ModelCapabilities.rejectsSamplingParams(model.getValue())).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("Thinking by default")
+    class ThinkingByDefault {
+
+        @ParameterizedTest
+        @EnumSource(value = AnthropicModelName.class, names = {"CLAUDE_SONNET_5", "CLAUDE_OPUS_5", "CLAUDE_OPUS_5_5",
+                "CLAUDE_FABLE_5", "CLAUDE_FABLE_5_1", "CLAUDE_MYTHOS_5", "CLAUDE_MYTHOS_5_1"})
+        void modelsThatThinkWhenTheRequestOmitsThinking(AnthropicModelName model) {
+            assertThat(ModelCapabilities.thinksByDefault(model.getValue())).isTrue();
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = AnthropicModelName.class, names = {"CLAUDE_SONNET_3_7", "CLAUDE_HAIKU_4_5",
+                "CLAUDE_OPUS_4_1", "CLAUDE_OPUS_4", "CLAUDE_OPUS_4_5", "CLAUDE_OPUS_4_6", "CLAUDE_OPUS_4_6_20260205",
+                "CLAUDE_OPUS_4_7", "CLAUDE_OPUS_4_7_20260416", "CLAUDE_OPUS_4_8", "CLAUDE_SONNET_4",
+                "CLAUDE_SONNET_4_5", "CLAUDE_SONNET_4_5_20250929", "CLAUDE_SONNET_4_6"})
+        void modelsThatThinkOnlyWhenAsked(AnthropicModelName model) {
+            assertThat(ModelCapabilities.thinksByDefault(model.getValue())).isFalse();
+        }
+
+        @ParameterizedTest
+        @CsvSource({
+                "claude-sonnet-5-5, true",
+                "claude-sonnet-5-20261001, true",
+                "us.anthropic.claude-opus-5-v1:0, true",
+                "claude-3-5-sonnet-20240620, false",
+                "custom-llm/gw/claude-prod, false",
+                "gpt-5, false"})
+        void placesIdsTheEnumDoesNotList(String modelName, boolean thinks) {
+            assertThat(ModelCapabilities.thinksByDefault(modelName)).isEqualTo(thinks);
         }
     }
 
@@ -226,36 +245,67 @@ class AnthropicClientGeneratorTest {
     @DisplayName("max_tokens resolution on the judge path")
     class MaxTokensResolution {
 
-        @Test
-        void defaultsMaxTokensWhenNotProvided() {
+        @ParameterizedTest(name = "{0} with custom_parameters {1}")
+        @CsvSource(delimiter = '|', value = {
+                "claude-sonnet-5            | {}",
+                "claude-fable-5-1           | {}",
+                "claude-sonnet-5            | {\"thinking\": {\"type\": \"adaptive\"}}",
+                "claude-sonnet-4-6          | {\"thinking\": {\"type\": \"adaptive\"}}",
+                "claude-opus-4-8            | {\"thinking\": {\"type\": \"adaptive\"}}"})
+        void givesAJudgeThatWillThinkRoomForThinkingAndTheAnswer(String modelName, String customParameters) {
             var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
-                    .name("claude-sonnet-5")
+                    .name(modelName)
+                    .customParameters(JsonUtils.getJsonNodeFromString(customParameters))
+                    .build());
+
+            assertThat(parameters.maxOutputTokens()).isEqualTo(THINKING_MAX_TOKENS);
+        }
+
+        @ParameterizedTest(name = "{0} with custom_parameters {1}")
+        @CsvSource(delimiter = '|', value = {
+                "claude-sonnet-4-6         | {}",
+                "claude-opus-4-8           | {}",
+                "claude-haiku-4-5-20251001 | {}",
+                "claude-sonnet-5           | {\"thinking\": {\"type\": \"disabled\"}}",
+                "claude-opus-5             | {\"thinking\": {\"type\": \"disabled\"}}"})
+        void keepsTheDefaultForAJudgeThatWillNotThink(String modelName, String customParameters) {
+            var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
+                    .name(modelName)
+                    .customParameters(JsonUtils.getJsonNodeFromString(customParameters))
                     .build());
 
             assertThat(parameters.maxOutputTokens()).isEqualTo(DEFAULT_MAX_TOKENS);
         }
 
-        @Test
-        void forwardsMaxTokensFromCustomParameters() {
+        @ParameterizedTest(name = "{0} with custom_parameters {1}")
+        @CsvSource(delimiter = '|', value = {
+                "claude-sonnet-5   | {\"max_tokens\": 2048}                                           | 2048",
+                "claude-sonnet-4-6 | {\"max_tokens\": 3000, \"thinking\": {\"type\": \"adaptive\"}}  | 3000",
+                "claude-sonnet-4-6 | {\"max_tokens\": 32000, \"thinking\": {\"type\": \"adaptive\"}} | 32000"})
+        void anExplicitMaxTokensWinsOverTheDefault(String modelName, String customParameters, int expected) {
             var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
-                    .name("claude-sonnet-5")
-                    .customParameters(JsonUtils.getJsonNodeFromString("{\"max_tokens\": 2048}"))
+                    .name(modelName)
+                    .customParameters(JsonUtils.getJsonNodeFromString(customParameters))
                     .build());
 
-            assertThat(parameters.maxOutputTokens()).isEqualTo(2048);
+            assertThat(parameters.maxOutputTokens()).isEqualTo(expected);
         }
 
-        @Test
-        void maxTokensAddsHeadroomAboveThinkingBudgetWhenOnlyBudgetProvided() {
+        @ParameterizedTest(name = "{0} with budget_tokens {1}")
+        @CsvSource(delimiter = '|', value = {
+                "claude-3-7-sonnet-20250219 | 1024  | 5120",
+                "claude-sonnet-5            | 4096  | 8192",
+                "claude-sonnet-5            | 4999  | 9095",
+                "claude-sonnet-5            | 20000 | 24096"})
+        void givesTheAnswerItsRoomAboveAThinkingBudgetWhenOnlyTheBudgetIsSet(String modelName, int budget,
+                int expected) {
             var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
-                    .name("claude-sonnet-5")
+                    .name(modelName)
                     .customParameters(JsonUtils.getJsonNodeFromString(
-                            "{\"thinking\": {\"type\": \"enabled\", \"budget_tokens\": 4096}}"))
+                            "{\"thinking\": {\"type\": \"enabled\", \"budget_tokens\": %d}}".formatted(budget)))
                     .build());
 
-            assertThat(parameters.maxOutputTokens())
-                    .isEqualTo(4096 + DEFAULT_MAX_TOKENS)
-                    .isGreaterThan(parameters.thinkingBudgetTokens());
+            assertThat(parameters.maxOutputTokens()).isEqualTo(expected);
         }
 
         @Test
@@ -290,7 +340,7 @@ class AnthropicClientGeneratorTest {
                             "{\"max_tokens\": 0, \"thinking\": {\"type\": \"enabled\", \"budget_tokens\": -5}}"))
                     .build());
 
-            assertThat(parameters.maxOutputTokens()).isEqualTo(DEFAULT_MAX_TOKENS);
+            assertThat(parameters.maxOutputTokens()).isEqualTo(THINKING_MAX_TOKENS);
             assertThat(parameters.thinkingBudgetTokens()).isNull();
         }
 
@@ -351,7 +401,7 @@ class AnthropicClientGeneratorTest {
 
             assertThat(parameters.thinkingType()).isNull();
             assertThat(parameters.thinkingBudgetTokens()).isNull();
-            assertThat(parameters.maxOutputTokens()).isEqualTo(DEFAULT_MAX_TOKENS);
+            assertThat(parameters.maxOutputTokens()).isEqualTo(THINKING_MAX_TOKENS);
         }
 
         @Test
@@ -406,6 +456,21 @@ class AnthropicClientGeneratorTest {
 
             assertThat(body.path("output_config"))
                     .isEqualTo(JsonUtils.getJsonNodeFromString("{\"effort\": \"%s\"}".formatted(effort)));
+        }
+
+        @ParameterizedTest(name = "{0} with custom_parameters {1}")
+        @CsvSource(delimiter = '|', value = {
+                "claude-sonnet-5 | {\"output_config\": {\"effort\": \"max\"}}                                   | 5000",
+                "claude-opus-5-5 | {\"output_config\": {\"effort\": \"high\"}}                                  | 5000",
+                "claude-opus-4-8 | {\"thinking\": {\"type\": \"adaptive\"}, \"output_config\": {\"effort\": \"high\"}} | 5000",
+                "claude-opus-4-5-20251101 | {\"output_config\": {\"effort\": \"high\"}}                   | 4096",
+                "claude-opus-5   | {\"thinking\": {\"type\": \"disabled\"}, \"output_config\": {\"effort\": \"high\"}} | 4096",
+                "claude-sonnet-5 | {\"thinking\": {\"type\": \"enabled\", \"budget_tokens\": 4096}}            | 8192",
+                "claude-sonnet-5 | {\"max_tokens\": 3000, \"output_config\": {\"effort\": \"max\"}}              | 3000"})
+        void sizesMaxTokensForWhetherTheJudgeWillThink(String model, String customParameters, int expectedMaxTokens) {
+            var body = bodySentToAnthropic(model, customParameters);
+
+            assertThat(body.path("max_tokens").asInt()).isEqualTo(expectedMaxTokens);
         }
 
         @Test

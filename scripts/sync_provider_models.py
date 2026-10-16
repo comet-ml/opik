@@ -18,6 +18,14 @@ Usage:
 
   # With provider API keys for better coverage:
   OPENAI_API_KEY=sk-... ANTHROPIC_API_KEY=sk-... GEMINI_API_KEY=... python scripts/sync_provider_models.py --dry-run
+
+A provider whose API call fails keeps its current models in every file; the others still sync.
+
+Exit codes (with --dry-run, "written" means "would be written"):
+  0  files written, every provider API call succeeded
+  1  nothing to write, every provider API call succeeded
+  3  files written, but at least one provider API call failed
+  4  nothing to write, and at least one provider API call failed
 """
 
 import argparse
@@ -147,6 +155,7 @@ OPENAI_DROPDOWN_EXCLUDE = [
     r"-chat-latest$",
     r"^o1-preview",
     r"^o1-mini",
+    r"^gpt-live",               # realtime voice model, 400 "not a chat model" on /v1/chat/completions
 ]
 
 GEMINI_DROPDOWN_EXCLUDE = [
@@ -166,11 +175,14 @@ GEMINI_DROPDOWN_EXCLUDE = [
     # sync sources.
     r"^gemma-(2|3)-",
     r"^gemini-gemma-",
+    r"^gemini-omni",             # video generation, 400 "only supports Interactions API" on generateContent
+    r"^lyria-",                  # music generation, answers with audio the playground cannot show
 ]
 
 VERTEXAI_DROPDOWN_EXCLUDE = [
     r"-exp-",                    # experimental
     r"-preview-\d{2}-\d{2}$",   # dated previews
+    r"/gemini-omni",             # video generation, Interactions API only
 ]
 
 
@@ -683,6 +695,7 @@ _TS_PROVIDER_ORDER = ["openai", "anthropic", "openrouter", "gemini", "vertexai"]
 def regenerate_providers_ts(
     content: str,
     models_by_provider: dict[str, list[ModelEntry]],
+    kept_providers: frozenset[str] | set[str] = frozenset(),
 ) -> str:
     """Regenerate the PROVIDER_MODEL_TYPE enum sections in providers.ts."""
     # Find the enum block
@@ -696,8 +709,23 @@ def regenerate_providers_ts(
     # Find the closing brace of the enum
     enum_close = content.index("\n}", opik_free_end)
 
+    enum_body = content[opik_free_end:enum_close]
+    marker_starts = sorted(
+        (enum_body.index(f"  {marker}"), provider)
+        for provider, marker in _TS_ENUM_SECTION_MARKERS.items()
+        if f"  {marker}" in enum_body
+    )
+    section_ends = [start for start, _ in marker_starts[1:]] + [len(enum_body)]
+    existing_sections = {
+        provider: enum_body[start:end].rstrip("\n")
+        for (start, provider), end in zip(marker_starts, section_ends)
+    }
+
     sections = []
     for provider in _TS_PROVIDER_ORDER:
+        if provider in kept_providers and provider in existing_sections:
+            sections.append(existing_sections[provider])
+            continue
         marker = _TS_ENUM_SECTION_MARKERS[provider]
         entries = models_by_provider.get(provider, [])
         lines = [f"  {marker}"]
@@ -818,6 +846,7 @@ def sync_simple_provider(
     label_fn,
     java_format: str = "2arg",
     label_overrides: dict[str, str] | None = None,
+    yaml_structured_output_ids: set[str] | None = None,
 ) -> tuple[str, list[ModelEntry], list[str], list[str]]:
     """Generic add-only sync for OpenAI/Anthropic/Gemini providers.
 
@@ -836,6 +865,7 @@ def sync_simple_provider(
 
     source_dict = {k: so for k, so in source_models}
     label_overrides = label_overrides or {}
+    yaml_structured_output_ids = yaml_structured_output_ids or set()
 
     # Preserve hand-crafted enum names from existing Java entries
     if java_format == "2arg":
@@ -880,7 +910,10 @@ def sync_simple_provider(
         model_entries.append(ModelEntry(
             enum_name=enum_name,
             value=value,
-            structured_output=current_so_by_value.get(value, source_dict.get(value, False)),
+            # A 1-arg enum stores no flag, so a kept model that left the source would otherwise lose the one the YAML has.
+            structured_output=current_so_by_value.get(
+                value, source_dict.get(value, value in yaml_structured_output_ids)
+            ),
             label=label,
         ))
 
@@ -1002,11 +1035,36 @@ def _parse_yaml_reasoning_flags(yaml_content: str) -> dict[str, dict[str, bool]]
     return result
 
 
+def _yaml_sections(yaml_content: str) -> dict[str, list[str]]:
+    sections: dict[str, list[str]] = {}
+    current_section: list[str] | None = None
+    for line in yaml_content.splitlines():
+        provider_match = re.match(r'^(\S[^:]+):\s*$', line)
+        if provider_match:
+            current_section = sections.setdefault(provider_match.group(1), [])
+        if current_section is not None:
+            current_section.append(line)
+    return sections
+
+
+def _yaml_structured_output_ids(yaml_content: str, section: str) -> set[str]:
+    ids: set[str] = set()
+    current_id: str | None = None
+    for line in _yaml_sections(yaml_content).get(section, []):
+        id_match = re.match(r'^\s+- id:\s+"([^"]+)"', line)
+        if id_match:
+            current_id = id_match.group(1)
+        elif current_id and re.match(r'^\s+structuredOutput:\s+true', line):
+            ids.add(current_id)
+    return ids
+
+
 def regenerate_llm_models_yaml(
     existing_content: str,
     models_by_provider: dict[str, list[ModelEntry]],
     dropdown_by_provider: dict[str, list[ModelEntry]] | None = None,
     openai_reasoning: dict[str, bool] | None = None,
+    kept_providers: frozenset[str] | set[str] = frozenset(),
 ) -> str:
     """
     Regenerate llm-models-default.yaml from the synced model entries.
@@ -1026,16 +1084,21 @@ def regenerate_llm_models_yaml(
       reasoning tokens", which is broader than what the frontend treats as
       a reasoning model, and nothing reads the flag for other providers.
     - Sections for providers not managed here (bedrock, ollama, opik-free,
-      custom-llm) are preserved as-is if present.
+      custom-llm), and for the managed providers in `kept_providers`, are
+      preserved as-is if present.
     """
     # Carry over existing reasoning flags by provider/model-id
     reasoning_flags = _parse_yaml_reasoning_flags(existing_content)
+    existing_sections = _yaml_sections(existing_content)
     dropdown_by_provider = dropdown_by_provider or {}
     openai_reasoning = openai_reasoning or {}
 
     lines: list[str] = []
 
     for provider_key, yaml_key in _PROVIDER_TO_YAML_KEY.items():
+        if provider_key in kept_providers and yaml_key in existing_sections:
+            lines.extend(existing_sections[yaml_key])
+            continue
         entries = models_by_provider.get(provider_key, [])
         provider_reasoning = reasoning_flags.get(yaml_key, {})
 
@@ -1087,26 +1150,9 @@ def regenerate_llm_models_yaml(
 
     # Preserve any provider sections not managed by the sync script
     managed_yaml_keys = set(_PROVIDER_TO_YAML_KEY.values())
-    unmanaged_lines: list[str] = []
-    current_section: list[str] = []
-    current_key: str | None = None
-
-    for line in existing_content.splitlines():
-        provider_match = re.match(r'^(\S[^:]+):\s*$', line)
-        if provider_match:
-            key = provider_match.group(1)
-            if current_key and current_key not in managed_yaml_keys:
-                unmanaged_lines.extend(current_section)
-            current_key = key
-            current_section = [line]
-        else:
-            current_section.append(line)
-
-    if current_key and current_key not in managed_yaml_keys:
-        unmanaged_lines.extend(current_section)
-
-    if unmanaged_lines:
-        lines.extend(unmanaged_lines)
+    for key, section in existing_sections.items():
+        if key not in managed_yaml_keys:
+            lines.extend(section)
 
     return "\n".join(lines) + "\n"
 
@@ -1184,13 +1230,10 @@ def _should_write_files(
     seeded_reasoning_ids: list[str],
     cleared_reasoning_ids: list[str],
     force_regen: bool,
-    fell_back: bool,
 ) -> bool:
-    # Any provider falling back blocks every file, not only that provider's: the files ship together, so a partial sync never publishes.
-    # A failed provider is rebuilt from the prices JSON, or for OpenRouter from an empty API list, so even a real addition elsewhere would ship degraded data.
     if force_regen:
         return True
-    return not fell_back and (total_added > 0 or bool(seeded_reasoning_ids) or bool(cleared_reasoning_ids))
+    return total_added > 0 or bool(seeded_reasoning_ids) or bool(cleared_reasoning_ids)
 
 
 def main():
@@ -1204,7 +1247,7 @@ def main():
     openai_key = os.environ.get("OPENAI_API_KEY")
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
     gemini_key = os.environ.get("GEMINI_API_KEY")
-    fell_back = False
+    failed_providers: set[str] = set()
 
     prices = load_model_prices()
     so_lookup = _build_structured_output_lookup(prices)
@@ -1218,8 +1261,8 @@ def main():
         openrouter_api_models = fetch_openrouter_models()
         print(f"  Found {len(openrouter_api_models)} chat models from API", file=sys.stderr)
     except Exception as e:
-        print(f"  WARNING: OpenRouter API fetch failed: {e}", file=sys.stderr)
-        fell_back = True
+        print(f"::error::OpenRouter API fetch failed, kept its current models: {e}", file=sys.stderr)
+        failed_providers.add("openrouter")
         openrouter_api_models = []
 
     # OpenAI
@@ -1230,9 +1273,9 @@ def main():
             openai_models = [(id_, so_lookup.get(id_, False)) for id_ in openai_ids]
             print(f"  Found {len(openai_models)} models from API", file=sys.stderr)
         except Exception as e:
-            print(f"  WARNING: OpenAI API fetch failed, falling back to prices JSON: {e}", file=sys.stderr)
-            fell_back = True
-            openai_models = extract_models_from_prices(prices, "openai", OPENAI_EXCLUDE_PATTERNS)
+            print(f"::error::OpenAI API fetch failed, kept its current models: {e}", file=sys.stderr)
+            failed_providers.add("openai")
+            openai_models = []
     else:
         print("  OpenAI: using prices JSON (no OPENAI_API_KEY)", file=sys.stderr)
         openai_models = extract_models_from_prices(prices, "openai", OPENAI_EXCLUDE_PATTERNS)
@@ -1247,9 +1290,9 @@ def main():
             anthropic_labels = {id_: name for id_, name in anthropic_api if name}
             print(f"  Found {len(anthropic_models)} models from API", file=sys.stderr)
         except Exception as e:
-            print(f"::warning::Anthropic API fetch failed, falling back to prices JSON (model list will lack API display names): {e}", file=sys.stderr)
-            fell_back = True
-            anthropic_models = extract_models_from_prices(prices, "anthropic", ANTHROPIC_EXCLUDE_PATTERNS)
+            print(f"::error::Anthropic API fetch failed, kept its current models: {e}", file=sys.stderr)
+            failed_providers.add("anthropic")
+            anthropic_models = []
     else:
         print("::warning::Anthropic: using prices JSON (no ANTHROPIC_API_KEY); model list will lack API display names", file=sys.stderr)
         anthropic_models = extract_models_from_prices(prices, "anthropic", ANTHROPIC_EXCLUDE_PATTERNS)
@@ -1264,11 +1307,9 @@ def main():
             gemini_labels = {id_: name for id_, name in gemini_api if name}
             print(f"  Found {len(gemini_models)} models from API", file=sys.stderr)
         except Exception as e:
-            print(f"  WARNING: Gemini API fetch failed, falling back to prices JSON: {e}", file=sys.stderr)
-            fell_back = True
-            gemini_models = extract_models_from_prices(
-                prices, "gemini", GEMINI_EXCLUDE_PATTERNS, key_prefix="gemini/"
-            )
+            print(f"::error::Gemini API fetch failed, kept its current Gemini and Vertex AI models (Vertex AI labels come from it): {e}", file=sys.stderr)
+            failed_providers.add("gemini")
+            gemini_models = []
     else:
         print("  Gemini: using prices JSON (no GEMINI_API_KEY)", file=sys.stderr)
         gemini_models = extract_models_from_prices(
@@ -1278,6 +1319,9 @@ def main():
     # VertexAI (always from prices JSON, but can use Gemini API labels)
     vertexai_models = _get_vertexai_models_from_prices(prices)
 
+    # A failed provider keeps its current entries in every file; Vertex AI goes with Gemini, whose labels it would otherwise lose.
+    kept_providers = failed_providers | ({"vertexai"} if "gemini" in failed_providers else set())
+
     # 2. Read current files
     or_java = read_file(OPENROUTER_JAVA)
     oa_java = read_file(OPENAI_JAVA)
@@ -1286,6 +1330,7 @@ def main():
     va_java = read_file(VERTEXAI_JAVA)
     providers_ts = read_file(PROVIDERS_TS)
     models_data_ts = read_file(MODELS_DATA_TS)
+    llm_models_yaml_content = read_file(LLM_MODELS_YAML)
 
     # 3. Sync each provider
     all_changes = {}
@@ -1303,6 +1348,7 @@ def main():
     new_an_java, an_entries, an_added, an_stale, an_collisions = sync_simple_provider(
         "anthropic", anthropic_models, an_java, generate_anthropic_label, "1arg",
         label_overrides=anthropic_labels,
+        yaml_structured_output_ids=_yaml_structured_output_ids(llm_models_yaml_content, "anthropic"),
     )
     all_changes["anthropic"] = {"entries": an_entries, "added": an_added, "stale": an_stale, "collisions": an_collisions}
 
@@ -1321,27 +1367,30 @@ def main():
     # 4. Regenerate TypeScript files
     # TS enum (providers.ts) gets ALL models — same as Java enums
     models_by_provider = {k: v["entries"] for k, v in all_changes.items()}
-    new_providers_ts = regenerate_providers_ts(providers_ts, models_by_provider)
+    new_providers_ts = regenerate_providers_ts(providers_ts, models_by_provider, kept_providers)
 
     # Dropdown (src/constants/providerModels.ts) gets curated subset — filtered and sorted
     dropdown_by_provider = {
         provider: filter_for_dropdown(entries, provider, deprecated)
         for provider, entries in models_by_provider.items()
     }
-    new_models_data_ts = regenerate_models_data_ts(models_data_ts, dropdown_by_provider)
+    new_models_data_ts = regenerate_models_data_ts(
+        models_data_ts,
+        {provider: entries for provider, entries in dropdown_by_provider.items() if provider not in kept_providers},
+    )
 
     # Regenerate llm-models-default.yaml with the full model list per provider
     # so the YAML stays a superset and the backend's classpath fallback covers
     # every routable model. Dropdown-curated entries lead their provider
     # section in curated order and carry human-readable labels; the rest
     # follow alphabetically without a label.
-    llm_models_yaml_content = read_file(LLM_MODELS_YAML)
     openai_reasoning = _build_reasoning_lookup(prices)
     new_llm_models_yaml = regenerate_llm_models_yaml(
         llm_models_yaml_content, models_by_provider, dropdown_by_provider,
         openai_reasoning=openai_reasoning,
+        kept_providers=kept_providers,
     )
-    seeded_reasoning_ids = _seeded_reasoning_ids(
+    seeded_reasoning_ids = [] if "openai" in kept_providers else _seeded_reasoning_ids(
         llm_models_yaml_content, models_by_provider["openai"], openai_reasoning,
     )
     cleared_reasoning_ids = _cleared_reasoning_ids(llm_models_yaml_content, new_llm_models_yaml)
@@ -1351,6 +1400,11 @@ def main():
     total_stale = 0
     total_deprecated = 0
     for provider, changes in all_changes.items():
+        if provider in kept_providers:
+            print(f"### {provider.title()}")
+            print("- Not synced: its API call failed, so its current models were kept unchanged.")
+            print()
+            continue
         added = changes["added"]
         stale = changes.get("stale", [])
         total_added += len(added)
@@ -1392,15 +1446,13 @@ def main():
         print()
 
     if not _should_write_files(
-        total_added, seeded_reasoning_ids, cleared_reasoning_ids, args.force_regen, fell_back,
+        total_added, seeded_reasoning_ids, cleared_reasoning_ids, args.force_regen,
     ):
-        if fell_back and (total_added > 0 or seeded_reasoning_ids or cleared_reasoning_ids):
-            print("A provider API call failed: fallback data not published; retry when the API is reachable, or rerun with --force-regen.")
-        elif total_stale > 0:
+        if total_stale > 0:
             print(f"No new models found. {total_stale} stale model(s) flagged for manual review.")
         else:
             print("No changes found.")
-        sys.exit(1)
+        sys.exit(4 if failed_providers else 1)
 
     if total_added == 0 and args.force_regen:
         print("No new models found, but --force-regen set: regenerating files anyway.")
@@ -1411,20 +1463,28 @@ def main():
             print(f"{total_stale} stale model(s) flagged for manual review.")
         if total_deprecated > 0:
             print(f"{total_deprecated} deprecated model(s) excluded from dropdown.")
-        sys.exit(0)
+        sys.exit(3 if failed_providers else 0)
 
     # 6. Write files
-    write_file(OPENROUTER_JAVA, new_or_java)
-    write_file(OPENAI_JAVA, new_oa_java)
-    write_file(ANTHROPIC_JAVA, new_an_java)
-    write_file(GEMINI_JAVA, new_ge_java)
-    write_file(VERTEXAI_JAVA, new_va_java)
-    write_file(PROVIDERS_TS, new_providers_ts)
-    write_file(MODELS_DATA_TS, new_models_data_ts)
-    write_file(LLM_MODELS_YAML, new_llm_models_yaml)
+    new_java_by_provider = {
+        "openrouter": (OPENROUTER_JAVA, new_or_java),
+        "openai": (OPENAI_JAVA, new_oa_java),
+        "anthropic": (ANTHROPIC_JAVA, new_an_java),
+        "gemini": (GEMINI_JAVA, new_ge_java),
+        "vertexai": (VERTEXAI_JAVA, new_va_java),
+    }
+    files_to_write = [
+        (path, content) for provider, (path, content) in new_java_by_provider.items() if provider not in kept_providers
+    ] + [
+        (PROVIDERS_TS, new_providers_ts),
+        (MODELS_DATA_TS, new_models_data_ts),
+        (LLM_MODELS_YAML, new_llm_models_yaml),
+    ]
+    for path, content in files_to_write:
+        write_file(path, content)
 
-    print(f"\nWrote changes ({total_added} added) across 8 files.", file=sys.stderr)
-    sys.exit(0)
+    print(f"\nWrote changes ({total_added} added) across {len(files_to_write)} files.", file=sys.stderr)
+    sys.exit(3 if failed_providers else 0)
 
 
 if __name__ == "__main__":
