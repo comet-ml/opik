@@ -273,6 +273,17 @@ export interface PromptVersionRef {
   id: string;
   promptId: string;
   versionNumber: string | null;
+  /**
+   * The 8-character short id the backend assigns each commit — `null` when it
+   * sent none, never defaulted, for the same reason `versionNumber` is not.
+   *
+   * Load-bearing for the save-dedup specs (opik#8923): when an unchanged save
+   * is deduped the server answers with the EXISTING version rather than a new
+   * one, and `id` plus `commit` are what say which version came back. A
+   * comparison on `id` alone would also pass if the server minted a fresh
+   * commit under a recycled id.
+   */
+  commit: string | null;
   template: string;
 }
 
@@ -2024,6 +2035,14 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       projectId?: string;
       changeDescription?: string;
       metadata?: Record<string, unknown>;
+      /**
+       * `text` or `chat`, and only honoured on the call that CREATES the prompt
+       * — the backend ignores it for a name that already exists and the
+       * structure is immutable thereafter. It decides which of the Playground's
+       * two library menus offers the prompt (the chat card's own loader filters
+       * on it), so a chat seed must set it on its first version.
+       */
+      templateStructure?: 'text' | 'chat';
     }): Promise<PromptVersionRef> {
       const created = await opik.api.prompts.createPromptVersion({
         name: args.name,
@@ -2032,6 +2051,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           ...(args.changeDescription ? { changeDescription: args.changeDescription } : {}),
           ...(args.metadata ? { metadata: args.metadata } : {}),
         },
+        ...(args.templateStructure ? { templateStructure: args.templateStructure } : {}),
         ...(args.projectId ? { projectId: args.projectId } : {}),
       });
       const id = created.id;
@@ -2045,6 +2065,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         // (or a backend that stopped sending the field), and either is a real
         // answer a label assertion must be able to see.
         versionNumber: created.versionNumber ?? null,
+        commit: created.commit ?? null,
         template: created.template,
       };
     },
@@ -2071,6 +2092,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         id: String(v.id ?? ''),
         promptId: v.promptId ? String(v.promptId) : promptId,
         versionNumber: v.versionNumber ?? null,
+        commit: v.commit ?? null,
         template: v.template,
       }));
     },

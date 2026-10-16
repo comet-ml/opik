@@ -5,6 +5,24 @@ import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
 
+/**
+ * The version `POST /v1/private/prompts/versions` answers a Playground save
+ * with, in the wire's own snake_case — this is the raw REST body, not a value
+ * that has been through the suite's typed backend client.
+ *
+ * Every field is optional because that is what the endpoint's contract allows,
+ * and a caller asserting a save deduped must be able to see an absent `commit`
+ * as the real answer it is rather than have it defaulted into a passing
+ * comparison.
+ */
+export interface SavedPromptVersionResponse {
+  id?: string;
+  prompt_id?: string;
+  commit?: string;
+  version_number?: string;
+  template?: string;
+}
+
 const escapeForRegExp = (literal: string): string =>
   literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -1800,6 +1818,46 @@ export class PlaygroundPage {
       await this.variantCard(0).hover();
       await this.page.getByTestId('playground-save-prompt-button').click();
       await this.submitSaveDialog();
+    });
+  }
+
+  /**
+   * Save variant 0's chat prompt in "Update existing" mode and hand back the
+   * version the server answered with.
+   *
+   * Exists because `POST /v1/private/prompts/versions` answers 200 whether it
+   * committed a new version or deduped an unchanged save onto the existing one
+   * (opik#8923) — the status says nothing, and `id`/`commit`/`version_number`
+   * in the body are the only place the two outcomes differ. A spec about the
+   * dedup therefore has to read the response, not just the page afterwards: the
+   * page settling on "v3" would also be satisfied by a server that minted v4
+   * and a timeline that had not refetched.
+   */
+  async savePromptToLibraryCapturingVersion(): Promise<SavedPromptVersionResponse> {
+    return test.step('save prompt to library and capture the version the server returned', async () => {
+      await this.variantCard(0).hover();
+      await this.page.getByTestId('playground-save-prompt-button').click();
+
+      // Armed before the submit, not after: the save is one request and its
+      // response can land before the dialog has finished animating closed, so a
+      // wait registered after `submitSaveDialog` returns can miss it entirely.
+      const posted = this.page.waitForResponse(
+        (res) =>
+          res.url().includes('/v1/private/prompts/versions') &&
+          res.request().method() === 'POST',
+      );
+      await this.submitSaveDialog();
+      const response = await posted;
+
+      const status = response.status();
+      if (status !== 200) {
+        throw new Error(
+          `save to library answered ${status}: ${await response.text()}` +
+            ' — the save itself failed, so nothing downstream is about the dedup',
+        );
+      }
+
+      return (await response.json()) as SavedPromptVersionResponse;
     });
   }
 
