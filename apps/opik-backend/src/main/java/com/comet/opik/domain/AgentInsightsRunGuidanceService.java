@@ -23,6 +23,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class AgentInsightsRunGuidanceService {
 
+    /** Stamped for a run that carries no guidance; same as guidance_version 0, "never saved". */
+    public static final int NO_GUIDANCE = 0;
+
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles;
 
@@ -40,24 +43,30 @@ public class AgentInsightsRunGuidanceService {
 
     /**
      * Called before the run goes on the queue, so the consumer can never see the run ahead of its stamp. A null
-     * version (guidance not active) makes the next report record that its results reflect no guidance.
+     * version (guidance not active) is stamped as {@link #NO_GUIDANCE}: NULL stays "no run pending".
      */
     public void markEnqueued(@NonNull String workspaceId, @NonNull UUID projectId, Integer guidanceVersion) {
         transactionTemplate.inTransaction(WRITE, handle -> {
             handle.attach(AgentInsightsJobDAO.class).markRunGuidanceVersion(workspaceId, projectId,
-                    guidanceVersion);
+                    stampOf(guidanceVersion));
             return null;
         });
     }
 
+    /** The stamp a run queued with this message version carries. */
+    public static int stampOf(Integer guidanceVersion) {
+        return guidanceVersion == null ? NO_GUIDANCE : guidanceVersion;
+    }
+
     /**
-     * Clears the stamp a run set, if it is still that run's version: the run never got its guidance (enqueue or
-     * trigger failed, or guidance was turned off before it went out). A newer stamp from another run is kept.
+     * Replaces the stamp a run set, if it is still that run's: with {@link #NO_GUIDANCE} when the run goes out
+     * without its guidance, with null when it never runs (enqueue or trigger failed). Another run's stamp is kept.
      */
-    public void clearIfStamped(@NonNull String workspaceId, @NonNull UUID projectId, int guidanceVersion) {
+    public void replaceIfStamped(@NonNull String workspaceId, @NonNull UUID projectId, int stamped,
+            Integer replacement) {
         transactionTemplate.inTransaction(WRITE, handle -> {
-            handle.attach(AgentInsightsJobDAO.class).clearRunGuidanceVersion(workspaceId, projectId,
-                    guidanceVersion);
+            handle.attach(AgentInsightsJobDAO.class).swapRunGuidanceVersion(workspaceId, projectId, stamped,
+                    replacement);
             return null;
         });
     }

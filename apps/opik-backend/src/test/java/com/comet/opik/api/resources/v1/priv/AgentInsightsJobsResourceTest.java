@@ -25,6 +25,7 @@ import com.comet.opik.api.resources.v1.jobs.AgentInsightsAutoFirstRunJob;
 import com.comet.opik.api.resources.v1.jobs.AgentInsightsReportJob;
 import com.comet.opik.domain.AgentInsightsJobService;
 import com.comet.opik.domain.AgentInsightsReportClient;
+import com.comet.opik.domain.AgentInsightsRunGuidanceService;
 import com.comet.opik.domain.AgentInsightsTriggerException;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -987,6 +988,10 @@ class AgentInsightsJobsResourceTest {
         var job = getJob(projectId);
         assertThat(job.guidanceVersion()).isEqualTo(2);
         assertThat(job.resultsGuidanceVersion()).isEqualTo(1);
+
+        // A second report for the same run (a retried write that had committed) keeps the version it recorded.
+        reportAllClear(projectId);
+        assertThat(getJob(projectId).resultsGuidanceVersion()).isEqualTo(1);
     }
 
     @Test
@@ -1018,7 +1023,7 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
-    @DisplayName("Guidance: a run queued while guidance was off is not credited with the version of an earlier run")
+    @DisplayName("Guidance: a run queued while guidance was off records no guidance, not an earlier run's version")
     void trigger__guidanceTurnedOffBetweenRuns__doesNotPromoteStaleVersion() {
         var projectId = createProject();
         updateGuidance(projectId, "Ignore retries");
@@ -1029,11 +1034,11 @@ class AgentInsightsJobsResourceTest {
         withGuidanceDisabled(() -> {
             jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME).close();
             assertThat(awaitTriggers(projectId, 2).get(1).guidance()).isNull();
-            awaitRunGuidanceVersion(projectId, null);
+            awaitRunGuidanceVersion(projectId, AgentInsightsRunGuidanceService.NO_GUIDANCE);
         });
         reportAllClear(projectId);
 
-        assertThat(getJob(projectId).resultsGuidanceVersion()).isNull();
+        assertThat(getJob(projectId).resultsGuidanceVersion()).isEqualTo(AgentInsightsRunGuidanceService.NO_GUIDANCE);
     }
 
     @Test

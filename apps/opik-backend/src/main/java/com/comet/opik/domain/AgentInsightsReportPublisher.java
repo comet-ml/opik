@@ -104,11 +104,9 @@ public class AgentInsightsReportPublisher {
      * not. A missed stamp only leaves the "guidance changed" callout less precise.
      */
     private void clearStamp(String workspaceId, UUID projectId, Integer guidanceVersion, String reportId) {
-        if (guidanceVersion == null) {
-            return;
-        }
         try {
-            runGuidanceService.clearIfStamped(workspaceId, projectId, guidanceVersion);
+            runGuidanceService.replaceIfStamped(workspaceId, projectId,
+                    AgentInsightsRunGuidanceService.stampOf(guidanceVersion), null);
         } catch (RuntimeException e) {
             log.warn("Failed to clear the guidance version of an unqueued Agent Insights run, reportId '{}', "
                     + "project '{}'", reportId, projectId, e);

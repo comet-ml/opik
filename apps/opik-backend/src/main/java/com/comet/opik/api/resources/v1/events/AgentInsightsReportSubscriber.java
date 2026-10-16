@@ -86,9 +86,13 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
         // Re-checked here so turning guidance off also drops it from runs already queued.
         boolean guidanceActive = serviceToggles.isAgentInsightsGuidanceActive();
         String guidance = guidanceActive ? message.guidance() : null;
-        if (!guidanceActive && message.guidanceVersion() != null) {
-            clearRunGuidanceVersion(message);
+        int stamped = AgentInsightsRunGuidanceService.stampOf(message.guidanceVersion());
+        if (!guidanceActive && stamped != AgentInsightsRunGuidanceService.NO_GUIDANCE) {
+            // The run goes out without its guidance: its results reflect none.
+            replaceRunGuidanceStamp(message, stamped, AgentInsightsRunGuidanceService.NO_GUIDANCE);
+            stamped = AgentInsightsRunGuidanceService.NO_GUIDANCE;
         }
+        int stampedForRun = stamped;
         var trigger = AgentInsightsReportClient.Trigger.builder()
                 .reportId(message.reportId())
                 .projectId(message.projectId())
@@ -122,23 +126,20 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
                     // Ollie never ran, so it can't report this itself: record the reason so the UI stops.
                     markRunFailed(message, throwable);
                     // Nor did it get the guidance, so a later report must not be recorded under this stamp.
-                    if (message.guidanceVersion() != null) {
-                        clearRunGuidanceVersion(message);
-                    }
+                    replaceRunGuidanceStamp(message, stampedForRun, null);
                     return Mono.empty();
                 });
     }
 
     /**
-     * The publisher stamped the run with the guidance version it was queued with. The run goes out without that
-     * guidance (turned off since) or never runs (trigger failed), so clear the stamp, otherwise a report would record
-     * results under guidance they were never produced with.
+     * The publisher stamped the run with the guidance version it was queued with. When the run goes out without that
+     * guidance (turned off since) the stamp becomes "no guidance"; when it never runs (trigger failed) it is cleared,
+     * so a report doesn't record results under guidance they were never produced with.
      * Best-effort, like the stamp itself: a miss only leaves the "guidance changed" callout less precise.
      */
-    private void clearRunGuidanceVersion(AgentInsightsReportMessage message) {
+    private void replaceRunGuidanceStamp(AgentInsightsReportMessage message, int stamped, Integer replacement) {
         try {
-            runGuidanceService.clearIfStamped(message.workspaceId(), message.projectId(),
-                    message.guidanceVersion());
+            runGuidanceService.replaceIfStamped(message.workspaceId(), message.projectId(), stamped, replacement);
         } catch (RuntimeException e) {
             log.warn("Failed to clear the guidance version of a queued Agent Insights run, reportId='{}', "
                     + "project='{}'", message.reportId(), message.projectId(), e);

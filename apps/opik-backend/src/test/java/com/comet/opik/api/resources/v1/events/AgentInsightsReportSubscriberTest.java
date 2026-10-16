@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RedissonReactiveClient;
@@ -25,6 +26,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -150,7 +152,7 @@ class AgentInsightsReportSubscriberTest {
         StepVerifier.create(subscriber.processEvent(message)).verifyComplete();
 
         verify(reportClient).triggerAgentInsights(expectedTrigger(message, "Only report billing failures"));
-        verify(runGuidanceService, never()).clearIfStamped(any(), any(), anyInt());
+        verify(runGuidanceService, never()).replaceIfStamped(any(), any(), anyInt(), any());
     }
 
     @Test
@@ -162,8 +164,8 @@ class AgentInsightsReportSubscriberTest {
         StepVerifier.create(subscriber.processEvent(message)).verifyComplete();
 
         verify(reportClient).triggerAgentInsights(expectedTrigger(message, null));
-        // The run was stamped with version 3 at enqueue; it must not claim results produced under that guidance.
-        verify(runGuidanceService).clearIfStamped(WORKSPACE_ID, PROJECT_ID, 3);
+        // The run was stamped with version 3 at enqueue; its results now reflect no guidance.
+        verify(runGuidanceService).replaceIfStamped(WORKSPACE_ID, PROJECT_ID, 3, 0);
     }
 
     @Test
@@ -173,7 +175,7 @@ class AgentInsightsReportSubscriberTest {
 
         StepVerifier.create(subscriber.processEvent(message())).verifyComplete();
 
-        verify(runGuidanceService, never()).clearIfStamped(any(), any(), anyInt());
+        verify(runGuidanceService, never()).replaceIfStamped(any(), any(), anyInt(), any());
     }
 
     @Test
@@ -185,7 +187,21 @@ class AgentInsightsReportSubscriberTest {
 
         StepVerifier.create(subscriber.processEvent(message)).verifyComplete();
 
-        verify(runGuidanceService).clearIfStamped(WORKSPACE_ID, PROJECT_ID, 3);
+        verify(runGuidanceService).replaceIfStamped(WORKSPACE_ID, PROJECT_ID, 3, null);
+    }
+
+    @Test
+    @DisplayName("Guidance turned off and the trigger then fails: the swapped stamp is the one cleared")
+    void processEvent__guidanceOffThenTriggerFails__clearsSwappedStamp() {
+        var message = message().toBuilder().guidance("Only report billing failures").guidanceVersion(3).build();
+        when(serviceToggles.isAgentInsightsGuidanceActive()).thenReturn(false);
+        failTriggerWith(new IllegalStateException("connection refused"));
+
+        StepVerifier.create(subscriber.processEvent(message)).verifyComplete();
+
+        InOrder order = inOrder(runGuidanceService);
+        order.verify(runGuidanceService).replaceIfStamped(WORKSPACE_ID, PROJECT_ID, 3, 0);
+        order.verify(runGuidanceService).replaceIfStamped(WORKSPACE_ID, PROJECT_ID, 0, null);
     }
 
     private static AgentInsightsReportClient.Trigger expectedTrigger(AgentInsightsReportMessage message,

@@ -96,7 +96,7 @@ class AgentInsightsReportPublisherTest {
         InOrder order = inOrder(runGuidanceService, stream);
         order.verify(runGuidanceService).markEnqueued(WORKSPACE_ID, projectId, 3);
         order.verify(stream).add(any());
-        verify(runGuidanceService, never()).clearIfStamped(any(), any(), anyInt());
+        verify(runGuidanceService, never()).replaceIfStamped(any(), any(), anyInt(), any());
     }
 
     @Test
@@ -113,7 +113,7 @@ class AgentInsightsReportPublisherTest {
                 .enqueue(projectId, WORKSPACE_ID, PERIOD_START, PERIOD_END, AgentInsightsMetrics.MANUAL))
                 .verifyError(IllegalStateException.class);
 
-        verify(runGuidanceService).clearIfStamped(WORKSPACE_ID, projectId, 3);
+        verify(runGuidanceService).replaceIfStamped(WORKSPACE_ID, projectId, 3, null);
     }
 
     @ParameterizedTest(name = "ollieEnabled={0}, agentInsightsEnabled={1}")

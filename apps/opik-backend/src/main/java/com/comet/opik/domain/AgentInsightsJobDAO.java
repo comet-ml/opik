@@ -89,7 +89,8 @@ interface AgentInsightsJobDAO {
 
     @SqlUpdate("""
             UPDATE agent_insights_jobs
-            SET last_scan_at = CURRENT_TIMESTAMP(6), results_guidance_version = run_guidance_version,
+            SET last_scan_at = CURRENT_TIMESTAMP(6),
+                results_guidance_version = COALESCE(run_guidance_version, results_guidance_version),
                 run_guidance_version = NULL, last_updated_by = :userName
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             """)
@@ -134,8 +135,10 @@ interface AgentInsightsJobDAO {
     Optional<RunGuidance> findRunGuidance(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId);
 
-    // The guidance version the queued run carries, or NULL when it carries none. markScanned moves it to
-    // results_guidance_version and clears it. One slot per job: overlapping runs share it (known limitation).
+    // The guidance version the queued run carries: NULL = no run pending, 0 = the run carries no guidance, N = it
+    // carries version N. markScanned moves it to results_guidance_version and clears it; a second report for the
+    // same run finds NULL and keeps the results value (COALESCE). One slot per job: overlapping runs share it
+    // (known limitation).
     @SqlUpdate("""
             UPDATE agent_insights_jobs SET run_guidance_version = :guidanceVersion, last_updated_at = last_updated_at
             WHERE workspace_id = :workspaceId AND project_id = :projectId
@@ -145,15 +148,16 @@ interface AgentInsightsJobDAO {
             @Bind("projectId") UUID projectId,
             @Bind("guidanceVersion") Integer guidanceVersion);
 
-    // Compare-and-clear: only the stamp the caller's run set, so another run's newer stamp is left alone.
+    // Compare-and-swap: only the stamp the caller's run set, so another run's newer stamp is left alone.
     @SqlUpdate("""
-            UPDATE agent_insights_jobs SET run_guidance_version = NULL, last_updated_at = last_updated_at
+            UPDATE agent_insights_jobs SET run_guidance_version = :replacement, last_updated_at = last_updated_at
             WHERE workspace_id = :workspaceId AND project_id = :projectId
-                AND run_guidance_version <=> :guidanceVersion
+                AND run_guidance_version <=> :expected
             """)
-    void clearRunGuidanceVersion(@Bind("workspaceId") String workspaceId,
+    void swapRunGuidanceVersion(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
-            @Bind("guidanceVersion") int guidanceVersion);
+            @Bind("expected") int expected,
+            @Bind("replacement") Integer replacement);
 
     // Cross-workspace — used only by the daily sweep (system context), never from a request thread.
     // INNER JOIN projects so jobs whose project was deleted are filtered out at the source (no per-job

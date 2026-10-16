@@ -82,11 +82,22 @@ class AgentInsightsIssueDAOTest {
         jdbi.useHandle(handle -> {
             var dao = handle.attach(AgentInsightsIssueDAO.class);
             dao.upsertIssues(workspaceId, projectId, "owner", List.of(issueId), List.of(issue("original")));
-            dao.upsertIssues(workspaceId, projectId, "owner", List.of(issueId), List.of(issue("renamed")));
+            var original = dao.findIssueById(workspaceId, projectId, issueId);
+            var renamed = issue("renamed");
+            dao.upsertIssues(workspaceId, projectId, "editor", List.of(issueId), List.of(renamed));
 
-            var stored = dao.findIssueById(workspaceId, projectId, issueId);
-            assertThat(stored.name()).isEqualTo("renamed");
-            assertThat(stored.description()).isEqualTo("Description of renamed");
+            assertThat(dao.findIssueById(workspaceId, projectId, issueId))
+                    .usingRecursiveComparison()
+                    .ignoringFields("lastUpdatedAt")
+                    .isEqualTo(original.toBuilder()
+                            .name(renamed.name())
+                            .description(renamed.description())
+                            .cause(renamed.cause())
+                            .suggestedFix(renamed.suggestedFix())
+                            .tracesQuery(renamed.tracesQuery())
+                            .severity(renamed.severity())
+                            .lastUpdatedBy("editor")
+                            .build());
         });
     }
 }
