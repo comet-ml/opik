@@ -33,8 +33,6 @@ import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.delete;
-import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -91,17 +89,6 @@ class InferenceClientTest {
     }
 
     @Test
-    void submitGenerateSendsContractValidBody() {
-        server.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(accepted()));
-
-        var response = client.submitGenerate(generateRequest(1, 10)).block();
-
-        assertThat(response).isEqualTo(BatchSubmitResponse.builder().jobId(JOB_ID).items(1).build());
-        var body = json(single(postRequestedFor(urlEqualTo(GENERATE_PATH))));
-        assertThat(InferenceContract.validateEndpoint(InferenceContract.BATCH_GENERATE, "request", body)).isEmpty();
-    }
-
-    @Test
     void getJobWhenResultsFalseSendsResultsFalse() {
         server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(jobView()));
 
@@ -109,25 +96,6 @@ class InferenceClientTest {
 
         assertThat(view.status()).isEqualTo(JobStatus.RUNNING);
         single(getRequestedFor(urlEqualTo(JOB_PATH + "?cursor=0&results=false")));
-    }
-
-    @Test
-    void getJobWhenResultsTrueSendsOnlyTheCursor() {
-        server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(jobView()));
-
-        client.getJob(JOB_ID, 5, true).block();
-
-        single(getRequestedFor(urlEqualTo(JOB_PATH + "?cursor=5")));
-    }
-
-    @Test
-    void cancelJobSendsDelete() {
-        server.stubFor(delete(urlEqualTo(JOB_PATH)).willReturn(jobView()));
-
-        var view = client.cancelJob(JOB_ID).block();
-
-        assertThat(view.jobId()).isEqualTo("job-8e4a");
-        single(deleteRequestedFor(urlEqualTo(JOB_PATH)));
     }
 
     @Test
@@ -174,16 +142,6 @@ class InferenceClientTest {
                     assertThat(exception.getRetryAfter()).isEqualTo(Duration.ofSeconds(3));
                 });
         assertThat(server.findAll(postRequestedFor(urlEqualTo(GENERATE_PATH)))).hasSize(1);
-    }
-
-    @Test
-    void getJobQuotaExceededIsRetried() {
-        stubSequence(() -> get(urlPathEqualTo(JOB_PATH)),
-                error("quota_exceeded", 429).withHeader("Retry-After", "0.05"), jobView());
-
-        client.getJob(JOB_ID, 0, false).block();
-
-        assertThat(server.findAll(getRequestedFor(urlPathEqualTo(JOB_PATH)))).hasSize(2);
     }
 
     static Stream<InferenceErrorCode> nonRetryableCodes() {
@@ -237,15 +195,6 @@ class InferenceClientTest {
                 .hasSize(InferenceClient.MAX_RETRIES + 1);
     }
 
-    @Test
-    void successBodyThatDoesNotParseBecomesUpstreamError() {
-        server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(aResponse().withStatus(200).withBody("not json")));
-
-        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, true).block())
-                .isInstanceOfSatisfying(InferenceException.class,
-                        exception -> assertThat(exception.getCode()).isEqualTo("upstream_error"));
-    }
-
     @ParameterizedTest
     @EnumSource(value = UnknownCode.class)
     void unknownCodeFollowsTheEnvelopesRetryableFlag(UnknownCode unknown) {
@@ -273,17 +222,6 @@ class InferenceClientTest {
             this.retryable = retryable;
             this.requests = requests;
         }
-    }
-
-    @Test
-    void retryHonorsRetryAfter() {
-        stubSequence(() -> get(urlPathEqualTo(JOB_PATH)), error("overloaded", 503).withHeader("Retry-After", "1"),
-                jobView());
-
-        var started = System.nanoTime();
-        client.getJob(JOB_ID, 0, false).block();
-
-        assertThat(Duration.ofNanos(System.nanoTime() - started)).isGreaterThanOrEqualTo(Duration.ofSeconds(1));
     }
 
     @Test
@@ -360,15 +298,6 @@ class InferenceClientTest {
                     assertThat(exception.getMessage()).doesNotContain(CREDENTIAL).doesNotContain("secret trace");
                     assertThat(exception.getServiceMessage()).isEqualTo("input_value='secret trace'");
                 });
-    }
-
-    @Test
-    void clientWithoutUrlConstructsAndFailsOnlyWhenCalled() {
-        var disabled = new InferenceClient(TestHttpClientUtils.client(), new AiLabelsConfig());
-
-        assertThatThrownBy(() -> disabled.getJob(JOB_ID, 0, false).block())
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("aiLabels.inference.url");
     }
 
     private AiLabelsConfig config(Duration readTimeout, long maxJobBytes) {

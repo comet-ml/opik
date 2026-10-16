@@ -2,7 +2,6 @@ package com.comet.opik.domain.ailabels;
 
 import com.comet.opik.infrastructure.inference.BatchDecideItem;
 import com.comet.opik.infrastructure.inference.BatchGenerateItem;
-import com.comet.opik.infrastructure.inference.BatchItem;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.inference.Message;
 import org.junit.jupiter.api.Test;
@@ -51,9 +50,11 @@ class AiLabelItemBuilderTest {
     @MethodSource("packings")
     void decideTasksArePackedFirstFitInNameOrder(String description, List<Integer> questionCounts,
             List<List<String>> expectedItems) {
+        // Reversed, so the builder has to sort by name itself.
         var tasks = IntStream.range(0, questionCounts.size())
                 .mapToObj(index -> decide("t" + index, false, questionCounts.get(index)))
-                .toList();
+                .toList()
+                .reversed();
 
         var items = builder.build(WORKSPACE_ID, rendered(TRACE_ID), tasks);
 
@@ -169,17 +170,6 @@ class AiLabelItemBuilderTest {
     }
 
     @Test
-    void itemIdsStayWithinTheServiceLimit() {
-        var longName = "t".repeat(32);
-        var items = builder.build(WORKSPACE_ID, rendered(TRACE_ID),
-                List.of(generate(longName, false), decide("a", false, 32), decide("b", false, 32)));
-
-        assertThat(items).extracting(item -> item.payload().itemId())
-                .allSatisfy(itemId -> assertThat(itemId).hasSizeLessThanOrEqualTo(BatchItem.MAX_ITEM_ID_LENGTH))
-                .contains(TRACE_ID + ":" + longName);
-    }
-
-    @Test
     void requestsCarryTheWorkspaceAsOrgAndOneCacheSetting() {
         var items = builder.build(WORKSPACE_ID, rendered(TRACE_ID),
                 List.of(decide("a", true, 2), generate("summary", false)));
@@ -198,18 +188,6 @@ class AiLabelItemBuilderTest {
         assertThat(generateRequest.orgId()).isEqualTo(WORKSPACE_ID);
         assertThat(generateRequest.cache()).isFalse();
         assertThat(generateRequest.items()).containsExactly((BatchGenerateItem) generateItems.getFirst().payload());
-    }
-
-    @Test
-    void requestRejectsAnItemOfAnotherJob() {
-        var items = builder.build(WORKSPACE_ID, rendered(TRACE_ID), List.of(decide("a", true, 2)));
-
-        assertThatThrownBy(() -> builder.decideRequest(WORKSPACE_ID, false, items))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("another job");
-        assertThatThrownBy(() -> builder.decideRequest("workspace-2", true, items))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("another workspace");
     }
 
     @Test

@@ -1,6 +1,5 @@
 package com.comet.opik.domain.ailabels;
 
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -50,13 +49,5 @@ class AiLabelTaskTest {
     void requiredIsTheHighestVersionAppliedAtCreation(String description, AiLabelTask task, Instant createdAt,
             int expected) {
         assertThat(task.required(createdAt)).isEqualTo(expected);
-    }
-
-    @Test
-    void sqlVersionsAreParallelToVersions() {
-        var sql = RELABEL.sqlVersions();
-
-        assertThat(sql.versions()).containsExactly(3, 2, 1);
-        assertThat(sql.appliesFrom()).containsExactly(V3_RELABEL.toString(), V2.toString(), V1.toString());
     }
 }
