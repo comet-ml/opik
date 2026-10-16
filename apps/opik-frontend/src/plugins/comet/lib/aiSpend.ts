@@ -6,7 +6,7 @@ const AI_SPEND_WORKSPACE_PATTERN = /^__(?:ai_spend|cc)_.+__$/;
 export const isAiSpendWorkspace = (workspace?: Workspace | null): boolean =>
   AI_SPEND_WORKSPACE_PATTERN.test(workspace?.workspaceName ?? "");
 
-// Falls back to a spend workspace only when it is the user's sole workspace.
+// Lands on a spend workspace only when the user has no regular one; undefined sends them to login.
 export const pickLandingWorkspace = (
   workspaces: Workspace[],
 ): Workspace | undefined => {
