@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -34,16 +33,32 @@ final class UsageKeys {
 
     private final Map<String, Long> countsByName;
     private final @Nullable Long reportedTotal;
+    private final @Nullable Long clientPromptTokens;
 
+    /** The provider's own keys. */
     static UsageKeys of(@NonNull OriginalUsage original) {
+        var countsByName = countsByName(original.keys());
+        Long reportedTotal = TOTAL_NAMES.stream().map(countsByName::get).filter(Objects::nonNull).findFirst()
+                .orElseGet(() -> asLong(original.outerKeys().get("total_tokens")));
+        return new UsageKeys(countsByName, reportedTotal, asLong(original.outerKeys().get("prompt_tokens")));
+    }
+
+    /** The provider's keys, with the keys the client sent next to them filling the counts they lack. */
+    static UsageKeys withClientKeys(@NonNull OriginalUsage original) {
+        var providerKeys = of(original);
+        return new UsageKeys(countsByName(original.withOuterKeys().keys()), providerKeys.reportedTotal,
+                providerKeys.clientPromptTokens);
+    }
+
+    private static Map<String, Long> countsByName(Map<String, Integer> keys) {
         var countsByName = new HashMap<String, Long>();
         // OriginalUsage keeps its keys sorted, so when two spellings normalize to the same name the choice is stable.
-        original.keys().forEach((key, value) -> countsByName.putIfAbsent(normalize(key), value.longValue()));
-        Long reportedTotal = TOTAL_NAMES.stream().map(countsByName::get).filter(Objects::nonNull).findFirst()
-                .orElseGet(() -> Optional.ofNullable(original.outerKeys().get("total_tokens"))
-                        .map(Integer::longValue)
-                        .orElse(null));
-        return new UsageKeys(Map.copyOf(countsByName), reportedTotal);
+        keys.forEach((key, value) -> countsByName.putIfAbsent(normalize(key), value.longValue()));
+        return Map.copyOf(countsByName);
+    }
+
+    private static Long asLong(@Nullable Integer value) {
+        return value == null ? null : value.longValue();
     }
 
     static String normalize(@NonNull String key) {
@@ -84,9 +99,23 @@ final class UsageKeys {
         return reportedTotal;
     }
 
+    /** The prompt count the SDK sent next to the provider's usage it converted, or null when it converted none. */
+    @Nullable Long clientPromptTokens() {
+        return clientPromptTokens;
+    }
+
     /** The count under the first of the names that is present, or 0. */
     long first(String... names) {
         return Arrays.stream(names).filter(this::has).findFirst().map(this::get).orElse(0L);
+    }
+
+    /**
+     * The count under the first of the names whose count isn't zero, or 0. For a count several shapes report under
+     * their own names, where a shape that saw none still sends its zero.
+     */
+    long firstNonZero(String... names) {
+        return Arrays.stream(names).map(this::find).filter(count -> count != null && count != 0).findFirst()
+                .orElse(0L);
     }
 
     /** Whether the usage carries items of a list flattened as indexed keys ({@code iterations.0.input_tokens}). */

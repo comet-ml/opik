@@ -19,6 +19,10 @@ final class AnthropicUsageFormat implements UsageFormat {
                     keys -> keys.hasAny("input_tokens", "prompt_tokens")
                             && keys.hasAny("cache_read.input_tokens", "cache_creation.input_tokens"),
                     AnthropicUsageFormat::fromOtelGenAi),
+            // OpenAI Responses usage (the OpenAI Agents SDK running Claude): its input includes the cache.
+            new InputVariant("openai_responses",
+                    keys -> keys.has("input_tokens") && keys.has("input_tokens_details.cached_tokens"),
+                    AnthropicUsageFormat::fromOpenAiResponses),
             new InputVariant("anthropic_native",
                     keys -> keys.has("input_tokens") || keys.hasListItems("iterations"),
                     AnthropicUsageFormat::fromNative),
@@ -54,6 +58,16 @@ final class AnthropicUsageFormat implements UsageFormat {
                 .build();
     }
 
+    private static NativeUsage fromOpenAiResponses(VariantInput input) {
+        var keys = input.keys();
+        long cacheRead = keys.get("input_tokens_details.cached_tokens");
+        return builder(input)
+                .inputTokens(input.excludingCache(keys.get("input_tokens"), cacheRead, keys.get("output_tokens")))
+                .cacheReadInputTokens(cacheRead)
+                .outputTokens(keys.get("output_tokens"))
+                .build();
+    }
+
     private static NativeUsage fromNative(VariantInput input) {
         var keys = input.keys();
         if (keys.hasListItems("iterations")) {
@@ -65,8 +79,10 @@ final class AnthropicUsageFormat implements UsageFormat {
                     .outputTokens(keys.sumOverListItems("iterations", "output_tokens"))
                     .build();
         }
+        // Bedrock Converse names the writes cacheWriteInputTokens.
         var cacheWrites = CacheWrites.of(keys, "cache_creation.ephemeral_5m_input_tokens",
-                "cache_creation.ephemeral_1h_input_tokens", keys.get("cache_creation_input_tokens"));
+                "cache_creation.ephemeral_1h_input_tokens",
+                keys.first("cache_creation_input_tokens", "cache_write_input_tokens"));
         return builder(input)
                 .inputTokens(keys.get("input_tokens"))
                 .cacheReadInputTokens(keys.get("cache_read_input_tokens"))
@@ -83,11 +99,11 @@ final class AnthropicUsageFormat implements UsageFormat {
      */
     private static NativeUsage fromLiteLlm(VariantInput input) {
         var keys = input.keys();
-        long cacheRead = keys.first("cache_read_input_tokens", "prompt_tokens_details.cached_tokens",
+        long cacheRead = keys.firstNonZero("cache_read_input_tokens", "prompt_tokens_details.cached_tokens",
                 "cache_read_tokens");
         var cacheWrites = CacheWrites.of(keys, "cache_creation_token_details.ephemeral_5m_input_tokens",
                 "cache_creation_token_details.ephemeral_1h_input_tokens",
-                keys.first("cache_creation_input_tokens", "cache_write_tokens", "cache_creation_tokens"));
+                keys.firstNonZero("cache_creation_input_tokens", "cache_write_tokens", "cache_creation_tokens"));
         long promptTokens = keys.get("prompt_tokens");
         return builder(input)
                 .inputTokens(keys.hasAny("prompt_tokens_details.cached_tokens",

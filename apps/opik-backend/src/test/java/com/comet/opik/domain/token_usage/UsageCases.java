@@ -130,6 +130,10 @@ public final class UsageCases {
                 new UsageCase("Anthropic with only the three totals", "anthropic",
                         usage("prompt_tokens", 300, "completion_tokens", 40, "total_tokens", 340),
                         anthropic("totals_only").inputTokens(300).outputTokens(40).build()),
+                new UsageCase("Claude through the OpenAI Agents SDK", "anthropic",
+                        usage("input_tokens", 1000, "output_tokens", 100, "input_tokens_details.cached_tokens", 200),
+                        anthropic("openai_responses").inputTokens(800).cacheReadInputTokens(200).outputTokens(100)
+                                .build()),
                 new UsageCase("Claude on Vertex", "vertex_ai-anthropic_models",
                         usage("input_tokens", 50, "output_tokens", 5),
                         AnthropicNativeUsage.builder().provider("vertex_ai-anthropic_models")
@@ -207,7 +211,13 @@ public final class UsageCases {
                 new UsageCase("Azure OpenAI", "azure",
                         usage("prompt_tokens", 40, "completion_tokens", 2, "total_tokens", 42),
                         OpenAiNativeUsage.builder().provider("azure").variant("chat_completions").promptTokens(40)
-                                .completionTokens(2).totalTokens(42).build()));
+                                .completionTokens(2).totalTokens(42).build()),
+                new UsageCase("Gemini usage under an OpenAI-compatible provider", "openrouter",
+                        usage("prompt_token_count", 1000, "candidates_token_count", 100, "thoughts_token_count", 50,
+                                "cached_content_token_count", 200, "total_token_count", 1150),
+                        OpenAiNativeUsage.builder().provider("openrouter").variant("gemini_style").promptTokens(1000)
+                                .cachedTokens(200).completionTokens(150).reasoningTokens(50).totalTokens(1150)
+                                .build()));
     }
 
     public static Stream<UsageCase> gemini() {

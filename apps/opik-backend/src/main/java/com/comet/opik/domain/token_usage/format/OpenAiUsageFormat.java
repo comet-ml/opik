@@ -24,7 +24,11 @@ final class OpenAiUsageFormat implements UsageFormat {
                     OpenAiUsageFormat::fromResponses),
             new InputVariant("openinference",
                     keys -> keys.hasAny("prompt", "completion"),
-                    OpenAiUsageFormat::fromOpenInference));
+                    OpenAiUsageFormat::fromOpenInference),
+            // Gemini usage under a provider serving Gemini models through an OpenAI-compatible API.
+            new InputVariant("gemini_style",
+                    keys -> keys.hasAny("prompt_token_count", "candidates_token_count"),
+                    OpenAiUsageFormat::fromGemini));
 
     @Override
     public List<InputVariant> inputVariants() {
@@ -104,6 +108,26 @@ final class OpenAiUsageFormat implements UsageFormat {
                 .reasoningTokens(keys.get("completion_details.reasoning"))
                 .audioCompletionTokens(keys.get("completion_details.audio"))
                 .totalTokens(keys.get("total"))
+                .build();
+    }
+
+    /**
+     * Gemini's prompt includes its cache, and its thoughts are output outside the candidates. Tool results fed back to
+     * the model count as prompt.
+     */
+    private static NativeUsage fromGemini(VariantInput input) {
+        var keys = input.keys();
+        long cachedTokens = keys.get("cached_content_token_count");
+        long thoughtsTokens = keys.get("thoughts_token_count");
+        // Gemini's own total also counts thoughts and tool use, so only the cache-larger-than-prompt check applies.
+        long promptTokens = input.includingCache(
+                keys.get("prompt_token_count") + keys.get("tool_use_prompt_token_count"), cachedTokens, null);
+        return builder(input)
+                .promptTokens(promptTokens)
+                .cachedTokens(cachedTokens)
+                .completionTokens(keys.get("candidates_token_count") + thoughtsTokens)
+                .reasoningTokens(thoughtsTokens)
+                .totalTokens(keys.get("total_token_count"))
                 .build();
     }
 

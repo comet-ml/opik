@@ -107,6 +107,15 @@ class UsageKeysTest {
         }
 
         @Test
+        void firstNonZeroSkipsAKeyThatIsZero() {
+            var keys = keys("cache_read_input_tokens", 0, "cached_tokens", 30);
+
+            assertThat(keys.firstNonZero("cache_read_input_tokens", "cached_tokens")).isEqualTo(30);
+            assertThat(keys.firstNonZero("cache_read_input_tokens")).isZero();
+            assertThat(keys.firstNonZero("missing")).isZero();
+        }
+
+        @Test
         void ofPicksTheSameSpellingWhateverTheOrderItWasSentIn() {
             var forward = new LinkedHashMap<String, Integer>();
             forward.put("inputTokens", 1);
