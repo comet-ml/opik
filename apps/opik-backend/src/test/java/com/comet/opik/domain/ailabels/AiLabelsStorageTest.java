@@ -15,13 +15,16 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.v1.jobs.AiLabelsJob;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jobs.GuiceJobManager;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +33,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.quartz.SchedulerException;
+import org.quartz.impl.matchers.GroupMatcher;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -44,6 +49,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -113,6 +119,21 @@ class AiLabelsStorageTest {
         this.templateAsync = templateAsync;
         this.traceClient = new TraceResourceClient(client, baseURI);
         this.projectClient = new ProjectResourceClient(client, baseURI, PodamFactoryUtils.newPodamFactory());
+    }
+
+    // The default test config, as in OSS: ai-labels off, no inference url or credential.
+    @Test
+    @DisplayName("off, the app boots without an inference url or credential and the tick job isn't scheduled")
+    void disabledJobIsNotScheduled(OpikConfiguration config, GuiceJobManager jobManager) throws SchedulerException {
+        var scheduler = jobManager.getScheduler();
+        var jobClasses = new ArrayList<Class<?>>();
+        for (var key : scheduler.getJobKeys(GroupMatcher.anyGroup())) {
+            jobClasses.add(scheduler.getJobDetail(key).getJobClass());
+        }
+
+        assertThat(config.getAiLabels().isEnabled()).isFalse();
+        assertThat(config.getAiLabels().getInference().getUrl()).isNull();
+        assertThat(jobClasses).isNotEmpty().doesNotContain(AiLabelsJob.class);
     }
 
     @Nested
