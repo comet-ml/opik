@@ -101,8 +101,7 @@ const RuleScopeField: React.FC<RuleScopeFieldProps> = ({
               <FormControl>
                 <Switch
                   id={EXCLUDE_EXPERIMENTS_SWITCH_ID}
-                  size="xs"
-                  className="h-[14px] w-6 border data-[state=unchecked]:bg-slate-300 [&>span]:size-3 [&>span]:data-[state=checked]:translate-x-[10px]"
+                  size="2xs"
                   checked={field.value === EVAL_TRIGGER_SCOPE.production}
                   onCheckedChange={(checked) =>
                     field.onChange(
