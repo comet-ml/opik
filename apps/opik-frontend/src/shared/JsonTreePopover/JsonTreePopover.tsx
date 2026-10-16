@@ -15,6 +15,7 @@ import {
   isArrayAccessMode,
   computePathsToExpand,
   filterVisiblePaths,
+  findPrefixMatchPath,
   findFirstChildPath,
   computeVisibleTopLevelKeys,
 } from "./jsonTreeUtils";
@@ -27,8 +28,6 @@ const MAX_HEIGHT = "320px";
 const KEY_CYCLE_FOCUS = "Tab";
 const KEY_FOCUS_NEXT = "ArrowDown";
 const KEY_FOCUS_PREV = "ArrowUp";
-const KEY_EXPAND = "ArrowRight";
-const KEY_COLLAPSE = "ArrowLeft";
 const KEY_SELECT = "Enter";
 const KEY_CLOSE = "Escape";
 
@@ -36,8 +35,6 @@ const NAVIGATION_KEYS = [
   KEY_CYCLE_FOCUS,
   KEY_FOCUS_NEXT,
   KEY_FOCUS_PREV,
-  KEY_EXPAND,
-  KEY_COLLAPSE,
   KEY_SELECT,
   KEY_CLOSE,
 ];
@@ -74,6 +71,9 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
     () => parseSearchQuery(searchQuery),
     [searchQuery],
   );
+
+  const pathToExpandRef = useRef(pathToExpand);
+  pathToExpandRef.current = pathToExpand;
 
   // Auto-expand paths based on the typed path
   useEffect(() => {
@@ -144,7 +144,7 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
         handleFocusPath(firstChildPath);
       }
     }
-    prevPathToExpandRef.current = pathToExpand;
+    prevPathToExpandRef.current = open ? pathToExpand : null;
   }, [open, pathToExpand, filteredVisiblePaths, handleFocusPath]);
 
   // Update focus when search term changes and current focus is not in filtered results
@@ -164,6 +164,26 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
     }
   }, [open, filteredVisiblePaths, focusedPath, handleFocusPath]);
 
+  const prevSearchTermRef = useRef("");
+  useEffect(() => {
+    if (!open) {
+      prevSearchTermRef.current = "";
+      return;
+    }
+    if (
+      filteredVisiblePaths.length === 0 ||
+      searchTerm === prevSearchTermRef.current
+    )
+      return;
+    prevSearchTermRef.current = searchTerm;
+    const prefixMatchPath = findPrefixMatchPath(
+      filteredVisiblePaths,
+      pathToExpand,
+      searchTerm,
+    );
+    if (prefixMatchPath) handleFocusPath(prefixMatchPath);
+  }, [open, searchTerm, pathToExpand, filteredVisiblePaths, handleFocusPath]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -171,7 +191,11 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
       setExpandedPaths(computePathsToExpand(selectedPath));
       handleFocusPath(selectedPath);
     } else {
-      setExpandedPaths(new Set());
+      setExpandedPaths(
+        pathToExpandRef.current
+          ? computePathsToExpand(pathToExpandRef.current)
+          : new Set(),
+      );
     }
   }, [open, selectedPath, handleFocusPath]);
 
@@ -238,27 +262,6 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
           handleFocusPath(filteredVisiblePaths[prevIndex].path);
           break;
         }
-        case KEY_EXPAND: {
-          e.preventDefault();
-          if (focusedPath) {
-            const item = filteredVisiblePaths.find(
-              (p) => p.path === focusedPath,
-            );
-            if (item && typeof item.value === "object" && item.value !== null) {
-              if (!expandedPaths.has(focusedPath)) {
-                handleToggleExpand(focusedPath);
-              }
-            }
-          }
-          break;
-        }
-        case KEY_COLLAPSE: {
-          e.preventDefault();
-          if (focusedPath && expandedPaths.has(focusedPath)) {
-            handleToggleExpand(focusedPath);
-          }
-          break;
-        }
         case KEY_SELECT: {
           if (focusedPath) {
             e.preventDefault();
@@ -286,10 +289,8 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
     open,
     focusedPath,
     filteredVisiblePaths,
-    expandedPaths,
     handleFocusPath,
     handleSelect,
-    handleToggleExpand,
     onOpenChange,
   ]);
 

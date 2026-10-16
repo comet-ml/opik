@@ -96,8 +96,7 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
       await onlineEval.goto(project.id);
       await onlineEval.waitForReady();
 
-      await onlineEval.openCreateRuleDialog();
-      await onlineEval.fillAndSubmitCreateRuleDialogPythonEquals({
+      await onlineEval.fillAndSubmitCreateRulePythonEquals({
         name: partialRule,
         referenceValue: REFERENCE_OUTPUT,
         samplingRatePercent: 50,
@@ -106,8 +105,7 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
 
       // Left at the control's 100% default — set explicitly so the test states
       // the value it depends on rather than inheriting it.
-      await onlineEval.openCreateRuleDialog();
-      await onlineEval.fillAndSubmitCreateRuleDialogPythonEquals({
+      await onlineEval.fillAndSubmitCreateRulePythonEquals({
         name: fullRule,
         referenceValue: REFERENCE_OUTPUT,
         samplingRatePercent: 100,
@@ -121,7 +119,7 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
     });
 
     // This gate runs BEFORE any trace is seeded, and it is the reason the rest
-    // of the test means anything. The dialog shows a percentage and the API
+    // of the test means anything. The editor shows a percentage and the API
     // stores a fraction, so a regression in that conversion — or any change
     // that drops the typed value before submit — would leave the rule at the
     // 100% default while the UI still displayed the number the test asked for.
@@ -130,10 +128,10 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
     // whole test would pass while asserting nothing about sampling at all.
     // Checking the persisted fraction up front converts that silent no-op into
     // a loud, early failure.
-    await test.step('Both rules persisted the rate the dialog displayed', async () => {
+    await test.step('Both rules persisted the rate the editor displayed', async () => {
       const rules = await backendClient.listAutomationRulesForProject(project.id);
       const byName = new Map(rules.map((r) => [r.name, r.samplingRate]));
-      // The dialog shows a percentage; the API stores a fraction.
+      // The editor shows a percentage; the API stores a fraction.
       expect(byName.get(partialRule), 'the 50% rule persisted as the fraction 0.5').toBeCloseTo(
         0.5,
         5,
@@ -311,10 +309,9 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
     const bypassCount = BYPASS_SOURCES.length;
 
     const ruleId = await test.step('Create a 0%-rate rule scoped to both production and experiment traces', async () => {
-      // Created through the API, not the dialog: `trigger_scope` has no control
-      // in the create-rule dialog, and without `both` an experiment-source trace
-      // is filtered out by `matchesTriggerScope` before sampling is ever
-      // consulted — the test would then pass for the wrong reason.
+      // Created through the API: this test is about the sampler, not the editor.
+      // Without `both` an experiment-source trace is filtered out by
+      // `matchesTriggerScope` before sampling is ever consulted.
       return backendClient.createAutomationRule({
         projectId: project.id,
         name: ruleName,

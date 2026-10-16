@@ -103,11 +103,8 @@ describe("resolveTraceEvaluatorVariableDefault", () => {
   });
 
   it("does not auto-fill spans on span scope, where the form schema rejects the sentinel", () => {
-    // A span-scoped `def score(input, spans)` must leave `spans` unmapped. Auto-filling the
-    // trace sentinel would fail PythonCodeDetailsSpanFormSchema (asserted in
-    // AddEditRuleDialog/helpers.test.ts) while
-    // LLMPromptMessagesVariables hid the offending row, leaving the dialog unsubmittable
-    // with nothing to correct.
+    // A span-scoped `def score(input, spans)` must leave `spans` unmapped: auto-filling the
+    // trace sentinel would fail PythonCodeDetailsSpanFormSchema.
     expect(
       resolveTraceEvaluatorVariableDefault(
         "spans",
@@ -124,7 +121,7 @@ describe("resolveTraceEvaluatorVariableDefault", () => {
     //
     // Note this state is reachable only via the API: the rule dialog's own schema
     // rejects an empty mapping value (`.min(1)` plus the JSONPath/sentinel regex in
-    // AddEditRuleDialog/schema.ts), so the editor will not produce or re-submit one.
+    // RuleEditorPanel/schema.ts), so the editor will not produce or re-submit one.
     // The resolver still must not rewrite it — preserving a value it cannot author is
     // what keeps an API-created rule's prompt re-parse non-destructive.
     expect(
