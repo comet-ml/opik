@@ -38,7 +38,7 @@ const JudgeTemplateMenu: React.FC<JudgeTemplateMenuProps> = ({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="2xs" type="button" className="gap-1">
+        <Button variant="ghost" size="2xs" type="button" className="gap-1 px-1">
           <FileTerminal className="size-3 shrink-0" />
           Templates
         </Button>
