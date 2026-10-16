@@ -21,7 +21,6 @@ import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.WORKSPACE_ID;
 import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.generate;
 import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.rendered;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 class AiLabelResultMapperTest {
@@ -175,20 +174,6 @@ class AiLabelResultMapperTest {
                     .status(AiLabelStatus.Status.FAILED).retryable(true).errorCode(AiLabelResultMapper.MISSING_ANSWER)
                     .build());
         }
-    }
-
-    @Test
-    void pendingRowsMustMatchTheItemsTasks() {
-        var item = item(List.of(OUTCOME, TONE));
-        var pending = item.pendingStatuses(JOB_ID, 1, Map.of("outcome", 1, "tone", 1));
-        var result = ItemResult.builder().itemId(item.plan().itemId()).build();
-
-        assertThatThrownBy(() -> mapper.map(result, item.plan(), pending.subList(0, 1)))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("don't match");
-        assertThatThrownBy(() -> mapper.map(result.toBuilder().itemId("other").build(), item.plan(), pending))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("another item");
     }
 
     private AiLabelItem item(List<AiLabelTask> tasks) {

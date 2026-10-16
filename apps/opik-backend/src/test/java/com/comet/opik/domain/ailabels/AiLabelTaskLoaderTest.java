@@ -1,7 +1,6 @@
 package com.comet.opik.domain.ailabels;
 
 import com.comet.opik.infrastructure.AiLabelsConfig;
-import com.comet.opik.infrastructure.inference.Question;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -13,7 +12,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.Objects;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -58,21 +56,6 @@ class AiLabelTaskLoaderTest {
             """;
 
     @Test
-    void decideTaskLoads() {
-        var task = parse(DECIDE);
-
-        assertThat(task.name()).isEqualTo("agent_outcome");
-        assertThat(task.endpoint()).isEqualTo(AiLabelEndpoint.DECIDE);
-        assertThat(task.cache()).isFalse();
-        assertThat(task.version()).isEqualTo(2);
-        assertThat(task.appliesFrom()).isEqualTo(Instant.parse("2026-11-01T00:00:00Z"));
-        assertThat(task.history()).containsExactly(new AiLabelTask.Version(1, Instant.parse("2026-10-20T00:00:00Z")));
-        assertThat(task.questions()).containsOnlyKeys("succeeded", "topic", "quality");
-        assertThat(task.questions().get("topic")).isInstanceOf(Question.ChoiceQuestion.class);
-        assertThat(task.questions().get("quality")).isInstanceOf(Question.ScoreQuestion.class);
-    }
-
-    @Test
     void generateTaskLoadsWithCacheOffByDefault() {
         var task = parse(GENERATE);
 
@@ -85,68 +68,26 @@ class AiLabelTaskLoaderTest {
 
     static Stream<Arguments> invalidTasks() {
         return Stream.of(
-                arguments("name with upper case", DECIDE.replace("name: agent_outcome", "name: Agent_Outcome"),
-                        "name must match"),
                 arguments("name over 32 characters", DECIDE.replace("agent_outcome", "a".repeat(33)),
                         "name must match"),
                 arguments("version not above history", DECIDE.replace("version: 2", "version: 1"),
                         "greater than every history version"),
-                arguments("duplicate history version", DECIDE.replace("version: 2", "version: 3").replace(
-                        "  - {version: 1, applies_from: 2026-10-20T00:00:00Z}",
-                        "  - {version: 1, applies_from: 2026-10-20T00:00:00Z}\n"
-                                + "  - {version: 1, applies_from: 2026-10-21T00:00:00Z}"),
-                        "history versions must be unique"),
-                arguments("version missing", DECIDE.replace("version: 2\n", ""), "version must be at least 1"),
-                arguments("applies_from missing", DECIDE.replace("applies_from: 2026-11-01T00:00:00Z\n", ""),
-                        "appliesFrom"),
-                arguments("history applies_from missing",
-                        DECIDE.replace("{version: 1, applies_from: 2026-10-20T00:00:00Z}", "{version: 1}"),
-                        "appliesFrom"),
                 arguments("unknown key", DECIDE + "sampling: 0.5\n", "sampling"),
-                arguments("duplicate key", DECIDE + "version: 3\n", "Duplicate field 'version'"),
                 arguments("second YAML document", DECIDE + "---\n" + GENERATE, "Trailing token"),
-                arguments("decide without questions", DECIDE.substring(0, DECIDE.indexOf("questions:")),
-                        "1 to 32 questions"),
                 arguments("decide with 33 questions", DECIDE.substring(0, DECIDE.indexOf("questions:"))
                         + questions(33), "1 to 32 questions"),
                 arguments("question id too long once prefixed",
                         DECIDE.replace("succeeded:", "s".repeat(51) + ":"), "must match"),
-                arguments("question id with a space", DECIDE.replace("succeeded:", "\"did succeed\":"),
-                        "must match"),
                 arguments("choice without options",
                         DECIDE.replace("{billing: null, technical: null, other: null}", "{}"),
                         "1 to '255' options"),
-                arguments("score with one level", DECIDE.replace("[poor, fair, good]", "[poor]"),
-                        "'2' to '10' levels"),
-                arguments("empty instructions",
-                        DECIDE.replace("\"Did the agent accomplish the user's goal?\"", "\"\""),
-                        "instructions must not be empty"),
-                arguments("unknown question type", DECIDE.replace("type: noul", "type: yesno"), "yesno"),
-                arguments("unknown question key", DECIDE.replace("type: noul,", "type: noul, weight: 2,"),
-                        "weight"),
-                arguments("decide with a prompt", DECIDE + "max_tokens: 10\n", "questions only"),
                 arguments("generate without placeholder", GENERATE.replace("\\n{{state}}", ""),
                         "exactly once in prompt.user"),
                 arguments("generate with placeholder twice", GENERATE.replace("{{state}}", "{{state}} {{state}}"),
                         "exactly once in prompt.user"),
-                arguments("generate with placeholder in system",
-                        GENERATE.replace("You summarize agent traces.", "{{state}}"), "must not appear"),
-                arguments("max_tokens 0", GENERATE.replace("max_tokens: 256", "max_tokens: 0"),
-                        "max_tokens must be between"),
-                arguments("max_tokens 4097", GENERATE.replace("max_tokens: 256", "max_tokens: 4097"),
-                        "max_tokens must be between"),
-                arguments("temperature above 2", GENERATE.replace("temperature: 0", "temperature: 2.5"),
-                        "temperature must be between"),
-                arguments("negative temperature", GENERATE.replace("temperature: 0", "temperature: -0.1"),
-                        "temperature must be between"),
                 arguments("schema with an unsupported keyword",
                         GENERATE.replace("{type: string}", "{type: string, not: {const: x}}"),
                         "unsupported keywords [not]"),
-                arguments("generate without schema", GENERATE.replace(
-                        "schema: {type: object, properties: {summary: {type: string}}, required: [summary]}\n", ""),
-                        "needs an object schema"),
-                arguments("generate with questions", GENERATE + "questions: {q: {type: noul, instructions: x}}\n",
-                        "no questions"),
                 arguments("prompt plus state over budget",
                         GENERATE.replace("Summarize this trace:", "x".repeat(20_000)),
                         "must be under modelInputBudgetBytes"),

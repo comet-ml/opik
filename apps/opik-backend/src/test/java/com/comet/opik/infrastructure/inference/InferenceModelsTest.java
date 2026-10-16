@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure.inference;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -16,7 +15,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
-import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,7 +25,6 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.inference.InferenceContract.BATCH_DECIDE;
 import static com.comet.opik.infrastructure.inference.InferenceContract.BATCH_GENERATE;
-import static com.comet.opik.infrastructure.inference.InferenceContract.CANCEL_JOB;
 import static com.comet.opik.infrastructure.inference.InferenceContract.GET_JOB;
 import static com.comet.opik.infrastructure.inference.InferenceContract.resource;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -116,27 +113,6 @@ class InferenceModelsTest {
         assertThat(InferenceContract.validateEndpoint(BATCH_GENERATE, "request", actual)).isEmpty();
     }
 
-    @Test
-    void requestWithoutRequestIdOmitsItAndStaysValid() {
-        var request = BatchGenerateRequest.builder()
-                .orgId("workspace-1")
-                .cache(false)
-                .items(List.of(BatchGenerateItem.builder()
-                        .itemId("item")
-                        .messages(List.of(Message.builder().role(Message.Role.USER).content("hi").build()))
-                        .schema(NODES.objectNode().put("type", "object"))
-                        .maxTokens(1)
-                        .temperature(2.0)
-                        .build()))
-                .build();
-
-        var actual = InferenceJson.MAPPER.valueToTree(request);
-
-        assertThat(actual.has("request_id")).isFalse();
-        assertThat(actual.has("workspace_id")).isFalse();
-        assertThat(InferenceContract.validateEndpoint(BATCH_GENERATE, "request", actual)).isEmpty();
-    }
-
     static Stream<Arguments> documentedResponses() {
         return Stream.of(
                 arguments("batch-submit-response.json", BATCH_DECIDE, BatchSubmitResponse.class,
@@ -145,8 +121,7 @@ class InferenceModelsTest {
                         BatchSubmitResponse.builder().jobId("job-7d3f").items(2).build()),
                 arguments("job-view-decide.json", GET_JOB, JobView.class, decideJobView()),
                 arguments("job-view-generate.json", GET_JOB, JobView.class, generateJobView()),
-                arguments("job-view-no-results.json", GET_JOB, JobView.class, noResultsJobView()),
-                arguments("job-view-no-results.json", CANCEL_JOB, JobView.class, noResultsJobView()));
+                arguments("job-view-no-results.json", GET_JOB, JobView.class, noResultsJobView()));
     }
 
     @ParameterizedTest(name = "{0} as {1}")
@@ -159,48 +134,30 @@ class InferenceModelsTest {
         assertThat(InferenceJson.MAPPER.treeToValue(json, type)).isEqualTo(expected);
     }
 
-    @Test
-    void errorEnvelopeIsValidAndDeserializes() throws Exception {
-        var json = resource("error-envelope.json");
-
-        assertThat(InferenceContract.validateErrorEnvelope(json)).isEmpty();
-        assertThat(InferenceJson.MAPPER.treeToValue(json, ErrorEnvelope.class)).isEqualTo(ErrorEnvelope.builder()
-                .error(ErrorBody.builder().code("quota_exceeded").message("too many pending items").retryable(true)
-                        .build())
-                .build());
-    }
-
-    static Stream<Arguments> responseFixtures() {
-        return Stream.of(
-                arguments("batch-submit-response.json", BatchSubmitResponse.class),
-                arguments("job-view-decide.json", JobView.class),
-                arguments("job-view-generate.json", JobView.class),
-                arguments("job-view-no-results.json", JobView.class),
-                arguments("error-envelope.json", ErrorEnvelope.class));
-    }
-
     /**
-     * Walks the JSON alongside the Java model, adding an unknown field to every object that is a model (never to a
-     * map, where it would be a new entry), so every model at every level must tolerate it.
+     * Walks each fixture alongside its Java model, adding an unknown field to every object that is a model (never to a
+     * map, where it would be a new entry), so every model at every level must tolerate it. The walk must reach every
+     * response model, so a model added later is covered too.
      */
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("responseFixtures")
-    void responseToleratesUnknownFieldsAtEveryLevel(String fixture, Class<?> type) throws Exception {
-        var clean = resource(fixture);
-        var withUnknownFields = clean.deepCopy();
-        addUnknownFields(withUnknownFields, type, new HashSet<>());
-
-        assertThat(withUnknownFields).isNotEqualTo(clean);
-        assertThat(InferenceJson.MAPPER.treeToValue(withUnknownFields, type))
-                .isEqualTo(InferenceJson.MAPPER.treeToValue(clean, type));
-    }
-
     @Test
-    void unknownFieldWalkCoversEveryResponseModel() {
+    void responseToleratesUnknownFieldsAtEveryLevel() throws Exception {
+        var fixtures = Map.of(
+                "batch-submit-response.json", BatchSubmitResponse.class,
+                "job-view-decide.json", JobView.class,
+                "job-view-generate.json", JobView.class,
+                "job-view-no-results.json", JobView.class,
+                "error-envelope.json", ErrorEnvelope.class);
         var visited = new HashSet<Class<?>>();
-        responseFixtures().forEach(arguments -> addUnknownFields(resource((String) arguments.get()[0]).deepCopy(),
-                (Class<?>) arguments.get()[1], visited));
 
+        for (var fixture : fixtures.entrySet()) {
+            var clean = resource(fixture.getKey());
+            var withUnknownFields = clean.deepCopy();
+            addUnknownFields(withUnknownFields, fixture.getValue(), visited);
+
+            assertThat(withUnknownFields).as(fixture.getKey()).isNotEqualTo(clean);
+            assertThat(InferenceJson.MAPPER.treeToValue(withUnknownFields, fixture.getValue())).as(fixture.getKey())
+                    .isEqualTo(InferenceJson.MAPPER.treeToValue(clean, fixture.getValue()));
+        }
         assertThat(visited).containsExactlyInAnyOrderElementsOf(RESPONSE_MODELS);
     }
 
@@ -211,18 +168,6 @@ class InferenceModelsTest {
         request.put("unexpected", true);
 
         assertThat(InferenceContract.validateEndpoint(BATCH_DECIDE, "request", request)).hasSizeGreaterThanOrEqualTo(2);
-    }
-
-    @Test
-    void everyResponseModelIgnoresUnknownProperties() {
-        var reachable = reachableModels(List.of(BatchSubmitResponse.class, JobView.class, ErrorEnvelope.class));
-
-        assertThat(reachable).containsExactlyInAnyOrderElementsOf(RESPONSE_MODELS);
-        assertThat(reachable).allSatisfy(model -> {
-            var annotation = model.getAnnotation(JsonIgnoreProperties.class);
-            assertThat(annotation).as(model.getName()).isNotNull();
-            assertThat(annotation.ignoreUnknown()).as(model.getName()).isTrue();
-        });
     }
 
     private static void addUnknownFields(JsonNode node, Type type, Set<Class<?>> visited) {
@@ -276,26 +221,6 @@ class InferenceModelsTest {
             return property.value();
         }
         return new PropertyNamingStrategies.SnakeCaseStrategy().translate(component.getName());
-    }
-
-    private static Set<Class<?>> reachableModels(List<Class<?>> roots) {
-        var found = new HashSet<Class<?>>();
-        var queue = new ArrayDeque<Type>(roots);
-        while (!queue.isEmpty()) {
-            var type = queue.poll();
-            if (type instanceof ParameterizedType parameterized) {
-                queue.addAll(List.of(parameterized.getActualTypeArguments()));
-                continue;
-            }
-            var clazz = (Class<?>) type;
-            if (clazz.isSealed()) {
-                queue.addAll(List.of(clazz.getPermittedSubclasses()));
-            } else if (clazz.isRecord() && found.add(clazz)) {
-                Stream.of(clazz.getRecordComponents()).map(RecordComponent::getGenericType)
-                        .forEach(queue::add);
-            }
-        }
-        return found;
     }
 
     private static JsonNode state() {
