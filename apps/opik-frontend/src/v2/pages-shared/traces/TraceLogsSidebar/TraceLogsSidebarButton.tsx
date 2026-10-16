@@ -31,6 +31,7 @@ type TraceLogsSidebarButtonProps = {
   // display. Used by per-row triggers (e.g. the online-evaluation rules table) so the sidebar is
   // mounted once for the page instead of once per row (which would race on the shared tls_* state).
   renderSidebar?: boolean;
+  stopClickPropagation?: boolean;
 };
 
 const TraceLogsSidebarButton: React.FunctionComponent<
@@ -47,16 +48,19 @@ const TraceLogsSidebarButton: React.FunctionComponent<
   label = "Go to logs",
   viewConfig,
   renderSidebar = true,
+  stopClickPropagation = false,
 }) => {
   const { open, openSidebar, closeSidebar } = useTraceLogsSidebarControls();
 
   const handleOpen = useCallback(
-    () =>
+    (event: React.MouseEvent) => {
+      if (stopClickPropagation) event.stopPropagation();
       openSidebar(
         sourceFilters,
         lockScope ? { locked: true, label: scopeLabel } : undefined,
-      ),
-    [openSidebar, sourceFilters, lockScope, scopeLabel],
+      );
+    },
+    [openSidebar, sourceFilters, lockScope, scopeLabel, stopClickPropagation],
   );
 
   const labelClassName = cn(

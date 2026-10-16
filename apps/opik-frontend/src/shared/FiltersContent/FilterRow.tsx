@@ -14,7 +14,13 @@ import TimeRow from "@/shared/FiltersContent/rows/TimeRow";
 import DictionaryRow from "@/shared/FiltersContent/rows/DictionaryRow";
 import DefaultRow from "@/shared/FiltersContent/rows/DefaultRow";
 import CategoryRow from "@/shared/FiltersContent/rows/CategoryRow";
+import ConditionCard from "@/shared/ConditionCard/ConditionCard";
 import { createFilter } from "@/lib/filters";
+
+export type FilterRowVariant = "table" | "card";
+
+const CARD_FIELD_CLASSES =
+  "[&_.min-w-32]:min-w-0 [&_.min-w-40]:min-w-0 [&_[role=combobox]]:h-8 [&_input]:h-8";
 
 type FilterRowProps<TColumnData> = {
   prefix: string;
@@ -24,6 +30,7 @@ type FilterRowProps<TColumnData> = {
   filter: Filter;
   onRemove: (id: string) => void;
   onChange: (filter: Filter) => void;
+  variant?: FilterRowVariant;
 };
 
 export const FilterRow = <TColumnData,>({
@@ -34,6 +41,7 @@ export const FilterRow = <TColumnData,>({
   disabledColumns,
   onRemove,
   onChange: onFilterChange,
+  variant = "table",
 }: FilterRowProps<TColumnData>) => {
   const onChange = useCallback(
     (newFilter: Filter) => {
@@ -83,30 +91,54 @@ export const FilterRow = <TColumnData,>({
     }
   };
 
+  const columnCell = (
+    <td className="p-1">
+      <ColumnSelector
+        columns={columns}
+        field={filter.field}
+        onSelect={(column) =>
+          onChange({
+            ...createFilter(),
+            id: filter.id,
+            field: column.id,
+            type: column.type as COLUMN_TYPE,
+            operator:
+              getConfig?.(column.id)?.defaultOperator ??
+              DEFAULT_OPERATOR_MAP[column.type as COLUMN_TYPE] ??
+              OPERATORS_MAP[column.type as COLUMN_TYPE]?.[0]?.value ??
+              "",
+          })
+        }
+        disabledColumns={disabledColumns}
+      ></ColumnSelector>
+    </td>
+  );
+
+  if (variant === "card") {
+    return (
+      <ConditionCard
+        onRemove={() => onRemove(filter.id)}
+        removeLabel="Remove filter"
+        errors={[filter.error]}
+        className={CARD_FIELD_CLASSES}
+      >
+        <table className="w-full table-fixed">
+          <tbody>
+            <tr className="[&>td:first-child]:pl-0 [&>td:last-child]:pr-0 [&>td]:px-1 [&>td]:py-0">
+              {columnCell}
+              {renderByType()}
+            </tr>
+          </tbody>
+        </table>
+      </ConditionCard>
+    );
+  }
+
   return (
     <>
       <tr>
         <td className="comet-body-s p-1">{prefix}</td>
-        <td className="p-1">
-          <ColumnSelector
-            columns={columns}
-            field={filter.field}
-            onSelect={(column) =>
-              onChange({
-                ...createFilter(),
-                id: filter.id,
-                field: column.id,
-                type: column.type as COLUMN_TYPE,
-                operator:
-                  getConfig?.(column.id)?.defaultOperator ??
-                  DEFAULT_OPERATOR_MAP[column.type as COLUMN_TYPE] ??
-                  OPERATORS_MAP[column.type as COLUMN_TYPE]?.[0]?.value ??
-                  "",
-              })
-            }
-            disabledColumns={disabledColumns}
-          ></ColumnSelector>
-        </td>
+        {columnCell}
         {renderByType()}
         <td>
           <Button
