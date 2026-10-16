@@ -14,7 +14,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
@@ -62,6 +61,10 @@ public class ExperimentItemLedger {
     /**
      * Records how the entry ended, unless an earlier delivery already did. True for the first record only, so a
      * caller can attach a step that must happen once per item.
+     *
+     * Kept for the full TTL, not cut short when the run drains: an entry that succeeded but lost its
+     * acknowledgement is redelivered with no bound from maxRetries, which only retires failures, and a late
+     * redelivery that finds no outcome runs the item again.
      */
     public Mono<Boolean> record(@NonNull String workspaceId, @NonNull UUID experimentId,
             @NonNull StreamMessageId entryId,
@@ -112,27 +115,6 @@ public class ExperimentItemLedger {
                 .map(outcomes -> outcomes.stream()
                         .filter(Outcome.FAILED.name()::equals)
                         .count());
-    }
-
-    /**
-     * Shortens how long the outcomes outlive a drained run. They are one field per item, so keeping them for the
-     * full TTL holds a large run's worth for a day. Deleting them outright reopens the duplicate they exist to
-     * stop: the last items' acknowledgements can still be lost, and a redelivery that finds no outcome runs the
-     * item again. Every redelivery happens within maxRetries idle periods, so that is how long they are kept.
-     */
-    public Mono<Void> expireAfterDrain(@NonNull String workspaceId, @NonNull UUID experimentId) {
-        return entries(workspaceId, experimentId)
-                .expireIfLess(redeliveryWindow())
-                .onErrorResume(error -> {
-                    // The TTL still clears them; the run has drained either way
-                    log.warn("Failed to shorten the outcomes of drained experiment '{}'", experimentId, error);
-                    return Mono.just(false);
-                })
-                .then();
-    }
-
-    private Duration redeliveryWindow() {
-        return config.getPendingMessageDuration().toJavaDuration().multipliedBy(config.getMaxRetries());
     }
 
     private RMapReactive<String, String> entries(String workspaceId, UUID experimentId) {

@@ -177,35 +177,17 @@ class ExperimentItemLedgerTest {
         assertThat(ledger.failures(WORKSPACE_ID, sibling).block()).isZero();
     }
 
+    // A success whose acknowledgement is lost is redelivered with no bound from maxRetries, so the
+    // outcomes are kept for the run's full TTL rather than a guessed redelivery window.
     @Test
-    @DisplayName("should keep a drained run's outcomes only for as long as a redelivery can arrive")
-    void drainShortensTheOutcomesToTheRedeliveryWindow() {
+    @DisplayName("should keep outcomes for the full TTL")
+    void outcomesAreKeptForTheFullTtl() {
         var experimentId = UUID.randomUUID();
         ledger.record(WORKSPACE_ID, experimentId, entry(), Outcome.OK).block();
 
-        assertThat(ttl(experimentId)).isGreaterThan(Duration.ofHours(23));
-
-        ledger.expireAfterDrain(WORKSPACE_ID, experimentId).block();
-
-        var window = config.getPendingMessageDuration().toJavaDuration().multipliedBy(config.getMaxRetries());
         assertThat(ttl(experimentId))
-                .isPositive()
-                .isLessThanOrEqualTo(window);
-    }
-
-    // A late item recorded after the drain must not stretch the outcomes back out to the full TTL.
-    @Test
-    @DisplayName("should not extend a drained run's outcomes when a late item is recorded")
-    void lateRecordKeepsTheShortenedExpiry() {
-        var experimentId = UUID.randomUUID();
-        ledger.record(WORKSPACE_ID, experimentId, entry(), Outcome.OK).block();
-        ledger.expireAfterDrain(WORKSPACE_ID, experimentId).block();
-
-        ledger.record(WORKSPACE_ID, experimentId, entry(), Outcome.OK).block();
-        ledger.expireAfterDrain(WORKSPACE_ID, experimentId).block();
-
-        var window = config.getPendingMessageDuration().toJavaDuration().multipliedBy(config.getMaxRetries());
-        assertThat(ttl(experimentId)).isLessThanOrEqualTo(window);
+                .isGreaterThan(config.getBatchCounterTtl().toJavaDuration().minusHours(1))
+                .isLessThanOrEqualTo(config.getBatchCounterTtl().toJavaDuration());
     }
 
     private StreamMessageId entry() {
