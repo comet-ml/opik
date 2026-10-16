@@ -34,4 +34,26 @@ describe("convertToStandardSignature", () => {
       ].join("\n"),
     );
   });
+
+  it("reads a parameter named spans from its mapped path on span scope", () => {
+    const code = [
+      "class M(base_metric.BaseMetric):",
+      "    def score(self, spans):",
+      "        return score_result.ScoreResult(value=1, name=self.name)",
+    ].join("\n");
+
+    expect(
+      convertToStandardSignature(code, EVALUATORS_RULE_SCOPE.span, {
+        spans: "metadata.spans",
+      }),
+    ).toBe(
+      [
+        "import json",
+        "class M(base_metric.BaseMetric):",
+        "    def score(self, metadata=None):",
+        '        spans = json.loads(metadata)["spans"]',
+        "        return score_result.ScoreResult(value=1, name=self.name)",
+      ].join("\n"),
+    );
+  });
 });

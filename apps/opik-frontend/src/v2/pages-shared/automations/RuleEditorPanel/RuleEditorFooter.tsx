@@ -1,6 +1,7 @@
 import React from "react";
 import { UseFormReturn, useWatch } from "react-hook-form";
 import isEqual from "lodash/isEqual";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "@/ui/button";
 import { Switch } from "@/ui/switch";
@@ -52,6 +53,7 @@ const RuleEditorFooter: React.FC<RuleEditorFooterProps> = ({
         onClick={onSubmit}
         disabled={isSubmitting || (isEdit && !hasChanges)}
       >
+        {isSubmitting && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
         {isEdit ? "Save changes" : "Create evaluator"}
       </Button>
     </div>

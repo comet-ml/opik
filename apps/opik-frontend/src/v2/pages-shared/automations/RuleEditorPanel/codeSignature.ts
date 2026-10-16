@@ -74,7 +74,9 @@ export const convertToStandardSignature = (
   );
   const mapped = parameters
     .map(getParameterName)
-    .filter((name) => name in codeArguments && name !== SPANS_ARGUMENT);
+    .filter(
+      (name) => name in codeArguments && codeArguments[name] !== SPANS_ARGUMENT,
+    );
   const usedSections = new Set<string>();
   const kept: string[] = [];
 
