@@ -10,18 +10,19 @@ title: Dialogue helpfulness
 
 # Dialogue Helpfulness Judge
 
-`DialogueHelpfulnessJudge` inspects the latest assistant reply in the context of preceding turns. It rewards responses that acknowledge the user’s request, use the available context, and offer actionable guidance.
+`DialogueHelpfulnessJudge` rates how helpful an assistant reply is. It rewards responses that acknowledge the user’s request, use the available context, and offer actionable guidance. The judge only sees the `output` string, so to have it weigh the earlier turns, include them in `output` together with the reply.
 
 ```python title="Scoring a support reply"
 from opik.evaluation.metrics import DialogueHelpfulnessJudge
 
-turns = """USER: My VPN disconnects every 5 minutes.\nASSISTANT: Try reinstalling the client.\nUSER: I already did.\n"""
+dialogue = """USER: My VPN disconnects every 5 minutes.
+ASSISTANT: Try reinstalling the client.
+USER: I already did.
+LATEST ASSISTANT REPLY: Can you send logs? I'll escalate to network engineering.
+"""
 
 metric = DialogueHelpfulnessJudge()
-score = metric.score(
-    input=turns,
-    output="Can you send logs? I'll escalate to network engineering.",
-)
+score = metric.score(output=dialogue)
 
 print(score.value)
 print(score.reason)
@@ -31,9 +32,9 @@ print(score.reason)
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
-| `input` | `str` | Optional | Conversation history (alternating USER / ASSISTANT blocks). |
-| `conversation` | `list[dict]` | Optional | Structured turns (`{"role": "user", "content": "..."}` | `{"role": "assistant", ...}`). |
-| `output` | `str` | **Yes** | Latest assistant reply to score. |
+| `output` | `str` | **Yes** | Text sent to the judge. Put the conversation history (alternating USER / ASSISTANT blocks) and the latest assistant reply here. |
+
+`input`, `conversation`, and any other keyword arguments are accepted but ignored: they never reach the judge prompt.
 
 ## Configuration
 

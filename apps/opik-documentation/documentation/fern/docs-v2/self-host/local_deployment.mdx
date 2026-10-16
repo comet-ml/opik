@@ -208,7 +208,13 @@ You can run a specific version of Opik by setting the `OPIK_VERSION` environment
 variable:
 
 ```bash
-OPIK_VERSION=latest
+OPIK_VERSION=latest ./opik.sh
+```
+
+To keep the version for several commands in the same shell, export it first:
+
+```bash
+export OPIK_VERSION=latest
 
 ./opik.sh
 ```

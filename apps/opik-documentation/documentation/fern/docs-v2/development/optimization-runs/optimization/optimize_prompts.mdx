@@ -42,10 +42,11 @@ result = optimizer.optimize_prompt(
     metric=answer_quality,
     max_trials=5,
     n_samples=50,
+    project_name="support-bot-optimization",
 )
 ```
 
-- Set `project_name` on the optimizer to group runs by team or initiative.
+- Pass `project_name` to `optimize_prompt()` to group runs by team or initiative. It is not an optimizer constructor argument.
 - Start with `max_trials` = 3–5. Increase once you confirm the metric is reliable.
 - Use `n_samples` to limit cost during early exploration; rerun on the full dataset before promoting a prompt.
 - For optimizers with inner-loop evaluations (HRPO, GEPA), set `n_samples_minibatch` to keep those steps lightweight.

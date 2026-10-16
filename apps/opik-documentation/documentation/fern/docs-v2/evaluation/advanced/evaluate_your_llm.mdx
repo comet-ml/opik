@@ -9,7 +9,7 @@ title: Evaluate your agent
 ---
 
 <Tip>
-  In Opik 2.0, Experiments and Evaluation Suites are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments.
+  In Opik 2.0, Experiments and Evaluation Suites are project-scoped. Make sure to specify a `project_name` when creating datasets. In the Python SDK, `evaluate()` logs its traces to the dataset's project.
 </Tip>
 
 Evaluating your LLM application allows you to have confidence in the performance of your LLM application. In this guide, we will walk through the process of evaluating complex applications like LLM chains or agents.
@@ -293,7 +293,6 @@ we want to evaluate with, we can run the evaluation:
         dataset=dataset,
         task=evaluation_task,
         scoring_metrics=[hallucination_metric],
-        project_name="my-project",
         experiment_config={
             "model": MODEL
         }
@@ -419,7 +418,6 @@ When creating an Experiment, you can link the Experiment to a specific prompt ve
         task=evaluation_task,
         scoring_metrics=[hallucination_metric],
         prompts=[prompt],
-        project_name="my-project",
     )
     ```
 
@@ -433,7 +431,9 @@ The experiment will now be linked to the prompt allowing you to view all experim
 
 ### Logging traces to a specific project
 
-You can use the `project_name` parameter of the `evaluate` function to log evaluation traces to a specific project:
+In the Python SDK, evaluation traces are logged to the project of the dataset you evaluate. Set the project when you create the dataset. The `project_name` parameter of `evaluate()` is deprecated: it is ignored (with a warning) when the dataset has a project, and every dataset created through the SDK has one.
+
+In the TypeScript SDK, use the `projectName` option of `evaluate`:
 
 <CodeBlocks>
     ```typescript title="TypeScript" language="typescript"
@@ -446,11 +446,15 @@ You can use the `project_name` parameter of the `evaluate` function to log evalu
     ```
 
     ```python title="Python" language="python"
+    dataset = client.get_or_create_dataset(
+        name="Example dataset",
+        project_name="hallucination-detection",
+    )
+
     evaluation = evaluate(
         dataset=dataset,
         task=evaluation_task,
         scoring_metrics=[hallucination_metric],
-        project_name="hallucination-detection",
     )
     ```
 
