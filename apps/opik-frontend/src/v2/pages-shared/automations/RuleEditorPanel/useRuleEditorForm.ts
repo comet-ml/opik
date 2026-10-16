@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FieldPathValue, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import cloneDeep from "lodash/cloneDeep";
 import isEqual from "lodash/isEqual";
@@ -193,6 +193,16 @@ const getDefaultValues = (
   } as EvaluationRuleFormType;
 };
 
+type ScopeDraftField =
+  | "triggerScope"
+  | "filters"
+  | "llmJudgeDetails"
+  | "pythonCodeDetails";
+
+type ScopeDraft = {
+  [K in ScopeDraftField]: FieldPathValue<EvaluationRuleFormType, K>;
+};
+
 type UseRuleEditorFormParams = {
   ruleType: UI_EVALUATORS_RULE_TYPE;
   projectId?: string;
@@ -239,24 +249,38 @@ const useRuleEditorForm = ({
     [savedJudge],
   );
 
+  const scopeDraftsRef = useRef<
+    Partial<Record<EVALUATORS_RULE_SCOPE, ScopeDraft>>
+  >({});
+
   const changeScope = useCallback(
     (scope: EVALUATORS_RULE_SCOPE) => {
-      const { model, config } = form.getValues("llmJudgeDetails");
+      const uiType = form.getValues("uiType");
+      const llmJudgeDetails = form.getValues("llmJudgeDetails");
+      scopeDraftsRef.current[form.getValues("scope")] = cloneDeep({
+        triggerScope: form.getValues("triggerScope"),
+        filters: form.getValues("filters"),
+        llmJudgeDetails,
+        pythonCodeDetails: form.getValues("pythonCodeDetails"),
+      });
+      const draft = scopeDraftsRef.current[scope];
+
       form.setValue("scope", scope);
-      form.setValue("triggerScope", EVAL_TRIGGER_SCOPE.production);
+      form.setValue("type", getBackendRuleType(scope, uiType));
       form.setValue(
-        "type",
-        getBackendRuleType(scope, form.getValues("uiType")),
+        "triggerScope",
+        draft?.triggerScope ?? EVAL_TRIGGER_SCOPE.production,
       );
-      form.setValue("filters", withEmptyRuleFilter([]));
+      form.setValue("filters", draft?.filters ?? withEmptyRuleFilter([]));
       form.setValue("llmJudgeDetails", {
-        ...cloneDeep(getDefaultJudgeData(form.getValues("uiType"))[scope]),
-        model,
-        config,
+        ...(draft?.llmJudgeDetails ??
+          cloneDeep(getDefaultJudgeData(uiType)[scope])),
+        model: llmJudgeDetails.model,
+        config: llmJudgeDetails.config,
       });
       form.setValue(
         "pythonCodeDetails",
-        cloneDeep(DEFAULT_PYTHON_CODE_DATA[scope]),
+        draft?.pythonCodeDetails ?? cloneDeep(DEFAULT_PYTHON_CODE_DATA[scope]),
       );
     },
     [form],
