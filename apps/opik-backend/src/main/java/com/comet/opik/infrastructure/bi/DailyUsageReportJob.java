@@ -21,9 +21,10 @@ import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.function.Tuple4;
+import reactor.util.function.Tuple5;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -46,6 +47,7 @@ public class DailyUsageReportJob extends Job implements InterruptableJob {
     private final @NonNull TraceService traceService;
     private final @NonNull ExperimentService experimentService;
     private final @NonNull DatasetService datasetService;
+    private final @NonNull ActiveClientsService activeClientsService;
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
 
@@ -122,26 +124,27 @@ public class DailyUsageReportJob extends Job implements InterruptableJob {
                 .then();
     }
 
-    private Mono<Tuple4<UserCount, Long, Long, Long>> fetchAllReportData() {
+    private Mono<Tuple5<UserCount, Long, Long, Long, Map<String, Long>>> fetchAllReportData() {
         return Mono.zip(
                 usageReportService.getUserCount(),
                 traceService.getDailyCreatedCount(),
                 experimentService.getDailyCreatedCount(),
                 Mono.fromCallable(datasetService::getDailyCreatedCount)
-                        .subscribeOn(Schedulers.boundedElastic()));
+                        .subscribeOn(Schedulers.boundedElastic()),
+                activeClientsService.getCounts());
     }
 
-    private BiEvent mapResults(String anonymousId, Tuple4<UserCount, Long, Long, Long> results) {
-        return new BiEvent(
-                anonymousId,
-                STATISTICS_BE,
-                Map.of(
-                        "opik_app_version", config.getMetadata().getVersion(),
-                        "total_users", String.valueOf(results.getT1().allTimes()),
-                        "daily_users", String.valueOf(results.getT1().daily()),
-                        "daily_traces", String.valueOf(results.getT2()),
-                        "daily_experiments", String.valueOf(results.getT3()),
-                        "daily_datasets", String.valueOf(results.getT4())));
+    private BiEvent mapResults(String anonymousId,
+            Tuple5<UserCount, Long, Long, Long, Map<String, Long>> results) {
+        var properties = new HashMap<String, String>();
+        properties.put("opik_app_version", config.getMetadata().getVersion());
+        properties.put("total_users", String.valueOf(results.getT1().allTimes()));
+        properties.put("daily_users", String.valueOf(results.getT1().daily()));
+        properties.put("daily_traces", String.valueOf(results.getT2()));
+        properties.put("daily_experiments", String.valueOf(results.getT3()));
+        properties.put("daily_datasets", String.valueOf(results.getT4()));
+        results.getT5().forEach((name, count) -> properties.put(name, String.valueOf(count)));
+        return new BiEvent(anonymousId, STATISTICS_BE, Map.copyOf(properties));
     }
 
     private boolean hasNoDataToSubmit(BiEvent biEvent) {

@@ -19,7 +19,9 @@ import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.infrastructure.http.CorsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -49,6 +51,8 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamUtils;
 
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -63,6 +67,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class DailyUsageReportJobTest {
@@ -317,6 +322,12 @@ class DailyUsageReportJobTest {
             projectResourceClient.createProject(UUID.randomUUID().toString(), apiKey, workspaceName);
 
             setUpData(apiKey, workspaceName, workspaceId);
+
+            // The run at application startup races this test's data setup: if it reads the first project, it
+            // reports and marks the day as sent, and the run below then skips. Clear it so this run reports.
+            transactionTemplate.inTransaction(TransactionTemplateAsync.WRITE,
+                    handle -> handle.createUpdate("DELETE FROM metadata WHERE `key` = 'daily_usage_report'")
+                            .execute());
 
             var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
 
@@ -695,6 +706,65 @@ class DailyUsageReportJobTest {
                 // traces created here rather than either project's share of them
                 verifyDailyTraces(wireMock.server(), expectedDailyTraces);
             });
+        }
+
+        @Test
+        @DisplayName("Daily usage report counts distinct active clients")
+        void dailyUsageReportCountsActiveClients() throws Exception {
+            var sdkClient = "a".repeat(64);
+            var browser = UUID.randomUUID().toString();
+
+            // The filter records today's clients: repeats count once and malformed IDs are ignored
+            for (var clientId : List.of(sdkClient, sdkClient, "not-a-client-id")) {
+                try (var response = client.target("%s/v1/private/projects".formatted(baseURI))
+                        .request()
+                        .header(RequestContext.WORKSPACE_HEADER, "default")
+                        .header(CorsFactory.OPIK_CLIENT_ID_HEADER, clientId)
+                        .header(CorsFactory.OPIK_BROWSER_ID_HEADER, browser)
+                        .get()) {
+                    assertThat(response.getStatus()).isEqualTo(200);
+                }
+            }
+            var today = LocalDate.now(ZoneOffset.UTC);
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+                assertThat(redisCli("PFCOUNT", activeClientsKey("sdk", today))).isEqualTo("1");
+                assertThat(redisCli("PFCOUNT", activeClientsKey("ui", today))).isEqualTo("1");
+            });
+
+            // The report covers windows ending yesterday; a client seen on several days counts once
+            var yesterday = today.minusDays(1);
+            redisCli("PFADD", activeClientsKey("sdk", yesterday), "a", "b");
+            redisCli("PFADD", activeClientsKey("sdk", yesterday.minusDays(3)), "b", "c");
+            redisCli("PFADD", activeClientsKey("sdk", yesterday.minusDays(20)), "d");
+            redisCli("PFADD", activeClientsKey("sdk", yesterday.minusDays(40)), "e");
+            redisCli("PFADD", activeClientsKey("ui", yesterday.minusDays(3)), "u");
+
+            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
+            guiceJobManager.getScheduler().scheduleJob(TriggerBuilder.newTrigger().startNow().forJob(key).build());
+
+            // No traces were created: the client counts alone are enough for the report to be sent
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                            .withRequestBody(matchingJsonPath("$.event_type",
+                                    equalTo(DailyUsageReportJob.STATISTICS_BE))
+                                    .and(matchingJsonPath("$.event_properties.daily_sdk_clients", equalTo("2")))
+                                    .and(matchingJsonPath("$.event_properties.weekly_sdk_clients", equalTo("3")))
+                                    .and(matchingJsonPath("$.event_properties.monthly_sdk_clients", equalTo("4")))
+                                    .and(matchingJsonPath("$.event_properties.daily_ui_clients", equalTo("0")))
+                                    .and(matchingJsonPath("$.event_properties.weekly_ui_clients", equalTo("1")))
+                                    .and(matchingJsonPath("$.event_properties.monthly_ui_clients",
+                                            equalTo("1"))))));
+        }
+
+        private String activeClientsKey(String type, LocalDate day) {
+            return "opik:active_clients:%s:%s".formatted(type, day);
+        }
+
+        private String redisCli(String... command) throws Exception {
+            var args = new String[command.length + 1];
+            args[0] = "redis-cli";
+            System.arraycopy(command, 0, args, 1, command.length);
+            return REDIS.execInContainer(args).getStdout().trim();
         }
 
     }
