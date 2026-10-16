@@ -141,8 +141,8 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
         try {
             runGuidanceService.replaceIfStamped(message.workspaceId(), message.projectId(), stamped, replacement);
         } catch (RuntimeException e) {
-            log.warn("Failed to clear the guidance version of a queued Agent Insights run, reportId='{}', "
-                    + "project='{}'", message.reportId(), message.projectId(), e);
+            log.warn("Failed to replace the guidance version stamp '{}' with '{}' for a queued Agent Insights run, "
+                    + "reportId='{}', project='{}'", stamped, replacement, message.reportId(), message.projectId(), e);
         }
     }
 
