@@ -1,5 +1,6 @@
 package com.comet.opik.domain.llm.langchain4j;
 
+import com.comet.opik.infrastructure.llm.MediaContentUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -190,12 +191,15 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
             if (content instanceof TextContent textContent) {
                 builder.addText(textContent.text());
             } else if (content instanceof ImageContent imageContent) {
-                builder.addImageUrl(imageContent.image().url().toString());
+                var image = imageContent.image();
+                builder.addImageUrl(MediaContentUtils.toUriString(image.url(), image.mimeType(), image.base64Data()));
             } else if (content instanceof VideoContent videoContent) {
-                builder.addVideoUrl(videoContent.video().url().toString());
+                var video = videoContent.video();
+                builder.addVideoUrl(MediaContentUtils.toUriString(video.url(), video.mimeType(), video.base64Data()));
             } else if (content instanceof AudioContent audioContent) {
                 // AudioContent uses URL-based audio (audio_url format for custom providers like Qwen3)
-                builder.addAudioUrl(audioContent.audio().url().toString());
+                var audio = audioContent.audio();
+                builder.addAudioUrl(MediaContentUtils.toUriString(audio.url(), audio.mimeType(), audio.base64Data()));
             }
             // Other content types (pdf) are not supported yet in OpikUserMessage
         }
