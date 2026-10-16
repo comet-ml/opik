@@ -52,6 +52,7 @@ import com.google.common.eventbus.EventBus;
 import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
@@ -1816,6 +1817,41 @@ class OnlineScoringEngineTest {
         assertThat(((ImageContent) parts.get(1)).image().url().toString()).isEqualTo(expectedUrl);
     }
 
+    @Test
+    @DisplayName("should pass base64 data URI image and audio as inline data, not as URLs")
+    void shouldInlineMedia_whenUrlsAreBase64DataUris() {
+        var base64Data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        var contentParts = List.of(
+                LlmAsJudgeMessageContent.builder()
+                        .type("image_url")
+                        .imageUrl(LlmAsJudgeMessageContent.ImageUrl.builder()
+                                .url("{{image_url}}")
+                                .build())
+                        .build(),
+                LlmAsJudgeMessageContent.builder()
+                        .type("audio_url")
+                        .audioUrl(LlmAsJudgeMessageContent.AudioUrl.builder()
+                                .url("{{audio_url}}")
+                                .build())
+                        .build());
+
+        var messages = List.of(
+                LlmAsJudgeMessage.builder()
+                        .role(ChatMessageType.USER)
+                        .contentArray(contentParts)
+                        .build());
+
+        var rendered = OnlineScoringEngine.renderMessages(
+                messages,
+                Map.of("image_url", "data:image/png;base64," + base64Data,
+                        "audio_url", "data:audio/wav;base64," + base64Data),
+                Trace.builder().build());
+
+        assertThat(rendered).containsExactly(UserMessage.from(
+                ImageContent.from(base64Data, "image/png"),
+                AudioContent.from(base64Data, "audio/wav")));
+    }
+
     // ========================================
     // Array Message Format Tests
     // ========================================
@@ -2088,8 +2124,8 @@ class OnlineScoringEngineTest {
         var userMessage = (UserMessage) renderedMessages.getFirst();
         assertThat(userMessage.contents()).hasSize(2);
 
-        var videoContent = (VideoContent) userMessage.contents().get(1);
-        assertThat(videoContent.video().url().toString()).startsWith("data:video/mp4;base64,");
+        assertThat(userMessage.contents().get(1)).isEqualTo(VideoContent.from(
+                "AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAACKBtZGF0", "video/mp4"));
     }
 
     @Test
