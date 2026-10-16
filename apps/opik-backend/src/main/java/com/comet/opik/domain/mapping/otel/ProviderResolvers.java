@@ -17,8 +17,10 @@ import java.util.List;
  *     canonical names, so the two Google steps below can match on canonical values only.</li>
  *     <li>{@link GoogleProviderResolver} disambiguates the Google values that name no backend,
  *     which requires the aliased vocabulary to have settled first.</li>
- *     <li>{@link VertexAnthropicResolver} last, because it keys on {@code google_vertexai} —
- *     a value either of the two preceding steps can produce.</li>
+ *     <li>{@link VertexAnthropicResolver}, because it keys on {@code google_vertexai} — a value
+ *     either of the two preceding steps can produce.</li>
+ *     <li>{@link ProviderHostResolver} last, so it only sees dotted values that no earlier step
+ *     recognised, such as an API host like {@code api.cerebras.ai}.</li>
  * </ol>
  */
 @UtilityClass
@@ -28,7 +30,8 @@ public class ProviderResolvers {
             new ElasticInferenceServiceResolver(),
             new GenAiProviderAliasResolver(),
             new GoogleProviderResolver(),
-            new VertexAnthropicResolver());
+            new VertexAnthropicResolver(),
+            new ProviderHostResolver());
 
     public static ProviderResolver.Resolution resolve(String model, String provider, ObjectNode metadata) {
         var resolution = new ProviderResolver.Resolution(model, provider);
