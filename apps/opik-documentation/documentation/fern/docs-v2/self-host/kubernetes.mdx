@@ -26,14 +26,14 @@ You can install Opik using the helm chart maintained by the Opik team by running
 
 Add Opik Helm repo
 
-```bash
+```bash wordWrap
 helm repo add opik https://comet-ml.github.io/opik/
 helm repo update
 ```
 
 You can set VERSION to the specific Opik version or leave it as 'latest'
 
-```bash
+```bash wordWrap
 VERSION=latest
 helm upgrade --install opik -n opik --create-namespace opik/opik \
     --set component.backend.image.tag=$VERSION \
@@ -46,14 +46,14 @@ helm upgrade --install opik -n opik --create-namespace opik/opik \
   We recommend that you always install the latest version of the Opik helm chart. You can list the available chart
   versions by running:
 
-  ```bash
+  ```bash wordWrap
   helm search repo opik/opik --versions
   ```
 </Tip>
 
 You can port-forward any service you need to your local machine:
 
-```bash
+```bash wordWrap
 kubectl port-forward -n opik svc/opik-frontend 5173
 ```
 
@@ -69,7 +69,7 @@ You can find a full list of the configuration options in the [helm chart documen
 
 ### Configure ingress for opik-frontend
 
-```yaml
+```yaml wordWrap
 component:
     frontend:
       ingress:
@@ -93,7 +93,7 @@ component:
 
 ### Configure LoadBalancer service for clickhouse
 
-```yaml
+```yaml wordWrap
 clickhouse:
   service:
     serviceTemplate: clickhouse-cluster-svc-lb-template
@@ -114,7 +114,7 @@ Attempting to set up replication before Opik is running may result in errors or 
 
 </Warning>
 
-```yaml
+```yaml wordWrap
 clickhouse:
   replicasCount: 2
 ```
@@ -134,7 +134,7 @@ You can create read-only ClickHouse users with custom settings profiles.
 
 ### Using inline passwords
 
-```yaml
+```yaml wordWrap
 clickhouse:
   additionalProfiles:
     # Keep this `default` entry. Helm replaces lists rather than merging them, so a values file
@@ -162,7 +162,7 @@ clickhouse:
 
 When `adminUser.useSecret.enabled: true`, user passwords are read from a Kubernetes secret. By default, it uses the admin secret (`adminUser.secretname`) with the key `<username>_pass`:
 
-```yaml
+```yaml wordWrap
 clickhouse:
   adminUser:
     useSecret:
@@ -200,7 +200,7 @@ The chart deploys MinIO by default and configures the backend for it (`S3_URL` p
 
 ### Using AWS key and secret keys
 
-```yaml
+```yaml wordWrap
 minio:
   enabled: false
 
@@ -217,7 +217,7 @@ component:
 
 If your IAM role is configured for the k8s nodes, the only things you will need is to set for opik-backend:
 
-```yaml
+```yaml wordWrap
 minio:
   enabled: false
 
@@ -230,7 +230,7 @@ component:
 
 If your role should be used by opik-backend serviceAccount, in addition you need to set:
 
-```yaml
+```yaml wordWrap
 component:
   backend:
     serviceAccount:
@@ -254,7 +254,7 @@ by default.
 
 To enable it:
 
-```yaml
+```yaml wordWrap
 clickhouse:
   forceMerge:
     enabled: true
@@ -269,7 +269,7 @@ can fill the background merge pool for hours, and mutations (deletes) cannot sta
 enabling it, check how much data sits in old parts. Run this on each replica, since every replica merges its own
 copy; replace `opik` if you changed the database name:
 
-```sql
+```sql wordWrap
 SELECT database, table, count() AS parts, formatReadableSize(sum(bytes_on_disk)) AS size
 FROM system.parts
 WHERE active AND database = 'opik' AND modification_time < now() - INTERVAL 7 DAY
@@ -283,7 +283,7 @@ Supported from Opik chart version 1.4.2
 
 Configuration snippet for using external Clickhouse:
 
-```yaml
+```yaml wordWrap
 component:
     backend:
       ...
@@ -307,7 +307,7 @@ clickhouse:
 
 The passwords can be handled in the secret, and then you should configure it as following
 
-```yaml
+```yaml wordWrap
 component:
     backend:
       ...
@@ -331,13 +331,13 @@ clickhouse:
 
 Before deleting opik installation with helm, make sure to remove finalizer on the clickhouse resource:
 
-```bash
+```bash wordWrap
 kubectl patch -n opik chi opik-clickhouse --type json --patch='[ { "op": "remove", "path": "/metadata/finalizers" } ]'
 ```
 
 Then, uninstall the opik:
 
-```bash
+```bash wordWrap
 helm uninstall opik -n opik
 ```
 
@@ -353,7 +353,7 @@ You can check your current Opik deployment version in the UI by clicking on the 
 ### Check Python SDK version
 You can check your installed Python SDK version by running:
 
-```bash
+```bash wordWrap
 pip show opik
 ```
 
@@ -368,7 +368,7 @@ Make sure both versions match. If they don't match:
 
 If you get an error similar to the following when running helm (the ClickHouse version in the message depends on your installation):
 
-```bash
+```bash wordWrap
 ERROR: Exception Primary Reason:  Code: 225. DB::Exception: Can't create replicated table without ZooKeeper. (NO_ZOOKEEPER) (version 24.3.5.47.altinitystable (altinity build))
 ```
 

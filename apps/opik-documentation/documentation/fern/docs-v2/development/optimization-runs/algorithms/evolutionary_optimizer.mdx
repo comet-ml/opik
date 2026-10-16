@@ -52,7 +52,7 @@ We repeat this process for a number of generations until we find the best prompt
 
 You can use the `EvolutionaryOptimizer` to optimize a prompt:
 
-```python maxLines=1000
+```python maxLines=1000 wordWrap
 from opik_optimizer import EvolutionaryOptimizer
 from opik.evaluation.metrics import LevenshteinRatio # or any other suitable metric
 from opik_optimizer import datasets, ChatPrompt
@@ -148,7 +148,7 @@ The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o
 `"anthropic/claude-opus-4-7"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
 using the `model_parameters` parameter:
 
-```python
+```python wordWrap
 optimizer = EvolutionaryOptimizer(
     model="anthropic/claude-sonnet-4-6",
     model_parameters={

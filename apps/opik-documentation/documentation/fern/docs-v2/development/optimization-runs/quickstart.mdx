@@ -29,7 +29,7 @@ title: Quickstart
 
 ## 1. Install and authenticate
 
-```bash
+```bash wordWrap
 pip install --upgrade opik opik-optimizer
 opik configure  # paste your API key
 export OPIK_PROJECT_NAME="optimization-quickstart"
@@ -39,7 +39,7 @@ Setting `OPIK_PROJECT_NAME` ensures all traces, experiments, and optimization ru
 
 ## 2. Create a dataset and metric
 
-```python
+```python wordWrap
 import opik
 from opik.evaluation.metrics import LevenshteinRatio
 
@@ -57,7 +57,7 @@ def answer_quality(item, output):
 
 ## 3. Run the optimizer
 
-```python
+```python wordWrap
 from opik_optimizer import MetaPromptOptimizer, ChatPrompt
 
 prompt = ChatPrompt(

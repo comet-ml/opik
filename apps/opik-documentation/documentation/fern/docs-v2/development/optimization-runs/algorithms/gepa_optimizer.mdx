@@ -36,7 +36,7 @@ short, the optimizer will:
 
 ## Quickstart
 
-```python
+```python wordWrap
 """
 Optimize a simple system prompt on the tiny_test dataset.
 Requires: pip install gepa, and a valid OPENAI_API_KEY for LiteLLM-backed models.
@@ -151,7 +151,7 @@ GEPA coordinates two model contexts:
 
 Set `model` to any LiteLLM-supported provider (e.g., `"gpt-4o"`, `"azure/gpt-4"`, `"anthropic/claude-opus-4-7"`, `"gemini/gemini-1.5-pro"`) and pass extra parameters via `model_parameters` when you need to tune temperature, max tokens, or other limits:
 
-```python
+```python wordWrap
 optimizer = GepaOptimizer(
     model="anthropic/claude-sonnet-4-6",
     model_parameters={

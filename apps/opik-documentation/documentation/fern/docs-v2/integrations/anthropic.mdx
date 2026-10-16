@@ -25,7 +25,7 @@ This guide explains how to integrate Opik with the Anthropic Python SDK. By usin
 
 To start tracking your Anthropic LLM calls, you'll need to have both the `opik` and `anthropic` packages. You can install them using pip:
 
-```bash
+```bash wordWrap
 pip install opik anthropic
 ```
 
@@ -44,13 +44,13 @@ In order to configure Anthropic, you will need to have your Anthropic API Key se
 
 You can set it as an environment variable:
 
-```bash
+```bash wordWrap
 export ANTHROPIC_API_KEY="YOUR_API_KEY"
 ```
 
 Or set it programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -62,7 +62,7 @@ if "ANTHROPIC_API_KEY" not in os.environ:
 
 In order to log the LLM calls to Opik, you will need to create the wrap the anthropic client with `track_anthropic`. When making calls with that wrapped client, all calls will be logged to Opik:
 
-```python
+```python wordWrap
 import anthropic
 from opik.integrations.anthropic import track_anthropic
 
@@ -91,7 +91,7 @@ print("Response", response.content[0].text)
 
 If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If Anthropic is called within one of these steps, the LLM call will be associated with that corresponding step:
 
-```python
+```python wordWrap
 import anthropic
 from opik import track
 from opik.integrations.anthropic import track_anthropic

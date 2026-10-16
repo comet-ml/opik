@@ -37,7 +37,7 @@ Once a rule is defined, Opik will score all the traces in the project and allow 
 
 Feedback scores can be logged while you are logging traces:
 
-```python
+```python wordWrap
 from opik import track, opik_context
 
 @track
@@ -61,7 +61,7 @@ You can also update traces with feedback scores after they have been logged. For
 
 You can use the [`Opik.search_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_traces) method to fetch all the traces you want to annotate.
 
-```python
+```python wordWrap
 import opik
 
 opik_client = opik.Opik()
@@ -81,7 +81,7 @@ The `search_traces` method allows you to fetch traces based on any trace attribu
 
 Once you have fetched the traces you want to annotate, you can update the feedback scores using the [`Opik.log_traces_feedback_scores`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.log_traces_feedback_scores) method.
 
-```python
+```python wordWrap
 for trace in traces:
     opik_client.log_traces_feedback_scores(
         scores=[
@@ -104,7 +104,7 @@ You will now be able to see the feedback scores in the Opik dashboard and track 
 
 You can view the content of your traces using [`Opik.get_trace_content(id: str)`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_trace_content), to look up your trace by id. Trace ids can be found using the [`Opik.search_traces()`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_traces) method or by looking at the ID column within the Projects > 'My-project' view.
 
-```python
+```python wordWrap
 from opik import Opik
 
 TRACE_ID = 'EXAMPLE-ID' # UUIDv7 Identifier
@@ -119,7 +119,7 @@ This will return a [`TracePublic`](https://www.comet.com/docs/opik/python-sdk-re
 
 You can update a given trace by first re-instantiating the trace using [`opik.Opik.trace()`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.trace) and then updating any one of the trace attributes using [`Trace.update()`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/Trace.html#opik.api_objects.trace.Trace.update). See above section for guidance on how to retrieve trace ids.
 
-```python
+```python wordWrap
 from opik import Opik
 
 TRACE_ID = 'EXAMPLE-ID' # UUIDv7 Identifier
