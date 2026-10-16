@@ -254,6 +254,30 @@ class ExperimentCancellationServiceTest {
                 .isEqualTo(ExperimentItemLedger.Outcome.OK);
     }
 
+    // A launch that failed partway discards what its run was counting against. Left behind, the
+    // outcomes would hold one field per item for a day, for a run that will never use them.
+    @Test
+    @DisplayName("should discard an aborted run's total and its recorded outcomes")
+    void discardCountersRemovesTheRecordedOutcomes() {
+        var experimentId = UUID.randomUUID();
+        var sibling = UUID.randomUUID();
+        publish(messages(experimentId, 2), messages(sibling, 1));
+        var entries = remainingStreamIds();
+        ledger.record(WORKSPACE_ID, experimentId, entries.getFirst(), ExperimentItemLedger.Outcome.OK).block();
+        ledger.record(WORKSPACE_ID, sibling, entries.getLast(), ExperimentItemLedger.Outcome.OK).block();
+
+        publisher.discardCounters(WORKSPACE_ID, List.of(experimentId)).block();
+
+        assertThat(itemCounter(experimentId).isExists().block()).isFalse();
+        assertThat(redissonClient.getMap(ExperimentExecutionConfig.itemEntriesKey(WORKSPACE_ID, experimentId))
+                .isExists().block())
+                .isFalse();
+        assertThat(redissonClient.getMap(ExperimentExecutionConfig.itemEntriesKey(WORKSPACE_ID, sibling)).isExists()
+                .block())
+                .as("only the aborted run's outcomes go")
+                .isTrue();
+    }
+
     // Both the consumer draining the last item and a cancel emptying the queue reach the finish, and
     // a counter taken past zero would otherwise re-run it for every item that lands afterwards.
     @Test
