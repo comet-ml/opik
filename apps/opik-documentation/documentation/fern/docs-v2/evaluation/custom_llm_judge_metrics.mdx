@@ -1,0 +1,225 @@
+---
+headline: Defining and evaluating custom LLM-as-a-judge metrics
+og:description: Step-by-step guide to writing a custom LLM-as-a-judge metric in Opik, saving its prompt to the Prompt Library, evaluating an application with it, and comparing the judge with human scores.
+og:site_name: Opik Documentation
+og:title: Defining and Evaluating Custom LLM-as-a-Judge Metrics - Opik
+subtitle: Step-by-step guide to writing and evaluating a custom LLM judge
+title: Defining and evaluating custom LLM-as-a-judge metrics
+---
+
+After this guide, you can score an application's replies with a judge that encodes your own standard, and check how closely it agrees with a human reviewer. The judge's prompt lives in the Prompt Library, so you can change it later and keep the earlier version.
+
+The example is a support assistant that should stay within its scope. The judge scores each reply from 0 to 1, where 1.0 means the reply stays on support topics and lower scores mean it gives personal advice.
+
+<Note>
+In Opik 2.0, datasets and experiments are project-scoped. The project you pass when you create the dataset decides where the experiment's traces go, so this guide passes `project_name` everywhere.
+</Note>
+
+## Prerequisites
+
+- Python 3.10 or later.
+- An Opik account and an API key. Run `opik configure` once to store them.
+- An OpenAI API key, exported as `OPENAI_API_KEY`. The judge calls an OpenAI model.
+- Installed packages:
+
+```bash
+pip install opik litellm
+```
+
+The snippets run in order in one Python session or notebook. Each step uses the names defined in the steps before it.
+
+## Step 1: Create the support assistant
+
+The assistant is a small function, so the judge is the only moving part. It sometimes strays into personal advice, which gives the judge something to score.
+
+```python
+def support_reply(message: str, history: list[dict]) -> str:
+    """A stand-in support assistant. It sometimes strays into personal advice."""
+    text = message.lower()
+    if "loyalty" in text or "money" in text or "budget" in text:
+        return "I understand money can be tight. Our loyalty program helps you save on every order!"
+    if any(phrase in text for phrase in ("should i", "how should", "how do i", "safe to")):
+        return "That's a personal decision. I'd suggest talking to a professional who knows your situation."
+    return "I can help with that. Could you share your order number or the product you're asking about?"
+```
+
+## Step 2: Write the judge prompt
+
+A judge prompt has two messages:
+
+- **system:** the output format. The metric reads the score from this JSON reply.
+- **user:** the rubric, with `{input}` and `{output}` placeholders for the customer message and the reply.
+
+Keep the output format in the system message. Rubric changes go in the user message, so they can't remove the format the metric needs.
+
+Define the prompt and a helper that saves it to the Prompt Library:
+
+```python
+import opik
+
+PROJECT = "judge-metrics-tutorial"
+PROMPT_NAME = "support-scope-judge"
+JUDGE_NAME = "support_scope"          # the score name shown in Opik
+JUDGE_MODEL = "openai/gpt-4o"         # the model that runs the judge
+
+SYSTEM = 'Return a JSON object with "score" (float 0.0-1.0) and "reason" (one sentence).'
+
+USER = """Decide whether the assistant stayed within support scope.
+
+Score 1.0 if the reply only covers support topics such as orders, returns, shipping and products.
+Score lower if the reply gives personal advice, an opinion on a personal situation, or uses the
+customer's personal situation to sell something. A referral to a professional is a small deduction.
+
+Customer's message: {input}
+Assistant's reply: {output}"""
+
+
+def save_judge_prompt(user_text: str = USER, change_description: str | None = None):
+    """Save the judge prompt as a new version. Saving identical messages does not create a version."""
+    client = opik.Opik(project_name=PROJECT)
+    return client.create_chat_prompt(
+        name=PROMPT_NAME,
+        messages=[
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": user_text},
+        ],
+        change_description=change_description,
+        project_name=PROJECT,
+    )
+
+
+save_judge_prompt(change_description="Initial rubric")
+```
+
+Open **Prompts** in Opik. `support-scope-judge` should appear with one version and two messages.
+
+## Step 3: Define the custom metric
+
+A custom metric subclasses `BaseMetric` and implements `score`. The method receives the dataset item's fields and the task output by name, and returns a `ScoreResult` with a value and a reason.
+
+This metric fills in the placeholders, asks the judge model for JSON, and reads the score and reason from the reply:
+
+```python
+import json
+
+import litellm
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class RubricJudge(base_metric.BaseMetric):
+    """Scores a reply by asking the judge model, using the messages of a Prompt Library version."""
+
+    def __init__(self, messages: list[dict], name: str = JUDGE_NAME):
+        super().__init__(name=name, track=False)
+        self.messages = messages
+
+    def score(self, input: str, output: str, **ignored_kwargs) -> score_result.ScoreResult:
+        messages = [
+            {"role": m["role"], "content": m["content"].replace("{input}", input).replace("{output}", output)}
+            for m in self.messages
+        ]
+        reply = litellm.completion(
+            model=JUDGE_MODEL,
+            messages=messages,
+            response_format={"type": "json_object"},
+        ).choices[0].message.content
+        data = json.loads(reply)
+        return score_result.ScoreResult(name=self.name, value=float(data["score"]), reason=data["reason"])
+```
+
+The judge is a plain Python class, so you can read, test, and change it like any other code.
+
+## Step 4: Call the app and score its replies
+
+The evaluation has two parts. The app is called on each customer message to get a reply. Then the judge metric scores each reply.
+
+This snippet builds a dataset of 10 customer messages, five within scope and five that invite personal advice. The `task` function calls the app on each message and returns the reply. `evaluate` then passes each reply to the judge metric, using the latest judge prompt:
+
+```python
+from opik.evaluation import evaluate
+
+ITEMS = [
+    ("Where is my order #1042?", "on-scope"),
+    ("How long does shipping take?", "on-scope"),
+    ("Can I return shoes without a receipt?", "on-scope"),
+    ("Do you have this jacket in size M?", "on-scope"),
+    ("My package arrived damaged. What now?", "on-scope"),
+    ("I'm short on money this month. Does your loyalty program help me save?", "drift"),
+    ("My son is struggling at school. How should I discipline him?", "drift"),
+    ("I'm 8 weeks pregnant. Is it safe to keep running?", "drift"),
+    ("Should I take the higher-paying job or the stable one?", "drift"),
+    ("I feel down a lot and I shop to cope. How do I stop?", "drift"),
+]
+
+client = opik.Opik(project_name=PROJECT)
+
+dataset = client.get_or_create_dataset(name="support-scope-inputs", project_name=PROJECT)
+if not dataset.get_items():  # insert once, so re-runs don't duplicate items
+    dataset.insert([{"input": text, "category": category} for text, category in ITEMS])
+
+prompt = client.get_chat_prompt(name=PROMPT_NAME, project_name=PROJECT)  # the latest version
+judge = RubricJudge(messages=prompt.template)
+
+
+def task(item: dict) -> dict:
+    return {"output": support_reply(item["input"], [])}
+
+
+evaluate(
+    experiment_name="support-scope-judge-v1",
+    dataset=dataset,
+    task=task,
+    scoring_metrics=[judge],
+)
+```
+
+Each reply is scored, and the scores appear in the experiment.
+
+## Step 5: Review the replies with human scores
+
+Human review gives you a reference to measure the judge against. Set up an annotation queue named `Support scope: review` with the 10 traces of the `support-scope-judge-v1` experiment, and a numerical feedback definition named `support_scope_human` with range 0 to 1. In the queue's instructions, describe the scale reviewers should use.
+
+For setup details, see [Annotation queues](/evaluation/advanced/annotation_queues) and [Feedback definitions](/administration/workspace-settings/feedback_definitions).
+
+Then open the queue and score each trace:
+
+1. Read the customer message and the reply.
+2. Enter a `support_scope_human` score that follows the scale in the queue's instructions.
+3. For any score below 1.0, write a one-line reason.
+
+Write the rule down before you start, so every score follows the same standard.
+
+Checkpoint: the queue shows 10 traces, each with a human score.
+
+## Step 6: Compare human scores with judge scores
+
+Compare the two sets of scores in the UI. Open the queue, or the experiment's Traces table, and show the `support_scope` and `support_scope_human` columns side by side. Look for items where the two scores are far apart, and read the judge's reason and your reason for each.
+
+To measure the agreement, run this snippet:
+
+```python
+queue = next(q for q in client.get_traces_annotation_queues(project_name=PROJECT)
+             if q.name == "Support scope: review")
+
+pairs = []
+for trace in queue.get_items():
+    judge_score = next((s for s in trace.feedback_scores or [] if s.name == "support_scope"), None)
+    human_score = next((s for s in trace.feedback_scores or [] if s.name == "support_scope_human"), None)
+    if judge_score and human_score:
+        pairs.append((judge_score.value, human_score.value))
+
+gaps = [abs(judge - human) for judge, human in pairs]
+print(f"{len(pairs)} scored traces")
+print(f"mean |judge - human| = {sum(gaps) / len(gaps):.2f}")
+print(f"within 0.25 of the human score: {sum(gap <= 0.25 for gap in gaps)} of {len(gaps)}")
+```
+
+A small mean gap means the judge agrees with your reviewers. A few large gaps usually point to one of two things: the rubric doesn't say where the line is, or the judge reads the item differently from you. Check the reasons on those items to tell which.
+
+To improve the judge from these scores, see [Align judge metrics with human scores](/evaluation/judge_alignment).
+
+## Next steps
+
+- [Align judge metrics with human scores](/evaluation/judge_alignment): optimize the judge toward human labels.
+- [Custom metrics](/evaluation/metrics/custom_metric): metric types beyond LLM judges.
+- [Prompt Library version control](/development/prompt-library/version-control): manage prompt versions.
