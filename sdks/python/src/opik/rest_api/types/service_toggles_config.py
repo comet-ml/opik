@@ -45,6 +45,9 @@ class ServiceTogglesConfig(UniversalBaseModel):
     ]
     event_bridge_alerts_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="eventBridgeAlertsEnabled")]
     default_page_size: typing_extensions.Annotated[typing.Optional[int], FieldMetadata(alias="defaultPageSize")] = None
+    custom_charts_enabled_for_workspace: typing_extensions.Annotated[
+        typing.Optional[bool], FieldMetadata(alias="customChartsEnabledForWorkspace")
+    ] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
