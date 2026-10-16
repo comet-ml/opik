@@ -13,10 +13,10 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Maps the provider a span names onto the providers of LiteLLM's price file, under whose names Opik prices models.
- * Every provider in that file is priced under its own name, so a provider LiteLLM adds needs no code change. Other
- * spellings clients send are aliases of one of them. The provider is never inferred from usage keys or from model-name
- * patterns.
+ * Maps the provider a span names to the matching provider of LiteLLM's price file, under whose names Opik prices
+ * models. Every provider in that file is priced under its own name, so a provider LiteLLM adds needs no code change.
+ * Other spellings clients send are aliases of one of them. The provider is never inferred from usage keys or from
+ * model-name patterns.
  */
 @UtilityClass
 public class ProviderRegistry {

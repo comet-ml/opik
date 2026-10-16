@@ -33,7 +33,8 @@ def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
             },
         ]
     )
-    # The items become readable shortly after the insert returns; evaluating sooner can score only some of them.
+    # The items become readable shortly after the insert returns; evaluating sooner can
+    # score only some of them.
     assert synchronization.until(
         lambda: len(dataset.get_items()) == 3, max_try_seconds=10
     ), "The 3 dataset items were not readable in time"
