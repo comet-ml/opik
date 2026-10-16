@@ -105,14 +105,8 @@ public class DailyUsageReportJob extends Job implements InterruptableJob {
     private Mono<Void> reportEvent(String anonymousId) {
         return fetchAllReportData()
                 .flatMap(results -> Mono.just(mapResults(anonymousId, results)))
-                .flatMap(biEvent -> {
-                    if (hasNoDataToSubmit(biEvent)) {
-                        log.info("No daily usage data to report");
-                        return Mono.empty();
-                    }
-                    return Mono.fromFuture(() -> statsClient.sendEvent(biEvent))
-                            .subscribeOn(Schedulers.boundedElastic());
-                })
+                .flatMap(biEvent -> Mono.fromFuture(() -> statsClient.sendEvent(biEvent))
+                        .subscribeOn(Schedulers.boundedElastic()))
                 .doOnNext(success -> {
                     if (success) {
                         usageReportService.markDailyReportAsSent();
@@ -145,26 +139,6 @@ public class DailyUsageReportJob extends Job implements InterruptableJob {
         properties.put("daily_datasets", String.valueOf(results.getT4()));
         results.getT5().forEach((name, count) -> properties.put(name, String.valueOf(count)));
         return new BiEvent(anonymousId, STATISTICS_BE, Map.copyOf(properties));
-    }
-
-    private boolean hasNoDataToSubmit(BiEvent biEvent) {
-        return biEvent.eventProperties().entrySet().stream().allMatch(e -> {
-            // All-time totals never return to zero, so on their own they would send a report every idle day
-            if (ActiveClientsService.TOTAL_COUNTS.contains(e.getKey())) {
-                return true;
-            }
-
-            if (!e.getKey().equals("opik_app_version") && !e.getKey().equals("total_users")) {
-                return e.getValue().equals("0");
-            }
-
-            if (e.getKey().equals("total_users")) {
-                // this will probably be 1 due to the migration to create the default project
-                return e.getValue().equals("1") || e.getValue().equals("0");
-            }
-
-            return true;
-        });
     }
 
     @Override

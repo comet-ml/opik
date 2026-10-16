@@ -127,6 +127,26 @@ class DailyUsageReportJobTest {
                                 .and(matchingJsonPath("$.event_properties.daily_traces", equalTo(dailyTraces)))));
     }
 
+    /**
+     * The run at application startup always sends and marks the day as sent. Waiting for it keeps it from landing
+     * after a test's own reset, which would make the test's run skip.
+     */
+    private static void awaitStartupReport(TransactionTemplate transactionTemplate) {
+        Awaitility.await().atMost(30, TimeUnit.SECONDS).until(() -> transactionTemplate.inTransaction(
+                TransactionTemplateAsync.READ_ONLY,
+                handle -> handle.createQuery("SELECT COUNT(*) FROM metadata WHERE `key` = 'daily_usage_report'")
+                        .mapTo(Integer.class).one()) > 0);
+    }
+
+    /** Clears the day's "sent" marker, then runs the report, so every test's run reports on its own data. */
+    private static void runReport(TransactionTemplate transactionTemplate, GuiceJobManager guiceJobManager)
+            throws SchedulerException {
+        transactionTemplate.inTransaction(TransactionTemplateAsync.WRITE,
+                handle -> handle.createUpdate("DELETE FROM metadata WHERE `key` = 'daily_usage_report'").execute());
+        var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
+        guiceJobManager.getScheduler().scheduleJob(TriggerBuilder.newTrigger().startNow().forJob(key).build());
+    }
+
     private void updateDatasets(String workspaceId, TransactionTemplate transactionTemplate, boolean updateUser) {
         transactionTemplate
                 .inTransaction(TransactionTemplateAsync.WRITE, handle -> handle.createUpdate("""
@@ -289,6 +309,7 @@ class DailyUsageReportJobTest {
             this.guiceJobManager = guiceJobManager;
 
             ClientSupportUtils.config(client);
+            awaitStartupReport(transactionTemplate);
 
             experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, factory);
             traceResourceClient = new TraceResourceClient(this.client, baseURI);
@@ -321,17 +342,7 @@ class DailyUsageReportJobTest {
 
             setUpData(apiKey, workspaceName, workspaceId);
 
-            // The run at application startup races this test's data setup: if it reads the first project, it
-            // reports and marks the day as sent, and the run below then skips. Clear it so this run reports.
-            transactionTemplate.inTransaction(TransactionTemplateAsync.WRITE,
-                    handle -> handle.createUpdate("DELETE FROM metadata WHERE `key` = 'daily_usage_report'")
-                            .execute());
-
-            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
-
-            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
-
-            guiceJobManager.getScheduler().scheduleJob(trigger);
+            runReport(transactionTemplate, guiceJobManager);
 
             Awaitility
                     .await()
@@ -438,6 +449,7 @@ class DailyUsageReportJobTest {
             this.guiceJobManager = guiceJobManager;
 
             ClientSupportUtils.config(client);
+            awaitStartupReport(transactionTemplate);
 
             experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, factory);
             traceResourceClient = new TraceResourceClient(this.client, baseURI);
@@ -492,11 +504,7 @@ class DailyUsageReportJobTest {
 
             setUpData(apiKey, workspaceName, ProjectService.DEFAULT_WORKSPACE_ID);
 
-            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
-
-            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
-
-            guiceJobManager.getScheduler().scheduleJob(trigger);
+            runReport(transactionTemplate, guiceJobManager);
 
             Awaitility
                     .await()
@@ -644,9 +652,7 @@ class DailyUsageReportJobTest {
             updateTraces(ProjectService.DEFAULT_WORKSPACE_ID, templateAsync, false);
 
             // Run the daily usage report job
-            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
-            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
-            guiceJobManager.getScheduler().scheduleJob(trigger);
+            runReport(transactionTemplate, guiceJobManager);
 
             // Wait for job completion and verify
             Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -694,9 +700,7 @@ class DailyUsageReportJobTest {
             updateTraces(ProjectService.DEFAULT_WORKSPACE_ID, templateAsync, false);
 
             // Run the daily usage report job
-            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
-            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
-            guiceJobManager.getScheduler().scheduleJob(trigger);
+            runReport(transactionTemplate, guiceJobManager);
 
             // Wait for job completion and verify
             Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -729,16 +733,8 @@ class DailyUsageReportJobTest {
             });
             redisCli("PFADD", "opik:active_clients:sdk", "b", "c");
 
-            // The totals only ride along with a report; yesterday's activity is what sends it
-            var projectName = UUID.randomUUID().toString();
-            projectResourceClient.createProject(projectName, "", "default");
-            traceResourceClient.batchCreateTraces(
-                    List.of(factory.manufacturePojo(Trace.class).toBuilder().projectName(projectName).build()),
-                    "", "default");
-            updateTraces(ProjectService.DEFAULT_WORKSPACE_ID, templateAsync, false);
-
-            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
-            guiceJobManager.getScheduler().scheduleJob(TriggerBuilder.newTrigger().startNow().forJob(key).build());
+            // Sent every day, with or without activity, so no traces are needed here
+            runReport(transactionTemplate, guiceJobManager);
 
             Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> wireMock.server().verify(
                     postRequestedFor(urlPathEqualTo("/v1/notify/event"))

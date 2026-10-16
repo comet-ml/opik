@@ -12,7 +12,6 @@ import org.redisson.client.codec.StringCodec;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -31,7 +30,6 @@ public class ActiveClientsService {
     private static final String KEY_FORMAT = "opik:active_clients:%s";
     private static final String TOTAL_SDK_CLIENTS = "total_sdk_clients";
     private static final String TOTAL_UI_CLIENTS = "total_ui_clients";
-    public static final Set<String> TOTAL_COUNTS = Set.of(TOTAL_SDK_CLIENTS, TOTAL_UI_CLIENTS);
 
     private final RedissonReactiveClient redisClient;
 
