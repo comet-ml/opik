@@ -747,6 +747,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         FROM spans
                         WHERE workspace_id = :workspace_id
                         AND trace_id IN (SELECT trace_id FROM experiment_items_final)
+                        <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN (SELECT trace_id FROM experiment_items_final))<endif>
                         AND project_id IN (SELECT project_id FROM experiment_trace_projects)
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY workspace_id, project_id, id
@@ -925,6 +926,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         WHERE workspace_id = :workspace_id
                         AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
                         AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces)
+                        <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces))<endif>
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY workspace_id, project_id, id
                     )
@@ -1076,6 +1078,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         WHERE workspace_id = :workspace_id
                         AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
                         AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces)
+                        <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces))<endif>
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY workspace_id, project_id, id
                     )
@@ -1260,6 +1263,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                             userName, "optimization_id=%s".formatted(id));
                     template.add("id", id.toString());
                     addTracesPartitionedFlag(template);
+                    addSpanWeeksBound(template);
 
                     var statement = connection.createStatement(template.render())
                             .bind("entity_type", EntityType.TRACE.getType())
@@ -1431,6 +1435,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
                     bindTemplateParams(template, searchCriteria);
                     addTracesPartitionedFlag(template);
+                    addSpanWeeksBound(template);
 
                     template.add("limit", size);
                     template.add("offset", offset);
@@ -1509,6 +1514,12 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private void addTracesPartitionedFlag(ST template) {
         if (configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable()) {
             template.add("traces_partitioned", true);
+        }
+    }
+
+    private void addSpanWeeksBound(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
         }
     }
 

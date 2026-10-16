@@ -18,7 +18,7 @@
     "opik": "^2.2.74"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0",
+    "@playwright/test": "^1.64.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^26.6.2",
     "allure-playwright": "^3.13.0",
