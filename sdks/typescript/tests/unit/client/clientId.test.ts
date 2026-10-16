@@ -26,7 +26,7 @@ describe("OpikApiClientTemp client id header", () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response("{}", { status: 200 }));
-    await client.projects.findProjects().catch(() => undefined);
+    await client.projects.findProjects();
     return new Headers(fetchSpy.mock.calls[0][1]?.headers);
   };
 
