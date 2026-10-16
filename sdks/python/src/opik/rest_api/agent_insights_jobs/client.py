@@ -143,6 +143,38 @@ class AgentInsightsJobsClient:
         _response = self._raw_client.trigger_agent_insights_job(project_id, request_options=request_options)
         return _response.data
 
+    def update_agent_insights_guidance(
+        self, project_id: str, *, guidance: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> AgentInsightsJob:
+        """
+        Saves the project guidance sent to every Agent Insights run, creating the job (disabled) if the project has none. Empty or whitespace-only clears it. The guidance version is bumped only when the text changes. 404 while guidance is not enabled.
+
+        Parameters
+        ----------
+        project_id : str
+
+        guidance : str
+            Project guidance for Agent Insights runs. Empty or whitespace-only clears it
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AgentInsightsJob
+            Job with the saved guidance
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.agent_insights_jobs.update_agent_insights_guidance(project_id='projectId', guidance='guidance', )
+        """
+        _response = self._raw_client.update_agent_insights_guidance(
+            project_id, guidance=guidance, request_options=request_options
+        )
+        return _response.data
+
 
 class AsyncAgentInsightsJobsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -285,4 +317,39 @@ class AsyncAgentInsightsJobsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.trigger_agent_insights_job(project_id, request_options=request_options)
+        return _response.data
+
+    async def update_agent_insights_guidance(
+        self, project_id: str, *, guidance: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> AgentInsightsJob:
+        """
+        Saves the project guidance sent to every Agent Insights run, creating the job (disabled) if the project has none. Empty or whitespace-only clears it. The guidance version is bumped only when the text changes. 404 while guidance is not enabled.
+
+        Parameters
+        ----------
+        project_id : str
+
+        guidance : str
+            Project guidance for Agent Insights runs. Empty or whitespace-only clears it
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AgentInsightsJob
+            Job with the saved guidance
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.agent_insights_jobs.update_agent_insights_guidance(project_id='projectId', guidance='guidance', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.update_agent_insights_guidance(
+            project_id, guidance=guidance, request_options=request_options
+        )
         return _response.data

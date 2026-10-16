@@ -31,6 +31,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     ollamaProviderEnabled: core.serialization.boolean(),
     ollieEnabled: core.serialization.boolean(),
     agentInsightsEnabled: core.serialization.boolean(),
+    agentInsightsGuidanceEnabled: core.serialization.boolean(),
     projectHomepageEnabled: core.serialization.boolean(),
     onlineScoringTracingEnabled: core.serialization.boolean(),
     annotationQueueAutomationEnabled: core.serialization.boolean(),
@@ -64,6 +65,7 @@ export declare namespace ServiceTogglesConfig {
         ollamaProviderEnabled: boolean;
         ollieEnabled: boolean;
         agentInsightsEnabled: boolean;
+        agentInsightsGuidanceEnabled: boolean;
         projectHomepageEnabled: boolean;
         onlineScoringTracingEnabled: boolean;
         annotationQueueAutomationEnabled: boolean;

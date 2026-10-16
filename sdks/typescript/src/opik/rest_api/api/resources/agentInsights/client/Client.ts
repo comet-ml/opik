@@ -328,7 +328,7 @@ export class AgentInsightsClient {
     }
 
     /**
-     * Moves an issue through its lifecycle: open, resolved or closed
+     * Moves an issue through its lifecycle: open, resolved or closed. close_note is kept only with closed; any other status clears it
      *
      * @param {string} issue_id
      * @param {OpikApi.AgentInsightsIssueUpdate} request
@@ -336,7 +336,9 @@ export class AgentInsightsClient {
      *
      * @throws {@link OpikApi.BadRequestError}
      * @throws {@link OpikApi.UnauthorizedError}
+     * @throws {@link OpikApi.ForbiddenError}
      * @throws {@link OpikApi.NotFoundError}
+     * @throws {@link OpikApi.UnprocessableEntityError}
      *
      * @example
      *     await client.agentInsights.updateAgentInsightsIssue("issue_id", {
@@ -397,8 +399,12 @@ export class AgentInsightsClient {
                     throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 401:
                     throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
+                case 403:
+                    throw new OpikApi.ForbiddenError(_response.error.body, _response.rawResponse);
                 case 404:
                     throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                case 422:
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
