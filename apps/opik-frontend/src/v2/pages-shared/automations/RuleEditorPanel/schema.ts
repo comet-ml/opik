@@ -289,9 +289,7 @@ const LLMJudgeBaseSchema = z.object({
   schema: z
     .array(
       z.object({
-        name: z
-          .string()
-          .min(1, { message: "Score definition name is required" }),
+        name: z.string().min(1, { message: "Score name is required" }),
         type: z.nativeEnum(LLM_SCHEMA_TYPE),
         description: z.string(),
         unsaved: z

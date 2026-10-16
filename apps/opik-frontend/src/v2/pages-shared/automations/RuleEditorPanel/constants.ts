@@ -49,7 +49,7 @@ const getTaskCompletionData = (
   variables,
   schema: [
     {
-      name: "Task completion",
+      name: "",
       description: "Whether the agent completed the task",
       type: LLM_SCHEMA_TYPE.BOOLEAN,
       unsaved: false,

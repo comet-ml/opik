@@ -249,6 +249,23 @@ const useRuleEditorForm = ({
     [savedJudge],
   );
 
+  useEffect(() => {
+    let previousRuleName = form.getValues("ruleName").trim();
+    const subscription = form.watch((values, { name }) => {
+      if (name !== "ruleName") return;
+      const ruleName = (values.ruleName ?? "").trim();
+      const mainScoreName = form.getValues("llmJudgeDetails.schema.0.name");
+      if (
+        mainScoreName !== undefined &&
+        (!mainScoreName.trim() || mainScoreName === previousRuleName)
+      ) {
+        form.setValue("llmJudgeDetails.schema.0.name", ruleName);
+      }
+      previousRuleName = ruleName;
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
+
   const scopeDraftsRef = useRef<
     Partial<Record<EVALUATORS_RULE_SCOPE, ScopeDraft>>
   >({});
@@ -305,14 +322,19 @@ const useRuleEditorForm = ({
 
   const applyTemplate = useCallback(
     (template: LLMPromptTemplate, label: string) => {
+      const current = form.getValues("llmJudgeDetails");
+      const [templateMainScore, ...templateScores] = cloneDeep(template.schema);
+      const mainScoreName = isEdit ? current.schema[0]?.name ?? "" : "";
       form.setValue(
         "llmJudgeDetails",
         {
-          ...form.getValues("llmJudgeDetails"),
+          ...current,
           template: template.value,
           messages: cloneDeep(template.messages),
           variables: cloneDeep(template.variables),
-          schema: cloneDeep(template.schema),
+          schema: templateMainScore
+            ? [{ ...templateMainScore, name: mainScoreName }, ...templateScores]
+            : [],
         },
         { shouldDirty: true },
       );
@@ -349,12 +371,12 @@ const useRuleEditorForm = ({
     const llmJudgeDetails = form.getValues("llmJudgeDetails");
 
     const [mainScore, ...additionalScores] = llmJudgeDetails.schema;
-    if (mainScore && !isEdit) {
+    if (mainScore) {
       const nextMainScore = {
         ...mainScore,
-        name: values.ruleName.trim(),
+        name: mainScore.name.trim() || values.ruleName.trim(),
         description:
-          values.uiType === UI_EVALUATORS_RULE_TYPE.decision_model
+          isEdit || values.uiType === UI_EVALUATORS_RULE_TYPE.decision_model
             ? mainScore.description
             : "",
       };

@@ -11,6 +11,7 @@ import RuleSettingsCard from "@/v2/pages-shared/automations/RuleEditorPanel/Rule
 import ScoreBlock from "@/v2/pages-shared/automations/RuleEditorPanel/ScoreBlock";
 import ScoreTypeSelect from "@/v2/pages-shared/automations/RuleEditorPanel/ScoreTypeSelect";
 import AdditionalScore from "@/v2/pages-shared/automations/RuleEditorPanel/AdditionalScore";
+import ScoreNameTitle from "@/v2/pages-shared/automations/RuleEditorPanel/ScoreNameTitle";
 
 const NEW_SCORE: LLMJudgeSchema = {
   name: "",
@@ -28,6 +29,7 @@ const ScoreConfigurationCard: React.FC<ScoreConfigurationCardProps> = ({
 }) => {
   const scores: LLMJudgeSchema[] = form.watch("llmJudgeDetails.schema") ?? [];
   const [mainScore, ...additionalScores] = scores;
+  const ruleName = form.watch("ruleName").trim();
 
   const setScores = useCallback(
     (next: LLMJudgeSchema[]) =>
@@ -60,7 +62,16 @@ const ScoreConfigurationCard: React.FC<ScoreConfigurationCardProps> = ({
     >
       <div className="flex flex-col gap-1.5 p-2">
         {mainScore && (
-          <ScoreBlock title="Main score">
+          <ScoreBlock
+            title="Main score"
+            heading={
+              <ScoreNameTitle
+                name={mainScore.name}
+                fallbackName={ruleName}
+                onChange={(name) => updateScore(0, { name })}
+              />
+            }
+          >
             <ScoreTypeSelect
               value={mainScore.type}
               onChange={(type) => updateScore(0, { type })}

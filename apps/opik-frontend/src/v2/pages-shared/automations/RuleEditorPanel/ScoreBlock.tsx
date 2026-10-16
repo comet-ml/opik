@@ -6,12 +6,14 @@ import IconTag from "@/v2/pages-shared/IconTag/IconTag";
 
 type ScoreBlockProps = {
   title: string;
+  heading?: React.ReactNode;
   onRemove?: () => void;
   children: React.ReactNode;
 };
 
 const ScoreBlock: React.FC<ScoreBlockProps> = ({
   title,
+  heading,
   onRemove,
   children,
 }) => (
@@ -21,9 +23,11 @@ const ScoreBlock: React.FC<ScoreBlockProps> = ({
         icon={BrainCircuit}
         className="bg-[var(--rule-icon-llm-judge)]"
       />
-      <span className="comet-body-xs-accented flex-1 text-muted-slate">
-        {title}
-      </span>
+      {heading ?? (
+        <span className="comet-body-xs-accented flex-1 text-muted-slate">
+          {title}
+        </span>
+      )}
       {onRemove && (
         <Button
           type="button"

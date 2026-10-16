@@ -4,7 +4,6 @@ import { CircleHelp } from "lucide-react";
 import get from "lodash/get";
 
 import { cn } from "@/lib/utils";
-import { Input } from "@/ui/input";
 import { Textarea } from "@/ui/textarea";
 import { FormErrorSkeleton } from "@/ui/form";
 import AddItemButton from "@/shared/AddItemButton/AddItemButton";
@@ -12,6 +11,7 @@ import { LLM_SCHEMA_TYPE, LLMJudgeSchema } from "@/types/llm";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 import RuleSettingsCard from "@/v2/pages-shared/automations/RuleEditorPanel/RuleSettingsCard";
 import ScoreBlock from "@/v2/pages-shared/automations/RuleEditorPanel/ScoreBlock";
+import ScoreNameTitle from "@/v2/pages-shared/automations/RuleEditorPanel/ScoreNameTitle";
 
 const NEW_QUESTION: LLMJudgeSchema = {
   name: "",
@@ -29,6 +29,7 @@ const DecisionModelQuestionsCard: React.FC<DecisionModelQuestionsCardProps> = ({
 }) => {
   const questions: LLMJudgeSchema[] =
     form.watch("llmJudgeDetails.schema") ?? [];
+  const ruleName = form.watch("ruleName").trim();
   const errors = form.formState.errors;
 
   const setQuestions = useCallback(
@@ -71,28 +72,21 @@ const DecisionModelQuestionsCard: React.FC<DecisionModelQuestionsCardProps> = ({
             <ScoreBlock
               key={index}
               title={isMain ? "Main question" : `Question ${index + 1}`}
+              heading={
+                <ScoreNameTitle
+                  name={question.name}
+                  fallbackName={isMain ? ruleName : undefined}
+                  hasError={Boolean(nameError)}
+                  onChange={(name) => updateQuestion(index, { name })}
+                />
+              }
               onRemove={
                 isMain
                   ? undefined
                   : () => setQuestions(questions.filter((_, i) => i !== index))
               }
             >
-              {!isMain && (
-                <>
-                  <Input
-                    dimension="sm"
-                    placeholder="Score name"
-                    value={question.name}
-                    onChange={(event) =>
-                      updateQuestion(index, { name: event.target.value })
-                    }
-                    className={cn(nameError && "border-destructive")}
-                  />
-                  {nameError && (
-                    <FormErrorSkeleton>{nameError}</FormErrorSkeleton>
-                  )}
-                </>
-              )}
+              {nameError && <FormErrorSkeleton>{nameError}</FormErrorSkeleton>}
               <Textarea
                 placeholder="For example: Does the output fully answer the input?"
                 value={question.description}

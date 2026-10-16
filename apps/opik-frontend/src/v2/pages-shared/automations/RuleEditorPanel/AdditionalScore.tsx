@@ -1,12 +1,11 @@
 import React from "react";
 
-import { cn } from "@/lib/utils";
-import { Input } from "@/ui/input";
 import { Textarea } from "@/ui/textarea";
 import { FormErrorSkeleton } from "@/ui/form";
 import { LLMJudgeSchema } from "@/types/llm";
 import ScoreBlock from "@/v2/pages-shared/automations/RuleEditorPanel/ScoreBlock";
 import ScoreTypeSelect from "@/v2/pages-shared/automations/RuleEditorPanel/ScoreTypeSelect";
+import ScoreNameTitle from "@/v2/pages-shared/automations/RuleEditorPanel/ScoreNameTitle";
 
 type AdditionalScoreProps = {
   title: string;
@@ -23,22 +22,23 @@ const AdditionalScore: React.FC<AdditionalScoreProps> = ({
   onChange,
   onRemove,
 }) => (
-  <ScoreBlock title={title} onRemove={onRemove}>
-    <div className="flex items-center gap-2">
-      <Input
-        dimension="sm"
-        placeholder="Score name"
-        value={score.name}
-        onChange={(event) => onChange({ name: event.target.value })}
-        className={cn("flex-1", nameError && "border-destructive")}
+  <ScoreBlock
+    title={title}
+    heading={
+      <ScoreNameTitle
+        name={score.name}
+        hasError={Boolean(nameError)}
+        onChange={(name) => onChange({ name })}
       />
-      <ScoreTypeSelect
-        value={score.type}
-        onChange={(type) => onChange({ type })}
-        className="h-8 flex-1 px-2"
-      />
-    </div>
+    }
+    onRemove={onRemove}
+  >
     {nameError && <FormErrorSkeleton>{nameError}</FormErrorSkeleton>}
+    <ScoreTypeSelect
+      value={score.type}
+      onChange={(type) => onChange({ type })}
+      className="h-8 px-2"
+    />
     <Textarea
       placeholder="Instruct the LLM on how to compute this score"
       value={score.description}
