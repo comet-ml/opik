@@ -95,6 +95,8 @@ public class FiltersFactory {
 
                         return false;
                     })
+                    // Only IS_EMPTY / IS_NOT_EMPTY are supported, so there's no value to validate
+                    .put(FieldType.COMMENTS, filter -> Operator.NO_VALUE_OPERATORS.contains(filter.operator()))
                     .put(FieldType.DICTIONARY, filter -> {
                         if (Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
                             return StringUtils.isNotBlank(filter.key());

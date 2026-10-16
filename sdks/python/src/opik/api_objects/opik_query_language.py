@@ -119,6 +119,7 @@ class TraceOQLConfig(OQLConfig):
             "created_at": "date_time",
             "last_updated_at": "date_time",
             "annotation_queue_ids": "list",
+            "comments": "comments",
             "experiment_id": "string",
             "environment": "enum",
         }
@@ -152,6 +153,7 @@ class TraceOQLConfig(OQLConfig):
             "tags": LIST_OPERATORS,
             "annotation_queue_ids": LIST_OPERATORS,
             "error_info": ["is_empty", "is_not_empty"],
+            "comments": ["is_empty", "is_not_empty"],
             "default": STRING_OPERATORS,
         }
 
@@ -256,6 +258,7 @@ class ThreadOQLConfig(OQLConfig):
             "status": "enum",
             "tags": "list",
             "annotation_queue_ids": "list",
+            "comments": "comments",
             "environment": "enum",
         }
 
@@ -275,6 +278,7 @@ class ThreadOQLConfig(OQLConfig):
             "status": ENUM_OPERATORS,
             "tags": LIST_OPERATORS,
             "annotation_queue_ids": LIST_OPERATORS,
+            "comments": ["is_empty", "is_not_empty"],
             "environment": ENUM_OPERATORS,
             "default": STRING_OPERATORS,
         }
