@@ -310,6 +310,18 @@ export const restoreMissingProviderAndConfigKeys = (
 export const isEmptyMessage = (message: LLMMessage) =>
   !message.content || message.content.length === 0;
 
+// No prompts at all counts too: a session that has never opened the Playground stores none.
+export const isPlaygroundEmpty = (
+  promptMap: Record<string, PlaygroundPromptType>,
+) => {
+  const prompts = Object.values(promptMap);
+
+  return (
+    prompts.length === 0 ||
+    (prompts.length === 1 && !!prompts[0].messages?.every(isEmptyMessage))
+  );
+};
+
 // The default prompt starts with a System message, and leaving it blank means "no system
 // prompt". The backend rejects a blank system message for Gemini, Vertex AI and OpenAI's
 // Responses API.

@@ -10,7 +10,7 @@ import {
   useSetExperimentName,
   useSetLastActiveProjectId,
 } from "@/store/PlaygroundStore";
-import { generateDefaultPrompt, isEmptyMessage } from "@/lib/playground";
+import { generateDefaultPrompt, isPlaygroundEmpty } from "@/lib/playground";
 import { DATASET_TYPE } from "@/types/datasets";
 import {
   generateDefaultLLMPromptMessage,
@@ -74,15 +74,7 @@ function useLoadPlayground() {
     },
   );
 
-  const isPlaygroundEmpty = useMemo(() => {
-    const keys = Object.keys(promptMap);
-
-    return (
-      keys.length === 0 ||
-      (keys.length === 1 &&
-        !!promptMap[keys[0]]?.messages?.every(isEmptyMessage))
-    );
-  }, [promptMap]);
+  const isEmpty = useMemo(() => isPlaygroundEmpty(promptMap), [promptMap]);
 
   const providerKeys = useMemo(() => {
     return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
@@ -253,7 +245,7 @@ function useLoadPlayground() {
 
   return {
     loadPlayground,
-    isPlaygroundEmpty,
+    isPlaygroundEmpty: isEmpty,
     isPendingProviderKeys,
   };
 }

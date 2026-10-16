@@ -8,6 +8,7 @@ import {
   getDefaultConfigByProvider,
   hasUnsupportedMedia,
   isEmptyMessage,
+  isPlaygroundEmpty,
   OUTPUT_LIMIT_REACHED_MESSAGE,
   parseCompletionOutput,
   restoreMissingConfigKeys,
@@ -746,6 +747,33 @@ describe("isEmptyMessage", () => {
     ["a list of parts", imageMessage],
   ])("treats %s as content", (_, message) => {
     expect(isEmptyMessage(message)).toBe(false);
+  });
+});
+
+describe("isPlaygroundEmpty", () => {
+  const promptMap = (...messageLists: LLMMessage[][]) =>
+    Object.fromEntries(
+      messageLists.map((messages, index) => [
+        `p${index}`,
+        { id: `p${index}`, messages } as PlaygroundPromptType,
+      ]),
+    );
+
+  it.each([
+    ["no prompts", promptMap()],
+    ["one prompt with only empty messages", promptMap([userMessage("")])],
+  ])("treats %s as empty", (_, prompts) => {
+    expect(isPlaygroundEmpty(prompts)).toBe(true);
+  });
+
+  it.each([
+    ["one prompt with content", promptMap([userMessage("Hello")])],
+    [
+      "two prompts with only empty messages",
+      promptMap([userMessage("")], [userMessage("")]),
+    ],
+  ])("treats %s as not empty", (_, prompts) => {
+    expect(isPlaygroundEmpty(prompts)).toBe(false);
   });
 });
 
