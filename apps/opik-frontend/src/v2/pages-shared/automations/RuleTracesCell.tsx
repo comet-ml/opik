@@ -48,6 +48,7 @@ const RuleTracesCell = (context: CellContext<EvaluatorsRule, string>) => {
         scopeLabel={rule.name}
         label="Go to traces"
         renderSidebar={false}
+        stopClickPropagation
       />
     </CellWrapper>
   );
