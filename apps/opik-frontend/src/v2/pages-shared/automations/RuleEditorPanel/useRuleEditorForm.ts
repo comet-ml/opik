@@ -70,7 +70,7 @@ const isDerivedField = (name: string) =>
     (field) => name === field || name.startsWith(`${field}.`),
   );
 
-const ENTITY_PATH_REGEX = /^(input|output|metadata)(\.|\[|$)/;
+const ENTITY_PATH_REGEX = /^(input|output|metadata)(\.|$)/;
 
 const getPromptVariables = (
   messages: LLMMessage[],

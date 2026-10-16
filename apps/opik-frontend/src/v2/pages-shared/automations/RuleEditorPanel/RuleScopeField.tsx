@@ -52,7 +52,7 @@ const RuleScopeField: React.FC<RuleScopeFieldProps> = ({
       ? []
       : [{ value: EVALUATORS_RULE_SCOPE.thread, label: "Threads" }]),
     { value: EVALUATORS_RULE_SCOPE.trace, label: "Traces" },
-    ...(isSpanScopeEnabled
+    ...(isSpanScopeEnabled || scope === EVALUATORS_RULE_SCOPE.span
       ? [{ value: EVALUATORS_RULE_SCOPE.span, label: "Spans" }]
       : []),
   ];
