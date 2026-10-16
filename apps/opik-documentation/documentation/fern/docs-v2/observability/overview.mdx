@@ -93,16 +93,15 @@ With Opik, you can:
       ```
 
       ```ts title="TypeScript"
-      import { Opik } from "opik";
-      const client = new Opik();
+      import { track } from "opik";
 
-      const myAgent = client.track({
-        name: "my-agent",
-        fn: async (userMessage: string) => {
+      const myAgent = track(
+        { name: "my-agent" },
+        async (userMessage: string) => {
           const context = await retrieveContext(userMessage);
           return await callLlm(userMessage, context);
-        },
-      });
+        }
+      );
       ```
     </CodeBlocks>
   </Step>

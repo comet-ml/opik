@@ -147,24 +147,25 @@ Opik provides two approaches to evaluation. Choose the one that fits your use ca
       ```
 
       ```ts title="Typescript"
-      import { Opik } from "opik";
+      import { Opik, evaluate, Hallucination } from "opik";
 
       const client = new Opik();
 
       // Create a dataset
-      const dataset = await client.getOrCreateDataset({ name: "my-eval-dataset" });
+      const dataset = await client.getOrCreateDataset("my-eval-dataset");
       await dataset.insert([
           { input: "What is the capital of France?", expectedOutput: "Paris" },
           { input: "What is 2+2?", expectedOutput: "4" },
       ]);
 
       // Run evaluation with metrics
-      await client.evaluate({
+      await evaluate({
           dataset,
           task: async (item) => {
               const result = await callLlm(item.input);
               return { output: result };
           },
+          scoringMetrics: [new Hallucination()],
           experimentName: "my-experiment-v1",
       });
       ```
