@@ -1,0 +1,2031 @@
+{
+  "x-vendored-from": {
+    "repository": "comet-ml/opik-inference",
+    "path": "api/v1.json",
+    "commit": "f0aa657856493dcd0ee65a6d8720e657506a0e4e",
+    "note": "Copied verbatim except for this key. Refresh it from opik-inference when the v1 contract changes."
+  },
+  "auth": {
+    "header": "Authorization",
+    "scheme": "Bearer"
+  },
+  "callback": {
+    "payload": {
+      "$defs": {
+        "JobCounts": {
+          "properties": {
+            "cancelled": {
+              "title": "Cancelled",
+              "type": "integer"
+            },
+            "failed": {
+              "title": "Failed",
+              "type": "integer"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "integer"
+            },
+            "pending": {
+              "title": "Pending",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "pending",
+            "ok",
+            "failed",
+            "cancelled"
+          ],
+          "title": "JobCounts",
+          "type": "object"
+        },
+        "JobStatus": {
+          "enum": [
+            "pending",
+            "running",
+            "completed",
+            "partially_failed",
+            "cancelled"
+          ],
+          "title": "JobStatus",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "counts": {
+          "$ref": "#/$defs/JobCounts"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/JobStatus"
+        }
+      },
+      "required": [
+        "job_id",
+        "status",
+        "counts"
+      ],
+      "title": "CallbackPayload",
+      "type": "object"
+    },
+    "signature_header": "X-Opik-Inference-Signature"
+  },
+  "endpoints": {
+    "DELETE /v1/batch/jobs/{job_id}": {
+      "request": null,
+      "response": {
+        "$defs": {
+          "ChoiceAnswer": {
+            "properties": {
+              "choice": {
+                "title": "Choice",
+                "type": "string"
+              },
+              "confidence": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Confidence",
+                "type": "number"
+              },
+              "probabilities": {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "title": "Probabilities",
+                "type": "object"
+              },
+              "type": {
+                "const": "choice",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "choice",
+              "probabilities",
+              "confidence"
+            ],
+            "title": "ChoiceAnswer",
+            "type": "object"
+          },
+          "DecideResponse": {
+            "properties": {
+              "cache_hit": {
+                "title": "Cache Hit",
+                "type": "boolean"
+              },
+              "latency_ms": {
+                "title": "Latency Ms",
+                "type": "integer"
+              },
+              "request_id": {
+                "title": "Request Id",
+                "type": "string"
+              },
+              "result": {
+                "$ref": "#/$defs/DecideResult"
+              },
+              "usage": {
+                "$ref": "#/$defs/Usage"
+              }
+            },
+            "required": [
+              "request_id",
+              "usage",
+              "cache_hit",
+              "latency_ms",
+              "result"
+            ],
+            "title": "DecideResponse",
+            "type": "object"
+          },
+          "DecideResult": {
+            "description": "One typed answer per question id. Probabilities are calibrated (temperature 1.3).",
+            "properties": {
+              "answers": {
+                "additionalProperties": {
+                  "discriminator": {
+                    "mapping": {
+                      "choice": "#/$defs/ChoiceAnswer",
+                      "noul": "#/$defs/NoulAnswer",
+                      "score": "#/$defs/ScoreAnswer"
+                    },
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/NoulAnswer"
+                    },
+                    {
+                      "$ref": "#/$defs/ChoiceAnswer"
+                    },
+                    {
+                      "$ref": "#/$defs/ScoreAnswer"
+                    }
+                  ]
+                },
+                "title": "Answers",
+                "type": "object"
+              }
+            },
+            "required": [
+              "answers"
+            ],
+            "title": "DecideResult",
+            "type": "object"
+          },
+          "ErrorBody": {
+            "properties": {
+              "code": {
+                "$ref": "#/$defs/ErrorCode"
+              },
+              "message": {
+                "title": "Message",
+                "type": "string"
+              },
+              "retryable": {
+                "title": "Retryable",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "retryable"
+            ],
+            "title": "ErrorBody",
+            "type": "object"
+          },
+          "ErrorCode": {
+            "enum": [
+              "unauthorized",
+              "org_not_allowed",
+              "invalid_request",
+              "invalid_schema",
+              "input_too_long",
+              "not_found",
+              "quota_exceeded",
+              "overloaded",
+              "deadline_exceeded",
+              "upstream_error",
+              "schema_violation"
+            ],
+            "title": "ErrorCode",
+            "type": "string"
+          },
+          "GenerateResponse": {
+            "properties": {
+              "cache_hit": {
+                "title": "Cache Hit",
+                "type": "boolean"
+              },
+              "latency_ms": {
+                "title": "Latency Ms",
+                "type": "integer"
+              },
+              "request_id": {
+                "title": "Request Id",
+                "type": "string"
+              },
+              "result": {
+                "$ref": "#/$defs/GenerateResult"
+              },
+              "usage": {
+                "$ref": "#/$defs/Usage"
+              }
+            },
+            "required": [
+              "request_id",
+              "usage",
+              "cache_hit",
+              "latency_ms",
+              "result"
+            ],
+            "title": "GenerateResponse",
+            "type": "object"
+          },
+          "GenerateResult": {
+            "properties": {
+              "output": {
+                "title": "Output"
+              }
+            },
+            "required": [
+              "output"
+            ],
+            "title": "GenerateResult",
+            "type": "object"
+          },
+          "ItemResult": {
+            "properties": {
+              "error": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ErrorBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "item_id": {
+                "title": "Item Id",
+                "type": "string"
+              },
+              "response": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/DecideResponse"
+                  },
+                  {
+                    "$ref": "#/$defs/GenerateResponse"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Response"
+              }
+            },
+            "required": [
+              "item_id"
+            ],
+            "title": "ItemResult",
+            "type": "object"
+          },
+          "JobCounts": {
+            "properties": {
+              "cancelled": {
+                "title": "Cancelled",
+                "type": "integer"
+              },
+              "failed": {
+                "title": "Failed",
+                "type": "integer"
+              },
+              "ok": {
+                "title": "Ok",
+                "type": "integer"
+              },
+              "pending": {
+                "title": "Pending",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "pending",
+              "ok",
+              "failed",
+              "cancelled"
+            ],
+            "title": "JobCounts",
+            "type": "object"
+          },
+          "JobStatus": {
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "partially_failed",
+              "cancelled"
+            ],
+            "title": "JobStatus",
+            "type": "string"
+          },
+          "JsonValue": {},
+          "NoulAnswer": {
+            "properties": {
+              "noul": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Noul",
+                "type": "number"
+              },
+              "type": {
+                "const": "noul",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "noul"
+            ],
+            "title": "NoulAnswer",
+            "type": "object"
+          },
+          "ScoreAnswer": {
+            "properties": {
+              "confidence": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Confidence",
+                "type": "number"
+              },
+              "legend": {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "title": "Legend",
+                "type": "object"
+              },
+              "probabilities": {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "title": "Probabilities",
+                "type": "object"
+              },
+              "score": {
+                "title": "Score",
+                "type": "number"
+              },
+              "type": {
+                "const": "score",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "score",
+              "legend",
+              "probabilities",
+              "confidence"
+            ],
+            "title": "ScoreAnswer",
+            "type": "object"
+          },
+          "Usage": {
+            "properties": {
+              "input_tokens": {
+                "default": 0,
+                "title": "Input Tokens",
+                "type": "integer"
+              },
+              "output_tokens": {
+                "default": 0,
+                "title": "Output Tokens",
+                "type": "integer"
+              }
+            },
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "cancel_requested": {
+            "default": false,
+            "title": "Cancel Requested",
+            "type": "boolean"
+          },
+          "counts": {
+            "$ref": "#/$defs/JobCounts"
+          },
+          "endpoint": {
+            "enum": [
+              "decide",
+              "generate"
+            ],
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Next Cursor"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/$defs/ItemResult"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/$defs/JobStatus"
+          }
+        },
+        "required": [
+          "job_id",
+          "endpoint",
+          "status",
+          "counts",
+          "results"
+        ],
+        "title": "JobView",
+        "type": "object"
+      },
+      "status": 200
+    },
+    "GET /v1/batch/jobs/{job_id}": {
+      "query": {
+        "properties": {
+          "cursor": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Cursor",
+            "type": "integer"
+          },
+          "results": {
+            "default": true,
+            "title": "Results",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "request": null,
+      "response": {
+        "$defs": {
+          "ChoiceAnswer": {
+            "properties": {
+              "choice": {
+                "title": "Choice",
+                "type": "string"
+              },
+              "confidence": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Confidence",
+                "type": "number"
+              },
+              "probabilities": {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "title": "Probabilities",
+                "type": "object"
+              },
+              "type": {
+                "const": "choice",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "choice",
+              "probabilities",
+              "confidence"
+            ],
+            "title": "ChoiceAnswer",
+            "type": "object"
+          },
+          "DecideResponse": {
+            "properties": {
+              "cache_hit": {
+                "title": "Cache Hit",
+                "type": "boolean"
+              },
+              "latency_ms": {
+                "title": "Latency Ms",
+                "type": "integer"
+              },
+              "request_id": {
+                "title": "Request Id",
+                "type": "string"
+              },
+              "result": {
+                "$ref": "#/$defs/DecideResult"
+              },
+              "usage": {
+                "$ref": "#/$defs/Usage"
+              }
+            },
+            "required": [
+              "request_id",
+              "usage",
+              "cache_hit",
+              "latency_ms",
+              "result"
+            ],
+            "title": "DecideResponse",
+            "type": "object"
+          },
+          "DecideResult": {
+            "description": "One typed answer per question id. Probabilities are calibrated (temperature 1.3).",
+            "properties": {
+              "answers": {
+                "additionalProperties": {
+                  "discriminator": {
+                    "mapping": {
+                      "choice": "#/$defs/ChoiceAnswer",
+                      "noul": "#/$defs/NoulAnswer",
+                      "score": "#/$defs/ScoreAnswer"
+                    },
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/NoulAnswer"
+                    },
+                    {
+                      "$ref": "#/$defs/ChoiceAnswer"
+                    },
+                    {
+                      "$ref": "#/$defs/ScoreAnswer"
+                    }
+                  ]
+                },
+                "title": "Answers",
+                "type": "object"
+              }
+            },
+            "required": [
+              "answers"
+            ],
+            "title": "DecideResult",
+            "type": "object"
+          },
+          "ErrorBody": {
+            "properties": {
+              "code": {
+                "$ref": "#/$defs/ErrorCode"
+              },
+              "message": {
+                "title": "Message",
+                "type": "string"
+              },
+              "retryable": {
+                "title": "Retryable",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "retryable"
+            ],
+            "title": "ErrorBody",
+            "type": "object"
+          },
+          "ErrorCode": {
+            "enum": [
+              "unauthorized",
+              "org_not_allowed",
+              "invalid_request",
+              "invalid_schema",
+              "input_too_long",
+              "not_found",
+              "quota_exceeded",
+              "overloaded",
+              "deadline_exceeded",
+              "upstream_error",
+              "schema_violation"
+            ],
+            "title": "ErrorCode",
+            "type": "string"
+          },
+          "GenerateResponse": {
+            "properties": {
+              "cache_hit": {
+                "title": "Cache Hit",
+                "type": "boolean"
+              },
+              "latency_ms": {
+                "title": "Latency Ms",
+                "type": "integer"
+              },
+              "request_id": {
+                "title": "Request Id",
+                "type": "string"
+              },
+              "result": {
+                "$ref": "#/$defs/GenerateResult"
+              },
+              "usage": {
+                "$ref": "#/$defs/Usage"
+              }
+            },
+            "required": [
+              "request_id",
+              "usage",
+              "cache_hit",
+              "latency_ms",
+              "result"
+            ],
+            "title": "GenerateResponse",
+            "type": "object"
+          },
+          "GenerateResult": {
+            "properties": {
+              "output": {
+                "title": "Output"
+              }
+            },
+            "required": [
+              "output"
+            ],
+            "title": "GenerateResult",
+            "type": "object"
+          },
+          "ItemResult": {
+            "properties": {
+              "error": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ErrorBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "item_id": {
+                "title": "Item Id",
+                "type": "string"
+              },
+              "response": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/DecideResponse"
+                  },
+                  {
+                    "$ref": "#/$defs/GenerateResponse"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Response"
+              }
+            },
+            "required": [
+              "item_id"
+            ],
+            "title": "ItemResult",
+            "type": "object"
+          },
+          "JobCounts": {
+            "properties": {
+              "cancelled": {
+                "title": "Cancelled",
+                "type": "integer"
+              },
+              "failed": {
+                "title": "Failed",
+                "type": "integer"
+              },
+              "ok": {
+                "title": "Ok",
+                "type": "integer"
+              },
+              "pending": {
+                "title": "Pending",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "pending",
+              "ok",
+              "failed",
+              "cancelled"
+            ],
+            "title": "JobCounts",
+            "type": "object"
+          },
+          "JobStatus": {
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "partially_failed",
+              "cancelled"
+            ],
+            "title": "JobStatus",
+            "type": "string"
+          },
+          "JsonValue": {},
+          "NoulAnswer": {
+            "properties": {
+              "noul": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Noul",
+                "type": "number"
+              },
+              "type": {
+                "const": "noul",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "noul"
+            ],
+            "title": "NoulAnswer",
+            "type": "object"
+          },
+          "ScoreAnswer": {
+            "properties": {
+              "confidence": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Confidence",
+                "type": "number"
+              },
+              "legend": {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "title": "Legend",
+                "type": "object"
+              },
+              "probabilities": {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "title": "Probabilities",
+                "type": "object"
+              },
+              "score": {
+                "title": "Score",
+                "type": "number"
+              },
+              "type": {
+                "const": "score",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "score",
+              "legend",
+              "probabilities",
+              "confidence"
+            ],
+            "title": "ScoreAnswer",
+            "type": "object"
+          },
+          "Usage": {
+            "properties": {
+              "input_tokens": {
+                "default": 0,
+                "title": "Input Tokens",
+                "type": "integer"
+              },
+              "output_tokens": {
+                "default": 0,
+                "title": "Output Tokens",
+                "type": "integer"
+              }
+            },
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "cancel_requested": {
+            "default": false,
+            "title": "Cancel Requested",
+            "type": "boolean"
+          },
+          "counts": {
+            "$ref": "#/$defs/JobCounts"
+          },
+          "endpoint": {
+            "enum": [
+              "decide",
+              "generate"
+            ],
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Next Cursor"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/$defs/ItemResult"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/$defs/JobStatus"
+          }
+        },
+        "required": [
+          "job_id",
+          "endpoint",
+          "status",
+          "counts",
+          "results"
+        ],
+        "title": "JobView",
+        "type": "object"
+      },
+      "status": 200
+    },
+    "POST /v1/batch/decide": {
+      "request": {
+        "$defs": {
+          "BatchDecideItem": {
+            "additionalProperties": false,
+            "properties": {
+              "item_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Item Id",
+                "type": "string"
+              },
+              "questions": {
+                "maxProperties": 32,
+                "minProperties": 1,
+                "patternProperties": {
+                  "^[A-Za-z0-9_.:-]{1,64}$": {
+                    "discriminator": {
+                      "mapping": {
+                        "choice": "#/$defs/ChoiceQuestion",
+                        "noul": "#/$defs/NoulQuestion",
+                        "score": "#/$defs/ScoreQuestion"
+                      },
+                      "propertyName": "type"
+                    },
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/NoulQuestion"
+                      },
+                      {
+                        "$ref": "#/$defs/ChoiceQuestion"
+                      },
+                      {
+                        "$ref": "#/$defs/ScoreQuestion"
+                      }
+                    ]
+                  }
+                },
+                "title": "Questions",
+                "type": "object"
+              },
+              "state": {
+                "$ref": "#/$defs/JsonValue"
+              }
+            },
+            "required": [
+              "state",
+              "questions",
+              "item_id"
+            ],
+            "title": "BatchDecideItem",
+            "type": "object"
+          },
+          "ChoiceQuestion": {
+            "additionalProperties": false,
+            "properties": {
+              "criteria": {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "maxProperties": 255,
+                "minProperties": 1,
+                "title": "Criteria",
+                "type": "object"
+              },
+              "instructions": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": {
+                "const": "choice",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "instructions",
+              "criteria"
+            ],
+            "title": "ChoiceQuestion",
+            "type": "object"
+          },
+          "JsonValue": {},
+          "NoulCriteria": {
+            "additionalProperties": false,
+            "description": "Optional descriptions of what a yes (near 1) and a no (near 0) mean.",
+            "properties": {
+              "false": {
+                "$ref": "#/$defs/JsonValue",
+                "default": null
+              },
+              "true": {
+                "$ref": "#/$defs/JsonValue",
+                "default": null
+              }
+            },
+            "title": "NoulCriteria",
+            "type": "object"
+          },
+          "NoulQuestion": {
+            "additionalProperties": false,
+            "properties": {
+              "criteria": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/NoulCriteria"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "instructions": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": {
+                "const": "noul",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "instructions"
+            ],
+            "title": "NoulQuestion",
+            "type": "object"
+          },
+          "ScoreQuestion": {
+            "additionalProperties": false,
+            "properties": {
+              "criteria": {
+                "items": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "maxItems": 10,
+                "minItems": 2,
+                "title": "Criteria",
+                "type": "array"
+              },
+              "instructions": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": {
+                "const": "score",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "instructions",
+              "criteria"
+            ],
+            "title": "ScoreQuestion",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "cache": {
+            "default": true,
+            "title": "Cache",
+            "type": "boolean"
+          },
+          "callback_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Callback Url"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/$defs/BatchDecideItem"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "org_id": {
+            "minLength": 1,
+            "title": "Org Id",
+            "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Request Id"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "org_id",
+          "items"
+        ],
+        "title": "BatchDecideRequest",
+        "type": "object"
+      },
+      "response": {
+        "properties": {
+          "items": {
+            "title": "Items",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "items"
+        ],
+        "title": "BatchSubmitResponse",
+        "type": "object"
+      },
+      "status": 202
+    },
+    "POST /v1/batch/generate": {
+      "request": {
+        "$defs": {
+          "BatchGenerateItem": {
+            "additionalProperties": false,
+            "properties": {
+              "item_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Item Id",
+                "type": "string"
+              },
+              "max_tokens": {
+                "default": 512,
+                "maximum": 4096,
+                "minimum": 1,
+                "title": "Max Tokens",
+                "type": "integer"
+              },
+              "messages": {
+                "items": {
+                  "$ref": "#/$defs/Message"
+                },
+                "minItems": 1,
+                "title": "Messages",
+                "type": "array"
+              },
+              "schema": {
+                "additionalProperties": true,
+                "title": "Schema",
+                "type": "object"
+              },
+              "temperature": {
+                "default": 0.0,
+                "maximum": 2.0,
+                "minimum": 0.0,
+                "title": "Temperature",
+                "type": "number"
+              }
+            },
+            "required": [
+              "messages",
+              "schema",
+              "item_id"
+            ],
+            "title": "BatchGenerateItem",
+            "type": "object"
+          },
+          "Message": {
+            "additionalProperties": false,
+            "properties": {
+              "content": {
+                "title": "Content",
+                "type": "string"
+              },
+              "role": {
+                "enum": [
+                  "system",
+                  "user",
+                  "assistant"
+                ],
+                "title": "Role",
+                "type": "string"
+              }
+            },
+            "required": [
+              "role",
+              "content"
+            ],
+            "title": "Message",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "cache": {
+            "default": true,
+            "title": "Cache",
+            "type": "boolean"
+          },
+          "callback_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Callback Url"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/$defs/BatchGenerateItem"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "org_id": {
+            "minLength": 1,
+            "title": "Org Id",
+            "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Request Id"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "org_id",
+          "items"
+        ],
+        "title": "BatchGenerateRequest",
+        "type": "object"
+      },
+      "response": {
+        "properties": {
+          "items": {
+            "title": "Items",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "items"
+        ],
+        "title": "BatchSubmitResponse",
+        "type": "object"
+      },
+      "status": 202
+    },
+    "POST /v1/decide": {
+      "request": {
+        "$defs": {
+          "ChoiceQuestion": {
+            "additionalProperties": false,
+            "properties": {
+              "criteria": {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "maxProperties": 255,
+                "minProperties": 1,
+                "title": "Criteria",
+                "type": "object"
+              },
+              "instructions": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": {
+                "const": "choice",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "instructions",
+              "criteria"
+            ],
+            "title": "ChoiceQuestion",
+            "type": "object"
+          },
+          "JsonValue": {},
+          "Lane": {
+            "enum": [
+              "realtime",
+              "batch"
+            ],
+            "title": "Lane",
+            "type": "string"
+          },
+          "NoulCriteria": {
+            "additionalProperties": false,
+            "description": "Optional descriptions of what a yes (near 1) and a no (near 0) mean.",
+            "properties": {
+              "false": {
+                "$ref": "#/$defs/JsonValue",
+                "default": null
+              },
+              "true": {
+                "$ref": "#/$defs/JsonValue",
+                "default": null
+              }
+            },
+            "title": "NoulCriteria",
+            "type": "object"
+          },
+          "NoulQuestion": {
+            "additionalProperties": false,
+            "properties": {
+              "criteria": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/NoulCriteria"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "instructions": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": {
+                "const": "noul",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "instructions"
+            ],
+            "title": "NoulQuestion",
+            "type": "object"
+          },
+          "ScoreQuestion": {
+            "additionalProperties": false,
+            "properties": {
+              "criteria": {
+                "items": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "maxItems": 10,
+                "minItems": 2,
+                "title": "Criteria",
+                "type": "array"
+              },
+              "instructions": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": {
+                "const": "score",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "instructions",
+              "criteria"
+            ],
+            "title": "ScoreQuestion",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "cache": {
+            "default": true,
+            "title": "Cache",
+            "type": "boolean"
+          },
+          "deadline_ms": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deadline Ms"
+          },
+          "lane": {
+            "$ref": "#/$defs/Lane",
+            "default": "realtime"
+          },
+          "org_id": {
+            "minLength": 1,
+            "title": "Org Id",
+            "type": "string"
+          },
+          "questions": {
+            "maxProperties": 32,
+            "minProperties": 1,
+            "patternProperties": {
+              "^[A-Za-z0-9_.:-]{1,64}$": {
+                "discriminator": {
+                  "mapping": {
+                    "choice": "#/$defs/ChoiceQuestion",
+                    "noul": "#/$defs/NoulQuestion",
+                    "score": "#/$defs/ScoreQuestion"
+                  },
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/NoulQuestion"
+                  },
+                  {
+                    "$ref": "#/$defs/ChoiceQuestion"
+                  },
+                  {
+                    "$ref": "#/$defs/ScoreQuestion"
+                  }
+                ]
+              }
+            },
+            "title": "Questions",
+            "type": "object"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Request Id"
+          },
+          "state": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "org_id",
+          "state",
+          "questions"
+        ],
+        "title": "DecideRequest",
+        "type": "object"
+      },
+      "response": {
+        "$defs": {
+          "ChoiceAnswer": {
+            "properties": {
+              "choice": {
+                "title": "Choice",
+                "type": "string"
+              },
+              "confidence": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Confidence",
+                "type": "number"
+              },
+              "probabilities": {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "title": "Probabilities",
+                "type": "object"
+              },
+              "type": {
+                "const": "choice",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "choice",
+              "probabilities",
+              "confidence"
+            ],
+            "title": "ChoiceAnswer",
+            "type": "object"
+          },
+          "DecideResult": {
+            "description": "One typed answer per question id. Probabilities are calibrated (temperature 1.3).",
+            "properties": {
+              "answers": {
+                "additionalProperties": {
+                  "discriminator": {
+                    "mapping": {
+                      "choice": "#/$defs/ChoiceAnswer",
+                      "noul": "#/$defs/NoulAnswer",
+                      "score": "#/$defs/ScoreAnswer"
+                    },
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/NoulAnswer"
+                    },
+                    {
+                      "$ref": "#/$defs/ChoiceAnswer"
+                    },
+                    {
+                      "$ref": "#/$defs/ScoreAnswer"
+                    }
+                  ]
+                },
+                "title": "Answers",
+                "type": "object"
+              }
+            },
+            "required": [
+              "answers"
+            ],
+            "title": "DecideResult",
+            "type": "object"
+          },
+          "JsonValue": {},
+          "NoulAnswer": {
+            "properties": {
+              "noul": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Noul",
+                "type": "number"
+              },
+              "type": {
+                "const": "noul",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "noul"
+            ],
+            "title": "NoulAnswer",
+            "type": "object"
+          },
+          "ScoreAnswer": {
+            "properties": {
+              "confidence": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Confidence",
+                "type": "number"
+              },
+              "legend": {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "title": "Legend",
+                "type": "object"
+              },
+              "probabilities": {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "title": "Probabilities",
+                "type": "object"
+              },
+              "score": {
+                "title": "Score",
+                "type": "number"
+              },
+              "type": {
+                "const": "score",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "score",
+              "legend",
+              "probabilities",
+              "confidence"
+            ],
+            "title": "ScoreAnswer",
+            "type": "object"
+          },
+          "Usage": {
+            "properties": {
+              "input_tokens": {
+                "default": 0,
+                "title": "Input Tokens",
+                "type": "integer"
+              },
+              "output_tokens": {
+                "default": 0,
+                "title": "Output Tokens",
+                "type": "integer"
+              }
+            },
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "cache_hit": {
+            "title": "Cache Hit",
+            "type": "boolean"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/$defs/DecideResult"
+          },
+          "usage": {
+            "$ref": "#/$defs/Usage"
+          }
+        },
+        "required": [
+          "request_id",
+          "usage",
+          "cache_hit",
+          "latency_ms",
+          "result"
+        ],
+        "title": "DecideResponse",
+        "type": "object"
+      },
+      "status": 200
+    },
+    "POST /v1/generate": {
+      "request": {
+        "$defs": {
+          "Lane": {
+            "enum": [
+              "realtime",
+              "batch"
+            ],
+            "title": "Lane",
+            "type": "string"
+          },
+          "Message": {
+            "additionalProperties": false,
+            "properties": {
+              "content": {
+                "title": "Content",
+                "type": "string"
+              },
+              "role": {
+                "enum": [
+                  "system",
+                  "user",
+                  "assistant"
+                ],
+                "title": "Role",
+                "type": "string"
+              }
+            },
+            "required": [
+              "role",
+              "content"
+            ],
+            "title": "Message",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "cache": {
+            "default": true,
+            "title": "Cache",
+            "type": "boolean"
+          },
+          "deadline_ms": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deadline Ms"
+          },
+          "lane": {
+            "$ref": "#/$defs/Lane",
+            "default": "realtime"
+          },
+          "max_tokens": {
+            "default": 512,
+            "maximum": 4096,
+            "minimum": 1,
+            "title": "Max Tokens",
+            "type": "integer"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/$defs/Message"
+            },
+            "minItems": 1,
+            "title": "Messages",
+            "type": "array"
+          },
+          "org_id": {
+            "minLength": 1,
+            "title": "Org Id",
+            "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Request Id"
+          },
+          "schema": {
+            "additionalProperties": true,
+            "title": "Schema",
+            "type": "object"
+          },
+          "temperature": {
+            "default": 0.0,
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Temperature",
+            "type": "number"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "org_id",
+          "messages",
+          "schema"
+        ],
+        "title": "GenerateRequest",
+        "type": "object"
+      },
+      "response": {
+        "$defs": {
+          "GenerateResult": {
+            "properties": {
+              "output": {
+                "title": "Output"
+              }
+            },
+            "required": [
+              "output"
+            ],
+            "title": "GenerateResult",
+            "type": "object"
+          },
+          "Usage": {
+            "properties": {
+              "input_tokens": {
+                "default": 0,
+                "title": "Input Tokens",
+                "type": "integer"
+              },
+              "output_tokens": {
+                "default": 0,
+                "title": "Output Tokens",
+                "type": "integer"
+              }
+            },
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "cache_hit": {
+            "title": "Cache Hit",
+            "type": "boolean"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/$defs/GenerateResult"
+          },
+          "usage": {
+            "$ref": "#/$defs/Usage"
+          }
+        },
+        "required": [
+          "request_id",
+          "usage",
+          "cache_hit",
+          "latency_ms",
+          "result"
+        ],
+        "title": "GenerateResponse",
+        "type": "object"
+      },
+      "status": 200
+    }
+  },
+  "errors": {
+    "codes": {
+      "deadline_exceeded": {
+        "http_status": 504,
+        "retryable": true
+      },
+      "input_too_long": {
+        "http_status": 413,
+        "retryable": false
+      },
+      "invalid_request": {
+        "http_status": 400,
+        "retryable": false
+      },
+      "invalid_schema": {
+        "http_status": 400,
+        "retryable": false
+      },
+      "not_found": {
+        "http_status": 404,
+        "retryable": false
+      },
+      "org_not_allowed": {
+        "http_status": 403,
+        "retryable": false
+      },
+      "overloaded": {
+        "http_status": 503,
+        "retryable": true
+      },
+      "quota_exceeded": {
+        "http_status": 429,
+        "retryable": true
+      },
+      "schema_violation": {
+        "http_status": 500,
+        "retryable": true
+      },
+      "unauthorized": {
+        "http_status": 401,
+        "retryable": false
+      },
+      "upstream_error": {
+        "http_status": 502,
+        "retryable": true
+      }
+    },
+    "envelope": {
+      "$defs": {
+        "ErrorBody": {
+          "properties": {
+            "code": {
+              "$ref": "#/$defs/ErrorCode"
+            },
+            "message": {
+              "title": "Message",
+              "type": "string"
+            },
+            "retryable": {
+              "title": "Retryable",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "title": "ErrorBody",
+          "type": "object"
+        },
+        "ErrorCode": {
+          "enum": [
+            "unauthorized",
+            "org_not_allowed",
+            "invalid_request",
+            "invalid_schema",
+            "input_too_long",
+            "not_found",
+            "quota_exceeded",
+            "overloaded",
+            "deadline_exceeded",
+            "upstream_error",
+            "schema_violation"
+          ],
+          "title": "ErrorCode",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/ErrorBody"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "title": "ErrorEnvelope",
+      "type": "object"
+    }
+  },
+  "limits": {
+    "batch_call_deadline_ms": {
+      "kind": "default",
+      "value": 30000
+    },
+    "batch_call_max_deadline_ms": {
+      "kind": "max",
+      "value": 300000
+    },
+    "decide_realtime_deadline_ms": {
+      "kind": "default",
+      "value": 150
+    },
+    "decide_realtime_max_deadline_ms": {
+      "kind": "max",
+      "value": 5000
+    },
+    "decision_realtime_max_state_chars": {
+      "kind": "max",
+      "value": 16384
+    },
+    "generate_realtime_deadline_ms": {
+      "kind": "default",
+      "value": 10000
+    },
+    "generate_realtime_max_deadline_ms": {
+      "kind": "max",
+      "value": 60000
+    },
+    "max_batch_body_bytes": {
+      "kind": "max",
+      "value": 134217728
+    },
+    "max_body_bytes": {
+      "kind": "max",
+      "value": 8388608
+    }
+  },
+  "version": "v1"
+}
