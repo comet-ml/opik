@@ -14,7 +14,7 @@ The anonymous usage statistics reporting is enabled by default. You can opt-out 
 
 ## What data is collected?
 
-When usage statistics reporting is enabled, report are collected by a server that is run and maintained by the Opik team.
+When usage statistics reporting is enabled, report are collected by a server that is run and maintained by the Opik team. The report is sent once a day by every running Opik server.
 
 The usage statistics include the following information:
 
@@ -24,6 +24,9 @@ The usage statistics include the following information:
 - Information about Opik users: This is not relevant for self-hosted deployments as no user management is available.
   - Total number of users
   - Daily number of users
+- Information about Opik clients:
+  - The number of distinct SDK clients that have connected to the Opik server
+  - The number of distinct browsers that have opened the Opik UI
 - Information about Opik's usage reported daily:
   - The number of traces created
   - The number of experiments created
@@ -41,7 +44,9 @@ No personally identifiable information is collected and no user data is sent to 
     "daily_users": "1",
     "daily_traces": "123",
     "daily_experiments": "123",
-    "daily_datasets": "123"
+    "daily_datasets": "123",
+    "total_sdk_clients": "12",
+    "total_ui_clients": "4"
   }
 }
 ```
