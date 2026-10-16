@@ -712,12 +712,12 @@ class DailyUsageReportJobTest {
 
         @Test
         @DisplayName("Daily usage report counts distinct clients")
-        void dailyUsageReportCountsActiveClients() throws Exception {
-            var sdkClient = "a".repeat(64);
+        void dailyUsageReportCountsActiveClients() {
             var browser = UUID.randomUUID().toString();
 
-            // The filter records clients from request headers: repeats count once and malformed IDs are ignored
-            for (var clientId : List.of(sdkClient, sdkClient, "not-a-client-id")) {
+            // Three distinct SDK clients and one browser: repeats count once and a malformed ID is ignored
+            for (var clientId : List.of("a".repeat(64), "a".repeat(64), "b".repeat(64), "c".repeat(64),
+                    "not-a-client-id")) {
                 try (var response = client.target("%s/v1/private/projects".formatted(baseURI))
                         .request()
                         .header(RequestContext.WORKSPACE_HEADER, "default")
@@ -727,28 +727,16 @@ class DailyUsageReportJobTest {
                     assertThat(response.getStatus()).isEqualTo(200);
                 }
             }
-            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
-                assertThat(redisCli("PFCOUNT", "opik:active_clients:sdk")).isEqualTo("1");
-                assertThat(redisCli("PFCOUNT", "opik:active_clients:ui")).isEqualTo("1");
+
+            // Clients are recorded asynchronously, so report again until the totals have caught up. The report is
+            // sent every day, with or without activity, so no traces are needed here.
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).untilAsserted(() -> {
+                resetAndScheduleReport(transactionTemplate, guiceJobManager);
+                wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(DailyUsageReportJob.STATISTICS_BE))
+                                .and(matchingJsonPath("$.event_properties.total_sdk_clients", equalTo("3")))
+                                .and(matchingJsonPath("$.event_properties.total_ui_clients", equalTo("1")))));
             });
-            redisCli("PFADD", "opik:active_clients:sdk", "b", "c");
-
-            // Sent every day, with or without activity, so no traces are needed here
-            resetAndScheduleReport(transactionTemplate, guiceJobManager);
-
-            Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> wireMock.server().verify(
-                    postRequestedFor(urlPathEqualTo("/v1/notify/event"))
-                            .withRequestBody(matchingJsonPath("$.event_type",
-                                    equalTo(DailyUsageReportJob.STATISTICS_BE))
-                                    .and(matchingJsonPath("$.event_properties.total_sdk_clients", equalTo("3")))
-                                    .and(matchingJsonPath("$.event_properties.total_ui_clients", equalTo("1"))))));
-        }
-
-        private String redisCli(String... command) throws Exception {
-            var args = new String[command.length + 1];
-            args[0] = "redis-cli";
-            System.arraycopy(command, 0, args, 1, command.length);
-            return REDIS.execInContainer(args).getStdout().trim();
         }
 
     }
