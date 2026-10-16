@@ -5,6 +5,8 @@ import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.domain.ExperimentCancellationService;
+import com.comet.opik.domain.ExperimentItemLedger;
+import com.comet.opik.domain.ExperimentItemLedger.Outcome;
 import com.comet.opik.domain.ExperimentItemProcessor;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
@@ -18,8 +20,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.redisson.api.RAtomicLongReactive;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.stream.StreamMessageId;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -42,12 +44,13 @@ import static org.mockito.Mockito.when;
 class ExperimentItemProcessingSubscriberTest {
 
     private static final String WORKSPACE_ID = "test-workspace";
+    private static final StreamMessageId ENTRY = new StreamMessageId(1760612345678L, 0);
 
     @Mock
     private RedissonReactiveClient redisClient;
 
     @Mock
-    private RAtomicLongReactive atomicLong;
+    private ExperimentItemLedger itemLedger;
 
     @Mock
     private ExperimentItemProcessor itemProcessor;
@@ -69,12 +72,18 @@ class ExperimentItemProcessingSubscriberTest {
         config.setBatchCounterTtl(Duration.hours(24));
 
         subscriber = new ExperimentItemProcessingSubscriber(config, redisClient, itemProcessor,
-                experimentService, testSuiteAssertionCounterService, cancellationService);
+                experimentService, testSuiteAssertionCounterService, cancellationService, itemLedger);
 
-        lenient().when(redisClient.getAtomicLong(anyString())).thenReturn(atomicLong);
+        // A first delivery: nothing has handled this entry yet.
+        lenient().when(itemLedger.outcome(anyString(), any(UUID.class), any(StreamMessageId.class)))
+                .thenReturn(Mono.empty());
+        lenient().when(itemLedger.record(anyString(), any(UUID.class), any(StreamMessageId.class), any(Outcome.class)))
+                .thenReturn(Mono.just(true));
         // One item left of a larger batch: the batch does not drain, so the finish path stays out of
         // these tests and they describe the skip alone.
-        lenient().when(atomicLong.decrementAndGet()).thenReturn(Mono.just(5L));
+        lenient().when(itemLedger.remaining(anyString(), any(UUID.class))).thenReturn(Mono.just(5L));
+        lenient().when(itemLedger.failures(anyString(), any(UUID.class))).thenReturn(Mono.just(0L));
+        lenient().when(itemLedger.expireAfterDrain(anyString(), any(UUID.class))).thenReturn(Mono.empty());
         // The drain hands the finish to one caller; these tests are always that caller.
         lenient().when(cancellationService.claimFinish(anyString(), any(UUID.class)))
                 .thenReturn(Mono.just(true));
@@ -113,7 +122,7 @@ class ExperimentItemProcessingSubscriberTest {
         var experimentId = UUID.randomUUID();
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
 
-        subscriber.processEvent(buildMessage(experimentId)).block();
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
         verify(itemProcessor, never()).process(any());
     }
@@ -124,10 +133,10 @@ class ExperimentItemProcessingSubscriberTest {
         var experimentId = UUID.randomUUID();
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
 
-        subscriber.processEvent(buildMessage(experimentId)).block();
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
         // Left uncounted, a cancelled run's batch never reaches zero and its experiments hang.
-        verify(atomicLong).decrementAndGet();
+        verify(itemLedger).record(WORKSPACE_ID, experimentId, ENTRY, Outcome.SKIPPED);
     }
 
     @Test
@@ -137,7 +146,7 @@ class ExperimentItemProcessingSubscriberTest {
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
         when(itemProcessor.process(any())).thenReturn(Mono.empty());
 
-        subscriber.processEvent(buildMessage(experimentId)).block();
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
         verify(itemProcessor).process(any());
     }
@@ -150,13 +159,11 @@ class ExperimentItemProcessingSubscriberTest {
 
         when(cancellationService.isCancelled(WORKSPACE_ID, failing)).thenReturn(Mono.just(false));
         when(itemProcessor.process(any())).thenReturn(Mono.error(new RuntimeException("persistence is down")));
-        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
-        when(atomicLong.incrementAndGet()).thenReturn(Mono.just(1L));
-        when(atomicLong.get()).thenReturn(Mono.just(1L));
-        when(atomicLong.expire(any(java.time.Duration.class))).thenReturn(Mono.just(true));
+        when(itemLedger.remaining(WORKSPACE_ID, failing)).thenReturn(Mono.just(0L));
+        when(itemLedger.failures(WORKSPACE_ID, failing)).thenReturn(Mono.just(1L));
         when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
 
-        subscriber.processEvent(buildMessage(failing, List.of(failing, sibling))).block();
+        subscriber.processEvent(buildMessage(failing, List.of(failing, sibling)), ENTRY).block();
 
         verify(experimentService).update(eq(failing), argThat(
                 update -> update.status() == ExperimentStatus.FAILED));
@@ -175,11 +182,11 @@ class ExperimentItemProcessingSubscriberTest {
         // The stop reached the finish first and owns the outcome, so this loses the claim for it.
         when(cancellationService.claimFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
         // The cancelled item is skipped rather than run, and draining it is what reaches the finish.
-        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
-        when(atomicLong.get()).thenReturn(Mono.just(1L));
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
+        when(itemLedger.failures(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(1L));
         when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
 
-        subscriber.processEvent(buildMessage(experimentId)).block();
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
         var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
         verify(experimentService).update(eq(experimentId), captor.capture());
@@ -198,12 +205,11 @@ class ExperimentItemProcessingSubscriberTest {
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
         when(itemProcessor.process(any())).thenReturn(Mono.empty());
-        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
-        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
         when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
         when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
 
-        subscriber.processEvent(buildMessage(experimentId)).block();
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
         var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
         verify(experimentService).update(eq(experimentId), captor.capture());
@@ -221,11 +227,10 @@ class ExperimentItemProcessingSubscriberTest {
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
         when(cancellationService.claimFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
-        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
-        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
         when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
 
-        subscriber.processEvent(buildMessage(experimentId)).block();
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
         var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
         verify(experimentService).update(eq(experimentId), captor.capture());
@@ -246,13 +251,12 @@ class ExperimentItemProcessingSubscriberTest {
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
         when(itemProcessor.process(any())).thenReturn(Mono.empty());
-        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
-        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
         when(experimentService.update(any(UUID.class), any()))
                 .thenReturn(Mono.error(new IllegalStateException("database is down")));
         when(cancellationService.releaseFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
 
-        subscriber.processEvent(buildMessage(experimentId)).block();
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
         verify(cancellationService).releaseFinish(WORKSPACE_ID, experimentId);
     }
@@ -266,13 +270,12 @@ class ExperimentItemProcessingSubscriberTest {
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
         when(itemProcessor.process(any())).thenReturn(Mono.empty());
-        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
-        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
         when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
         when(experimentService.finishExperiments(any()))
                 .thenReturn(Mono.error(new IllegalStateException("aggregation is down")));
 
-        subscriber.processEvent(buildMessage(experimentId)).block();
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
         var update = ArgumentCaptor.forClass(ExperimentUpdate.class);
         verify(experimentService).update(eq(experimentId), update.capture());
@@ -289,8 +292,7 @@ class ExperimentItemProcessingSubscriberTest {
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
         when(itemProcessor.process(any())).thenReturn(Mono.empty());
-        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
-        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
         // What Redis actually answers: won once, refused every time after.
         when(cancellationService.claimFinish(WORKSPACE_ID, experimentId))
                 .thenReturn(Mono.just(true))
@@ -299,7 +301,7 @@ class ExperimentItemProcessingSubscriberTest {
                 .thenReturn(Mono.error(new IllegalStateException("database is down")));
         when(cancellationService.releaseFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
 
-        subscriber.processEvent(buildMessage(experimentId)).block();
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
         verify(cancellationService).releaseFinish(WORKSPACE_ID, experimentId);
     }
@@ -310,14 +312,13 @@ class ExperimentItemProcessingSubscriberTest {
         var experimentId = UUID.randomUUID();
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
-        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
-        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
         when(experimentService.update(any(UUID.class), any()))
                 .thenReturn(Mono.error(new IllegalStateException("database is down")));
         when(cancellationService.releaseFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
 
         assertThatThrownBy(() -> subscriber
-                .processEvent(buildMessage(experimentId).toBuilder().testSuite(true).build())
+                .processEvent(buildMessage(experimentId).toBuilder().testSuite(true).build(), ENTRY)
                 .block())
                 .hasMessage("database is down");
 
@@ -333,12 +334,11 @@ class ExperimentItemProcessingSubscriberTest {
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
         when(itemProcessor.process(any())).thenReturn(Mono.empty());
-        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
-        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
         when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
         when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
 
-        subscriber.processEvent(buildMessage(experimentId)).block();
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
         verify(cancellationService, never()).releaseFinish(any(), any());
     }
@@ -352,12 +352,11 @@ class ExperimentItemProcessingSubscriberTest {
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
         when(itemProcessor.process(any())).thenReturn(Mono.empty());
-        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
-        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
         when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
         when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
 
-        subscriber.processEvent(buildMessage(experimentId)).block();
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
         verify(cancellationService).discardQueued(WORKSPACE_ID, experimentId);
     }
@@ -371,7 +370,7 @@ class ExperimentItemProcessingSubscriberTest {
         when(itemProcessor.process(any())).thenReturn(Mono.empty());
 
         // The default: one of a larger batch, so a stop still has items to purge.
-        subscriber.processEvent(buildMessage(experimentId)).block();
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
         verify(cancellationService, never()).discardQueued(any(), any());
     }
@@ -384,11 +383,10 @@ class ExperimentItemProcessingSubscriberTest {
         var experimentId = UUID.randomUUID();
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
-        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
-        when(atomicLong.get()).thenReturn(Mono.just(0L));
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
         when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
 
-        subscriber.processEvent(buildMessage(experimentId).toBuilder().testSuite(true).build()).block();
+        subscriber.processEvent(buildMessage(experimentId).toBuilder().testSuite(true).build(), ENTRY).block();
 
         var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
         verify(experimentService).update(eq(experimentId), captor.capture());
@@ -396,5 +394,95 @@ class ExperimentItemProcessingSubscriberTest {
         assertThat(captor.getValue().status())
                 .as("the status still waits for the assertions")
                 .isNull();
+    }
+
+    // Redis hands out a message again whenever its acknowledgement is lost, after the provider call
+    // and the trace write have already happened. Running it again pays for the call twice and writes
+    // a second trace for one item.
+    @Test
+    @DisplayName("should not call the provider again for an entry that already ran")
+    void redeliveredEntryDoesNotRunAgain() {
+        var experimentId = UUID.randomUUID();
+        when(itemLedger.outcome(WORKSPACE_ID, experimentId, ENTRY)).thenReturn(Mono.just(Outcome.OK));
+
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
+
+        verify(itemProcessor, never()).process(any());
+        verify(itemLedger, never()).record(any(), any(), any(), any());
+    }
+
+    // The first delivery may have recorded its outcome and then lost its way before the finish, which
+    // nothing else would ever reach for a run with no item left to come.
+    @Test
+    @DisplayName("should still finish a drained run when the last entry is delivered again")
+    void redeliveredLastEntryStillFinishesTheRun() {
+        var experimentId = UUID.randomUUID();
+        when(itemLedger.outcome(WORKSPACE_ID, experimentId, ENTRY)).thenReturn(Mono.just(Outcome.OK));
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
+        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+        when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
+
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
+
+        verify(itemProcessor, never()).process(any());
+        verify(experimentService).update(eq(experimentId), argThat(
+                update -> update.status() == ExperimentStatus.COMPLETED));
+    }
+
+    @Test
+    @DisplayName("should record the outcome of an item against its stream entry")
+    void recordOutcomeAgainstTheEntry() {
+        var experimentId = UUID.randomUUID();
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(any())).thenReturn(Mono.empty());
+
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
+
+        verify(itemLedger).record(WORKSPACE_ID, experimentId, ENTRY, Outcome.OK);
+    }
+
+    // A failed item yields no assertions, so the suite's assertion counter is taken down for it once.
+    @Test
+    @DisplayName("should take a failed test-suite item off the assertion counter")
+    void failedTestSuiteItemReleasesItsAssertions() {
+        var experimentId = UUID.randomUUID();
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(any())).thenReturn(Mono.error(new RuntimeException("persistence is down")));
+        when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId))
+                .thenReturn(Mono.empty());
+
+        subscriber.processEvent(buildMessage(experimentId).toBuilder().testSuite(true).build(), ENTRY).block();
+
+        verify(testSuiteAssertionCounterService).decrementAndFinishIfComplete(WORKSPACE_ID, experimentId);
+    }
+
+    // Another delivery of the same entry recorded first. It already took the item off the assertion
+    // counter, and doing it again finishes the suite while assertions are still to land.
+    @Test
+    @DisplayName("should not take a failed item off the assertion counter twice")
+    void failedItemRecordedElsewhereLeavesTheAssertionCounter() {
+        var experimentId = UUID.randomUUID();
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(any())).thenReturn(Mono.error(new RuntimeException("persistence is down")));
+        when(itemLedger.record(WORKSPACE_ID, experimentId, ENTRY, Outcome.FAILED)).thenReturn(Mono.just(false));
+
+        subscriber.processEvent(buildMessage(experimentId).toBuilder().testSuite(true).build(), ENTRY).block();
+
+        verify(testSuiteAssertionCounterService, never()).decrementAndFinishIfComplete(any(), any());
+    }
+
+    @Test
+    @DisplayName("should shorten the outcomes of a run once it has drained")
+    void expireOutcomesOnDrain() {
+        var experimentId = UUID.randomUUID();
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(any())).thenReturn(Mono.empty());
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
+        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+        when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
+
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
+
+        verify(itemLedger).expireAfterDrain(WORKSPACE_ID, experimentId);
     }
 }
