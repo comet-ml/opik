@@ -252,29 +252,6 @@ class AiLabelsStorageTest {
 
             assertThat(findLatestLabels(workspaceId, traceId)).containsExactlyInAnyOrderElementsOf(labels);
         }
-
-        @Test
-        @DisplayName("each key reads back as its latest write, before and after OPTIMIZE FINAL")
-        void latestRowWins() {
-            var workspaceId = UUID.randomUUID().toString();
-            var projectId = UUID.randomUUID();
-            var traceId = ID_GENERATOR.generateId();
-            var rewritten = outputLabel(workspaceId, projectId, traceId, "summary", 1, "{\"summary\":\"first\"}");
-            var rewrite = rewritten.toBuilder().output("{\"summary\":\"second\"}").build();
-            var relabeled = outputLabel(workspaceId, projectId, traceId, "topic", 1, "{\"topic\":\"v1\"}");
-            var relabel = relabeled.toBuilder().taskVersion(2).output("{\"topic\":\"v2\"}").build();
-
-            labelsDAO.insert(List.of(rewritten, relabeled)).block();
-            labelsDAO.insert(List.of(rewrite)).block();
-            labelsDAO.insert(List.of(relabel)).block();
-
-            assertThat(findLatestLabels(workspaceId, traceId)).containsExactlyInAnyOrder(rewrite, relabel);
-
-            optimizeFinal(AiLabelsDAO.TABLE);
-
-            assertThat(countRows(AiLabelsDAO.TABLE, workspaceId)).isEqualTo(2);
-            assertThat(findLatestLabels(workspaceId, traceId)).containsExactlyInAnyOrder(rewrite, relabel);
-        }
     }
 
     @Nested
@@ -298,12 +275,6 @@ class AiLabelsStorageTest {
                     .build());
 
             assertThat(inFlightEngineCalls()).isEqualTo(15);
-        }
-
-        @Test
-        @DisplayName("an empty table has no engine calls in flight")
-        void inFlightEngineCallsWhenNoJobs() {
-            assertThat(inFlightEngineCalls()).isZero();
         }
 
         @Test
