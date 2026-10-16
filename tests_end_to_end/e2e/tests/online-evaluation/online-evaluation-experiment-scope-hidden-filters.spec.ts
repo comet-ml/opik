@@ -133,9 +133,9 @@ test.describe(
           // would also be satisfied by an editor that failed to render at all.
           await expect(onlineEval.scopeOption('Traces')).toHaveAttribute('data-state', 'on');
           await expect(
-            onlineEval.excludeExperimentTracesSwitch,
-            'an experiment-only rule does not exclude experiment traces',
-          ).not.toBeChecked();
+            onlineEval.includeTracesSelect,
+            'an experiment-only rule includes only experiment traces',
+          ).toHaveText('experiment traces');
         });
 
         const update = await test.step('Disable the rule and save, leaving everything else alone', async () => {

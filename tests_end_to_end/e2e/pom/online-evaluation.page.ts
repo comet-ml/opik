@@ -215,8 +215,8 @@ export class OnlineEvaluationPage {
   }
 
   /** Only rendered at trace scope. */
-  get excludeExperimentTracesSwitch(): Locator {
-    return this.panel.getByRole('switch', { name: 'Exclude experiment traces' });
+  get includeTracesSelect(): Locator {
+    return this.panel.getByRole('combobox', { name: 'Include' });
   }
 
   // --- Filtering and sampling ---

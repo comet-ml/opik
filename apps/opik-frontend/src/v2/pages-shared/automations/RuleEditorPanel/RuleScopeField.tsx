@@ -3,8 +3,8 @@ import { UseFormReturn } from "react-hook-form";
 import { CornerDownRight } from "lucide-react";
 
 import { FormControl, FormField, FormItem, FormLabel } from "@/ui/form";
-import { Switch } from "@/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
+import SelectBox from "@/shared/SelectBox/SelectBox";
 import {
   EVAL_TRIGGER_SCOPE,
   EVALUATORS_RULE_SCOPE,
@@ -14,7 +14,13 @@ import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 
-const EXCLUDE_EXPERIMENTS_SWITCH_ID = "rule-editor-exclude-experiments";
+const INCLUDE_SELECT_ID = "rule-editor-include";
+
+const INCLUDE_OPTIONS = [
+  { value: EVAL_TRIGGER_SCOPE.production, label: "production traces" },
+  { value: EVAL_TRIGGER_SCOPE.experiment, label: "experiment traces" },
+  { value: EVAL_TRIGGER_SCOPE.both, label: "all traces" },
+];
 
 type RuleScopeFieldProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
@@ -90,26 +96,22 @@ const RuleScopeField: React.FC<RuleScopeFieldProps> = ({
           control={form.control}
           name="triggerScope"
           render={({ field }) => (
-            <FormItem className="flex-row items-center gap-1.5 pl-1 pr-0.5">
+            <FormItem className="flex-row items-center gap-0 pl-1 pr-0.5">
               <FormLabel
-                htmlFor={EXCLUDE_EXPERIMENTS_SWITCH_ID}
-                className="comet-body-s flex flex-1 cursor-pointer items-center gap-1 font-normal"
+                htmlFor={INCLUDE_SELECT_ID}
+                className="comet-body-s flex items-center gap-1 font-normal"
               >
                 <CornerDownRight className="size-3 shrink-0 text-muted-slate" />
-                Exclude experiment traces
+                Include
               </FormLabel>
               <FormControl>
-                <Switch
-                  id={EXCLUDE_EXPERIMENTS_SWITCH_ID}
-                  size="2xs"
-                  checked={field.value === EVAL_TRIGGER_SCOPE.production}
-                  onCheckedChange={(checked) =>
-                    field.onChange(
-                      checked
-                        ? EVAL_TRIGGER_SCOPE.production
-                        : EVAL_TRIGGER_SCOPE.both,
-                    )
-                  }
+                <SelectBox
+                  id={INCLUDE_SELECT_ID}
+                  value={field.value}
+                  onChange={field.onChange}
+                  options={INCLUDE_OPTIONS}
+                  variant="ghost"
+                  className="comet-body-s h-6 w-auto gap-1 px-1 font-normal"
                 />
               </FormControl>
             </FormItem>

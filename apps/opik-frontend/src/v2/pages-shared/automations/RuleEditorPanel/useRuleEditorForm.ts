@@ -243,6 +243,7 @@ const useRuleEditorForm = ({
     (scope: EVALUATORS_RULE_SCOPE) => {
       const { model, config } = form.getValues("llmJudgeDetails");
       form.setValue("scope", scope);
+      form.setValue("triggerScope", EVAL_TRIGGER_SCOPE.production);
       form.setValue(
         "type",
         getBackendRuleType(scope, form.getValues("uiType")),
