@@ -401,6 +401,22 @@ describe("containsTruncatedMedia", () => {
     });
   });
 
+  describe("truncated lists stored as JSON text", () => {
+    it.each([
+      ['"[\\"data:image/png;base64,iVBORw0KGgo'],
+      ['"[\\n  \\"data:image/png;base64,iVBORw0KGgo'],
+      ['" [\\"https://example.com/a.png\\", \\"https://example.com/b'],
+    ])("should detect %s", (value) => {
+      expect(containsTruncatedMedia(value)).toBe(true);
+    });
+
+    it("should not match a complete list stored as JSON text", () => {
+      expect(
+        containsTruncatedMedia('["data:image/png;base64,iVBORw0KGgo="]'),
+      ).toBe(false);
+    });
+  });
+
   describe("nested structures", () => {
     it("should detect placeholder in object values", () => {
       expect(containsTruncatedMedia({ key: "[image]" })).toBe(true);

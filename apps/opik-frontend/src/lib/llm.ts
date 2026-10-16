@@ -1,3 +1,5 @@
+import get from "lodash/get";
+import mustache from "mustache";
 import {
   AudioPart,
   ImagePart,
@@ -169,6 +171,50 @@ export const getAllTemplateStringsFromContent = (
       return part.audio_url.url;
     }
   });
+};
+
+const getSingleVariableName = (template: string): string | null => {
+  let tokens: ReturnType<typeof mustache.parse>;
+  try {
+    tokens = mustache.parse(template);
+  } catch {
+    return null;
+  }
+
+  const meaningfulTokens = tokens.filter(
+    ([type, value]) => type !== "text" || value.trim() !== "",
+  );
+  if (meaningfulTokens.length !== 1) return null;
+
+  const [type, name] = meaningfulTokens[0];
+  return type === "name" || type === "&" ? name : null;
+};
+
+// CSV uploads store every cell as text, so a list arrives as a JSON string.
+const toList = (value: unknown): unknown[] | null => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string" || !value.trim().startsWith("[")) return null;
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+export const getMediaUrlsFromListVariable = (
+  template: string,
+  data: object,
+): string[] | null => {
+  const name = getSingleVariableName(template);
+  if (!name) return null;
+
+  return (
+    toList(get(data, name))?.map((item) =>
+      typeof item === "string" ? item : JSON.stringify(item),
+    ) ?? null
+  );
 };
 
 export const parseLLMMessageContent = (
