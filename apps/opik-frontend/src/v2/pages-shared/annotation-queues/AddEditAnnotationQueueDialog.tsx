@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -268,6 +268,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     permissions: { canCreateAnnotationQueues, canEditAnnotationQueues },
   } = usePermissions();
 
+  const [isNestedDialogOpen, setIsNestedDialogOpen] = useState(false);
+
   const isAutomationEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED,
   );
@@ -419,7 +421,10 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       <SheetContent
         side="right"
         className="flex w-full max-w-none flex-col gap-0 p-0 sm:max-w-[800px]"
-        blockOverlayClose
+        // A select or nested dialog opened from inside the form must not be treated as an outside
+        // click, or configuring a field would close the whole form.
+        // A form with edits closes only through X or Cancel, never by a stray click on the overlay.
+        blockOverlayClose={isNestedDialogOpen || form.formState.isDirty}
         header={
           <SheetTopBar variant="form" title={title}>
             <Button
@@ -541,6 +546,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                           valueField="name"
                           multiselect
                           showSelectAll
+                          onInnerDialogOpenChange={setIsNestedDialogOpen}
                           renderTitle={(options) => (
                             <FeedbackDefinitionChips
                               names={options.map((option) => option.label)}
