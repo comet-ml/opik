@@ -83,6 +83,20 @@ public class MigrationUtils {
      *            {@code 000114_recreate_traces_local_v2_id_at_datetime64.sql}
      */
     public static void runClickhouseDbMigrationThrough(ClickHouseContainer container, String migrationFileName) {
+        runClickhouseDbMigrationUpTo(container, migrationFileName, true);
+    }
+
+    /**
+     * Applies the ClickHouse changelog up to, but excluding, the changesets of {@code migrationFileName}, so a test can
+     * create data the way an install did before that migration existed, then resume with
+     * {@link #runClickhouseDbMigration(ClickHouseContainer)}.
+     */
+    public static void runClickhouseDbMigrationBefore(ClickHouseContainer container, String migrationFileName) {
+        runClickhouseDbMigrationUpTo(container, migrationFileName, false);
+    }
+
+    private static void runClickhouseDbMigrationUpTo(ClickHouseContainer container, String migrationFileName,
+            boolean inclusive) {
         try (var connection = container.createConnection("")) {
             DatabaseConnection dbConnection = new JdbcConnection(
                     new ClickHouseConnectionImpl(connection.getMetaData().getURL()));
@@ -90,8 +104,10 @@ public class MigrationUtils {
             try (var liquibase = new Liquibase(CLICKHOUSE_CHANGELOG_FILE, new ClassLoaderResourceAccessor(),
                     database)) {
                 ClickHouseContainerUtils.migrationParameters().forEach(liquibase::setChangeLogParameter);
-                liquibase.update(countChangeSetsThrough(liquibase, migrationFileName), new Contexts(),
-                        new LabelExpression());
+                var count = inclusive
+                        ? countChangeSetsThrough(liquibase, migrationFileName)
+                        : countChangeSetsBefore(liquibase, migrationFileName);
+                liquibase.update(count, new Contexts(), new LabelExpression());
             }
         } catch (SQLException e) {
             throw new RuntimeException("Failed to run ClickHouse DB migration", e);
@@ -142,6 +158,20 @@ public class MigrationUtils {
         for (int i = changeSets.size() - 1; i >= 0; i--) {
             if (changeSets.get(i).getFilePath().endsWith(migrationFileName)) {
                 return i + 1;
+            }
+        }
+        throw new IllegalArgumentException(
+                "No changeset found for migration file '%s' in %s".formatted(migrationFileName,
+                        CLICKHOUSE_CHANGELOG_FILE));
+    }
+
+    /** Number of changesets from the start of the changelog up to the first one declared in {@code migrationFileName}. */
+    private static int countChangeSetsBefore(Liquibase liquibase, String migrationFileName)
+            throws LiquibaseException {
+        var changeSets = liquibase.getDatabaseChangeLog().getChangeSets();
+        for (int i = 0; i < changeSets.size(); i++) {
+            if (changeSets.get(i).getFilePath().endsWith(migrationFileName)) {
+                return i;
             }
         }
         throw new IllegalArgumentException(

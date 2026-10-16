@@ -29,6 +29,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -68,12 +69,16 @@ class SpanWeeksBackfillServiceTest {
     // Where the epoch and ids past 2300 are stored.
     private static final long EPOCH_WEEK = 19691229L;
     private static final long SATURATED_WEEK = 22991225L;
+    private static final String SPAN_WEEKS_MV_MIGRATION = "000138_create_span_weeks_mv.sql";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     // Not reused: the backfill runs once per install, so a reused state DB would hold the previous run's finished plan.
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer(false);
-    private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
-    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER);
+    // Not reused either: the changelog stops before the span_weeks MV, which a reused database already has.
+    private final Network network = Network.newNetwork();
+    private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer(false, network);
+    private final ClickHouseContainer clickHouse = ClickHouseContainerUtils.newClickHouseContainer(false, network,
+            zookeeper);
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
@@ -81,16 +86,18 @@ class SpanWeeksBackfillServiceTest {
     private final WireMockUtils.WireMockRuntime wireMock;
 
     {
-        Startables.deepStart(REDIS, MYSQL, CLICKHOUSE, ZOOKEEPER).join();
+        Startables.deepStart(REDIS, MYSQL, clickHouse, zookeeper).join();
 
         wireMock = WireMockUtils.startWireMock();
 
-        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
+        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouse, DATABASE_NAME);
 
         MigrationUtils.runMysqlDbMigration(MYSQL);
-        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
+        // Stop before the span_weeks materialized view: the spans this test writes are history from before live
+        // registration, which is what the backfill is for. The rest of the changelog runs once they are written.
+        MigrationUtils.runClickhouseDbMigrationBefore(clickHouse, SPAN_WEEKS_MV_MIGRATION);
 
-        // Live registration stays off here, so every week found afterwards is the backfill's. Validation off admits
+        // Live registration stays off here too, so every week found afterwards is the backfill's. Validation off admits
         // the boundary ids that only historical rows carry.
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(MYSQL.getJdbcUrl())
@@ -143,6 +150,8 @@ class SpanWeeksBackfillServiceTest {
                 span(ID_GENERATOR.getTimeOrderedEpoch(Instant.parse("2300-01-01T00:00:00Z").toEpochMilli()),
                         traceWithBoundaryIds, projectName));
         spanResourceClient.batchCreateSpans(spans, ws.apiKey(), ws.workspaceName());
+        // The install now upgrades: from here on the MV registers new spans, but not these.
+        MigrationUtils.runClickhouseDbMigration(clickHouse);
         var upToMonday = List.of(
                 SpanWeek.builder().projectId(projectId).traceId(traceWithBoundaryIds).idWeek(EPOCH_WEEK).build(),
                 SpanWeek.builder().projectId(projectId).traceId(traceAcrossWeeks).idWeek(PREVIOUS_WEEK).build(),
