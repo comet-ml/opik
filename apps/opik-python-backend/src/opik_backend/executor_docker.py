@@ -25,6 +25,7 @@ from opik_backend.executor import (
     SATURATED_ERROR,
     SHUTDOWN_ERROR,
 )
+from opik_backend.score_validation import has_usable_score
 
 logger = logging.getLogger(__name__)
 
@@ -414,6 +415,32 @@ class DockerExecutor(CodeExecutorBase):
             "payload_type": payload_type or "unknown"
         })
 
+    @staticmethod
+    def _is_rejected_response(parsed_result: object) -> bool:
+        """Whether the HTTP layer would reject this metric response instead of serving it.
+
+        ``evaluator.run_scoring`` aborts on three conditions after the executor returns, and a
+        response that trips any of them must not be counted as a successful execution:
+
+        * ``"error" in response`` -- the metric's own failure payload, which ``parse_execution_result``
+          turns into a ``code``;
+        * no ``scores`` at all, i.e. ``score()`` returned nothing usable;
+        * no *storable* score among them -- ``has_usable_score`` also rejects a score with no value
+          and one the metric itself flagged as failed.
+
+        The last two used to be recorded as successes: ``parse_execution_result`` returns the parsed
+        object verbatim when the metric exits 0, so a well-formed ``{"scores": []}`` has no ``code``
+        to key on and looked like a clean run to the counter while the caller received a 400.
+        """
+        if not isinstance(parsed_result, dict):
+            return True
+
+        if "error" in parsed_result:
+            return True
+
+        scores = parsed_result.get("scores", [])
+        return len(scores) == 0 or not has_usable_score(scores)
+
     def run_scoring(self, code: str, data: dict, payload_type: Optional[str] = None) -> dict:
         if self.stop_event.is_set():
             return {"code": 503, "error": SHUTDOWN_ERROR}
@@ -479,7 +506,7 @@ class DockerExecutor(CodeExecutorBase):
                 # parse_execution_result reports as a 4xx. Keying telemetry on the exit code
                 # counted those as successes while the caller was handed an error.
                 result_code = parsed_result.get("code") if isinstance(parsed_result, dict) else None
-                if exec_result.exit_code == 0 and result_code is None:
+                if exec_result.exit_code == 0 and not self._is_rejected_response(parsed_result):
                     outcome_status = "success"
                 else:
                     outcome_status = "invalid_code"
