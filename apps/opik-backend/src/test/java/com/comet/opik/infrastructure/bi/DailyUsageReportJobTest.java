@@ -138,13 +138,19 @@ class DailyUsageReportJobTest {
                         .mapTo(Integer.class).one()) > 0);
     }
 
-    /** Clears the day's "sent" marker, then schedules the report, so every test's run reports on its own data. */
+    /**
+     * Clears the day's "sent" marker, then schedules the report, so every test's run reports on its own data. Waits for
+     * any run still in progress first, as it would otherwise write the marker back after it was cleared.
+     */
     private static void resetAndScheduleReport(TransactionTemplate transactionTemplate, GuiceJobManager guiceJobManager)
             throws SchedulerException {
+        var scheduler = guiceJobManager.getScheduler();
+        Awaitility.await().atMost(30, TimeUnit.SECONDS).until(() -> scheduler.getCurrentlyExecutingJobs().stream()
+                .noneMatch(job -> job.getJobInstance() instanceof DailyUsageReportJob));
         transactionTemplate.inTransaction(TransactionTemplateAsync.WRITE,
                 handle -> handle.createUpdate("DELETE FROM metadata WHERE `key` = 'daily_usage_report'").execute());
         var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
-        guiceJobManager.getScheduler().scheduleJob(TriggerBuilder.newTrigger().startNow().forJob(key).build());
+        scheduler.scheduleJob(TriggerBuilder.newTrigger().startNow().forJob(key).build());
     }
 
     private void updateDatasets(String workspaceId, TransactionTemplate transactionTemplate, boolean updateUser) {
@@ -713,7 +719,8 @@ class DailyUsageReportJobTest {
         @Test
         @DisplayName("Daily usage report counts distinct clients")
         void dailyUsageReportCountsActiveClients() {
-            var browser = UUID.randomUUID().toString();
+            // Fixed IDs, so a Redis reused across runs re-adds the same members and the totals stay the same
+            var browser = "0a8c3bde-6f1e-4b9a-9d2c-5e7f1a2b3c4d";
 
             // Three distinct SDK clients and one browser: repeats count once and a malformed ID is ignored
             for (var clientId : List.of("a".repeat(64), "a".repeat(64), "b".repeat(64), "c".repeat(64),
