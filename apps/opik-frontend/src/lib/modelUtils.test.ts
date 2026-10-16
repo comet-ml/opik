@@ -10,6 +10,7 @@ import {
   isReasoningModel,
   resolveEffort,
   resolveSamplingParams,
+  resolveThinkingLevel,
   SamplingParams,
   sanitizeConfigForRequest,
   supportsAnthropicThinkingEffort,
@@ -20,6 +21,8 @@ import {
   supportsSamplingParams,
   supportsVertexAIThinkingLevel,
   updateProviderConfig,
+  withoutThinkingAmount,
+  withShownThinkingLevel,
 } from "@/lib/modelUtils";
 import {
   AnthropicThinkingEffort,
@@ -1089,14 +1092,25 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     ).toBeUndefined();
   });
 
-  // auto is the weaker "let the model decide" and must not delete fields the form cannot represent.
-  it("leaves a persisted thinking block alone for auto", () => {
-    expect(
-      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+  // A budget set through the API outranks any level server-side, so keeping it under Auto would
+  // pin how much the model thinks while the panel says the model decides.
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+  ])("drops a persisted budget for auto on %s", (model) => {
+    for (const configs of [
+      {
         thinkingLevel: "auto",
         custom_parameters: { thinking: { budget_tokens: 4096 } },
-      }).custom_parameters,
-    ).toEqual({ thinking: { budget_tokens: 4096 } });
+      },
+      { custom_parameters: { thinking: { budget_tokens: 4096 } } },
+    ]) {
+      expect(
+        sanitizeConfigForRequest(model, configs).custom_parameters,
+      ).toBeUndefined();
+    }
   });
 
   it("sends a low or medium level on 3.1 Flash Lite instead of resetting it to none", () => {
@@ -1188,21 +1202,34 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     expect(result.custom_parameters).toBeUndefined();
   });
 
-  it("merges the level into an existing thinking block, keeping its other fields", () => {
-    const result = sanitizeConfigForRequest(
-      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
-      {
-        thinkingLevel: "low",
+  // A budget set through the API outranks any level server-side, so keeping it would send that
+  // budget while the panel shows the level.
+  it.each<[PROVIDER_MODEL_TYPE, GeminiThinkingLevel, Record<string, unknown>]>([
+    [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, "low", { thinkingLevel: "low" }],
+    [
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      "medium",
+      { thinkingLevel: "medium" },
+    ],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, "minimal", {}],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_PRO, "high", {}],
+  ])(
+    "sends %s's %s without a persisted budget, keeping the rest",
+    (model, level, flat) => {
+      const result = sanitizeConfigForRequest(model, {
+        ...flat,
         custom_parameters: {
-          thinking: { budget_tokens: 4096, include_thoughts: true },
+          thinking: { level, budget_tokens: 4096, include_thoughts: true },
+          unrelated: "keep",
         },
-      },
-    );
+      });
 
-    expect(result.custom_parameters).toEqual({
-      thinking: { budget_tokens: 4096, include_thoughts: true, level: "low" },
-    });
-  });
+      expect(result.custom_parameters).toEqual({
+        thinking: { include_thoughts: true, level },
+        unrelated: "keep",
+      });
+    },
+  );
 });
 
 describe("updateProviderConfig — Gemini thinking level", () => {
@@ -1511,6 +1538,222 @@ describe("resolveEffort", () => {
         thinkingEffort: "max",
       }),
     ).toEqual({ reasoningEffort: "low", thinkingEffort: "max" });
+  });
+});
+
+describe("resolveThinkingLevel", () => {
+  it.each<[string, PROVIDER_MODEL_TYPE, Record<string, unknown>, string]>([
+    [
+      "keeps a stored level the model offers",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      { thinkingLevel: "low" },
+      "low",
+    ],
+    [
+      "falls back to the default for a stored level the model does not offer",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      { thinkingLevel: "minimal" },
+      "auto",
+    ],
+    [
+      "does the same on Vertex AI",
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      { thinkingLevel: "minimal" },
+      "auto",
+    ],
+    [
+      "keeps minimal on a model that offers it",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      { thinkingLevel: "minimal" },
+      "minimal",
+    ],
+    [
+      "falls back to the default when nothing is stored",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      {},
+      "high",
+    ],
+    [
+      "reads a level nested under custom_parameters",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      { custom_parameters: { thinking: { level: "high" } } },
+      "high",
+    ],
+    [
+      "lets a flat level win over a nested one",
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      {
+        thinkingLevel: "medium",
+        custom_parameters: { thinking: { level: "high" } },
+      },
+      "medium",
+    ],
+  ])("%s", (_, model, configs, expected) => {
+    expect(resolveThinkingLevel(model, configs)).toBe(expected);
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+  ])(
+    "sends what the dropdown shows when %s does not offer the stored level",
+    (model) => {
+      const configs = { thinkingLevel: "minimal" as const };
+
+      expect(resolveThinkingLevel(model, configs)).toBe("auto");
+      expect(sanitizeConfigForRequest(model, configs)).toEqual({});
+    },
+  );
+});
+
+describe("Auto sends no Gemini thinking level", () => {
+  it.each<[string, Record<string, unknown>]>([
+    [
+      "a flat auto over a nested level",
+      {
+        thinkingLevel: "auto",
+        custom_parameters: { thinking: { level: "high" } },
+      },
+    ],
+    [
+      "a nested level the model does not offer",
+      { custom_parameters: { thinking: { level: "minimal" } } },
+    ],
+    [
+      "a flat level the model does not offer over a nested one",
+      {
+        thinkingLevel: "minimal",
+        custom_parameters: { thinking: { level: "high" } },
+      },
+    ],
+  ])("drops %s", (_, configs) => {
+    for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+    ]) {
+      expect(resolveThinkingLevel(model, configs), model).toBe("auto");
+      expect(
+        sanitizeConfigForRequest(model, configs).custom_parameters,
+        model,
+      ).toBeUndefined();
+    }
+  });
+
+  it("drops the budget too, and keeps include_thoughts and the other custom parameters", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, {
+        thinkingLevel: "auto",
+        custom_parameters: {
+          thinking: {
+            level: "low",
+            budget_tokens: 4096,
+            include_thoughts: true,
+          },
+          unrelated: "keep",
+        },
+      }).custom_parameters,
+    ).toEqual({
+      thinking: { include_thoughts: true },
+      unrelated: "keep",
+    });
+  });
+});
+
+describe("withoutThinkingAmount", () => {
+  it.each<[string, unknown, unknown]>([
+    ["nothing stored", undefined, undefined],
+    [
+      "a block holding only a level",
+      { thinking: { level: "high" } },
+      undefined,
+    ],
+    [
+      "other keys next to the block",
+      { thinking: { level: "high" }, seed: 1 },
+      { seed: 1 },
+    ],
+    [
+      "a block holding only a budget",
+      { thinking: { budget_tokens: 4096 }, seed: 1 },
+      { seed: 1 },
+    ],
+    [
+      "a level and a budget next to include_thoughts",
+      {
+        thinking: {
+          level: "low",
+          budget_tokens: 4096,
+          include_thoughts: false,
+        },
+      },
+      { thinking: { include_thoughts: false } },
+    ],
+    [
+      "a block with neither",
+      { thinking: { include_thoughts: true } },
+      { thinking: { include_thoughts: true } },
+    ],
+    [
+      "a thinking value that is not an object",
+      { thinking: "on" },
+      { thinking: "on" },
+    ],
+  ])("handles %s", (_, customParameters, expected) => {
+    expect(withoutThinkingAmount(customParameters)).toEqual(expected);
+  });
+});
+
+describe("a model switch carries the thinking level the panel showed", () => {
+  const GEMINI = PROVIDER_TYPE.GEMINI as COMPOSED_PROVIDER_TYPE;
+
+  it.each<
+    [PROVIDER_MODEL_TYPE, GeminiThinkingLevel, PROVIDER_MODEL_TYPE, string]
+  >([
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "high",
+    ],
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+      "none",
+    ],
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
+      "minimal",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "high",
+    ],
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      "none",
+      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+      "none",
+    ],
+    [
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "low",
+      PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+      "low",
+    ],
+  ])("%s holding %s, then %s: %s", (from, thinkingLevel, to, expected) => {
+    const switched = updateProviderConfig(
+      withShownThinkingLevel(from, { thinkingLevel }),
+      { model: to, provider: GEMINI },
+    );
+
+    expect(switched?.thinkingLevel).toBe(expected);
+  });
+
+  it("leaves a model without a level control alone", () => {
+    const configs = { temperature: 0.5 };
+
+    expect(
+      withShownThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH, configs),
+    ).toBe(configs);
   });
 });
 
@@ -2045,25 +2288,12 @@ describe("max on the OpenAI Responses API only", () => {
   });
 });
 
-describe("an OpenAI reasoning model reached through another provider", () => {
+describe("an OpenAI reasoning model reached through a custom gateway", () => {
   const SAMPLING: SamplingParams = { temperature: 0.7, topP: 0.9 };
-  const OPEN_ROUTER_ID = PROVIDER_MODEL_TYPE.OPENAI_GPT_6_ASTRA;
   const CUSTOM_ID = "custom-llm/my-gateway/gpt-6-astra" as PROVIDER_MODEL_TYPE;
 
   afterEach(() => {
     resetModelRegistryStoreForTesting();
-  });
-
-  it("keeps penalties and sampling on OpenRouter even when the registry flags it as reasoning", () => {
-    setLatestModelFlags(
-      new Map([[OPEN_ROUTER_ID, { reasoning: true, structuredOutput: true }]]),
-    );
-
-    expect(getProviderFromModel(OPEN_ROUTER_ID)).toBe(
-      PROVIDER_TYPE.OPEN_ROUTER,
-    );
-    expect(supportsPenaltyParams(OPEN_ROUTER_ID)).toBe(true);
-    expect(resolveSamplingParams(OPEN_ROUTER_ID, SAMPLING)).toEqual(SAMPLING);
   });
 
   it("keeps penalties and sampling behind a named custom gateway", () => {
@@ -2077,6 +2307,75 @@ describe("an OpenAI reasoning model reached through another provider", () => {
     expect(getProviderFromModel(CUSTOM_ID)).toBe(PROVIDER_TYPE.OPEN_AI);
     expect(supportsPenaltyParams(CUSTOM_ID)).toBe(true);
     expect(resolveSamplingParams(CUSTOM_ID, SAMPLING)).toEqual(SAMPLING);
+  });
+});
+
+describe("an OpenAI or Gemini model reached through OpenRouter", () => {
+  const SAMPLING: SamplingParams = { temperature: 0.7, topP: 0.9 };
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it.each<[PROVIDER_MODEL_TYPE, SamplingParams]>([
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_6_ASTRA, {}],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH, {}],
+    [PROVIDER_MODEL_TYPE.OPENAI_O3, {}],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW, {}],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW_BATCH, {}],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_LITE, {}],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI, SAMPLING],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH, SAMPLING],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_4_31B_IT, SAMPLING],
+    // OpenRouter-only names with no native row: left alone rather than guessed.
+    [PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH, SAMPLING],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_CHAT, SAMPLING],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_OSS_120B, SAMPLING],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS, SAMPLING],
+  ])("resolves sampling params on %s to %j", (model, expected) => {
+    expect(getProviderFromModel(model)).toBe(PROVIDER_TYPE.OPEN_ROUTER);
+    expect(resolveSamplingParams(model, SAMPLING)).toEqual(expected);
+  });
+
+  it.each<[PROVIDER_MODEL_TYPE, boolean]>([
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_6_ASTRA, false],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH, false],
+    [PROVIDER_MODEL_TYPE.OPENAI_O3, false],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI, true],
+    [PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH, true],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW, true],
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_4_31B_IT, true],
+  ])("supports penalties on %s: %s", (model, expected) => {
+    expect(supportsPenaltyParams(model)).toBe(expected);
+  });
+
+  it("follows the registry for a native id only the registry lists", () => {
+    const model = PROVIDER_MODEL_TYPE.OPENAI_O3_PRO;
+    expect(resolveSamplingParams(model, SAMPLING)).toEqual(SAMPLING);
+
+    const snapshot = getLatestProviderModelsSnapshot();
+    setLatestProviderModelsSnapshot({
+      ...snapshot,
+      [PROVIDER_TYPE.OPEN_AI]: [
+        ...(snapshot[PROVIDER_TYPE.OPEN_AI] ?? []),
+        { value: "o3-pro" as PROVIDER_MODEL_TYPE, label: "o3-pro" },
+      ],
+    });
+    setLatestModelFlags(
+      new Map([["o3-pro", { reasoning: true, structuredOutput: true }]]),
+    );
+
+    expect(resolveSamplingParams(model, SAMPLING)).toEqual({});
+    expect(supportsPenaltyParams(model)).toBe(false);
+  });
+
+  it("ignores a Responses API pipeline mode, which belongs to the OpenAI key", () => {
+    expect(
+      supportsPenaltyParams(
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+        "responses_api",
+      ),
+    ).toBe(true);
   });
 });
 
@@ -2109,6 +2408,7 @@ describe("Anthropic request contract", () => {
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7_20260416, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1, LOW_TO_MAX],
@@ -2116,6 +2416,7 @@ describe("Anthropic request contract", () => {
     [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_PREVIEW, LOW_TO_MAX_WITHOUT_XHIGH],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, LOW_TO_MAX_WITHOUT_XHIGH],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6_20260205, LOW_TO_MAX_WITHOUT_XHIGH],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, LOW_TO_MAX_WITHOUT_XHIGH],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5, ["low", "medium", "high"]],
   ])(
@@ -2243,6 +2544,44 @@ describe("Anthropic request contract", () => {
         custom_parameters: { output_config: { effort: "xhigh" } },
       }),
     ).toEqual({ thinkingEffort: "high" });
+  });
+
+  describe("on a Claude model this build has no row for", () => {
+    const UNLISTED = "claude-opus-9" as PROVIDER_MODEL_TYPE;
+
+    afterEach(() => {
+      resetModelRegistryStoreForTesting();
+    });
+
+    it.each<[string, Record<string, unknown>, unknown]>([
+      [
+        "sends a stored level as is, for Anthropic to judge",
+        { output_config: { effort: "xhigh" } },
+        { output_config: { effort: "xhigh" } },
+      ],
+      [
+        "drops a value that is not a level name, which the backend rejects",
+        { output_config: { effort: "adaptive", format: "x" }, other: 1 },
+        { output_config: { format: "x" }, other: 1 },
+      ],
+      [
+        "sends no custom_parameters once an invalid effort was all they held",
+        { output_config: { effort: "adaptive" } },
+        undefined,
+      ],
+    ])("%s", (_, stored, expected) => {
+      setLatestProviderModelsSnapshot({
+        ...getLatestProviderModelsSnapshot(),
+        [PROVIDER_TYPE.ANTHROPIC]: [{ value: UNLISTED, label: UNLISTED }],
+      });
+
+      expect(
+        sanitizeConfigForRequest(UNLISTED, {
+          maxCompletionTokens: 4000,
+          custom_parameters: stored,
+        }).custom_parameters,
+      ).toEqual(expected);
+    });
   });
 
   it("sends the valid nested effort rather than replacing it over a stale flat one", () => {
@@ -2556,13 +2895,53 @@ describe("OpenRouter request contract", () => {
     },
     {
       model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+      maxTokens: 0.5,
+      request: WITHOUT_MAX_TOKENS,
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
       maxTokens: 512,
       request: { ...WITHOUT_MAX_TOKENS, maxTokens: 512 },
     },
     {
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+      maxTokens: 20.5,
+      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 20 },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
+      maxTokens: 4000,
+      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 2048 },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
+      maxTokens: 1000,
+      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 1000 },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B_FREE,
+      maxTokens: 9000,
+      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 7372 },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
+      maxTokens: 9000,
+      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 8192 },
+    },
+    {
       model: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH,
       maxTokens: 0,
-      request: WITHOUT_MAX_TOKENS,
+      request: omit(WITHOUT_MAX_TOKENS, ["temperature", "topP"]),
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      maxTokens: 0,
+      request: omit(WITHOUT_MAX_TOKENS, [
+        "temperature",
+        "topP",
+        "frequencyPenalty",
+        "presencePenalty",
+      ]),
     },
   ])("$model with maxTokens $maxTokens", ({ model, maxTokens, request }) => {
     it("sends exactly the parameters it accepts", () => {

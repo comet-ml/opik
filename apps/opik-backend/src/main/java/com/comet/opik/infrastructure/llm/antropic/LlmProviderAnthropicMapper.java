@@ -25,6 +25,7 @@ import dev.langchain4j.model.openai.internal.chat.UserMessage;
 import dev.langchain4j.model.openai.internal.shared.Usage;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -104,10 +105,11 @@ interface LlmProviderAnthropicMapper {
 
     @Named("resolveMaxTokens")
     default Integer resolveMaxTokens(@NonNull ChatCompletionRequest request) {
-        if (request.maxCompletionTokens() != null) {
-            return request.maxCompletionTokens();
+        var maxTokens = ObjectUtils.firstNonNull(request.maxCompletionTokens(), request.maxTokens());
+        if (maxTokens != null) {
+            return maxTokens;
         }
-        LOG.info("Anthropic request for model '{}' has no maxCompletionTokens; defaulting to {}",
+        LOG.info("Anthropic request for model '{}' has no maxCompletionTokens or maxTokens; defaulting to {}",
                 request.model(), DEFAULT_MAX_COMPLETION_TOKENS);
         return DEFAULT_MAX_COMPLETION_TOKENS;
     }

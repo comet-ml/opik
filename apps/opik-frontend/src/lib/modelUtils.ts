@@ -1,4 +1,5 @@
 import {
+  ANTHROPIC_THINKING_EFFORT_VALUES,
   AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
@@ -10,13 +11,21 @@ import {
 import {
   ANTHROPIC_MODEL_CAPABILITIES,
   DEFAULT_ANTHROPIC_CONFIGS,
+  DEFAULT_OPEN_AI_CONFIGS,
+  DEFAULT_OPEN_ROUTER_CONFIGS,
   OPENAI_MODEL_CAPABILITIES,
 } from "@/constants/llm";
 import {
   getProviderFromModel,
   parseComposedProviderType,
 } from "@/lib/provider";
+import {
+  getMaxOutputTokens,
+  getOpenRouterMaxOutputTokens,
+  isCustomProviderModel,
+} from "@/lib/modelCapabilities";
 import isPlainObject from "lodash/isPlainObject";
+import isEmpty from "lodash/isEmpty";
 import omit from "lodash/omit";
 import {
   getLatestModelFlags,
@@ -282,6 +291,64 @@ export const getDefaultThinkingLevel = (
 ): GeminiThinkingLevel =>
   DEFAULT_THINKING_LEVEL_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ?? "high";
 
+export type ThinkingLevelParams = {
+  thinkingLevel?: GeminiThinkingLevel;
+  custom_parameters?: unknown;
+};
+
+// What the Gemini and Vertex AI panels show and what the request sends. A
+// level the model does not offer (saved for another model, or by older code)
+// falls back to the model's default, the same way resolveEffort does.
+export const resolveThinkingLevel = (
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: ThinkingLevelParams,
+): GeminiThinkingLevel => {
+  const nested = (
+    (configs.custom_parameters as Record<string, unknown> | undefined)
+      ?.thinking as Record<string, unknown> | undefined
+  )?.level;
+  const stored = configs.thinkingLevel ?? nested;
+  return getThinkingLevelOptions(model).some((o) => o.value === stored)
+    ? (stored as GeminiThinkingLevel)
+    : getDefaultThinkingLevel(model);
+};
+
+// A model switch has to carry the level the panel showed. Carrying a hidden stored one (a "minimal"
+// shown as Auto on Gemini 2.5 Flash) brings it back on the next model that offers it.
+export const withShownThinkingLevel = <T extends object>(
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: T,
+): T => {
+  if (getThinkingLevelOptions(model).length === 0) {
+    return configs;
+  }
+  const params = configs as ThinkingLevelParams;
+  const shown = resolveThinkingLevel(model, params);
+  return params.thinkingLevel === shown
+    ? configs
+    : ({ ...configs, thinkingLevel: shown } as T);
+};
+
+// "auto" leaves how much to think to the model, so it drops both ways of setting that: the level and
+// a budget_tokens set through the API, which outranks any level server-side. include_thoughts and the
+// other keys stay, as they do for "off".
+export const withoutThinkingAmount = (
+  customParameters: unknown,
+): Record<string, unknown> | undefined => {
+  const params = (customParameters ?? {}) as Record<string, unknown>;
+  const thinking = isPlainObject(params.thinking)
+    ? (params.thinking as Record<string, unknown>)
+    : undefined;
+  if (!thinking || !("level" in thinking || "budget_tokens" in thinking)) {
+    return isEmpty(params) ? undefined : params;
+  }
+  const restThinking = omit(thinking, ["level", "budget_tokens"]);
+  const rest = isEmpty(restThinking)
+    ? omit(params, "thinking")
+    : { ...params, thinking: restThinking };
+  return isEmpty(rest) ? undefined : rest;
+};
+
 const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
   low: "Low",
   medium: "Medium",
@@ -474,6 +541,13 @@ export const supportsAnthropicThinkingEffort = (
   !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
     ?.thinkingEffortOptions;
 
+// A Claude model with no row is one this build does not know yet. The backend checks its effort only
+// against the known level names and lets Anthropic judge the rest, so a stored level must pass through
+// rather than be dropped as unsupported. A row without thinkingEffortOptions means the model takes none.
+export const knowsAnthropicEffortLevels = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean => !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE];
+
 export const getDefaultThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): AnthropicThinkingEffort =>
@@ -492,9 +566,7 @@ export const getNestedThinkingEffort = (
   customParameters: unknown,
 ): AnthropicThinkingEffort | undefined => {
   const effort = asRecord(asRecord(customParameters).output_config).effort;
-  return typeof effort === "string"
-    ? (effort as AnthropicThinkingEffort)
-    : undefined;
+  return ANTHROPIC_THINKING_EFFORT_VALUES.find((level) => level === effort);
 };
 
 // Keeps every other key, inside output_config too, so fields no form control shows survive a save.
@@ -687,6 +759,27 @@ export type SamplingParams = { temperature?: number; topP?: number };
 export const isClaudeModel = (model: PROVIDER_MODEL_TYPE | ""): boolean =>
   /claude/i.test((model.split("/").pop() ?? "").trim());
 
+// OpenRouter names OpenAI's and Google's models `<vendor>/<native id>`, with routing variants after a
+// colon (`:free`, `:batch`). The native id is used only when that provider's list has it: ids only
+// OpenRouter uses (o3-mini-high, gpt-5-chat) have no row to read, and guessing would hide working sliders.
+const OPEN_ROUTER_NATIVE_ID_PATTERN = /^(openai|google)\/([^:]+)/;
+
+const getNativeModelBehindOpenRouter = (
+  model: PROVIDER_MODEL_TYPE,
+): PROVIDER_MODEL_TYPE | undefined => {
+  const match = OPEN_ROUTER_NATIVE_ID_PATTERN.exec(model);
+  if (!match) {
+    return undefined;
+  }
+  const [, vendor, id] = match;
+  const nativeProvider =
+    vendor === "openai" ? PROVIDER_TYPE.OPEN_AI : PROVIDER_TYPE.GEMINI;
+  const listed = (getLatestProviderModelsSnapshot()[nativeProvider] ?? []).some(
+    (option) => option.value === id,
+  );
+  return listed ? (id as PROVIDER_MODEL_TYPE) : undefined;
+};
+
 /**
  * The single interpreter of temperature/topP for a model: capability gating plus Anthropic's
  * temperature-XOR-topP rule.
@@ -719,6 +812,13 @@ export const resolveSamplingParams = (
   }
 
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
+
+  if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+    const native = getNativeModelBehindOpenRouter(model);
+    if (native) {
+      return resolveSamplingParams(native, configs);
+    }
+  }
 
   if (provider === PROVIDER_TYPE.ANTHROPIC) {
     // Anthropic takes one of the pair, never both: temperature wins a config carrying both, and
@@ -768,12 +868,25 @@ const isSentThroughOpenAiResponsesApi = (
 export const supportsPenaltyParams = (
   model?: PROVIDER_MODEL_TYPE | "",
   openAiPipelineMode?: OpenAiPipelineMode,
-): boolean =>
-  !model ||
-  getProviderFromModel(model as PROVIDER_MODEL_TYPE) !==
-    PROVIDER_TYPE.OPEN_AI ||
-  (!isReasoningModel(model) &&
-    !isSentThroughOpenAiResponsesApi(model, openAiPipelineMode));
+): boolean => {
+  if (!model) {
+    return true;
+  }
+
+  const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
+
+  if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+    const native = getNativeModelBehindOpenRouter(model);
+    // No pipeline mode: that belongs to the OpenAI key, which never carries an OpenRouter request.
+    return !native || supportsPenaltyParams(native);
+  }
+
+  return (
+    provider !== PROVIDER_TYPE.OPEN_AI ||
+    (!isReasoningModel(model) &&
+      !isSentThroughOpenAiResponsesApi(model, openAiPipelineMode))
+  );
+};
 
 export type EffortParams = {
   reasoningEffort?: OpenAIReasoningEffort;
@@ -834,6 +947,78 @@ export const resolveEffort = (
   return { ...configs };
 };
 
+// Used for a model the pricing data does not list: the caps the panels had before it was read.
+const MAX_COMPLETION_TOKENS_FALLBACK = {
+  [PROVIDER_TYPE.OPEN_AI]: 128000,
+  [PROVIDER_TYPE.ANTHROPIC]: 64000,
+};
+
+export type MaxCompletionTokensRange = { min: number; max: number };
+
+export const getMaxCompletionTokensRange = (
+  provider: keyof typeof MAX_COMPLETION_TOKENS_FALLBACK,
+  model: string,
+  openAiPipelineMode?: OpenAiPipelineMode,
+): MaxCompletionTokensRange => ({
+  // Below 16, the Responses API rejects max_output_tokens. Elsewhere 0 is rejected too: OpenAI
+  // wants at least 1, and Anthropic refuses 0 on a streamed request, which every playground run is.
+  min:
+    provider === PROVIDER_TYPE.OPEN_AI && openAiPipelineMode === "responses_api"
+      ? 16
+      : 1,
+  max: getMaxOutputTokens(model) ?? MAX_COMPLETION_TOKENS_FALLBACK[provider],
+});
+
+const MAX_COMPLETION_TOKENS_DEFAULT = {
+  [PROVIDER_TYPE.OPEN_AI]: DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS,
+  [PROVIDER_TYPE.ANTHROPIC]: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
+};
+
+export const resolveMaxCompletionTokens = (
+  provider: keyof typeof MAX_COMPLETION_TOKENS_FALLBACK,
+  model: string,
+  value: number | undefined,
+  openAiPipelineMode?: OpenAiPipelineMode,
+): number => {
+  const { min, max } = getMaxCompletionTokensRange(
+    provider,
+    model,
+    openAiPipelineMode,
+  );
+  // A stored 0 was saved while the slider still went down to 0: it meant "not set", never a
+  // one-token answer, so it gets the default rather than the new floor.
+  const requested = value || MAX_COMPLETION_TOKENS_DEFAULT[provider];
+  return Math.min(Math.max(Math.floor(requested), min), max);
+};
+
+export const getOpenRouterDefaultMaxTokens = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): number => {
+  const modelMaxOutputTokens = getOpenRouterMaxOutputTokens(model);
+  return modelMaxOutputTokens
+    ? Math.min(DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS, modelMaxOutputTokens)
+    : DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS;
+};
+
+const OPEN_ROUTER_MAX_TOKENS_LIMIT = 10000;
+
+export const getOpenRouterMaxTokensLimit = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): number => {
+  const modelMaxOutputTokens = getOpenRouterMaxOutputTokens(model);
+  return modelMaxOutputTokens
+    ? Math.min(OPEN_ROUTER_MAX_TOKENS_LIMIT, modelMaxOutputTokens)
+    : OPEN_ROUTER_MAX_TOKENS_LIMIT;
+};
+
+// Only shown and sent clamped, never written back, so switching back to a model with a higher
+// limit brings the stored value back, as resolveMaxCompletionTokens does for OpenAI and Anthropic.
+export const resolveOpenRouterMaxTokens = (
+  model: PROVIDER_MODEL_TYPE | "" | undefined,
+  value: number | undefined,
+): number | undefined =>
+  value ? Math.min(value, getOpenRouterMaxTokensLimit(model)) : value;
+
 // Last-mile request hardening, complementary to updateProviderConfig: this
 // layer doesn't trust upstream and keeps the payload valid for stale state
 // (e.g. older persisted prompts missing maxCompletionTokens).
@@ -861,8 +1046,28 @@ export const sanitizeConfigForRequest = (
     delete sanitized.presencePenalty;
   }
 
-  if (provider === PROVIDER_TYPE.OPEN_ROUTER && sanitized.maxTokens === 0) {
-    delete sanitized.maxTokens;
+  // On these providers the slider starts at 0, and 0 means no limit, so it is left out rather than
+  // sent. Rounded down first: the backend truncates a fraction, so a 0.5 would reach them as 0.
+  if (
+    provider === PROVIDER_TYPE.OPEN_ROUTER ||
+    provider === PROVIDER_TYPE.GEMINI ||
+    provider === PROVIDER_TYPE.VERTEX_AI ||
+    isCustomProviderModel(model)
+  ) {
+    for (const key of ["maxTokens", "maxCompletionTokens"] as const) {
+      const value = sanitized[key];
+      if (typeof value !== "number") {
+        continue;
+      }
+      if (Math.floor(value) > 0) {
+        sanitized[key] =
+          provider === PROVIDER_TYPE.OPEN_ROUTER
+            ? resolveOpenRouterMaxTokens(model, Math.floor(value))
+            : Math.floor(value);
+      } else {
+        delete sanitized[key];
+      }
+    }
   }
 
   // Prompts stored while the Top K slider stepped by 0.01 can still carry a fraction.
@@ -907,6 +1112,24 @@ export const sanitizeConfigForRequest = (
       DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS;
   }
 
+  // getProviderFromModel answers OpenAI for any model the registry does not list, a custom gateway's
+  // ids included, so only a listed model is held to OpenAI's or Anthropic's limits.
+  if (
+    (provider === PROVIDER_TYPE.ANTHROPIC ||
+      provider === PROVIDER_TYPE.OPEN_AI) &&
+    (getLatestProviderModelsSnapshot()[provider] ?? []).some(
+      (option) => option.value === model,
+    ) &&
+    typeof sanitized.maxCompletionTokens === "number"
+  ) {
+    sanitized.maxCompletionTokens = resolveMaxCompletionTokens(
+      provider,
+      model,
+      sanitized.maxCompletionTokens,
+      openAiPipelineMode,
+    );
+  }
+
   if (
     provider === PROVIDER_TYPE.ANTHROPIC ||
     provider === PROVIDER_TYPE.OPEN_AI
@@ -928,7 +1151,9 @@ export const sanitizeConfigForRequest = (
     if (provider === PROVIDER_TYPE.ANTHROPIC) {
       const customParameters = withThinkingEffort(
         sanitized.custom_parameters,
-        effort.thinkingEffort,
+        knowsAnthropicEffortLevels(model)
+          ? effort.thinkingEffort
+          : getNestedThinkingEffort(sanitized.custom_parameters),
       );
       if (customParameters) {
         sanitized.custom_parameters = customParameters;
@@ -962,18 +1187,7 @@ export const sanitizeConfigForRequest = (
     // A nested level the model still offers is a real past choice and is honoured — including on the
     // Flash Lite models, where an explicitly saved "minimal" keeps thinking on. Only the *default*
     // changed to "none"; a level someone chose is not overridden.
-    const nested = (
-      (sanitized.custom_parameters as Record<string, unknown> | undefined)
-        ?.thinking as Record<string, unknown> | undefined
-    )?.level;
-    const stored = (sanitized.thinkingLevel ?? nested) as
-      | GeminiThinkingLevel
-      | undefined;
-    const level = (
-      stored != null && thinkingLevelOptions.some((o) => o.value === stored)
-        ? stored
-        : getDefaultThinkingLevel(model)
-    ) as GeminiThinkingLevel;
+    const level = resolveThinkingLevel(model, sanitized as ThinkingLevelParams);
 
     // Dropped unconditionally: the field is Opik's own, and no provider accepts it at the top
     // level, so leaving it on the payload can only be dead weight.
@@ -994,8 +1208,20 @@ export const sanitizeConfigForRequest = (
       }
     }
 
-    // "auto" also sends no thinkingConfig, but it is a weaker statement — "let the model decide" —
-    // so it leaves a persisted block alone rather than deleting fields the form cannot represent.
+    // "auto" also sends no thinkingConfig: it drops a persisted level and budget, since either would
+    // pin how much the model thinks. Unlike "none" it keeps the rest of the block, which the form
+    // cannot represent.
+    if (level === "auto" && thinkingLevelOptions.length > 0) {
+      const customParameters = withoutThinkingAmount(
+        sanitized.custom_parameters,
+      );
+      if (customParameters) {
+        sanitized.custom_parameters = customParameters;
+      } else {
+        delete sanitized.custom_parameters;
+      }
+    }
+
     // `level` is already known to be one this model offers.
     if (
       level !== "auto" &&
@@ -1004,19 +1230,15 @@ export const sanitizeConfigForRequest = (
     ) {
       const customParameters =
         (sanitized.custom_parameters as Record<string, unknown>) ?? {};
-      // Merge into any existing thinking block rather than replacing it — the backend also reads
-      // budget_tokens and include_thoughts from there, and only `level` is ours to set here.
       const thinking =
         (customParameters.thinking as Record<string, unknown>) ?? {};
 
+      // Merged into the existing block so include_thoughts survives. A budget_tokens set through the
+      // API does not: the backend lets it outrank any level, so the model would get that budget
+      // while the panel shows Low, or thinking would stay on under Off.
       sanitized.custom_parameters = {
         ...customParameters,
-        // An explicit budget outranks the level server-side, so "off" has to clear it. Left in, the
-        // block would say "disabled" and "4096 tokens" at once and thinking would stay on.
-        thinking:
-          level === "off"
-            ? { ...omit(thinking, "budget_tokens"), level }
-            : { ...thinking, level },
+        thinking: { ...omit(thinking, "budget_tokens"), level },
       };
     }
   }

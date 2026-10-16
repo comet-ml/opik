@@ -39,77 +39,86 @@ public interface PromptDAO {
             "VALUES (:bean.id, :bean.name, :bean.description, :bean.createdBy, :bean.lastUpdatedBy, :workspace_id, :bean.projectId, :bean.tags, :bean.templateStructure)")
     void save(@Bind("workspace_id") String workspaceId, @BindMethods("bean") Prompt prompt);
 
+    // Each subquery resolves its one row through the index before building JSON: a CTE over every version of the
+    // prompt made a GET cost O(versions), with the full template read for each.
     @SqlQuery("""
-            WITH pv_for_prompt AS (
-                SELECT pv.*
-                FROM prompt_versions pv
-                WHERE pv.prompt_id = :id AND pv.workspace_id = :workspace_id
-            ), active_envs AS (
-                SELECT pve.version_id, pve.environment
-                FROM prompt_version_envs pve
-                INNER JOIN pv_for_prompt pfp ON pfp.id = pve.version_id
-                WHERE pve.workspace_id = :workspace_id AND pve.ended_at IS NULL
-            ), ver_envs AS (
-                SELECT version_id, JSON_ARRAYAGG(environment) AS environments
-                FROM active_envs
-                GROUP BY version_id
-            )
             SELECT
                 p.*,
                 (
-                    SELECT COUNT(pfp.id)
-                    FROM pv_for_prompt pfp
-                    WHERE pfp.version_type = 'prompt_version'
+                    SELECT COUNT(pv.id)
+                    FROM prompt_versions pv
+                    WHERE pv.workspace_id = p.workspace_id
+                    AND pv.prompt_id = p.id
+                    AND pv.version_type = 'prompt_version'
                 ) AS version_count,
                 (
                     SELECT JSON_OBJECT(
-                        'id', pfp.id,
-                        'prompt_id', pfp.prompt_id,
-                        'commit', pfp.commit,
-                        'version_number', pfp.version_number,
-                        'template', pfp.template,
-                        'metadata', pfp.metadata,
-                        'change_description', pfp.change_description,
-                        'type', pfp.type,
-                        'version_type', pfp.version_type,
-                        'environments', ve.environments,
-                        'tags', pfp.tags,
-                        'created_at', pfp.created_at,
-                        'created_by', pfp.created_by,
-                        'last_updated_at', pfp.last_updated_at,
-                        'last_updated_by', pfp.last_updated_by
+                        'id', pv.id,
+                        'prompt_id', pv.prompt_id,
+                        'commit', pv.commit,
+                        'version_number', pv.version_number,
+                        'template', pv.template,
+                        'metadata', pv.metadata,
+                        'change_description', pv.change_description,
+                        'type', pv.type,
+                        'version_type', pv.version_type,
+                        'environments', (
+                            SELECT JSON_ARRAYAGG(pve.environment)
+                            FROM prompt_version_envs pve
+                            WHERE pve.workspace_id = pv.workspace_id AND pve.version_id = pv.id AND pve.ended_at IS NULL
+                        ),
+                        'tags', pv.tags,
+                        'created_at', pv.created_at,
+                        'created_by', pv.created_by,
+                        'last_updated_at', pv.last_updated_at,
+                        'last_updated_by', pv.last_updated_by
                     )
-                    FROM pv_for_prompt pfp
-                    LEFT JOIN ver_envs ve ON ve.version_id = pfp.id
-                    WHERE pfp.version_type = 'prompt_version'
-                    ORDER BY pfp.id DESC
+                    FROM prompt_versions pv
+                    WHERE pv.workspace_id = p.workspace_id
+                    AND pv.prompt_id = p.id
+                    AND pv.version_type = 'prompt_version'
+                    ORDER BY pv.id DESC
                     LIMIT 1
                 ) AS latest_version
                 <if(mask_id || environment)>
                 ,
                 (
                     SELECT JSON_OBJECT(
-                        'id', pfp.id,
-                        'prompt_id', pfp.prompt_id,
-                        'commit', pfp.commit,
-                        'version_number', pfp.version_number,
-                        'template', pfp.template,
-                        'metadata', pfp.metadata,
-                        'change_description', pfp.change_description,
-                        'type', pfp.type,
-                        'version_type', pfp.version_type,
-                        'environments', ve.environments,
-                        'tags', pfp.tags,
-                        'created_at', pfp.created_at,
-                        'created_by', pfp.created_by,
-                        'last_updated_at', pfp.last_updated_at,
-                        'last_updated_by', pfp.last_updated_by
+                        'id', pv.id,
+                        'prompt_id', pv.prompt_id,
+                        'commit', pv.commit,
+                        'version_number', pv.version_number,
+                        'template', pv.template,
+                        'metadata', pv.metadata,
+                        'change_description', pv.change_description,
+                        'type', pv.type,
+                        'version_type', pv.version_type,
+                        'environments', (
+                            SELECT JSON_ARRAYAGG(pve.environment)
+                            FROM prompt_version_envs pve
+                            WHERE pve.workspace_id = pv.workspace_id AND pve.version_id = pv.id AND pve.ended_at IS NULL
+                        ),
+                        'tags', pv.tags,
+                        'created_at', pv.created_at,
+                        'created_by', pv.created_by,
+                        'last_updated_at', pv.last_updated_at,
+                        'last_updated_by', pv.last_updated_by
                     )
-                    FROM pv_for_prompt pfp
-                    LEFT JOIN ver_envs ve ON ve.version_id = pfp.id
-                    WHERE 1=1
-                    <if(mask_id)> AND pfp.id = :mask_id AND pfp.version_type = 'mask' <endif>
-                    <if(environment)> AND pfp.id IN (SELECT version_id FROM active_envs WHERE environment = :environment) AND pfp.version_type = 'prompt_version' <endif>
+                    FROM prompt_versions pv
+                    WHERE pv.workspace_id = p.workspace_id
+                    AND pv.prompt_id = p.id
+                    <if(mask_id)> AND pv.id = :mask_id AND pv.version_type = 'mask' <endif>
+                    <if(environment)>
+                    AND pv.version_type = 'prompt_version'
+                    AND pv.id IN (
+                        SELECT pve.version_id
+                        FROM prompt_version_envs pve
+                        WHERE pve.workspace_id = p.workspace_id
+                        AND pve.prompt_id = p.id
+                        AND pve.environment = :environment
+                        AND pve.ended_at IS NULL
+                    )
+                    <endif>
                 ) AS requested_version
                 <endif>
             FROM prompts p
@@ -161,6 +170,15 @@ public interface PromptDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
+    /**
+     * Finds prompts by id, each with its latest version: the one with the highest id.
+     *
+     * <p>Grouping by the whole {@code (workspace_id, prompt_id, version_type)} index prefix lets {@code MAX(id)}
+     * skip-scan to each prompt's last index entry. Grouping by {@code prompt_id} alone, or a {@code ROW_NUMBER}
+     * window, reads every version. The prompts are joined on {@code latest_ids.prompt_id}: joined on the version's own
+     * {@code prompt_id}, MySQL reads every version of each prompt through the prompt id index and probes
+     * {@code latest_ids} for each one.
+     */
     @SqlQuery("""
             WITH selected_prompts AS (
             	SELECT
@@ -175,16 +193,20 @@ public interface PromptDAO {
             	FROM prompts AS p
             	WHERE workspace_id = :workspace_id
             	<if(ids)> AND id IN (<ids>) <endif>
-            ), pv_ranked AS (
-                SELECT pv.*,
-                    ROW_NUMBER() OVER (PARTITION BY pv.prompt_id ORDER BY pv.id DESC) AS rn
-                FROM prompt_versions pv
-                WHERE pv.workspace_id = :workspace_id AND pv.version_type = 'prompt_version'
-                <if(ids)> AND pv.prompt_id IN (<ids>) <endif>
+            ), latest_ids AS (
+                SELECT prompt_id, MAX(id) AS id
+                FROM prompt_versions
+                WHERE workspace_id = :workspace_id AND version_type = 'prompt_version'
+                <if(ids)> AND prompt_id IN (<ids>) <endif>
+                GROUP BY workspace_id, prompt_id, version_type
+            ), pv_latest AS (
+                SELECT li.prompt_id AS latest_prompt_id, pv.*
+                FROM latest_ids li
+                INNER JOIN prompt_versions pv ON pv.id = li.id AND pv.workspace_id = :workspace_id
             ), active_envs AS (
                 SELECT pve.version_id, pve.environment
                 FROM prompt_version_envs pve
-                INNER JOIN pv_ranked pvr ON pvr.id = pve.version_id AND pvr.rn = 1
+                INNER JOIN pv_latest pvr ON pvr.id = pve.version_id
                 WHERE pve.workspace_id = :workspace_id AND pve.ended_at IS NULL
             ), ver_envs AS (
                 SELECT version_id, JSON_ARRAYAGG(environment) AS environments
@@ -209,10 +231,9 @@ public interface PromptDAO {
                 'last_updated_at', pvr.last_updated_at,
                 'last_updated_by', pvr.last_updated_by
               ) AS latest_version,
-              pvr.prompt_id
-              FROM pv_ranked pvr
+              pvr.latest_prompt_id AS prompt_id
+              FROM pv_latest pvr
               LEFT JOIN ver_envs ve ON ve.version_id = pvr.id
-              WHERE pvr.rn = 1
             )
             SELECT sp.*, lv.latest_version
             FROM selected_prompts sp

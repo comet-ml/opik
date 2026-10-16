@@ -253,6 +253,7 @@ areas:
     spec_dir: trace-explore   # NOTE: dir name != product vocabulary ("Logs")
     specs:
       - trace-explore/dataset-item-field-mappings.spec.ts
+      - trace-explore/logs-filter-persistence.spec.ts
       - trace-explore/mcp-hint.spec.ts
       - trace-explore/sdk-track-non-error-throw.spec.ts
       - trace-explore/span-cached-token-cost.spec.ts
@@ -305,6 +306,7 @@ areas:
       # this under either would retire the question permanently.
       logs-open-ended-window: { covered: false, note: "A date-range preset ending today sends no interval_end, on the kpi-cards read and on the chart's metrics read alike: the KPI cards, their period-over-period deltas and the table footer then report one population including a row whose UUIDv7 id instant is mid-2200, on the Traces, Spans and Threads tabs. Pinned against the same seed read with interval_end = now, where every current-period number differs and the prior period is identical" }
       filter-traces:          { covered: true,  tier: t2-cuj }
+      filter-persistence:     { covered: true,  tier: t2-cuj, note: "Logs filter chips are remembered per project in localStorage and restored when the Logs URL has no filter param. E2E proves only the Traces tag-chip restore on a bare landing: after leaving and returning via the sidebar, after re-clicking Logs while on Logs (bare navigation proven), and in a new tab; the environment picker and the Threads/Spans tables are covered by unit tests only, not e2e" }
       mcp-hint-on-trace-error: { covered: true,  tier: t2-cuj, note: "the MCP hint on an expanded trace error: absent while the error is collapsed, shown once it is opened, kept through a collapse, and the card that explains Opik MCP and links to its docs. NOTE: written but never run green anywhere yet. The SDK bridge could not seed traces on the machine it was written on, where an existing spec (trace-delete) fails the same way, and both CI suites default to tier t1, so a t2 spec only runs on a manual dispatch." }
       configure-columns:      { covered: false }
       # New for 2.2.86, from the release pass's own exploration of opik#8411.
@@ -508,6 +510,7 @@ areas:
       - playground/playground-dataset-run-failure.spec.ts
       - playground/playground-experiment-name.spec.ts
       - playground/playground-failed-run-output.spec.ts
+      - playground/playground-message-cursor.spec.ts
       - playground/playground-metric-selection.spec.ts
       - playground/playground-model-parameters.spec.ts
       - playground/playground-openrouter-model-parameters.spec.ts
@@ -523,7 +526,7 @@ areas:
       - prompts/prompt-playground-traces.spec.ts
       - prompts/prompt-version-playground.spec.ts
     capabilities:
-      compose-run-prompt:        { covered: true,  tier: t1-smoke, note: "smoke covers composing and running a prompt. t2 also covers OPIK-8313's RESET (playground-reset.spec.ts): the control leaves exactly one empty prompt card on a fresh page, after the list has grown, twice in a row, across a reload, and out of dataset mode — where it also clears the loaded source and returns an editable editor. RECORDED GAP, not a claim: reset has no capability key of its own and is filed here as the nearest fit, so read this key as 'compose, run, and reset the composer', and do not take the reset assertions as evidence about running." }
+      compose-run-prompt:        { covered: true,  tier: t1-smoke, note: "smoke covers composing and running a prompt. t2 also covers OPIK-8313's RESET (playground-reset.spec.ts): the control leaves exactly one empty prompt card on a fresh page, after the list has grown, twice in a row, across a reload, and out of dataset mode — where it also clears the loaded source and returns an editable editor. RECORDED GAP, not a claim: reset has no capability key of its own and is filed here as the nearest fit, so read this key as 'compose, run, and reset the composer', and do not take the reset assertions as evidence about running. t3 also covers OPIK-5298's message editor cursor (playground-message-cursor.spec.ts): at column 0 of an empty message and of a line with text, no part of the cursor is clipped by the editor's scroll box. Checked as geometry, so it says nothing about blinking or colour. The same spec covers focus: on opening the Playground the first message of the first prompt has focus (typing lands there), and + Message moves focus to the message it added." }
       select-model-provider:     { covered: true,  suites: [provider-sanity] }
       # OPEN, needs a human call: STOPPING a run has no capability of its own in
       # this area. playground-stop-run.spec.ts rides on run-against-dataset for

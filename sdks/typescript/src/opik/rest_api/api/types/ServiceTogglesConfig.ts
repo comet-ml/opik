@@ -27,5 +27,7 @@ export interface ServiceTogglesConfig {
     projectHomepageEnabled: boolean;
     onlineScoringTracingEnabled: boolean;
     annotationQueueAutomationEnabled: boolean;
+    eventBridgeAlertsEnabled: boolean;
     defaultPageSize?: number;
+    customChartsEnabledForWorkspace?: boolean;
 }

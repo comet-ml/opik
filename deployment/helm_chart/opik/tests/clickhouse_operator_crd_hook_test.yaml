@@ -1,0 +1,20 @@
+suite: clickhouse operator CRD-install hook image
+
+# The Altinity operator subchart defaults its CRD-install hook to bitnami/kubectl:latest.
+# values.yaml pins it to the official kubectl image this chart uses elsewhere, so no
+# Bitnami image is pulled. This fails if that override is dropped or the default returns.
+
+templates:
+  - charts/altinity-clickhouse-operator/templates/hooks/crd-install-job.yaml
+
+tests:
+  - it: runs the CRD-install hook on alpine/kubectl, not a Bitnami image
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: alpine/kubectl:1.35.0
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: bitnami

@@ -172,7 +172,7 @@ test.describe(
 
         await test.step('Close the panel and run a one-line prompt', async () => {
           await playground.closeModelParameters();
-          await playground.fillFirstMessage('Reply with the single word OK.');
+          await playground.fillUserMessage('Reply with the single word OK.');
         });
 
         const request = await test.step('Capture the outbound completion request', async () => {

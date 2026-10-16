@@ -265,8 +265,10 @@ from .dashboard_page_public import DashboardPagePublic
 from .dashboard_public import DashboardPublic
 from .dashboard_public_scope import DashboardPublicScope
 from .dashboard_public_type import DashboardPublicType
+from .dashboard_saved_query import DashboardSavedQuery
 from .dashboard_update_public import DashboardUpdatePublic
 from .dashboard_update_public_type import DashboardUpdatePublicType
+from .dashboard_widget_query_request import DashboardWidgetQueryRequest
 from .dashboard_write import DashboardWrite
 from .dashboard_write_type import DashboardWriteType
 from .data_point_double import DataPointDouble
@@ -557,6 +559,7 @@ from .project_stats_summary import ProjectStatsSummary
 from .project_stats_summary_item import ProjectStatsSummaryItem
 from .project_visibility import ProjectVisibility
 from .prompt import Prompt
+from .prompt_cache_options import PromptCacheOptions
 from .prompt_detail import PromptDetail
 from .prompt_detail_template_structure import PromptDetailTemplateStructure
 from .prompt_page_public import PromptPagePublic
@@ -981,8 +984,10 @@ __all__ = [
     "DashboardPublic",
     "DashboardPublicScope",
     "DashboardPublicType",
+    "DashboardSavedQuery",
     "DashboardUpdatePublic",
     "DashboardUpdatePublicType",
+    "DashboardWidgetQueryRequest",
     "DashboardWrite",
     "DashboardWriteType",
     "DataPointDouble",
@@ -1264,6 +1269,7 @@ __all__ = [
     "ProjectStatsSummaryItem",
     "ProjectVisibility",
     "Prompt",
+    "PromptCacheOptions",
     "PromptDetail",
     "PromptDetailTemplateStructure",
     "PromptPagePublic",

@@ -2,16 +2,21 @@ package com.comet.opik.infrastructure.llm.gemini;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
+import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.infrastructure.llm.LoggingChunkedResponseHandler;
 import com.comet.opik.infrastructure.llm.StreamingResponseLogger;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
+import dev.langchain4j.model.output.FinishReason;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.Optional;
@@ -58,12 +63,49 @@ public class LlmProviderGemini implements LlmProviderService {
                         streamingChatLanguageModel
                                 .chat(
                                         mappedMessages,
-                                        new LoggingChunkedResponseHandler(delegate, logger));
+                                        streamHandler(request, delegate, logger));
                     } catch (Exception e) {
                         handleError.accept(e);
                         handleClose.run();
                     }
                 });
+    }
+
+    static LoggingChunkedResponseHandler streamHandler(ChatCompletionRequest request, ChunkedResponseHandler delegate,
+            StreamingResponseLogger logger) {
+        return new LoggingChunkedResponseHandler(delegate, logger) {
+            @Override
+            public void onCompleteResponse(ChatResponse chatResponse) {
+                super.onCompleteResponse(withCutOffWhileThinking(request, chatResponse));
+            }
+        };
+    }
+
+    // When a thinking model spends the whole output limit on thinking, Google's stream drops the last chunk because it
+    // has no parts, so the body is empty: no text, no finish reason, no usage. The same call without streaming says
+    // MAX_TOKENS. Asking for thought summaries keeps that chunk, but it delays every answer and models that cannot
+    // think reject it, so the empty stream is read as the limit running out instead.
+    static ChatResponse withCutOffWhileThinking(ChatCompletionRequest request, ChatResponse response) {
+        var outputLimit = GeminiMaxOutputTokens.firstPositive(request);
+        if (response.finishReason() != null
+                || response.tokenUsage() != null
+                || StringUtils.isNotEmpty(response.aiMessage().text())
+                || outputLimit.isEmpty()
+                || isThinkingTurnedOff(request)) {
+            return response;
+        }
+        log.info("Gemini stream for model '{}' ended empty with max output tokens '{}', reporting finish reason '{}'",
+                request.model(), outputLimit.get(), FinishReason.LENGTH);
+        return response.toBuilder()
+                .metadata(response.metadata().toBuilder().finishReason(FinishReason.LENGTH).build())
+                .build();
+    }
+
+    private static boolean isThinkingTurnedOff(ChatCompletionRequest request) {
+        return GeminiThinkingParams.from(request.customParameters())
+                .wireBudgetFor(request.model())
+                .filter(budget -> budget == 0)
+                .isPresent();
     }
 
     @Override

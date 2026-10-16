@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
 // The custom panel embeds the real CodeMirror editor for custom_parameters, which does not mount
 // under this environment (a duplicate @codemirror/state breaks its instanceof checks).
@@ -16,11 +16,13 @@ import {
 } from "@/types/providers";
 import { getDefaultConfigByProvider } from "@/lib/playground";
 import { TooltipProvider } from "@/ui/tooltip";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 const renderTrigger = (
   provider: COMPOSED_PROVIDER_TYPE,
   model: PROVIDER_MODEL_TYPE | "" = PROVIDER_MODEL_TYPE.OPIK_FREE_MODEL,
   configs: Partial<LLMPromptConfigsType> = {},
+  onChange = vi.fn(),
 ) =>
   render(
     <TooltipProvider delayDuration={700}>
@@ -28,7 +30,7 @@ const renderTrigger = (
         provider={provider}
         model={model}
         configs={configs}
-        onChange={vi.fn()}
+        onChange={onChange}
       />
     </TooltipProvider>,
   );
@@ -82,5 +84,46 @@ describe("PromptModelConfigs for Ollama and Bedrock", () => {
     expect(screen.getByTestId("maxCompletionTokens-input")).toHaveValue("4000");
     expect(screen.getByTestId("topP-input")).toHaveValue("1");
     expect(screen.getByText("Extra body parameters (Optional)")).toBeVisible();
+  });
+});
+
+describe("PromptModelConfigs panel header", () => {
+  it("explains the parameters in a line under the heading, with no info icon", () => {
+    renderTrigger(PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O);
+
+    openPanel();
+
+    const header = screen.getByRole("heading", {
+      name: "Model parameters",
+    }).parentElement!;
+    expect(
+      within(header).getByText(
+        EXPLAINERS_MAP[EXPLAINER_ID.whats_these_configuration_things]
+          .description,
+      ),
+    ).toBeVisible();
+    expect(header.querySelector("svg")).not.toBeInTheDocument();
+  });
+});
+
+describe("PromptModelConfigs typed values", () => {
+  it("keeps a typed value when Escape closes the panel", () => {
+    const onChange = vi.fn();
+    renderTrigger(
+      PROVIDER_TYPE.OPEN_AI,
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      getDefaultConfigByProvider(
+        PROVIDER_TYPE.OPEN_AI,
+        PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      ),
+      onChange,
+    );
+
+    openPanel();
+    const input = screen.getByTestId("temperature-input");
+    fireEvent.change(input, { target: { value: "0.7" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    expect(onChange).toHaveBeenCalledWith({ temperature: 0.7 });
   });
 });

@@ -1,3 +1,8 @@
+import first from "lodash/first";
+import isNil from "lodash/isNil";
+import escapeRegExp from "lodash/escapeRegExp";
+import last from "lodash/last";
+import omitBy from "lodash/omitBy";
 import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
 import {
@@ -11,6 +16,7 @@ import {
 import {
   getDefaultThinkingEffort,
   getDefaultThinkingLevel,
+  getOpenRouterDefaultMaxTokens,
   isClaudeModel,
   supportsAnthropicThinkingEffort,
   supportsGeminiThinkingLevel,
@@ -32,14 +38,18 @@ import {
 } from "@/types/providers";
 import {
   generateDefaultLLMPromptMessage,
+  hasAudiosInContent,
   hasImagesInContent,
   hasVideosInContent,
 } from "@/lib/llm";
+import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import {
+  supportsAudioInput,
   supportsImageInput,
   supportsVideoInput,
 } from "@/lib/modelCapabilities";
 import {
+  DropdownModelCheck,
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
@@ -160,7 +170,7 @@ export const getDefaultConfigByProvider = (
 
   if (providerType === PROVIDER_TYPE.OPEN_ROUTER) {
     return {
-      maxTokens: DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS,
+      maxTokens: getOpenRouterDefaultMaxTokens(model),
       temperature: DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE,
       topP: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P,
       topK: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_K,
@@ -229,6 +239,7 @@ interface GenerateDefaultPromptParams {
   lastPickedModel?: PROVIDER_MODEL_TYPE | "";
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
+  isDropdownModel: DropdownModelCheck;
 }
 
 export const generateDefaultPrompt = ({
@@ -237,19 +248,80 @@ export const generateDefaultPrompt = ({
   lastPickedModel,
   providerResolver,
   modelResolver,
+  isDropdownModel,
 }: GenerateDefaultPromptParams): PlaygroundPromptType => {
-  const modelByDefault = modelResolver(lastPickedModel || "", setupProviders);
-  const provider = providerResolver(modelByDefault);
+  // The model resolver keeps any model it can resolve, so a stored prompt on a
+  // model later taken out of the picker keeps it. A new prompt only starts on
+  // a remembered pick the picker still offers.
+  const rememberedModel =
+    lastPickedModel &&
+    isDropdownModel(lastPickedModel, providerResolver(lastPickedModel))
+      ? lastPickedModel
+      : "";
+  const modelByDefault = modelResolver(rememberedModel, setupProviders);
+  // The model resolver can pick the first set-up provider's static default model before the model
+  // registry loads, but mapping that model back to a provider needs the registry. A picked model
+  // that maps to no provider can only be that default, so it belongs to the first set-up provider.
+  const provider =
+    providerResolver(modelByDefault) ||
+    (modelByDefault && first(setupProviders)) ||
+    "";
 
   return {
     name: "Prompt",
-    messages: [generateDefaultLLMPromptMessage()],
+    messages: [
+      generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.system }),
+      generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user }),
+    ],
     model: modelByDefault,
     provider,
     configs: getDefaultConfigByProvider(provider, modelByDefault),
     ...initPrompt,
     id: generateRandomString(),
   };
+};
+
+export const restoreMissingProviderAndConfigKeys = (
+  prompt: PlaygroundPromptType,
+  providerResolver: ProviderResolver,
+): PlaygroundPromptType => {
+  if (prompt.provider) {
+    return prompt;
+  }
+
+  const provider = providerResolver(prompt.model);
+
+  if (!provider) {
+    return prompt;
+  }
+
+  // Not restoreMissingConfigKeys: without a provider the prompt never had its provider's settings,
+  // so nothing it lacks was the user's choice, Claude's temperature/Top P pair included.
+  return {
+    ...prompt,
+    provider,
+    configs: {
+      ...getDefaultConfigByProvider(provider, prompt.model),
+      ...omitBy(prompt.configs, isNil),
+    } as LLMPromptConfigsType,
+  };
+};
+
+export const isEmptyMessage = (message: LLMMessage) =>
+  !message.content || message.content.length === 0;
+
+// The default prompt starts with a System message, and leaving it blank means "no system
+// prompt". The backend rejects a blank system message for Gemini, Vertex AI and OpenAI's
+// Responses API.
+export const dropEmptySystemMessages = (messages: LLMMessage[]) =>
+  messages.filter(
+    (message) =>
+      message.role !== LLM_MESSAGE_ROLE.system || !isEmptyMessage(message),
+  );
+
+export const canRunMessages = (messages: LLMMessage[]) => {
+  const messagesToSend = dropEmptySystemMessages(messages);
+  return messagesToSend.length > 0 && !messagesToSend.some(isEmptyMessage);
 };
 
 export const hasUnsupportedMedia = (
@@ -263,12 +335,20 @@ export const hasUnsupportedMedia = (
   const hasVideos = prompt.messages.some((message) =>
     hasVideosInContent(message.content),
   );
+  const hasAudios = prompt.messages.some((message) =>
+    hasAudiosInContent(message.content),
+  );
 
   return (
     (hasImages && !supportsImageInput(prompt.model)) ||
-    (hasVideos && !supportsVideoInput(prompt.model))
+    (hasVideos && !supportsVideoInput(prompt.model)) ||
+    (hasAudios && !supportsAudioInput(prompt.model))
   );
 };
+
+// Kept short: the output cell shows one truncated line, with the full text only in a tooltip.
+export const OUTPUT_LIMIT_REACHED_MESSAGE =
+  "The model used up Max output tokens while thinking. Raise Max output tokens or lower the reasoning effort.";
 
 export const parseCompletionOutput = (run: RunStreamingReturn) => {
   return (
@@ -276,9 +356,73 @@ export const parseCompletionOutput = (run: RunStreamingReturn) => {
     run.opikError ||
     run.providerError ||
     run.pythonProxyError ||
-    "The AI provider returned an empty response. Please, try again."
+    (run.finishReason === "length"
+      ? OUTPUT_LIMIT_REACHED_MESSAGE
+      : "The AI provider returned an empty response. Please, try again.")
   );
 };
+
+const HTTP_NOT_FOUND = 404;
+
+export type RunFailureHint = {
+  action: string;
+};
+
+export type RunFailure = {
+  message: string;
+  hint?: RunFailureHint;
+};
+
+type RunFailureContext = {
+  model: string;
+};
+
+// Matched as a whole id, so "llama-3" doesn't match "llama-3-70b", and a one-letter name doesn't
+// match inside "page".
+const mentionsModel = (text: string, modelName: string) =>
+  new RegExp(`(^|[^\\w-])${escapeRegExp(modelName)}([^\\w-]|$)`).test(text);
+
+const getRunFailureHint = (
+  run: RunStreamingReturn,
+  { model }: RunFailureContext,
+): RunFailureHint | undefined => {
+  const providerMessage =
+    run.opikError || run.providerError || run.pythonProxyError;
+  const modelName = last(model.split("/"));
+  // Providers answer a model the key can't use with a 404 that names it. A 404 that doesn't name it
+  // has another cause, such as a custom provider's wrong URL ("Not Found").
+  if (
+    run.errorStatus === HTTP_NOT_FOUND &&
+    modelName &&
+    providerMessage &&
+    mentionsModel(providerMessage, modelName)
+  ) {
+    return {
+      action:
+        "This model isn't available for your API key. Pick another model, or check which models your provider account can use.",
+    };
+  }
+  return undefined;
+};
+
+export const describeRunFailure = (
+  run: RunStreamingReturn,
+  context: RunFailureContext,
+): RunFailure => {
+  const hint = getRunFailureHint(run, context);
+  if (!hint) return { message: parseCompletionOutput(run) };
+  return { message: parseCompletionOutput(run), hint };
+};
+
+export class RunFailedError extends Error {
+  failure: RunFailure;
+
+  constructor(failure: RunFailure) {
+    super(failure.message);
+    this.name = "RunFailedError";
+    this.failure = failure;
+  }
+}
 
 export const parseCompletionError = (run: RunStreamingReturn) => {
   if (run.opikError) {
