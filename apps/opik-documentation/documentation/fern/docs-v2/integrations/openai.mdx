@@ -238,6 +238,37 @@ _ = wrapped_client.responses.create(
 
 More information on logging chat conversations can be found in the [Log conversations](/tracing/advanced/log_chat_conversations) section.
 
+## Decisions API
+
+The `track_openai` wrapper also tracks OpenAI's [Decisions API](https://developers.openai.com/api/docs/guides/decisions), which answers typed questions about your input with calibrated probabilities instead of free-form text. It requires `openai>=3.26.0`.
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+client = track_openai(OpenAI())
+
+decision = client.decisions.create(
+    model="gpt-6-luna",
+    input="I was charged twice for my subscription this month!",
+    questions=[
+        {
+            "name": "is_complaint",
+            "type": "predicate",
+            "instructions": "Is the customer complaining?",
+        },
+        {
+            "name": "topic",
+            "type": "choice",
+            "instructions": "What is the message about?",
+            "choices": [{"value": "billing"}, {"value": "shipping"}, {"value": "other"}],
+        },
+    ],
+)
+```
+
+Each call is logged as an LLM span named `decisions_create`, with the `input` and `questions` as the span input, the returned `answers` as the span output, and the token usage.
+
 ## Video Generation (Sora)
 
 The `track_openai` wrapper also supports OpenAI's video generation API (Sora). When you generate videos, Opik automatically tracks the video creation process and logs the generated video as an attachment when you download it via the client API.
@@ -303,6 +334,7 @@ The `track_openai` wrapper supports the following OpenAI methods:
 - `openai_client.beta.chat.completions.parse()`
 - `openai_client.beta.chat.completions.stream()`
 - `openai_client.responses.create()`
+- `openai_client.decisions.create()`
 - `openai_client.videos.create()`
 - `openai_client.videos.create_and_poll()`
 - `openai_client.videos.poll()`

@@ -110,6 +110,26 @@ async function streamingExample() {
 streamingExample();
 ```
 
+### Using with the Decisions API
+
+Calls to OpenAI's [Decisions API](https://developers.openai.com/api/docs/guides/decisions) (`openai` ≥ 7.30.0) are traced too. Opik logs the `input` and `questions` as the span input, the returned `answers` as the span output, and the token usage.
+
+```typescript
+const decision = await trackedOpenAI.decisions.create({
+  model: "gpt-6-luna",
+  input: "I was charged twice for my subscription this month!",
+  questions: [
+    {
+      name: "is_complaint",
+      type: "predicate",
+      instructions: "Is the customer complaining?",
+    },
+  ],
+});
+
+await trackedOpenAI.flush();
+```
+
 ## Advanced Configuration
 
 The `trackOpenAI` function accepts an optional configuration object to customize the integration:

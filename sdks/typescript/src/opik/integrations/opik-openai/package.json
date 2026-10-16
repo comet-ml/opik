@@ -57,7 +57,7 @@
     "README.md"
   ],
   "peerDependencies": {
-    "openai": "^6.0.1",
+    "openai": "^6.0.1 || ^7.0.0",
     "opik": "^1.8.61"
   },
   "devDependencies": {
