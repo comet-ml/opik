@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -12,6 +13,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -114,27 +116,24 @@ class ServiceTogglesResourceTest {
     @DisplayName("custom_charts_enabled_for_workspace is true only for a workspace on the Custom Charts allowlist")
     void getToggles__customChartsEnabled__followsTheCallersWorkspace(String apiKey, String workspaceName,
             boolean expected) {
+        var expectedToggles = TestConfigUtils.loadConfigTest().getServiceToggles();
+        expectedToggles.setOllieEnabled(true);
+
         try (var response = client.target("%s/v1/private/toggles/".formatted(baseURI))
                 .request(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.getStatus()).as("[%s] status", workspaceName).isEqualTo(200);
             var toggles = response.readEntity(JsonNode.class);
-            assertThat(toggle(toggles, "custom_charts_enabled_for_workspace")).isEqualTo(expected);
-            assertThat(toggle(toggles, "ollie_enabled")).isTrue();
+            assertThat(toggles)
+                    .as("[%s] toggles", workspaceName)
+                    .isEqualTo(JsonUtils.valueToTree(expectedToggles.withCustomChartsEnabledForWorkspace(expected)));
+            // The key the frontend reads.
+            assertThat(toggles.get("custom_charts_enabled_for_workspace").asBoolean())
+                    .as("[%s] custom_charts_enabled_for_workspace", workspaceName)
+                    .isEqualTo(expected);
         }
-    }
-
-    // The test app writes these keys in camelCase, the deployed one in snake_case; match either.
-    private static boolean toggle(JsonNode toggles, String snakeCaseName) {
-        String name = snakeCaseName.replace("_", "");
-        return toggles.properties().stream()
-                .filter(entry -> entry.getKey().replace("_", "").equalsIgnoreCase(name))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("no toggle " + snakeCaseName + " in " + toggles))
-                .getValue()
-                .asBoolean();
     }
 }
