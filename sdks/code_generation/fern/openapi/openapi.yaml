@@ -22092,6 +22092,9 @@ components:
           minimum: 5
           type: integer
           format: int32
+        customChartsEnabledForWorkspace:
+          type: boolean
+          readOnly: true
     SpanBatchUpdate:
       required:
       - ids

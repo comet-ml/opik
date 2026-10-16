@@ -29,4 +29,5 @@ export interface ServiceTogglesConfig {
     annotationQueueAutomationEnabled: boolean;
     eventBridgeAlertsEnabled: boolean;
     defaultPageSize?: number;
+    customChartsEnabledForWorkspace?: boolean;
 }
