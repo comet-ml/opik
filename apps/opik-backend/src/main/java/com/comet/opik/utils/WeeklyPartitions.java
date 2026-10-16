@@ -4,6 +4,7 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -17,6 +18,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Single derivation point for the {@code id_at} weekly partition value(s) a batch of ids resolves to, so a statement
@@ -108,6 +110,13 @@ public class WeeklyPartitions {
     private static final long ID_AT_LEGACY_MODULUS = 1L << 32;
 
     /**
+     * How far behind its trace id a span id may be minted and still count as in the trace's weeks, for
+     * {@link #spanWeeksOfTraces}. Hosts on synchronised clocks differ by far less; a span further behind is left to the
+     * span_weeks index, which holds every span's week once registered.
+     */
+    private static final Duration SPAN_CLOCK_SKEW = Duration.ofHours(1);
+
+    /**
      * Groups the ids by the weekly partition value(s) each resolves to — under each {@code id_at} type the mutation
      * may run against (see the class javadoc) — or empty if the batch contains an id whose partition cannot be
      * derived exactly. In the empty case the caller must omit its partition predicate entirely and emit the
@@ -189,11 +198,34 @@ public class WeeklyPartitions {
      * by {@code SpansLocalV2PartitioningTest}.
      */
     public static long storedPartitionOf(@NonNull UUID id) {
+        return weeklyPartitionOf(storedEpochSecondOf(id));
+    }
+
+    /**
+     * The weeks that hold almost every span of the given traces, ascending and distinct: each trace id's
+     * {@link #storedPartitionOf} week, the following one, and the previous one when the trace id falls within
+     * {@link #SPAN_CLOCK_SKEW} of its week's start. Spans are created while their trace runs, so after the trace id;
+     * the margin covers a span minted on another host whose clock lags, as with distributed trace headers. Total, like
+     * {@code storedPartitionOf}: an extra week only adds a partition to a read bounded by these. Ascending so the
+     * rendered statement is the same for a given id set, as {@link #weeksOf} explains.
+     */
+    public static List<Long> spanWeeksOfTraces(@NonNull Collection<UUID> traceIds) {
+        return traceIds.stream()
+                .map(WeeklyPartitions::storedEpochSecondOf)
+                .flatMap(epochSecond -> Stream.of(epochSecond - SPAN_CLOCK_SKEW.toSeconds(), epochSecond,
+                        epochSecond + Duration.ofDays(7).toSeconds()))
+                .map(WeeklyPartitions::weeklyPartitionOf)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private static long storedEpochSecondOf(UUID id) {
         if (id.version() != 7) {
-            return weeklyPartitionOf(0L);
+            return 0L;
         }
         long epochMilli = Math.min(id.getMostSignificantBits() >>> 16, ID_AT_CEILING - 1);
-        return weeklyPartitionOf(epochMilli / 1_000L);
+        return epochMilli / 1_000L;
     }
 
     /**

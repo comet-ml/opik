@@ -3,15 +3,20 @@ package com.comet.opik.utils;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -341,6 +346,65 @@ class WeeklyPartitionsTest {
                 .isInstanceOf(UnsupportedOperationException.class);
         assertThatThrownBy(() -> grouped.get(partition).remove(ordinary))
                 .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    /** How far into its week the trace id is, and the weeks named for it, as offsets from that week. */
+    private static Stream<Arguments> spanWeeksOfTracesNamesTheTracesWeeks() {
+        return Stream.of(
+                arguments(Named.of("within the clock skew of the week start",
+                        Duration.ofMinutes(ThreadLocalRandom.current().nextInt(0, 60))), List.of(-1, 0, 1)),
+                arguments(Named.of("an hour into the week", Duration.ofHours(1)), List.of(0, 1)),
+                arguments(
+                        Named.of("mid-week", Duration.ofDays(3).plusHours(ThreadLocalRandom.current().nextInt(0, 24))),
+                        List.of(0, 1)),
+                arguments(Named.of("at the end of the week", Duration.ofDays(7).minusSeconds(1)), List.of(0, 1)));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void spanWeeksOfTracesNamesTheTracesWeeks(Duration intoTheWeek, List<Integer> expectedWeekOffsets) {
+        var monday = randomMonday();
+        var traceId = ID_GENERATOR.generateId(monday.atStartOfDay().toInstant(ZoneOffset.UTC).plus(intoTheWeek));
+
+        var actualWeeks = WeeklyPartitions.spanWeeksOfTraces(List.of(traceId));
+
+        var expectedWeeks = expectedWeekOffsets.stream().map(offset -> partition(monday.plusWeeks(offset))).toList();
+        assertThat(actualWeeks).isEqualTo(expectedWeeks);
+    }
+
+    @Test
+    void spanWeeksOfTracesNamesEachWeekOnceAscending() {
+        // A week apart, passed newest-first: the newer trace's week is also the older one's next week.
+        var monday = randomMonday();
+        var olderIdAt = monday.atStartOfDay().toInstant(ZoneOffset.UTC).plus(Duration.ofDays(2));
+        var older = ID_GENERATOR.generateId(olderIdAt);
+        var newer = ID_GENERATOR.generateId(olderIdAt.plus(Duration.ofDays(7)));
+
+        var actualWeeks = WeeklyPartitions.spanWeeksOfTraces(List.of(newer, older));
+
+        var expectedWeeks = List.of(partition(monday), partition(monday.plusWeeks(1)),
+                partition(monday.plusWeeks(2)));
+        assertThat(actualWeeks).isEqualTo(expectedWeeks);
+    }
+
+    @Test
+    void spanWeeksOfTracesOfANonV7IdNamesTheEpochWeekAndTheNext() {
+        // Total, unlike weeksOf: a non-v7 id is stored in the epoch's week, which starts on Monday 1969-12-29.
+        var actualWeeks = WeeklyPartitions.spanWeeksOfTraces(List.of(UUID.randomUUID()));
+
+        assertThat(actualWeeks).isEqualTo(List.of(19691229L, 19700105L));
+    }
+
+    /** A Monday in the last ten years. */
+    private LocalDate randomMonday() {
+        return LocalDate.now(ZoneOffset.UTC)
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                .minusWeeks(ThreadLocalRandom.current().nextInt(1, 520));
+    }
+
+    /** A week's partition value, its Monday as {@code yyyyMMdd}, computed independently of the derivation. */
+    private long partition(LocalDate monday) {
+        return Long.parseLong(monday.format(DateTimeFormatter.BASIC_ISO_DATE));
     }
 
     /**
