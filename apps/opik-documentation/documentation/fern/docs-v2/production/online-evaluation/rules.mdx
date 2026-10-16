@@ -57,32 +57,21 @@ Use the **Enabled** toggle in the footer to create the evaluator in a paused sta
 
 ## LLM-as-a-Judge
 
-An LLM-as-a-Judge evaluator sends one prompt to a model and reads back the scores. New judges start with a **Task completion** prompt for the selected scope, with a single Boolean score. Edit it or replace it with a template.
+An LLM-as-a-Judge evaluator sends a prompt to a model and reads back the scores. By default, it works as an agent-as-a-judge: the judge receives the whole trace, thread or span, and can explore it before it scores.
 
-### Write the prompt
+### Agent-as-a-Judge
 
-The judge uses a single prompt. Write your instructions and the data to judge in the same text.
+Put the variable for the whole item in your prompt. The judge receives the item, whatever its shape, so you don't need to know which fields hold the data.
 
-Type `{{` to insert a variable. A picker lists the fields found in your latest traces or spans. Pick a field, or type a path with `.` for objects and `[` for arrays, for example `{{input.question}}`, `{{output}}` or `{{metadata.customer_tier}}`. Paths must start with `input`, `output` or `metadata`.
+| Variable      | Scope   | What the judge receives                   |
+| ------------- | ------- | ----------------------------------------- |
+| `{{trace}}`   | Traces  | The full trace, with its spans            |
+| `{{span}}`    | Spans   | The full span                             |
+| `{{context}}` | Threads | The conversation, see [Threads](#threads) |
 
-<Frame>
-  <img src="/img/production/online_evaluation_variable_picker.png" alt="The variable picker opened by typing two curly braces in the prompt" />
-</Frame>
+New judges start with a **Task completion** prompt that already uses the variable for the selected scope. Edit the instructions, or load a [template](#templates).
 
-You don't need to describe the output format. Opik adds the JSON format for your scores to the prompt when the evaluator runs.
-
-### Reserved variables
-
-Some variables give the judge a whole item instead of one field:
-
-| Variable      | Scope   | What the judge receives                       |
-| ------------- | ------- | --------------------------------------------- |
-| `{{trace}}`   | Traces  | The full trace, with its spans                |
-| `{{spans}}`   | Traces  | All the spans of the trace, as JSON           |
-| `{{span}}`    | Spans   | The full span                                 |
-| `{{context}}` | Threads | The conversation, see [Threads](#threads)     |
-
-`{{trace}}` and `{{span}}` work on any trace shape, so you don't need to know where each field lives. With a model that supports tool calling, the judge can also inspect the item with these tools:
+With a model that supports tool calling, the judge can inspect the item with these tools before it scores:
 
 - `read`: read the trace or one of its spans
 - `jq`: pull out a specific path
@@ -90,9 +79,11 @@ Some variables give the judge a whole item instead of one field:
 - `get_trace_spans`: list the trace's spans
 - `get_attachment`: fetch an attached file as image, audio or text
 
-Opik truncates large items in the prompt and lets the judge read only the parts it needs. A small trace fits in the prompt and the judge answers in one call. On a model without tool calling, the judge gets the truncated item in a single call.
+Opik truncates large items in the prompt, and the judge reads only the parts it needs. A small trace fits in the prompt, so the judge answers in one call. On a model without tool calling, the judge gets the truncated item in a single call.
 
-Use a field path such as `{{output}}` when a metric should always score the same field. The input stays fixed, so scores stay comparable over time.
+This is the best fit for agents: the judge can check which tools ran, in which order, and what they returned, not only the final answer.
+
+You don't need to describe the output format. Opik adds the JSON format for your scores to the prompt when the evaluator runs.
 
 ### Templates
 
@@ -131,6 +122,18 @@ Every score is stored as a feedback score with its name.
 On trace and span scope, the buttons at the bottom of the prompt add an image, audio or video. Enter a URL or a variable, for example `{{input.image_url}}`. Image URLs and base64 encoded images are supported.
 
 For multimodal agents, `{{trace}}` is often simpler: the judge can fetch the trace's attachments with the `get_attachment` tool.
+
+### Advanced: insert specific fields
+
+When you know which fields to judge, insert only those fields instead of the whole item. The prompt is smaller, so evaluations cost less and run faster. The judge always sees the same fields, so the scores stay comparable over time.
+
+Type `{{` to insert a variable. A picker lists the fields found in your latest traces or spans. Pick a field, or type a path with `.` for objects and `[` for arrays, for example `{{input.question}}`, `{{output}}` or `{{metadata.customer_tier}}`. Paths must start with `input`, `output` or `metadata`. On trace scope, `{{spans}}` inserts all the spans of the trace as JSON.
+
+<Frame>
+  <img src="/img/production/online_evaluation_variable_picker.png" alt="The variable picker opened by typing two curly braces in the prompt" />
+</Frame>
+
+Field variables are not available on thread scope, where the prompt uses only `{{context}}`.
 
 ## Decision models
 
