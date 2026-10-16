@@ -15,10 +15,15 @@ export function clientIdentifier(): string {
     .digest("hex");
 }
 
-function userName(): string {
+// Mirrors Python's `getpass.getuser()` and Opik's "unknown" fallback, so a host
+// with no passwd entry (e.g. a container running as an arbitrary UID) hashes the same in both SDKs.
+export function userName(env: NodeJS.ProcessEnv = process.env): string {
+  for (const name of ["LOGNAME", "USER", "LNAME", "USERNAME"]) {
+    if (env[name]) return env[name];
+  }
   try {
     return os.userInfo().username;
   } catch {
-    return "";
+    return "unknown";
   }
 }
