@@ -5,6 +5,7 @@ import com.google.common.cache.CacheBuilder;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RHyperLogLogReactive;
 import org.redisson.api.RedissonReactiveClient;
@@ -20,6 +21,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 @Singleton
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class ActiveClientsService {
 
     public enum ClientType {
@@ -31,7 +33,7 @@ public class ActiveClientsService {
     private static final String TOTAL_SDK_CLIENTS = "total_sdk_clients";
     private static final String TOTAL_UI_CLIENTS = "total_ui_clients";
 
-    private final RedissonReactiveClient redisClient;
+    private final @NonNull RedissonReactiveClient redisClient;
 
     // An SDK sends thousands of requests a day; only the first per client needs to reach Redis. Bounded, so unique
     // junk IDs cannot grow memory, and expiring, so a client is re-added daily should the Redis key ever be lost.
@@ -40,11 +42,6 @@ public class ActiveClientsService {
             .maximumSize(10_000)
             .expireAfterWrite(1, TimeUnit.DAYS)
             .build();
-
-    @Inject
-    public ActiveClientsService(@NonNull RedissonReactiveClient redisClient) {
-        this.redisClient = redisClient;
-    }
 
     /** Fire-and-forget: never blocks or fails the request that carried the identifier. */
     public void record(@NonNull ClientType type, @NonNull String clientId) {
@@ -59,7 +56,7 @@ public class ActiveClientsService {
                         },
                         error -> {
                             recorded.invalidate(cacheKey);
-                            log.warn("Failed to record active client", error);
+                            log.warn("Failed to record active client of type '{}'", type, error);
                         });
     }
 
