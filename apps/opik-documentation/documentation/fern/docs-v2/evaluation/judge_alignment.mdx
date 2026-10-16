@@ -115,6 +115,10 @@ print(f"agreement {optimized.initial_score:.3f} -> {optimized.score:.3f}")
 
 Checkpoint: the output shows the starting agreement and the best agreement.
 
+<Frame>
+  <img src="/img/evaluation/judge_optimization_run.png" alt="MetaPrompt optimization run in Opik, showing agreement by trial" />
+</Frame>
+
 The optimizer scores candidates on the same 10 items it learns from. Treat any gain as a check that the setup works, not as proof that the judge generalizes.
 
 Opik offers several optimizers. [MetaPrompt](/development/optimization-runs/algorithms/metaprompt_optimizer) refines a prompt by having an LLM analyze and rewrite it, which is what this step uses. [GEPA](/development/optimization-runs/algorithms/gepa_optimizer) optimizes a system prompt by reflecting on its results. For a comparison, see the [optimizer overview](/development/optimization-runs/algorithms/overview).
@@ -142,6 +146,10 @@ else:
 ```
 
 Checkpoint: open **Prompts** in Opik. `support-scope-judge` has a new version, with the change description, if the run improved.
+
+<Frame>
+  <img src="/img/evaluation/judge_prompt_versions.png" alt="Prompt Library version history for the judge prompt, with the optimized version at the top" />
+</Frame>
 
 ## Step 4: Score the experiment output with the optimized judge
 
@@ -181,6 +189,10 @@ for name, values in gaps.items():
 
 Checkpoint: the output shows a mean gap for each judge. A smaller gap for `support_scope_optimized` means the new version agrees better with your reviewers on these traces. In the experiment's Traces table, you can also compare the two score columns side by side.
 
+<Frame>
+  <img src="/img/evaluation/judge_experiment_optimized_vs_human.png" alt="Experiment with the original judge, the optimized judge and the human scores side by side" />
+</Frame>
+
 ## Step 5: Create an online evaluation rule with the optimized prompt
 
 An [online evaluation rule](/production/online-evaluation/rules) runs an LLM judge on traces as they're logged. Create one with the optimized rubric, so production traces are scored the same way as your experiments.
@@ -207,16 +219,6 @@ Checkpoint: the rule is enabled, and it appears in the project's rules list.
 The rule from step 5 scores production traces as they're logged, at the sampling rate you set. Review the `support_scope_optimized` scores in the project's Traces tab, and read the reasons on the low scores.
 
 When you save a new prompt version later, update the rule's prompt to match. That keeps production and your evaluations on the same rubric. The rules page explains how to run a rule on traces that were logged before it existed.
-
-## Troubleshooting
-
-| Problem | Likely cause | Fix |
-| --- | --- | --- |
-| The dataset has 0 items | The traces aren't scored, or the score names don't match | Score every trace in the queue. The names must be `support_scope` and `support_scope_human`. |
-| Every candidate scores 0 | The candidates lost the output format | Keep the format in the system message, and optimize only the user message. |
-| The best score is much higher than the starting score | The optimizer saw the scores, or the set is small | Check `task_context_columns`, and check that the saved text has no score or reason placeholders. |
-| The judge disagrees with you on borderline items | The rubric doesn't say where the line is | Write the rule down, score by it, and anchor each band on substance, not tone. |
-| The rule doesn't score new traces | The sampling rate is 0%, or a variable mapping doesn't match the trace fields | Check the sampling rate, and check that `input.input` and `output.output` exist on the traces. |
 
 ## Next steps
 
