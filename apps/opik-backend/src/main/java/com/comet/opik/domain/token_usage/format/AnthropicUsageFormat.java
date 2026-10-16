@@ -99,11 +99,12 @@ final class AnthropicUsageFormat implements UsageFormat {
      */
     private static NativeUsage fromLiteLlm(VariantInput input) {
         var keys = input.keys();
-        long cacheRead = keys.firstNonZero("cache_read_input_tokens", "prompt_tokens_details.cached_tokens",
-                "cache_read_tokens");
+        // A client that saw no cache reads may still send its zero next to another client's count of them.
+        long cacheRead = Math.max(keys.get("cache_read_input_tokens"),
+                Math.max(keys.get("prompt_tokens_details.cached_tokens"), keys.get("cache_read_tokens")));
         var cacheWrites = CacheWrites.of(keys, "cache_creation_token_details.ephemeral_5m_input_tokens",
                 "cache_creation_token_details.ephemeral_1h_input_tokens",
-                keys.firstNonZero("cache_creation_input_tokens", "cache_write_tokens", "cache_creation_tokens"));
+                keys.first("cache_creation_input_tokens", "cache_write_tokens", "cache_creation_tokens"));
         long promptTokens = keys.get("prompt_tokens");
         return builder(input)
                 .inputTokens(keys.hasAny("prompt_tokens_details.cached_tokens",

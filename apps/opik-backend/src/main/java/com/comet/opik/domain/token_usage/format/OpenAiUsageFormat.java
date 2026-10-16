@@ -24,11 +24,7 @@ final class OpenAiUsageFormat implements UsageFormat {
                     OpenAiUsageFormat::fromResponses),
             new InputVariant("openinference",
                     keys -> keys.hasAny("prompt", "completion"),
-                    OpenAiUsageFormat::fromOpenInference),
-            // Gemini usage under a provider serving Gemini models through an OpenAI-compatible API.
-            new InputVariant("gemini_style",
-                    keys -> keys.hasAny("prompt_token_count", "candidates_token_count"),
-                    OpenAiUsageFormat::fromGemini));
+                    OpenAiUsageFormat::fromOpenInference));
 
     @Override
     public List<InputVariant> inputVariants() {
@@ -42,11 +38,13 @@ final class OpenAiUsageFormat implements UsageFormat {
     private static NativeUsage fromChatCompletions(VariantInput input) {
         // Bare cache_read_input_tokens comes from flat OTel spans, cache_read.input_tokens from OTel GenAI spans (whose
         // input_tokens OTel ingestion stores as prompt_tokens), bare cached_tokens from flattened detail leaves.
-        // OpenRouter reports writes for the providers that bill them (Anthropic) in the prompt details.
+        // OpenRouter reports writes for the providers that bill them (Anthropic) in the prompt details. Gemini's
+        // cached_content_token_count comes from Gemini usage the SDK logged under another provider.
         var keys = input.keys();
         return chatCompletions(input,
                 keys.first("prompt_tokens_details.cached_tokens", "input_tokens_details.cached_tokens",
-                        "cache_read_input_tokens", "cache_read.input_tokens", "cached_tokens", "cache_read_tokens"),
+                        "cache_read_input_tokens", "cache_read.input_tokens", "cached_tokens", "cache_read_tokens",
+                        "cached_content_token_count"),
                 keys.first("prompt_tokens_details.cache_write_tokens", "prompt_tokens_details.cache_creation_tokens",
                         "cache_creation_input_tokens", "cache_creation.input_tokens", "cache_write_tokens",
                         "cache_creation_tokens"));
@@ -108,26 +106,6 @@ final class OpenAiUsageFormat implements UsageFormat {
                 .reasoningTokens(keys.get("completion_details.reasoning"))
                 .audioCompletionTokens(keys.get("completion_details.audio"))
                 .totalTokens(keys.get("total"))
-                .build();
-    }
-
-    /**
-     * Gemini's prompt includes its cache, and its thoughts are output outside the candidates. Tool results fed back to
-     * the model count as prompt.
-     */
-    private static NativeUsage fromGemini(VariantInput input) {
-        var keys = input.keys();
-        long cachedTokens = keys.get("cached_content_token_count");
-        long thoughtsTokens = keys.get("thoughts_token_count");
-        // Gemini's own total also counts thoughts and tool use, so only the cache-larger-than-prompt check applies.
-        long promptTokens = input.includingCache(
-                keys.get("prompt_token_count") + keys.get("tool_use_prompt_token_count"), cachedTokens, null);
-        return builder(input)
-                .promptTokens(promptTokens)
-                .cachedTokens(cachedTokens)
-                .completionTokens(keys.get("candidates_token_count") + thoughtsTokens)
-                .reasoningTokens(thoughtsTokens)
-                .totalTokens(keys.get("total_token_count"))
                 .build();
     }
 

@@ -211,13 +211,7 @@ public final class UsageCases {
                 new UsageCase("Azure OpenAI", "azure",
                         usage("prompt_tokens", 40, "completion_tokens", 2, "total_tokens", 42),
                         OpenAiNativeUsage.builder().provider("azure").variant("chat_completions").promptTokens(40)
-                                .completionTokens(2).totalTokens(42).build()),
-                new UsageCase("Gemini usage under an OpenAI-compatible provider", "openrouter",
-                        usage("prompt_token_count", 1000, "candidates_token_count", 100, "thoughts_token_count", 50,
-                                "cached_content_token_count", 200, "total_token_count", 1150),
-                        OpenAiNativeUsage.builder().provider("openrouter").variant("gemini_style").promptTokens(1000)
-                                .cachedTokens(200).completionTokens(150).reasoningTokens(50).totalTokens(1150)
-                                .build()));
+                                .completionTokens(2).totalTokens(42).build()));
     }
 
     public static Stream<UsageCase> gemini() {

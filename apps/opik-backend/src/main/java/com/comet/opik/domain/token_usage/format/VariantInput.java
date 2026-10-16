@@ -10,6 +10,7 @@ record VariantInput(
         @NonNull String provider,
         @NonNull String variant,
         @NonNull UsageKeys keys,
+        @Nullable Integer outerPromptTokens,
         @NonNull List<UsageWarning> warnings) {
 
     /** The input without the cache, for a variant whose input includes it unless the numbers say otherwise. */
@@ -38,10 +39,7 @@ record VariantInput(
             return false;
         }
         Long total = keys.reportedTotal();
-        if (total != null && outputTokens != null && total == input + cacheTokens + outputTokens) {
-            return false;
-        }
-        Long outerPromptTokens = keys.outerPromptTokens();
-        return outerPromptTokens == null || outerPromptTokens != input + cacheTokens;
+        return (total == null || outputTokens == null || total != input + cacheTokens + outputTokens)
+                && (outerPromptTokens == null || outerPromptTokens != input + cacheTokens);
     }
 }
