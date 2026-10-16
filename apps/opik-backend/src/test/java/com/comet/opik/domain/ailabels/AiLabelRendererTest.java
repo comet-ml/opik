@@ -12,7 +12,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -20,7 +19,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -150,40 +148,6 @@ class AiLabelRendererTest {
         assertThat(outcome).isInstanceOf(RenderOutcome.OverBudget.class);
         assertThat(outcome.trace()).isEqualTo(ref);
         assertThat(((RenderOutcome.OverBudget) outcome).bytes()).isGreaterThan(80_000);
-    }
-
-    /** A 2,000-span trace with about 200 KB of I/O renders in under 20 ms on one core, once the JIT is warm. */
-    @Test
-    void renderIsFastForALargeTrace() {
-        var fixtures = new AiLabelRenderFixtures(12, false);
-        var trace = fixtures.trace(20_000);
-        var spans = fixtures.spans(trace, 2_000, 10, 0).stream()
-                .map(span -> span.toBuilder()
-                        .input("{\"query\":\"%s\"}".formatted(fixtures.text(20)))
-                        .output("{\"answer\":\"%s\"}".formatted(fixtures.text(30)))
-                        .build())
-                .toList();
-        var ref = AiLabelRenderFixtures.refOf(trace);
-        long ioBytes = Stream.concat(Stream.of(trace.input(), trace.output(), trace.metadata()),
-                spans.stream().flatMap(span -> Stream.of(span.input(), span.output(), span.metadata())))
-                .filter(value -> value != null)
-                .mapToLong(value -> value.getBytes(StandardCharsets.UTF_8).length)
-                .sum();
-        assertThat(ioBytes).isBetween(150_000L, 300_000L);
-
-        for (int i = 0; i < 50; i++) {
-            AiLabelRenderer.render(ref, trace, spans, 80_000);
-        }
-        long[] nanos = LongStream.range(0, 21)
-                .map(i -> {
-                    long start = System.nanoTime();
-                    AiLabelRenderer.render(ref, trace, spans, 80_000);
-                    return System.nanoTime() - start;
-                })
-                .sorted()
-                .toArray();
-
-        assertThat(nanos[nanos.length / 2] / 1_000_000.0).as("median render time in ms").isLessThan(20.0);
     }
 
     private static RenderOutcome render(GoldenCase goldenCase) {

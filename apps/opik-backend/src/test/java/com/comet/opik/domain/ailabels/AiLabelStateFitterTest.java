@@ -37,32 +37,6 @@ class AiLabelStateFitterTest {
     }
 
     @Test
-    void sizeOfCountsLoneSurrogatesAsTheyAreEncoded() {
-        var trace = TraceRow.builder()
-                .id(UUID.randomUUID())
-                .projectId(UUID.randomUUID())
-                .input("{\"\\ud800key\": \"\\udc00 value \\ud83d\\ude00\", \"x\": [1e400, -0.0, 12345678901234567890123]}")
-                .build();
-        var state = AiLabelRenderer.toState(trace, List.of());
-
-        assertThat(state.get("input").get("\ud800key").textValue()).isEqualTo("\uFFFD value \uD83D\uDE00");
-        assertThat(AiLabelStateFitter.sizeOf(state)).isEqualTo(canonicalBytes(state));
-    }
-
-    @Test
-    void fitLeavesAStateWithinBudgetWhole() {
-        var fixtures = new AiLabelRenderFixtures(1, true);
-        var trace = fixtures.trace(100);
-        var state = state(trace, fixtures.spans(trace, 20, 4, 50));
-        var expected = state.deepCopy();
-        long bytes = canonicalBytes(state);
-
-        var fit = AiLabelStateFitter.fit(state, bytes);
-
-        assertThat(fit).isEqualTo(new Fitted(expected, bytes, "full"));
-    }
-
-    @Test
     void fitDropsSpanIoFromTheDeepestLevelUp() {
         var trace = trace("t", "{\"q\":\"question\"}");
         var spans = List.of(

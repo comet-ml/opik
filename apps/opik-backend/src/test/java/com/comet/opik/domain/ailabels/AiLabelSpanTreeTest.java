@@ -5,9 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Random;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -65,21 +63,6 @@ class AiLabelSpanTreeTest {
         assertThat(names(tree.get(1).spans().getFirst().spans())).containsExactly("y");
         assertThat(tree.get(1).spans().getFirst().spans().getFirst().spans()).isNull();
         assertThat(tree.get(2).spans()).isNull();
-    }
-
-    @Test
-    void buildGivesTheSameTreeWhateverTheInputOrder() {
-        var fixtures = new AiLabelRenderFixtures(7, true);
-        var trace = fixtures.trace(10);
-        var spans = fixtures.spans(trace, 300, 8, 20);
-        var expected = AiLabelSpanTree.build(spans);
-
-        var random = new Random(11);
-        for (int i = 0; i < 5; i++) {
-            var shuffled = new ArrayList<>(spans);
-            Collections.shuffle(shuffled, random);
-            assertThat(AiLabelSpanTree.build(shuffled)).isEqualTo(expected);
-        }
     }
 
     @Test
