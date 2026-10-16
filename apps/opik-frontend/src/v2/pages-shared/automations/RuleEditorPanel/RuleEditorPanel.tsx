@@ -56,6 +56,7 @@ const RuleEditorPanel: React.FC<RuleEditorPanelProps> = ({
       open={open}
       onClose={handleClose}
       minWidth={700}
+      blockOverlayClose
       header={
         <ResizableSidePanelTopBar
           variant="form"

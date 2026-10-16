@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 
@@ -26,7 +20,6 @@ interface BaseFeedbackDefinitionsSelectBoxProps {
   className?: string;
   disabled?: boolean;
   valueField?: keyof FeedbackDefinition;
-  onInnerDialogOpenChange?: (open: boolean) => void;
 }
 
 interface SingleSelectFeedbackDefinitionsProps
@@ -53,12 +46,7 @@ type FeedbackDefinitionsSelectBoxProps =
 const FeedbackDefinitionsSelectBox: React.FC<
   FeedbackDefinitionsSelectBoxProps
 > = (props) => {
-  const {
-    className,
-    disabled,
-    valueField = "id",
-    onInnerDialogOpenChange,
-  } = props;
+  const { className, disabled, valueField = "id" } = props;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [feedbackDefinitionDialogOpen, setFeedbackDefinitionDialogOpen] =
@@ -83,10 +71,6 @@ const FeedbackDefinitionsSelectBox: React.FC<
       props.onChange(newValue);
     }
   };
-
-  useLayoutEffect(() => {
-    onInnerDialogOpenChange?.(feedbackDefinitionDialogOpen);
-  }, [feedbackDefinitionDialogOpen, onInnerDialogOpenChange]);
 
   const { data, isLoading } = useFeedbackDefinitionsList(
     {
