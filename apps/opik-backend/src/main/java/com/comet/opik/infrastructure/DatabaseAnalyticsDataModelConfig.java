@@ -103,7 +103,7 @@ import lombok.Builder;
  * {@code spans} keeps {@code id_at} as a 32-bit {@code DateTime} that wraps far-future ids, so a week bound there would
  * drop rows. Turn it on once the backfill logs that it is complete; before that, unindexed spans would be
  * skipped. Registration is asynchronous, so a read right after a write can miss the new spans until their week is
- * indexed.</p>
+ * indexed, except for {@code SpanDAO}'s trace-keyed reads, which also admit the weeks of the traces themselves.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(

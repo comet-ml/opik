@@ -3,10 +3,13 @@ package com.comet.opik.infrastructure;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.ProjectStats;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.SpanField;
+import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadField;
@@ -31,6 +34,7 @@ import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
@@ -44,17 +48,20 @@ import com.comet.opik.infrastructure.SpanWeeksReadFixtures.FarFutureTrace;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.AsyncUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -70,6 +77,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -77,12 +85,13 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions.EXPERIMENT_IGNORED_FIELDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
  * The trace-keyed spans reads bounded by the span_weeks index ({@code spanWeeksReadEnabled}) return every span of
  * their traces, a far-future one included, on the weekly-partitioned spans table: each read is compared as a whole
  * against what its traces' spans add up to. Live registration is on, and each fixture waits for its weeks to be
- * indexed; the async gap after a write is accepted behaviour, not under test.
+ * indexed. SpanWeeksReadBoundUnregisteredTest covers the reads before the weeks are indexed.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -119,12 +128,7 @@ class SpanWeeksReadBoundTest {
                 clickHouseContainer, DATABASE_NAME);
         MigrationUtils.runMysqlDbMigration(mysqlContainer);
         MigrationUtils.runClickhouseDbMigration(clickHouseContainer);
-        // The successor has no public API before the cutover, so it is installed the way the cutover does it.
-        TransactionTemplateAsync.create(databaseAnalyticsFactory.build())
-                .nonTransaction(connection -> Mono.from(connection
-                        .createStatement("EXCHANGE TABLES spans AND spans_local_v2 ON CLUSTER '{cluster}'")
-                        .execute()))
-                .block();
+        installPartitionedSpans(databaseAnalyticsFactory);
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(mysqlContainer.getJdbcUrl())
@@ -145,10 +149,12 @@ class SpanWeeksReadBoundTest {
     }
 
     private TraceResourceClient traceResourceClient;
+    private SpanResourceClient spanResourceClient;
     private ExperimentResourceClient experimentResourceClient;
     private OptimizationResourceClient optimizationResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private ExperimentAggregatesService experimentAggregatesService;
+    private SpanService spanService;
     private SpanWeeksReadFixtures fixtures;
 
     @BeforeAll
@@ -158,13 +164,15 @@ class SpanWeeksReadBoundTest {
         ClientSupportUtils.config(clientSupport);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         this.traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
+        this.spanResourceClient = new SpanResourceClient(clientSupport, baseUrl);
         this.experimentResourceClient = new ExperimentResourceClient(clientSupport, baseUrl, factory);
         this.optimizationResourceClient = new OptimizationResourceClient(clientSupport, baseUrl, factory);
         this.datasetResourceClient = new DatasetResourceClient(clientSupport, baseUrl);
         this.experimentAggregatesService = experimentAggregatesService;
+        this.spanService = spanService;
         this.fixtures = new SpanWeeksReadFixtures(API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER, factory,
                 new ProjectResourceClient(clientSupport, baseUrl, factory), traceResourceClient,
-                new SpanResourceClient(clientSupport, baseUrl), datasetResourceClient, experimentResourceClient,
+                spanResourceClient, datasetResourceClient, experimentResourceClient,
                 spanService);
     }
 
@@ -267,47 +275,169 @@ class SpanWeeksReadBoundTest {
                         WORKSPACE_NAME))));
     }
 
+    /** A thread id filter activates the trace-set prefilter; a cost sort disqualifies the page pushdown. */
+    private Stream<Arguments> threadListCountsAFarFutureSpanOfItsTrace() {
+        var pagePushdownThreadId = fixtures.randomThreadId();
+        var traceSetThreadId = fixtures.randomThreadId();
+        var windowThreadId = fixtures.randomThreadId();
+        return Stream.of(
+                arguments(Named.of("page pushdown", pagePushdownThreadId), null, null),
+                arguments(Named.of("trace set", traceSetThreadId), threadIdFilter(traceSetThreadId), null),
+                arguments(Named.of("window", windowThreadId), null, List.of(SortingField.builder()
+                        .field(SortableFields.TOTAL_ESTIMATED_COST)
+                        .direction(Direction.DESC)
+                        .build())));
+    }
+
     /** The thread list's three span reads: the page pushdown, the trace-set prefilter, and the plain window. */
-    @ParameterizedTest
-    @ValueSource(strings = {"page pushdown", "trace set", "window"})
-    void threadListCountsAFarFutureSpanOfItsTrace(String variant) {
-        var trace = fixtures.createFarFutureTrace();
-        // A thread id filter activates the trace-set prefilter; a cost sort disqualifies the page pushdown.
-        var filters = variant.equals("trace set") ? threadIdFilter(trace.trace().threadId()) : null;
-        var sorting = variant.equals("window")
-                ? List.of(SortingField.builder().field(SortableFields.TOTAL_ESTIMATED_COST)
-                        .direction(Direction.DESC).build())
-                : null;
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void threadListCountsAFarFutureSpanOfItsTrace(String threadId, List<TraceThreadFilter> filters,
+            List<SortingField> sorting) {
+        var trace = fixtures.createFarFutureTrace(threadId);
 
-        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> TraceAssertions.assertThreads(
-                List.of(expectedThread(trace)),
-                traceResourceClient.getTraceThreads(trace.projectId(), null, API_KEY, WORKSPACE_NAME, filters,
-                        sorting, Map.of()).content()));
+        var expectedThreads = List.of(expectedThread(trace));
+        // Threads are materialised from their traces asynchronously.
+        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            var actualThreads = traceResourceClient.getTraceThreads(trace.projectId(), null, API_KEY, WORKSPACE_NAME,
+                    filters, sorting, Map.of()).content();
+            TraceAssertions.assertThreads(expectedThreads, actualThreads);
+        });
     }
 
-    @ParameterizedTest(name = "trace set: {0}")
-    @ValueSource(booleans = {false, true})
-    void threadStatsCountAFarFutureSpanOfItsTrace(boolean traceSet) {
+    private Stream<Arguments> threadStatsCountAFarFutureSpanOfItsTrace() {
+        var projectThreadId = fixtures.randomThreadId();
+        var traceSetThreadId = fixtures.randomThreadId();
+        return Stream.of(
+                arguments(Named.of("project", projectThreadId), null),
+                arguments(Named.of("trace set", traceSetThreadId), threadIdFilter(traceSetThreadId)));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void threadStatsCountAFarFutureSpanOfItsTrace(String threadId, List<TraceThreadFilter> filters) {
+        var trace = fixtures.createFarFutureTrace(threadId);
+
+        // One thread: its average cost is its total.
+        var expectedStats = withExplicitCost(
+                StatsUtils.getProjectThreadStatItems(List.of(trace.trace()), trace.spans(), null),
+                trace.totalCost(), trace.totalCost());
+        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            var actualStats = traceResourceClient.getTraceThreadStats(null, trace.projectId(), API_KEY,
+                    WORKSPACE_NAME, filters, Map.of()).stats();
+            TraceAssertions.assertStats(actualStats, expectedStats);
+        });
+    }
+
+    /** No span has a score, so an is-empty feedback score filter keeps both, and turns on the span id prefilter. */
+    private Stream<Arguments> traceSpansPageCountsAFarFutureSpan() {
+        return Stream.of(
+                arguments(Named.of("no filter", null)),
+                arguments(Named.of("feedback score filter", List.of(SpanFilter.builder()
+                        .field(SpanField.FEEDBACK_SCORES)
+                        .operator(Operator.IS_EMPTY)
+                        .key("score-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                        .value("")
+                        .build()))));
+    }
+
+    /**
+     * The spans of a trace and their count, as the trace detail reads them: through the page-keyed aggregates
+     * without filters, and through the span id prefilter of both statements with a feedback score filter.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void traceSpansPageCountsAFarFutureSpan(List<SpanFilter> filters) {
         var trace = fixtures.createFarFutureTrace();
-        var filters = traceSet ? threadIdFilter(trace.trace().threadId()) : null;
-        // The helper prices spans from their model and usage; these carry an explicit cost, so the two cost stats
-        // are the trace's own total (one thread: the average is the sum).
-        var expected = StatsUtils.getProjectThreadStatItems(List.of(trace.trace()), trace.spans(), null)
-                .stream().<ProjectStats.ProjectStatItem<?>>map(stat -> switch (stat.getName()) {
-                    case "total_estimated_cost", "total_estimated_cost_sum" ->
-                        ProjectStats.AvgValueStat.builder().name(stat.getName()).value(trace.totalCost().doubleValue())
-                                .type(ProjectStats.StatsType.AVG).build();
-                    default -> stat;
-                })
+
+        var actualPage = spanResourceClient.findSpans(WORKSPACE_NAME, API_KEY, trace.projectName(), null, 1, 10,
+                trace.trace().id(), null, filters, null, null);
+
+        var expectedSpans = fixtures.expectedSpans(trace.spans());
+        SpanAssertions.assertPage(actualPage, 1, expectedSpans.size(), expectedSpans.size());
+        SpanAssertions.assertSpan(actualPage.content(), expectedSpans, USER);
+    }
+
+    @Test
+    void traceSpansStreamIncludesAFarFutureSpan() {
+        var trace = fixtures.createFarFutureTrace();
+
+        var actualSpans = fixtures.streamTraceSpans(trace);
+
+        var expectedSpans = fixtures.expectedSpans(trace.spans());
+        SpanAssertions.assertSpan(actualSpans, expectedSpans, USER);
+    }
+
+    /**
+     * The span stats scoped to a trace share the find statements' search criteria but carry no span_weeks bound, so
+     * they must not be given its {@code :trace_weeks}: an unused parameter fails the statement.
+     */
+    @Test
+    void traceSpanStatsCountAFarFutureSpan() {
+        var trace = fixtures.createFarFutureTrace();
+
+        var actualStats = spanResourceClient.getSpansStats(trace.projectName(), null, null, API_KEY, WORKSPACE_NAME,
+                Map.of("trace_id", trace.trace().id().toString())).stats();
+
+        // Both spans have a positive cost, so the average is over both.
+        var expectedStats = withExplicitCost(StatsUtils.getProjectSpanStatItems(trace.spans()),
+                trace.totalCost().divide(BigDecimal.valueOf(trace.spans().size())), trace.totalCost());
+        TraceAssertions.assertStats(actualStats, expectedStats);
+    }
+
+    @Test
+    void spansByTraceIdsIncludeAFarFutureSpan() {
+        var trace = fixtures.createFarFutureTrace();
+
+        var actualSpanIds = fixtures.getSpanIdsOfDatasetItemFromTrace(trace.trace().id());
+
+        var expectedSpanIds = trace.spans().stream().map(Span::id).toList();
+        assertThat(actualSpanIds).containsExactlyInAnyOrderElementsOf(expectedSpanIds);
+    }
+
+    /**
+     * Read only by the thread online scorers, to route between inline and agentic scoring, so through the service. The
+     * estimate sums ClickHouse's own lengths of the stored payloads, so it is compared against the same spans written
+     * this week, alone and together with the trace.
+     */
+    @Test
+    void spansSizeOfTracesCountsAFarFutureSpan() {
+        var trace = fixtures.createFarFutureTrace();
+        var copy = fixtures.createThisWeekCopy(trace);
+        var expectedSize = spansSize(Set.of(copy.trace().id()));
+        assertThat(expectedSize).isPositive();
+
+        var actualSize = spansSize(Set.of(trace.trace().id()));
+        var actualSizeWithCopy = spansSize(Set.of(trace.trace().id(), copy.trace().id()));
+
+        assertThat(actualSize).isEqualTo(expectedSize);
+        assertThat(actualSizeWithCopy).isEqualTo(2 * expectedSize);
+    }
+
+    private long spansSize(Set<UUID> traceIds) {
+        return spanService.getSpansSizeByTraceIds(traceIds)
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, USER, WORKSPACE_ID))
+                .block();
+    }
+
+    /** The stats helpers price spans from their model and usage; the fixture's spans carry an explicit cost instead. */
+    private List<ProjectStats.ProjectStatItem<?>> withExplicitCost(List<ProjectStats.ProjectStatItem<?>> stats,
+            BigDecimal averageCost, BigDecimal totalCost) {
+        var costs = Map.of(StatsMapper.TOTAL_ESTIMATED_COST, averageCost,
+                StatsMapper.TOTAL_ESTIMATED_COST_SUM, totalCost);
+        return stats
+                .stream().<ProjectStats.ProjectStatItem<?>>map(stat -> Optional
+                        .ofNullable(costs.get(stat.getName())).<ProjectStats.ProjectStatItem<?>>map(
+                                cost -> ProjectStats.AvgValueStat.builder()
+                                        .name(stat.getName())
+                                        .value(cost.doubleValue())
+                                        .type(ProjectStats.StatsType.AVG)
+                                        .build())
+                        .orElse(stat))
                 .toList();
-
-        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> TraceAssertions.assertStats(
-                traceResourceClient.getTraceThreadStats(null, trace.projectId(), API_KEY, WORKSPACE_NAME, filters,
-                        Map.of()).stats(),
-                expected));
     }
 
-    private static Trace expectedTrace(FarFutureTrace trace) {
+    private Trace expectedTrace(FarFutureTrace trace) {
         return trace.trace().toBuilder()
                 .projectId(trace.projectId())
                 .usage(trace.totalUsage())
@@ -317,7 +447,7 @@ class SpanWeeksReadBoundTest {
     }
 
     /** One trace, so the per-trace averages are the trace's own totals. */
-    private static Experiment expectedExperiment(Experiment experiment, FarFutureTrace trace) {
+    private Experiment expectedExperiment(Experiment experiment, FarFutureTrace trace) {
         var quantiles = ExperimentsTestUtils.getQuantities(Stream.of(trace.trace()));
         return experiment.toBuilder()
                 .projectId(trace.projectId())
@@ -329,7 +459,7 @@ class SpanWeeksReadBoundTest {
                 .build();
     }
 
-    private static void assertExperiment(Experiment actual, Experiment expected) {
+    private void assertExperiment(Experiment actual, Experiment expected) {
         assertThat(actual)
                 .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
                         .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
@@ -339,7 +469,7 @@ class SpanWeeksReadBoundTest {
     }
 
     /** One experiment item over one trace: every average and percentile is that trace's own value. */
-    private static List<ProjectStats.ProjectStatItem<?>> expectedExperimentItemsStats(FarFutureTrace trace) {
+    private List<ProjectStats.ProjectStatItem<?>> expectedExperimentItemsStats(FarFutureTrace trace) {
         var cost = trace.totalCost().doubleValue();
         var duration = DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.trace().startTime(),
                 trace.trace().endTime());
@@ -371,7 +501,7 @@ class SpanWeeksReadBoundTest {
         return stats;
     }
 
-    private static TraceThread expectedThread(FarFutureTrace trace) {
+    private TraceThread expectedThread(FarFutureTrace trace) {
         var source = trace.trace();
         return TraceThread.builder()
                 .id(source.threadId())
@@ -390,11 +520,20 @@ class SpanWeeksReadBoundTest {
                 .build();
     }
 
-    private static List<TraceThreadFilter> threadIdFilter(String threadId) {
+    private List<TraceThreadFilter> threadIdFilter(String threadId) {
         return List.of(TraceThreadFilter.builder()
                 .field(TraceThreadField.ID)
                 .operator(Operator.EQUAL)
                 .value(threadId)
                 .build());
+    }
+
+    /** The partitioned successor has no public API before the cutover, so it is installed the way the cutover does. */
+    private void installPartitionedSpans(DatabaseAnalyticsFactory databaseAnalyticsFactory) {
+        TransactionTemplateAsync.create(databaseAnalyticsFactory.build())
+                .nonTransaction(connection -> Mono.from(connection
+                        .createStatement("EXCHANGE TABLES spans AND spans_local_v2 ON CLUSTER '{cluster}'")
+                        .execute()))
+                .block();
     }
 }
