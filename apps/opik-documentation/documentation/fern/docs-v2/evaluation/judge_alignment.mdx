@@ -1,0 +1,229 @@
+---
+headline: Aligning judge metrics with human scores
+og:description: Step-by-step guide to aligning an LLM-as-a-judge metric with human scores in Opik, by optimizing the judge prompt toward reviewer scores and putting the result into an online evaluation rule.
+og:site_name: Opik Documentation
+og:title: Aligning Judge Metrics with Human Scores - Opik
+subtitle: Step-by-step guide to aligning a judge metric with human scores
+title: Aligning judge metrics with human scores
+---
+
+The [Defining and evaluating custom LLM-as-a-judge metrics](/evaluation/custom_llm_judge_metrics) guide built a judge metric, ran it on a support assistant's replies, and collected human scores on those replies. This guide aligns the judge with those human scores.
+
+What we bring from that guide:
+
+- **The judge prompt**, versioned in the Prompt Library as `support-scope-judge`.
+- **The application output**: the replies in the `support-scope-judge-v1` experiment.
+- **Human scores** on those replies, collected in the `Support scope: review` annotation queue.
+
+With these, we build a dataset of customer messages, replies and human scores, optimize the judge prompt toward the human scores, save the result as a new prompt version, and put it into production as an online evaluation rule.
+
+## Prerequisites
+
+- You have completed [Defining and evaluating custom LLM-as-a-judge metrics](/evaluation/custom_llm_judge_metrics), and scored the 10 traces in the `Support scope: review` queue with `support_scope_human`.
+- The optimizer package, installed with `pip install opik-optimizer`.
+- An OpenAI API key, exported as `OPENAI_API_KEY`.
+
+The snippets run in order in one Python session or notebook. Each step uses the names defined in the steps before it.
+
+## Step 1: Create the dataset to optimize against
+
+The optimizer needs one dataset with the customer message, the application's reply, and the human score. Read them from the annotation queue, and store them in a new dataset named `support-scope-alignment`:
+
+```python
+import opik
+
+PROJECT = "judge-metrics-tutorial"
+PROMPT_NAME = "support-scope-judge"
+JUDGE_MODEL = "openai/gpt-4o"  # the same judge model the defining guide uses
+HUMAN_NAME = "support_scope_human"
+QUEUE_NAME = "Support scope: review"
+
+client = opik.Opik(project_name=PROJECT)
+
+queue = next(q for q in client.get_traces_annotation_queues(project_name=PROJECT) if q.name == QUEUE_NAME)
+
+rows = []
+for trace in queue.get_items():
+    human = next((s for s in trace.feedback_scores or [] if s.name == HUMAN_NAME), None)
+    if human is None:
+        continue  # not scored yet
+    rows.append({
+        "input": trace.input["input"],
+        "output": trace.output["output"],
+        "human_score": human.value,
+    })
+
+dataset = client.get_or_create_dataset(name="support-scope-alignment", project_name=PROJECT)
+dataset.clear()  # rebuild from the current scores on each run
+dataset.insert(rows)
+print(f"{len(rows)} items in support-scope-alignment")
+```
+
+Checkpoint: the output shows 10 items.
+
+## Step 2: Run the optimization with MetaPrompt
+
+Start from the judge prompt in the Prompt Library. `MetaPromptOptimizer` proposes rewrites of the user message. Each candidate is scored by how closely the judge agrees with the human scores, using `1 - |judge - human|`, so 1.0 means exact agreement:
+
+```python
+import json
+
+from opik.evaluation.metrics import score_result
+from opik_optimizer import ChatPrompt, MetaPromptOptimizer
+
+
+def parse_score(reply: str) -> float:
+    data = json.loads(reply[reply.index("{"): reply.rindex("}") + 1])
+    return max(0.0, min(1.0, float(data["score"])))
+
+
+def agreement(dataset_item, llm_output):
+    judged = parse_score(llm_output)
+    human = float(dataset_item["human_score"])
+    return score_result.ScoreResult(
+        name="agreement",
+        value=1.0 - abs(judged - human),
+        reason=f"judge {judged:.2f} vs human {human:.2f}",
+    )
+
+
+library = client.get_chat_prompt(name=PROMPT_NAME, project_name=PROJECT)
+system_text = next(m["content"] for m in library.template if m["role"] == "system")
+user_text = next(m["content"] for m in library.template if m["role"] == "user")
+
+starting_prompt = ChatPrompt(
+    system=system_text,   # the output format: not edited
+    user=user_text,       # the rubric: the optimizer edits this
+    model=JUDGE_MODEL,    # the judge that scores each candidate
+)
+
+optimizer = MetaPromptOptimizer(
+    model="openai/gpt-5",                       # writes candidate rubrics; any strong model works
+    task_context_columns=["input", "output"],   # the message and reply only: the scores would leak into the rubric
+)
+
+optimized = optimizer.optimize_prompt(
+    project_name=PROJECT,
+    prompt=starting_prompt,
+    dataset=dataset,
+    metric=agreement,
+    optimize_prompts="user",
+    max_trials=5,  # raise this for a longer search once the loop works
+)
+print(f"agreement {optimized.initial_score:.3f} -> {optimized.score:.3f}")
+```
+
+Checkpoint: the output shows the starting agreement and the best agreement.
+
+<Frame>
+  <img src="/img/evaluation/judge_optimization_run.png" alt="MetaPrompt optimization run in Opik, showing agreement by trial" />
+</Frame>
+
+The optimizer scores candidates on the same 10 items it learns from. Treat any gain as a check that the setup works, not as proof that the judge generalizes.
+
+Opik offers several optimizers. [MetaPrompt](/development/optimization-runs/algorithms/metaprompt_optimizer) refines a prompt by having an LLM analyze and rewrite it, which is what this step uses. [GEPA](/development/optimization-runs/algorithms/gepa_optimizer) optimizes a system prompt by reflecting on its results. For a comparison, see the [optimizer overview](/development/optimization-runs/algorithms/overview).
+
+## Step 3: Version the new prompt in the Prompt Library
+
+Save the optimized rubric as a new version of `support-scope-judge`, and only if agreement improved. The original version stays unchanged, so you can compare or roll back:
+
+```python
+new_user = optimized.prompt.user
+
+if optimized.score > optimized.initial_score and "{input}" in new_user and "{output}" in new_user:
+    client.create_chat_prompt(
+        name=PROMPT_NAME,
+        messages=[
+            {"role": "system", "content": system_text},
+            {"role": "user", "content": new_user},
+        ],
+        change_description=f"Optimized toward human scores: {optimized.initial_score:.3f} -> {optimized.score:.3f}",
+        project_name=PROJECT,
+    )
+    print("Saved a new version of support-scope-judge.")
+else:
+    print("Not saved: agreement did not improve, or the placeholders are missing.")
+```
+
+Checkpoint: open **Prompts** in Opik. `support-scope-judge` has a new version, with the change description, if the run improved.
+
+<Frame>
+  <img src="/img/evaluation/judge_prompt_versions.png" alt="Prompt Library version history for the judge prompt, with the optimized version at the top" />
+</Frame>
+
+## Step 4: Score the experiment output with the optimized judge
+
+The application's replies from `support-scope-judge-v1` are already logged. Score them with the latest judge prompt, without running the application again. `evaluate_experiment` adds the new scores to the existing experiment.
+
+This step uses the `RubricJudge` metric from Step 3 of the defining guide:
+
+```python
+from opik import evaluate_experiment
+
+latest = client.get_chat_prompt(name=PROMPT_NAME, project_name=PROJECT)  # the saved version, if one was saved
+optimized_judge = RubricJudge(messages=latest.template, name="support_scope_optimized")
+
+evaluate_experiment(
+    experiment_name="support-scope-judge-v1",
+    scoring_metrics=[optimized_judge],
+    project_name=PROJECT,
+)
+```
+
+Next, compare each judge with the human scores on the traces in the queue:
+
+```python
+gaps = {"support_scope": [], "support_scope_optimized": []}
+
+for trace in queue.get_items():
+    scores = {s.name: s.value for s in trace.feedback_scores or []}
+    if HUMAN_NAME not in scores:
+        continue
+    for name in gaps:
+        if name in scores:
+            gaps[name].append(abs(scores[name] - scores[HUMAN_NAME]))
+
+for name, values in gaps.items():
+    print(f"{name}: mean |judge - human| = {sum(values) / len(values):.3f} over {len(values)} traces")
+```
+
+Checkpoint: the output shows a mean gap for each judge. A smaller gap for `support_scope_optimized` means the new version agrees better with your reviewers on these traces. In the experiment's Traces table, you can also compare the two score columns side by side.
+
+<Frame>
+  <img src="/img/evaluation/judge_experiment_optimized_vs_human.png" alt="Experiment with the original judge, the optimized judge and the human scores side by side" />
+</Frame>
+
+## Step 5: Create an online evaluation rule with the optimized prompt
+
+An [online evaluation rule](/production/online-evaluation/rules) runs an LLM judge on traces as they're logged. Create one with the optimized rubric, so production traces are scored the same way as your experiments.
+
+Print the rubric with the placeholders in the rule's format, and copy it:
+
+```python
+print(new_user.replace("{input}", "{{input}}").replace("{output}", "{{output}}"))
+```
+
+Then, in the project's **Rules** tab, create a rule:
+
+1. **Name:** `Support scope (optimized)`.
+2. **Sampling rate:** 100%.
+3. **Model:** `gpt-4o`, the same model as the judge.
+4. **Prompt:** paste the rubric from the code above. The output format comes from the score definition, so the prompt doesn't need the JSON instruction.
+5. **Variable mapping:** `input` → `input.input`, and `output` → `output.output`.
+6. **Score definition:** a numerical score named `support_scope_optimized`, from 0 to 1.
+
+Checkpoint: the rule is enabled, and it appears in the project's rules list.
+
+## Step 6: Use the judge in production
+
+The rule from step 5 scores production traces as they're logged, at the sampling rate you set. Review the `support_scope_optimized` scores in the project's Traces tab, and read the reasons on the low scores.
+
+When you save a new prompt version later, update the rule's prompt to match. That keeps production and your evaluations on the same rubric. The rules page explains how to run a rule on traces that were logged before it existed.
+
+## Next steps
+
+- [Defining and evaluating custom LLM-as-a-judge metrics](/evaluation/custom_llm_judge_metrics): the guide this one builds on.
+- [Online evaluation rules](/production/online-evaluation/rules): scoring production traces with a judge.
+- [Annotation queues](/evaluation/advanced/annotation_queues): set up reviewer workflows for larger teams.
+- [Prompt Library version control](/development/prompt-library/version-control): manage prompt versions.
+- [MetaPrompt optimizer](/development/optimization-runs/algorithms/metaprompt_optimizer): optimizer options.
