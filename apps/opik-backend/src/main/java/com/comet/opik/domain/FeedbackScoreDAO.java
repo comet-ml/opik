@@ -8,12 +8,10 @@ import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
-import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
@@ -34,7 +32,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -77,47 +74,6 @@ public interface FeedbackScoreDAO {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
-
-    private static final String BULK_INSERT_FEEDBACK_SCORE = """
-            INSERT INTO <if(author)>authored_feedback_scores<else>feedback_scores<endif>(
-                entity_type,
-                entity_id,
-                project_id,
-                workspace_id,
-                name,
-                category_name,
-                value,
-                reason,
-                source,
-                <if(author)>author,<endif>
-                <if(author)>source_queue_id,<endif>
-                created_by,
-                last_updated_by
-            )
-            SETTINGS log_comment = '<log_comment>'
-            FORMAT Values
-                <items:{item |
-                    (
-                         :entity_type<item.index>,
-                         :entity_id<item.index>,
-                         :project_id<item.index>,
-                         :workspace_id,
-                         :name<item.index>,
-                         :category_name<item.index>,
-                         :value<item.index>,
-                         :reason<item.index>,
-                         :source<item.index>,
-                         <if(author)>:author<item.index>,<endif>
-                         <if(author)>:source_queue_id<item.index>,<endif>
-                         :user_name,
-                         :user_name
-                     )
-                     <if(item.hasNext)>
-                        ,
-                     <endif>
-                }>
-            ;
-            """;
 
     private static final String DELETE_FEEDBACK_SCORE = """
             DELETE FROM <table_name>
@@ -376,31 +332,12 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         scores.forEach(score -> Preconditions.checkArgument(score.value() != null,
                 "Feedback score '%s' cannot be stored without a value", score.name()));
 
-        if (configuration.getBulkInsert().v2ClientEnabled()) {
-            return insertJsonEachRow(entityType, scores, author);
-        }
-
-        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
-
-            var logComment = getLogComment("bulk_insert_feedback_score", workspaceId, userName, scores.size());
-            var template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
-            template.add("author", author);
-            template.add("log_comment", logComment);
-
-            var statement = connection.createStatement(template.render());
-
-            bindParameters(entityType, scores, statement, author);
-            bindUserNameAndWorkspace(statement, userName, workspaceId);
-
-            return Flux.from(statement.execute())
-                    .flatMap(Result::getRowsUpdated)
-                    .reduce(Long::sum);
-        }));
+        return insertJsonEachRow(entityType, scores, author);
     }
 
     /**
-     * The {@link #BULK_INSERT_FEEDBACK_SCORE} rows streamed as JSONEachRow through the v2 client rather
-     * than bound as 8 named parameters per row — 10 for the authored table.
+     * Feedback score rows streamed as JSONEachRow through the v2 client. Replaced an R2DBC insert that
+     * bound 8 named parameters per row — 10 for the authored table.
      *
      * <p>Batch size here is not capped the way the other bulk paths are: a feedback score batch is 1000
      * items at most on its own endpoints, but {@code ExperimentItemBulkIngestionService} accumulates up
@@ -429,35 +366,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     @Override
     public Mono<Long> scoreBatchOfThreads(@NonNull List<FeedbackScoreBatchItemThread> scores, @Nullable String author) {
         return scoreBatchOf(EntityType.THREAD, scores, author);
-    }
-
-    private void bindParameters(EntityType entityType, List<? extends FeedbackScoreItem> scores,
-            Statement statement, String author) {
-
-        // Batch-invariant, so normalized once rather than per row. Kept null when absent: author being
-        // null is what selects the unauthored table and drops these two columns, so it must not be
-        // flattened to "" here.
-        var normalizedAuthor = author == null ? null : StringUtils.stripToEmpty(author);
-
-        for (var i = 0; i < scores.size(); i++) {
-
-            var feedbackScoreBatchItem = scores.get(i);
-
-            statement.bind("entity_type" + i, entityType.getType())
-                    .bind("entity_id" + i, feedbackScoreBatchItem.id())
-                    .bind("project_id" + i, feedbackScoreBatchItem.projectId())
-                    .bind("name" + i, feedbackScoreBatchItem.name())
-                    .bind("value" + i, feedbackScoreBatchItem.value().toString())
-                    .bind("source" + i, feedbackScoreBatchItem.source().getValue())
-                    .bind("reason" + i, StringUtils.stripToEmpty(feedbackScoreBatchItem.reason()))
-                    .bind("category_name" + i, StringUtils.stripToEmpty(feedbackScoreBatchItem.categoryName()));
-
-            if (normalizedAuthor != null) {
-                statement.bind("author" + i, normalizedAuthor);
-                statement.bind("source_queue_id" + i,
-                        Optional.ofNullable(feedbackScoreBatchItem.sourceQueueId()).map(UUID::toString).orElse(""));
-            }
-        }
     }
 
     @Override

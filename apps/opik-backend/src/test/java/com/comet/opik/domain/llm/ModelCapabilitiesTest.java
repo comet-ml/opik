@@ -1,10 +1,13 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -93,5 +96,35 @@ class ModelCapabilitiesTest {
                 Arguments.of("gemini-2-5-pro", true, "Gemini without dots should work"),
                 Arguments.of("qwen2.5-vl-32b-instruct", true, "Qwen VL with dots should work"),
                 Arguments.of("qwen2-5-vl-32b-instruct", true, "Qwen VL without dots should work"));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void newestInFamilyRanksByVersionNotReleaseDate(Set<String> modelIds, String familyPrefix, String newest) {
+        assertThat(ModelCapabilities.newestInFamily(modelIds, familyPrefix)).contains(newest);
+    }
+
+    private static Stream<Arguments> newestInFamilyRanksByVersionNotReleaseDate() {
+        return Stream.of(
+                Arguments.of(Set.of("claude-haiku-4-5-20251001", "claude-haiku-5-5"), "claude-haiku",
+                        "claude-haiku-5-5"),
+                Arguments.of(Set.of("claude-opus-4-20250514", "claude-opus-4-6", "claude-opus-4-1-20250805"),
+                        "claude-opus", "claude-opus-4-6"),
+                Arguments.of(Set.of("claude-sonnet-4-5", "claude-opus-5-5"), "claude-sonnet", "claude-sonnet-4-5"));
+    }
+
+    /**
+     * Checked against the listed models rather than a fixed answer: the daily sync adds models, and the
+     * alias has to follow whichever one is newest.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"claude-haiku", "claude-opus", "claude-sonnet", "claude-fable"})
+    void readsAFloatingAliasAsTheFamilysNewestListedMember(String family) {
+        var newest = ModelCapabilities.newestInFamily(AnthropicModelName.allModelIds(), family).orElseThrow();
+        var alias = "~anthropic/" + family + "-latest";
+
+        assertThat(ModelCapabilities.rejectsSamplingParams(alias))
+                .isEqualTo(ModelCapabilities.rejectsSamplingParams(newest));
+        assertThat(ModelCapabilities.thinksByDefault(alias)).isEqualTo(ModelCapabilities.thinksByDefault(newest));
     }
 }

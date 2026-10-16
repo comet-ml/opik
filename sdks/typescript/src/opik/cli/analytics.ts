@@ -1,8 +1,9 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import ini from "ini";
+import { clientIdentifier } from "../utils/clientId";
 
 /**
  * Reports what this command did to Comet's stats collector, which forwards to
@@ -156,10 +157,7 @@ export function userIdentifier(
     return workspace;
   }
 
-  const machine = createHash("sha256")
-    .update(os.hostname() + userName())
-    .digest("hex");
-  return `${WORKSPACE_DEFAULT_NAME}_${machine}`;
+  return `${WORKSPACE_DEFAULT_NAME}_${clientIdentifier()}`;
 }
 
 export function createReporter(
@@ -253,12 +251,4 @@ function workspaceFromConfigFile(env: NodeJS.ProcessEnv, home: string): string {
 
 function blankToUndefined(value: string | undefined): string | undefined {
   return value === undefined || value.trim() === "" ? undefined : value;
-}
-
-function userName(): string {
-  try {
-    return os.userInfo().username;
-  } catch {
-    return "";
-  }
 }

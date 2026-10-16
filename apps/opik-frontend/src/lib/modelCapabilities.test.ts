@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getMaxOutputTokens,
+  getOpenRouterMaxOutputTokens,
   supportsAudioInput,
 } from "@/lib/modelCapabilities";
 import { CUSTOM_PROVIDER_MODEL_PREFIX } from "@/constants/providers";
@@ -86,4 +87,34 @@ describe("getMaxOutputTokens", () => {
       expect(getMaxOutputTokens(model)).toBeUndefined();
     },
   );
+});
+
+describe("getOpenRouterMaxOutputTokens", () => {
+  it.each([
+    {
+      reads: "a model's own OpenRouter row",
+      model: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY,
+      limit: 117964,
+    },
+    {
+      reads: "a variant's own row over its base model's",
+      model: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
+      limit: 8192,
+    },
+    {
+      reads: "the base model's row for a variant without its own",
+      model: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B_FREE,
+      limit: 7372,
+    },
+    {
+      reads: "no other provider's row",
+      model: "openai/computer-use-preview",
+      limit: undefined,
+    },
+    { reads: "nothing for an empty id", model: "", limit: undefined },
+    { reads: "nothing for null", model: null, limit: undefined },
+    { reads: "nothing for undefined", model: undefined, limit: undefined },
+  ])("reads $reads", ({ model, limit }) => {
+    expect(getOpenRouterMaxOutputTokens(model)).toBe(limit);
+  });
 });
