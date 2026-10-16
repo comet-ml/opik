@@ -133,8 +133,8 @@ test.describe(
           // would also be satisfied by an editor that failed to render at all.
           await expect(onlineEval.scopeOption('Traces')).toHaveAttribute('data-state', 'on');
           await expect(
-            onlineEval.includeTracesSelect,
-            'an experiment-only rule includes only experiment traces',
+            onlineEval.scoredTracesSelect,
+            'an experiment-only rule scores only experiment traces',
           ).toHaveText('experiment traces');
         });
 

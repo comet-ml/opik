@@ -215,8 +215,8 @@ export class OnlineEvaluationPage {
   }
 
   /** Only rendered at trace scope. */
-  get includeTracesSelect(): Locator {
-    return this.panel.getByRole('combobox', { name: 'Include' });
+  get scoredTracesSelect(): Locator {
+    return this.panel.getByRole('combobox', { name: 'Score', exact: true });
   }
 
   // --- Filtering and sampling ---

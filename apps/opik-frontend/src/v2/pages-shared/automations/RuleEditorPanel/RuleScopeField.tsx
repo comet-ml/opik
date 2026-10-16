@@ -1,6 +1,5 @@
 import React from "react";
 import { UseFormReturn } from "react-hook-form";
-import { CornerDownRight } from "lucide-react";
 
 import { FormControl, FormField, FormItem, FormLabel } from "@/ui/form";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
@@ -14,9 +13,9 @@ import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 
-const INCLUDE_SELECT_ID = "rule-editor-include";
+const SCORED_TRACES_SELECT_ID = "rule-editor-scored-traces";
 
-const INCLUDE_OPTIONS = [
+const SCORED_TRACES_OPTIONS = [
   { value: EVAL_TRIGGER_SCOPE.production, label: "production traces" },
   { value: EVAL_TRIGGER_SCOPE.experiment, label: "experiment traces" },
   { value: EVAL_TRIGGER_SCOPE.both, label: "all traces" },
@@ -96,20 +95,19 @@ const RuleScopeField: React.FC<RuleScopeFieldProps> = ({
           control={form.control}
           name="triggerScope"
           render={({ field }) => (
-            <FormItem className="flex-row items-center gap-0 pl-1 pr-0.5">
+            <FormItem className="flex-row items-center gap-0 px-0.5">
               <FormLabel
-                htmlFor={INCLUDE_SELECT_ID}
-                className="comet-body-s flex items-center gap-1 font-normal"
+                htmlFor={SCORED_TRACES_SELECT_ID}
+                className="comet-body-s font-normal"
               >
-                <CornerDownRight className="size-3 shrink-0 text-muted-slate" />
-                Include
+                Score
               </FormLabel>
               <FormControl>
                 <SelectBox
-                  id={INCLUDE_SELECT_ID}
+                  id={SCORED_TRACES_SELECT_ID}
                   value={field.value}
                   onChange={field.onChange}
-                  options={INCLUDE_OPTIONS}
+                  options={SCORED_TRACES_OPTIONS}
                   variant="ghost"
                   className="comet-body-s h-6 w-auto gap-1 px-1 font-normal"
                 />
