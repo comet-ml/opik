@@ -31,7 +31,7 @@ public class ExperimentExecutionConfig implements StreamConfiguration {
     private static final int ADMISSION_HEADROOM_PERCENT = 20;
 
     /**
-     * Outstanding items for one prompt variant of a run. Scoped to the experiment rather than to the
+     * How many items one prompt variant of a run queued. Scoped to the experiment rather than to the
      * run so each variant settles on its own work: one that finishes is not held open by its
      * siblings, and one that is cancelled takes nothing down with it.
      */
@@ -39,8 +39,8 @@ public class ExperimentExecutionConfig implements StreamConfiguration {
         return ITEM_COUNTER_KEY_PREFIX + workspaceId + ":" + experimentId;
     }
 
-    public static String itemFailureCounterKey(String workspaceId, UUID experimentId) {
-        return itemCounterKey(workspaceId, experimentId) + ":failures";
+    public static String itemEntriesKey(String workspaceId, UUID experimentId) {
+        return itemCounterKey(workspaceId, experimentId) + ":entries";
     }
 
     @Valid @NotBlank @JsonProperty

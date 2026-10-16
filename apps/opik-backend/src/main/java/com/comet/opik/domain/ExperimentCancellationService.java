@@ -54,13 +54,16 @@ public class ExperimentCancellationService {
 
     private final RedissonReactiveClient redisClient;
     private final ExperimentExecutionConfig config;
+    private final ExperimentItemLedger itemLedger;
 
     @Inject
     public ExperimentCancellationService(
             @NonNull RedissonReactiveClient redisClient,
-            @NonNull @Config("experimentExecution") ExperimentExecutionConfig config) {
+            @NonNull @Config("experimentExecution") ExperimentExecutionConfig config,
+            @NonNull ExperimentItemLedger itemLedger) {
         this.redisClient = redisClient;
         this.config = config;
+        this.itemLedger = itemLedger;
     }
 
     public Mono<Void> cancel(@NonNull String workspaceId, @NonNull Collection<UUID> experimentIds) {
@@ -99,7 +102,7 @@ public class ExperimentCancellationService {
      * Deletes the run's messages that no consumer has taken yet.
      *
      * Reports whether that leaves nothing outstanding. Deleted entries reach no consumer, so nothing
-     * else would ever count them down. False whenever a drain cannot be established, since claiming
+     * else would ever count them. False whenever a drain cannot be established, since claiming
      * one wrongly reports a run finished while it is still going.
      */
     public Mono<Boolean> purgeQueued(@NonNull String workspaceId, @NonNull UUID experimentId) {
@@ -134,7 +137,7 @@ public class ExperimentCancellationService {
                                             log.info("Removed queued messages for a cancelled experiment, removed '{}',"
                                                     + " withConsumer '{}', experimentId '{}'",
                                                     removed, ids.size() - queued.size(), experimentId);
-                                            return subtractPurgedItems(workspaceId, experimentId, removed);
+                                            return countPurged(workspaceId, experimentId, queued);
                                         });
                             })
                             // Trimmed, not deleted: a run still publishing goes on appending here,
@@ -174,21 +177,20 @@ public class ExperimentCancellationService {
     }
 
     /**
-     * Subtracts the purged messages from the experiment's own counter. What remains is what a
-     * consumer still holds, and at zero there is none of it left.
+     * Counts the purged entries as skipped. Deleted entries reach no consumer, so nothing else would count them,
+     * and an entry XDEL did not find counts the same way: one a consumer took first keeps the outcome it
+     * recorded, and one trimmed off the stream will never run. What remains is what a consumer still holds,
+     * and at zero there is none of it left.
      */
-    private Mono<Boolean> subtractPurgedItems(String workspaceId, UUID experimentId, long removed) {
-        if (removed == 0) {
-            return Mono.just(false);
-        }
-
-        return redisClient
-                .getAtomicLong(ExperimentExecutionConfig.itemCounterKey(workspaceId, experimentId))
-                .addAndGet(-removed)
+    private Mono<Boolean> countPurged(String workspaceId, UUID experimentId, List<StreamMessageId> purged) {
+        return itemLedger.recordSkipped(workspaceId, experimentId, purged)
+                .then(itemLedger.remaining(workspaceId, experimentId))
                 .doOnNext(
                         remaining -> log.info("Counted the purge off an experiment, remaining '{}', experimentId '{}'",
                                 remaining, experimentId))
-                .map(remaining -> remaining <= 0);
+                .flatMap(remaining -> remaining <= 0
+                        ? itemLedger.expireAfterDrain(workspaceId, experimentId).thenReturn(true)
+                        : Mono.just(false));
     }
 
     /**
