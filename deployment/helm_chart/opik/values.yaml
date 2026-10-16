@@ -824,6 +824,10 @@ databaseAnalyticsDataModel:
   spanWeeksWriteEnabled: false
   # Run the span weeks backfill job. Turn true only once spanWeeksWriteEnabled is live on every backend instance.
   spanWeeksBackfillEnabled: false
+  # Bound span reads by trace id with the span_weeks index. Effective only with spanWeeksWriteEnabled and
+  # spanColumnsNonNullable; turn true
+  # once the span weeks backfill logs that it is complete.
+  spanWeeksReadEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
 # lightweight-delete mask and publishes opik.clickhouse.partition.* gauges; a distributed lock keeps
@@ -834,6 +838,21 @@ partitionMetrics:
   interval: 5m
   # Comma-separated tables scanned for lightweight-deleted (masked) rows.
   lwdTables: "traces,spans"
+
+# Publish Opik alerts to an Amazon EventBridge event bus (best-effort, no durable retry). Off by
+# default; while off nothing is rendered. When enabled, sets ALERTS_EVENTBRIDGE_* on the backend; an
+# explicit key under component.backend.env wins. The backend's service account needs
+# `events:PutEvents` on the bus: bind an IAM role through component.backend.serviceAccount.annotations
+# (IRSA) or an EKS Pod Identity association. Inside the comet-ml chart, set
+# comet.alerts.awsEventBridge there instead.
+alerts:
+  awsEventBridge:
+    enabled: false
+    # Bus name or ARN. Required when enabled.
+    eventBus: ""
+    # Optional. When empty, resolved from the ARN or the pod's region. With an ARN bus it must match the
+    # ARN's region.
+    region: ""
 
 clickhouse:
   enabled: true

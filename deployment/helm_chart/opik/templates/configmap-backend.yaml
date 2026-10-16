@@ -54,10 +54,16 @@ data:
         "ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED" $dm.spansDistributedWrapEnabled
         "ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_WRITE_ENABLED" $dm.spanWeeksWriteEnabled
         "ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED" $dm.spanWeeksBackfillEnabled
+        "ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_READ_ENABLED" $dm.spanWeeksReadEnabled
         "PARTITION_METRICS_ENABLED" $pm.enabled
         "PARTITION_METRICS_INTERVAL" $pm.interval
         "PARTITION_METRICS_LWD_TABLES" $pm.lwdTables
       }}
+  {{- if not (hasKey $env $k) }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+  {{- end }}
+  {{- range $k, $v := include "opik.alerts.awsEventBridgeEnv" $ | fromYaml }}
   {{- if not (hasKey $env $k) }}
   {{ $k }}: {{ $v | quote }}
   {{- end }}
