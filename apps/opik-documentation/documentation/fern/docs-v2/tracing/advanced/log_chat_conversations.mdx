@@ -70,7 +70,7 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
         )
         return "Opik is an Open Source GenAI platform"
 
-    chat_message("What is Opik ?", thread_id)
+    chat_message("What is Opik ?")
     ```
 
     ```python title="Python SDK"
@@ -156,7 +156,7 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
     ```python title="OpenAI Agents"
     # Using trace context manager with group_id for threading
     import uuid
-    from opik import trace
+    from agents import trace
 
     thread_id = str(uuid.uuid4())
 
@@ -274,7 +274,7 @@ Different integrations handle thread IDs in various ways:
 
     ```python title="OpenAI Agents"
     import uuid
-    from opik import trace
+    from agents import trace
 
     # Use trace context manager with group_id for threading
     thread_id = str(uuid.uuid4())
@@ -325,11 +325,11 @@ Different integrations handle thread IDs in various ways:
 
 ## Reviewing conversations
 
-Conversations can be viewed at a project level in the `threads` tab. All conversations are tracked and by clicking on the thread ID you will be able to
+Conversations can be viewed at a project level on the **Logs** page, in the **Threads** tab. All conversations are tracked and by clicking on a thread you will be able to
 view the full conversation.
 
 The thread view supports markdown making it easier for you to review the content that was returned to the user. If you would like to dig in deeper, you
-can click on the `View trace` button to deepdive into how the AI assistant response was generated.
+can click on the **Trace** link under a response to deepdive into how the AI assistant response was generated, or on **Tool calls** to see the tools it used.
 
 By clicking on the thumbs up or thumbs down icons, you can quickly rate the AI assistant response. This feedback score will be logged and associated to
 the relevant trace. By switching to the trace view, you can review the full trace as well as add additional feedback scores through the annotation
@@ -341,8 +341,8 @@ functionality.
 
 ## Scoring conversations
 
-You can assign conversation-level feedback scores to threads at any time. Threads are aggregated traces
-that are created when tracking agents or simply traces interconnected by a `thread_id`.
+You can assign conversation-level feedback scores to threads at any time: open a thread and click **Annotate**.
+Threads are aggregated traces that are created when tracking agents or simply traces interconnected by a `thread_id`.
 
 <Frame>
   <img src="/img/tracing/chat_conversations_score.png" />
@@ -433,12 +433,18 @@ You can also manage threads programmatically using the Opik SDK:
             print(f"Output: {thread_content.output}")
 
     # Add feedback scores to thread traces
-    for trace in threads:
-        trace.log_feedback_score(
-            name="conversation_quality",
-            value=0.8,
-            reason="Good multi-turn conversation flow"
-        )
+    client.log_traces_feedback_scores(
+        scores=[
+            {
+                "id": trace.id,
+                "name": "conversation_quality",
+                "value": 0.8,
+                "reason": "Good multi-turn conversation flow",
+                "project_name": "my-chatbot",
+            }
+            for trace in threads
+        ]
+    )
     ```
 
 </CodeBlocks>

@@ -86,8 +86,8 @@ result.display()
 
 ## 4. Inspect results
 
-- Run `opik dashboard` or open [https://www.comet.com/opik](https://www.comet.com/opik).
-- In the left nav, go to **Evaluation → Optimization runs**, then select your latest run.
+- Open [https://www.comet.com/opik](https://www.comet.com/opik), or your self-hosted Opik URL.
+- In the left nav, go to **Development → Optimization runs**, then select your latest run.
 - Review the optimization-progress chart, trial table, and per-trial traces to decide whether to ship the new prompt.
 
 ## Common first issues
@@ -97,7 +97,7 @@ result.display()
     Import `ChatPrompt` from `opik_optimizer` and wrap your `messages` list before passing it to any optimizer.
   </Accordion>
   <Accordion title="Authentication failed">
-    Re-run `opik configure` and confirm the account has Agent Optimizer access. If you changed machines, copy the `~/.opik/config` file or re-enter the key.
+    Re-run `opik configure` and confirm the account has Agent Optimizer access. If you changed machines, copy the `~/.opik.config` file or re-enter the key.
   </Accordion>
   <Accordion title="liteLLM provider errors">
     Ensure provider keys (e.g., `OPENAI_API_KEY`) are exported in the same shell running the script, and verify the model you selected is enabled for that key.

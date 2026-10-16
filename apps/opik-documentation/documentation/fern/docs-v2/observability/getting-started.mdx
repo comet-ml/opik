@@ -134,27 +134,25 @@ tracing manually with the SDK.
       ```
 
       ```ts title="Typescript"
-      import { Opik } from "opik";
+      import { track } from "opik";
 
-      const client = new Opik();
-
-      const myLlmCall = client.track({
-        name: "my_llm_call",
-        fn: async (userMessage: string) => {
+      const myLlmCall = track(
+        { name: "my_llm_call" },
+        async (userMessage: string) => {
           // Your LLM call here
           const response = await callLlm(userMessage);
           return response;
-        },
-      });
+        }
+      );
 
-      const myAgent = client.track({
-        name: "my-agent",
-        fn: async (userMessage: string) => {
+      const myAgent = track(
+        { name: "my-agent" },
+        async (userMessage: string) => {
           const context = await retrieveContext(userMessage);
           const response = await myLlmCall(userMessage);
           return response;
-        },
-      });
+        }
+      );
       ```
     </CodeBlocks>
   </Tab>
