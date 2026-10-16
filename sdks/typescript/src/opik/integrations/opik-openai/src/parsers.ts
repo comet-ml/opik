@@ -35,12 +35,25 @@ interface CompletionUsageObject<T> {
   usage: T;
 }
 
+type ToolCallDelta =
+  OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta.ToolCall;
+
 type ChunkResult =
   | { isToolCall: false; data: string }
   | {
       isToolCall: true;
-      data: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta.ToolCall;
+      data: ToolCallDelta[];
+      text: string;
     };
+
+interface StreamedToolCall {
+  id?: string;
+  type?: string;
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
 
 interface ModelMetadataResult {
   model: string | undefined;
@@ -410,7 +423,8 @@ export const parseChunk = (rawChunk: unknown): ChunkResult => {
     if (isToolCallDelta(chunkData)) {
       return {
         isToolCall: true,
-        data: chunkData.delta.tool_calls[0],
+        data: chunkData.delta.tool_calls,
+        text: chunkData.delta.content || "",
       };
     }
 
@@ -438,6 +452,7 @@ const isToolCallDelta = (
   chunkData: unknown
 ): chunkData is {
   delta: {
+    content?: string | null;
     tool_calls: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta.ToolCall[];
   };
 } => {
@@ -474,32 +489,44 @@ const isTextChunk = (
 };
 
 export const getToolCallOutput = (
-  toolCallChunks: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta.ToolCall[]
-): {
-  tool_calls: {
-    function: {
-      name: string;
-      arguments: string;
+  toolCallChunks: ToolCallDelta[]
+): { tool_calls: StreamedToolCall[] } => {
+  // Parallel calls stream as fragments of several calls; `index` says which call each continues.
+  const toolCalls = new Map<number, StreamedToolCall>();
+
+  for (const chunk of toolCallChunks) {
+    const index = chunk.index ?? 0;
+    const toolCall = toolCalls.get(index) ?? {
+      function: { name: "", arguments: "" },
     };
-  }[];
-} => {
-  const { name, arguments: toolArguments } = toolCallChunks.reduce(
-    (result, chunk) => ({
-      name: chunk.function?.name || result.name,
-      arguments: result.arguments + (chunk.function?.arguments || ""),
-    }),
-    { name: "", arguments: "" }
-  );
+
+    if (chunk.id) toolCall.id = chunk.id;
+    if (chunk.type) toolCall.type = chunk.type;
+    if (chunk.function?.name) toolCall.function.name = chunk.function.name;
+    toolCall.function.arguments += chunk.function?.arguments || "";
+
+    toolCalls.set(index, toolCall);
+  }
 
   return {
-    tool_calls: [
-      {
-        function: {
-          name,
-          arguments: toolArguments,
-        },
-      },
-    ],
+    tool_calls: [...toolCalls.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([, toolCall]) => toolCall),
+  };
+};
+
+export const buildStreamOutput = (
+  textChunks: string[],
+  toolCallChunks: ToolCallDelta[]
+): { message: string } | { message?: string; tool_calls: StreamedToolCall[] } => {
+  const message = textChunks.join("");
+  if (toolCallChunks.length === 0) {
+    return { message };
+  }
+
+  return {
+    ...(message ? { message } : {}),
+    ...getToolCallOutput(toolCallChunks),
   };
 };
 
