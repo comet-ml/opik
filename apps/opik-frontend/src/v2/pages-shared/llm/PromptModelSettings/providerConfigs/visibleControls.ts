@@ -166,13 +166,17 @@ export const hasVisibleControls = (
   const supports = createSupports(unsupportedParams);
 
   switch (provider) {
+    // Requesty shares the OpenAI form, and always uses Chat Completions: the pipeline mode belongs
+    // to the OpenAI key alone.
     case PROVIDER_TYPE.OPEN_AI:
+    case PROVIDER_TYPE.REQUESTY:
       return isAnyControlVisible(
         getOpenAIVisibleControls({
           model,
           configs: configs as Partial<LLMOpenAIConfigsType>,
           supports,
-          openAiPipelineMode,
+          openAiPipelineMode:
+            provider === PROVIDER_TYPE.OPEN_AI ? openAiPipelineMode : undefined,
         }),
       );
     case PROVIDER_TYPE.ANTHROPIC:

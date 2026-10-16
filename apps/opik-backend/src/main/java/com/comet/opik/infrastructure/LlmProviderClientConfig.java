@@ -50,4 +50,6 @@ public class LlmProviderClientConfig {
     private String openRouterUrl;
 
     @NotBlank private String openRouterDecisionsUrl;
+
+    private String requestyUrl;
 }

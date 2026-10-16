@@ -50,6 +50,16 @@ describe("hasVisibleControls", () => {
     ).toBe(true);
   });
 
+  it("is true for a Requesty model, which shares the OpenAI form", () => {
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.REQUESTY,
+        PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_4O,
+        { temperature: 0.4, maxCompletionTokens: 4000 },
+      ),
+    ).toBe(true);
+  });
+
   it("is true for the same Claude model on the playground", () => {
     expect(
       hasVisibleControls(
