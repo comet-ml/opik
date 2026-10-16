@@ -138,8 +138,8 @@ class DailyUsageReportJobTest {
                         .mapTo(Integer.class).one()) > 0);
     }
 
-    /** Clears the day's "sent" marker, then runs the report, so every test's run reports on its own data. */
-    private static void runReport(TransactionTemplate transactionTemplate, GuiceJobManager guiceJobManager)
+    /** Clears the day's "sent" marker, then schedules the report, so every test's run reports on its own data. */
+    private static void resetAndScheduleReport(TransactionTemplate transactionTemplate, GuiceJobManager guiceJobManager)
             throws SchedulerException {
         transactionTemplate.inTransaction(TransactionTemplateAsync.WRITE,
                 handle -> handle.createUpdate("DELETE FROM metadata WHERE `key` = 'daily_usage_report'").execute());
@@ -342,7 +342,7 @@ class DailyUsageReportJobTest {
 
             setUpData(apiKey, workspaceName, workspaceId);
 
-            runReport(transactionTemplate, guiceJobManager);
+            resetAndScheduleReport(transactionTemplate, guiceJobManager);
 
             Awaitility
                     .await()
@@ -504,7 +504,7 @@ class DailyUsageReportJobTest {
 
             setUpData(apiKey, workspaceName, ProjectService.DEFAULT_WORKSPACE_ID);
 
-            runReport(transactionTemplate, guiceJobManager);
+            resetAndScheduleReport(transactionTemplate, guiceJobManager);
 
             Awaitility
                     .await()
@@ -652,7 +652,7 @@ class DailyUsageReportJobTest {
             updateTraces(ProjectService.DEFAULT_WORKSPACE_ID, templateAsync, false);
 
             // Run the daily usage report job
-            runReport(transactionTemplate, guiceJobManager);
+            resetAndScheduleReport(transactionTemplate, guiceJobManager);
 
             // Wait for job completion and verify
             Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -700,7 +700,7 @@ class DailyUsageReportJobTest {
             updateTraces(ProjectService.DEFAULT_WORKSPACE_ID, templateAsync, false);
 
             // Run the daily usage report job
-            runReport(transactionTemplate, guiceJobManager);
+            resetAndScheduleReport(transactionTemplate, guiceJobManager);
 
             // Wait for job completion and verify
             Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -734,7 +734,7 @@ class DailyUsageReportJobTest {
             redisCli("PFADD", "opik:active_clients:sdk", "b", "c");
 
             // Sent every day, with or without activity, so no traces are needed here
-            runReport(transactionTemplate, guiceJobManager);
+            resetAndScheduleReport(transactionTemplate, guiceJobManager);
 
             Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> wireMock.server().verify(
                     postRequestedFor(urlPathEqualTo("/v1/notify/event"))
