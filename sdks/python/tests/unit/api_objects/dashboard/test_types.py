@@ -39,6 +39,18 @@ def test_project_metrics_config__defaults_and_breakdown_camelcase():
     assert_equal({"field": "metadata", "metadataKey": "provider"}, result["breakdown"])
 
 
+def test_project_metrics_config__span_cost_by_provider():
+    config = types.ProjectMetricsConfig(
+        metric_type=types.ProjectMetricType.SPAN_COST,
+        breakdown=types.BreakdownConfig(field=types.BreakdownField.PROVIDER),
+    )
+
+    result = config.to_jsonable()
+
+    assert result["metricType"] == "SPAN_COST"
+    assert result["breakdown"] == {"field": "provider"}
+
+
 def test_breakdown_config__metadata_field_requires_metadata_key():
     with pytest.raises(exceptions.DashboardValidationError):
         types.BreakdownConfig(field=types.BreakdownField.METADATA)
