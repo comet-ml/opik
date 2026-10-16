@@ -142,7 +142,8 @@ public class AiLabelItemBuilder {
                 if (task.prompt().system() != null) {
                     messages.add(Message.builder().role(Message.Role.SYSTEM).content(task.prompt().system()).build());
                 }
-                var user = task.prompt().user().replace(AiLabelTask.STATE_PLACEHOLDER, InferenceJson.canonical(state));
+                var user = task.prompt().user().replace(AiLabelTask.STATE_PLACEHOLDER,
+                        AiLabelRenderer.canonicalJson(state));
                 messages.add(Message.builder().role(Message.Role.USER).content(user).build());
                 yield BatchGenerateItem.builder()
                         .itemId(plan.itemId())
