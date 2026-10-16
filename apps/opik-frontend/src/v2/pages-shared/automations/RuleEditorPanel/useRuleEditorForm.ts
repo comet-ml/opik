@@ -376,7 +376,7 @@ const useRuleEditorForm = ({
         ...mainScore,
         name: mainScore.name.trim() || values.ruleName.trim(),
         description:
-          isEdit || values.uiType === UI_EVALUATORS_RULE_TYPE.decision_model
+          rule || values.uiType === UI_EVALUATORS_RULE_TYPE.decision_model
             ? mainScore.description
             : "",
       };
@@ -398,7 +398,7 @@ const useRuleEditorForm = ({
       "llmJudgeDetails.parsingVariablesError",
       parsingVariablesError,
     );
-  }, [form, isEdit]);
+  }, [form, rule]);
 
   useEffect(() => {
     const subscription = form.watch((_, { name }) => {

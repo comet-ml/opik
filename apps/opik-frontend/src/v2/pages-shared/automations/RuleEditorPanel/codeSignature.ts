@@ -8,6 +8,8 @@ const SECTION_PATH_REGEX = /^(input|output|metadata)(?=$|\.|\[)(.*)$/;
 const PATH_TOKEN_REGEX = /\.([^.[\]]+)|\[(\d+)\]|\[["']([^"']+)["']\]/g;
 const SCORE_DEF_REGEX = /def\s+score\s*\(/;
 const HEADER_END_REGEX = /^\s*(?:->[^:\n]*)?:[ \t]*(#.*)?\n/;
+const FUTURE_IMPORT_REGEX =
+  /^from\s+__future__\s+import\s+(?:\([^)]*\)|[^\n]*)\n?/gm;
 
 export const getLegacyCodeArguments = (
   scope: EVALUATORS_RULE_SCOPE,
@@ -38,6 +40,16 @@ const toAssignment = (name: string, path: string) => {
   return rest
     ? `${name} = json.loads(${section})${toPythonAccessor(rest)}`
     : `${name} = ${section}`;
+};
+
+const addJsonImport = (code: string) => {
+  const lastFutureImport = Array.from(code.matchAll(FUTURE_IMPORT_REGEX)).at(
+    -1,
+  );
+  if (!lastFutureImport) return `import json\n${code}`;
+  const end = lastFutureImport.index + lastFutureImport[0].length;
+  const separator = lastFutureImport[0].endsWith("\n") ? "" : "\n";
+  return `${code.slice(0, end)}${separator}import json\n${code.slice(end)}`;
 };
 
 const getParameterName = (parameter: string) =>
@@ -75,7 +87,9 @@ export const convertToStandardSignature = (
   const mapped = parameters
     .map(getParameterName)
     .filter(
-      (name) => name in codeArguments && codeArguments[name] !== SPANS_ARGUMENT,
+      (name) =>
+        name in codeArguments &&
+        !(name === SPANS_ARGUMENT && codeArguments[name] === SPANS_ARGUMENT),
     );
   const usedSections = new Set<string>();
   const kept: string[] = [];
@@ -120,5 +134,5 @@ export const convertToStandardSignature = (
   const needsJson =
     assignments.some((line) => line.includes("json.loads(")) &&
     !/^\s*import json\b/m.test(code);
-  return needsJson ? `import json\n${converted}` : converted;
+  return needsJson ? addJsonImport(converted) : converted;
 };

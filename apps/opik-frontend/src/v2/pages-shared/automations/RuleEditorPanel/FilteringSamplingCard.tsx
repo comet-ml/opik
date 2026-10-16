@@ -19,6 +19,7 @@ import {
 import {
   DEFAULT_SAMPLING_RATE,
   FILTER_COLUMNS_BY_SCOPE,
+  SCOPE_ENTITY_LABEL,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 
 type FilteringSamplingCardProps = {
@@ -67,7 +68,7 @@ const FilteringSamplingCard: React.FC<FilteringSamplingCardProps> = ({
       title="Filtering and sampling"
       tooltip={
         triggerScope === EVAL_TRIGGER_SCOPE.both
-          ? "Filters and sampling apply only to production traces, not to experiment traces."
+          ? `Filters and sampling apply only to production ${SCOPE_ENTITY_LABEL[scope]}, not to experiment ${SCOPE_ENTITY_LABEL[scope]}.`
           : undefined
       }
       collapsible

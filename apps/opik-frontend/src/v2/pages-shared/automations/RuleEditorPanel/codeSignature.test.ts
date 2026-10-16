@@ -56,4 +56,51 @@ describe("convertToStandardSignature", () => {
       ].join("\n"),
     );
   });
+
+  it("adds the json import after future imports", () => {
+    const code = [
+      '"""Metric docs."""',
+      "from __future__ import annotations",
+      "class M(base_metric.BaseMetric):",
+      "    def score(self, question):",
+      "        return score_result.ScoreResult(value=1, name=self.name)",
+    ].join("\n");
+
+    expect(
+      convertToStandardSignature(code, EVALUATORS_RULE_SCOPE.trace, {
+        question: "input.question",
+      }),
+    ).toBe(
+      [
+        '"""Metric docs."""',
+        "from __future__ import annotations",
+        "import json",
+        "class M(base_metric.BaseMetric):",
+        "    def score(self, input):",
+        '        question = json.loads(input)["question"]',
+        "        return score_result.ScoreResult(value=1, name=self.name)",
+      ].join("\n"),
+    );
+  });
+
+  it("keeps the literal value of another parameter mapped to spans", () => {
+    const code = [
+      "class M(base_metric.BaseMetric):",
+      "    def score(self, all_spans):",
+      "        return score_result.ScoreResult(value=1, name=self.name)",
+    ].join("\n");
+
+    expect(
+      convertToStandardSignature(code, EVALUATORS_RULE_SCOPE.trace, {
+        all_spans: "spans",
+      }),
+    ).toBe(
+      [
+        "class M(base_metric.BaseMetric):",
+        "    def score(self):",
+        '        all_spans = "spans"',
+        "        return score_result.ScoreResult(value=1, name=self.name)",
+      ].join("\n"),
+    );
+  });
 });
