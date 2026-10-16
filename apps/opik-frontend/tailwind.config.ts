@@ -124,6 +124,7 @@ module.exports = {
 
         /* Recoverable-waste callout colors (AI Spend) */
         "waste-bg": "var(--waste-bg)",
+        "guidance-callout-bg": "var(--guidance-callout-bg)",
         "waste-border": "var(--waste-border)",
         "waste-text": "var(--waste-text)",
 

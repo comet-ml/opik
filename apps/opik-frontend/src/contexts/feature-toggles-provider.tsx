@@ -32,6 +32,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.CUSTOM_CHARTS_ENABLED_FOR_WORKSPACE]: false,
   // Matches the backend default, so a backend that omits the key keeps Diagnostics as-is.
   [FeatureToggleKeys.AGENT_INSIGHTS_ENABLED]: true,
+  [FeatureToggleKeys.AGENT_INSIGHTS_GUIDANCE_ENABLED]: false,
   [FeatureToggleKeys.PROJECT_HOMEPAGE_ENABLED]: false,
   [FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED]: false,
   [FeatureToggleKeys.EVENT_BRIDGE_ALERTS_ENABLED]: false,
