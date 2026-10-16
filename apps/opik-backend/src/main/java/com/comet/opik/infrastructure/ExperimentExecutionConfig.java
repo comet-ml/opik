@@ -28,7 +28,7 @@ public class ExperimentExecutionConfig implements StreamConfiguration {
     public static final String FINISH_CLAIM_KEY_PREFIX = "opik:experiment:finish-claim:";
 
     /**
-     * Outstanding items for one prompt variant of a run. Scoped to the experiment rather than to the
+     * How many items one prompt variant of a run queued. Scoped to the experiment rather than to the
      * run so each variant settles on its own work: one that finishes is not held open by its
      * siblings, and one that is cancelled takes nothing down with it.
      */
@@ -36,8 +36,8 @@ public class ExperimentExecutionConfig implements StreamConfiguration {
         return ITEM_COUNTER_KEY_PREFIX + experimentId;
     }
 
-    public static String itemFailureCounterKey(UUID experimentId) {
-        return itemCounterKey(experimentId) + ":failures";
+    public static String itemEntriesKey(UUID experimentId) {
+        return itemCounterKey(experimentId) + ":entries";
     }
 
     @Valid @NotBlank @JsonProperty
