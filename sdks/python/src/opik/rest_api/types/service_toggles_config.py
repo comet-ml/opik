@@ -36,6 +36,9 @@ class ServiceTogglesConfig(UniversalBaseModel):
     ollama_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="ollamaProviderEnabled")]
     ollie_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="ollieEnabled")]
     agent_insights_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="agentInsightsEnabled")]
+    agent_insights_guidance_enabled: typing_extensions.Annotated[
+        bool, FieldMetadata(alias="agentInsightsGuidanceEnabled")
+    ]
     project_homepage_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="projectHomepageEnabled")]
     online_scoring_tracing_enabled: typing_extensions.Annotated[
         bool, FieldMetadata(alias="onlineScoringTracingEnabled")
