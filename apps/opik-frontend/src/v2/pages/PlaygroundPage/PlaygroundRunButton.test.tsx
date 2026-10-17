@@ -12,9 +12,22 @@ const MEDIA_REASON =
 
 let prompt: PlaygroundPromptType | undefined;
 
+let isResumingRun = false;
+let isPromptRunning = false;
+let isStopPending = false;
+
 vi.mock("@/store/PlaygroundStore", () => ({
   usePromptById: () => prompt,
-  useIsPromptRunning: () => false,
+  useIsPromptRunning: () => isPromptRunning,
+  useIsResumingRun: () => isResumingRun,
+  useIsStopPending: () => isStopPending,
+  useDatasetItemsTotal: () => null,
+}));
+
+// The button also refuses a run whose dataset has nothing left to run; these cases are about the
+// media check, so the dataset is left out of the way.
+vi.mock("@/hooks/usePlaygroundDataset", () => ({
+  usePlaygroundDataset: () => ({ datasetId: undefined }),
 }));
 
 const createPrompt = (
@@ -45,11 +58,12 @@ const audioContent: MessageContent = [
 ];
 
 const onRun = vi.fn();
+const onStop = vi.fn();
 
 const renderButton = () =>
   render(
     <TooltipProvider delayDuration={0}>
-      <PlaygroundRunButton promptId="prompt-1" onRun={onRun} onStop={vi.fn()} />
+      <PlaygroundRunButton promptId="prompt-1" onRun={onRun} onStop={onStop} />
     </TooltipProvider>,
   );
 
@@ -62,6 +76,10 @@ const hoverRunButton = () =>
 
 beforeEach(() => {
   onRun.mockClear();
+  onStop.mockClear();
+  isResumingRun = false;
+  isPromptRunning = false;
+  isStopPending = false;
 });
 
 describe("PlaygroundRunButton", () => {
@@ -155,6 +173,28 @@ describe("PlaygroundRunButton", () => {
     });
   });
 
+  // A reopened page does not yet know whether its run is still going. Starting one here in that
+  // window would run alongside it, and the resume then drops the result.
+  describe("while the page is picking a run back up", () => {
+    beforeEach(() => {
+      isResumingRun = true;
+      prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, "Say hello");
+    });
+
+    it("should disable Run on a prompt that is otherwise runnable", () => {
+      renderButton();
+
+      expect(getRunButton()).toBeDisabled();
+    });
+
+    it("should not call onRun when clicked in that window", () => {
+      renderButton();
+      fireEvent.click(getRunButton());
+
+      expect(onRun).not.toHaveBeenCalled();
+    });
+  });
+
   describe("reason priority", () => {
     it("should report an empty message before the media problem", async () => {
       prompt = {
@@ -176,5 +216,33 @@ describe("PlaygroundRunButton", () => {
         "Message is empty. Please add some text to proceed",
       );
     });
+  });
+});
+
+describe("PlaygroundRunButton stop state", () => {
+  it("offers Stop while the prompt runs", () => {
+    prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4O, "Hello");
+    isPromptRunning = true;
+    renderButton();
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+
+    expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
+  // A stop pressed before /execute answers cannot cancel anything yet, so the button says so
+  // rather than offering a Stop that looks ignored.
+  it("says Stopping... and refuses a second press while the stop waits for ids", () => {
+    prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4O, "Hello");
+    isPromptRunning = true;
+    isStopPending = true;
+    renderButton();
+
+    const button = screen.getByRole("button", { name: "Stopping..." });
+    fireEvent.click(button);
+
+    expect(button).toBeDisabled();
+    expect(onStop).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
   });
 });
