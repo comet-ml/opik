@@ -108,3 +108,20 @@ async def test_openai_async_responses_stream__consumer_breaks_early__no_error_lo
     responses_span = fake_backend.trace_trees[0].spans[0]
     assert responses_span.end_time is not None
     assert logging.ERROR not in _levels(aggregator_log_records)
+
+def test_aggregate__terminal_response_failed_event__returns_response():
+    fake_response = openai_responses.Response.model_construct(
+        id="resp_failed_1",
+        status="failed",
+    )
+    event = openai_responses.ResponseFailedEvent.model_construct(
+        response=fake_response,
+        sequence_number=1,
+        type="response.failed",
+    )
+
+    result = response_events_aggregator.aggregate([event])
+
+    assert result == fake_response
+    assert result.status == "failed"
+
