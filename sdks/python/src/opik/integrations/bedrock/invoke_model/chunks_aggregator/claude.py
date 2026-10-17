@@ -10,6 +10,33 @@ from .base import ChunkAggregator, updated_token_count
 LOGGER = logging.getLogger(__name__)
 
 
+def _parse_tool_input(tool_input: str, index: int) -> Any:
+    """Parse the streamed input into the JSON value non-streaming invoke_model returns."""
+    if not tool_input:
+        return {}  # Claude streams a no-argument call as input ""
+    try:
+        return json.loads(tool_input)
+    except ValueError as e:
+        # e.g. cut off by max_tokens: keep what was streamed
+        LOGGER.debug("Could not parse tool input of content block %s: %s", index, e)
+        return tool_input
+
+
+def _apply_delta(block: Dict[str, Any], delta: Dict[str, Any], tool_input: str) -> str:
+    """Append a content_block_delta to its block; return the tool input streamed so far."""
+    if "text" in delta:
+        block["text"] = block.get("text", "") + delta["text"]
+    elif "thinking" in delta:
+        block["thinking"] = block.get("thinking", "") + delta["thinking"]
+    elif "signature" in delta:
+        block["signature"] = block.get("signature", "") + delta["signature"]
+    elif "partial_json" in delta:
+        tool_input += delta["partial_json"]
+    else:
+        LOGGER.debug("Unknown delta type in content_block_delta: %s", list(delta))
+    return tool_input
+
+
 class ClaudeAggregator(ChunkAggregator):
     """
     Aggregator for Claude/Anthropic streaming format.
@@ -19,8 +46,9 @@ class ClaudeAggregator(ChunkAggregator):
 
     Claude chunk structure uses snake_case:
     - message_start: Contains role and initial usage
-    - content_block_start: Content block metadata
-    - content_block_delta: Text chunks in delta.text
+    - content_block_start: Content block metadata (text, thinking, tool_use id/name)
+    - content_block_delta: delta.text, delta.thinking, delta.signature or
+      delta.partial_json (tool input), for the block at the same index
     - content_block_stop: End of content block
     - message_delta: Stop reason and updated usage
     - message_stop: amazon-bedrock-invocationMetrics
@@ -30,8 +58,8 @@ class ClaudeAggregator(ChunkAggregator):
         """Aggregate Claude chunks into native Claude message structure with Bedrock usage."""
         LOGGER.debug("Claude aggregator processing %d items", len(items))
 
-        content_blocks = []
-        current_text = ""
+        blocks: Dict[int, Dict[str, Any]] = {}
+        tool_inputs: Dict[int, str] = {}
         role = "assistant"
         stop_reason = None
         input_tokens = 0
@@ -70,15 +98,19 @@ class ClaudeAggregator(ChunkAggregator):
                         output_tokens,
                     )
 
-                elif chunk_type == "content_block_delta":
-                    delta = chunk_data.get("delta", {})
-                    if "text" in delta:
-                        current_text += delta["text"]
+                elif chunk_type == "content_block_start":
+                    index = chunk_data.get("index", 0)
+                    block = dict(chunk_data.get("content_block", {}))
+                    if block.get("type") == "tool_use":
+                        tool_inputs[index] = ""
+                    blocks[index] = block
 
-                elif chunk_type == "content_block_stop":
-                    if current_text:
-                        content_blocks.append({"type": "text", "text": current_text})
-                        current_text = ""
+                elif chunk_type == "content_block_delta":
+                    index = chunk_data.get("index", 0)
+                    block = blocks.setdefault(index, {"type": "text", "text": ""})
+                    tool_inputs[index] = _apply_delta(
+                        block, chunk_data.get("delta", {}), tool_inputs.get(index, "")
+                    )
 
                 elif chunk_type == "message_delta":
                     delta = chunk_data.get("delta", {})
@@ -126,12 +158,21 @@ class ClaudeAggregator(ChunkAggregator):
                 LOGGER.debug("Claude aggregator error processing chunk: %s", e)
                 continue
 
-        # Add any remaining text
-        if current_text:
-            content_blocks.append({"type": "text", "text": current_text})
+        for index, tool_input in tool_inputs.items():
+            if blocks[index].get("type") == "tool_use":
+                blocks[index]["input"] = _parse_tool_input(tool_input, index)
+
+        # Empty text blocks were never logged before; keep it that way.
+        content_blocks = [
+            blocks[index]
+            for index in sorted(blocks)
+            if not (
+                blocks[index].get("type") == "text" and not blocks[index].get("text")
+            )
+        ]
 
         total_text = "".join(
-            block["text"] for block in content_blocks if block["type"] == "text"
+            block["text"] for block in content_blocks if block.get("type") == "text"
         )
         LOGGER.debug(
             "Claude aggregated: %d chars, input_tokens=%d, output_tokens=%d",

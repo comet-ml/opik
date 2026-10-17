@@ -228,3 +228,140 @@ class TestClaudeStreamAggregation:
         assert backend_usage["original_usage.cacheWriteInputTokens"] == 1024
         assert backend_usage["original_usage.cacheReadInputTokens"] == 4096
         assert backend_usage["original_usage.inputTokens"] == 15
+
+
+def _content_stream(
+    events: List[Dict[str, Any]], stop_reason: str
+) -> List[Dict[str, Any]]:
+    return [
+        _chunk(
+            {
+                "type": "message_start",
+                "message": {"role": "assistant", "usage": {"input_tokens": 12}},
+            }
+        ),
+        *[_chunk(event) for event in events],
+        _chunk(
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": stop_reason},
+                "usage": {"output_tokens": 7},
+            }
+        ),
+        _chunk({"type": "message_stop"}),
+    ]
+
+
+def _tool_use_events(index: int, partial_jsons: List[str]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "type": "content_block_start",
+            "index": index,
+            "content_block": {
+                "type": "tool_use",
+                "id": "toolu_1",
+                "name": "get_weather",
+                "input": {},
+            },
+        },
+        *[
+            {
+                "type": "content_block_delta",
+                "index": index,
+                "delta": {"type": "input_json_delta", "partial_json": partial_json},
+            }
+            for partial_json in partial_jsons
+        ],
+        {"type": "content_block_stop", "index": index},
+    ]
+
+
+class TestClaudeStreamContentBlocks:
+    def test_aggregate_chunks__tool_only_turn__tool_use_block_logged(self):
+        chunks = _content_stream(
+            _tool_use_events(0, ['{"city": ', '"Paris"}']), stop_reason="tool_use"
+        )
+
+        response = chunks_aggregator.aggregate_chunks_to_dataclass(chunks)
+
+        assert response.native_response["content"] == [
+            {
+                "type": "tool_use",
+                "id": "toolu_1",
+                "name": "get_weather",
+                "input": {"city": "Paris"},
+            }
+        ]
+        assert response.native_response["stop_reason"] == "tool_use"
+
+    def test_aggregate_chunks__thinking_text_and_tool_use__all_blocks_logged_in_order(
+        self,
+    ):
+        events = [
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "thinking", "thinking": "", "signature": ""},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": "Need the "},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": "weather."},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "signature_delta", "signature": "sig"},
+            },
+            {"type": "content_block_stop", "index": 0},
+            {
+                "type": "content_block_start",
+                "index": 1,
+                "content_block": {"type": "text", "text": ""},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "text_delta", "text": "Checking."},
+            },
+            {"type": "content_block_stop", "index": 1},
+            *_tool_use_events(2, ['{"city": "Paris"}']),
+        ]
+
+        response = chunks_aggregator.aggregate_chunks_to_dataclass(
+            _content_stream(events, stop_reason="tool_use")
+        )
+
+        assert response.native_response["content"] == [
+            {"type": "thinking", "thinking": "Need the weather.", "signature": "sig"},
+            {"type": "text", "text": "Checking."},
+            {
+                "type": "tool_use",
+                "id": "toolu_1",
+                "name": "get_weather",
+                "input": {"city": "Paris"},
+            },
+        ]
+
+    def test_aggregate_chunks__tool_call_without_arguments__input_is_empty_object(
+        self,
+    ):
+        chunks = _content_stream(_tool_use_events(0, [""]), stop_reason="tool_use")
+
+        response = chunks_aggregator.aggregate_chunks_to_dataclass(chunks)
+
+        assert response.native_response["content"][0]["input"] == {}
+
+    def test_aggregate_chunks__tool_input_cut_off__raw_input_kept(self):
+        chunks = _content_stream(
+            _tool_use_events(0, ['{"city": "Par']), stop_reason="max_tokens"
+        )
+
+        response = chunks_aggregator.aggregate_chunks_to_dataclass(chunks)
+
+        assert response.native_response["content"][0]["input"] == '{"city": "Par'
