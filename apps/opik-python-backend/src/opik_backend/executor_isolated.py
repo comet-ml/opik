@@ -302,10 +302,18 @@ class IsolatedSubprocessExecutor:
                 # Real-time streaming: start log collector threads, then wait for process
                 self._log_collectors[process.pid].start_stream_from_process(process)
                 
-                # Send input to the process
-                process.stdin.write(input_json)
-                process.stdin.close()  # Signal EOF so process knows input is done
-                
+                # Send input to the process. A child that exits without reading
+                # stdin closes the pipe; ignore that like communicate() does and
+                # judge the run by its exit code and stdout.
+                try:
+                    process.stdin.write(input_json)
+                except BrokenPipeError:
+                    pass
+                try:
+                    process.stdin.close()  # Signal EOF so process knows input is done
+                except BrokenPipeError:
+                    pass
+
                 # Wait for process to complete
                 process.wait(timeout=timeout_secs)
                 
