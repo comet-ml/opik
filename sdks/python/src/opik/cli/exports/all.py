@@ -137,10 +137,11 @@ def _export_all_datasets(
     force: bool,
     debug: bool,
     format: str,
-) -> tuple[int, int]:
-    """Export all datasets in the project. Returns (exported, skipped)."""
+) -> tuple[int, int, int]:
+    """Export all datasets in the project. Returns (exported, skipped, errors)."""
     exported = 0
     skipped = 0
+    errors = 0
 
     try:
         all_datasets = list(
@@ -148,11 +149,11 @@ def _export_all_datasets(
         )
     except Exception as e:
         console.print(f"[red]Error listing datasets: {e}[/red]")
-        return 0, 0
+        return 0, 0, 1
 
     if not all_datasets:
         console.print("[yellow]No datasets found.[/yellow]")
-        return 0, 0
+        return 0, 0, 0
 
     console.print(f"[blue]Found {len(all_datasets)} dataset(s)[/blue]")
 
@@ -179,13 +180,14 @@ def _export_all_datasets(
                 else:
                     skipped += 1
             except Exception as e:
+                errors += 1
                 console.print(
                     f"[red]Error exporting dataset '{ds_public.name}': {e}[/red]"
                 )
             finally:
                 progress.advance(task)
 
-    return exported, skipped
+    return exported, skipped, errors
 
 
 def _export_all_prompts(
@@ -231,22 +233,30 @@ def _export_all_prompts(
             try:
                 # Use template_structure to decide which SDK type to fetch
                 prompt_obj: Optional[Union[Prompt, ChatPrompt]] = None
+                lookup_error: Optional[Exception] = None
                 if prompt_public.template_structure == "chat":
                     try:
                         prompt_obj = client.get_chat_prompt(
                             prompt_public.name, project_name=project_name
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        lookup_error = e
                 if prompt_obj is None:
                     try:
                         prompt_obj = client.get_prompt(
                             prompt_public.name, project_name=project_name
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        lookup_error = e
 
-                if prompt_obj is None:
+                if prompt_obj is None and lookup_error is not None:
+                    # The listing returned this prompt, so a lookup that raised
+                    # is a failure, not a missing prompt.
+                    console.print(
+                        f"[red]Error retrieving prompt '{prompt_public.name}': {lookup_error}[/red]"
+                    )
+                    errors += 1
+                elif prompt_obj is None:
                     console.print(
                         f"[yellow]Could not retrieve prompt '{prompt_public.name}', skipping.[/yellow]"
                     )
@@ -455,7 +465,7 @@ def export_all(
             console.print("\n[bold blue]--- Exporting Datasets ---[/bold blue]")
             datasets_dir = project_root / "datasets"
             datasets_dir.mkdir(parents=True, exist_ok=True)
-            ds_exp, ds_skip = _export_all_datasets(
+            ds_exp, ds_skip, ds_errors = _export_all_datasets(
                 client,
                 datasets_dir,
                 project_name,
@@ -467,6 +477,8 @@ def export_all(
             )
             total_stats["datasets"] = ds_exp
             total_stats["datasets_skipped"] = ds_skip
+            if ds_errors:
+                any_errors = True
 
         # Phase 2: Prompts
         if "prompts" in include:
@@ -542,7 +554,8 @@ def export_all(
         if any_errors:
             console.print(
                 "\n[bold yellow]Export completed with errors — "
-                "some traces or experiments could not be exported.[/bold yellow]"
+                "some datasets, prompts, traces or experiments could not be "
+                "exported.[/bold yellow]"
             )
         else:
             console.print("\n[bold green]Export complete.[/bold green]")
