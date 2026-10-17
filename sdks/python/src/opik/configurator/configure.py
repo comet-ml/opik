@@ -297,6 +297,11 @@ class OpikConfigurator:
         """
         config_file_needs_updating = False
 
+        # Treat blank/whitespace-only keys the same as a missing key so that
+        # opik.configure(api_key="") and OPIK_API_KEY="" are handled correctly.
+        if self.api_key is not None:
+            self.api_key = self.api_key.strip() or None
+
         if self.api_key:
             extracted_base_url = _extract_base_url_from_api_key(self.api_key)
             if extracted_base_url is None and self.self_hosted_comet:
@@ -330,8 +335,15 @@ class OpikConfigurator:
             config_file_needs_updating = True
 
         elif self.api_key is None and self.current_config.api_key is not None:
-            self.api_key = self.current_config.api_key
-            self._try_set_url_from_api_key()
+            config_key = self.current_config.api_key.strip() or None
+            if config_key is not None:
+                self.api_key = config_key
+                self._try_set_url_from_api_key()
+            else:
+                # Blank key in config; treat it as missing and ask for one
+                self._ask_for_api_key()
+                self._try_set_url_from_api_key()
+                config_file_needs_updating = True
 
         return config_file_needs_updating
 

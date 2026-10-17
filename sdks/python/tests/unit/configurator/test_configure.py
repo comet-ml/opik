@@ -972,6 +972,54 @@ class TestGetApiKey:
         assert configurator.base_url == "https://same-url.com/"
 
 
+    @pytest.mark.parametrize("blank_key", ["", "   ", "\t"])
+    @patch("opik.configurator.configure.OpikConfigurator._ask_for_api_key")
+    def test_set_api_key__blank_key_passed__treated_as_missing__user_is_asked(
+        self, mock_ask_for_api_key, blank_key
+    ):
+        """A blank/whitespace-only api_key argument must be treated the same as None.
+
+        opik.configure(api_key="") and opik.configure(api_key="   ") previously
+        fell through all branches of _set_api_key without validation or prompting,
+        leaving self.api_key as an empty string.
+        """
+
+        def set_api_key():
+            self.configurator.api_key = "real_key"
+
+        mock_ask_for_api_key.side_effect = set_api_key
+
+        self.configurator = OpikConfigurator(api_key=blank_key, force=False)
+        needs_update = self.configurator._set_api_key()
+
+        mock_ask_for_api_key.assert_called_once()
+        assert self.configurator.api_key == "real_key"
+        assert needs_update is True
+
+    @pytest.mark.parametrize("blank_key", ["", "   ", "\t"])
+    @patch("opik.configurator.configure.OpikConfigurator._ask_for_api_key")
+    def test_set_api_key__blank_key_in_config__treated_as_missing__user_is_asked(
+        self, mock_ask_for_api_key, blank_key
+    ):
+        """A blank/whitespace-only key stored in the config file must be treated
+        as missing and trigger the prompt, not silently propagated as the key.
+        """
+
+        def set_api_key():
+            self.configurator.api_key = "real_key"
+
+        mock_ask_for_api_key.side_effect = set_api_key
+
+        self.configurator = OpikConfigurator(api_key=None, force=False)
+        self.configurator.current_config = MagicMock()
+        self.configurator.current_config.api_key = blank_key
+        needs_update = self.configurator._set_api_key()
+
+        mock_ask_for_api_key.assert_called_once()
+        assert self.configurator.api_key == "real_key"
+        assert needs_update is True
+
+
 class TestGetWorkspace:
     @patch("opik.configurator.configure.opik.config.OpikConfig")
     @patch(
