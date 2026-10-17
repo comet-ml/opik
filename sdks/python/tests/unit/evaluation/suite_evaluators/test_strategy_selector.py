@@ -64,7 +64,7 @@ class TestHeuristicSelector:
     def test_context_present__capable_model__returns_agentic(self):
         sel = strategy_selector.HeuristicSelector()
         ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})
-        for model in ("gpt-5", "gpt-4o", "gpt-4o-mini", "claude-opus-4-7"):
+        for model in ("gpt-5", "gpt-4o", "gpt-4o-mini", "claude-opus-4-6"):
             assert (
                 sel.select(trace_tool_context=ctx, model_name=model, assertions=[])
                 is strategy_selector.ScoringToolStrategy.AGENTIC
@@ -113,6 +113,133 @@ class TestCapabilityLookup:
     def test_unknown_model__falls_back_to_default(self):
         cap = strategy_selector._capability_for("totally-unknown-model")
         assert cap is model_capabilities.DEFAULT_CAPABILITY
+
+    def test_provider_qualified_name__resolves_same_as_bare(self):
+        # `AnthropicChatModel` defaults to a provider-qualified name and
+        # `base_model` stores it verbatim, so the qualified form is what
+        # reaches the capability lookup. It has to resolve to the same
+        # entry as the bare id, otherwise the judge silently drops to
+        # DEFAULT_CAPABILITY.
+        bare = strategy_selector._capability_for("claude-sonnet-4-6")
+        qualified = strategy_selector._capability_for("anthropic/claude-sonnet-4-6")
+        assert qualified is bare
+        assert qualified is not model_capabilities.DEFAULT_CAPABILITY
+
+    def test_provider_qualified_name__preserves_agentic_flag(self):
+        # The fall-through changes more than the token budget: it also
+        # flips `agentic_in_auto`, which changes strategy selection under
+        # `auto` rather than just how rich the overview is.
+        cap = strategy_selector._capability_for("anthropic/claude-sonnet-4-6")
+        assert cap.agentic_in_auto is True
+
+    def test_unknown_provider_prefix__still_falls_back(self):
+        cap = strategy_selector._capability_for("someprovider/totally-unknown-model")
+        assert cap is model_capabilities.DEFAULT_CAPABILITY
+
+    def test_bedrock_name__resolves_same_as_bare(self):
+        # LiteLLM Bedrock ids keep a geo/vendor prefix after the provider.
+        for bedrock_name, bare in (
+            ("bedrock/us.anthropic.claude-sonnet-4-6", "claude-sonnet-4-6"),
+            ("bedrock/global.anthropic.claude-opus-5", "claude-opus-5"),
+            (
+                "bedrock/converse/us.anthropic.claude-haiku-4-5-20251001-v1:0",
+                "claude-haiku-4-5",
+            ),
+        ):
+            cap = strategy_selector._capability_for(bedrock_name)
+            assert cap is strategy_selector._capability_for(bare), bedrock_name
+
+    def test_fifth_generation_models__are_registered(self):
+        for model_name in ("claude-opus-5", "claude-sonnet-5"):
+            cap = strategy_selector._capability_for(model_name)
+            assert cap is not model_capabilities.DEFAULT_CAPABILITY, model_name
+
+    def test_fifth_generation_models__have_expected_capabilities(self):
+        # Asserting only "not DEFAULT_CAPABILITY" would pass on a wrong
+        # prefix match, so pin the values.
+        for model_name in ("claude-opus-5", "claude-sonnet-5"):
+            cap = strategy_selector._capability_for(model_name)
+            assert cap.model_name_prefix == model_name, model_name
+            assert cap.context_window == 1_000_000, model_name
+
+    def test_sampling_rejecting_models__stay_out_of_agentic_auto(self):
+        # `agentic/loop.py` sends temperature=0 on every turn, and Opus 4.7
+        # onward rejects a non-default temperature, so routing these models
+        # into the agentic loop under `auto` would fail the first request
+        # instead of scoring.
+        for model_name in ("claude-opus-4-7", "claude-opus-5", "claude-sonnet-5"):
+            cap = strategy_selector._capability_for(model_name)
+            assert cap.agentic_in_auto is False, model_name
+
+    def test_sampling_accepting_models__keep_agentic_auto(self):
+        for model_name in ("claude-sonnet-4-6", "claude-opus-4-6", "gpt-4o"):
+            cap = strategy_selector._capability_for(model_name)
+            assert cap.agentic_in_auto is True, model_name
+
+    def test_custom_table_with_empty_prefix__prefers_real_match(self):
+        # An empty prefix matches every name via startswith. Without
+        # deferring it, a caller-supplied table containing a catch-all
+        # entry would shadow the real match for a qualified name.
+        table = [
+            model_capabilities.ModelCapability(
+                "", context_window=16_000, agentic_in_auto=False
+            ),
+            model_capabilities.ModelCapability(
+                "claude-sonnet-4-6", context_window=1_000_000, agentic_in_auto=True
+            ),
+        ]
+        cap = strategy_selector._capability_for(
+            "anthropic/claude-sonnet-4-6", capabilities=table
+        )
+        assert cap.model_name_prefix == "claude-sonnet-4-6"
+        assert cap.context_window == 1_000_000
+
+    def test_custom_table_empty_prefix__serves_unmatched_models(self):
+        # A caller-supplied catch-all is a deliberate configuration, not
+        # noise. It must lose to any specific match but still win over
+        # DEFAULT_CAPABILITY, otherwise the caller's configured limits are
+        # silently discarded for every unmatched model.
+        catch_all = model_capabilities.ModelCapability(
+            "", context_window=250_000, agentic_in_auto=True
+        )
+        table = [
+            catch_all,
+            model_capabilities.ModelCapability(
+                "claude-sonnet-4-6", context_window=1_000_000, agentic_in_auto=True
+            ),
+        ]
+        cap = strategy_selector._capability_for(
+            "some-unlisted-model", capabilities=table
+        )
+        assert cap is catch_all
+        assert cap is not model_capabilities.DEFAULT_CAPABILITY
+
+    def test_custom_table_without_catch_all__still_uses_default(self):
+        table = [
+            model_capabilities.ModelCapability(
+                "claude-sonnet-4-6", context_window=1_000_000, agentic_in_auto=True
+            ),
+        ]
+        cap = strategy_selector._capability_for(
+            "some-unlisted-model", capabilities=table
+        )
+        assert cap is model_capabilities.DEFAULT_CAPABILITY
+
+
+class TestBudgetTokens:
+    def test_qualified_name__matches_bare_budget(self):
+        assert strategy_selector.compute_budget_tokens(
+            "anthropic/claude-sonnet-4-6"
+        ) == strategy_selector.compute_budget_tokens("claude-sonnet-4-6")
+
+    def test_qualified_name__is_not_the_default_budget(self):
+        default_budget = (
+            int(model_capabilities.DEFAULT_CAPABILITY.context_window * 0.5) - 1500
+        )
+        assert (
+            strategy_selector.compute_budget_tokens("anthropic/claude-sonnet-4-6")
+            != default_budget
+        )
 
 
 class TestLLMJudgeIntegration:

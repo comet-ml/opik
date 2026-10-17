@@ -57,7 +57,12 @@ MODEL_CAPABILITIES: List[ModelCapability] = [
     ModelCapability("gpt-5-nano", context_window=400_000, agentic_in_auto=False),
     ModelCapability("gpt-4o", context_window=128_000, agentic_in_auto=True),
     ModelCapability("gpt-4o-mini", context_window=128_000, agentic_in_auto=True),
-    ModelCapability("claude-opus-4-7", context_window=1_000_000, agentic_in_auto=True),
+    # `agentic/loop.py` sends temperature=0 on every turn, and Opus 4.7 onward
+    # rejects a non-default temperature, so `auto` keeps these on the one-shot
+    # path. Flip once the loop stops sending sampling parameters.
+    ModelCapability("claude-opus-4-7", context_window=1_000_000, agentic_in_auto=False),
+    ModelCapability("claude-opus-5", context_window=1_000_000, agentic_in_auto=False),
+    ModelCapability("claude-sonnet-5", context_window=1_000_000, agentic_in_auto=False),
     ModelCapability("claude-opus-4-6", context_window=1_000_000, agentic_in_auto=True),
     ModelCapability(
         "claude-sonnet-4-6", context_window=1_000_000, agentic_in_auto=True
