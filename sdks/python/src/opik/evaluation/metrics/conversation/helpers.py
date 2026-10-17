@@ -1,4 +1,6 @@
-from typing import Any, Generator, List
+from typing import Any, Generator, List, Mapping, Sequence
+
+import opik.exceptions as exceptions
 
 from . import types
 from .conversation_turns_factory import build_conversation_turns
@@ -99,9 +101,68 @@ def render_turns_for_prompt(
     return str(rendered)
 
 
+def message_has_text(message: Mapping[str, Any]) -> bool:
+    """Whether a conversation message carries text to read.
+
+    An assistant message can reach the conversation-level metrics without any text:
+    the output transform that builds a conversation returns the trace's output, and
+    ``create_conversation_from_traces`` skips a message only when that is ``None``,
+    so a turn whose text is empty -- an agent call that only issued tool calls, or
+    an empty completion -- arrives as ``""``. ``None`` is the one non-text value read
+    as "no text", because an output transform returns it for a turn it has nothing to
+    say for.
+
+    The content shapes are read the way the GEval conversation adapters read them
+    (``llm_judges.g_eval_wrappers._text_from_parts``), so both families agree on
+    which turns carry text. A shape this cannot read is reported by raising rather
+    than read as empty: reading it as empty would silently drop a message that does
+    have an answer.
+    """
+    content = message.get("content")
+    if content is None:
+        return False
+    if isinstance(content, str):
+        return bool(content.strip())
+    if isinstance(content, (list, tuple)):
+        return any(text.strip() for text in _text_parts(content))
+    raise _bad_content_error(content)
+
+
+def _text_parts(parts: Sequence[Any]) -> List[str]:
+    """The text carried by the text parts of a content list.
+
+    Mirrors the GEval conversation adapters' reading of the same shape: a string and
+    a mapping with string ``text`` carry text, a mapping without one carries none
+    (an image part, say), and any other shape is one neither can read.
+    """
+    texts: List[str] = []
+    for part in parts:
+        if isinstance(part, str):
+            texts.append(part)
+        elif isinstance(part, dict):
+            if "text" in part:
+                text = part["text"]
+                if not isinstance(text, str):
+                    raise _bad_content_error(part)
+                texts.append(text)
+            elif part.get("type") == "text":
+                raise _bad_content_error(part)
+        else:
+            raise _bad_content_error(part)
+    return texts
+
+
+def _bad_content_error(content: Any) -> exceptions.MetricComputationError:
+    return exceptions.MetricComputationError(
+        "Assistant turn content must be text or a list of content parts, "
+        f"got {type(content).__name__}."
+    )
+
+
 __all__ = [
     "get_turns_in_sliding_window",
     "merge_turns",
     "extract_turns_windows_from_conversation",
+    "message_has_text",
     "render_turns_for_prompt",
 ]
