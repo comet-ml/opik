@@ -127,6 +127,16 @@ public enum AnthropicModelName implements StructuredOutputSupported {
             Map.entry(CLAUDE_SONNET_4_5.value, List.of()),
             Map.entry(CLAUDE_SONNET_4_5_20250929.value, List.of()));
 
+    // These take adaptive thinking but, unlike the newer models, run without any thinking when the request does not ask
+    // for it. Opus 4.5 is not here: it has no adaptive thinking, only a fixed budget.
+    private static final Set<String> THINKS_ONLY_WHEN_ASKED_MODEL_IDS = Set.of(
+            CLAUDE_SONNET_4_6.value,
+            CLAUDE_OPUS_4_6.value,
+            CLAUDE_OPUS_4_6_20260205.value,
+            CLAUDE_OPUS_4_7.value,
+            CLAUDE_OPUS_4_7_20260416.value,
+            CLAUDE_OPUS_4_8.value);
+
     private static final Set<String> ALL_MODEL_IDS = Arrays.stream(values())
             .map(AnthropicModelName::getValue)
             .collect(Collectors.toUnmodifiableSet());
@@ -146,6 +156,10 @@ public enum AnthropicModelName implements StructuredOutputSupported {
 
     static Optional<List<String>> effortLevels(String modelId) {
         return Optional.ofNullable(modelId).map(EFFORT_LEVELS_BY_MODEL_ID::get);
+    }
+
+    static boolean thinksOnlyWhenAsked(String modelId) {
+        return modelId != null && THINKS_ONLY_WHEN_ASKED_MODEL_IDS.contains(modelId);
     }
 
     @Override
