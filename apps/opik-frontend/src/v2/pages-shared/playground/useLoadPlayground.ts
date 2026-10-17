@@ -8,8 +8,9 @@ import {
   useSetPromptMap,
   useSetDatasetType,
   useSetExperimentName,
+  useSetLastActiveProjectId,
 } from "@/store/PlaygroundStore";
-import { generateDefaultPrompt, isEmptyMessage } from "@/lib/playground";
+import { generateDefaultPrompt, isPlaygroundEmpty } from "@/lib/playground";
 import { DATASET_TYPE } from "@/types/datasets";
 import {
   generateDefaultLLMPromptMessage,
@@ -53,6 +54,7 @@ function useLoadPlayground() {
   const setPromptMap = useSetPromptMap();
   const setDatasetType = useSetDatasetType();
   const setExperimentName = useSetExperimentName();
+  const setLastActiveProjectId = useSetLastActiveProjectId();
 
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
@@ -72,13 +74,7 @@ function useLoadPlayground() {
     },
   );
 
-  const isPlaygroundEmpty = useMemo(() => {
-    const keys = Object.keys(promptMap);
-
-    return (
-      keys.length === 1 && !!promptMap[keys[0]]?.messages?.every(isEmptyMessage)
-    );
-  }, [promptMap]);
+  const isEmpty = useMemo(() => isPlaygroundEmpty(promptMap), [promptMap]);
 
   const providerKeys = useMemo(() => {
     return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
@@ -223,6 +219,8 @@ function useLoadPlayground() {
 
       setDatasetType(datasetType ?? null);
       setExperimentName(null);
+      // Otherwise the Playground reads the arrival as a project switch and resets what was loaded.
+      setLastActiveProjectId(activeProjectId);
 
       navigate({
         to: "/$workspaceName/projects/$projectId/playground",
@@ -239,6 +237,7 @@ function useLoadPlayground() {
       setDatasetVersionKey,
       setDatasetType,
       setExperimentName,
+      setLastActiveProjectId,
       workspaceName,
       activeProjectId,
     ],
@@ -246,7 +245,7 @@ function useLoadPlayground() {
 
   return {
     loadPlayground,
-    isPlaygroundEmpty,
+    isPlaygroundEmpty: isEmpty,
     isPendingProviderKeys,
   };
 }
