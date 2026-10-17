@@ -57,18 +57,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * The post-cutover branch of {@code 000138_create_span_weeks_mv}: on an install whose {@code spans} is already the
- * Distributed wrapper over {@code spans_local}, the MV sits on {@code spans_local}, and spans written through the API
- * (into the wrapper, delivered to the shard) register their weeks.
- *
- * <p>The cutover is spliced in the way {@link SpansSchemaParityPostCutoverTest} does it: the changelog stops at the
- * splice point, the runbook's EXCHANGE and Distributed wrap run, and the rest of the changelog, this MV included,
- * resumes against that topology. Dedicated, non-reused containers, because the splice swaps the live table.
+ * {@code 000138_create_span_weeks_mv} across the cutover: the MV is created on {@code spans} while it is the live local
+ * table, then the runbook's EXCHANGE and Distributed wrap run, and the MV must follow the name onto the wrapper, so spans
+ * written through the API keep registering their weeks. Dedicated, non-reused containers, because the cutover swaps
+ * the live table.
  */
-@DisplayName("Span weeks registration by the materialized view, post-cutover")
+@DisplayName("Span weeks registration by the materialized view, across the cutover")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class SpanWeeksMaterializedViewPostCutoverTest {
+class SpanWeeksMaterializedViewCutoverTest {
 
     private static final String USER = UUID.randomUUID().toString();
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
@@ -83,7 +80,6 @@ class SpanWeeksMaterializedViewPostCutoverTest {
     private static final String BACKUP = PARITY.getBackup();
     private static final String TEMP_WRAPPER = "spans_dist";
     private static final String MATERIALIZED_VIEW = "span_weeks_mv";
-    private static final String CUTOVER_SPLICE_POINT = CutoverMigrationPreconditionLint.SPANS.getCutoverSplicePoint();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -105,7 +101,8 @@ class SpanWeeksMaterializedViewPostCutoverTest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouse, DATABASE_NAME);
 
         MigrationUtils.runMysqlDbMigration(MYSQL);
-        migrateAcrossTheCutover();
+        MigrationUtils.runClickhouseDbMigration(clickHouse);
+        applyCutover();
 
         // The listener stays off, so every span_weeks row here comes from span_weeks_mv. The other two flags match
         // the post-cutover topology: sentinel columns, and mutations routed to spans_local.
@@ -166,7 +163,6 @@ class SpanWeeksMaterializedViewPostCutoverTest {
                 SpanWeek.builder().projectId(projectId).traceId(traceWithBoundaryIds).idWeek(EPOCH_WEEK).build(),
                 SpanWeek.builder().projectId(projectId).traceId(traceWithBoundaryIds).idWeek(SATURATED_WEEK)
                         .build());
-        // The wrapper delivers to spans_local through its background queue, where the MV fires.
         await().atMost(30, SECONDS).untilAsserted(() -> {
             var actualWeeks = weeks(Set.of(traceAcrossWeeks, traceWithBoundaryIds), ws);
             assertThat(actualWeeks).containsExactlyInAnyOrderElementsOf(expectedWeeks);
@@ -174,11 +170,12 @@ class SpanWeeksMaterializedViewPostCutoverTest {
     }
 
     @Test
-    @DisplayName("the MV is attached to the spans_local shard, not to the Distributed wrapper")
-    void materializedViewIsAttachedToTheShard() throws SQLException {
-        // An MV on the wrapper would also register inserts through it, so the test above cannot tell the two apart.
-        assertThat(dependentViews(SHARD)).containsExactly(MATERIALIZED_VIEW);
-        assertThat(dependentViews(SPANS)).isEmpty();
+    @DisplayName("the MV follows the spans name onto the Distributed wrapper, not the renamed shard")
+    void materializedViewFollowsTheSpansName() throws SQLException {
+        // An MV left on the shard would also register inserts delivered to it, so the test above cannot tell the two
+        // apart.
+        assertThat(dependentViews(SPANS)).containsExactly(MATERIALIZED_VIEW);
+        assertThat(dependentViews(SHARD)).isEmpty();
     }
 
     private List<String> dependentViews(String table) throws SQLException {
@@ -197,8 +194,7 @@ class SpanWeeksMaterializedViewPostCutoverTest {
         }
     }
 
-    private void migrateAcrossTheCutover() {
-        MigrationUtils.runClickhouseDbMigrationThrough(clickHouse, CUTOVER_SPLICE_POINT);
+    private void applyCutover() {
         try (var connection = clickHouse.createConnection("");
                 var statement = connection.createStatement()) {
             // Cutover step 3, as 000003_exchange_and_wrap.sql runs it.
@@ -214,10 +210,8 @@ class SpanWeeksMaterializedViewPostCutoverTest {
                     .formatted(DATABASE_NAME, SPANS, DATABASE_NAME, SHARD, DATABASE_NAME, TEMP_WRAPPER,
                             DATABASE_NAME, SPANS));
         } catch (SQLException e) {
-            throw new IllegalStateException("Failed to splice the spans cutover", e);
+            throw new IllegalStateException("Failed to apply the spans cutover", e);
         }
-        // Resume: the rest of the changelog, the MV's post-cutover branch included, runs on the wrapped topology.
-        MigrationUtils.runClickhouseDbMigration(clickHouse);
     }
 
     private List<SpanWeek> weeks(Set<UUID> traceIds, WorkspaceContext ws) {
