@@ -42,9 +42,9 @@ public class ExperimentItemPublisher {
     }
 
     /**
-     * Sets the batch counter atomically, then publishes all messages to the Redis stream.
-     * The counter is set BEFORE publishing to prevent the race where a fast consumer
-     * decrements to zero before all messages are published.
+     * Sets each experiment's item total, then publishes all messages to the Redis stream.
+     * The totals are set BEFORE publishing to prevent the race where a fast consumer
+     * reads a run as drained before all messages are published.
      */
     public Mono<Void> publish(@NonNull UUID batchId, List<ExperimentItemToProcess> messages, boolean testSuite) {
         if (CollectionUtils.isEmpty(messages)) {
@@ -95,7 +95,7 @@ public class ExperimentItemPublisher {
         return Flux.fromIterable(experimentIds)
                 .flatMap(experimentId -> Flux.just(
                         ExperimentExecutionConfig.itemCounterKey(experimentId),
-                        ExperimentExecutionConfig.itemFailureCounterKey(experimentId))
+                        ExperimentExecutionConfig.itemEntriesKey(experimentId))
                         .flatMap(key -> redisClient.getAtomicLong(key).delete()))
                 .then()
                 .onErrorResume(error -> {
@@ -106,8 +106,8 @@ public class ExperimentItemPublisher {
     }
 
     /**
-     * One counter per prompt variant, all set before the first message is published so a fast
-     * consumer cannot drain a variant before its own counter exists.
+     * One total per prompt variant, all set before the first message is published so a fast
+     * consumer cannot drain a variant before its own total exists.
      */
     private Mono<Void> setItemCounters(List<ExperimentItemToProcess> messages) {
         var itemsByExperiment = messages.stream()
