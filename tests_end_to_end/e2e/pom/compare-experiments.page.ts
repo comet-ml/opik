@@ -84,6 +84,41 @@ export class CompareExperimentsPage {
   }
 
   /**
+   * Open the Results tab with view state already applied, and with one row's
+   * detail panel expanded.
+   *
+   * All of it in ONE navigation, as URL state, for the same reason
+   * `gotoConfiguration` takes `diff` that way: these are the params a shared
+   * link carries, and a spec that needs the view to START in this state should
+   * not render three intermediate views to get there. Driving the real search
+   * box is what `searchItems` is for; both paths matter.
+   *
+   * `search` and `height` are here because they are what a round trip has to
+   * carry back and the ones a user would notice losing — a return that dropped
+   * the search lands on an unfiltered grid, one that dropped the height
+   * silently resets the row size. They are set verbatim, so the caller decides
+   * whether the search actually matches anything.
+   */
+  async gotoResultsView(opts: {
+    search?: string;
+    height?: 'small' | 'medium' | 'large';
+    row?: string;
+  }): Promise<void> {
+    await test.step('open the compare Results tab with view state', async () => {
+      const url = new URL(this.compareUrl('items'));
+      if (opts.search !== undefined) url.searchParams.set('search', opts.search);
+      if (opts.height !== undefined) url.searchParams.set('height', opts.height);
+      if (opts.row !== undefined) url.searchParams.set('row', opts.row);
+      await this.page.goto(url.toString());
+      if (opts.row !== undefined) {
+        // The panel's Close control only exists once the slide-over is mounted —
+        // same settle `openRowPanel` uses.
+        await this.page.getByRole('button', { name: 'Close' }).waitFor({ state: 'visible' });
+      }
+    });
+  }
+
+  /**
    * Open the Configuration tab, optionally with "Show differences only" already
    * on.
    *
@@ -609,6 +644,54 @@ export class CompareExperimentsPage {
   /** The compare row-detail slide-over. */
   private get rowPanel(): Locator {
     return this.page.getByTestId('compare-experiments');
+  }
+
+  /**
+   * The row-detail panel's link out to the open row's dataset item — the
+   * "View in test suite" tag in the dataset-item column (OPIK-8600).
+   *
+   * Addressed by role and accessible name, which `ResourceLink` supplies from
+   * the tag's own text. Page-scoped rather than reached through `rowPanel`
+   * because the tag is the only one of its name on the view and the panel is a
+   * portal-adjacent slide-over; every caller asserts the lookup resolved to
+   * exactly one element, so an ambiguous match fails rather than guessing.
+   */
+  get datasetItemTag(): Locator {
+    return this.page.getByRole('link', { name: 'View in test suite' });
+  }
+
+  /**
+   * The dataset-item tag's `href`, once it has rendered.
+   *
+   * The wait is a `toHaveCount(1)` rather than a bare read: the Data tab mounts
+   * a beat after the panel's Close control appears, so a read taken as soon as
+   * the panel is open finds nothing and would report an absent link on a
+   * perfectly good build.
+   */
+  async readDatasetItemTagHref(): Promise<string> {
+    return test.step('read the dataset-item tag href from the row panel', async () => {
+      await expect(this.datasetItemTag, 'exactly one dataset-item tag in the row panel').toHaveCount(
+        1,
+        { timeout: GRID_READ_TIMEOUT_MS },
+      );
+      const href = await this.datasetItemTag.getAttribute('href');
+      // Asserted, not defaulted: a tag rendered without an href looks identical
+      // and navigates nowhere, which is a defect rather than an empty string.
+      expect(href, 'the dataset-item tag carries an href').not.toBeNull();
+      return href as string;
+    });
+  }
+
+  /** Follow the dataset-item tag and settle on the dataset items page. */
+  async clickDatasetItemTag(): Promise<void> {
+    await test.step('click the dataset-item tag', async () => {
+      await expect(this.datasetItemTag, 'exactly one dataset-item tag in the row panel').toHaveCount(
+        1,
+        { timeout: GRID_READ_TIMEOUT_MS },
+      );
+      await this.datasetItemTag.click();
+      await this.page.waitForURL((url) => url.pathname.endsWith('/items'), { timeout: 30_000 });
+    });
   }
 
   /**
