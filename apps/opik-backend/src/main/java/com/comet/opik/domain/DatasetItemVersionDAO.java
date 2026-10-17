@@ -1349,7 +1349,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     created_at,
                     last_updated_at,
                     author,
-                    source_queue_id
+                    source_queue_id,
+                    evaluator_revision
                 FROM (
                     SELECT
                         workspace_id,
@@ -1365,7 +1366,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         created_at,
                         last_updated_at,
                         feedback_scores.last_updated_by AS author,
-                        CAST('' AS FixedString(36)) AS source_queue_id
+                        CAST('' AS FixedString(36)) AS source_queue_id,
+                        evaluator_revision
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -1386,7 +1388,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         created_at,
                         last_updated_at,
                         author,
-                        source_queue_id
+                        source_queue_id,
+                        evaluator_revision
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -1402,7 +1405,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     project_id,
                     entity_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id, evaluator_revision)) AS entries
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ),
@@ -1418,7 +1421,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     arrayElement(entries, 1).4 AS source,
                     mapFromArrays(
                         arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
-                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, CAST(e.9 AS DateTime64(9, 'UTC')), '', '', e.10, e.5), entries)
+                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, CAST(e.9 AS DateTime64(9, 'UTC')), '', '', e.10, e.5, e.11), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -1894,7 +1897,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                                             v.6,
                                                             v.7,
                                                             v.8,
-                                                            v.9
+                                                            v.9,
+                                                            v.10
                                                         ),
                                                         'Tuple(
                                                             value Decimal(18,9),
@@ -1905,7 +1909,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                                             span_type String,
                                                             span_id String,
                                                             source_queue_id String,
-                                                            author String
+                                                            author String,
+                                                            evaluator_revision String
                                                         )'
                                                     ),
                                                     mapValues(value_by_author)
@@ -1933,7 +1938,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                                     span_type String,
                                                     span_id String,
                                                     source_queue_id String,
-                                                    author String
+                                                    author String,
+                                                    evaluator_revision String
                                                 )
                                             )
                                         )'
