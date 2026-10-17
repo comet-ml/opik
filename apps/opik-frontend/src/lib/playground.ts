@@ -14,6 +14,7 @@ import {
   DEFAULT_CUSTOM_CONFIGS,
 } from "@/constants/llm";
 import {
+  getDefaultReasoningEffort,
   getDefaultThinkingEffort,
   getDefaultThinkingLevel,
   getOpenRouterDefaultMaxTokens,
@@ -143,7 +144,7 @@ export const getDefaultConfigByProvider = (
     };
 
     if (supportsOpenAIReasoningEffort(model)) {
-      config.reasoningEffort = "high";
+      config.reasoningEffort = getDefaultReasoningEffort(model);
     }
 
     return config;
