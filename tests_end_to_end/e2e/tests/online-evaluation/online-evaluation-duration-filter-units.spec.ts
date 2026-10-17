@@ -66,9 +66,8 @@ test.describe(
         await test.step('Open the create-rule dialog on a fresh project', async () => {
           await rules.goto(project.id);
           await rules.waitForReady();
-          await rules.openCreateRuleDialog();
+          await rules.openCreateRuleDialog('Code metric');
           await rules.dialog.getByRole('textbox', { name: 'Rule name' }).fill(ruleName);
-          await rules.dialog.getByRole('radio', { name: 'Code metric' }).click();
         });
 
         await test.step(`Add a "${DURATION_COLUMN} > ${WHOLE.seconds}" filter and a name filter`, async () => {
@@ -138,9 +137,8 @@ test.describe(
         await test.step(`Create a rule filtered at ${SUB_SECOND.seconds}s`, async () => {
           await rules.goto(project.id);
           await rules.waitForReady();
-          await rules.openCreateRuleDialog();
+          await rules.openCreateRuleDialog('Code metric');
           await rules.dialog.getByRole('textbox', { name: 'Rule name' }).fill(ruleName);
-          await rules.dialog.getByRole('radio', { name: 'Code metric' }).click();
           await rules.addFilterRow();
           await rules.setFilterColumn(0, DURATION_COLUMN);
           await rules.setFilterOperator(0, '>');

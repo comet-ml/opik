@@ -181,7 +181,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       const onlineEval = new OnlineEvaluationPage(page);
       await onlineEval.goto(project.id);
       await onlineEval.waitForReady();
-      await onlineEval.openCreateRuleDialog();
+      await onlineEval.openCreateRuleDialog('Code metric');
       await onlineEval.fillAndSubmitCreateRuleDialogPythonEquals({
         name: ruleName,
         referenceValue: reference,
