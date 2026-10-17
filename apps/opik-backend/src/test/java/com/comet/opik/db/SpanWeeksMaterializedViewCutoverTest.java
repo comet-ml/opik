@@ -103,6 +103,7 @@ class SpanWeeksMaterializedViewCutoverTest {
         MigrationUtils.runMysqlDbMigration(MYSQL);
         MigrationUtils.runClickhouseDbMigration(clickHouse);
         applyCutover();
+        assertCutOver();
 
         // The listener stays off, so every span_weeks row here comes from span_weeks_mv. The other two flags match
         // the post-cutover topology: sentinel columns, and mutations routed to spans_local.
@@ -178,18 +179,32 @@ class SpanWeeksMaterializedViewCutoverTest {
         assertThat(dependentViews(SHARD)).isEmpty();
     }
 
+    /** Guards against a no-op cutover before any span is written: {@code spans} must wrap the renamed shard. */
+    private void assertCutOver() {
+        try {
+            assertThat(systemTables("engine", SPANS)).containsExactly("Distributed");
+            assertThat(systemTables("engine", SHARD)).containsExactly("ReplicatedReplacingMergeTree");
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to read the spans topology", e);
+        }
+    }
+
     private List<String> dependentViews(String table) throws SQLException {
+        return systemTables("arrayJoin(dependencies_table)", table);
+    }
+
+    private List<String> systemTables(String column, String table) throws SQLException {
         try (var connection = clickHouse.createConnection("");
                 var statement = connection.prepareStatement(
-                        "SELECT arrayJoin(dependencies_table) FROM system.tables WHERE database = ? AND name = ?")) {
+                        "SELECT %s FROM system.tables WHERE database = ? AND name = ?".formatted(column))) {
             statement.setString(1, DATABASE_NAME);
             statement.setString(2, table);
             try (var rows = statement.executeQuery()) {
-                var views = new ArrayList<String>();
+                var values = new ArrayList<String>();
                 while (rows.next()) {
-                    views.add(rows.getString(1));
+                    values.add(rows.getString(1));
                 }
-                return views;
+                return values;
             }
         }
     }
