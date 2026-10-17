@@ -3,6 +3,8 @@ package com.comet.opik.domain;
 import com.comet.opik.api.OllamaConnectionTestResponse;
 import com.comet.opik.api.OllamaModel;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
+import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -19,6 +21,8 @@ import java.time.Instant;
 import java.util.List;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
@@ -30,6 +34,7 @@ class OllamaServiceTest {
 
     private static WireMockServer wireMockServer;
     private static OllamaService ollamaService;
+    private static OllamaService strictOllamaService;
     private static String baseUrl;
 
     @BeforeAll
@@ -41,7 +46,11 @@ class OllamaServiceTest {
         baseUrl = "http://localhost:" + wireMockServer.port();
         var httpClient = TestHttpClientUtils.client();
 
-        ollamaService = new OllamaService(httpClient);
+        ollamaService = new OllamaService(httpClient, new LlmProviderClientConfig());
+
+        var strictConfig = new LlmProviderClientConfig();
+        strictConfig.setDestinationGuard(DestinationGuard.Mode.STRICT);
+        strictOllamaService = new OllamaService(httpClient, strictConfig);
     }
 
     @AfterAll
@@ -337,6 +346,27 @@ class OllamaServiceTest {
         // Verify Authorization header was sent
         wireMockServer.verify(getRequestedFor(urlEqualTo("/api/tags"))
                 .withHeader("Authorization", equalTo("Bearer " + apiKey)));
+    }
+
+    @Test
+    @DisplayName("Should refuse a private destination without sending a request when the guard is strict")
+    void testConnection__strictGuardRefusesPrivateDestination() {
+        OllamaConnectionTestResponse response = strictOllamaService.testConnection(baseUrl, null).block();
+
+        assertThat(response).isNotNull();
+        assertThat(response.connected()).isFalse();
+        assertThat(response.errorMessage()).contains("destination was refused");
+        wireMockServer.verify(0, anyRequestedFor(anyUrl()));
+    }
+
+    @Test
+    @DisplayName("Should return no models for a private destination without sending a request when the guard is strict")
+    void listModels__strictGuardRefusesPrivateDestination() {
+        List<OllamaModel> models = strictOllamaService.listModels(baseUrl, null).block();
+
+        assertThat(models).isNotNull();
+        assertThat(models).isEmpty();
+        wireMockServer.verify(0, anyRequestedFor(anyUrl()));
     }
 
 }
