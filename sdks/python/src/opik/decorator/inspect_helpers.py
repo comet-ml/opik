@@ -57,9 +57,11 @@ def is_generator_function(obj: Any) -> bool:
 def is_async(func: Callable) -> bool:
     # Walk the full __wrapped__ chain so that async functions decorated with
     # one or more synchronous wrappers (e.g. functools.wraps-based decorators)
-    # are still detected correctly.  Python 3.12+ handles this inside
-    # inspect.iscoroutinefunction itself, but Python 3.11 does not, so we do
-    # the traversal here to stay compatible.
+    # are still detected correctly. inspect.iscoroutinefunction never follows
+    # __wrapped__ (it only unwraps functools.partial), and the
+    # inspect.markcoroutinefunction opt-in added in Python 3.12
+    # (https://github.com/python/cpython/issues/94912) requires the wrapper
+    # author to mark it, so this traversal is still needed on every version.
     seen = set()
     current: Any = func
     while current is not None:

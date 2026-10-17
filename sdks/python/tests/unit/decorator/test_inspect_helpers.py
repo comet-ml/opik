@@ -110,8 +110,8 @@ class TestIsAsync:
         assert is_async(wrapper) is True
 
     def test_async_wrapped_by_two_sync_decorators_detected(self):
-        """Async function wrapped twice; Python 3.11 inspect does not traverse
-        the __wrapped__ chain past one level, so is_async must do it."""
+        """Async function wrapped twice; inspect.iscoroutinefunction does not
+        traverse the __wrapped__ chain, so is_async must do it."""
 
         async def my_async():
             pass
