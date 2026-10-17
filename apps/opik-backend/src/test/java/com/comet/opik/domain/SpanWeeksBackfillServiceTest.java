@@ -22,6 +22,7 @@ import com.comet.opik.utils.AsyncUtils;
 import com.redis.testcontainers.RedisContainer;
 import lombok.Builder;
 import org.apache.commons.lang3.RandomUtils;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -129,6 +130,14 @@ class SpanWeeksBackfillServiceTest {
         // A second instance of the service, as another backend instance in the cluster would hold.
         this.otherInstance = new SpanWeeksBackfillService(template, spanWeeksDAO, projectService,
                 configuration.getSpanWeeksBackfill());
+    }
+
+    @AfterAll
+    void afterAll() {
+        wireMock.server().stop();
+        clickHouse.stop();
+        zookeeper.stop();
+        network.close();
     }
 
     @Test

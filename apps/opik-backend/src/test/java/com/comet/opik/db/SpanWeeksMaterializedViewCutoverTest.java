@@ -26,6 +26,7 @@ import com.redis.testcontainers.RedisContainer;
 import lombok.Builder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -132,6 +133,14 @@ class SpanWeeksMaterializedViewCutoverTest {
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.spanService = spanService;
+    }
+
+    @AfterAll
+    void afterAll() {
+        wireMock.server().stop();
+        clickHouse.stop();
+        zookeeper.stop();
+        network.close();
     }
 
     @Test
