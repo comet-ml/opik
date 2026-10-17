@@ -330,7 +330,7 @@ class TestPromptLookupErrors:
         )
         return client
 
-    def test_export_all_prompts__lookup_fails__counted_as_error(self, tmp_path):
+    def test_export_all_prompts__lookup_fails__counted_as_error(self, tmp_path, capsys):
         from opik.cli.exports.all import _export_all_prompts
 
         client = self._listing_client(Mock(side_effect=_UNAVAILABLE))
@@ -340,6 +340,9 @@ class TestPromptLookupErrors:
         )
 
         assert result == (0, 0, 1)
+        out = capsys.readouterr().out
+        assert "greeting" in out
+        assert "503" in out
 
     def test_export_all_prompts__prompt_missing__still_skipped(self, tmp_path):
         from opik.cli.exports.all import _export_all_prompts
@@ -352,7 +355,7 @@ class TestPromptLookupErrors:
 
         assert result == (0, 1, 0)
 
-    def test_export_prompt_by_name__lookup_fails__exits_1(self, tmp_path):
+    def test_export_prompt_by_name__lookup_fails__exits_1(self, tmp_path, capsys):
         from opik.cli.exports.prompt import export_prompt_by_name
 
         client = _make_prompt_client()
@@ -372,6 +375,9 @@ class TestPromptLookupErrors:
                 )
 
         assert exc_info.value.code == 1
+        out = capsys.readouterr().out
+        assert "greeting" in out
+        assert "503" in out
 
     def test_export_prompt_by_name__not_found__no_error_exit(self, tmp_path, capsys):
         from opik.cli.exports.prompt import export_prompt_by_name
