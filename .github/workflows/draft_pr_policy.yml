@@ -1,0 +1,158 @@
+name: 🚦 Draft PR Policy
+
+# Converts a ready-for-review PR back to draft when it is not reviewable yet:
+#
+#   1. It has merge conflicts with its base branch.
+#   2. It has an unresolved review thread, opened by someone other than the
+#      author, where the author does not have the last word. Bot replies (e.g.
+#      Baz acknowledging a fix) are ignored when finding the last word, so they
+#      don't reopen a thread the author already answered.
+#
+# The draft state is the signal; no comment is posted. To get back to ready the
+# author clicks "Ready for review", which re-runs the check. The schedule
+# catches conflicts introduced by other merges to the base branch.
+#
+# Fork PRs and bot-authored PRs are skipped.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+  # Also catches threads that get unresolved, which have no workflow trigger.
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only log which PRs would be converted to draft"
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || 'all-open-prs' }}
+  cancel-in-progress: true
+
+jobs:
+  convert-to-draft:
+    name: Convert unreviewable PRs to draft
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Convert PRs with conflicts or unaddressed threads to draft
+        uses: actions/github-script@v9
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const dryRun = process.env.DRY_RUN === "true";
+            // GitHub computes mergeability lazily and reports UNKNOWN until it's done.
+            const MERGEABLE_ATTEMPTS = 6;
+            const MERGEABLE_RETRY_MS = 5000;
+
+            const PR_QUERY = `
+              query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    id
+                    state
+                    isDraft
+                    isCrossRepository
+                    mergeable
+                    author { __typename login }
+                  }
+                }
+              }`;
+
+            const THREADS_QUERY = `
+              query($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    reviewThreads(first: 100, after: $cursor) {
+                      pageInfo { hasNextPage endCursor }
+                      nodes {
+                        isResolved
+                        opener: comments(first: 1) { nodes { url author { __typename login } } }
+                        recent: comments(last: 100) { nodes { author { __typename login } } }
+                      }
+                    }
+                  }
+                }
+              }`;
+
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const isBot = (actor) => actor?.__typename === "Bot";
+
+            const fetchPr = async (number) => {
+              for (let attempt = 1; ; attempt++) {
+                const { repository } = await github.graphql(PR_QUERY, { owner, repo, number });
+                const pr = repository.pullRequest;
+                if (pr.mergeable !== "UNKNOWN" || attempt === MERGEABLE_ATTEMPTS) return pr;
+                await sleep(MERGEABLE_RETRY_MS);
+              }
+            };
+
+            const unaddressedThreadUrls = async (number, authorLogin) => {
+              const urls = [];
+              let cursor = null;
+              do {
+                const { repository } = await github.graphql(THREADS_QUERY, { owner, repo, number, cursor });
+                const { nodes, pageInfo } = repository.pullRequest.reviewThreads;
+                for (const thread of nodes) {
+                  const opener = thread.opener.nodes[0];
+                  if (thread.isResolved || !opener || opener.author?.login === authorLogin) continue;
+                  const lastHuman = thread.recent.nodes.filter((c) => !isBot(c.author)).at(-1);
+                  if (lastHuman?.author?.login !== authorLogin) urls.push(opener.url);
+                }
+                cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null;
+              } while (cursor);
+              return urls;
+            };
+
+            const numbers = context.payload.pull_request
+              ? [context.payload.pull_request.number]
+              : (
+                  await github.paginate(github.rest.pulls.list, { owner, repo, state: "open", per_page: 100 })
+                ).filter((pr) => !pr.draft).map((pr) => pr.number);
+
+            for (const number of numbers) {
+              const pr = await fetchPr(number);
+              if (pr.state !== "OPEN" || pr.isDraft) continue;
+              if (pr.isCrossRepository || isBot(pr.author)) {
+                core.info(`PR #${number}: fork or bot-authored, skipped`);
+                continue;
+              }
+
+              const reasons = [];
+              if (pr.mergeable === "CONFLICTING") {
+                reasons.push("merge conflicts with the base branch");
+              } else if (pr.mergeable === "UNKNOWN") {
+                core.info(`PR #${number}: mergeability still UNKNOWN, conflict check skipped`);
+              }
+              const threads = await unaddressedThreadUrls(number, pr.author?.login);
+              if (threads.length > 0) {
+                reasons.push(`${threads.length} unaddressed review thread(s):\n  ${threads.join("\n  ")}`);
+              }
+
+              if (reasons.length === 0) {
+                core.info(`PR #${number}: reviewable, left as is`);
+                continue;
+              }
+
+              core.info(`PR #${number}: converting to draft${dryRun ? " (dry run)" : ""}, ${reasons.join("; ")}`);
+              if (dryRun) continue;
+              await github.graphql(
+                `mutation($id: ID!) { convertPullRequestToDraft(input: { pullRequestId: $id }) { clientMutationId } }`,
+                { id: pr.id }
+              );
+            }
