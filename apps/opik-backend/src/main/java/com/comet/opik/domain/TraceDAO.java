@@ -175,6 +175,8 @@ public interface TraceDAO {
 
     Mono<Set<UUID>> getTraceIdsByThreadIds(UUID projectId, List<String> threadIds, Connection connection);
 
+    Mono<List<UUID>> getTraceIdsByProjectId(UUID projectId, UUID lastId, int limit, Connection connection);
+
     Mono<Trace> getPartialById(UUID id);
 
     Flux<Trace> search(int limit, TraceSearchCriteria criteria);
@@ -3504,6 +3506,17 @@ class TraceDAOImpl implements TraceDAO {
             SETTINGS log_comment = '<log_comment>'
             """;
 
+    private static final String SELECT_TRACE_IDS_BY_PROJECT_ID = """
+            SELECT DISTINCT id
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            <if(last_id)>AND id > :last_id<endif>
+            ORDER BY id
+            LIMIT :limit
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
     public static final String SELECT_COUNT_TRACES_BY_PROJECT_IDS = """
             SELECT
                 count(distinct id) as count
@@ -5371,6 +5384,32 @@ class TraceDAOImpl implements TraceDAO {
                     .doFinally(signalType -> endSegment(segment))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)))
                     .collect(toSet());
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<List<UUID>> getTraceIdsByProjectId(@NonNull UUID projectId, UUID lastId, int limit,
+            @NonNull Connection connection) {
+        log.info("Getting trace IDs by project id '{}', after id '{}', limit '{}'", projectId, lastId, limit);
+
+        return makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_TRACE_IDS_BY_PROJECT_ID, "get_trace_ids_by_project_id",
+                    workspaceId, userName, "project_id=%s".formatted(projectId));
+            Optional.ofNullable(lastId).ifPresent(id -> template.add("last_id", id));
+
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId)
+                    .bind("project_id", projectId)
+                    .bind("limit", limit);
+            Optional.ofNullable(lastId).ifPresent(id -> statement.bind("last_id", id));
+
+            Segment segment = startSegment("traces", "Clickhouse", "getTraceIdsByProjectId");
+
+            return Mono.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)))
+                    .collectList();
         });
     }
 

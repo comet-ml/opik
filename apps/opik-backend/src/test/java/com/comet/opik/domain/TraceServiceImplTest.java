@@ -43,6 +43,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,6 +56,8 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -348,6 +351,54 @@ class TraceServiceImplTest {
             // The unbounded fallback is narrowed to the miss set, never re-queried over the whole id set.
             verify(traceDao).getAllProjectIdsByTraceIds(Set.of(missedId));
             verify(traceDao).delete(expectedPairs, connection);
+        }
+
+        @Test
+        void deleteByProjectId__whenTracesSpanSeveralPages__thenDeletesEachPageResumingAfterItsLastId() {
+            var projectId = ID_GENERATOR.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+            var pageSize = TraceServiceImpl.DELETE_BY_PROJECT_ID_PAGE_SIZE;
+            var firstPage = Stream.generate(ID_GENERATOR::generateId).limit(pageSize).toList();
+            var secondPage = List.of(ID_GENERATOR.generateId());
+
+            when(traceDao.getTraceIdsByProjectId(projectId, null, pageSize, connection))
+                    .thenReturn(Mono.just(firstPage));
+            when(traceDao.getTraceIdsByProjectId(projectId, firstPage.getLast(), pageSize, connection))
+                    .thenReturn(Mono.just(secondPage));
+            when(traceDao.delete(any(), eq(connection))).thenReturn(Mono.empty());
+
+            assertDoesNotThrow(() -> traceService
+                    .deleteByProjectId(projectId)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            var inOrder = inOrder(traceDao);
+            inOrder.verify(traceDao).getTraceIdsByProjectId(projectId, null, pageSize, connection);
+            inOrder.verify(traceDao).delete(pairs(projectId, Set.copyOf(firstPage)), connection);
+            inOrder.verify(traceDao).getTraceIdsByProjectId(projectId, firstPage.getLast(), pageSize, connection);
+            inOrder.verify(traceDao).delete(pairs(projectId, Set.copyOf(secondPage)), connection);
+            // The second page is short, so it is the last one read.
+            verify(traceDao, times(2)).getTraceIdsByProjectId(eq(projectId), any(), anyInt(), eq(connection));
+        }
+
+        @Test
+        void deleteByProjectId__whenProjectHasNoTraces__thenDeletesNothing() {
+            var projectId = ID_GENERATOR.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+            when(traceDao.getTraceIdsByProjectId(projectId, null, TraceServiceImpl.DELETE_BY_PROJECT_ID_PAGE_SIZE,
+                    connection)).thenReturn(Mono.just(List.of()));
+
+            assertDoesNotThrow(() -> traceService
+                    .deleteByProjectId(projectId)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            verify(traceDao, never()).delete(any(), any());
+            verifyNoInteractions(eventBus);
         }
 
         /**
