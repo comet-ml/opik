@@ -316,3 +316,78 @@ class TestExportPromptErrors:
 
         assert exc_info.value.code == 1
         assert "already exists" not in capsys.readouterr().out
+
+
+class TestPromptLookupErrors:
+    @staticmethod
+    def _listing_client(get_prompt: Mock) -> Mock:
+        client = _make_prompt_client()
+        client.get_prompt = get_prompt
+        prompt_public = MagicMock(template_structure="text")
+        prompt_public.name = "greeting"
+        client.rest_client.prompts.get_prompts.return_value = MagicMock(
+            content=[prompt_public], total=1
+        )
+        return client
+
+    def test_export_all_prompts__lookup_fails__counted_as_error(self, tmp_path):
+        from opik.cli.exports.all import _export_all_prompts
+
+        client = self._listing_client(Mock(side_effect=_UNAVAILABLE))
+
+        result = _export_all_prompts(
+            client, tmp_path, "proj", _PROJECT_ID, None, True, False, "json"
+        )
+
+        assert result == (0, 0, 1)
+
+    def test_export_all_prompts__prompt_missing__still_skipped(self, tmp_path):
+        from opik.cli.exports.all import _export_all_prompts
+
+        client = self._listing_client(Mock(return_value=None))
+
+        result = _export_all_prompts(
+            client, tmp_path, "proj", _PROJECT_ID, None, True, False, "json"
+        )
+
+        assert result == (0, 1, 0)
+
+    def test_export_prompt_by_name__lookup_fails__exits_1(self, tmp_path):
+        from opik.cli.exports.prompt import export_prompt_by_name
+
+        client = _make_prompt_client()
+        client.get_chat_prompt = Mock(side_effect=_UNAVAILABLE)
+        client.get_prompt = Mock(side_effect=_UNAVAILABLE)
+
+        with (
+            patch(f"{_PROMPT_MODULE}.opik.Opik", return_value=client),
+            patch(
+                f"{_PROMPT_MODULE}.prepare_project_export_dir",
+                side_effect=_fake_prepare_export_dir,
+            ),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                export_prompt_by_name(
+                    "greeting", "ws", "proj", str(tmp_path), None, False, False, "json"
+                )
+
+        assert exc_info.value.code == 1
+
+    def test_export_prompt_by_name__not_found__no_error_exit(self, tmp_path, capsys):
+        from opik.cli.exports.prompt import export_prompt_by_name
+
+        client = _make_prompt_client()
+        client.get_chat_prompt = Mock(return_value=None)
+
+        with (
+            patch(f"{_PROMPT_MODULE}.opik.Opik", return_value=client),
+            patch(
+                f"{_PROMPT_MODULE}.prepare_project_export_dir",
+                side_effect=_fake_prepare_export_dir,
+            ),
+        ):
+            export_prompt_by_name(
+                "greeting", "ws", "proj", str(tmp_path), None, False, False, "json"
+            )
+
+        assert "not found" in capsys.readouterr().out

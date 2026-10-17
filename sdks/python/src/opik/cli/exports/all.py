@@ -233,22 +233,30 @@ def _export_all_prompts(
             try:
                 # Use template_structure to decide which SDK type to fetch
                 prompt_obj: Optional[Union[Prompt, ChatPrompt]] = None
+                lookup_error: Optional[Exception] = None
                 if prompt_public.template_structure == "chat":
                     try:
                         prompt_obj = client.get_chat_prompt(
                             prompt_public.name, project_name=project_name
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        lookup_error = e
                 if prompt_obj is None:
                     try:
                         prompt_obj = client.get_prompt(
                             prompt_public.name, project_name=project_name
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        lookup_error = e
 
-                if prompt_obj is None:
+                if prompt_obj is None and lookup_error is not None:
+                    # The listing returned this prompt, so a lookup that raised
+                    # is a failure, not a missing prompt.
+                    console.print(
+                        f"[red]Error retrieving prompt '{prompt_public.name}': {lookup_error}[/red]"
+                    )
+                    errors += 1
+                elif prompt_obj is None:
                     console.print(
                         f"[yellow]Could not retrieve prompt '{prompt_public.name}', skipping.[/yellow]"
                     )
