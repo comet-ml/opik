@@ -787,6 +787,11 @@ class OpikQueryLanguage:
                     f"Array elements must be quoted strings, got: {self.query_string[self._cursor :]!r}"
                 )
             parsed = self._parse_value()
+            if "," in parsed["value"]:
+                raise ValueError(
+                    f'Array element values cannot contain commas (got: "{parsed["value"]}"). '
+                    "The backend uses comma as the array delimiter."
+                )
             items.append(parsed["value"])
 
         return {"value": ",".join(items)}

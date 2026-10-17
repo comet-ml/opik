@@ -133,6 +133,35 @@ class TestExportTracesByIdsRetry:
 # ---------------------------------------------------------------------------
 
 
+class TestExportExperimentRejectsInvalidFilter:
+    @pytest.mark.parametrize(
+        "entry_point", ["export_experiment_by_name", "export_experiment_by_name_or_id"]
+    )
+    def test_export_experiment__comma_in_array_filter__exits_before_export(
+        self, tmp_path, entry_point
+    ):
+        """An unparseable filter must fail fast, not export every trace unfiltered."""
+        from opik.cli.exports import experiment
+
+        with patch(f"{_EXPERIMENT_MODULE}.opik.Opik") as opik_client:
+            with pytest.raises(SystemExit) as exit_info:
+                getattr(experiment, entry_point)(
+                    "exp",
+                    workspace="ws",
+                    project_name="proj",
+                    output_path=str(tmp_path),
+                    dataset=None,
+                    max_traces=None,
+                    force=True,
+                    debug=False,
+                    format="json",
+                    filter_string='environment in ("a,b")',
+                )
+
+        assert exit_info.value.code == 1
+        opik_client.assert_not_called()
+
+
 class TestExportExperimentByIdPropagatesErrors:
     def test_export_experiment_by_id__api_error_propagates(self, tmp_path):
         """An unexpected error must propagate so the caller can set had_errors=True."""
