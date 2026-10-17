@@ -93,4 +93,36 @@ def test_add__fragment_without_index_or_known_id__opens_a_new_call():
     tool_calls.add(_fragment(0, "call_1", "get_weather", "{}"))
     tool_calls.add(_fragment(call_id="call_2", name="get_time", arguments="{}"))
 
-    assert [call["id"] for call in tool_calls.to_list()] == ["call_1", "call_2"]
+    assert tool_calls.to_list() == [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "get_weather", "arguments": "{}"},
+        },
+        {
+            "id": "call_2",
+            "type": "function",
+            "function": {"name": "get_time", "arguments": "{}"},
+        },
+    ]
+
+
+def test_to_list__fragments_arriving_out_of_index_order__returns_calls_by_index():
+    tool_calls = _streamed_tool_calls.StreamedToolCalls()
+
+    tool_calls.add(_fragment(1, "call_2", "get_time", '{"tz": '))
+    tool_calls.add(_fragment(0, "call_1", "get_weather", "{}"))
+    tool_calls.add(_fragment(1, arguments='"CET"}'))
+
+    assert tool_calls.to_list() == [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "get_weather", "arguments": "{}"},
+        },
+        {
+            "id": "call_2",
+            "type": "function",
+            "function": {"name": "get_time", "arguments": '{"tz": "CET"}'},
+        },
+    ]

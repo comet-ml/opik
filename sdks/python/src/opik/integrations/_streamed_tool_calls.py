@@ -46,7 +46,10 @@ class StreamedToolCalls:
             ) + function["arguments"]
 
     def to_list(self) -> List[Dict[str, Any]]:
-        return [self._calls[key] for key in self._calls]
+        # Calls in index order, as OpenAI's aggregator returns them, then the
+        # calls opened without an index in arrival order (-1, -2, ...).
+        keys = sorted(self._calls, key=lambda key: (key < 0, abs(key)))
+        return [self._calls[key] for key in keys]
 
     def _next_unindexed_key(self) -> int:
         # Kept below every provider index, so a later fragment that does send an
