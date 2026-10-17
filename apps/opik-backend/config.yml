@@ -2345,3 +2345,69 @@ redaction:
   # on long base64 payloads. The match budget now bounds that rather than leaving it to the pattern, but an
   # anchored rule is still the difference between exact masking and a value withheld whole.
   rules: '${OPIK_REDACTION_RULES:-[]}'
+
+# ai-labels: AI-generated labels (e.g. a trace summary) for every ended trace in opted-in workspaces, computed by
+# opik-inference. Off by default and on only in Comet-hosted deployments; opt-in is the ai_label_workspaces table.
+# Requires databaseAnalyticsDataModel.traceColumnsNonNullable (the cut-over traces table).
+aiLabels:
+  #  Default: false
+  #  Description: Runs the ai-labels job. Server-side only, never exposed to the UI.
+  enabled: ${AI_LABELS_ENABLED:-false}
+  #  Default: unset (the tasks bundled under ai-labels/tasks/)
+  #  Description: Directory of task YAML to load instead of the bundled tasks
+  tasksDir: ${AI_LABELS_TASKS_DIR:-}
+  inference:
+    #  Description: opik-inference base URL. Required when enabled.
+    url: ${AI_LABELS_INFERENCE_URL:-}
+    #  Description: opik-inference deployment credential, from a secret. Required when enabled. Never logged.
+    credential: ${AI_LABELS_INFERENCE_CREDENTIAL:-}
+    connectTimeout: ${AI_LABELS_INFERENCE_CONNECT_TIMEOUT:-5s}
+    readTimeout: ${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}
+  #  Default: 2000
+  #  Description: Global in-flight engine calls (decide items × questions, plus generate items)
+  budgetEngineCalls: ${AI_LABELS_BUDGET_ENGINE_CALLS:-2000}
+  tickInterval: ${AI_LABELS_TICK_INTERVAL:-30s}
+  tickBudget: ${AI_LABELS_TICK_BUDGET:-25s}
+  sweepInterval: ${AI_LABELS_SWEEP_INTERVAL:-1m}
+  healthInterval: ${AI_LABELS_HEALTH_INTERVAL:-5m}
+  pollInterval: ${AI_LABELS_POLL_INTERVAL:-30s}
+  #  Default: 7d
+  #  Description: H, how far back (by trace created_at) traces are labeled
+  horizon: ${AI_LABELS_HORIZON:-7d}
+  #  Default: 30m
+  #  Description: Q, how long a trace must go without updates before it is labeled
+  quietPeriod: ${AI_LABELS_QUIET_PERIOD:-30m}
+  sloSlack: ${AI_LABELS_SLO_SLACK:-15m}
+  retry:
+    #  Default: 2
+    #  Description: X, Opik-side attempts per (trace, task), on top of the service's own retries
+    maxAttempts: ${AI_LABELS_RETRY_MAX_ATTEMPTS:-2}
+    #  Default: 15m
+    #  Description: D, the wait before a retryable failure is picked up again
+    delay: ${AI_LABELS_RETRY_DELAY:-15m}
+  #  Default: 24h
+  #  Description: P, a pending status older than this is treated as an orphan and resubmitted
+  pendingOrphanAge: ${AI_LABELS_PENDING_ORPHAN_AGE:-24h}
+  chunkTraces: ${AI_LABELS_CHUNK_TRACES:-1000}
+  #  Default: 10000
+  #  Description: C, the most candidates one sweep returns per workspace
+  perWorkspaceCandidates: ${AI_LABELS_PER_WORKSPACE_CANDIDATES:-10000}
+  #  Default: 33554432 (32 MiB; the service's limit is 128 MiB)
+  maxJobBytes: ${AI_LABELS_MAX_JOB_BYTES:-33554432}
+  #  Default: 80000 (about 20k tokens at UTF-8 bytes / 4)
+  #  Description: The rendered trace's share of the model input
+  renderBudgetBytes: ${AI_LABELS_RENDER_BUDGET_BYTES:-80000}
+  modelInputBudgetBytes: ${AI_LABELS_MODEL_INPUT_BUDGET_BYTES:-100000}
+  renderThreads: ${AI_LABELS_RENDER_THREADS:-4}
+  maxSpansPerTrace: ${AI_LABELS_MAX_SPANS_PER_TRACE:-2000}
+  #  Default: 1048576 (1 MiB)
+  #  Description: A larger trace or span field is replaced whole in SQL, before it reaches the JVM
+  maxFieldBytes: ${AI_LABELS_MAX_FIELD_BYTES:-1048576}
+  sweep:
+    #  Default: 8
+    #  Description: N, enabled workspaces are split into this many buckets, one sweep query each
+    buckets: ${AI_LABELS_SWEEP_BUCKETS:-8}
+    maxRowsToRead: ${AI_LABELS_SWEEP_MAX_ROWS_TO_READ:-30000000}
+    #  Default: 4294967296 (4 GiB)
+    maxMemoryUsage: ${AI_LABELS_SWEEP_MAX_MEMORY_USAGE:-4294967296}
+    maxExecutionTime: ${AI_LABELS_SWEEP_MAX_EXECUTION_TIME:-50s}
