@@ -21,6 +21,7 @@ def aggregate(
                     openai_responses.ResponseCompletedEvent,
                     openai_responses.ResponseErrorEvent,
                     openai_responses.ResponseIncompleteEvent,
+                    openai_responses.ResponseFailedEvent,
                 ),
             )
         ]

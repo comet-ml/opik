@@ -59,6 +59,21 @@ def _create_responses_stream(client):
     )
 
 
+def test_aggregate__response_failed__returns_response():
+    response = openai_responses.Response.model_construct(
+        id="resp_failed",
+        status="failed",
+        usage=None,
+    )
+    event = openai_responses.ResponseFailedEvent.model_construct(
+        response=response,
+        sequence_number=1,
+        type="response.failed",
+    )
+
+    assert response_events_aggregator.aggregate([event]) is response
+
+
 def test_aggregate__non_terminal_events_only__returns_none_and_logs_debug(
     aggregator_log_records,
 ):
