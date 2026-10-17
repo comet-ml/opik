@@ -1,27 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import asyncLib from "async";
+import { useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
-import { getExperimentById } from "@/api/datasets/useExperimentById";
 
-import { COMPARE_EXPERIMENTS_KEY, PROJECTS_KEY } from "@/api/api";
-import { getCompareExperimentsList } from "@/api/datasets/useCompareExperimentsList";
-import {
-  ASSERTION_POLL_INTERVAL_MS,
-  COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
-  EXPERIMENT_POLL_INTERVAL_MS,
-} from "@/constants/experiments";
-import {
-  DATASET_TYPE,
-  EVALUATION_METHOD,
-  ExperimentsCompare,
-} from "@/types/datasets";
-import { isExperimentTerminal } from "@/lib/experiments";
+import {} from "@/constants/experiments";
+import { DATASET_TYPE, EVALUATION_METHOD } from "@/types/datasets";
 import { processFilters, transformDataColumnFilters } from "@/lib/filters";
-import { isItemScored } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
 import { LogExperiment } from "@/types/playground";
 import useRunExperimentExecution from "@/api/playground/useRunExperimentExecution";
-import useCancelExperimentExecution from "@/api/playground/useCancelExperimentExecution";
+import useBackendRunCancellation from "@/v2/pages/PlaygroundPage/useBackendRunCancellation";
+import useClientSideRun from "@/v2/pages/PlaygroundPage/useClientSideRun";
+import useRunWatcher from "@/v2/pages/PlaygroundPage/useRunWatcher";
+import useRunResume from "@/v2/pages/PlaygroundPage/useRunResume";
 import usePlaygroundStore, {
   getExperimentNameForPrompt,
   getExperimentNamesForPrompts,
@@ -35,52 +23,20 @@ import usePlaygroundStore, {
   useClearCreatedExperiments,
   useIsRunning,
   useSetAllRunning,
-  useSetIsResumingRun,
   useSettleRun,
   useSetPromptRunning,
   useSetProgress,
   useSetProgressPhase,
   useResetProgress,
-  useSetWatchPaused,
-  useSetStopPending,
   useForgetExperimentForPrompt,
-  useUpdateOutputTraceId,
   useDatasetType,
   useDatasetFilters,
   useSetExperimentByPromptId,
 } from "@/store/PlaygroundStore";
 
 import { useToast } from "@/ui/use-toast";
-import { usePermissions } from "@/contexts/PermissionsContext";
-import {
-  LogProcessorArgs,
-  TraceMapping,
-  buildLogProcessor,
-} from "@/api/playground/createLogPlaygroundProcessor";
-import usePromptCombination, {
-  PromptCombination,
-} from "@/v2/pages/PlaygroundPage/usePromptCombination";
-import useRunCompletionToast from "@/v2/pages/PlaygroundPage/useRunCompletionToast";
+import {} from "@/api/playground/createLogPlaygroundProcessor";
 import useOpenAiPipelineMode from "@/hooks/useOpenAiPipelineMode";
-
-const DEFAULT_MAX_CONCURRENT_REQUESTS = 5;
-
-const MAX_POLL_DURATION_MS = 5 * 60 * 1000;
-const MAX_POLL_DURATION_LABEL = "5 minutes";
-
-/**
- * What this tab stops doing after {@link MAX_POLL_DURATION_LABEL}, which is watching — the run
- * itself is on the server and finishes whether or not anyone is looking.
- */
-const STILL_RUNNING_DESCRIPTION =
-  `This run is taking longer than ${MAX_POLL_DURATION_LABEL}, so it is no longer being followed here. ` +
-  "It continues on the server — refresh the progress bar to pick it back up.";
-
-interface PollScope {
-  scopedPromptIds?: string[];
-  pollKeySuffix?: string;
-  announceExperiments?: LogExperiment[];
-}
 
 interface UseActionButtonActionsArguments {
   workspaceName: string;
@@ -113,16 +69,10 @@ const useActionButtonActions = ({
 
   const { toast } = useToast();
 
-  const {
-    permissions: { canLogTraceSpanThread },
-  } = usePermissions();
-
   const isRunning = useIsRunning();
   const setAllRunning = useSetAllRunning();
   const settleRun = useSettleRun();
-  const setIsResumingRun = useSetIsResumingRun();
   const setPromptRunning = useSetPromptRunning();
-  const isToStopRef = useRef(false);
   const setCreatedExperiments = useSetCreatedExperiments();
   const setRunTotalItemsForPrompts = useSetRunTotalItemsForPrompts();
   const setIsRunInFlight = useSetIsRunInFlight();
@@ -133,19 +83,8 @@ const useActionButtonActions = ({
   const datasetType = useDatasetType();
   const datasetFilters = useDatasetFilters();
   const setExperimentByPromptId = useSetExperimentByPromptId();
-  const abortControllersRef = useRef(
-    new Map<string, { controller: AbortController; promptId: string }>(),
-  );
-  const pollGenerationRef = useRef(0);
   const runExperimentExecution = useRunExperimentExecution();
   const openAiPipelineMode = useOpenAiPipelineMode(workspaceName);
-
-  // Only `mutate` is stable; useMutation's object is new every render. stopAll ends up in an
-  // unmount cleanup, which an unstable identity re-runs every render, stopping the run it began.
-  const { mutate: cancelExperimentRun } = useCancelExperimentExecution();
-  const announceRunComplete = useRunCompletionToast(datasetId);
-  const announcePendingRef = useRef(false);
-  const scopedAnnounceRef = useRef(new Set<string>());
 
   const isTestSuite = isTestSuiteRun(datasetId, datasetType);
   const evaluationMethod = isTestSuite
@@ -155,6 +94,42 @@ const useActionButtonActions = ({
   // Keyed on the id alone: the name arrives from its own request, and falling back to the browser
   // while that is in flight would quietly give one run different semantics from the next.
   const isBackendRun = !!datasetId;
+
+  const {
+    refreshRunViews,
+    releaseRunInFlight,
+    cancelBackendRun,
+    dropQueuedStop,
+    applyQueuedStop,
+  } = useBackendRunCancellation(isBackendRun);
+
+  const {
+    pollExperimentCompletion,
+    stopPolling,
+    stopWatching,
+    stopAll,
+    stopSingle,
+    markWatchStarted,
+    expectScopedAnnouncement,
+    addAbortController,
+    deleteAbortController,
+    clearAbortControllers,
+  } = useRunWatcher({
+    workspaceName,
+    isTestSuite,
+    isBackendRun,
+    datasetId,
+    cancelBackendRun,
+    releaseRunInFlight,
+    refreshRunViews,
+  });
+
+  const { checkAgain } = useRunResume({
+    datasetId,
+    pollExperimentCompletion,
+    stopPolling,
+    refreshRunViews,
+  });
 
   const reportDatasetNotReady = useCallback(() => {
     toast({
@@ -169,56 +144,11 @@ const useActionButtonActions = ({
     [datasetFilters],
   );
 
-  // Get the minimum maxConcurrentRequests from all prompts
-  const maxConcurrentRequests = useMemo(() => {
-    const prompts = Object.values(promptMap);
-    if (prompts.length === 0) return DEFAULT_MAX_CONCURRENT_REQUESTS;
-
-    const concurrencyValues = prompts
-      .map((p) => p.configs.maxConcurrentRequests)
-      .filter((val) => val !== undefined && val !== null) as number[];
-
-    if (concurrencyValues.length === 0) return DEFAULT_MAX_CONCURRENT_REQUESTS;
-
-    // Use the minimum value across all prompts (most conservative)
-    return Math.min(...concurrencyValues);
-  }, [promptMap]);
-
-  // Get the maximum throttling from all prompts (most conservative)
-  const throttlingSeconds = useMemo(() => {
-    const prompts = Object.values(promptMap);
-    if (prompts.length === 0) return 0;
-
-    const throttlingValues = prompts
-      .map((p) => p.configs.throttling)
-      .filter((val) => val !== undefined && val !== null) as number[];
-
-    if (throttlingValues.length === 0) return 0;
-
-    // Use the maximum value across all prompts (most conservative)
-    return Math.max(...throttlingValues);
-  }, [promptMap]);
-
   const resetOutputMap = useResetOutputMap();
-  const updateOutputTraceId = useUpdateOutputTraceId();
   const setProgress = useSetProgress();
   const setProgressPhase = useSetProgressPhase();
   const resetProgress = useResetProgress();
-  const setWatchPaused = useSetWatchPaused();
-  const setStopPending = useSetStopPending();
   const forgetExperimentForPrompt = useForgetExperimentForPrompt();
-
-  const stopPolling = useCallback(() => {
-    abortControllersRef.current.forEach(({ controller }) => controller.abort());
-    abortControllersRef.current.clear();
-    pollGenerationRef.current += 1;
-  }, []);
-
-  const refreshRunViews = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["experiment"] });
-    queryClient.invalidateQueries({ queryKey: ["experiments"] });
-    queryClient.invalidateQueries({ queryKey: [COMPARE_EXPERIMENTS_KEY] });
-  }, [queryClient]);
 
   const resetState = useCallback(() => {
     resetOutputMap();
@@ -234,128 +164,6 @@ const useActionButtonActions = ({
     resetProgress,
   ]);
 
-  // isRunInFlight is shared by every prompt, and the sidebar watches the run through it. An action
-  // scoped to one prompt may only clear it once no sibling is left running.
-  const releaseRunInFlight = useCallback(() => {
-    const { isRunningMap } = usePlaygroundStore.getState();
-    if (!Object.values(isRunningMap).some(Boolean)) {
-      setIsRunInFlight(false);
-    }
-  }, [setIsRunInFlight]);
-
-  const cancelBackendRun = useCallback(
-    (promptIds: string[]) => {
-      if (!isBackendRun) return;
-
-      const experimentByPromptId =
-        usePlaygroundStore.getState().experimentByPromptId ?? {};
-      const experimentIds = promptIds
-        .map((promptId) => experimentByPromptId[promptId])
-        .filter(Boolean);
-
-      // Nothing to cancel by id yet: /execute has not answered, so the run exists on the server
-      // but this tab cannot name it. Remember the stop and replay it when the ids arrive, keeping
-      // any stop already waiting so a second one does not drop the first.
-      if (experimentIds.length === 0) {
-        const waiting = usePlaygroundStore.getState().stopPending ?? [];
-        setStopPending([...new Set([...waiting, ...promptIds])]);
-        return;
-      }
-
-      releaseRunInFlight();
-      cancelExperimentRun({ experimentIds });
-      refreshRunViews();
-    },
-    [
-      isBackendRun,
-      cancelExperimentRun,
-      releaseRunInFlight,
-      refreshRunViews,
-      setStopPending,
-    ],
-  );
-
-  /**
-   * The launch failed, so a stop waiting on its ids has nothing left to cancel. Dropping only this
-   * prompt leaves a stop queued against a sibling launch that is still open.
-   */
-  const dropQueuedStop = useCallback(
-    (promptId: string) => {
-      const waiting = usePlaygroundStore.getState().stopPending;
-      if (!waiting) return;
-
-      setStopPending(waiting.filter((id) => id !== promptId));
-    },
-    [setStopPending],
-  );
-
-  /**
-   * Applies a stop that was pressed before /execute answered. The mapping is in the store by the
-   * time this runs, so the same cancel path that had nothing to work with now finds the ids.
-   * Returns whether the run was stopped, so the caller knows not to start watching it.
-   */
-  const applyQueuedStop = useCallback(
-    (launched: string[]) => {
-      const queued = usePlaygroundStore.getState().stopPending;
-      if (!queued) return false;
-
-      // Cleared first: the ids exist now, so the cancel below lands rather than queueing again.
-      setStopPending(null);
-      cancelBackendRun(queued);
-
-      // Only a launch whose every prompt was stopped is over. A stop aimed at one of several
-      // leaves its siblings running on the server, and they still need watching.
-      return launched.every((promptId) => queued.includes(promptId));
-    },
-    [cancelBackendRun, setStopPending],
-  );
-
-  /**
-   * Leaving the page, as opposed to stopping the run. A server-side run outlives it, so cancelling
-   * here would end the run, and clearing the in-flight flag would stop the sidebar watching for it.
-   */
-  const stopWatching = useCallback(() => {
-    // The poll is a timeout chain and outlives the page; left running it settles the run here.
-    // A scoped poll ignores isToStopRef by design, so moving the generation is what reaches it.
-    stopPolling();
-    isToStopRef.current = true;
-
-    if (!isBackendRun) {
-      settleRun();
-    }
-  }, [stopPolling, settleRun, isBackendRun]);
-
-  const stopAll = useCallback(() => {
-    // Read before settling, which empties both: these are the prompts the stop covers, and a
-    // stop that has to wait for ids needs to name them. A prompt stopped on its own is already
-    // out of the running map with its stop still queued, so carry that across or it is lost.
-    const { isRunningMap, stopPending } = usePlaygroundStore.getState();
-    const running = Object.keys(isRunningMap).filter((id) => isRunningMap[id]);
-    const covered = [...new Set([...running, ...(stopPending ?? [])])];
-
-    announcePendingRef.current = false;
-    scopedAnnounceRef.current.clear();
-    settleRun();
-    isToStopRef.current = true;
-    stopPolling();
-    cancelBackendRun(covered);
-  }, [settleRun, stopPolling, cancelBackendRun]);
-
-  const stopSingle = useCallback(
-    (promptId: string) => {
-      scopedAnnounceRef.current.delete(promptId);
-      setPromptRunning(promptId, false);
-      for (const [key, entry] of abortControllersRef.current.entries()) {
-        if (entry.promptId === promptId) {
-          entry.controller.abort();
-          abortControllersRef.current.delete(key);
-        }
-      }
-      cancelBackendRun([promptId]);
-    },
-    [setPromptRunning, cancelBackendRun],
-  );
-
   const storeExperiments = useCallback(
     (experiments: LogExperiment[]) => {
       setCreatedExperiments(experiments);
@@ -363,327 +171,22 @@ const useActionButtonActions = ({
     [setCreatedExperiments],
   );
 
-  const logProcessorHandlers: LogProcessorArgs = useMemo(() => {
-    return {
-      onError: (e) => {
-        toast({
-          title: "Error",
-          variant: "destructive",
-          description: e.message,
-        });
-      },
-      onCreateTraces: (traces, mappings: TraceMapping[]) => {
-        mappings.forEach((mapping) => {
-          updateOutputTraceId(mapping.promptId, mapping.traceId);
-        });
-
-        queryClient.invalidateQueries({
-          queryKey: [PROJECTS_KEY],
-        });
-      },
-    };
-  }, [queryClient, toast, updateOutputTraceId]);
-
-  const addAbortController = useCallback(
-    (key: string, value: AbortController, promptId: string) => {
-      abortControllersRef.current.set(key, { controller: value, promptId });
-    },
-    [],
-  );
-
-  const deleteAbortController = useCallback(
-    (key: string) => abortControllersRef.current.delete(key),
-    [],
-  );
-
-  const { createCombinations, processCombination } = usePromptCombination({
+  const { runAllViaFrontend, runSingleViaFrontend } = useClientSideRun({
     workspaceName,
-    selectedRuleIds,
+    projectName,
+    resetState,
+    markWatchStarted,
     addAbortController,
     deleteAbortController,
-    throttlingSeconds,
-    openAiPipelineMode,
+    clearAbortControllers,
   });
-
-  const pauseWatching = useCallback(
-    (description: string) => {
-      stopPolling();
-      setWatchPaused(true);
-      refreshRunViews();
-      toast({ title: "Still running", description });
-    },
-    [stopPolling, setWatchPaused, refreshRunViews, toast],
-  );
-
-  const finishPollScope = useCallback(
-    (scope?: PollScope) => {
-      if (scope?.scopedPromptIds) {
-        scope.scopedPromptIds.forEach((id) => setPromptRunning(id, false));
-        releaseRunInFlight();
-      } else {
-        settleRun();
-        isToStopRef.current = false;
-      }
-    },
-    [settleRun, setPromptRunning, releaseRunInFlight],
-  );
-
-  const handlePollError = useCallback(
-    (
-      error: unknown,
-      scope: PollScope | undefined,
-      description: string,
-      onUnscopedCleanup?: () => void,
-    ) => {
-      // A cancelled poll means this tab stopped watching, not that the run stopped. Both paths
-      // that abort it already settle the run; doing it here too ends a live one.
-      if (axios.isCancel(error)) {
-        return;
-      }
-
-      const isScoped = !!scope?.scopedPromptIds;
-      finishPollScope(scope);
-      if (!isScoped) {
-        onUnscopedCleanup?.();
-      }
-
-      toast({
-        title: "Error",
-        description,
-        variant: "destructive",
-      });
-    },
-    [finishPollScope, toast],
-  );
-
-  // TODO: OPIK-5724 — for datasets >20k items, replace with a dedicated BE count endpoint
-  const pollAssertionEvaluation = useCallback(
-    async (
-      experimentIds: string[],
-      curDatasetId: string,
-      scope?: PollScope,
-    ) => {
-      const startTime = Date.now();
-      const pollKey = `poll-assertion${scope?.pollKeySuffix ?? ""}`;
-      const isScoped = !!scope?.scopedPromptIds;
-      const generation = pollGenerationRef.current;
-
-      const poll = async () => {
-        if (generation !== pollGenerationRef.current) return;
-        if (!isScoped && isToStopRef.current) return;
-
-        if (Date.now() - startTime > MAX_POLL_DURATION_MS) {
-          pauseWatching(STILL_RUNNING_DESCRIPTION);
-          return;
-        }
-
-        try {
-          const controller = new AbortController();
-          abortControllersRef.current.set(pollKey, {
-            controller,
-            promptId: scope?.scopedPromptIds?.[0] ?? "",
-          });
-
-          const [data, ...experimentResults] = await Promise.all([
-            getCompareExperimentsList(
-              { signal: controller.signal },
-              {
-                workspaceName,
-                datasetId: curDatasetId,
-                experimentsIds: experimentIds,
-                truncate: true,
-                size: COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
-                page: 1,
-              },
-            ),
-            ...experimentIds.map((id) =>
-              getExperimentById(
-                { signal: controller.signal },
-                { experimentId: id },
-              ),
-            ),
-          ]);
-
-          const experimentsFinished = experimentResults.every((exp) =>
-            isExperimentTerminal(exp?.status),
-          );
-
-          const rows: ExperimentsCompare[] = data?.content ?? [];
-
-          let scoredItems = 0;
-          let totalExperimentItems = 0;
-
-          for (const row of rows) {
-            const experimentItems = row.experiment_items ?? [];
-            const noEvaluators = (row.evaluators?.length ?? 0) === 0;
-
-            for (const ei of experimentItems) {
-              totalExperimentItems++;
-              if (noEvaluators || isItemScored(ei)) {
-                scoredItems++;
-              }
-            }
-          }
-
-          if (!isScoped && totalExperimentItems > 0) {
-            setProgress(scoredItems, totalExperimentItems);
-          }
-
-          if (experimentsFinished) {
-            if (!isScoped) {
-              setProgress(totalExperimentItems, totalExperimentItems);
-              setTimeout(() => resetProgress(), 3000);
-            }
-            finishPollScope(scope);
-            const scopedId = scope?.scopedPromptIds?.[0];
-            if (!scopedId || scopedAnnounceRef.current.delete(scopedId)) {
-              announceRunComplete(scope?.announceExperiments ?? []);
-            }
-            refreshRunViews();
-            return;
-          }
-
-          queryClient.invalidateQueries({
-            queryKey: [COMPARE_EXPERIMENTS_KEY],
-          });
-          setTimeout(poll, ASSERTION_POLL_INTERVAL_MS);
-        } catch (error) {
-          handlePollError(
-            error,
-            scope,
-            "Failed to poll assertion evaluation status",
-            resetProgress,
-          );
-        }
-      };
-
-      poll();
-    },
-    [
-      workspaceName,
-      setProgress,
-      resetProgress,
-      pauseWatching,
-      refreshRunViews,
-      announceRunComplete,
-      finishPollScope,
-      queryClient,
-      handlePollError,
-    ],
-  );
-
-  const pollExperimentCompletion = useCallback(
-    async (
-      experimentIds: string[],
-      totalItems: number,
-      curDatasetId: string,
-      scope?: PollScope,
-    ) => {
-      const startTime = Date.now();
-      const pollKey = `poll-experiment${scope?.pollKeySuffix ?? ""}`;
-      const isScoped = !!scope?.scopedPromptIds;
-      const generation = pollGenerationRef.current;
-
-      const poll = async () => {
-        if (generation !== pollGenerationRef.current) return;
-        if (!isScoped && isToStopRef.current) return;
-
-        if (Date.now() - startTime > MAX_POLL_DURATION_MS) {
-          pauseWatching(STILL_RUNNING_DESCRIPTION);
-          return;
-        }
-
-        try {
-          const controller = new AbortController();
-          abortControllersRef.current.set(pollKey, {
-            controller,
-            promptId: scope?.scopedPromptIds?.[0] ?? "",
-          });
-          const results = await Promise.all(
-            experimentIds.map((id) =>
-              getExperimentById(
-                { signal: controller.signal },
-                {
-                  experimentId: id,
-                },
-              ),
-            ),
-          );
-
-          const totalTraces = results.reduce(
-            (sum, exp) => sum + (exp?.trace_count ?? 0),
-            0,
-          );
-          if (!isScoped) {
-            setProgress(Math.min(totalTraces, totalItems), totalItems);
-          }
-
-          const allExperimentsFinished = results.every((exp) =>
-            isExperimentTerminal(exp?.status),
-          );
-
-          if (allExperimentsFinished) {
-            // Assertions already done — skip Step 2, finish immediately
-            if (!isScoped) {
-              setProgress(totalItems, totalItems);
-              setTimeout(() => resetProgress(), 3000);
-            }
-            finishPollScope(scope);
-            const scopedId = scope?.scopedPromptIds?.[0];
-            if (!scopedId || scopedAnnounceRef.current.delete(scopedId)) {
-              announceRunComplete(scope?.announceExperiments ?? []);
-            }
-            refreshRunViews();
-            return;
-          }
-
-          // A regular dataset has no assertions to wait for
-          const allTracesCollected = totalTraces >= totalItems;
-          if (allTracesCollected && isTestSuite) {
-            if (!isScoped) {
-              setProgress(totalItems, totalItems);
-              setProgressPhase("evaluating");
-              setProgress(0, totalItems);
-            }
-            queryClient.invalidateQueries({ queryKey: ["experiments"] });
-            pollAssertionEvaluation(experimentIds, curDatasetId, scope);
-            return;
-          }
-
-          queryClient.invalidateQueries({ queryKey: ["experiments"] });
-          setTimeout(poll, EXPERIMENT_POLL_INTERVAL_MS);
-        } catch (error) {
-          handlePollError(
-            error,
-            scope,
-            "Failed to poll experiment completion status",
-          );
-        }
-      };
-
-      setTimeout(poll, EXPERIMENT_POLL_INTERVAL_MS);
-    },
-    [
-      setProgress,
-      setProgressPhase,
-      resetProgress,
-      finishPollScope,
-      refreshRunViews,
-      announceRunComplete,
-      pauseWatching,
-      queryClient,
-      pollAssertionEvaluation,
-      handlePollError,
-      isTestSuite,
-    ],
-  );
 
   const runAllViaBackend = useCallback(async () => {
     if (!datasetId) return;
     if (!datasetName) return reportDatasetNotReady();
 
     resetState();
-    isToStopRef.current = false;
+    markWatchStarted();
     setAllRunning(true);
 
     try {
@@ -744,10 +247,11 @@ const useActionButtonActions = ({
       });
     } catch {
       settleRun();
-      isToStopRef.current = false;
+      markWatchStarted();
     }
   }, [
     applyQueuedStop,
+    markWatchStarted,
     datasetName,
     datasetId,
     datasetVersionId,
@@ -775,102 +279,12 @@ const useActionButtonActions = ({
     evaluationMethod,
   ]);
 
-  const runAllViaFrontend = useCallback(async () => {
-    resetState();
-    isToStopRef.current = false;
-    setAllRunning(true);
-
-    const logProcessor = buildLogProcessor({
-      canLogTraceSpanThread,
-      args: { ...logProcessorHandlers, projectName },
-    });
-
-    const combinations = createCombinations();
-    const totalCombinations = combinations.length;
-
-    // Initialize progress tracking
-    setProgress(0, totalCombinations);
-
-    let completedCount = 0;
-
-    asyncLib.mapLimit(
-      combinations,
-      maxConcurrentRequests,
-      async (combination: PromptCombination) => {
-        await processCombination(combination, logProcessor);
-
-        // Update progress after each combination completes
-        completedCount += 1;
-        setProgress(completedCount, totalCombinations);
-      },
-      () => {
-        logProcessor.finishLogging();
-
-        settleRun();
-        isToStopRef.current = false;
-        abortControllersRef.current.clear();
-      },
-    );
-  }, [
-    resetState,
-    setAllRunning,
-    settleRun,
-    createCombinations,
-    processCombination,
-    logProcessorHandlers,
-    maxConcurrentRequests,
-    setProgress,
-    projectName,
-    canLogTraceSpanThread,
-  ]);
-
   const runAll = useCallback(async () => {
     if (isBackendRun) {
       return runAllViaBackend();
     }
     return runAllViaFrontend();
   }, [isBackendRun, runAllViaBackend, runAllViaFrontend]);
-
-  const runSingleViaFrontend = useCallback(
-    async (promptId: string) => {
-      const prompt = usePlaygroundStore.getState().promptMap[promptId];
-      if (!prompt) return;
-
-      setPromptRunning(promptId, true);
-
-      const logProcessor = buildLogProcessor({
-        canLogTraceSpanThread,
-        args: { ...logProcessorHandlers, projectName },
-      });
-
-      const experimentName = getExperimentNameForPrompt(promptId);
-      const combinations: PromptCombination[] = [{ prompt, experimentName }];
-
-      try {
-        await new Promise<void>((resolve) => {
-          asyncLib.mapLimit(
-            combinations,
-            maxConcurrentRequests,
-            async (combination: PromptCombination) => {
-              await processCombination(combination, logProcessor);
-            },
-            () => resolve(),
-          );
-        });
-      } finally {
-        logProcessor.finishLogging();
-        setPromptRunning(promptId, false);
-      }
-    },
-    [
-      maxConcurrentRequests,
-      setPromptRunning,
-      logProcessorHandlers,
-      processCombination,
-      projectName,
-      canLogTraceSpanThread,
-    ],
-  );
 
   const runSingleViaBackend = useCallback(
     async (promptId: string) => {
@@ -880,7 +294,7 @@ const useActionButtonActions = ({
       if (!prompt) return;
 
       setPromptRunning(promptId, true);
-      scopedAnnounceRef.current.add(promptId);
+      expectScopedAnnouncement(promptId);
       // Until /execute answers, this prompt's previous experiment is the only id on hand, and a
       // stop pressed now would cancel that finished run instead of queueing for this one.
       const previousExperimentId =
@@ -988,6 +402,7 @@ const useActionButtonActions = ({
       datasetItemFilters,
       evaluationMethod,
       applyQueuedStop,
+      expectScopedAnnouncement,
       forgetExperimentForPrompt,
       dropQueuedStop,
     ],
@@ -1004,125 +419,6 @@ const useActionButtonActions = ({
   );
 
   // Picks a server-side run back up
-  const pickUpRunningExperiments = useCallback(async () => {
-    if (!datasetId) return;
-
-    const {
-      experimentByPromptId,
-      runTotalItemsByPromptId,
-      createdExperiments,
-    } = usePlaygroundStore.getState();
-    const entries = Object.entries(experimentByPromptId ?? {});
-    if (entries.length === 0) return;
-
-    // Set before the round-trip, not after: until it answers, the page knows a run exists but not
-    // whether it is still going, and offering Run in that window starts a second one alongside it.
-    setIsResumingRun(true);
-    const experimentIds = entries.map(([, experimentId]) => experimentId);
-
-    {
-      try {
-        // Through the cache the cells and the sidebar already share, so resuming does not read
-        // the same experiments a second time.
-        const experiments = await Promise.all(
-          experimentIds.map((experimentId) =>
-            queryClient.fetchQuery({
-              queryKey: ["experiment", { experimentId }],
-              queryFn: (context) =>
-                getExperimentById(context, { experimentId }),
-            }),
-          ),
-        );
-
-        // The map keeps a prompt's experiment after its run ends, while runTotalItems describes only
-        // the latest run. Picking the finished ones back up would offer Stop for a run that is over
-        // and count its traces against a total that never included them.
-        const resumable = entries
-          .map(([promptId, experimentId], index) => ({
-            promptId,
-            experimentId,
-            experiment: experiments[index],
-          }))
-          .filter(
-            ({ experiment }) => !isExperimentTerminal(experiment?.status),
-          );
-
-        if (resumable.length === 0) {
-          // All over while we were away. The per-prompt running state is not cleared by leaving and
-          // survives navigating back, so without this the page returns offering Stop for a run that
-          // has already finished.
-          settleRun();
-          return;
-        }
-
-        const resumableTotal = resumable.reduce(
-          (sum, { promptId }) =>
-            sum + (runTotalItemsByPromptId?.[promptId] ?? 0),
-          0,
-        );
-        if (resumableTotal === 0) {
-          settleRun();
-          return;
-        }
-
-        resumable.forEach(({ promptId }) => setPromptRunning(promptId, true));
-        setIsRunInFlight(true);
-        setProgressPhase("running");
-        // Seeded from the traces already logged, the same count the poll uses, so a run that is
-        // nearly done reopens near the end rather than at zero until the first poll lands.
-        const loggedTraces = resumable.reduce(
-          (sum, { experiment }) => sum + (experiment?.trace_count ?? 0),
-          0,
-        );
-        setProgress(Math.min(loggedTraces, resumableTotal), resumableTotal);
-        pollExperimentCompletion(
-          resumable.map(({ experimentId }) => experimentId),
-          resumableTotal,
-          datasetId,
-          { announceExperiments: createdExperiments },
-        );
-      } catch {
-        // A run we cannot read the status of is one we cannot resume; the cells still fill in on
-        // their own, so leaving the page idle is better than a progress bar that never moves.
-        // Settled rather than simply left alone: isRunInFlight is persisted, so giving up without
-        // clearing it strands the sidebar watcher polling for a status that never arrives.
-        settleRun();
-      } finally {
-        setIsResumingRun(false);
-      }
-    }
-  }, [
-    datasetId,
-    queryClient,
-    setIsResumingRun,
-    settleRun,
-    setPromptRunning,
-    setProgress,
-    setProgressPhase,
-    pollExperimentCompletion,
-    setIsRunInFlight,
-  ]);
-
-  const hasResumedRef = useRef(false);
-  useEffect(() => {
-    if (hasResumedRef.current || !datasetId) return;
-
-    const { experimentByPromptId } = usePlaygroundStore.getState();
-    if (Object.keys(experimentByPromptId ?? {}).length === 0) return;
-
-    hasResumedRef.current = true;
-    pickUpRunningExperiments();
-  }, [datasetId, pickUpRunningExperiments]);
-
-  // Statuses are read fresh, anything still polling is dropped, so one poll covers every prompt
-  // still running
-  const checkAgain = useCallback(() => {
-    stopPolling();
-    setWatchPaused(false);
-    refreshRunViews();
-    pickUpRunningExperiments();
-  }, [stopPolling, setWatchPaused, refreshRunViews, pickUpRunningExperiments]);
-
   return {
     isRunning,
     runAll,
