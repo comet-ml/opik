@@ -856,6 +856,8 @@ def evaluate_experiment(
             - dataset_item — a dictionary containing the dataset item content,
             - task_outputs — a dictionary containing the LLM task output.
             - task_span - the data collected during the LLM task execution [optional].
+              Re-scoring an existing experiment runs no task, so metrics that use
+              `task_span` are skipped with a warning. Use `evaluate()` to score them.
 
         scoring_threads: amount of thread workers to run scoring metrics.
 
