@@ -173,6 +173,20 @@ class LlmModelCatalogTest {
         }
 
         @Test
+        void withoutTheCuratedLayerAModelGetsTheParamsTheShippedLayerWouldGiveIt() {
+            var withoutCurated = service("llm-models-test.yaml", "", null);
+            var withShipped = service("llm-models-test.yaml", "llm-models-curated.yaml", null);
+
+            var params = withoutCurated.paramsOf("anthropic", "claude-sonnet-4-6");
+
+            assertThat(withoutCurated.getRegistry().get("anthropic").getFirst().params()).isNull();
+            assertThat(params).isEqualTo(withShipped.paramsOf("anthropic", "claude-sonnet-4-6"));
+            assertThat(params.temperature().accepted())
+                    .as("only the row's own profile accepts it; the anthropic profile refuses it")
+                    .isTrue();
+        }
+
+        @Test
         void aProviderWithoutDefaultsGetsNoParams() {
             assertThat(model(service(null), "vertex-ai", "gemini-2.0-flash-001").params()).isNull();
         }

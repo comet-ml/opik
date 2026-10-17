@@ -10,6 +10,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.util.Set;
 import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ModelCapabilitiesTest {
@@ -123,8 +124,13 @@ class ModelCapabilitiesTest {
         var newest = ModelCapabilities.newestInFamily(AnthropicModelName.allModelIds(), family).orElseThrow();
         var alias = "~anthropic/" + family + "-latest";
 
-        assertThat(ModelCapabilities.rejectsSamplingParams(alias))
-                .isEqualTo(ModelCapabilities.rejectsSamplingParams(newest));
-        assertThat(ModelCapabilities.thinksByDefault(alias)).isEqualTo(ModelCapabilities.thinksByDefault(newest));
+        var registry = bundledRegistry();
+
+        assertThat(ModelCapabilities.rejectsTemperature(alias, registry))
+                .isEqualTo(ModelCapabilities.rejectsTemperature(newest, registry));
+        assertThat(ModelCapabilities.rejectsTopP(alias, registry))
+                .isEqualTo(ModelCapabilities.rejectsTopP(newest, registry));
+        assertThat(ModelCapabilities.thinksByDefault(alias, registry))
+                .isEqualTo(ModelCapabilities.thinksByDefault(newest, registry));
     }
 }

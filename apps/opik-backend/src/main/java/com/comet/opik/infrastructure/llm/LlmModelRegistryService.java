@@ -9,6 +9,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.google.common.base.Suppliers;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
@@ -18,6 +20,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
@@ -34,6 +37,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -47,6 +51,8 @@ public class LlmModelRegistryService {
 
     private final LlmModelRegistryConfig config;
     private final Client httpClient;
+    private final Supplier<CuratedCatalog> shippedCatalog = Suppliers.memoize(
+            () -> readCuratedCatalog(new LlmModelRegistryConfig().getCuratedResource()));
     private final CuratedCatalog catalog;
     // volatile: reload() is called from the scheduled job thread
     private volatile Map<String, List<LlmModelDefinition>> registry;
@@ -239,8 +245,7 @@ public class LlmModelRegistryService {
 
     boolean isRemoteConfigured() {
         return config.isRemoteEnabled()
-                && config.getRemoteUrl() != null
-                && !config.getRemoteUrl().isBlank();
+                && StringUtils.isNotBlank(config.getRemoteUrl());
     }
 
     private Map<String, List<LlmModelDefinition>> load() {
@@ -268,7 +273,7 @@ public class LlmModelRegistryService {
         reportSyncedAwaitingRows(result, catalog.models());
 
         var overridePath = config.getLocalOverridePath();
-        if (overridePath == null || overridePath.isBlank()) {
+        if (StringUtils.isBlank(overridePath)) {
             return toRegistry(result);
         }
 
@@ -296,9 +301,44 @@ public class LlmModelRegistryService {
         return Collections.unmodifiableMap(copy);
     }
 
+    /**
+     * The params the registry serves for a model id, the same ones the API lists; an unlisted or null id gets its
+     * provider's profile. Null when no layer and no profile says anything about the model, as for a provider the
+     * catalog has no profile for.
+     *
+     * <p>A deployment that turns the curated layer off still gets the shipped rules for a model no layer gives
+     * params, so turning it off cannot make a reasoning or Claude model fail with a 400.
+     */
+    public @Nullable ModelParams paramsOf(@NonNull String provider, @Nullable String modelId) {
+        var listed = registry.getOrDefault(provider, List.of()).stream()
+                .filter(model -> model.id() != null && model.id().equals(modelId))
+                .findFirst();
+        if (listed.isPresent() && listed.get().params() != null) {
+            return listed.get().params();
+        }
+        var row = ModelEntry.builder()
+                .id(modelId)
+                .reasoning(listed.map(LlmModelDefinition::reasoning).orElse(false))
+                .build();
+        return ObjectUtils.getIfNull(catalog.resolve(provider, row), () -> shippedParams(provider, row));
+    }
+
+    private ModelParams shippedParams(String provider, ModelEntry row) {
+        var shipped = shippedCatalog.get();
+        var shippedRow = shipped.models().getOrDefault(provider, List.of()).stream()
+                .filter(m -> m.id() != null && m.id().equals(row.id()))
+                .findFirst()
+                .map(m -> m.toBuilder().reasoning(row.reasoning()).build())
+                .orElse(row);
+        return shipped.resolve(provider, shipped.foldProfile(shippedRow));
+    }
+
     private CuratedCatalog loadCuratedCatalog() {
-        var resourceName = config.getCuratedResource();
-        if (resourceName == null || resourceName.isBlank()) {
+        return readCuratedCatalog(config.getCuratedResource());
+    }
+
+    private static CuratedCatalog readCuratedCatalog(String resourceName) {
+        if (StringUtils.isBlank(resourceName)) {
             return CuratedCatalog.EMPTY;
         }
         return readClasspathYaml(resourceName, new TypeReference<CuratedCatalog>() {
@@ -344,7 +384,7 @@ public class LlmModelRegistryService {
             }
             var byId = new LinkedHashMap<String, ModelEntry>();
             rows.forEach(row -> {
-                if (row == null || row.id() == null || row.id().isBlank()) {
+                if (row == null || StringUtils.isBlank(row.id())) {
                     log.warn("Skipping curated row with missing id for provider '{}'", provider);
                     return;
                 }
@@ -441,7 +481,7 @@ public class LlmModelRegistryService {
             var existing = result.getOrDefault(provider, List.of());
             var existingIds = new LinkedHashMap<String, ModelEntry>();
             existing.forEach(m -> {
-                if (m.id() == null || m.id().isBlank()) {
+                if (StringUtils.isBlank(m.id())) {
                     log.warn("Skipping default model with missing id for provider '{}'", provider);
                     return;
                 }
@@ -449,7 +489,7 @@ public class LlmModelRegistryService {
             });
 
             overrideModels.forEach(m -> {
-                if (m.id() == null || m.id().isBlank()) {
+                if (StringUtils.isBlank(m.id())) {
                     log.warn("Skipping override model with missing id for provider '{}'", provider);
                     return;
                 }
