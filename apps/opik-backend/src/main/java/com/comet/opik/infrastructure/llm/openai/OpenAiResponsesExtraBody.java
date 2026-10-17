@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.openai;
 
+import com.comet.opik.infrastructure.llm.CustomParametersOverrides;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -58,14 +59,7 @@ class OpenAiResponsesExtraBody {
         if (MapUtils.isEmpty(customParameters)) {
             return request;
         }
-        OPIK_MANAGED_KEYS.stream()
-                .filter(customParameters::containsKey)
-                .findFirst()
-                .ifPresent(key -> {
-                    throw new BadRequestException(
-                            "custom_parameters.%s is set by Opik from the request and cannot be replaced"
-                                    .formatted(key));
-                });
+        CustomParametersOverrides.rejectOpikManagedKeys(OPIK_MANAGED_KEYS, customParameters);
         if (CHAT_COMPLETIONS_KEYS.stream().noneMatch(customParameters::containsKey)) {
             return request;
         }
