@@ -83,11 +83,11 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
       "#analyzing-evaluation-results",
     ),
   },
-  [EXPLAINER_ID.whats_the_test_suite_item]: {
-    ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_test_suite_item],
+  [EXPLAINER_ID.whats_the_dataset_item]: {
+    ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_dataset_item],
     docLink: buildDocsUrl(
       "/evaluation/concepts",
-      "#test-suites-assertion-based-testing",
+      "#datasets-metrics-quantitative-scoring",
     ),
   },
   [EXPLAINER_ID.whats_a_test_suite]: {

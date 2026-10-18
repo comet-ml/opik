@@ -32,7 +32,7 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
   value,
   onValueChange,
   projectId,
-  placeholder = "Select a test suite",
+  placeholder = "Select item source",
   className,
   showIcon = false,
   disabled,
