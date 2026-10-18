@@ -4,22 +4,11 @@ import json
 import logging
 from typing import Any, Dict, List
 
+from ...tool_input import parse_streamed_tool_input
 from .. import usage_converters
 from .base import ChunkAggregator, updated_token_count
 
 LOGGER = logging.getLogger(__name__)
-
-
-def _parse_tool_input(tool_input: str, index: int) -> Any:
-    """Parse the streamed input into the JSON value non-streaming invoke_model returns."""
-    if not tool_input:
-        return {}  # Claude streams a no-argument call as input ""
-    try:
-        return json.loads(tool_input)
-    except ValueError as e:
-        # e.g. cut off by max_tokens: keep what was streamed
-        LOGGER.debug("Could not parse tool input of content block %s: %s", index, e)
-        return tool_input
 
 
 def _apply_delta(block: Dict[str, Any], delta: Dict[str, Any], tool_input: str) -> str:
@@ -160,7 +149,9 @@ class ClaudeAggregator(ChunkAggregator):
 
         for index, tool_input in tool_inputs.items():
             if blocks[index].get("type") == "tool_use":
-                blocks[index]["input"] = _parse_tool_input(tool_input, index)
+                blocks[index]["input"] = parse_streamed_tool_input(
+                    tool_input, index, LOGGER
+                )
 
         # Empty text blocks were never logged before; keep it that way.
         content_blocks = [
