@@ -526,11 +526,11 @@ eval_results = evaluate(
           {!isTestSuite && renderEvaluatorsSection()}
           <div className="flex w-full flex-col gap-6 md:min-w-[450px] md:flex-1 md:rounded-md md:border md:border-border md:p-6">
             <div>
-              <CodeSectionTitle>1. Select test suite</CodeSectionTitle>
+              <CodeSectionTitle>1. Select item source</CodeSectionTitle>
               <LoadableSelectBox
                 options={options}
                 value={datasetName}
-                placeholder="Select a test suite"
+                placeholder="Select item source"
                 onChange={setDatasetName}
                 onLoadMore={
                   total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore

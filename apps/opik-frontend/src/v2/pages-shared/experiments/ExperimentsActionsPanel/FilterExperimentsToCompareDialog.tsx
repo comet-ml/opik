@@ -11,6 +11,7 @@ import {
 } from "@/ui/dialog";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Experiment } from "@/types/datasets";
+import { isTestSuiteExperiment } from "@/lib/experiments";
 import { Button } from "@/ui/button";
 import { useNavigate } from "@tanstack/react-router";
 import { Checkbox } from "@/ui/checkbox";
@@ -84,7 +85,9 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
               <span className="comet-body-s-accented truncate">{e.name}</span>
             </div>
             <div className="comet-body-s truncate pl-6 text-light-slate">
-              Test suite: {e.dataset_name ?? "Deleted test suite"}
+              {isTestSuiteExperiment(e)
+                ? `Test suite: ${e.dataset_name ?? "Deleted test suite"}`
+                : `Dataset: ${e.dataset_name ?? "Deleted dataset"}`}
             </div>
           </div>
         </label>
@@ -99,7 +102,7 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
           <DialogTitle>Select experiments to compare</DialogTitle>
         </DialogHeader>
         <div className="w-full overflow-hidden">
-          <ExplainerDescription description="You can only compare experiments that use the same test suite. Please make sure all the experiments use the same test suite." />
+          <ExplainerDescription description="You can only compare experiments that use the same item source. Please make sure all the experiments use the same item source." />
           <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch gap-2.5 overflow-y-auto">
             {renderListItems()}
           </div>
