@@ -1,0 +1,107 @@
+name: 🚦 Draft PR Policy
+
+# Converts a ready-for-review PR back to draft when it has merge conflicts with
+# its base branch, since it isn't reviewable until they're resolved.
+#
+# The draft state is the signal; no comment is posted. To get back to ready the
+# author clicks "Ready for review", which re-runs the check. The schedule
+# catches conflicts introduced by other merges to the base branch.
+#
+# Fork PRs and bot-authored PRs are skipped.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only log which PRs would be converted to draft"
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || 'all-open-prs' }}
+  cancel-in-progress: true
+
+jobs:
+  convert-to-draft:
+    name: Convert conflicting PRs to draft
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Convert PRs with merge conflicts to draft
+        uses: actions/github-script@v9
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const dryRun = process.env.DRY_RUN === "true";
+            // GitHub computes mergeability lazily and reports UNKNOWN until it's done.
+            const MERGEABLE_ATTEMPTS = 6;
+            const MERGEABLE_RETRY_MS = 5000;
+
+            const PR_QUERY = `
+              query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    id
+                    state
+                    isDraft
+                    isCrossRepository
+                    mergeable
+                    author { __typename login }
+                  }
+                }
+              }`;
+
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+            const fetchPr = async (number) => {
+              for (let attempt = 1; ; attempt++) {
+                const { repository } = await github.graphql(PR_QUERY, { owner, repo, number });
+                const pr = repository.pullRequest;
+                if (pr.mergeable !== "UNKNOWN" || attempt === MERGEABLE_ATTEMPTS) return pr;
+                await sleep(MERGEABLE_RETRY_MS);
+              }
+            };
+
+            const numbers = context.payload.pull_request
+              ? [context.payload.pull_request.number]
+              : (
+                  await github.paginate(github.rest.pulls.list, { owner, repo, state: "open", per_page: 100 })
+                ).filter((pr) => !pr.draft).map((pr) => pr.number);
+
+            for (const number of numbers) {
+              const pr = await fetchPr(number);
+              if (pr.state !== "OPEN" || pr.isDraft) continue;
+              if (pr.isCrossRepository || pr.author?.__typename === "Bot") {
+                core.info(`PR #${number}: fork or bot-authored, skipped`);
+                continue;
+              }
+
+              if (pr.mergeable === "UNKNOWN") {
+                core.info(`PR #${number}: mergeability still UNKNOWN, skipped until the next run`);
+                continue;
+              }
+              if (pr.mergeable !== "CONFLICTING") {
+                core.info(`PR #${number}: no conflicts, left as is`);
+                continue;
+              }
+
+              core.info(`PR #${number}: merge conflicts with the base branch, converting to draft${dryRun ? " (dry run)" : ""}`);
+              if (dryRun) continue;
+              await github.graphql(
+                `mutation($id: ID!) { convertPullRequestToDraft(input: { pullRequestId: $id }) { clientMutationId } }`,
+                { id: pr.id }
+              );
+            }
