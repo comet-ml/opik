@@ -5,6 +5,7 @@ import { Checkbox } from "@/ui/checkbox";
 import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
 import LoadableSelectBox from "@/v2/components/LoadableSelectBox/LoadableSelectBox";
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
+import { DATASET_TYPE } from "@/types/datasets";
 import SideDialog from "@/shared/SideDialog/SideDialog";
 import { SheetTopBar } from "@/ui/sheet";
 import ApiKeyCard from "@/v2/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
@@ -302,6 +303,13 @@ const AddOptimizationDialog: React.FunctionComponent<
 
   const total = data?.total ?? 0;
 
+  const selectedDataset = data?.content?.find((d) => d.name === datasetName);
+  const sourceLabel = !selectedDataset
+    ? "item source"
+    : selectedDataset.type === DATASET_TYPE.TEST_SUITE
+      ? "test suite"
+      : "dataset";
+
   const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);
 
   const options: DropdownOption<string>[] = useMemo(() => {
@@ -364,7 +372,7 @@ const AddOptimizationDialog: React.FunctionComponent<
           </div>
           <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-border p-6">
             <div className="comet-body-s text-foreground-secondary">
-              1. Select item source
+              1. Select {sourceLabel}
             </div>
             <Tooltip>
               <TooltipTrigger asChild>

@@ -223,6 +223,11 @@ const AddExperimentDialog: React.FunctionComponent<
     [data?.content, datasetName],
   );
   const isTestSuite = selectedDataset?.type === DATASET_TYPE.TEST_SUITE;
+  const sourceLabel = !selectedDataset
+    ? "item source"
+    : isTestSuite
+      ? "test suite"
+      : "dataset";
 
   // When the selected dataset is a test suite, evaluators are defined
   // on the suite itself — skip metrics in the generated code.
@@ -526,7 +531,7 @@ eval_results = evaluate(
           {!isTestSuite && renderEvaluatorsSection()}
           <div className="flex w-full flex-col gap-6 md:min-w-[450px] md:flex-1 md:rounded-md md:border md:border-border md:p-6">
             <div>
-              <CodeSectionTitle>1. Select item source</CodeSectionTitle>
+              <CodeSectionTitle>1. Select {sourceLabel}</CodeSectionTitle>
               <LoadableSelectBox
                 options={options}
                 value={datasetName}
