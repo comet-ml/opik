@@ -113,7 +113,7 @@ export const createDatasetRowActionsCell = ({
             setOpen={setOpen}
             onConfirm={deleteDatasetHandler}
             title={`Delete ${entityName}`}
-            description={`Deleting this ${entityName} will also remove all its items. Any experiments linked to it will be moved to a \u201cDeleted test suite\u201d group. This action can\u2019t be undone. Are you sure you want to continue?`}
+            description={`Deleting this ${entityName} will also remove all its items. Any experiments linked to it will be moved to a \u201cDeleted item source\u201d group. This action can\u2019t be undone. Are you sure you want to continue?`}
             confirmText={`Delete ${entityName}`}
             confirmButtonVariant="destructive"
           />

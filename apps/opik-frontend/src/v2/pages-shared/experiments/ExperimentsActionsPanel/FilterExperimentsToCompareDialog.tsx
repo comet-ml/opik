@@ -10,17 +10,12 @@ import {
   DialogTitle,
 } from "@/ui/dialog";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
-import { EVALUATION_METHOD, Experiment } from "@/types/datasets";
+import { Experiment } from "@/types/datasets";
+import { isTestSuiteExperiment } from "@/lib/experiments";
 import { Button } from "@/ui/button";
 import { useNavigate } from "@tanstack/react-router";
 import { Checkbox } from "@/ui/checkbox";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { ITEM_SOURCE_LABEL } from "@/v2/pages-shared/experiments/ItemSourceCell";
-
-const SOURCE_LABEL_MAP: Record<EVALUATION_METHOD, string> = {
-  [EVALUATION_METHOD.DATASET]: "Dataset",
-  [EVALUATION_METHOD.TEST_SUITE]: "Test suite",
-};
 
 type FilterExperimentsToCompareDialogProps = {
   experiments: Experiment[];
@@ -74,10 +69,8 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
     return experiments.map((e) => {
       const checked =
         findIndex(selectedExperiments, (se) => se.id === e.id) !== -1;
-      // Pre-migration experiments carry no evaluation_method, so their type is unknown.
-      const sourceLabel =
-        (e.evaluation_method && SOURCE_LABEL_MAP[e.evaluation_method]) ??
-        ITEM_SOURCE_LABEL;
+      // Pre-migration experiments carry no evaluation_method; they are datasets.
+      const sourceLabel = isTestSuiteExperiment(e) ? "Test suite" : "Dataset";
       return (
         <label
           key={e.id}
