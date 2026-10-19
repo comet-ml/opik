@@ -93,3 +93,10 @@ MISTRAL_SMALL = "mistral-small-latest"
 # The integration tests mock the transport and never reach Together, but this
 # is still the id the client is called with and the value asserted on the span.
 TOGETHER_LLAMA = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+
+# ---------------------------------------------------------------------------
+# Cohere
+# ---------------------------------------------------------------------------
+# The integration tests mock the transport and never reach Cohere, but this is
+# still the id the client is called with and the value asserted on the span.
+COHERE_COMMAND = "command-r-plus"
