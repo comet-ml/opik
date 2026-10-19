@@ -17,6 +17,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.lang.reflect.Array;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -91,7 +92,6 @@ class AiLabelSweepDAO {
                         status = 'done'
                         OR (status = 'failed' AND (NOT retryable OR attempt >= :max_attempts))
                         OR (status = 'failed' AND retryable AND updated_at > now64(6) - toIntervalSecond(:retry_delay_seconds))
-                        OR (status = 'pending' AND updated_at > now64(6) - toIntervalSecond(:pending_orphan_seconds))
                     ) AS settled
                 FROM latest_status
             ),
@@ -119,11 +119,14 @@ class AiLabelSweepDAO {
             """;
 
     // A task version older than required is never settled, but its attempts belong to the old version, so they reset.
+    // Newest first (ids are UUIDv7), so under overload the newest traces are labeled and the oldest age out of H. Traces
+    // in flight are left out here, before the LIMIT: the newest C would otherwise be exactly the ones in flight.
     private static final String SWEEP = CANDIDATE_CTES + """
             SELECT workspace_id, project_id, id, created_at, missing, attempts
             FROM candidates
             WHERE notEmpty(missing)
-            ORDER BY workspace_id, id
+            AND id NOT IN :in_flight
+            ORDER BY workspace_id, id DESC
             LIMIT :per_workspace_candidates BY workspace_id
             """ + SETTINGS;
 
@@ -152,12 +155,15 @@ class AiLabelSweepDAO {
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull @Config("aiLabels") AiLabelsConfig config;
 
-    Flux<Candidate> sweep(@NonNull List<String> workspaceIds, @NonNull List<SweepTask> tasks, int bucket) {
+    /** @param inFlight the bucket's traces with a task in flight, which yield no candidates */
+    Flux<Candidate> sweep(@NonNull List<String> workspaceIds, @NonNull List<SweepTask> tasks, int bucket,
+            @NonNull Collection<String> inFlight) {
         if (workspaceIds.isEmpty() || tasks.isEmpty()) {
             return Flux.empty();
         }
         return query(SWEEP, "ai-labels:sweep", workspaceIds, tasks, bucket,
-                statement -> statement.bind("per_workspace_candidates", config.getPerWorkspaceCandidates()))
+                statement -> statement.bind("per_workspace_candidates", config.getPerWorkspaceCandidates())
+                        .bind("in_flight", inFlight.toArray(String[]::new)))
                 .flatMap(result -> result.map((row, metadata) -> toCandidate(row)));
     }
 
@@ -203,8 +209,7 @@ class AiLabelSweepDAO {
                             .bind("horizon_seconds", config.getHorizon().toSeconds())
                             .bind("quiet_seconds", config.getQuietPeriod().toSeconds())
                             .bind("max_attempts", config.getRetry().getMaxAttempts())
-                            .bind("retry_delay_seconds", config.getRetry().getDelay().toSeconds())
-                            .bind("pending_orphan_seconds", config.getPendingOrphanAge().toSeconds());
+                            .bind("retry_delay_seconds", config.getRetry().getDelay().toSeconds());
                     bindTasks(statement, tasks);
                     extraBinds.accept(statement);
                     return statement.execute();

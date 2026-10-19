@@ -113,23 +113,21 @@ class AiLabelSweepDAOTest {
     class Settled {
 
         static Stream<Arguments> latestStatus() {
-            // X = 2 attempts, D = 15 min, P = 24 h (the config defaults); a value of -1 means the pair is settled.
-            // Each case has an older row first: pending, except where a settled older row must not win.
+            // X = 2 attempts, D = 15 min (the config defaults); a value of -1 means the pair is settled. Each case
+            // has an older row first: a terminal failure, except where an older settled row must not win.
             return Stream.of(
-                    Arguments.of("done", "pending", 0, "done", false, 1, 1, 60, -1),
-                    Arguments.of("failed, not retryable", "pending", 0, "failed", false, 1, 1, 60 * 60, -1),
-                    Arguments.of("failed, retryable, X attempts made", "pending", 0, "failed", true, 2, 1, 60 * 60,
+                    Arguments.of("done", "failed", 0, "done", false, 1, 1, 60, -1),
+                    Arguments.of("failed, not retryable", "failed", 0, "failed", false, 1, 1, 60 * 60, -1),
+                    Arguments.of("failed, retryable, X attempts made", "failed", 0, "failed", true, 2, 1, 60 * 60,
                             -1),
-                    Arguments.of("failed, retryable, below X, D elapsed", "pending", 0, "failed", true, 1, 1, 16 * 60,
+                    Arguments.of("failed, retryable, below X, D elapsed", "failed", 0, "failed", true, 1, 1, 16 * 60,
                             1),
-                    Arguments.of("failed, retryable, below X, inside D", "pending", 0, "failed", true, 1, 1, 14 * 60,
+                    Arguments.of("failed, retryable, below X, inside D", "failed", 0, "failed", true, 1, 1, 14 * 60,
                             -1),
-                    Arguments.of("pending, inside P", "pending", 0, "pending", false, 1, 1, 23 * 3600, -1),
-                    Arguments.of("pending, P elapsed (an orphan)", "pending", 0, "pending", false, 1, 1, 25 * 3600, 1),
-                    Arguments.of("done at a version below the one required", "pending", 0, "done", false, 1, 0, 60,
+                    Arguments.of("done at a version below the one required", "failed", 0, "done", false, 1, 0, 60,
                             0),
-                    Arguments.of("done, then a newer orphaned pending row", "done", 1, "pending", false, 2, 1,
-                            25 * 3600, 2));
+                    Arguments.of("done, then a newer retryable failure past D", "done", 1, "failed", true, 1, 1,
+                            16 * 60, 1));
         }
 
         @ParameterizedTest(name = "{0}")
@@ -199,7 +197,7 @@ class AiLabelSweepDAOTest {
             config.setPerWorkspaceCandidates(3);
 
             var candidates = new AiLabelSweepDAO(connectionFactory, config)
-                    .sweep(List.of(big, small), List.of(SUMMARY), 0)
+                    .sweep(List.of(big, small), List.of(SUMMARY), 0, List.of())
                     .collectList()
                     .block();
 
@@ -207,6 +205,41 @@ class AiLabelSweepDAOTest {
                     .filteredOn(big::equals).hasSize(3);
             assertThat(candidates).extracting(Candidate::workspaceId)
                     .filteredOn(small::equals).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("newest first: C takes the newest traces, so under overload the oldest age out")
+        void newestFirst() {
+            var workspaceId = workspace();
+            var traces = IntStream.range(0, 5).mapToObj(i -> trace(workspaceId).build().insert()).toList();
+            var config = new AiLabelsConfig();
+            config.setPerWorkspaceCandidates(2);
+
+            var candidates = new AiLabelSweepDAO(connectionFactory, config)
+                    .sweep(List.of(workspaceId), List.of(SUMMARY), 0, List.of())
+                    .collectList()
+                    .block();
+
+            assertThat(candidates).extracting(Candidate::traceId)
+                    .containsExactly(traces.get(4).id(), traces.get(3).id());
+        }
+
+        @Test
+        @DisplayName("in-flight traces are left out before C: with the newest C in flight, the next C come back")
+        void inFlightLeftOutBeforeTheLimit() {
+            var workspaceId = workspace();
+            var traces = IntStream.range(0, 4).mapToObj(i -> trace(workspaceId).build().insert()).toList();
+            var config = new AiLabelsConfig();
+            config.setPerWorkspaceCandidates(2);
+            var inFlight = List.of(traces.get(3).id().toString(), traces.get(2).id().toString());
+
+            var candidates = new AiLabelSweepDAO(connectionFactory, config)
+                    .sweep(List.of(workspaceId), List.of(SUMMARY), 0, inFlight)
+                    .collectList()
+                    .block();
+
+            assertThat(candidates).extracting(Candidate::traceId)
+                    .containsExactly(traces.get(1).id(), traces.get(0).id());
         }
 
         @Test
@@ -218,7 +251,7 @@ class AiLabelSweepDAOTest {
             IntStream.range(0, 9_999).forEach(i -> bucket.add(UUID.randomUUID().toString()));
             bucket.add(workspaceId);
 
-            var candidates = dao().sweep(bucket, List.of(SUMMARY), 0).collectList().block();
+            var candidates = dao().sweep(bucket, List.of(SUMMARY), 0, List.of()).collectList().block();
 
             assertThat(candidates).extracting(Candidate::traceId).containsExactly(trace.id());
         }
@@ -232,7 +265,7 @@ class AiLabelSweepDAOTest {
             config.getSweep().setMaxRowsToRead(1);
 
             assertThatThrownBy(() -> new AiLabelSweepDAO(connectionFactory, config)
-                    .sweep(List.of(workspaceId), List.of(SUMMARY), 0)
+                    .sweep(List.of(workspaceId), List.of(SUMMARY), 0, List.of())
                     .collectList()
                     .block())
                     .satisfies(error -> assertThat(AiLabelSweepService.guardCode(error)).contains("TOO_MANY_ROWS"));
@@ -249,10 +282,10 @@ class AiLabelSweepDAOTest {
         void countsMatchTheFixture() {
             var workspaceId = workspace();
             var topic = new SweepTask("topic", List.of(1), List.of(LONG_AGO));
-            // Past the SLO (Q + slack = 45 min): created and last updated 2 h ago, both tasks missing.
+            // Past the SLO (Q + slack = 75 min): created and last updated 2 h ago, both tasks missing.
             trace(workspaceId).createdSecondsAgo(2 * 3600).lastUpdatedSecondsAgo(2 * 3600).build().insert();
-            // Unsettled but inside the SLO: created 40 min ago, quiet for 35, one task done.
-            var recent = trace(workspaceId).createdSecondsAgo(40 * 60).lastUpdatedSecondsAgo(35 * 60).build().insert();
+            // Unsettled but inside the SLO: created 70 min ago, quiet for 65, one task done.
+            var recent = trace(workspaceId).createdSecondsAgo(70 * 60).lastUpdatedSecondsAgo(65 * 60).build().insert();
             status(recent, "summary", "done", false, 1, 1, 60);
             // Settled for both tasks.
             var settled = trace(workspaceId).build().insert();
@@ -287,7 +320,7 @@ class AiLabelSweepDAOTest {
     }
 
     private List<Candidate> sweep(String workspaceId, List<SweepTask> tasks) {
-        return dao().sweep(List.of(workspaceId), tasks, 0).collectList().block();
+        return dao().sweep(List.of(workspaceId), tasks, 0, List.of()).collectList().block();
     }
 
     private static String workspace() {

@@ -21,7 +21,7 @@ runs only where `AI_LABELS_ENABLED=true` (Comet-hosted deployments); it is off e
 
 Opt-in is the `ai_label_workspaces` table in the state database (MySQL). There is no API.
 
-Before enabling a workspace, check how much it will backfill: its traces in the horizon (7 days by default). Traces
+Before enabling a workspace, check how much it will backfill: its traces in the horizon (24 hours by default). Traces
 created before a task's `applies_from` are never labeled.
 
 ```sql
@@ -29,12 +29,15 @@ created before a task's `applies_from` are never labeled.
 SELECT count()
 FROM traces
 WHERE workspace_id = '<workspace_id>'
-  AND created_at >= now64(6) - INTERVAL 7 DAY;
+  AND created_at >= now64(6) - INTERVAL 1 DAY;
 ```
 
-The sweep hands each workspace at most `AI_LABELS_PER_WORKSPACE_CANDIDATES` (10,000) traces a minute, and the global
-budget (`AI_LABELS_BUDGET_ENGINE_CALLS`) and the pool's throughput usually bind first. Expect a backfill of at least
-count ÷ 10,000 minutes.
+The pool's throughput binds first: one L40S on the 4B model labels about 3 traces a second at 7K tokens each (22K
+tokens/s), and a trace with large spans costs up to 50 times a small one. The sweep takes the newest traces first, so a
+backfill works backward from now, and when the pool can't keep up the oldest traces age out of the horizon unlabeled
+(`ai_labels.unsettled` stops shrinking). The global budget (`AI_LABELS_BUDGET_BYTES`, about 3 minutes of the pool by
+default) bounds how much waits in opik-inference, and is shared out evenly between the workspaces that have traces to
+label.
 
 ```sql
 -- MySQL: enable (or re-enable) a workspace
@@ -70,8 +73,13 @@ LIMIT 1 BY workspace_id, project_id, task, trace_id, key;
 | Metric | Meaning |
 |---|---|
 | `ai_labels.unsettled_past_slo` | Unsettled (trace, task) pairs past the SLO, per workspace. The headline. |
-| `ai_labels.budget.in_flight` / `.limit` | Engine calls in flight against the budget. |
+| `ai_labels.budget.in_flight` / `.limit` | Cost in flight against the budget. Pinned at the limit means the pool is the bottleneck. |
+| `ai_labels.unsettled` | Unsettled (trace, task) pairs in the horizon: the backlog. |
+| `ai_labels.tick.phase_seconds` by `phase` | Time in load, sweep and submit. Loading stops starting jobs at 40% of the tick budget. |
+| `ai_labels.render.traces` / `ai_labels.submit.traces` | Traces rendered vs admitted. Far apart means renders are wasted: raise `AI_LABELS_MIN_ITEM_BYTES` toward a typical item. |
 | `ai_labels.items.failed` by `error_code` | `render_over_budget`, `render_error`, `job_lost`, `missing_result`, `missing_answer`, or the service's code. |
 | `ai_labels.submit.rejected` | A submit rejected with 400: a renderer or task bug. |
 | `ai_labels.sweep.guard_trips` | A sweep query hit a ClickHouse guard: raise `AI_LABELS_SWEEP_BUCKETS`. |
 | `ai_labels.render.compaction_level`, `.bytes` | How far traces had to be compacted to fit. |
+| `ai_labels.render.history_turns`, `.history_bytes` | The earlier thread turns left in each fitted history, and their size. |
+| `ai_labels.render.history_errors` | Failed reads of earlier turns. The chunk's render fails and is retried as `render_error`. |

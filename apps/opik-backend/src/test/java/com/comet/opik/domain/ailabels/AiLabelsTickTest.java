@@ -65,6 +65,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -84,11 +85,11 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.same;
@@ -115,6 +116,7 @@ class AiLabelsTickTest {
     private static final String DECIDE_PATH = "/v1/batch/decide";
     private static final String GENERATE_PATH = "/v1/batch/generate";
     private static final String JOB_PATH = "/v1/batch/jobs/";
+    private static final String STATUS_PATH = "/v1/batch/jobs/status";
     private static final String DECIDE_TASK = "agent_outcome";
     private static final String GENERATE_TASK = "trace_summary";
     private static final Set<String> TASKS = Set.of(DECIDE_TASK, GENERATE_TASK);
@@ -143,7 +145,7 @@ class AiLabelsTickTest {
             """ + IntStream.range(0, WIDE_QUESTIONS)
             .mapToObj(i -> "  q%02d: {type: noul, instructions: \"Check %d?\"}\n".formatted(i, i))
             .collect(Collectors.joining());
-    // The sweep and poll cadences are 1 s; the extra half second covers MySQL's clock, which marks a job polled.
+    // The sweep cadence is 1 s; the extra half second covers clock drift between the lock and the test.
     private static final Duration TICK_GAP = Duration.ofMillis(1_500);
     // Wide enough that the tick asserting "not yet retried" lands inside D even on a slow runner.
     private static final Duration RETRY_DELAY = Duration.ofSeconds(8);
@@ -190,7 +192,6 @@ class AiLabelsTickTest {
                         new CustomConfig("aiLabels.tickBudget", "30s"),
                         new CustomConfig("aiLabels.sweepInterval", "1s"),
                         new CustomConfig("aiLabels.healthInterval", "1h"),
-                        new CustomConfig("aiLabels.pollInterval", "1s"),
                         new CustomConfig("aiLabels.quietPeriod", "0s"),
                         new CustomConfig("aiLabels.retry.delay", RETRY_DELAY.toSeconds() + "s"),
                         new CustomConfig("aiLabels.sweep.buckets", "1")))
@@ -213,9 +214,15 @@ class AiLabelsTickTest {
     private Connection clickHouseConnection;
 
     private Instant lastTick = Instant.EPOCH;
-    private int defaultBudget;
+    private long defaultBudget;
     private int defaultChunkTraces;
     private long defaultRenderBudgetBytes;
+    private long defaultMinItemBytes;
+    private long defaultPerCallBytes;
+    private io.dropwizard.util.Duration defaultTickBudget;
+    // What the status call reports for each job: absent is running, and a lost job is left out.
+    private final Map<String, String> jobStatuses = new ConcurrentHashMap<>();
+    private final Set<String> lostJobs = ConcurrentHashMap.newKeySet();
 
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template, @Jit LockService lockService,
@@ -237,9 +244,12 @@ class AiLabelsTickTest {
         this.statusDAO = statusDAO;
         this.labelsDAO = labelsDAO;
         this.clickHouseConnection = clickHouse.createConnection("");
-        this.defaultBudget = config().getBudgetEngineCalls();
+        this.defaultBudget = config().getBudgetBytes();
         this.defaultChunkTraces = config().getChunkTraces();
         this.defaultRenderBudgetBytes = config().getRenderBudgetBytes();
+        this.defaultMinItemBytes = config().getMinItemBytes();
+        this.defaultPerCallBytes = config().getPerCallBytes();
+        this.defaultTickBudget = config().getTickBudget();
 
         // The job fires once at startup: wait for that tick to release the leader lock, so it can't race the tests.
         lockService.bestEffortLock(new LockService.Lock("ai_labels:leader"), Mono.just(true), Mono.empty(),
@@ -258,21 +268,24 @@ class AiLabelsTickTest {
         template.inTransaction(WRITE, handle -> {
             handle.execute("UPDATE ai_label_workspaces SET enabled = FALSE");
             handle.execute("DELETE FROM ai_label_jobs");
+            handle.execute("DELETE FROM ai_label_job_items");
             return null;
         });
+        jobStatuses.clear();
+        lostJobs.clear();
         wireMock.server().resetAll();
         stubSubmit(DECIDE_PATH);
         stubSubmit(GENERATE_PATH);
-        // Any job without its own stub is still running.
-        wireMock.server().stubFor(get(urlPathMatching(JOB_PATH + ".+")).atPriority(10)
-                .willReturn(json(200, jobView("job-running", "generate", "running", List.of(), null))));
     }
 
     @AfterEach
     void tearDown() {
-        config().setBudgetEngineCalls(defaultBudget);
+        config().setBudgetBytes(defaultBudget);
         config().setChunkTraces(defaultChunkTraces);
         config().setRenderBudgetBytes(defaultRenderBudgetBytes);
+        config().setMinItemBytes(defaultMinItemBytes);
+        config().setPerCallBytes(defaultPerCallBytes);
+        config().setTickBudget(defaultTickBudget);
         config().getSweep().setBuckets(1);
     }
 
@@ -303,7 +316,7 @@ class AiLabelsTickTest {
 
         tick();
 
-        var expectedStates = render(workspaceId, projectId, traceIds);
+        var expectedStates = render(workspaceId, projectId, traceIds, registry.get(DECIDE_TASK));
         var decide = submits(DECIDE_PATH, workspaceId);
         assertThat(decide).singleElement().satisfies(body -> {
             assertThat(body.path("org_id").asText()).isEqualTo(workspaceId);
@@ -328,25 +341,29 @@ class AiLabelsTickTest {
                 var traceId = UUID.fromString(item.path("item_id").asText().split(":")[0]);
                 assertThat(item.path("messages").get(0).path("content").asText())
                         .isEqualTo(summary.prompt().system());
+                // No thread: the history is empty, and the state is fitted with it.
                 assertThat(item.path("messages").get(1).path("content").asText())
-                        .isEqualTo(summary.prompt().user().replace(AiLabelTask.STATE_PLACEHOLDER,
-                                expectedStates.get(traceId)));
+                        .isEqualTo(summary.prompt().user().replace(AiLabelTask.HISTORY_PLACEHOLDER, "[]")
+                                .replace(AiLabelTask.STATE_PLACEHOLDER, expectedStates.get(traceId)));
                 assertThat(item.path("schema")).isEqualTo(summary.schema());
                 assertThat(item.path("max_tokens").asInt()).isEqualTo(64);
             });
         });
 
         var jobs = jobs(workspaceId);
-        assertThat(jobs).extracting(JobRow::endpoint, JobRow::status, JobRow::itemCount, JobRow::engineCalls)
-                .containsExactlyInAnyOrder(tuple("decide", "submitted", 3, 6), tuple("generate", "submitted", 3, 3));
+        var cost = traceCost(workspaceId, projectId, traceIds.getFirst());
+        assertThat(jobs).extracting(JobRow::endpoint, JobRow::status, JobRow::itemCount, JobRow::bytes)
+                .containsExactlyInAnyOrder(tuple("decide", "submitted", 3, 3 * cost.get(AiLabelEndpoint.DECIDE)),
+                        tuple("generate", "submitted", 3, 3 * cost.get(AiLabelEndpoint.GENERATE)));
         var jobIdByTask = Map.of(DECIDE_TASK, job(jobs, "decide").jobId(), GENERATE_TASK,
                 job(jobs, "generate").jobId());
-        assertThat(statuses(workspaceId, traceIds)).hasSize(6).allSatisfy(status -> {
-            assertThat(status.status()).isEqualTo(AiLabelStatus.Status.PENDING);
-            assertThat(status.jobId()).isEqualTo(jobIdByTask.get(status.task()));
-            assertThat(status.attempt()).isOne();
-            assertThat(status.taskVersion()).isOne();
-            assertThat(status.rendererVersion()).isEqualTo(AiLabelRenderer.RENDERER_VERSION);
+        // In flight in MySQL only: nothing is written to ClickHouse at submit.
+        assertThat(statuses(workspaceId, traceIds)).isEmpty();
+        assertThat(inFlight(workspaceId)).hasSize(6).allSatisfy(item -> {
+            assertThat(item.jobId()).isEqualTo(jobIdByTask.get(item.task()));
+            assertThat(item.attempt()).isOne();
+            assertThat(item.taskVersion()).isOne();
+            assertThat(item.rendererVersion()).isEqualTo(AiLabelRenderer.RENDERER_VERSION);
         });
 
         completeJob(job(jobs, "decide"), List.of(traceIds.stream().map(AiLabelsTickTest::decideResult).toList()));
@@ -356,7 +373,12 @@ class AiLabelsTickTest {
                 List.of(generateResult(traceIds.get(1)), generateResult(traceIds.get(2)))));
         tick();
 
+        // One status call for both jobs.
+        assertThat(statusCalls()).last().satisfies(body -> assertThat(body.path("job_ids"))
+                .extracting(JsonNode::asText)
+                .containsExactlyInAnyOrder(jobIdByTask.get(DECIDE_TASK), jobIdByTask.get(GENERATE_TASK)));
         assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
+        assertThat(inFlight(workspaceId)).isEmpty();
         assertThat(statuses(workspaceId, traceIds)).hasSize(6).allSatisfy(status -> {
             assertThat(status.status()).isEqualTo(AiLabelStatus.Status.DONE);
             assertThat(status.attempt()).isOne();
@@ -383,51 +405,109 @@ class AiLabelsTickTest {
     }
 
     @Test
-    @DisplayName("budget: submissions stop at the budget, and loading frees it for the next tick")
-    void budget() {
-        config().setBudgetEngineCalls(6);
+    @DisplayName("history: the turns of one thread in one chunk each get the earlier ones")
+    void threadTurnsInOneChunkSeeEachOther() {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
-        var traceIds = IntStream.range(0, 4).mapToObj(i -> trace(workspaceId, projectId, 1)).toList();
+        var turns = IntStream.rangeClosed(1, 3).mapToObj(turn -> trace(workspaceId, projectId, 0, "thread-1"))
+                .toList();
 
         tick();
 
-        // The decide job comes first and fills the budget: 3 traces of 2 questions each.
+        var turnJson = "{\"input\":\"{\\\"question\\\":\\\"where is my refund?\\\"}\","
+                + "\"output\":\"{\\\"answer\\\":\\\"it is on its way\\\"}\"}";
+        var expectedHistory = Map.of(turns.get(0), "[]", turns.get(1), "[" + turnJson + "]",
+                turns.get(2), "[" + turnJson + "," + turnJson + "]");
+        var summary = registry.get(GENERATE_TASK);
+        var states = render(workspaceId, projectId, turns, summary);
+        assertThat(submits(GENERATE_PATH, workspaceId)).singleElement().satisfies(body -> assertThat(items(body))
+                .hasSize(3)
+                .allSatisfy(item -> {
+                    var traceId = UUID.fromString(item.path("item_id").asText().split(":")[0]);
+                    assertThat(item.path("messages").get(1).path("content").asText()).isEqualTo(summary.prompt()
+                            .user().replace(AiLabelTask.HISTORY_PLACEHOLDER, expectedHistory.get(traceId))
+                            .replace(AiLabelTask.STATE_PLACEHOLDER, states.get(traceId)));
+                }));
+    }
+
+    @Test
+    @DisplayName("budget: whole traces are admitted up to the budget, and loading frees it for the next tick")
+    void budget() {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        var traceIds = IntStream.range(0, 4).mapToObj(i -> trace(workspaceId, projectId, 1)).toList();
+        // The traces render alike, so each one costs the same: its decide and generate items together.
+        long cost = traceCost(workspaceId, projectId, traceIds.getFirst()).values().stream()
+                .mapToLong(Long::longValue).sum();
+        // Room for 3 traces and half of a fourth.
+        long budget = 3 * cost + cost / 2;
+        config().setBudgetBytes(budget);
+
+        tick();
+
         assertThat(submits(DECIDE_PATH, workspaceId)).singleElement()
                 .satisfies(body -> assertThat(items(body)).hasSize(3));
-        assertThat(submits(GENERATE_PATH, workspaceId)).isEmpty();
-        assertThat(inFlightEngineCalls()).isEqualTo(6);
-        var firstDecided = jobTraceIds(workspaceId, job(jobs(workspaceId), "decide"));
+        assertThat(submits(GENERATE_PATH, workspaceId)).singleElement()
+                .satisfies(body -> assertThat(items(body)).hasSize(3));
+        assertThat(inFlightBytes()).isEqualTo(3 * cost);
+        var firstAdmitted = inFlight(workspaceId).stream().map(AiLabelJobItem::traceId).collect(Collectors.toSet());
 
         tick();
 
         assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
-        assertThat(submits(GENERATE_PATH, workspaceId)).isEmpty();
+        assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(1);
 
         completeJobs(workspaceId);
         tick();
 
-        var lastTrace = traceIds.stream().filter(traceId -> !firstDecided.contains(traceId)).toList();
+        var lastTrace = traceIds.stream().filter(traceId -> !firstAdmitted.contains(traceId)).toList();
+        assertThat(lastTrace).hasSize(1);
         assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(2).last()
-                .satisfies(body -> assertThat(itemIds(body))
-                        .containsExactlyElementsOf(lastTrace.stream().map(UUID::toString).toList()));
-        assertThat(submits(GENERATE_PATH, workspaceId)).singleElement()
-                .satisfies(body -> assertThat(items(body)).hasSize(4));
-        assertThat(inFlightEngineCalls()).isEqualTo(6);
+                .satisfies(body -> assertThat(itemIds(body)).containsExactly(lastTrace.getFirst().toString()));
+        assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(2);
+        assertThat(inFlightBytes()).isEqualTo(cost);
     }
 
     @Test
-    @DisplayName("fairness: a small workspace is submitted in the first tick, however big the one before it")
+    @DisplayName("a full budget skips the sweep until loading frees room")
+    void fullBudgetSkipsTheSweep(@Jit AiLabelSweepDAO sweepDAO) {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        var first = trace(workspaceId, projectId, 1);
+        long cost = traceCost(workspaceId, projectId, first).values().stream().mapToLong(Long::longValue).sum();
+        config().setBudgetBytes(cost);
+        var sweeps = new AtomicInteger();
+        var service = tickService(template, statusDAO, registry,
+                new AiLabelSweepService(countingSweeps(sweepDAO, sweeps), template, config()));
+
+        tick(service);
+
+        assertThat(sweeps).hasValue(1);
+        assertThat(inFlightBytes()).isEqualTo(cost);
+        var second = trace(workspaceId, projectId, 1);
+
+        tick(service);
+
+        assertThat(sweeps).hasValue(1);
+        assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
+
+        completeJobs(workspaceId);
+        tick(service);
+
+        assertThat(sweeps).hasValue(2);
+        assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(2).last()
+                .satisfies(body -> assertThat(itemIds(body)).containsExactly(second.toString()));
+    }
+
+    @Test
+    @DisplayName("fairness: workspaces share the budget in one tick, whatever their order or size")
     void fairness() {
-        // Scaled down from 50k and 10 candidates: 12 traces cost 36 engine calls against a budget of 21, in turns of 4.
-        config().setBudgetEngineCalls(21);
-        config().setChunkTraces(4);
-        var workspaceIds = IntStream.range(0, 2).mapToObj(i -> UUID.randomUUID().toString()).sorted().toList();
-        // The sweep orders by workspace id, so the big workspace takes the first turn.
-        var big = workspaceIds.get(0);
-        var small = workspaceIds.get(1);
-        enable(big);
-        enable(small);
+        // Every item at the floor, so every trace costs the same: 2 items.
+        config().setMinItemBytes(8 * 1024);
+        long cost = 2 * 8 * 1024;
+        config().setBudgetBytes(7 * cost);
+        var big = enabledWorkspace();
+        var small = enabledWorkspace();
         var bigProject = UUID.randomUUID();
         var smallProject = UUID.randomUUID();
         IntStream.range(0, 12).forEach(i -> trace(big, bigProject, 0));
@@ -435,22 +515,44 @@ class AiLabelsTickTest {
 
         tick();
 
-        assertThat(statuses(small, smallTraces)).hasSize(4)
-                .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.PENDING));
-        assertThat(jobs(small)).extracting(JobRow::engineCalls).containsExactlyInAnyOrder(4, 2);
-        assertThat(inFlightEngineCalls()).isLessThanOrEqualTo(21);
+        // In either order, the small workspace's 2 traces go out and the big one takes the other 5.
+        assertThat(inFlight(small)).extracting(AiLabelJobItem::traceId).containsOnlyElementsOf(smallTraces)
+                .hasSize(4);
+        assertThat(inFlight(big).stream().map(AiLabelJobItem::traceId).distinct()).hasSize(5);
+        assertThat(inFlightBytes()).isEqualTo(7 * cost);
+        // Turns render about what fits their share: one job per job key, however many turns.
+        assertThat(submits(DECIDE_PATH, big)).hasSize(1);
+        assertThat(submits(GENERATE_PATH, big)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("one trace id in two projects of a workspace goes out once, never twice in one job")
+    void traceIdInTwoProjects() {
+        var workspaceId = enabledWorkspace();
+        var traceId = trace(workspaceId, UUID.randomUUID(), 0);
+        trace(workspaceId, UUID.randomUUID(), 0, "", traceId);
+
+        tick();
+
+        assertThat(submits(DECIDE_PATH, workspaceId)).singleElement()
+                .satisfies(body -> assertThat(itemIds(body)).containsExactly(traceId.toString()));
+        assertThat(submits(GENERATE_PATH, workspaceId)).singleElement()
+                .satisfies(body -> assertThat(itemIds(body)).containsExactly(traceId + ":" + GENERATE_TASK));
+
+        completeJobs(workspaceId);
+        tick();
+        tick();
+
+        // Settled is judged per trace id, so the copy counts as labeled once the first loads.
+        assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
+        assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
     }
 
     @Test
     @DisplayName("429: only that workspace backs off, until Retry-After; the others proceed")
     void throttled() {
-        var workspaceIds = IntStream.range(0, 2).mapToObj(i -> UUID.randomUUID().toString()).sorted().toList();
-        // The sweep orders by workspace id, so the throttled workspace takes the first turn: a 429 that stalled
-        // every later turn would leave the other one unsubmitted.
-        var throttled = workspaceIds.get(0);
-        var other = workspaceIds.get(1);
-        enable(throttled);
-        enable(other);
+        var throttled = enabledWorkspace();
+        var other = enabledWorkspace();
         var throttledTrace = trace(throttled, UUID.randomUUID(), 0);
         var otherTrace = trace(other, UUID.randomUUID(), 0);
         // Wide enough that the second tick can't cross it on a slow runner.
@@ -464,14 +566,13 @@ class AiLabelsTickTest {
         // The submit isn't retried, and the workspace's other job isn't tried.
         assertThat(submits(DECIDE_PATH, throttled)).hasSize(1);
         assertThat(submits(GENERATE_PATH, throttled)).isEmpty();
-        assertThat(statuses(throttled, List.of(throttledTrace))).isEmpty();
-        assertThat(statuses(other, List.of(otherTrace))).hasSize(2)
-                .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.PENDING));
+        assertThat(inFlight(throttled)).isEmpty();
+        assertThat(inFlight(other)).extracting(AiLabelJobItem::traceId).containsOnly(otherTrace).hasSize(2);
 
         tick();
 
         assertThat(submits(DECIDE_PATH, throttled)).hasSize(1);
-        assertThat(statuses(throttled, List.of(throttledTrace))).isEmpty();
+        assertThat(inFlight(throttled)).isEmpty();
 
         stubs.forEach(wireMock.server()::removeStub);
         pauseUntil(throttledAt.plus(retryAfter));
@@ -479,8 +580,7 @@ class AiLabelsTickTest {
 
         assertThat(submits(DECIDE_PATH, throttled)).hasSize(2);
         assertThat(submits(GENERATE_PATH, throttled)).hasSize(1);
-        assertThat(statuses(throttled, List.of(throttledTrace))).hasSize(2)
-                .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.PENDING));
+        assertThat(inFlight(throttled)).extracting(AiLabelJobItem::traceId).containsOnly(throttledTrace).hasSize(2);
     }
 
     @Test
@@ -502,7 +602,7 @@ class AiLabelsTickTest {
                     ? Flux.error(new IllegalStateException("Code: 158. DB::Exception: Limit for rows (controlled by "
                             + "'max_rows_to_read' setting) exceeded. (TOO_MANY_ROWS)"))
                     : invocation.callRealMethod();
-        }).when(guardedDAO).sweep(anyList(), anyList(), anyInt());
+        }).when(guardedDAO).sweep(anyList(), anyList(), anyInt(), anyCollection());
         var service = tickService(template, statusDAO, registry,
                 new AiLabelSweepService(guardedDAO, template, config()));
 
@@ -510,9 +610,8 @@ class AiLabelsTickTest {
 
         // Bucket 0 trips first, and bucket 1 is still swept and submitted in the same tick.
         assertThat(sweptBuckets).containsExactly(0, 1);
-        assertThat(statuses(swept, List.of(sweptTrace))).hasSize(2)
-                .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.PENDING));
-        assertThat(statuses(tripped, List.of(trippedTrace))).isEmpty();
+        assertThat(inFlight(swept)).extracting(AiLabelJobItem::traceId).containsOnly(sweptTrace).hasSize(2);
+        assertThat(inFlight(tripped)).isEmpty();
         assertThat(submits(DECIDE_PATH, tripped)).isEmpty();
 
         tick(service);
@@ -559,9 +658,8 @@ class AiLabelsTickTest {
             assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(2).last()
                     .satisfies(body -> assertThat(itemIds(body)).containsExactly(retried + ":" + GENERATE_TASK));
             assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
-            assertThat(status(workspaceId, retried, GENERATE_TASK))
-                    .extracting(AiLabelStatus::status, AiLabelStatus::attempt)
-                    .containsExactly(AiLabelStatus.Status.PENDING, 2);
+            assertThat(inFlight(workspaceId)).extracting(AiLabelJobItem::traceId, AiLabelJobItem::task,
+                    AiLabelJobItem::attempt).containsExactly(tuple(retried, GENERATE_TASK, 2));
 
             completeJobs(workspaceId, failGenerate);
             tick();
@@ -578,14 +676,13 @@ class AiLabelsTickTest {
         }
 
         @Test
-        @DisplayName("not_found: the job's pending pairs become retryable job_lost, and come back after D")
+        @DisplayName("left out of the status call: the job's items become retryable job_lost, and come back after D")
         void jobLost() {
             var workspaceId = enabledWorkspace();
             var traceId = trace(workspaceId, UUID.randomUUID(), 0);
 
             tick();
-            jobs(workspaceId).forEach(job -> wireMock.server().stubFor(get(urlPathMatching(JOB_PATH + job.jobId()))
-                    .willReturn(error(404, "not_found"))));
+            jobs(workspaceId).forEach(job -> lostJobs.add(job.jobId()));
             tick();
             var lostAt = Instant.now();
 
@@ -598,9 +695,7 @@ class AiLabelsTickTest {
             pauseUntil(lostAt.plus(RETRY_DELAY).plus(CLOCK_MARGIN));
             tick();
 
-            assertThat(statuses(workspaceId, List.of(traceId)))
-                    .extracting(AiLabelStatus::status, AiLabelStatus::attempt)
-                    .containsOnly(tuple(AiLabelStatus.Status.PENDING, 2));
+            assertThat(inFlight(workspaceId)).extracting(AiLabelJobItem::attempt).containsOnly(2).hasSize(2);
             assertThat(jobs(workspaceId)).extracting(JobRow::status)
                     .containsExactlyInAnyOrder("loaded", "loaded", "submitted", "submitted");
         }
@@ -620,12 +715,11 @@ class AiLabelsTickTest {
 
             assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(1);
             assertThat(jobs(workspaceId)).extracting(JobRow::endpoint).containsExactly("decide");
+            assertThat(inFlight(workspaceId)).extracting(AiLabelJobItem::task).containsOnly(DECIDE_TASK).hasSize(2);
             assertThat(statuses(workspaceId, traceIds))
                     .extracting(AiLabelStatus::task, AiLabelStatus::status, AiLabelStatus::retryable,
                             AiLabelStatus::attempt, AiLabelStatus::errorCode)
                     .containsExactlyInAnyOrder(
-                            tuple(DECIDE_TASK, AiLabelStatus.Status.PENDING, false, 1, ""),
-                            tuple(DECIDE_TASK, AiLabelStatus.Status.PENDING, false, 1, ""),
                             tuple(GENERATE_TASK, AiLabelStatus.Status.FAILED, false, 1, "invalid_request"),
                             tuple(GENERATE_TASK, AiLabelStatus.Status.FAILED, false, 1, "invalid_request"));
 
@@ -657,7 +751,7 @@ class AiLabelsTickTest {
         }
 
         @Test
-        @DisplayName("a submit still failing after the client's retries drops the chunk; the next sweep resubmits it")
+        @DisplayName("a submit failing with the service down drops the tick's other jobs; the next tick resubmits")
         void submitFailed() {
             var workspaceId = enabledWorkspace();
             var traceId = trace(workspaceId, UUID.randomUUID(), 0);
@@ -669,9 +763,9 @@ class AiLabelsTickTest {
 
             tick();
 
-            // The client's two retries, then the tick moves on to the next job.
-            assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(3);
-            assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(3);
+            // The client's two retries of the first job, then the tick's other job isn't tried.
+            assertThat(submits(DECIDE_PATH, workspaceId).size() + submits(GENERATE_PATH, workspaceId).size())
+                    .isEqualTo(3);
             assertThat(jobs(workspaceId)).isEmpty();
             assertThat(statuses(workspaceId, List.of(traceId))).isEmpty();
 
@@ -679,9 +773,29 @@ class AiLabelsTickTest {
             tick();
 
             assertThat(jobs(workspaceId)).hasSize(2);
-            assertThat(statuses(workspaceId, List.of(traceId)))
-                    .extracting(AiLabelStatus::status, AiLabelStatus::attempt)
-                    .containsOnly(tuple(AiLabelStatus.Status.PENDING, 1));
+            assertThat(inFlight(workspaceId)).extracting(AiLabelJobItem::attempt).containsOnly(1).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("a hung submit is cut at the tick's deadline, so the tick never outlives the leader lease")
+        void hungSubmitEndsTheTickOnTime() {
+            config().setTickBudget(io.dropwizard.util.Duration.seconds(3));
+            var workspaceId = enabledWorkspace();
+            trace(workspaceId, UUID.randomUUID(), 0);
+            List.of(DECIDE_PATH, GENERATE_PATH).forEach(path -> wireMock.server().stubFor(post(urlEqualTo(path))
+                    .withRequestBody(matchingJsonPath("$.workspace_id", equalTo(workspaceId)))
+                    .willReturn(aResponse().withStatus(202).withFixedDelay(20_000))));
+            var service = tickService(template, statusDAO, registry, sweepService);
+
+            tick(service);
+            var took = Duration.between(lastTick, Instant.now());
+
+            // Against 3 attempts of the 30 s read timeout per job before the deadline.
+            assertThat(took).isLessThan(Duration.ofSeconds(5));
+            // One attempt, cut at the deadline with no time to retry; with the service down, the other job isn't tried.
+            assertThat(submits(DECIDE_PATH, workspaceId).size() + submits(GENERATE_PATH, workspaceId).size())
+                    .isEqualTo(1);
+            assertThat(jobs(workspaceId)).isEmpty();
         }
 
         @Test
@@ -725,37 +839,38 @@ class AiLabelsTickTest {
 
             tick(tickService(crashingTemplate, statusDAO));
 
+            // Each job fails on its own: the other one is still submitted.
             assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
-            assertThat(submits(GENERATE_PATH, workspaceId)).isEmpty();
+            assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(1);
             assertThat(jobs(workspaceId)).isEmpty();
             assertThat(statuses(workspaceId, traceIds)).isEmpty();
 
             tick();
 
             assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(2);
-            assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(1);
+            assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(2);
             assertConverges(workspaceId, traceIds);
         }
 
         @Test
-        @DisplayName("after the job row, before the pending rows: the job loads nothing, and the next sweep resubmits")
-        void crashBeforePendingRows() {
+        @DisplayName("the job row and its items commit together: a failure after both inserts leaves neither")
+        void jobAndItemsCommitTogether() {
             var workspaceId = enabledWorkspace();
             var traceIds = List.of(trace(workspaceId, UUID.randomUUID(), 1));
-            var crashingStatusDAO = failingInsertsOf(AiLabelStatus.Status.PENDING);
+            var crashingTemplate = spy(template);
+            doAnswer(invocation -> template.inTransaction(WRITE, handle -> {
+                invocation.<TxAction<?>>getArgument(1).execute(handle);
+                throw new IllegalStateException("crash");
+            })).when(crashingTemplate).inTransaction(same(WRITE), any(TxAction.class));
 
-            tick(tickService(template, crashingStatusDAO));
+            tick(tickService(crashingTemplate, statusDAO));
 
-            assertThat(jobs(workspaceId)).extracting(JobRow::endpoint).containsExactly("decide");
-            assertThat(statuses(workspaceId, traceIds)).isEmpty();
+            assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
+            assertThat(jobs(workspaceId)).isEmpty();
+            assertThat(inFlight(workspaceId)).isEmpty();
 
-            // The orphaned job completes, but none of its items has a pending row, so none is written.
-            completeJob(job(jobs(workspaceId), "decide"),
-                    List.of(traceIds.stream().map(AiLabelsTickTest::decideResult).toList()));
             tick();
 
-            assertThat(labels(workspaceId, traceIds)).isEmpty();
-            assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(2);
             assertConverges(workspaceId, traceIds);
         }
 
@@ -770,9 +885,9 @@ class AiLabelsTickTest {
             tick(tickService(template, failingInsertsOf(AiLabelStatus.Status.DONE)));
 
             assertThat(labels(workspaceId, traceIds)).hasSize(6);
-            assertThat(statuses(workspaceId, traceIds)).hasSize(4)
-                    .allSatisfy(status -> assertThat(status.status()).isEqualTo(AiLabelStatus.Status.PENDING));
+            assertThat(statuses(workspaceId, traceIds)).isEmpty();
             assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("submitted");
+            assertThat(inFlight(workspaceId)).hasSize(4);
 
             tick();
 
@@ -789,8 +904,8 @@ class AiLabelsTickTest {
         }
 
         @Test
-        @DisplayName("a load interrupted between a trace's two decide items resumes: the loaded item is skipped, the other loads")
-        void interruptedLoadResumes() {
+        @DisplayName("a load that fails partway writes nothing of that job; the next tick loads it whole")
+        void failedLoadWritesNothing() {
             var tasksConfig = new AiLabelsConfig();
             tasksConfig.setEnabled(true);
             tasksConfig.setTasksDir(writeTasks(Map.of(DECIDE_TASK, DECIDE_YAML, WIDE_TASK, WIDE_YAML)).toString());
@@ -818,10 +933,13 @@ class AiLabelsTickTest {
 
             tick(service);
 
-            assertThat(status(workspaceId, traceId, DECIDE_TASK).status()).isEqualTo(AiLabelStatus.Status.DONE);
-            assertThat(status(workspaceId, traceId, WIDE_TASK).status()).isEqualTo(AiLabelStatus.Status.PENDING);
+            // The generate job loaded; the decide job wrote nothing, not even its first page, and is still in flight.
+            assertThat(statuses(workspaceId, List.of(traceId)))
+                    .extracting(AiLabelStatus::task, AiLabelStatus::status)
+                    .containsExactly(tuple(GENERATE_TASK, AiLabelStatus.Status.DONE));
+            assertThat(jobs(workspaceId)).extracting(JobRow::endpoint, JobRow::status)
+                    .containsExactlyInAnyOrder(tuple("decide", "submitted"), tuple("generate", "loaded"));
 
-            pauseUntil(Instant.now().plusMillis(1_500));
             tick(service);
 
             assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
@@ -916,12 +1034,22 @@ class AiLabelsTickTest {
                 itemBuilder, resultMapper, statusDAO, labelsDAO);
     }
 
+    private static AiLabelSweepDAO countingSweeps(AiLabelSweepDAO sweepDAO, AtomicInteger sweeps) {
+        var counting = spy(sweepDAO);
+        doAnswer(invocation -> {
+            sweeps.incrementAndGet();
+            return invocation.callRealMethod();
+        }).when(counting).sweep(anyList(), anyList(), anyInt(), anyCollection());
+        return counting;
+    }
+
     private void tick() {
         tick(tickService);
     }
 
     private void tick(AiLabelsTickService service) {
         pauseUntil(lastTick.plus(TICK_GAP));
+        stubStatus();
         lastTick = Instant.now();
         service.tick(lastTick);
     }
@@ -973,15 +1101,22 @@ class AiLabelsTickTest {
 
     /** An ended trace, created a minute ago, with {@code spans} spans. Inserted into the shard to read back at once. */
     private UUID trace(String workspaceId, UUID projectId, int spans) {
-        var traceId = ID_GENERATOR.generateId();
+        return trace(workspaceId, projectId, spans, "");
+    }
+
+    private UUID trace(String workspaceId, UUID projectId, int spans, String threadId) {
+        return trace(workspaceId, projectId, spans, threadId, ID_GENERATOR.generateId());
+    }
+
+    private UUID trace(String workspaceId, UUID projectId, int spans, String threadId, UUID traceId) {
         execute("""
                 INSERT INTO %s.%s (workspace_id, project_id, id, name, start_time, end_time, input, output, metadata,
-                    created_at, last_updated_at, is_deleted)
+                    thread_id, created_at, last_updated_at, is_deleted)
                 VALUES ('%s', '%s', '%s', 'support chat', now64(6) - toIntervalSecond(60),
                     now64(6) - toIntervalSecond(2), '{"question":"where is my refund?"}',
-                    '{"answer":"it is on its way"}', '{"channel":"web"}', now64(6) - toIntervalSecond(60),
+                    '{"answer":"it is on its way"}', '{"channel":"web"}', '%s', now64(6) - toIntervalSecond(60),
                     now64(6) - toIntervalSecond(1), 0)
-                """.formatted(DATABASE_NAME, PostCutoverTraces.SHARD, workspaceId, projectId, traceId));
+                """.formatted(DATABASE_NAME, PostCutoverTraces.SHARD, workspaceId, projectId, traceId, threadId));
         for (int i = 0; i < spans; i++) {
             execute("""
                     INSERT INTO %s.spans (id, workspace_id, project_id, trace_id, name, type, start_time, end_time,
@@ -1002,10 +1137,10 @@ class AiLabelsTickTest {
         }
     }
 
-    /** The canonical rendered state of each trace, as the items must carry it. */
-    private Map<UUID, String> render(String workspaceId, UUID projectId, List<UUID> traceIds) {
+    /** The canonical rendered state of each trace, as the items of {@code task} must carry it. */
+    private Map<UUID, String> render(String workspaceId, UUID projectId, List<UUID> traceIds, AiLabelTask task) {
         var refs = traceIds.stream().map(traceId -> new TraceRef(projectId, traceId, Instant.EPOCH)).toList();
-        return renderer.render(workspaceId, refs)
+        return renderer.render(workspaceId, refs, List.of(task))
                 .cast(RenderOutcome.Rendered.class)
                 .collectMap(rendered -> rendered.trace().traceId(),
                         rendered -> AiLabelRenderer.canonicalJson(rendered.state()))
@@ -1040,7 +1175,7 @@ class AiLabelsTickTest {
             if (!job.status().equals("submitted")) {
                 continue;
             }
-            var traceIds = jobTraceIds(workspaceId, job);
+            var traceIds = jobTraceIds(job);
             var results = traceIds.stream()
                     .map(traceId -> switch (job.endpoint()) {
                         case "decide" -> decideResult(traceId);
@@ -1051,11 +1186,28 @@ class AiLabelsTickTest {
         }
     }
 
-    /** Stubs the job as completed, its results served as {@code pages} with cursors 0, 1, ... */
+    /**
+     * The status call's answer for every submitted job, from {@link #jobStatuses} and {@link #lostJobs}, stubbed just
+     * before each tick: the tick polls exactly the jobs submitted before it.
+     */
+    private void stubStatus() {
+        var submitted = template.inTransaction(READ_ONLY, handle -> handle
+                .createQuery("SELECT job_id, endpoint FROM ai_label_jobs WHERE status = 'submitted'")
+                .map((rs, ctx) -> Map.entry(rs.getString("job_id"), rs.getString("endpoint")))
+                .list());
+        var body = InferenceJson.MAPPER.createObjectNode();
+        var views = body.putArray("jobs");
+        submitted.stream()
+                .filter(job -> !lostJobs.contains(job.getKey()))
+                .forEach(job -> views.add(jobView(job.getKey(), job.getValue(),
+                        jobStatuses.getOrDefault(job.getKey(), "running"), List.of(), null)));
+        wireMock.server().stubFor(post(urlEqualTo(STATUS_PATH)).willReturn(json(200, body)));
+    }
+
+    /** Marks the job completed, its results served as {@code pages} with cursors 0, 1, ... */
     private void completeJob(JobRow job, List<List<ObjectNode>> pages) {
         var path = JOB_PATH + job.jobId();
-        wireMock.server().stubFor(get(urlEqualTo(path + "?cursor=0&results=false"))
-                .willReturn(json(200, jobView(job.jobId(), job.endpoint(), "completed", List.of(), null))));
+        jobStatuses.put(job.jobId(), "completed");
         for (int page = 0; page < pages.size(); page++) {
             Integer next = page + 1 < pages.size() ? page + 1 : null;
             wireMock.server().stubFor(get(urlEqualTo(path + "?cursor=" + page))
@@ -1138,6 +1290,18 @@ class AiLabelsTickTest {
                 .withBody(body.toString());
     }
 
+    private List<JsonNode> statusCalls() {
+        return wireMock.server().findAll(postRequestedFor(urlEqualTo(STATUS_PATH))).stream()
+                .map(request -> {
+                    try {
+                        return InferenceJson.MAPPER.readTree(request.getBodyAsString());
+                    } catch (IOException exception) {
+                        throw new UncheckedIOException(exception);
+                    }
+                })
+                .toList();
+    }
+
     private List<JsonNode> submits(String path, String workspaceId) {
         return wireMock.server()
                 .findAll(postRequestedFor(urlEqualTo(path))
@@ -1169,34 +1333,62 @@ class AiLabelsTickTest {
 
     // --- State ---
 
-    record JobRow(String jobId, String endpoint, String status, int itemCount, int engineCalls) {
+    record JobRow(String jobId, String endpoint, String status, int itemCount, long bytes) {
     }
 
     private List<JobRow> jobs(String workspaceId) {
         return template.inTransaction(READ_ONLY, handle -> handle.createQuery("""
-                SELECT job_id, endpoint, status, item_count, engine_calls FROM ai_label_jobs
+                SELECT job_id, endpoint, status, item_count, bytes FROM ai_label_jobs
                 WHERE workspace_id = :workspaceId ORDER BY submitted_at
                 """)
                 .bind("workspaceId", workspaceId)
                 .map((rs, ctx) -> new JobRow(rs.getString("job_id"), rs.getString("endpoint"),
-                        rs.getString("status"), rs.getInt("item_count"), rs.getInt("engine_calls")))
+                        rs.getString("status"), rs.getInt("item_count"), rs.getLong("bytes")))
                 .list());
+    }
+
+    /** The workspace's in-flight (trace, task) rows, in MySQL. */
+    private List<AiLabelJobItem> inFlight(String workspaceId) {
+        var jobIds = jobs(workspaceId).stream().map(JobRow::jobId).toList();
+        if (jobIds.isEmpty()) {
+            return List.of();
+        }
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(AiLabelJobDAO.class).findItems(jobIds));
     }
 
     private static JobRow job(List<JobRow> jobs, String endpoint) {
         return jobs.stream().filter(job -> job.endpoint().equals(endpoint)).findFirst().orElseThrow();
     }
 
-    private long inFlightEngineCalls() {
-        return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(AiLabelJobDAO.class).inFlightEngineCalls());
+    /**
+     * What one trace's items cost against the budget, per endpoint: each item's request bytes plus the per-call
+     * charge, at least the floor.
+     */
+    private Map<AiLabelEndpoint, Long> traceCost(String workspaceId, UUID projectId, UUID traceId) {
+        var tasks = registry.tasks();
+        var builder = new AiLabelItemBuilder();
+        return renderer.render(workspaceId, List.of(new TraceRef(projectId, traceId, Instant.EPOCH)), tasks)
+                .cast(RenderOutcome.Rendered.class)
+                .flatMapIterable(rendered -> builder.build(workspaceId, rendered, tasks.stream()
+                        .filter(task -> task.usesHistory() == rendered.withHistory())
+                        .toList()))
+                .collect(Collectors.groupingBy(item -> item.plan().endpoint(),
+                        Collectors.summingLong(item -> Math.max(
+                                item.bytes() + config().getPerCallBytes() * item.engineCalls(),
+                                config().getMinItemBytes()))))
+                .block();
     }
 
-    private Set<UUID> jobTraceIds(String workspaceId, JobRow job) {
-        return statusDAO.pendingTraceTasks(workspaceId, job.jobId())
-                .map(AiLabelStatus::traceId)
-                .collect(Collectors.toSet())
-                .block();
+    private long inFlightBytes() {
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(AiLabelJobDAO.class).inFlightBytes());
+    }
+
+    private Set<UUID> jobTraceIds(JobRow job) {
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(AiLabelJobDAO.class)
+                .findItems(List.of(job.jobId()))).stream()
+                .map(AiLabelJobItem::traceId)
+                .collect(Collectors.toSet());
     }
 
     private List<AiLabelStatus> statuses(String workspaceId, List<UUID> traceIds) {

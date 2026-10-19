@@ -112,10 +112,18 @@ public class AiLabelSweepService {
                 count);
     }
 
-    /** One bucket's candidates, at most C per workspace; a failed or guarded query yields none. */
+    /**
+     * One bucket's candidates, newest first, at most C per workspace; a failed or guarded query yields none. Traces
+     * with a task in flight are read from MySQL just before, and left out.
+     */
     public Flux<Candidate> sweep(@NonNull List<String> bucket, int index, @NonNull List<SweepTask> tasks) {
+        if (bucket.isEmpty()) {
+            return Flux.empty();
+        }
         long start = System.nanoTime();
-        return sweepDAO.sweep(bucket, tasks, index)
+        var inFlight = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(AiLabelJobDAO.class).inFlightTraceIds(bucket));
+        return sweepDAO.sweep(bucket, tasks, index, inFlight)
                 .doOnComplete(() -> duration.record((System.nanoTime() - start) / 1e9,
                         Attributes.of(longKey("bucket"), (long) index)))
                 .onErrorResume(error -> skipBucket("sweep", index, error));
