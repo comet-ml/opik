@@ -509,7 +509,7 @@ class TraceDAOImpl implements TraceDAO {
      * whose partitioning is a separate slice.
      */
     private static final String SELECT_BY_IDS = """
-            WITH <if(spans_partitioned)>span_weeks AS (
+            WITH <if(spans_partitioned)>trace_span_weeks AS (
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
                 WHERE workspace_id = :workspace_id
@@ -521,7 +521,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
-                <if(spans_partitioned)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM span_weeks)))<endif>
+                <if(spans_partitioned)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM trace_span_weeks)))<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, id
             ),
@@ -723,7 +723,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
-                <if(spans_partitioned)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM span_weeks)))<endif>
+                <if(spans_partitioned)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM trace_span_weeks)))<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, id
             ), spans_agg AS (
@@ -1029,7 +1029,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE 1 = 1
                 <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
-            ), <endif><if(span_weeks)>span_weeks AS (
+            ), <endif><if(trace_span_weeks)>trace_span_weeks AS (
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
                 WHERE workspace_id = :workspace_id
@@ -1226,7 +1226,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                 <endif>
-                <if(span_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM span_weeks)))<endif>
+                <if(trace_span_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM trace_span_weeks)))<endif>
             ),
             span_feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -1375,7 +1375,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                 <endif>
-                <if(span_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM span_weeks)))<endif>
+                <if(trace_span_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin((SELECT groupArray(week) FROM trace_span_weeks)))<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), spans_agg AS (
@@ -1885,6 +1885,16 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                 <endif>
+                <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    <if(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                    <else>
+                    <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+                    <endif>
+                )<endif>
             ),
             span_feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -2116,6 +2126,12 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND trace_id IN (SELECT trace_id FROM target_spans)
+                    <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT id_week FROM span_weeks
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        AND trace_id IN (SELECT trace_id FROM target_spans)
+                    )<endif>
                     ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS s ON t.id = s.trace_id
@@ -2568,7 +2584,7 @@ class TraceDAOImpl implements TraceDAO {
      * it reads {@code t.id} directly, so it was wrong on both schemas.
      * <p>
      * {@code spans_data} (here and in {@code SELECT_FEEDBACK_SCORES_STATS}) is keyed by a trace id-range, but spans
-     * partition on their own id, so under {@code spans_partitioned} it is bounded to {@code span_weeks}: the weeks the
+     * partition on their own id, so under {@code spans_partitioned} it is bounded to {@code trace_span_weeks}: the weeks the
      * matching spans' own ids resolve to, read off the key and {@code id_at} without {@code FINAL}. Every row the read
      * can return is in one of those weeks, so the bound prunes without assuming where a span sits relative to its
      * trace, and a set rather than a min/max range so one far-future id cannot widen it across every week between.
@@ -2593,7 +2609,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
             ), <endif><if(spans_partitioned)>
-            span_weeks AS (
+            trace_span_weeks AS (
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
                 WHERE workspace_id = :workspace_id
@@ -2619,7 +2635,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                 <if(annotation_queue_narrows)> AND trace_id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                 <if(spans_partitioned)>
-                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT week FROM span_weeks)
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT week FROM trace_span_weeks)
                 <endif>
              ), spans_agg AS (
                 SELECT
@@ -3058,7 +3074,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
             ), <endif><if(spans_partitioned)>
-            span_weeks AS (
+            trace_span_weeks AS (
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
                 WHERE workspace_id = :workspace_id
@@ -3084,7 +3100,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                 <if(annotation_queue_narrows)> AND trace_id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                 <if(spans_partitioned)>
-                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT week FROM span_weeks)
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT week FROM trace_span_weeks)
                 <endif>
             ), spans_agg AS (
                 SELECT
@@ -3732,6 +3748,12 @@ class TraceDAOImpl implements TraceDAO {
     private void addSpansPartitionedFlag(ST template) {
         if (configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable()) {
             template.add("spans_partitioned", true);
+        }
+    }
+
+    private void addSpanWeeksBound(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
         }
     }
 
@@ -4538,11 +4560,11 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private void addSpanWeeksFlag(ST template) {
-        // Unbounded, span_weeks is every week the project has spans in, so the pre-pass costs more than it prunes.
+        // Unbounded, trace_span_weeks is every week the project has spans in, so the pre-pass costs more than it prunes.
         if (configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable()
                 && Stream.of("page_keyed_aggregates", "trace_id_prefilter", "uuid_from_time", "uuid_to_time")
                         .anyMatch(name -> template.getAttribute(name) != null)) {
-            template.add("span_weeks", true);
+            template.add("trace_span_weeks", true);
         }
     }
 
@@ -4707,6 +4729,7 @@ class TraceDAOImpl implements TraceDAO {
             var template = newTraceThreadFindTemplate(
                     COUNT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
             addTracesPartitionedFlag(template);
+            addSpanWeeksBound(template);
             template.add("log_comment", logComment);
 
             // As in addAggregateKeyingFlags: with a queue that only keeps queued traces, the prefilter is the

@@ -167,6 +167,37 @@ class LlmModelRegistryServiceTest {
         assertThat(result.get().model().reasoning()).isEqualTo(reasoning);
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            "claude-mythos-preview, ANTHROPIC, claude-mythos-preview,",
+            "claude-3-7-sonnet-20250219, ANTHROPIC, claude-3-7-sonnet-20250219,",
+            "claude-opus-4-20250514, ANTHROPIC, claude-opus-4-20250514,",
+            "claude-opus-4-1-20250805, ANTHROPIC, claude-opus-4-1-20250805,",
+            "claude-sonnet-4-20250514, ANTHROPIC, claude-sonnet-4-20250514,",
+            "gemini-flash-latest-high-res-exp, GEMINI, gemini-flash-latest-high-res-exp,",
+            "gemini-3-pro-preview, GEMINI, gemini-3-pro-preview,",
+            "vertex_ai/gemini-robotics-er-2, VERTEX_AI, gemini-robotics-er-2, vertex_ai/gemini-robotics-er-2",
+            "vertex_ai/gemini-2.0-flash-001, VERTEX_AI, gemini-2.0-flash-001, vertex_ai/gemini-2.0-flash-001",
+            "vertex_ai/gemini-2.0-flash-lite-001, VERTEX_AI, gemini-2.0-flash-lite-001, vertex_ai/gemini-2.0-flash-lite-001",
+            "vertex_ai/gemini-3-pro-preview, VERTEX_AI, gemini-3-pro-preview, vertex_ai/gemini-3-pro-preview",
+            "vertex_ai/gemini-3.1-flash-lite-preview, VERTEX_AI, gemini-3.1-flash-lite-preview, vertex_ai/gemini-3.1-flash-lite-preview"
+    })
+    void defaultResourceHidesModelsThatCannotRunButStillResolvesThem(String model, LlmProvider provider, String id,
+            String qualifiedName) {
+        var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
+
+        var result = service.findModel(model);
+
+        var expected = new LlmModelRegistryService.ModelLookupResult(provider,
+                LlmModelDefinition.builder().id(id).qualifiedName(qualifiedName).build());
+        // The capability flags come from the sync and the params from the catalog, and both have their own tests;
+        // this one is about hiding the model.
+        assertThat(result).get()
+                .usingRecursiveComparison()
+                .ignoringFields("model.structuredOutput", "model.reasoning", "model.params")
+                .isEqualTo(expected);
+    }
+
     @Test
     void missingClasspathResourceThrows() {
         var config = new LlmModelRegistryConfig();
@@ -302,6 +333,7 @@ class LlmModelRegistryServiceTest {
     void registryJsonHasBothFlagsWhenTheYamlLeavesThemOut() {
         var config = new LlmModelRegistryConfig();
         config.setDefaultResource("llm-models-test.yaml");
+        config.setCuratedResource(null);
 
         var service = new LlmModelRegistryService(config);
 
@@ -421,6 +453,7 @@ class LlmModelRegistryServiceTest {
 
         var config = new LlmModelRegistryConfig();
         config.setDefaultResource("llm-models-test.yaml");
+        config.setCuratedResource(null);
         config.setRemoteEnabled(true);
         config.setRemoteUrl("https://cdn.example.com/models.yaml");
 

@@ -28,6 +28,7 @@ readability and avoids false-coupling with real model identifiers.
 # the value here.
 OPENAI_GPT_NANO = "gpt-5-nano"
 OPENAI_SORA = "sora-2"
+OPENAI_DECISIONS = "gpt-6-luna"
 
 # gpt-4o-mini kept only for CrewAI v0 — v0's hard pin on litellm==1.74.9
 # reports `stop` as supported for gpt-5-nano, which CrewAI's ReAct loop
@@ -72,6 +73,10 @@ LITELLM_VERTEX_GEMINI_FLASH = f"vertex_ai/{GEMINI_FLASH}"
 # AWS Bedrock
 # ---------------------------------------------------------------------------
 BEDROCK_CLAUDE_SONNET = "us.anthropic.claude-sonnet-4-6"
+BEDROCK_AMAZON_NOVA = "us.amazon.nova-pro-v1:0"
+BEDROCK_META_LLAMA = "us.meta.llama3-1-8b-instruct-v1:0"
+BEDROCK_DEEPSEEK_R1 = "us.deepseek.r1-v1:0"
+BEDROCK_OPENAI_GPT_OSS = "openai.gpt-oss-20b-1:0"
 BEDROCK_MISTRAL_PIXTRAL = "us.mistral.pixtral-large-2502-v1:0"
 BEDROCK_MISTRAL_PIXTRAL_REGION = "us-east-2"
 
@@ -82,3 +87,17 @@ LITELLM_BEDROCK_CLAUDE_SONNET = f"bedrock/{BEDROCK_CLAUDE_SONNET}"
 # ---------------------------------------------------------------------------
 # Default chat model: mistral-small-latest — the cheap+fast tier.
 MISTRAL_SMALL = "mistral-small-latest"
+
+# ---------------------------------------------------------------------------
+# Together AI
+# ---------------------------------------------------------------------------
+# The integration tests mock the transport and never reach Together, but this
+# is still the id the client is called with and the value asserted on the span.
+TOGETHER_LLAMA = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+
+# ---------------------------------------------------------------------------
+# Cohere
+# ---------------------------------------------------------------------------
+# The integration tests mock the transport and never reach Cohere, but this is
+# still the id the client is called with and the value asserted on the span.
+COHERE_COMMAND = "command-r-plus"

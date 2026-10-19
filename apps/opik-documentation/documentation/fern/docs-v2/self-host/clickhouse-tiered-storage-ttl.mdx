@@ -18,7 +18,7 @@ There are two parts:
 
 ## Setting the TTL
 
-```yaml
+```yaml wordWrap
 clickhouse:
   tieredStorage:
     enabled: true
@@ -47,7 +47,7 @@ The backfill reads data on the hot disk and writes it to S3. On a large table th
 
 ### Option 1: let the chart run it (small installations)
 
-```yaml
+```yaml wordWrap
 clickhouse:
   tieredStorage:
     ttl:
@@ -67,7 +67,7 @@ The hook only starts the operation; the data moves in the background afterwards.
 
 Leave `materialize.enabled: false` and, at a quiet time, run:
 
-```sql
+```sql wordWrap
 ALTER TABLE <db>.<table> ON CLUSTER '{cluster}' MATERIALIZE TTL
 ```
 
@@ -86,7 +86,7 @@ In the queries below, `<table>` is a table from `ttl.tables` (for example `trace
 
 Progress (size per disk, and parts that don't carry the expected TTL yet, including parts with a different TTL from an earlier `moveAfterWeeks`):
 
-```sql
+```sql wordWrap
 SELECT disk_name, count() AS parts, formatReadableSize(sum(bytes_on_disk)) AS size,
        countIf(NOT has(move_ttl_info.expression, 'id_at + toIntervalWeek(<moveAfterWeeks>)')) AS without_expected_ttl
 FROM system.parts
@@ -96,7 +96,7 @@ GROUP BY disk_name
 
 The `MATERIALIZE TTL` run:
 
-```sql
+```sql wordWrap
 SELECT mutation_id, command, create_time, is_done, parts_to_do, latest_fail_reason
 FROM system.mutations
 WHERE database = '<db>' AND table = '<table>' AND command LIKE '%MATERIALIZE TTL%'
@@ -105,7 +105,7 @@ ORDER BY create_time DESC LIMIT 5
 
 Moves in flight, and moves done in the last day (with failures):
 
-```sql
+```sql wordWrap
 SELECT table, part_name, target_disk_name, elapsed FROM system.moves WHERE database = '<db>';
 
 SELECT count() AS moves, formatReadableSize(sum(size_in_bytes)) AS moved, countIf(error != 0) AS failed
@@ -116,7 +116,7 @@ WHERE database = '<db>' AND table = '<table>' AND event_type = 'MovePart'
 
 How busy the mover is:
 
-```sql
+```sql wordWrap
 SELECT metric, value FROM system.metrics
 WHERE metric IN ('BackgroundMovePoolTask', 'BackgroundMovePoolSize')
 ```

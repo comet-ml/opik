@@ -1,5 +1,6 @@
 package com.comet.opik.domain.llm.langchain4j;
 
+import com.comet.opik.infrastructure.llm.CustomParametersOverrides;
 import com.comet.opik.infrastructure.llm.MediaContentUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -66,6 +67,9 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
     public OpikOpenAiChatModel(OpenAiChatModel.OpenAiChatModelBuilder builder, JsonNode customParameters) {
         super(builder);
         this.customParameters = customParameters;
+        // Checked while the judge model is built, so the scorer gets the 400 as is. Thrown from doChat, it would be
+        // retried and then reported as a 500, which the online scoring queue redelivers.
+        CustomParametersOverrides.rejectOpikManagedKeys(convertCustomParameters());
 
         // Extract client via reflection since it's private in parent
         try {
@@ -97,7 +101,7 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
         List<Message> messages = toOpikMessages(chatRequest.messages());
 
         // Build the request with our converted messages
-        ChatCompletionRequest openAiRequest = ChatCompletionRequest.builder()
+        ChatCompletionRequest openAiRequest = CustomParametersOverrides.apply(ChatCompletionRequest.builder()
                 .messages(messages)
                 // Copy all parameters from toOpenAiChatRequest
                 .model(parameters.modelName())
@@ -121,7 +125,7 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
                 // without relying on LangChain4j's builder which doesn't support them
                 // Convert JsonNode to Map<String, Object> for the request
                 .customParameters(convertCustomParameters())
-                .build();
+                .build());
 
         ParsedAndRawResponse<ChatCompletionResponse> parsedAndRawResponse = withRetryMappingExceptions(
                 () -> client.chatCompletion(openAiRequest).executeRaw(), maxRetries);

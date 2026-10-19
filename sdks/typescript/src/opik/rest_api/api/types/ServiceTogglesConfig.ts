@@ -24,9 +24,11 @@ export interface ServiceTogglesConfig {
     ollamaProviderEnabled: boolean;
     ollieEnabled: boolean;
     agentInsightsEnabled: boolean;
+    agentInsightsGuidanceEnabled: boolean;
     projectHomepageEnabled: boolean;
     onlineScoringTracingEnabled: boolean;
     annotationQueueAutomationEnabled: boolean;
     eventBridgeAlertsEnabled: boolean;
     defaultPageSize?: number;
+    customChartsEnabledForWorkspace?: boolean;
 }
