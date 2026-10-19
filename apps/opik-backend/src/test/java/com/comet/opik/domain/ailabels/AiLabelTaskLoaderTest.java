@@ -85,6 +85,12 @@ class AiLabelTaskLoaderTest {
                         "exactly once in prompt.user"),
                 arguments("generate with placeholder twice", GENERATE.replace("{{state}}", "{{state}} {{state}}"),
                         "exactly once in prompt.user"),
+                arguments("generate with history twice",
+                        GENERATE.replace("{{state}}", "{{history}}\\n{{history}}\\n{{state}}"),
+                        "at most once in prompt.user"),
+                arguments("generate with history in the system prompt",
+                        GENERATE.replace("You summarize agent traces.", "Earlier: {{history}}"),
+                        "{{history}} must not appear in prompt.system"),
                 arguments("schema with an unsupported keyword",
                         GENERATE.replace("{type: string}", "{type: string, not: {const: x}}"),
                         "unsupported keywords [not]"),
@@ -103,6 +109,19 @@ class AiLabelTaskLoaderTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("invalid ai-labels task, file 'test.yaml'")
                 .satisfies(exception -> assertThat(fullMessage(exception)).contains(reason));
+    }
+
+    /** History is fitted inside renderBudgetBytes, so its placeholder costs nothing in the fit check. */
+    @Test
+    void historyPlaceholderLeavesTheFitCheckUnchanged() {
+        // The system prompt's 27 bytes, plus the user prompt's: the largest prompt under 100,000 - 80,000 bytes.
+        var largest = GENERATE.replace("Summarize this trace:", "x".repeat(19_999 - 27 - 1));
+        var withHistory = largest.replace("{{state}}", "{{history}}{{state}}");
+
+        assertThat(parse(largest).usesHistory()).isFalse();
+        assertThat(parse(withHistory).usesHistory()).isTrue();
+        assertThatThrownBy(() -> parse(withHistory.replace("{{history}}", "x{{history}}")))
+                .hasStackTraceContaining("must be under modelInputBudgetBytes");
     }
 
     @Test

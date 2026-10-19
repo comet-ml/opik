@@ -16,8 +16,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Maps one item's result to label and status rows. Each status row is the task's {@code pending} row, so the attempt,
- * versions, job and {@code compaction_level} recorded at submit carry over. A task is {@code done} only with all of its
+ * Maps one item's result to label and status rows. Each status row is built from the task's in-flight row, so the
+ * attempt, versions, job and {@code compaction_level} recorded at submit carry over. A task is {@code done} only with all of its
  * values: an answer or output that is missing fails it as {@code missing_answer}, retryable.
  */
 @Singleton
@@ -27,49 +27,45 @@ public class AiLabelResultMapper {
     public static final String CANCELLED = "cancelled";
 
     /**
-     * @param plan    the item's plan, rebuilt from the job's pending rows
-     * @param pending the item's {@code pending} rows, one per task of the plan
+     * @param plan  the item's plan, rebuilt from the job's in-flight rows
+     * @param items the item's in-flight rows, one per task of the plan
      */
     public AiLabelResults map(@NonNull ItemResult result, @NonNull AiLabelItemPlan plan,
-            @NonNull List<AiLabelStatus> pending) {
+            @NonNull List<AiLabelJobItem> items) {
         Preconditions.checkArgument(result.itemId().equals(plan.itemId()),
                 "result is for another item, itemId '%s', planItemId '%s'", result.itemId(), plan.itemId());
-        var pendingByTask = pending.stream()
-                .collect(Collectors.toMap(AiLabelStatus::task, Function.identity()));
+        var itemsByTask = items.stream()
+                .collect(Collectors.toMap(AiLabelJobItem::task, Function.identity()));
         var taskNames = plan.tasks().stream().map(AiLabelTask::name).collect(Collectors.toSet());
-        Preconditions.checkArgument(pendingByTask.keySet().equals(taskNames),
-                "pending rows don't match the item's tasks, itemId '%s'", plan.itemId());
+        Preconditions.checkArgument(itemsByTask.keySet().equals(taskNames),
+                "in-flight rows don't match the item's tasks, itemId '%s'", plan.itemId());
 
         if (result.error() != null) {
-            return failAll(plan, pendingByTask, result.error().code(), result.error().retryable());
+            return failAll(plan, itemsByTask, result.error().code(), result.error().retryable());
         }
         if (result.response() == null) {
-            return failAll(plan, pendingByTask, CANCELLED, true);
+            return failAll(plan, itemsByTask, CANCELLED, true);
         }
         var labels = new ArrayList<AiLabel>();
         var statuses = new ArrayList<AiLabelStatus>();
         for (var task : plan.tasks()) {
-            var row = pendingByTask.get(task.name());
+            var row = itemsByTask.get(task.name());
             var taskLabels = switch (plan.endpoint()) {
                 case DECIDE -> decideLabels(task, row, result.response());
                 case GENERATE -> generateLabels(task, row, result.response());
             };
             if (taskLabels == null) {
-                statuses.add(failed(row, MISSING_ANSWER, true));
+                statuses.add(row.failed(MISSING_ANSWER, true));
             } else {
                 labels.addAll(taskLabels);
-                statuses.add(row.toBuilder()
-                        .status(AiLabelStatus.Status.DONE)
-                        .retryable(false)
-                        .errorCode("")
-                        .build());
+                statuses.add(row.done());
             }
         }
         return AiLabelResults.builder().labels(labels).statuses(statuses).build();
     }
 
     /** One row per question, or null when any of the task's questions has no answer. */
-    private static List<AiLabel> decideLabels(AiLabelTask task, AiLabelStatus row, ItemResponse response) {
+    private static List<AiLabel> decideLabels(AiLabelTask task, AiLabelJobItem row, ItemResponse response) {
         if (!(response instanceof ItemResponse.DecideResponse decide)) {
             return null;
         }
@@ -85,7 +81,7 @@ public class AiLabelResultMapper {
         return labels;
     }
 
-    private static AiLabel decideLabel(AiLabelStatus row, String key, Answer answer) {
+    private static AiLabel decideLabel(AiLabelJobItem row, String key, Answer answer) {
         var label = baseLabel(row, key);
         return switch (answer) {
             case Answer.NoulAnswer noul -> label
@@ -110,7 +106,7 @@ public class AiLabelResultMapper {
     }
 
     /** One {@code output} row, or null when there is no output or it lacks a property its schema requires. */
-    private static List<AiLabel> generateLabels(AiLabelTask task, AiLabelStatus row, ItemResponse response) {
+    private static List<AiLabel> generateLabels(AiLabelTask task, AiLabelJobItem row, ItemResponse response) {
         if (!(response instanceof ItemResponse.GenerateResponse generate)) {
             return null;
         }
@@ -140,7 +136,7 @@ public class AiLabelResultMapper {
         return true;
     }
 
-    private static AiLabel.AiLabelBuilder baseLabel(AiLabelStatus row, String key) {
+    private static AiLabel.AiLabelBuilder baseLabel(AiLabelJobItem row, String key) {
         return AiLabel.builder()
                 .workspaceId(row.workspaceId())
                 .projectId(row.projectId())
@@ -162,21 +158,13 @@ public class AiLabelResultMapper {
         return value.isTextual() ? value.textValue() : InferenceJson.canonical(value);
     }
 
-    private static AiLabelResults failAll(AiLabelItemPlan plan, Map<String, AiLabelStatus> pendingByTask,
+    private static AiLabelResults failAll(AiLabelItemPlan plan, Map<String, AiLabelJobItem> itemsByTask,
             String errorCode, boolean retryable) {
         return AiLabelResults.builder()
                 .labels(List.of())
                 .statuses(plan.tasks().stream()
-                        .map(task -> failed(pendingByTask.get(task.name()), errorCode, retryable))
+                        .map(task -> itemsByTask.get(task.name()).failed(errorCode, retryable))
                         .toList())
-                .build();
-    }
-
-    private static AiLabelStatus failed(AiLabelStatus row, String errorCode, boolean retryable) {
-        return row.toBuilder()
-                .status(AiLabelStatus.Status.FAILED)
-                .retryable(retryable)
-                .errorCode(errorCode)
                 .build();
     }
 }

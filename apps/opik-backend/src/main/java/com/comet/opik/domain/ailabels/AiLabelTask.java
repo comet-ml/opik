@@ -32,6 +32,7 @@ public record AiLabelTask(
         Double temperature) {
 
     public static final String STATE_PLACEHOLDER = "{{state}}";
+    public static final String HISTORY_PLACEHOLDER = "{{history}}";
     public static final int DEFAULT_MAX_TOKENS = 512;
     public static final double DEFAULT_TEMPERATURE = 0.0;
 
@@ -78,6 +79,11 @@ public record AiLabelTask(
         return new SqlVersions(
                 versions.stream().map(Version::version).toArray(Integer[]::new),
                 versions.stream().map(candidate -> candidate.appliesFrom().toString()).toArray(String[]::new));
+    }
+
+    /** Whether the task is given the trace's earlier turns: its prompt has {@link #HISTORY_PLACEHOLDER}. */
+    public boolean usesHistory() {
+        return prompt != null && prompt.user().contains(HISTORY_PLACEHOLDER);
     }
 
     /** A decide task's question id on the wire: {@code <task>.<question>}. */

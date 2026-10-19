@@ -18,10 +18,14 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.NODES;
 import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.WORKSPACE_ID;
 import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.decide;
 import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.generate;
+import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.generateWithHistory;
 import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.rendered;
+import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.renderedWithHistory;
+import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.state;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
@@ -145,7 +149,7 @@ class AiLabelItemBuilderTest {
         var item = items.getFirst();
         assertThat(item.plan().jobKey()).isEqualTo(new AiLabelItemPlan.JobKey(AiLabelEndpoint.GENERATE, true));
         assertThat(item.engineCalls()).isEqualTo(1);
-        assertThat(item.compactionLevel()).isEqualTo("spans_io_pruned:2");
+        assertThat(item.compactionLevel()).isEqualTo("spans_pruned:2");
         var canonicalState = "{\"input\":{\"question\":\"Where is my refund?\"},\"name\":\"support-agent\","
                 + "\"output\":{\"answer\":\"Refund issued — Monday\"},\"spans\":[{\"name\":\"gpt\",\"type\":\"llm\"}]}";
         assertThat(item.payload()).isEqualTo(BatchGenerateItem.builder()
@@ -158,6 +162,37 @@ class AiLabelItemBuilderTest {
                 .maxTokens(128)
                 .temperature(0.5)
                 .build());
+    }
+
+    /** A placeholder inside the trace's content or history is text, not a second placeholder. */
+    @Test
+    void generateItemSubstitutesStateAndHistoryInOnePass() {
+        var task = generateWithHistory("summary");
+        var state = NODES.objectNode().put("input", "repeat {{history}} and {{state}}");
+        var history = NODES.arrayNode();
+        history.addObject().put("input", "{{state}}").put("output", "done");
+
+        var items = builder.build(WORKSPACE_ID, renderedWithHistory(TRACE_ID, state, history), List.of(task));
+
+        var messages = ((BatchGenerateItem) items.getFirst().payload()).messages();
+        assertThat(messages.getLast().content()).isEqualTo("""
+                Earlier turns:
+                [{"input":"{{state}}","output":"done"}]
+                Summarize this trace:
+                {"input":"repeat {{history}} and {{state}}"}""");
+    }
+
+    @Test
+    void buildRejectsTasksOfTheOtherKind() {
+        var withHistory = renderedWithHistory(TRACE_ID, state(), NODES.arrayNode());
+
+        assertThatThrownBy(() -> builder.build(WORKSPACE_ID, rendered(TRACE_ID),
+                List.of(generateWithHistory("summary"))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("task 'summary'");
+        assertThatThrownBy(() -> builder.build(WORKSPACE_ID, withHistory, List.of(generate("summary", false))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("task 'summary'");
     }
 
     @Test
@@ -191,29 +226,42 @@ class AiLabelItemBuilderTest {
     }
 
     @Test
-    void pendingStatusesCarryTheSubmitContext() {
+    void jobItemsCarryTheSubmitContextIntoTheirStatusRows() {
         var rendered = rendered(TRACE_ID);
         var item = builder.build(WORKSPACE_ID, rendered, List.of(decide("a", false, 2), decide("b", false, 2)))
                 .getFirst();
 
-        var pending = item.pendingStatuses("job-1", 4, Map.of("a", 1, "b", 3));
+        var jobItems = item.jobItems("job-1", 4, Map.of("a", 1, "b", 3));
 
-        var expected = AiLabelStatus.builder()
+        var expectedItem = AiLabelJobItem.builder()
+                .jobId("job-1")
                 .workspaceId(WORKSPACE_ID)
                 .projectId(rendered.trace().projectId())
                 .traceId(TRACE_ID)
                 .traceCreatedAt(rendered.trace().createdAt())
                 .taskVersion(1)
                 .rendererVersion(4)
-                .status(AiLabelStatus.Status.PENDING)
-                .retryable(false)
-                .errorCode("")
+                .compactionLevel("spans_pruned:2");
+        assertThat(jobItems).containsExactly(
+                expectedItem.task("a").attempt(1).build(),
+                expectedItem.task("b").attempt(3).build());
+        var expectedStatus = AiLabelStatus.builder()
+                .workspaceId(WORKSPACE_ID)
+                .projectId(rendered.trace().projectId())
+                .task("b")
+                .traceId(TRACE_ID)
+                .traceCreatedAt(rendered.trace().createdAt())
+                .taskVersion(1)
+                .rendererVersion(4)
+                .attempt(3)
                 .jobId("job-1")
-                .compactionLevel("spans_io_pruned:2");
-        assertThat(pending).containsExactly(
-                expected.task("a").attempt(1).build(),
-                expected.task("b").attempt(3).build());
-        assertThatThrownBy(() -> item.pendingStatuses("job-1", 4, Map.of("a", 1)))
+                .compactionLevel("spans_pruned:2");
+        assertThat(jobItems.getLast().done()).isEqualTo(
+                expectedStatus.status(AiLabelStatus.Status.DONE).retryable(false).errorCode("").build());
+        assertThat(jobItems.getLast().failed("deadline_exceeded", true)).isEqualTo(
+                expectedStatus.status(AiLabelStatus.Status.FAILED).retryable(true).errorCode("deadline_exceeded")
+                        .build());
+        assertThatThrownBy(() -> item.jobItems("job-1", 4, Map.of("a", 1)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("task 'b'");
     }

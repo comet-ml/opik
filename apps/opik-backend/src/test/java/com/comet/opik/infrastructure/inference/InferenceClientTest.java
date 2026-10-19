@@ -26,10 +26,12 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -51,6 +53,7 @@ class InferenceClientTest {
     private static final String GENERATE_PATH = "/v1/batch/generate";
     private static final String JOB_ID = "job-7d3f";
     private static final String JOB_PATH = "/v1/batch/jobs/" + JOB_ID;
+    private static final String STATUS_PATH = "/v1/batch/jobs/status";
     private static final JsonNodeFactory NODES = JsonNodeFactory.instance;
 
     private WireMockServer server;
@@ -76,7 +79,7 @@ class InferenceClientTest {
     void submitDecideSendsBearerAuthAndContractValidBody() {
         server.stubFor(post(urlEqualTo(DECIDE_PATH)).willReturn(accepted()));
 
-        var response = client.submitDecide(decideRequest()).block();
+        var response = client.submitDecide(decideRequest(), later()).block();
 
         assertThat(response).isEqualTo(BatchSubmitResponse.builder().jobId(JOB_ID).items(1).build());
         var sent = single(postRequestedFor(urlEqualTo(DECIDE_PATH)));
@@ -92,10 +95,51 @@ class InferenceClientTest {
     void getJobWhenResultsFalseSendsResultsFalse() {
         server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(jobView()));
 
-        var view = client.getJob(JOB_ID, 0, false).block();
+        var view = client.getJob(JOB_ID, 0, false, later()).block();
 
         assertThat(view.status()).isEqualTo(JobStatus.RUNNING);
         single(getRequestedFor(urlEqualTo(JOB_PATH + "?cursor=0&results=false")));
+    }
+
+    @Test
+    void getJobsSendsAContractValidBodyAndReadsTheFoundJobs() {
+        var view = InferenceJson.MAPPER.createObjectNode();
+        view.putArray("jobs").add(InferenceContract.resource("job-view-no-results.json"));
+        server.stubFor(post(urlEqualTo(STATUS_PATH)).willReturn(aResponse().withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(view.toString())));
+
+        var views = client.getJobs(List.of(JOB_ID, "job-unknown"), later()).block();
+
+        assertThat(views).singleElement().satisfies(found -> {
+            assertThat(found.jobId()).isEqualTo(InferenceContract.resource("job-view-no-results.json")
+                    .path("job_id").asText());
+            assertThat(found.status()).isEqualTo(JobStatus.RUNNING);
+        });
+        var body = json(single(postRequestedFor(urlEqualTo(STATUS_PATH))));
+        assertThat(body.path("job_ids")).extracting(JsonNode::asText).containsExactly(JOB_ID, "job-unknown");
+        assertThat(InferenceContract.validateEndpoint(InferenceContract.JOBS_STATUS, "request", body)).isEmpty();
+    }
+
+    @Test
+    void getJobsIsRetriedLikeAGet() {
+        var empty = aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                .withBody("{\"jobs\":[]}");
+        stubSequence(() -> post(urlEqualTo(STATUS_PATH)), error("overloaded", 503), empty);
+
+        assertThat(client.getJobs(List.of(JOB_ID), later()).block()).isEmpty();
+        assertThat(server.findAll(postRequestedFor(urlEqualTo(STATUS_PATH)))).hasSize(2);
+    }
+
+    @Test
+    void getJobsTakesOneToAThousandIds() {
+        var tooMany = IntStream.rangeClosed(0, InferenceClient.MAX_STATUS_JOB_IDS)
+                .mapToObj("job-%d"::formatted)
+                .toList();
+
+        assertThatThrownBy(() -> client.getJobs(List.of(), later())).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> client.getJobs(tooMany, later())).isInstanceOf(IllegalArgumentException.class);
+        assertThat(server.getAllServeEvents()).isEmpty();
     }
 
     @Test
@@ -103,7 +147,7 @@ class InferenceClientTest {
         stubSequence(() -> post(urlEqualTo(DECIDE_PATH)), error("overloaded", 503), error("upstream_error", 502),
                 accepted());
 
-        client.submitDecide(decideRequest()).block();
+        client.submitDecide(decideRequest(), later()).block();
 
         var retried = server.findAll(postRequestedFor(urlEqualTo(DECIDE_PATH)));
         assertThat(retried).hasSize(3);
@@ -112,7 +156,7 @@ class InferenceClientTest {
                 .isEqualTo(requestId));
 
         server.resetRequests();
-        client.submitDecide(decideRequest()).block();
+        client.submitDecide(decideRequest(), later()).block();
 
         var next = single(postRequestedFor(urlEqualTo(DECIDE_PATH)));
         assertThat(json(next).path("request_id").asText()).isNotEqualTo(requestId);
@@ -123,7 +167,7 @@ class InferenceClientTest {
         stubSequence(() -> get(urlPathEqualTo(JOB_PATH)),
                 aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER), jobView());
 
-        var view = client.getJob(JOB_ID, 0, false).block();
+        var view = client.getJob(JOB_ID, 0, false, later()).block();
 
         assertThat(view).isNotNull();
         assertThat(server.findAll(getRequestedFor(urlPathEqualTo(JOB_PATH)))).hasSize(2);
@@ -134,7 +178,7 @@ class InferenceClientTest {
         server.stubFor(post(urlEqualTo(GENERATE_PATH))
                 .willReturn(error("quota_exceeded", 429).withHeader("Retry-After", "3")));
 
-        assertThatThrownBy(() -> client.submitGenerate(generateRequest(1, 10)).block())
+        assertThatThrownBy(() -> client.submitGenerate(generateRequest(1, 10), later()).block())
                 .isInstanceOfSatisfying(InferenceException.class, exception -> {
                     assertThat(exception.isQuotaExceeded()).isTrue();
                     assertThat(exception.isRetryable()).isTrue();
@@ -153,7 +197,7 @@ class InferenceClientTest {
     void nonRetryableCodeFailsAtOnce(InferenceErrorCode code) {
         server.stubFor(post(urlEqualTo(DECIDE_PATH)).willReturn(error(code.getValue(), code.getHttpStatus())));
 
-        assertThatThrownBy(() -> client.submitDecide(decideRequest()).block())
+        assertThatThrownBy(() -> client.submitDecide(decideRequest(), later()).block())
                 .isInstanceOfSatisfying(InferenceException.class, exception -> {
                     assertThat(exception.getCode()).isEqualTo(code.getValue());
                     assertThat(exception.getHttpStatus()).isEqualTo(code.getHttpStatus());
@@ -171,7 +215,7 @@ class InferenceClientTest {
     void retryableCodeIsRetriedTwiceThenFails(InferenceErrorCode code) {
         server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(error(code.getValue(), code.getHttpStatus())));
 
-        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, true).block())
+        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, true, later()).block())
                 .isInstanceOfSatisfying(InferenceException.class, exception -> {
                     assertThat(exception.getCode()).isEqualTo(code.getValue());
                     assertThat(exception.isRetryable()).isTrue();
@@ -185,7 +229,7 @@ class InferenceClientTest {
         server.stubFor(get(urlPathEqualTo(JOB_PATH))
                 .willReturn(aResponse().withStatus(502).withBody("<html>bad gateway</html>")));
 
-        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, true).block())
+        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, true, later()).block())
                 .isInstanceOfSatisfying(InferenceException.class, exception -> {
                     assertThat(exception.getCode()).isEqualTo("upstream_error");
                     assertThat(exception.isRetryable()).isTrue();
@@ -203,7 +247,7 @@ class InferenceClientTest {
                 .withBody("{\"error\":{\"code\":\"added_later\",\"message\":\"m\",\"retryable\":%s}}"
                         .formatted(unknown.retryable))));
 
-        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, true).block())
+        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, true, later()).block())
                 .isInstanceOfSatisfying(InferenceException.class, exception -> {
                     assertThat(exception.getCode()).isEqualTo("added_later");
                     assertThat(exception.isRetryable()).isEqualTo(unknown.retryable);
@@ -262,7 +306,7 @@ class InferenceClientTest {
         client = new InferenceClient(TestHttpClientUtils.client(), config(Duration.ofSeconds(5), 2_000));
         server.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(accepted()));
 
-        assertThatThrownBy(() -> client.submitGenerate(generateRequest(2, 1_000)).block())
+        assertThatThrownBy(() -> client.submitGenerate(generateRequest(2, 1_000), later()).block())
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("maxJobBytes");
         assertThat(server.getAllServeEvents()).isEmpty();
@@ -275,7 +319,7 @@ class InferenceClientTest {
         server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(jobView().withFixedDelay(5_000)));
 
         var started = System.nanoTime();
-        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, false).block())
+        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, false, later()).block())
                 .isInstanceOfSatisfying(InferenceException.class,
                         exception -> assertThat(exception.getCode()).isEqualTo("upstream_error"));
         var elapsed = Duration.ofNanos(System.nanoTime() - started);
@@ -287,17 +331,59 @@ class InferenceClientTest {
     }
 
     @Test
+    void noAttemptOutlastsTheDeadline() {
+        server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(jobView().withFixedDelay(5_000)));
+
+        var started = System.nanoTime();
+        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, false, Instant.now().plusMillis(300)).block())
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("upstream_error"));
+        var elapsed = Duration.ofNanos(System.nanoTime() - started);
+
+        // The 5 s read timeout is cut to the 300 ms left, and no retry fits after it.
+        assertThat(server.findAll(getRequestedFor(urlPathEqualTo(JOB_PATH)))).hasSize(1);
+        assertThat(elapsed).isLessThan(Duration.ofMillis(2_000));
+    }
+
+    @Test
+    void retryWhoseBackoffPassesTheDeadlineIsNotMade() {
+        server.stubFor(post(urlEqualTo(DECIDE_PATH))
+                .willReturn(error("overloaded", 503).withHeader("Retry-After", "5")));
+
+        assertThatThrownBy(() -> client.submitDecide(decideRequest(), Instant.now().plusSeconds(2)).block())
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("overloaded"));
+        assertThat(server.findAll(postRequestedFor(urlEqualTo(DECIDE_PATH)))).hasSize(1);
+    }
+
+    @Test
+    void callPastItsDeadlineSendsNothing() {
+        server.stubFor(post(urlEqualTo(DECIDE_PATH)).willReturn(accepted()));
+
+        assertThatThrownBy(() -> client.submitDecide(decideRequest(), Instant.now().minusMillis(1)).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.isOutOfTime()).isTrue();
+                    assertThat(exception.isRetryable()).isFalse();
+                });
+        assertThat(server.getAllServeEvents()).isEmpty();
+    }
+
+    @Test
     void exceptionMessageCarriesNeitherTheCredentialNorTheServiceMessage() {
         server.stubFor(post(urlEqualTo(DECIDE_PATH)).willReturn(aResponse().withStatus(400)
                 .withHeader("Content-Type", "application/json")
                 .withBody("{\"error\":{\"code\":\"invalid_request\",\"message\":\"input_value='secret trace'\","
                         + "\"retryable\":false}}")));
 
-        assertThatThrownBy(() -> client.submitDecide(decideRequest()).block())
+        assertThatThrownBy(() -> client.submitDecide(decideRequest(), later()).block())
                 .isInstanceOfSatisfying(InferenceException.class, exception -> {
                     assertThat(exception.getMessage()).doesNotContain(CREDENTIAL).doesNotContain("secret trace");
                     assertThat(exception.getServiceMessage()).isEqualTo("input_value='secret trace'");
                 });
+    }
+
+    private static Instant later() {
+        return Instant.now().plusSeconds(60);
     }
 
     private AiLabelsConfig config(Duration readTimeout, long maxJobBytes) {

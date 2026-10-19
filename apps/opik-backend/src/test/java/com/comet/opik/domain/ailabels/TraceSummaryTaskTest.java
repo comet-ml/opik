@@ -4,7 +4,8 @@ import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.inference.InferenceContract;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.utils.JsonUtils;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -23,13 +24,19 @@ class TraceSummaryTaskTest {
     private final AiLabelTaskRegistry registry = new AiLabelTaskRegistry(new AiLabelsConfig());
     private final AiLabelItemBuilder builder = new AiLabelItemBuilder();
 
-    @Test
-    void goldenTraceProducesTheByteExactGenerateItem() {
+    /** The trace and its history, and the same trace as the first turn of its thread. */
+    @ParameterizedTest
+    @CsvSource({"trace_summary-history.json, trace_summary-item.json",
+            ", trace_summary-item-no-history.json"})
+    void goldenTraceProducesTheByteExactGenerateItem(String historyFile, String itemFile) {
         var task = registry.get("trace_summary");
         var trace = new TraceRef(UUID.fromString("0192f0c4-0000-7000-8000-000000000001"), TRACE_ID,
                 Instant.parse("2026-11-02T08:00:00Z"));
         var state = JsonUtils.getJsonNodeFromString(resource("trace_summary-state.json"));
-        var rendered = new RenderOutcome.Rendered(trace, state, InferenceJson.canonical(state).length(), "full");
+        var history = historyFile == null
+                ? JsonUtils.createArrayNode()
+                : JsonUtils.getJsonNodeFromString(resource(historyFile));
+        var rendered = new RenderOutcome.Rendered(trace, state, history, 0, "full");
 
         var items = builder.build("workspace-1", rendered, List.of(task));
 
@@ -38,7 +45,7 @@ class TraceSummaryTaskTest {
         assertThat(item.engineCalls()).isEqualTo(1);
         assertThat(item.plan().jobKey()).isEqualTo(new AiLabelItemPlan.JobKey(AiLabelEndpoint.GENERATE, false));
         var bytes = InferenceJson.writeBytes(item.payload());
-        assertThat(new String(bytes, StandardCharsets.UTF_8)).isEqualTo(resource("trace_summary-item.json"));
+        assertThat(new String(bytes, StandardCharsets.UTF_8)).isEqualTo(resource(itemFile));
         assertThat(item.bytes()).isEqualTo(bytes.length);
         var request = InferenceJson.MAPPER
                 .valueToTree(builder.generateRequest("workspace-1", false, items));

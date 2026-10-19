@@ -183,9 +183,13 @@ public class AiLabelTaskLoader {
         var user = task.prompt().user();
         require(StringUtils.countMatches(user, AiLabelTask.STATE_PLACEHOLDER) == 1,
                 "%s must appear exactly once in prompt.user", AiLabelTask.STATE_PLACEHOLDER);
+        require(StringUtils.countMatches(user, AiLabelTask.HISTORY_PLACEHOLDER) <= 1,
+                "%s must appear at most once in prompt.user", AiLabelTask.HISTORY_PLACEHOLDER);
         var system = task.prompt().system();
-        require(system == null || !system.contains(AiLabelTask.STATE_PLACEHOLDER),
-                "%s must not appear in prompt.system", AiLabelTask.STATE_PLACEHOLDER);
+        for (var placeholder : List.of(AiLabelTask.STATE_PLACEHOLDER, AiLabelTask.HISTORY_PLACEHOLDER)) {
+            require(system == null || !system.contains(placeholder), "%s must not appear in prompt.system",
+                    placeholder);
+        }
         var maxTokens = task.effectiveMaxTokens();
         require(maxTokens >= BatchGenerateItem.MIN_MAX_TOKENS && maxTokens <= BatchGenerateItem.MAX_MAX_TOKENS,
                 "max_tokens must be between %s and %s", BatchGenerateItem.MIN_MAX_TOKENS,
@@ -195,8 +199,9 @@ public class AiLabelTaskLoader {
                 "temperature must be between %s and %s", BatchGenerateItem.MIN_TEMPERATURE,
                 BatchGenerateItem.MAX_TEMPERATURE);
         JsonSchemaSubset.validate(task.schema());
-        long promptBytes = utf8Length(system)
-                + utf8Length(user.replace(AiLabelTask.STATE_PLACEHOLDER, ""));
+        // History is fitted inside renderBudgetBytes along with the state, so the check is the same with or without it.
+        long promptBytes = utf8Length(system) + utf8Length(user.replace(AiLabelTask.STATE_PLACEHOLDER, "")
+                .replace(AiLabelTask.HISTORY_PLACEHOLDER, ""));
         requireFits(promptBytes, budgets);
     }
 

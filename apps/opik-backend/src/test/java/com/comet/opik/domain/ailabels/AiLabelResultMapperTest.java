@@ -49,7 +49,7 @@ class AiLabelResultMapperTest {
     @Test
     void decideAnswersMapToTypedColumnsAndDone() {
         var item = item(List.of(OUTCOME, TONE));
-        var pending = item.pendingStatuses(JOB_ID, 1, Map.of("outcome", 2, "tone", 1));
+        var inFlight = item.jobItems(JOB_ID, 1, Map.of("outcome", 2, "tone", 1));
         var legend = new LinkedHashMap<String, JsonNode>();
         legend.put("1", NODES.textNode("poor"));
         legend.put("2", NODES.objectNode().put("label", "good"));
@@ -61,7 +61,7 @@ class AiLabelResultMapperTest {
                         .probabilities(Map.of("1", 0.5, "2", 0.5)).confidence(0.5).build(),
                 "tone.q00", Answer.NoulAnswer.builder().noul(0.25).build());
 
-        var results = mapper.map(decideResult(item, answers), item.plan(), pending);
+        var results = mapper.map(decideResult(item, answers), item.plan(), inFlight);
 
         var label = AiLabel.builder()
                 .workspaceId(WORKSPACE_ID)
@@ -82,67 +82,64 @@ class AiLabelResultMapperTest {
                 AiLabel.builder().workspaceId(WORKSPACE_ID).projectId(item.trace().projectId()).traceId(TRACE_ID)
                         .task("tone").taskVersion(1).key("q00").answerType(AiLabel.AnswerType.NOUL).noul(0.25f)
                         .probabilities(Map.of()).legend(Map.of()).output("").build());
-        assertThat(results.statuses()).containsExactlyElementsOf(pending.stream()
-                .map(row -> row.toBuilder().status(AiLabelStatus.Status.DONE).build())
+        assertThat(results.statuses()).containsExactlyElementsOf(inFlight.stream()
+                .map(AiLabelJobItem::done)
                 .toList());
     }
 
     @Test
     void missingAnswerFailsOnlyItsTask() {
         var item = item(List.of(OUTCOME, TONE));
-        var pending = item.pendingStatuses(JOB_ID, 1, Map.of("outcome", 1, "tone", 2));
+        var inFlight = item.jobItems(JOB_ID, 1, Map.of("outcome", 1, "tone", 2));
 
         var results = mapper.map(decideResult(item, Map.of(
                 "outcome.succeeded", Answer.NoulAnswer.builder().noul(1.0).build(),
-                "tone.q00", Answer.NoulAnswer.builder().noul(0.5).build())), item.plan(), pending);
+                "tone.q00", Answer.NoulAnswer.builder().noul(0.5).build())), item.plan(), inFlight);
 
         assertThat(results.labels()).extracting(AiLabel::task, AiLabel::key)
                 .containsExactly(tuple("tone", "q00"));
         assertThat(results.statuses()).containsExactly(
-                pending.get(0).toBuilder().status(AiLabelStatus.Status.FAILED).retryable(true)
-                        .errorCode(AiLabelResultMapper.MISSING_ANSWER).build(),
-                pending.get(1).toBuilder().status(AiLabelStatus.Status.DONE).build());
+                inFlight.get(0).failed(AiLabelResultMapper.MISSING_ANSWER, true),
+                inFlight.get(1).done());
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void errorFailsEveryTaskWithTheEnvelopesCodeAndRetryability(boolean retryable) {
         var item = item(List.of(OUTCOME, TONE));
-        var pending = item.pendingStatuses(JOB_ID, 1, Map.of("outcome", 2, "tone", 2));
+        var inFlight = item.jobItems(JOB_ID, 1, Map.of("outcome", 2, "tone", 2));
         var result = ItemResult.builder()
                 .itemId(item.plan().itemId())
                 .error(ErrorBody.builder().code("deadline_exceeded").message("m").retryable(retryable).build())
                 .build();
 
-        var results = mapper.map(result, item.plan(), pending);
+        var results = mapper.map(result, item.plan(), inFlight);
 
         assertThat(results.labels()).isEmpty();
-        assertThat(results.statuses()).containsExactlyElementsOf(pending.stream()
-                .map(row -> row.toBuilder().status(AiLabelStatus.Status.FAILED).retryable(retryable)
-                        .errorCode("deadline_exceeded").build())
+        assertThat(results.statuses()).containsExactlyElementsOf(inFlight.stream()
+                .map(row -> row.failed("deadline_exceeded", retryable))
                 .toList());
     }
 
     @Test
     void cancelledItemFailsRetryable() {
         var item = item(List.of(generate("summary", false)));
-        var pending = item.pendingStatuses(JOB_ID, 1, Map.of("summary", 1));
+        var inFlight = item.jobItems(JOB_ID, 1, Map.of("summary", 1));
 
-        var results = mapper.map(ItemResult.builder().itemId(item.plan().itemId()).build(), item.plan(), pending);
+        var results = mapper.map(ItemResult.builder().itemId(item.plan().itemId()).build(), item.plan(), inFlight);
 
         assertThat(results.labels()).isEmpty();
-        assertThat(results.statuses()).containsExactly(pending.getFirst().toBuilder()
-                .status(AiLabelStatus.Status.FAILED).retryable(true).errorCode(AiLabelResultMapper.CANCELLED)
-                .build());
+        assertThat(results.statuses())
+                .containsExactly(inFlight.getFirst().failed(AiLabelResultMapper.CANCELLED, true));
     }
 
     @Test
     void generateOutputMapsToOneCanonicalOutputRow() {
         var item = item(List.of(generate("summary", false)));
-        var pending = item.pendingStatuses(JOB_ID, 1, Map.of("summary", 1));
+        var inFlight = item.jobItems(JOB_ID, 1, Map.of("summary", 1));
         var output = NODES.objectNode().put("summary", "Asks where a refund is").put("a_first", 1);
 
-        var results = mapper.map(generateResult(item, output), item.plan(), pending);
+        var results = mapper.map(generateResult(item, output), item.plan(), inFlight);
 
         assertThat(results.labels()).containsExactly(AiLabel.builder()
                 .workspaceId(WORKSPACE_ID)
@@ -156,23 +153,21 @@ class AiLabelResultMapperTest {
                 .legend(Map.of())
                 .output("{\"a_first\":1,\"summary\":\"Asks where a refund is\"}")
                 .build());
-        assertThat(results.statuses()).containsExactly(pending.getFirst().toBuilder()
-                .status(AiLabelStatus.Status.DONE).build());
+        assertThat(results.statuses()).containsExactly(inFlight.getFirst().done());
     }
 
     @Test
     void generateOutputMissingARequiredPropertyFailsAsMissingAnswer() {
         var item = item(List.of(generate("summary", false)));
-        var pending = item.pendingStatuses(JOB_ID, 1, Map.of("summary", 1));
+        var inFlight = item.jobItems(JOB_ID, 1, Map.of("summary", 1));
 
         for (var output : List.<JsonNode>of(NODES.objectNode().put("other", "x"), NODES.nullNode(),
                 NODES.textNode("summary"))) {
-            var results = mapper.map(generateResult(item, output), item.plan(), pending);
+            var results = mapper.map(generateResult(item, output), item.plan(), inFlight);
 
             assertThat(results.labels()).isEmpty();
-            assertThat(results.statuses()).containsExactly(pending.getFirst().toBuilder()
-                    .status(AiLabelStatus.Status.FAILED).retryable(true).errorCode(AiLabelResultMapper.MISSING_ANSWER)
-                    .build());
+            assertThat(results.statuses())
+                    .containsExactly(inFlight.getFirst().failed(AiLabelResultMapper.MISSING_ANSWER, true));
         }
     }
 

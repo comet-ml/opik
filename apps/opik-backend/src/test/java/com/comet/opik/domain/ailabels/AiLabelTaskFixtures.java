@@ -34,6 +34,16 @@ class AiLabelTaskFixtures {
                 .build();
     }
 
+    /** A generate task whose prompt has {@code {{history}}} before {@code {{state}}}. */
+    static AiLabelTask generateWithHistory(String name) {
+        var task = generate(name, false);
+        return task.toBuilder()
+                .prompt(task.prompt().toBuilder()
+                        .user("Earlier turns:\n{{history}}\nSummarize this trace:\n{{state}}")
+                        .build())
+                .build();
+    }
+
     static AiLabelTask generate(String name, boolean cache) {
         var schema = NODES.objectNode();
         schema.put("type", "object");
@@ -67,6 +77,12 @@ class AiLabelTaskFixtures {
     static RenderOutcome.Rendered rendered(UUID traceId) {
         var trace = new TraceRef(UUID.fromString("0192f0c4-0000-7000-8000-000000000001"), traceId,
                 Instant.parse("2026-10-15T12:00:00.123456Z"));
-        return new RenderOutcome.Rendered(trace, state(), 210, "spans_io_pruned:2");
+        return new RenderOutcome.Rendered(trace, state(), null, 210, "spans_pruned:2");
+    }
+
+    static RenderOutcome.Rendered renderedWithHistory(UUID traceId, JsonNode state, JsonNode history) {
+        var trace = new TraceRef(UUID.fromString("0192f0c4-0000-7000-8000-000000000001"), traceId,
+                Instant.parse("2026-10-15T12:00:00.123456Z"));
+        return new RenderOutcome.Rendered(trace, state, history, 250, "full");
     }
 }

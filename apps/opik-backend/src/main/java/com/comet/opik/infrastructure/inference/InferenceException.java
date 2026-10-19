@@ -17,6 +17,8 @@ import java.time.Duration;
 public class InferenceException extends RuntimeException {
 
     static final Duration MAX_RETRY_AFTER = Duration.ofSeconds(30);
+    /** A local code, not the service's: the call's deadline passed before an attempt could start. */
+    public static final String OUT_OF_TIME = "out_of_time";
 
     private final @NonNull String code;
     private final boolean retryable;
@@ -37,6 +39,10 @@ public class InferenceException extends RuntimeException {
 
     public boolean isQuotaExceeded() {
         return InferenceErrorCode.QUOTA_EXCEEDED.getValue().equals(code);
+    }
+
+    public boolean isOutOfTime() {
+        return OUT_OF_TIME.equals(code);
     }
 
     /**
@@ -61,6 +67,10 @@ public class InferenceException extends RuntimeException {
     static InferenceException upstreamError(int httpStatus, Duration retryAfter, Throwable cause) {
         return new InferenceException(InferenceErrorCode.UPSTREAM_ERROR.getValue(), true, httpStatus, retryAfter,
                 null, cause);
+    }
+
+    static InferenceException outOfTime() {
+        return new InferenceException(OUT_OF_TIME, false, 0, null, null, null);
     }
 
     static InferenceException transport(@NonNull Throwable cause) {

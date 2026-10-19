@@ -25,11 +25,11 @@ public record AiLabelItem(
     }
 
     /**
-     * The {@code pending} rows written once the item's job is accepted: one per task, at the task's current version.
+     * The item's in-flight rows, written with its job: one per task, at the task's current version.
      *
      * @param attemptByTask the attempt to record for each of the item's tasks
      */
-    public List<AiLabelStatus> pendingStatuses(@NonNull String jobId, int rendererVersion,
+    public List<AiLabelJobItem> jobItems(@NonNull String jobId, int rendererVersion,
             @NonNull Map<String, Integer> attemptByTask) {
         return plan.tasks().stream()
                 .map(task -> {
@@ -39,20 +39,17 @@ public record AiLabelItem(
                                 "no attempt given for task, task '%s', itemId '%s'".formatted(task.name(),
                                         plan.itemId()));
                     }
-                    return AiLabelStatus.builder()
+                    return AiLabelJobItem.builder()
+                            .jobId(jobId)
                             .workspaceId(workspaceId)
                             .projectId(trace.projectId())
-                            .task(task.name())
                             .traceId(trace.traceId())
                             .traceCreatedAt(trace.createdAt())
+                            .task(task.name())
                             .taskVersion(task.version())
                             .rendererVersion(rendererVersion)
-                            .status(AiLabelStatus.Status.PENDING)
-                            .retryable(false)
-                            .attempt(attempt)
-                            .errorCode("")
-                            .jobId(jobId)
                             .compactionLevel(compactionLevel)
+                            .attempt(attempt)
                             .build();
                 })
                 .toList();

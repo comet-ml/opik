@@ -8,7 +8,6 @@ import com.comet.opik.infrastructure.inference.BatchItem;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.inference.Message;
 import com.comet.opik.infrastructure.inference.Question;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -19,15 +18,20 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * Builds batch items from a rendered trace and the tasks it is missing. Each trace is rendered once and shared by all
- * its items: its decide tasks that share a {@code cache} setting are packed first-fit into items of at most 32 questions
+ * Builds batch items from a rendered trace and the tasks it is missing. Each trace is rendered once per kind of task
+ * (with or without {@code {{history}}}) and shared by those tasks' items: its decide tasks that share a {@code cache} setting are packed first-fit into items of at most 32 questions
  * (deterministic, though not always the fewest items), and each generate
  * task is an item of its own.
  */
 @Singleton
 public class AiLabelItemBuilder {
+
+    private static final Pattern PLACEHOLDER = Pattern.compile(
+            Pattern.quote(AiLabelTask.STATE_PLACEHOLDER) + "|" + Pattern.quote(AiLabelTask.HISTORY_PLACEHOLDER));
 
     /**
      * Packing is first-fit in task name order, never splitting a task's questions, so the same task set always packs
@@ -63,11 +67,16 @@ public class AiLabelItemBuilder {
         return plans;
     }
 
+    /** {@code missing} are the tasks {@code rendered} is for: all with {@code {{history}}}, or all without. */
     public List<AiLabelItem> build(@NonNull String workspaceId, @NonNull RenderOutcome.Rendered rendered,
             @NonNull Collection<AiLabelTask> missing) {
+        for (var task : missing) {
+            Preconditions.checkArgument(task.usesHistory() == rendered.withHistory(),
+                    "task rendered without its history, or with one it doesn't use, task '%s'", task.name());
+        }
         return plan(rendered.trace().traceId(), missing).stream()
                 .map(plan -> {
-                    var payload = payload(plan, rendered.state());
+                    var payload = payload(plan, rendered);
                     return AiLabelItem.builder()
                             .workspaceId(workspaceId)
                             .trace(rendered.trace())
@@ -124,7 +133,7 @@ public class AiLabelItemBuilder {
         return bins;
     }
 
-    private static BatchItem payload(AiLabelItemPlan plan, JsonNode state) {
+    private static BatchItem payload(AiLabelItemPlan plan, RenderOutcome.Rendered rendered) {
         return switch (plan.endpoint()) {
             case DECIDE -> {
                 var questions = new TreeMap<String, Question>();
@@ -132,7 +141,7 @@ public class AiLabelItemBuilder {
                         .forEach((question, definition) -> questions.put(task.questionId(question), definition)));
                 yield BatchDecideItem.builder()
                         .itemId(plan.itemId())
-                        .state(state)
+                        .state(rendered.state())
                         .questions(questions)
                         .build();
             }
@@ -142,7 +151,7 @@ public class AiLabelItemBuilder {
                 if (task.prompt().system() != null) {
                     messages.add(Message.builder().role(Message.Role.SYSTEM).content(task.prompt().system()).build());
                 }
-                var user = task.prompt().user().replace(AiLabelTask.STATE_PLACEHOLDER, InferenceJson.canonical(state));
+                var user = fill(task.prompt().user(), rendered);
                 messages.add(Message.builder().role(Message.Role.USER).content(user).build());
                 yield BatchGenerateItem.builder()
                         .itemId(plan.itemId())
@@ -153,6 +162,20 @@ public class AiLabelItemBuilder {
                         .build();
             }
         };
+    }
+
+    /**
+     * One pass over the template, so a {@code {{history}}} inside the trace's own content is left as text rather than
+     * replaced.
+     */
+    private static String fill(String template, RenderOutcome.Rendered rendered) {
+        var matcher = PLACEHOLDER.matcher(template);
+        var filled = new StringBuilder();
+        while (matcher.find()) {
+            var value = matcher.group().equals(AiLabelTask.STATE_PLACEHOLDER) ? rendered.state() : rendered.history();
+            matcher.appendReplacement(filled, Matcher.quoteReplacement(InferenceJson.canonical(value)));
+        }
+        return matcher.appendTail(filled).toString();
     }
 
     private static void checkJob(String workspaceId, AiLabelItemPlan.JobKey jobKey, List<AiLabelItem> items) {

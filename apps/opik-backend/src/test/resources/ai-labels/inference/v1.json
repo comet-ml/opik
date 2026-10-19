@@ -2,7 +2,7 @@
   "x-vendored-from": {
     "repository": "comet-ml/opik-inference",
     "path": "api/v1.json",
-    "commit": "f0aa657856493dcd0ee65a6d8720e657506a0e4e",
+    "commit": "755e72eceee81c149fed594e03852724c180ec02",
     "note": "Copied verbatim except for this key. Refresh it from opik-inference when the v1 contract changes."
   },
   "auth": {
@@ -1168,9 +1168,17 @@
                 "type": "array"
               },
               "schema": {
-                "additionalProperties": true,
-                "title": "Schema",
-                "type": "object"
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Schema"
               },
               "temperature": {
                 "default": 0.0,
@@ -1182,7 +1190,6 @@
             },
             "required": [
               "messages",
-              "schema",
               "item_id"
             ],
             "title": "BatchGenerateItem",
@@ -1299,6 +1306,445 @@
         "type": "object"
       },
       "status": 202
+    },
+    "POST /v1/batch/jobs/status": {
+      "request": {
+        "additionalProperties": false,
+        "description": "Many jobs' status in one call. POST because 1,000 ids don't fit in a URL; it has no side effects.",
+        "properties": {
+          "job_ids": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Job Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "job_ids"
+        ],
+        "title": "BatchJobStatusRequest",
+        "type": "object"
+      },
+      "response": {
+        "$defs": {
+          "ChoiceAnswer": {
+            "properties": {
+              "choice": {
+                "title": "Choice",
+                "type": "string"
+              },
+              "confidence": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Confidence",
+                "type": "number"
+              },
+              "probabilities": {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "title": "Probabilities",
+                "type": "object"
+              },
+              "type": {
+                "const": "choice",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "choice",
+              "probabilities",
+              "confidence"
+            ],
+            "title": "ChoiceAnswer",
+            "type": "object"
+          },
+          "DecideResponse": {
+            "properties": {
+              "cache_hit": {
+                "title": "Cache Hit",
+                "type": "boolean"
+              },
+              "latency_ms": {
+                "title": "Latency Ms",
+                "type": "integer"
+              },
+              "request_id": {
+                "title": "Request Id",
+                "type": "string"
+              },
+              "result": {
+                "$ref": "#/$defs/DecideResult"
+              },
+              "usage": {
+                "$ref": "#/$defs/Usage"
+              }
+            },
+            "required": [
+              "request_id",
+              "usage",
+              "cache_hit",
+              "latency_ms",
+              "result"
+            ],
+            "title": "DecideResponse",
+            "type": "object"
+          },
+          "DecideResult": {
+            "description": "One typed answer per question id. Probabilities are calibrated (temperature 1.3).",
+            "properties": {
+              "answers": {
+                "additionalProperties": {
+                  "discriminator": {
+                    "mapping": {
+                      "choice": "#/$defs/ChoiceAnswer",
+                      "noul": "#/$defs/NoulAnswer",
+                      "score": "#/$defs/ScoreAnswer"
+                    },
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/NoulAnswer"
+                    },
+                    {
+                      "$ref": "#/$defs/ChoiceAnswer"
+                    },
+                    {
+                      "$ref": "#/$defs/ScoreAnswer"
+                    }
+                  ]
+                },
+                "title": "Answers",
+                "type": "object"
+              }
+            },
+            "required": [
+              "answers"
+            ],
+            "title": "DecideResult",
+            "type": "object"
+          },
+          "ErrorBody": {
+            "properties": {
+              "code": {
+                "$ref": "#/$defs/ErrorCode"
+              },
+              "message": {
+                "title": "Message",
+                "type": "string"
+              },
+              "retryable": {
+                "title": "Retryable",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "retryable"
+            ],
+            "title": "ErrorBody",
+            "type": "object"
+          },
+          "ErrorCode": {
+            "enum": [
+              "unauthorized",
+              "org_not_allowed",
+              "invalid_request",
+              "invalid_schema",
+              "input_too_long",
+              "not_found",
+              "quota_exceeded",
+              "overloaded",
+              "deadline_exceeded",
+              "upstream_error",
+              "schema_violation"
+            ],
+            "title": "ErrorCode",
+            "type": "string"
+          },
+          "GenerateResponse": {
+            "properties": {
+              "cache_hit": {
+                "title": "Cache Hit",
+                "type": "boolean"
+              },
+              "latency_ms": {
+                "title": "Latency Ms",
+                "type": "integer"
+              },
+              "request_id": {
+                "title": "Request Id",
+                "type": "string"
+              },
+              "result": {
+                "$ref": "#/$defs/GenerateResult"
+              },
+              "usage": {
+                "$ref": "#/$defs/Usage"
+              }
+            },
+            "required": [
+              "request_id",
+              "usage",
+              "cache_hit",
+              "latency_ms",
+              "result"
+            ],
+            "title": "GenerateResponse",
+            "type": "object"
+          },
+          "GenerateResult": {
+            "properties": {
+              "output": {
+                "title": "Output"
+              }
+            },
+            "required": [
+              "output"
+            ],
+            "title": "GenerateResult",
+            "type": "object"
+          },
+          "ItemResult": {
+            "properties": {
+              "error": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ErrorBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "item_id": {
+                "title": "Item Id",
+                "type": "string"
+              },
+              "response": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/DecideResponse"
+                  },
+                  {
+                    "$ref": "#/$defs/GenerateResponse"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Response"
+              }
+            },
+            "required": [
+              "item_id"
+            ],
+            "title": "ItemResult",
+            "type": "object"
+          },
+          "JobCounts": {
+            "properties": {
+              "cancelled": {
+                "title": "Cancelled",
+                "type": "integer"
+              },
+              "failed": {
+                "title": "Failed",
+                "type": "integer"
+              },
+              "ok": {
+                "title": "Ok",
+                "type": "integer"
+              },
+              "pending": {
+                "title": "Pending",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "pending",
+              "ok",
+              "failed",
+              "cancelled"
+            ],
+            "title": "JobCounts",
+            "type": "object"
+          },
+          "JobStatus": {
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "partially_failed",
+              "cancelled"
+            ],
+            "title": "JobStatus",
+            "type": "string"
+          },
+          "JobView": {
+            "properties": {
+              "cancel_requested": {
+                "default": false,
+                "title": "Cancel Requested",
+                "type": "boolean"
+              },
+              "counts": {
+                "$ref": "#/$defs/JobCounts"
+              },
+              "endpoint": {
+                "enum": [
+                  "decide",
+                  "generate"
+                ],
+                "title": "Endpoint",
+                "type": "string"
+              },
+              "job_id": {
+                "title": "Job Id",
+                "type": "string"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Next Cursor"
+              },
+              "results": {
+                "items": {
+                  "$ref": "#/$defs/ItemResult"
+                },
+                "title": "Results",
+                "type": "array"
+              },
+              "status": {
+                "$ref": "#/$defs/JobStatus"
+              }
+            },
+            "required": [
+              "job_id",
+              "endpoint",
+              "status",
+              "counts",
+              "results"
+            ],
+            "title": "JobView",
+            "type": "object"
+          },
+          "JsonValue": {},
+          "NoulAnswer": {
+            "properties": {
+              "noul": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Noul",
+                "type": "number"
+              },
+              "type": {
+                "const": "noul",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "noul"
+            ],
+            "title": "NoulAnswer",
+            "type": "object"
+          },
+          "ScoreAnswer": {
+            "properties": {
+              "confidence": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Confidence",
+                "type": "number"
+              },
+              "legend": {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "title": "Legend",
+                "type": "object"
+              },
+              "probabilities": {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "title": "Probabilities",
+                "type": "object"
+              },
+              "score": {
+                "title": "Score",
+                "type": "number"
+              },
+              "type": {
+                "const": "score",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "score",
+              "legend",
+              "probabilities",
+              "confidence"
+            ],
+            "title": "ScoreAnswer",
+            "type": "object"
+          },
+          "Usage": {
+            "properties": {
+              "input_tokens": {
+                "default": 0,
+                "title": "Input Tokens",
+                "type": "integer"
+              },
+              "output_tokens": {
+                "default": 0,
+                "title": "Output Tokens",
+                "type": "integer"
+              }
+            },
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "description": "Each visible job once, in no guaranteed order, as GET /v1/batch/jobs/{job_id}?results=false returns it.\nA job the caller can't see (unknown, expired, or another deployment's) is left out.",
+        "properties": {
+          "jobs": {
+            "items": {
+              "$ref": "#/$defs/JobView"
+            },
+            "title": "Jobs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "jobs"
+        ],
+        "title": "BatchJobStatusResponse",
+        "type": "object"
+      },
+      "status": 200
     },
     "POST /v1/decide": {
       "request": {
@@ -1792,9 +2238,17 @@
             "title": "Request Id"
           },
           "schema": {
-            "additionalProperties": true,
-            "title": "Schema",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Schema"
           },
           "temperature": {
             "default": 0.0,
@@ -1818,8 +2272,7 @@
         },
         "required": [
           "org_id",
-          "messages",
-          "schema"
+          "messages"
         ],
         "title": "GenerateRequest",
         "type": "object"
