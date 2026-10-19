@@ -14,23 +14,6 @@ import opik.exceptions as exceptions
 
 from . import types
 
-# The ``type`` values of the non-text multimodal parts this module recognizes. A
-# mapping part with one of these carries no text but is a known shape, so it is
-# skipped; any other mapping is a shape no adapter can read, so it is reported.
-_NON_TEXT_PART_TYPES = frozenset(
-    {
-        "image",
-        "image_url",
-        "input_audio",
-        "audio",
-        "audio_url",
-        "video",
-        "video_url",
-        "file",
-        "refusal",
-    }
-)
-
 
 def message_has_text(message: types.ConversationDict) -> bool:
     """Whether a conversation message carries text to read.
@@ -53,15 +36,17 @@ def message_has_text(message: types.ConversationDict) -> bool:
 def text_from_parts(parts: Any) -> str:
     """The text of a multimodal content list, or ``""`` when it carries none.
 
-    A string part and a mapping with string ``text`` carry text. A mapping with a
-    known non-text ``type`` (an image or audio part, say) carries none and is
-    skipped. Any other shape -- a mapping with no ``text`` and no known ``type``, a
-    mapping whose ``text`` is not a string, or a part that is neither a string nor
-    a mapping -- is one no adapter can read, so it is reported by raising rather
-    than counted as an empty turn: counting it as empty would grade an older turn
-    and report success. The public conversation type still declares string content;
-    list/tuple handling is defensive support for direct ``score()`` calls, while
-    ``evaluate_threads`` continues to normalize its output to strings.
+    A string part and a mapping with string ``text`` carry text. Any other mapping
+    part -- a ``tool_use``, ``thinking``, image or audio part, say -- carries none
+    and is skipped, whatever its ``type``, so provider-specific part names keep
+    working without an allowlist to maintain. The one mapping that is reported
+    rather than skipped is a ``type: "text"`` part without a ``text`` key: it
+    claims to carry text and does not, so reading it as empty would silently drop
+    an answer. A part that is neither a string nor a mapping, or a mapping whose
+    ``text`` is not a string, is reported too. The public conversation type still
+    declares string content; list/tuple handling is defensive support for direct
+    ``score()`` calls, while ``evaluate_threads`` continues to normalize its
+    output to strings.
     """
     texts: List[str] = []
     for part in parts:
@@ -73,10 +58,7 @@ def text_from_parts(parts: Any) -> str:
                 if not isinstance(text, str):
                     raise bad_content_error(part)
                 texts.append(text)
-            else:
-                part_type = part.get("type")
-                if isinstance(part_type, str) and part_type in _NON_TEXT_PART_TYPES:
-                    continue
+            elif part.get("type") == "text":
                 raise bad_content_error(part)
         else:
             raise bad_content_error(part)

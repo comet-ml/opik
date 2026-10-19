@@ -27,31 +27,37 @@ def test_message_has_text__content_parts():
     assert not conversation_content.message_has_text({"content": []})
 
 
-def test_message_has_text__unknown_part_shape__raises():
-    """A mapping with no ``text`` and no known non-text ``type`` is unreadable.
+def test_message_has_text__non_text_part_types_are_skipped():
+    """A dict part without ``text`` carries none, whatever its ``type``.
 
-    Skipping it silently would drop an assistant turn that may carry an answer in
-    a shape no adapter understands, so it is reported instead.
+    Provider part names -- ``tool_use``, ``thinking``, ``reasoning``, media parts,
+    or a name no adapter has seen -- are all skipped rather than reported, so
+    content that the conversation metrics accept today keeps working.
     """
+    assert conversation_content.message_has_text(
+        {
+            "content": [
+                {"type": "tool_use", "id": "call_1", "name": "get_weather"},
+                {"type": "thinking", "thinking": "The user wants the fee."},
+                {"type": "text", "text": "It is 5%."},
+            ]
+        }
+    )
+    assert not conversation_content.message_has_text(
+        {"content": [{"type": "tool_use", "id": "call_1"}]}
+    )
+    assert not conversation_content.message_has_text({"content": [{"type": "mystery"}]})
+    assert not conversation_content.message_has_text(
+        {"content": [{"anything": "else"}]}
+    )
+
+
+def test_message_has_text__text_part_without_text__raises():
+    """A ``type: "text"`` part without a ``text`` key claims to carry text and
+    does not, so it is reported rather than skipped: skipping it would silently
+    drop an answer."""
     with pytest.raises(exceptions.MetricComputationError):
-        conversation_content.message_has_text({"content": [{"type": "mystery"}]})
-
-    with pytest.raises(exceptions.MetricComputationError):
-        conversation_content.message_has_text({"content": [{"anything": "else"}]})
-
-
-def test_message_has_text__malformed_part_type__raises_content_error():
-    """A non-string ``type`` is an unreadable shape, not a raw ``TypeError``.
-
-    The metric's contract is that an unreadable reply fails with
-    ``MetricComputationError``; leaking the membership check's own exception would
-    report an implementation error instead.
-    """
-    with pytest.raises(exceptions.MetricComputationError):
-        conversation_content.message_has_text({"content": [{"type": []}]})
-
-    with pytest.raises(exceptions.MetricComputationError):
-        conversation_content.message_has_text({"content": [{"type": 42}]})
+        conversation_content.message_has_text({"content": [{"type": "text"}]})
 
 
 def test_message_has_text__unreadable_content__raises():
@@ -71,23 +77,14 @@ def test_text_from_parts__joins_only_the_text_parts():
     )
     # Whitespace-only parts carry no text, so they are dropped from the join.
     assert conversation_content.text_from_parts(["", "   "]) == ""
-    # Known non-text multimodal parts are skipped, whatever their payload shape.
+    # Non-text parts are skipped whatever their payload shape.
     assert (
         conversation_content.text_from_parts(
             [
                 {"type": "image", "image_url": {"url": "..."}},
                 {"type": "input_audio", "input_audio": {"data": "..."}},
-                {"type": "text", "text": "the answer"},
-            ]
-        )
-        == "the answer"
-    )
-    # The url-shaped media parts are known non-text parts too.
-    assert (
-        conversation_content.text_from_parts(
-            [
-                {"type": "audio_url", "audio_url": {"url": "..."}},
-                {"type": "video_url", "video_url": {"url": "..."}},
+                {"type": "tool_use", "name": "get_weather", "input": {}},
+                {"type": "thinking", "thinking": "What is the fee?"},
                 {"type": "text", "text": "the answer"},
             ]
         )
