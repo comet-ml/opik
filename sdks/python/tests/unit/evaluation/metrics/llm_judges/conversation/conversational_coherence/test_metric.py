@@ -633,7 +633,10 @@ def test_score__empty_assistant_reply__is_not_graded(mock_model):
     prompts = _graded_window_prompts(mock_model.generate_chat_completion.call_args_list)
     assert len(prompts) == 1
     assert "content': ''" not in prompts[0]
+    assert result.name == "conversational_coherence_score"
     assert result.value == 1.0
+    assert result.reason == "One window was graded."
+    assert result.scoring_failed is False
 
 
 @pytest.mark.asyncio
@@ -657,7 +660,10 @@ async def test_score__empty_assistant_reply__is_not_graded__async(mock_model):
     )
     assert len(prompts) == 1
     assert "content': ''" not in prompts[0]
+    assert result.name == "conversational_coherence_score"
     assert result.value == 1.0
+    assert result.reason == "One window was graded."
+    assert result.scoring_failed is False
 
 
 @pytest.mark.parametrize("empty_reply", ["", "   "])

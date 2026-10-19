@@ -169,34 +169,13 @@ def test_extract_turns_windows_from_conversation__no_turns__raises_error():
         )
 
 
-def test_message_has_text__string_content():
+def test_message_has_text__reexported_from_helpers():
+    """The sliding-window judges read content through ``helpers``, so the re-export
+    must keep pointing at the one implementation in ``conversation_content``."""
+    from opik.evaluation.metrics.conversation import conversation_content
+
+    assert (
+        conversation_helpers.message_has_text is conversation_content.message_has_text
+    )
     assert conversation_helpers.message_has_text({"content": "Hi there!"})
     assert not conversation_helpers.message_has_text({"content": ""})
-    assert not conversation_helpers.message_has_text({"content": "   "})
-    # ``None`` is what an output transform returns for a turn it has nothing to
-    # say for, so it is read as "no text" rather than malformed.
-    assert not conversation_helpers.message_has_text({"content": None})
-
-
-def test_message_has_text__content_parts():
-    assert conversation_helpers.message_has_text(
-        {"content": [{"type": "text", "text": "Hi there!"}]}
-    )
-    assert conversation_helpers.message_has_text(
-        {"content": ["Hi there!", {"type": "image_url", "image_url": "..."}]}
-    )
-    # A content list whose parts are all non-text carries no text to grade.
-    assert not conversation_helpers.message_has_text(
-        {"content": [{"type": "image_url", "image_url": "..."}]}
-    )
-    assert not conversation_helpers.message_has_text({"content": []})
-
-
-def test_message_has_text__unreadable_content__raises():
-    from opik import exceptions
-
-    with pytest.raises(exceptions.MetricComputationError):
-        conversation_helpers.message_has_text({"content": 42})
-
-    with pytest.raises(exceptions.MetricComputationError):
-        conversation_helpers.message_has_text({"content": [{"text": 42}]})
