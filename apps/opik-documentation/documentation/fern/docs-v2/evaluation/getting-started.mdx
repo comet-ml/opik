@@ -20,7 +20,7 @@ Opik provides two approaches to evaluation. Choose the one that fits your use ca
     against your agent. An LLM judge checks each assertion automatically.
 
     <CodeBlocks>
-      ```python title="Python"
+      ```python title="Python" wordWrap
       import opik
       from openai import OpenAI
       from opik.integrations.openai import track_openai
@@ -61,7 +61,7 @@ Opik provides two approaches to evaluation. Choose the one that fits your use ca
       print(f"Pass rate: {result.pass_rate:.0%}")
       ```
 
-      ```ts title="Typescript"
+      ```ts title="Typescript" wordWrap
       import { Opik, TestSuite, runTests } from "opik";
       import OpenAI from "openai";
 
@@ -116,7 +116,7 @@ Opik provides two approaches to evaluation. Choose the one that fits your use ca
     hallucination detection, answer relevance, or custom scoring functions.
 
     <CodeBlocks>
-      ```python title="Python"
+      ```python title="Python" wordWrap
       import opik
       from opik.evaluation import evaluate
       from opik.evaluation.metrics import Hallucination
@@ -146,7 +146,7 @@ Opik provides two approaches to evaluation. Choose the one that fits your use ca
       )
       ```
 
-      ```ts title="Typescript"
+      ```ts title="Typescript" wordWrap
       import { Opik, evaluate, Hallucination } from "opik";
 
       const client = new Opik();

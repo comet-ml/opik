@@ -27,7 +27,7 @@ Migrates dataset version counters in MySQL. This is controlled by `DATASET_VERSI
 
 **Recommendation**: After the upgrade completes successfully, you can **optionally disable this flag** to prevent the migration job from running on subsequent restarts. However, this is **not required** - after the first successful run, the migration automatically detects that all data has been migrated and becomes a no-op (does nothing):
 
-```yaml
+```yaml wordWrap
 # Disable after successful migration
 DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED: false
 ```
@@ -101,7 +101,7 @@ Controls optional data reconciliation for datasets that may have been missed dur
 
 Monitor the backend logs to confirm successful completion:
 
-```bash
+```bash wordWrap
 # Kubernetes
 kubectl logs -n opik deployment/opik-backend -f | grep -i "migration"
 
@@ -119,7 +119,7 @@ Dataset version items_total migration completed successfully
 
 Once you see the completion message, you can **optionally disable the MySQL counter migration flag**. This is not required since the migration automatically becomes a no-op after the first successful run, but you may choose to disable it for clarity:
 
-```yaml
+```yaml wordWrap
 # Docker Compose
 services:
   backend:
@@ -127,7 +127,7 @@ services:
       - DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED=false
 ```
 
-```yaml
+```yaml wordWrap
 # Kubernetes/Helm
 component:
   backend:
@@ -149,7 +149,7 @@ You can run these queries to validate the migration completed successfully:
 
 **Verify item counts match between ClickHouse tables:**
 
-```sql
+```sql wordWrap
 -- Both queries should return the same count
 SELECT count(distinct id) from dataset_items;
 SELECT count(distinct id) from dataset_item_versions;
@@ -157,7 +157,7 @@ SELECT count(distinct id) from dataset_item_versions;
 
 **Verify all MySQL dataset version counters are updated:**
 
-```sql
+```sql wordWrap
 -- Should return empty result set (0 rows)
 -- Any rows returned indicate versions with incomplete items total migration
 SELECT count(id)
@@ -187,20 +187,20 @@ WHERE items_total = -1;
 **Recovery Steps:**
 
 1. **Check if migration is still progressing:**
-   ```bash
+   ```bash wordWrap
    # Monitor backend logs for progress
    kubectl logs -n opik deployment/opik-backend -f | grep -i "migration"
    ```
 
 2. **If migration is stuck, increase timeouts:**
-   ```yaml
+   ```yaml wordWrap
    # Extend timeouts for large deployments
    DATASET_VERSION_ITEMS_TOTAL_MIGRATION_LOCK_TIMEOUT_SECONDS: "7200"  # 2 hours
    DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT_SECONDS: "7200"   # 2 hours
    ```
 
 3. **Check database health:**
-   ```bash
+   ```bash wordWrap
    # Verify ClickHouse is responsive
    kubectl exec -it chi-opik-clickhouse-cluster-0-0-0 -- clickhouse-client -q "SELECT 1"
    
@@ -209,7 +209,7 @@ WHERE items_total = -1;
    ```
 
 4. **Restart the backend service** after adjusting configuration:
-   ```bash
+   ```bash wordWrap
    # Kubernetes
    kubectl rollout restart deployment/opik-backend -n opik
    
@@ -241,7 +241,7 @@ These timeout errors are **expected and transient** during the migration process
 **If errors persist beyond 15-20 minutes:**
 
 1. **Check migration progress in logs:**
-   ```bash
+   ```bash wordWrap
    # Kubernetes
    kubectl logs -n opik deployment/opik-backend -f | grep -i "migration"
    
@@ -250,13 +250,13 @@ These timeout errors are **expected and transient** during the migration process
    ```
 
 2. **Verify ClickHouse is responding:**
-   ```bash
+   ```bash wordWrap
    # Check ClickHouse is healthy
    kubectl exec -it chi-opik-clickhouse-cluster-0-0-0 -- clickhouse-client -q "SELECT 1"
    ```
 
 3. **If ClickHouse is unresponsive, check resources:**
-   ```bash
+   ```bash wordWrap
    # Check ClickHouse CPU and memory usage
    kubectl top pod -n opik | grep clickhouse
    ```
@@ -285,7 +285,7 @@ These timeout errors are **expected and transient** during the migration process
          - DATASET_VERSIONING_MIGRATION_LAZY_ENABLED=true
    ```
    
-   ```yaml
+   ```yaml wordWrap
    # Kubernetes/Helm
    component:
      backend:
@@ -294,7 +294,7 @@ These timeout errors are **expected and transient** during the migration process
    ```
 
 2. **Restart the backend service:**
-   ```bash
+   ```bash wordWrap
    # Kubernetes
    kubectl rollout restart deployment/opik-backend -n opik
    
@@ -305,12 +305,12 @@ These timeout errors are **expected and transient** during the migration process
 3. **Access affected datasets** through the UI or API to trigger lazy migration for those specific datasets.
 
 4. **Monitor logs** for lazy migration activity:
-   ```bash
+   ```bash wordWrap
    kubectl logs -n opik deployment/opik-backend -f | grep -i "lazy.*migration"
    ```
 
 5. **After reconciliation is complete, disable lazy migration:**
-   ```yaml
+   ```yaml wordWrap
    DATASET_VERSIONING_MIGRATION_LAZY_ENABLED: "false"
    ```
 
@@ -330,13 +330,13 @@ These timeout errors are **expected and transient** during the migration process
 **Recovery Steps:**
 
 1. **Verify the exact environment variable name:**
-   ```yaml
+   ```yaml wordWrap
    # Correct variable name
    DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED: "false"
    ```
 
 2. **Check that configuration is applied:**
-   ```bash
+   ```bash wordWrap
    # Kubernetes - check environment variables
    kubectl get pod -n opik -l app=opik-backend -o jsonpath='{.items[0].spec.containers[0].env[*]}'
    
@@ -345,7 +345,7 @@ These timeout errors are **expected and transient** during the migration process
    ```
 
 3. **Ensure backend was restarted after configuration change:**
-   ```bash
+   ```bash wordWrap
    # Kubernetes
    kubectl rollout restart deployment/opik-backend -n opik
    kubectl rollout status deployment/opik-backend -n opik
@@ -355,7 +355,7 @@ These timeout errors are **expected and transient** during the migration process
    ```
 
 4. **Monitor logs to confirm migration is skipped:**
-   ```bash
+   ```bash wordWrap
    kubectl logs -n opik deployment/opik-backend -f | grep -i "migration"
    ```
 
@@ -399,7 +399,7 @@ These timeout errors are **expected and transient** during the migration process
 
 Monitor the backend logs to track migration progress:
 
-```bash
+```bash wordWrap
 # Kubernetes
 kubectl logs -n opik deployment/opik-backend -f | grep -i "migration"
 

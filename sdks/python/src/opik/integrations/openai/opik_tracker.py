@@ -39,6 +39,7 @@ def track_openai(
     * `openai_client.beta.chat.completions.parse()`
     * `openai_client.beta.chat.completions.stream()`
     * `openai_client.responses.create()`
+    * `openai_client.decisions.create()`
     * `openai_client.videos.create()`, `videos.create_and_poll()`, `videos.poll()`,
       `videos.list()`, `videos.delete()`, `videos.remix()`, `videos.download_content()`,
       and `write_to_file()` on downloaded content
@@ -83,6 +84,9 @@ def track_openai(
 
     if hasattr(openai_client, "responses"):
         _patch_openai_responses(openai_client, resolved_provider, project_name)
+
+    if hasattr(openai_client, "decisions"):
+        _patch_openai_decisions(openai_client, resolved_provider, project_name)
 
     if hasattr(openai_client, "videos"):
         _patch_openai_videos(openai_client, resolved_provider, project_name)
@@ -186,6 +190,28 @@ def _patch_openai_responses(
         openai_client.responses.parse = responses_parse_decorator(
             openai_client.responses.parse
         )
+
+
+def _patch_openai_decisions(
+    openai_client: OpenAIClient,
+    provider: str,
+    project_name: Optional[str],
+) -> None:
+    from . import openai_decisions_decorator
+
+    decisions_decorator_factory = (
+        openai_decisions_decorator.OpenaiDecisionsTrackDecorator()
+    )
+    decisions_decorator_factory.provider = provider
+
+    decisions_create_decorator = decisions_decorator_factory.track(
+        type="llm",
+        name="decisions_create",
+        project_name=project_name,
+    )
+    openai_client.decisions.create = decisions_create_decorator(
+        openai_client.decisions.create
+    )
 
 
 def _patch_openai_videos(

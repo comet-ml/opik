@@ -12,7 +12,7 @@ title: Dialogue helpfulness
 
 `DialogueHelpfulnessJudge` rates how helpful an assistant reply is. It rewards responses that acknowledge the user’s request, use the available context, and offer actionable guidance. The judge only sees the `output` string, so to have it weigh the earlier turns, include them in `output` together with the reply.
 
-```python title="Scoring a support reply"
+```python title="Scoring a support reply" wordWrap
 from opik.evaluation.metrics import DialogueHelpfulnessJudge
 
 dialogue = """USER: My VPN disconnects every 5 minutes.

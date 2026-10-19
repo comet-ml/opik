@@ -23,7 +23,7 @@ just one line of code:
 
 <Tabs>
  <Tab value="Linux / Mac" title="Linux / Mac">
-```bash
+```bash wordWrap
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
@@ -40,7 +40,7 @@ cd opik
 </Tab>
 <Tab value="Windows" title="Windows">
 
-```powershell
+```powershell wordWrap
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
@@ -63,14 +63,14 @@ and all traces logged from your local machine will be logged to this local Opik 
 to be logged to your Opik instance, you need to make sure that the Opik SDK is configured to point to the Opik server
 you just started. You can do this by running the following command:
 
-```bash
+```bash wordWrap
 # Configure the Python SDK to point to the local Opik platform
 opik configure --use_local
 ```
 
 or by setting the `OPIK_URL_OVERRIDE` environment variable, which both the Python and TypeScript SDKs read:
 
-```bash
+```bash wordWrap
 export OPIK_URL_OVERRIDE=http://localhost:5173/api
 ```
 

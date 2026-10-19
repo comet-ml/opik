@@ -10145,6 +10145,16 @@ components:
             description: "Ids whose automatic run already happened, so enrolling has\
               \ no effect"
             format: uuid
+        reset_project_ids:
+          uniqueItems: true
+          type: array
+          description: "Ids whose automatic run never finished, so clearing forgot\
+            \ it and enrolling them again gives it one more free run"
+          items:
+            type: string
+            description: "Ids whose automatic run never finished, so clearing forgot\
+              \ it and enrolling them again gives it one more free run"
+            format: uuid
     Request:
       required:
       - enrolled

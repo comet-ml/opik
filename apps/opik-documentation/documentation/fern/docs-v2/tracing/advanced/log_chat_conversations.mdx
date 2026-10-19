@@ -30,7 +30,7 @@ The `thread_id` is a user-defined identifier that must be unique per project. Al
 You can log chat conversations by specifying the `thread_id` parameter when using either the low level SDK, Python decorators, or integration libraries:
 
 <CodeBlocks>
-    ```typescript title="Typescript SDK" language="typescript"
+    ```typescript title="Typescript SDK" language="typescript" wordWrap
     import { Opik } from "opik";
 
     const client = new Opik({
@@ -51,7 +51,7 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
     });
     ```
 
-    ```python title="Python decorators" language="python"
+    ```python title="Python decorators" language="python" wordWrap
     import opik
     from opik import opik_context
 
@@ -73,7 +73,7 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
     chat_message("What is Opik ?")
     ```
 
-    ```python title="Python SDK"
+    ```python title="Python SDK" wordWrap
     import opik
 
     opik_client = opik.Opik()
@@ -89,7 +89,7 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
     )
     ```
 
-    ```python title="LangGraph integration"
+    ```python title="LangGraph integration" wordWrap
     # LangGraph automatically uses its thread_id as Opik thread_id
     from langgraph.graph import StateGraph
     from opik.integrations.langchain import OpikTracer
@@ -118,7 +118,7 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
     )
     ```
 
-    ```python title="ADK integration"
+    ```python title="ADK integration" wordWrap
     # ADK automatically maps session_id to thread_id
     from opik.integrations.adk import OpikTracer
     from google.adk import sessions as adk_sessions, runners as adk_runners
@@ -153,7 +153,7 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
     )
     ```
 
-    ```python title="OpenAI Agents"
+    ```python title="OpenAI Agents" wordWrap
     # Using trace context manager with group_id for threading
     import uuid
     from agents import trace
@@ -189,7 +189,7 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
 Choose a thread ID strategy that fits your application:
 
 <CodeBlocks>
-    ```python title="User session based"
+    ```python title="User session based" wordWrap
     import uuid
     import opik
 
@@ -205,7 +205,7 @@ Choose a thread ID strategy that fits your application:
     process_user_message("What is Opik ?", opik_args={"trace": {"thread_id": thread_id}})
     ```
 
-    ```python title="UUID based"
+    ```python title="UUID based" wordWrap
     import uuid
     import opik
 
@@ -219,7 +219,7 @@ Choose a thread ID strategy that fits your application:
     start_conversation("What is Opik ?", opik_args={"trace": {"thread_id": thread_id}})
     ```
 
-    ```python title="Timestamp based"
+    ```python title="Timestamp based" wordWrap
     import time
     import opik
 
@@ -240,7 +240,7 @@ Choose a thread ID strategy that fits your application:
 Different integrations handle thread IDs in various ways:
 
 <CodeBlocks>
-    ```python title="LangChain"
+    ```python title="LangChain" wordWrap
     from opik.integrations.langchain import OpikTracer
 
     # Set thread_id at tracer level - applies to all traces
@@ -259,7 +259,7 @@ Different integrations handle thread IDs in various ways:
     )
     ```
 
-    ```python title="LangGraph"
+    ```python title="LangGraph" wordWrap
     from opik.integrations.langchain import OpikTracer
 
     # LangGraph automatically uses its thread_id as Opik thread_id
@@ -272,7 +272,7 @@ Different integrations handle thread IDs in various ways:
     result = compiled_graph.invoke(input_data, config=config)
     ```
 
-    ```python title="OpenAI Agents"
+    ```python title="OpenAI Agents" wordWrap
     import uuid
     from agents import trace
 
@@ -285,7 +285,7 @@ Different integrations handle thread IDs in various ways:
         result2 = await Runner.run(agent, "Follow-up question")
     ```
 
-    ```python title="GenAI"
+    ```python title="GenAI" wordWrap
     from google import genai
     from opik.integrations.genai import track_genai
 
@@ -299,7 +299,7 @@ Different integrations handle thread IDs in various ways:
     )
     ```
 
-    ```python title="OpenAI"
+    ```python title="OpenAI" wordWrap
     import openai
 
     from opik.integrations.openai import track_openai
@@ -412,7 +412,7 @@ to threads regardless of whether new traces are still being added.
 You can also manage threads programmatically using the Opik SDK:
 
 <CodeBlocks>
-    ```python title="Python" language="python"
+    ```python title="Python" language="python" wordWrap
     import opik
 
     # Initialize client

@@ -109,6 +109,10 @@ const parseInputFormat = (
     return { prompt: args.prompt };
   }
 
+  if ("questions" in args) {
+    return { input: args.input, questions: args.questions };
+  }
+
   if ("input" in args) {
     return parseInputField(args.input);
   }
@@ -181,7 +185,20 @@ export const parseCompletionOutput = (
     return extractEmbeddingOutput(res);
   }
 
+  if (isAnswersFormat(res)) {
+    return { answers: res.answers };
+  }
+
   return undefined;
+};
+
+const isAnswersFormat = (res: unknown): res is { answers: unknown[] } => {
+  return Boolean(
+    typeof res === "object" &&
+      res !== null &&
+      "answers" in res &&
+      Array.isArray(res["answers"])
+  );
 };
 
 const isOutputTextFormat = (res: unknown): res is { output_text: string } => {

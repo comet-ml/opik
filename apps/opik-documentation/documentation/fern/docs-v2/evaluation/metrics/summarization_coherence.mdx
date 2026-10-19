@@ -12,7 +12,7 @@ title: Summarization coherence
 
 `SummarizationCoherenceJudge` evaluates the writing quality of a summary: structure, clarity, and logical flow. It complements `SummarizationConsistencyJudge` by focusing on how the summary reads rather than whether it is factual, returning a 0.0–1.0 score derived from a raw 0–10 judgement.
 
-```python title="Improving summary readability"
+```python title="Improving summary readability" wordWrap
 from opik.evaluation.metrics import SummarizationCoherenceJudge
 
 metric = SummarizationCoherenceJudge()
