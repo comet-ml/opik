@@ -4,6 +4,7 @@ import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
+import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
@@ -51,6 +52,7 @@ import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -68,6 +70,7 @@ import org.slf4j.Logger;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -79,7 +82,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -1141,6 +1143,11 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 }
                 """;
 
+        private static final RecursiveComparisonConfiguration SCORE_COMPARISON = RecursiveComparisonConfiguration
+                .builder()
+                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                .build();
+
         private static final String SUITE_RESPONSE = """
                 {"assertion_1": {"score": true, "reason": "polite"}, "assertion_2": {"score": false, "reason": "long"}}
                 """;
@@ -1174,17 +1181,26 @@ class OnlineScoringLlmAsJudgeScorerTest {
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<FeedbackScoreBatchItem>> scoresCaptor = ArgumentCaptor.forClass(List.class);
             verify(feedbackScoreService, times(1)).scoreBatchOfTraces(scoresCaptor.capture());
-            var trace = message.trace();
             assertThat(scoresCaptor.getValue())
-                    .extracting(FeedbackScoreBatchItem::id, FeedbackScoreBatchItem::projectId,
-                            FeedbackScoreBatchItem::projectName, FeedbackScoreBatchItem::categoryName,
-                            FeedbackScoreBatchItem::name, item -> item.value().intValue(),
-                            FeedbackScoreBatchItem::reason)
+                    .usingRecursiveFieldByFieldElementComparator(SCORE_COMPARISON)
                     .containsExactlyInAnyOrder(
-                            tuple(trace.id(), trace.projectId(), trace.projectName(),
-                                    TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY, "Is polite", 1, "polite"),
-                            tuple(trace.id(), trace.projectId(), trace.projectName(),
-                                    TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY, "Is short", 0, "long"));
+                            suiteScore(message, "Is polite", BigDecimal.ONE, "polite"),
+                            suiteScore(message, "Is short", BigDecimal.ZERO, "long"));
+        }
+
+        private FeedbackScoreBatchItem suiteScore(TraceToScoreLlmAsJudge message, String name, BigDecimal value,
+                String reason) {
+            var trace = message.trace();
+            return FeedbackScoreBatchItem.builder()
+                    .id(trace.id())
+                    .projectId(trace.projectId())
+                    .projectName(trace.projectName())
+                    .name(name)
+                    .value(value)
+                    .reason(reason)
+                    .categoryName(TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY)
+                    .source(ScoreSource.ONLINE_SCORING)
+                    .build();
         }
 
         private List<String> judgedModels(int times) {
@@ -1226,13 +1242,13 @@ class OnlineScoringLlmAsJudgeScorerTest {
         }
 
         @ParameterizedTest(name = "status {0}")
-        @ValueSource(ints = {429, 500, 503})
+        @ValueSource(ints = {408, 425, 429, 500, 503})
         void doesNotFallBackOnATransientFailure(int status) {
             var message = suiteMessage(List.of("judge-b"));
             stubJudgeRouting();
             RuntimeException failure = status >= 500
                     ? new jakarta.ws.rs.ServerErrorException("provider down", status)
-                    : new ClientErrorException("rate limited", status);
+                    : new ClientErrorException("try again later", status);
             stubJudge("judge-a", failure);
 
             assertThatThrownBy(() -> scorer.doScore(message).block()).isSameAs(failure);
@@ -1322,17 +1338,13 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
             scorer.onRetired(message, new ClientErrorException("Incorrect API key provided", 401)).block();
 
+            var reason = "Not evaluated: the LLM judge failed (judge models: judge-a, judge-b)."
+                    + " Incorrect API key provided";
             assertThat(scoresCaptor.getValue())
-                    .extracting(FeedbackScoreBatchItem::name)
-                    .containsExactly("Is polite", "Is short");
-            assertThat(scoresCaptor.getValue()).allSatisfy(item -> {
-                assertThat(item.id()).isEqualTo(message.trace().id());
-                assertThat(item.value()).isEqualByComparingTo("0");
-                assertThat(item.categoryName()).isEqualTo(TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY);
-                assertThat(item.reason())
-                        .contains("judge-a, judge-b")
-                        .contains("Incorrect API key provided");
-            });
+                    .usingRecursiveFieldByFieldElementComparator(SCORE_COMPARISON)
+                    .containsExactly(
+                            suiteScore(message, "Is polite", BigDecimal.ZERO, reason),
+                            suiteScore(message, "Is short", BigDecimal.ZERO, reason));
             verify(testSuiteAssertionCounterService, times(1))
                     .decrementAndFinishIfComplete(message.workspaceId(), message.experimentId());
         }
