@@ -1,4 +1,4 @@
-export { test, expect } from './new-provider-cost-spans.fixture';
+export { test, expect } from './outer-prompt-tokens-spans.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -381,4 +381,19 @@ export type {
   NewProviderCostSpansRef,
   NewProviderCostSpansFixtures,
 } from './new-provider-cost-spans.fixture';
+export type {
+  CrossShapeCacheVector,
+  CrossShapeCacheSpansRef,
+  CrossShapeCacheSpansFixtures,
+} from './cross-shape-cache-spans.fixture';
+export type {
+  LitellmCacheShadowSpanSeed,
+  LitellmCacheShadowSpansRef,
+  LitellmCacheShadowSpansFixtures,
+} from './litellm-cache-shadow-spans.fixture';
+export type {
+  OuterPromptTokensSpanSeed,
+  OuterPromptTokensSpansRef,
+  OuterPromptTokensSpansFixtures,
+} from './outer-prompt-tokens-spans.fixture';
 export type { ProjectRef } from '../core/backend';
