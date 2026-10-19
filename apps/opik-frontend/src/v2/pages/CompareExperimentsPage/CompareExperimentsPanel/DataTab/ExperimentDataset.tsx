@@ -15,8 +15,6 @@ import ExperimentDatasetItems from "@/v2/pages/CompareExperimentsPage/CompareExp
 import useLocalStorageState from "use-local-storage-state";
 import difference from "lodash/difference";
 import union from "lodash/union";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
-import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { useLocation } from "@tanstack/react-router";
 import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
@@ -116,9 +114,6 @@ const ExperimentDataset = ({ data, datasetItemId }: ExperimentDatasetProps) => {
       <div className="flex items-center justify-between gap-2 pb-4">
         <div className="flex min-w-0 shrink items-center gap-1">
           <h4 className="comet-body-accented truncate">Dataset item</h4>
-          <ExplainerIcon
-            {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_dataset_item]}
-          />
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {datasetItemId && (

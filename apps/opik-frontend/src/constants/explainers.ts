@@ -26,7 +26,6 @@ export enum EXPLAINER_ID {
   what_are_experiment_items = "what_are_experiment_items",
   whats_the_experiment_configuration = "whats_the_experiment_configuration",
   what_does_it_mean_to_compare_my_experiments = "what_does_it_mean_to_compare_my_experiments",
-  whats_the_dataset_item = "whats_the_dataset_item",
   whats_a_test_suite = "whats_a_test_suite",
   why_do_i_need_multiple_test_suites = "why_do_i_need_multiple_test_suites",
   what_format_is_this_to_add_my_test_suite_item = "what_format_is_this_to_add_my_test_suite_item",
@@ -254,12 +253,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
       "Compare experiments to understand how changes to prompts, models, or rules impact performance. Select at least two experiments from the same item source to get started.",
     type: "help",
   },
-  [EXPLAINER_ID.whats_the_dataset_item]: {
-    id: EXPLAINER_ID.whats_the_dataset_item,
-    description:
-      "Dataset items are individual input samples in an experiment, each representing a test case your LLM app processes and evaluates.",
-    type: "help",
-  },
   [EXPLAINER_ID.whats_a_test_suite]: {
     id: EXPLAINER_ID.whats_a_test_suite,
     description:
@@ -424,7 +417,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_are_trial_items]: {
     id: EXPLAINER_ID.what_are_trial_items,
     description:
-      "Trial items are item source samples processed during a trial. Each one generates an output and score that contribute to the trial's results.",
+      "Trial items are test suite samples processed during a trial. Each one generates an output and score that contribute to the trial's results.",
   },
   [EXPLAINER_ID.whats_the_evaluation_run_configuration]: {
     id: EXPLAINER_ID.whats_the_evaluation_run_configuration,
