@@ -47,7 +47,7 @@ Add the `{cluster}` macro to your ClickHouse configuration file. The location de
 
 Add the macros to `/etc/clickhouse-server/config.d/macros.xml` (or your equivalent config directory):
 
-```xml
+```xml wordWrap
 <clickhouse>
     <macros>
         <cluster>single_node_cluster</cluster>
@@ -69,7 +69,7 @@ After adding the configuration, restart ClickHouse for the changes to take effec
 
 You can verify the macro is configured by connecting to ClickHouse and running:
 
-```sql
+```sql wordWrap
 SELECT * FROM system.macros WHERE macro = 'cluster';
 ```
 
@@ -118,7 +118,7 @@ A default self-hosted or open-source install has both settings `false` and the `
 
 Start from the health check message — it names both the setting and the engine it actually found. The readiness endpoint does not carry it (`/health-check` returns the verdict only), so read it from the admin connector, which listens on `SERVER_ADMIN_PORT` (8081 by default):
 
-```bash
+```bash wordWrap
 # Kubernetes — the Helm chart's Service does not expose the admin port, so forward it.
 # Substitute your namespace; every command below assumes the same one. The workload is named after
 # the chart rather than the release, so it stays `opik-backend` unless you set `nameOverride`.
@@ -137,7 +137,7 @@ Then make the setting and the table agree.
 
 Check what the tables really are. Substitute `<database_name>` with your `ANALYTICS_DB_DATABASE_NAME` — `opik` is only the default, and querying the wrong database returns no rows, which looks like the tables are missing:
 
-```sql
+```sql wordWrap
 SELECT name, engine FROM system.tables
 WHERE database = '<database_name>'
   AND name IN ('traces', 'traces_local', 'spans', 'spans_local');
@@ -147,7 +147,7 @@ WHERE database = '<database_name>'
   `system.tables` is node-local, and so is the health check: both answer for the **one replica that served the query**. The backend reaches ClickHouse through a load-balanced service, so if the failure is intermittent — some probes healthy, some not, pods flapping rather than all staying unready — the replicas disagree with each other and the flag is not what is wrong. Confirm with the cluster-wide form below, and fix the lagging replica rather than the flag.
 </Callout>
 
-```sql
+```sql wordWrap
 -- Same lookup, every replica. Compare down each table separately: one table's engine must be
 -- the same on every host. A table and its `_local` shard are expected to differ from each
 -- other: after the wrap `traces` is `Distributed` and `traces_local` is a
@@ -278,7 +278,7 @@ Only do this when the schema genuinely matches the changelog. Re-baselining asse
 - Every changeset in the pending list corresponds to an object that already exists — spot-check the most recent few, not just the first.
 - For ClickHouse (`dbAnalytics`, the default) on a multi-replica cluster, check **every** replica, not just the one you are connected to. A partially restored replica can look complete at the table level while its replicated tables are stale. `system.replicas` only reflects the node you are connected to, so query it cluster-wide:
 
-  ```sql
+  ```sql wordWrap
   -- Any replica that cannot accept writes is not settled.
   SELECT hostName() AS host, database, table, is_readonly, absolute_delay
   FROM clusterAllReplicas('{cluster}', system.replicas)
@@ -307,7 +307,7 @@ For ClickHouse the script enforces the coarse version of this itself: it counts 
 
     On Kubernetes:
 
-    ```bash
+    ```bash wordWrap
     NS=<your namespace>
 
     # Take the image from the failing deployment rather than using a floating tag —
@@ -328,7 +328,7 @@ For ClickHouse the script enforces the coarse version of this itself: it counts 
 
     On Docker Compose:
 
-    ```bash
+    ```bash wordWrap
     docker compose run --rm --entrypoint bash opik-backend
     ```
 
@@ -347,7 +347,7 @@ For ClickHouse the script enforces the coarse version of this itself: it counts 
   <Step>
     Review what would change, without writing anything:
 
-    ```bash
+    ```bash wordWrap
     ./rebaseline_db_changelog.sh --dry-run
     ```
 
@@ -356,7 +356,7 @@ For ClickHouse the script enforces the coarse version of this itself: it counts 
   <Step>
     Re-baseline the analytics changelog:
 
-    ```bash
+    ```bash wordWrap
     ./rebaseline_db_changelog.sh
     ```
 
@@ -377,7 +377,7 @@ None of these refusals apply to `--dry-run`, which reports without writing and s
 
 If you prefer to run the underlying commands directly, these are the Dropwizard migration commands the script drives:
 
-```bash
+```bash wordWrap
 java -jar opik-backend-$OPIK_VERSION.jar dbAnalytics status --verbose config.yml
 java -jar opik-backend-$OPIK_VERSION.jar dbAnalytics fast-forward --all config.yml
 ```
@@ -418,7 +418,7 @@ Follow these steps to restore ClickHouse table metadata in Zookeeper:
 
 If only some table paths are missing in Zookeeper, you'll need to delete the existing paths manually. Connect to the Zookeeper pod and use the Zookeeper CLI:
 
-```bash
+```bash wordWrap
 # Connect to Zookeeper pod
 kubectl exec -it cometml-production-opik-zookeeper-0 -- zkCli.sh -server localhost:2181
 
@@ -434,7 +434,7 @@ deleteall /clickhouse/tables
 
 Restart the ClickHouse pods so they become aware that Zookeeper no longer has the metadata:
 
-```bash
+```bash wordWrap
 kubectl rollout restart statefulset/chi-opik-clickhouse-cluster-0-0
 ```
 
@@ -442,7 +442,7 @@ kubectl rollout restart statefulset/chi-opik-clickhouse-cluster-0-0
 
 Connect to the first ClickHouse replica and restore the replica definitions for each table:
 
-```bash
+```bash wordWrap
 # Connect to the first ClickHouse replica
 kubectl exec -it chi-opik-clickhouse-cluster-0-0-0 -- clickhouse-client
 ```
@@ -453,7 +453,7 @@ kubectl exec -it chi-opik-clickhouse-cluster-0-0-0 -- clickhouse-client
 
 Run the `SYSTEM RESTORE REPLICA` command for each table:
 
-```sql
+```sql wordWrap
 -- Restore system tables
 SYSTEM RESTORE REPLICA default.DATABASECHANGELOG;
 SYSTEM RESTORE REPLICA default.DATABASECHANGELOGLOCK;
@@ -493,7 +493,7 @@ Restart ClickHouse again to ensure it:
 - Verifies and synchronizes the newly restored metadata
 - Automatically resumes normal replication operations
 
-```bash
+```bash wordWrap
 kubectl rollout restart statefulset/chi-opik-clickhouse-cluster-0-0
 ```
 
@@ -501,7 +501,7 @@ kubectl rollout restart statefulset/chi-opik-clickhouse-cluster-0-0
 
 After the restart completes, verify that the replica status is healthy:
 
-```sql
+```sql wordWrap
 -- Check table creation
 SHOW CREATE TABLE opik.attachments;
 
@@ -517,7 +517,7 @@ FROM system.replicas;
 
 You can also verify from the Zookeeper side:
 
-```bash
+```bash wordWrap
 # Connect to Zookeeper CLI
 kubectl exec -it cometml-production-opik-zookeeper-0 -- zkCli.sh -server localhost:2181
 
@@ -559,7 +559,7 @@ Clients calling `POST /api/v1/private/spans/batch` (or `/traces/batch`) receive 
 
 #### Diagnose first
 
-```sql
+```sql wordWrap
 -- Active parts per node and table: is the count high and growing?
 SELECT hostName() AS host, table, count() AS active_parts
 FROM clusterAllReplicas('{cluster}', system.parts)
@@ -609,7 +609,7 @@ With `async_insert=1`, each server-side flush becomes a new part. A short busy-t
 
 To reduce fragmentation for high-volume deployments, widen the flush window (fewer, larger parts) via these opik-backend environment variables:
 
-```bash
+```bash wordWrap
 ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS=2000   # ceiling of the adaptive flush window (ms); e.g. 1000–3000
 ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS=1000   # floor of the adaptive flush window (ms); keep below max
 ANALYTICS_DB_ASYNC_INSERT_MAX_DATA_SIZE=52428800     # buffered bytes that force a flush; larger = fewer parts
@@ -633,7 +633,7 @@ Work from least to most invasive: the threshold bump (step 1) and diagnosis (ste
   <Step>
     **Restore ingestion immediately (reversible, no data loss).** Temporarily raise the throw threshold so inserts succeed while you fix the root cause:
 
-    ```sql
+    ```sql wordWrap
     ALTER TABLE <database_name>.<table> ON CLUSTER '{cluster}' MODIFY SETTING parts_to_throw_insert = 20000, parts_to_delay_insert = 20000;
     ```
 
@@ -648,7 +648,7 @@ Work from least to most invasive: the threshold bump (step 1) and diagnosis (ste
   <Step>
     **Try to recover the corrupt source parts.** If a part is still intact on another replica, `DETACH` the corrupt local copy (never `DROP`) — ClickHouse then re-fetches the good copy from a healthy replica, which lets the blocked merge complete. Detached parts are preserved under the table's `detached/` directory.
 
-    ```sql
+    ```sql wordWrap
     ALTER TABLE <database_name>.<table> DETACH PART 'all_1_100_5';
     -- repeat for each corrupt part named in the exception
     ```
@@ -719,28 +719,28 @@ If you cannot upgrade, re-own the volume by hand:
 
 <Steps>
   <Step title="Stop the stack">
-    ```bash
+    ```bash wordWrap
     ./opik.sh --stop
     ```
 
     On Windows, use `.\opik.ps1 --stop`. If you run Opik with plain `docker compose`, stop it the way you normally do, e.g. `docker compose -p <project> -f deployment/docker-compose/docker-compose.yaml down`. The `docker` commands on this page are identical on all platforms.
   </Step>
   <Step title="Find the volume name">
-    ```bash
+    ```bash wordWrap
     docker volume ls --filter label=com.docker.compose.volume=minio-data --format '{{.Name}}\t{{.Label "com.docker.compose.project"}}'
     ```
 
     This lists every Opik MinIO volume with the Compose project it belongs to, whether or not the stack is running. Pick the one for the stack you run: `opik.sh` names its project `opik-<checkout directory>`, so a default installation in `opik/` gives `opik-opik_minio-data`. The next step calls it `<volume>`.
   </Step>
   <Step title="Re-own the volume">
-    ```bash
+    ```bash wordWrap
     docker run --rm -v <volume>:/data alpine chown -R 1001:1001 /data
     ```
 
     This changes ownership only. Nothing stored in the volume is modified or removed.
   </Step>
   <Step title="Start Opik again">
-    ```bash
+    ```bash wordWrap
     ./opik.sh
     ```
 
@@ -758,7 +758,7 @@ Do not delete the volume to get past this error. Removing `minio-data` discards 
 
 Connect directly to ClickHouse pods for diagnostics:
 
-```bash
+```bash wordWrap
 # Connect to first replica
 kubectl exec -it chi-opik-clickhouse-cluster-0-0-0 -- clickhouse-client
 
@@ -770,7 +770,7 @@ kubectl exec -it chi-opik-clickhouse-cluster-0-1-0 -- clickhouse-client
 
 Connect directly to Zookeeper pods:
 
-```bash
+```bash wordWrap
 # Connect to Zookeeper pod
 kubectl exec -it cometml-production-opik-zookeeper-0 -- bash
 
@@ -780,7 +780,7 @@ zkCli.sh -server localhost:2181
 
 Common Zookeeper commands:
 
-```bash
+```bash wordWrap
 # List tables in Zookeeper
 kubectl exec -it cometml-production-opik-zookeeper-0 -- \
   zkCli.sh -server localhost:2181 ls /clickhouse/tables/0/opik

@@ -14,7 +14,7 @@ Opik provides a set of LLM as a Judge metrics that are designed to be model-agno
 
 By default, Opik will use the `gpt-5-nano` model. However, you can change this by setting the `model` parameter when initializing your metric to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers):
 
-```python
+```python wordWrap
 from opik.evaluation.metrics import Hallucination
 
 hallucination_metric = Hallucination(
@@ -26,7 +26,7 @@ hallucination_metric = Hallucination(
 
 In order to use many models supported by LiteLLM, you also need to pass additional parameters. For this, you can use the [LiteLLMChatModel](https://www.comet.com/docs/opik/python-sdk-reference/Objects/LiteLLMChatModel.html) class and passing it to the metric:
 
-```python
+```python wordWrap
 from opik.evaluation.metrics import Hallucination
 from opik.evaluation import models
 
@@ -50,7 +50,7 @@ Set `OPENAI_API_KEY` to your provider's API key and `OPENAI_BASE_URL` to the pro
 {/* Example based on LiteLLM's OpenAI-compatible provider pattern.
     See: https://docs.litellm.ai/docs/providers/openai_compatible */}
 
-```python
+```python wordWrap
 import os
 from opik.evaluation.metrics import Hallucination
 
@@ -94,7 +94,7 @@ Opik's LLM-as-a-Judge metrics, such as [`Hallucination`](https://www.comet.com/d
 
 Here's an example of a custom model class that interacts with an LLM service exposing an OpenAI-compatible API endpoint.
 
-```python
+```python wordWrap
 import requests
 from typing import Any
 
@@ -153,7 +153,7 @@ In order to run an evaluation using your Custom Model with the [`Hallucination`]
 you will first need to instantiate our `CustomOpenAICompatibleModel` class and pass it to the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) class.
 The evaluation can then be kicked off by calling the [`Hallucination.score()`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html)` method.
 
-```python
+```python wordWrap
 from opik.evaluation.metrics import Hallucination
 
 # Ensure these are set securely, e.g., via environment variables
@@ -195,7 +195,7 @@ The TypeScript SDK integrates seamlessly with the Vercel AI SDK, allowing you to
 
 For unsupported LLM providers, implement the `OpikBaseModel` interface:
 
-```typescript
+```typescript wordWrap
 import { OpikBaseModel, OpikMessage } from "opik/evaluation/models";
 
 class CustomProviderModel extends OpikBaseModel {
@@ -251,7 +251,7 @@ class CustomProviderModel extends OpikBaseModel {
 
 Once implemented, use your custom model like any other:
 
-```typescript
+```typescript wordWrap
 import { Hallucination } from "opik";
 import { evaluatePrompt } from "opik";
 

@@ -1,10 +1,12 @@
 package com.comet.opik.infrastructure.redis;
 
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.domain.AgentInsightsReportMessage;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
@@ -22,8 +24,12 @@ import org.redisson.config.Config;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -331,4 +337,51 @@ class RedisStreamCodecTest {
     record SamplePayload(String name, int value) {
     }
 
+    private static AgentInsightsReportMessage agentInsightsMessage() {
+        Instant periodEnd = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+        return AgentInsightsReportMessage.builder()
+                .reportId(UUID.randomUUID().toString())
+                .projectId(UUID.randomUUID())
+                .workspaceId(UUID.randomUUID().toString())
+                .periodStart(periodEnd.minus(1, ChronoUnit.DAYS))
+                .periodEnd(periodEnd)
+                .triggerSource("scheduled")
+                .guidance("Ignore retries")
+                .guidanceVersion(2)
+                .build();
+    }
+
+    @Test
+    @DisplayName("An Agent Insights message queued before guidance existed decodes, with no guidance")
+    void agentInsightsMessageWithoutGuidanceFieldsDecodes() throws Exception {
+        ObjectMapper mapper = RedisStreamCodec.buildStreamMapper();
+        var message = agentInsightsMessage();
+        var legacy = (ObjectNode) mapper.readTree(mapper.writeValueAsString(message));
+        // Whatever naming the stream mapper uses, drop every guidance property the older producer never wrote.
+        var guidanceFields = new ArrayList<String>();
+        legacy.fieldNames().forEachRemaining(name -> {
+            if (name.toLowerCase().startsWith("guidance")) {
+                guidanceFields.add(name);
+            }
+        });
+        assertThat(guidanceFields).hasSize(2);
+        legacy.remove(guidanceFields);
+
+        var decoded = mapper.readValue(mapper.writeValueAsString(legacy), AgentInsightsReportMessage.class);
+
+        assertThat(decoded).isEqualTo(message.toBuilder().guidance(null).guidanceVersion(null).build());
+    }
+
+    @Test
+    @DisplayName("An Agent Insights message carrying a field this version does not know still decodes")
+    void agentInsightsMessageWithUnknownFieldDecodes() throws Exception {
+        ObjectMapper mapper = RedisStreamCodec.buildStreamMapper();
+        var message = agentInsightsMessage();
+        var newer = (ObjectNode) mapper.readTree(mapper.writeValueAsString(message));
+        newer.put("fieldFromANewerVersion", "value");
+
+        var decoded = mapper.readValue(mapper.writeValueAsString(newer), AgentInsightsReportMessage.class);
+
+        assertThat(decoded).isEqualTo(message);
+    }
 }

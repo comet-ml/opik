@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Min;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Getter;
+import lombok.NonNull;
 
 import java.util.Arrays;
 import java.util.Objects;
@@ -40,6 +41,14 @@ public class CustomChartsConfig {
                 .map(String::strip)
                 .filter(workspaceId -> !workspaceId.isEmpty())
                 .collect(Collectors.toUnmodifiableSet());
+    }
+
+    /**
+     * Whether the workspace may use Custom Charts: Ollie is on and the workspace is allowlisted. The one check behind
+     * the chart endpoints and the UI toggle, so they cannot drift apart.
+     */
+    public boolean isEnabledFor(@NonNull ServiceTogglesConfig serviceToggles, @NonNull String workspaceId) {
+        return serviceToggles.isOllieEnabled() && enabledWorkspaceIds().contains(workspaceId);
     }
 
     /**

@@ -10,6 +10,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.With;
 
@@ -68,6 +69,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean agentInsightsEnabled = true;
     @JsonProperty
+    @NotNull boolean agentInsightsGuidanceEnabled;
+    @JsonProperty
     @NotNull boolean projectHomepageEnabled;
     @JsonProperty
     @NotNull boolean onlineScoringTracingEnabled;
@@ -79,13 +82,20 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @Min(5) @Max(100) int defaultPageSize;
 
-    // Not configured here: the toggles endpoint sets it for the caller's workspace from customCharts.enabledWorkspaces.
+    // Set per request by the toggles endpoint, never from config. No getter: the shared instance always holds false,
+    // so the code checks CustomChartsConfig.isEnabledFor instead.
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     @With
+    @Getter(AccessLevel.NONE)
     boolean customChartsEnabledForWorkspace;
 
     @JsonIgnore
     public boolean isAgentInsightsActive() {
         return ollieEnabled && agentInsightsEnabled;
+    }
+
+    @JsonIgnore
+    public boolean isAgentInsightsGuidanceActive() {
+        return isAgentInsightsActive() && agentInsightsGuidanceEnabled;
     }
 }
