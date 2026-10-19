@@ -13,7 +13,7 @@ const DATASET_ITEM_ID = "item-1";
 let experimentStatus: string;
 let finishedAt: string | null;
 let createdAt: string;
-/** When the rows and the finish stamp were each read, which the hook orders against each other. */
+/** The hook orders the rows and finish-stamp reads by these timestamps. */
 let rowsReadAt: number;
 let experimentReadAt: number;
 
@@ -35,8 +35,13 @@ vi.mock("@/api/datasets/useExperimentById", () => ({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let rows: any[];
 
+const compareExperimentsSpy: Mock = vi.fn(() => ({
+  data: { content: rows },
+  dataUpdatedAt: rowsReadAt,
+}));
+
 vi.mock("@/api/datasets/useCompareExperimentsList", () => ({
-  default: () => ({ data: { content: rows }, dataUpdatedAt: rowsReadAt }),
+  default: (...args: unknown[]) => compareExperimentsSpy(...args),
 }));
 
 vi.mock("@/store/AppStore", () => ({
@@ -152,6 +157,61 @@ describe("usePlaygroundExperimentItem", () => {
     const { result } = renderItem();
 
     await waitFor(() => expect(result.current.notRun).toBe(true));
+  });
+
+  // Both queries pending, which is what the cell shows before either has answered. A row still
+  // being processed must not read as one the run never reached.
+  it("should report a row as still loading while nothing has answered yet", async () => {
+    experimentByIdSpy.mockReturnValueOnce({
+      data: undefined,
+      dataUpdatedAt: 0,
+    });
+    compareExperimentsSpy.mockReturnValueOnce({
+      data: undefined,
+      dataUpdatedAt: 0,
+    });
+
+    const { result } = renderItem();
+
+    expect(result.current.hasItem).toBe(false);
+    expect(result.current.notRun).toBe(false);
+  });
+
+  // The rows read has two ways to stop, and both run through the finish stamp rather than the
+  // status, so a regression in hasFinished would leave this polling with nothing to notice it.
+  describe("how long the rows keep being read for", () => {
+    const rowsInterval = (
+      content: unknown[] = rows,
+      updatedAt = rowsReadAt,
+    ) => {
+      renderItem();
+      const options = compareExperimentsSpy.mock.calls.at(-1)?.[1];
+      return options?.refetchInterval?.({
+        state: { data: { content }, dataUpdatedAt: updatedAt },
+      });
+    };
+
+    it("should stop once this row has its item", () => {
+      finishedAt = null;
+      createdAt = new Date().toISOString();
+
+      const withItem = [
+        { experiment_items: [{ dataset_item_id: DATASET_ITEM_ID }] },
+      ];
+
+      expect(rowsInterval(withItem)).toBe(false);
+    });
+
+    it("should stop once the rows were read after the run finished", () => {
+      expect(rowsInterval([], experimentReadAt + 1_000)).toBe(false);
+    });
+
+    it("should keep reading while the row is absent and the run may still be landing", () => {
+      finishedAt = null;
+      createdAt = new Date().toISOString();
+
+      expect(rowsInterval([])).toBe(3000);
+    });
   });
 
   // The cases above prove the cell stops waiting. This is the other half of the same read: a run
