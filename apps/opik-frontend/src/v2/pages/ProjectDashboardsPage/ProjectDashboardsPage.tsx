@@ -109,12 +109,20 @@ const ProjectDashboardsContent: React.FunctionComponent<
       projectIds: [projectId],
       dateRange: dateRangeValue,
       dashboardType: dashboard?.type,
+      dashboardId: dashboard?.id,
+      dashboardScope: DASHBOARD_SCOPE.INSIGHTS,
     });
 
     return () => {
       setRuntimeConfig({});
     };
-  }, [projectId, dateRangeValue, dashboard?.type, setRuntimeConfig]);
+  }, [
+    projectId,
+    dateRangeValue,
+    dashboard?.type,
+    dashboard?.id,
+    setRuntimeConfig,
+  ]);
 
   const handleDashboardCreated = useCallback(
     (newDashboardId: string) => {

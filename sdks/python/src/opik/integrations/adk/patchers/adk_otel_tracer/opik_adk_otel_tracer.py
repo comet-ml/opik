@@ -1,7 +1,19 @@
+import contextlib
+import contextvars
 import logging
-from typing import Callable, ContextManager, Iterator, Optional, Tuple
+from typing import (
+    Any,
+    Callable,
+    ContextManager,
+    Iterator,
+    Mapping,
+    Optional,
+    Tuple,
+    Union,
+)
 
 import opentelemetry.trace
+import opentelemetry.util.types
 import opik
 import opik.context_storage
 from opik.api_objects import trace, span
@@ -16,6 +28,16 @@ from . import llm_span_helpers
 
 
 LOGGER = logging.getLogger(__name__)
+
+# The OTel SDK Tracer implements start_as_current_span by calling
+# self.start_span, which is patched to OpikADKOtelTracer.start_span. Without this
+# flag, every span delegated to a real SDK Tracer (as ADK's tracer is under
+# `adk api_server`) would get Opik bookkeeping twice.
+_ENTERING_INNER_START_AS_CURRENT_SPAN: contextvars.ContextVar[bool] = (
+    contextvars.ContextVar(
+        "opik_adk_entering_inner_start_as_current_span", default=False
+    )
+)
 
 
 class OpikADKOtelTracer:
@@ -87,11 +109,27 @@ class OpikADKOtelTracer:
         record_exception: bool = True,
         set_status_on_exception: bool = True,
     ) -> "opentelemetry.trace.Span":
-        # Delegate to the original ADK tracer so user-configured OTel exporters
-        # (Cloud Trace, Jaeger, etc.) still receive the span. ADK does not call
-        # this method for any span Opik needs to track today, so no Opik-side
-        # bookkeeping is required here.
-        return self._inner_start_span(
+        # google-adk >= 2.12.0 opens agent (`invoke_agent ...`) and workflow
+        # spans with start_span + an explicit span.end() instead of
+        # start_as_current_span, so the Opik trace/span has to be opened here
+        # and closed when ADK ends the returned span.
+        if (
+            name in self._ADK_INTERNAL_SPAN_NAME_SKIP_LIST
+            or _ENTERING_INNER_START_AS_CURRENT_SPAN.get()
+        ):
+            return self._inner_start_span(
+                name,
+                context=context,
+                kind=kind,
+                attributes=attributes,
+                links=links,
+                start_time=start_time,
+                record_exception=record_exception,
+                set_status_on_exception=set_status_on_exception,
+            )
+
+        # Delegate first so a failure here leaves no Opik trace/span open.
+        inner_span = self._inner_start_span(
             name,
             context=context,
             kind=kind,
@@ -100,6 +138,16 @@ class OpikADKOtelTracer:
             start_time=start_time,
             record_exception=record_exception,
             set_status_on_exception=set_status_on_exception,
+        )
+        trace_to_close, span_to_close = self._start_opik_span_or_trace(name)
+        return _OpikFinalizingSpan(
+            inner_span=inner_span,
+            on_exception=lambda exception: _record_error_info(
+                trace_to_close, span_to_close, exception
+            ),
+            on_end=lambda exited_normally: self._finalize_opik_span_or_trace(
+                trace_to_close, span_to_close, exited_normally
+            ),
         )
 
     @opentelemetry.util._decorator._agnosticcontextmanager
@@ -132,10 +180,51 @@ class OpikADKOtelTracer:
                 yield inner_span
             return
 
-        trace_to_close_in_finally_block = None
-        span_to_close_in_finally_block = None
+        trace_to_close_in_finally_block, span_to_close_in_finally_block = (
+            self._start_opik_span_or_trace(name)
+        )
         exited_normally = False
 
+        try:
+            with contextlib.ExitStack() as exit_stack:
+                inner_span = _enter_without_start_span_bookkeeping(
+                    exit_stack,
+                    self._inner_start_as_current_span(
+                        name,
+                        context=context,
+                        kind=kind,
+                        attributes=attributes,
+                        links=links,
+                        start_time=start_time,
+                        record_exception=record_exception,
+                        set_status_on_exception=set_status_on_exception,
+                        end_on_exit=end_on_exit,
+                    ),
+                )
+                yield inner_span
+            exited_normally = True
+        except Exception as exception:
+            # The expected exception here is the exception that happened during the agent
+            # execution and was re-raised from the `opentelemetry.util._decorator._agnosticcontextmanagergenerator`s
+            # `__exit__` method via the `gen.throw(...)` statement.
+            #
+            # More context: https://docs.python.org/3.12/reference/expressions.html#examples
+            _record_error_info(
+                trace_to_close_in_finally_block,
+                span_to_close_in_finally_block,
+                exception,
+            )
+            raise
+        finally:
+            self._finalize_opik_span_or_trace(
+                trace_to_close_in_finally_block,
+                span_to_close_in_finally_block,
+                exited_normally,
+            )
+
+    def _start_opik_span_or_trace(
+        self, name: str
+    ) -> Tuple[Optional[trace.TraceData], Optional[span.SpanData]]:
         self._finalize_llm_spans_skipped_by_after_model_callback()
 
         current_trace_data = opik.context_storage.get_trace_data()
@@ -162,80 +251,53 @@ class OpikADKOtelTracer:
                     )
             current_span_data = opik.context_storage.top_span_data()
 
-        try:
-            trace_to_close_in_finally_block, span_to_close_in_finally_block = (
-                _prepare_trace_and_span_to_be_finalized(
-                    name=name,
-                    current_trace_data=current_trace_data,
-                    current_span_data=current_span_data,
-                    distributed_headers=self._distributed_headers,
+        return _prepare_trace_and_span_to_be_finalized(
+            name=name,
+            current_trace_data=current_trace_data,
+            current_span_data=current_span_data,
+            distributed_headers=self._distributed_headers,
+        )
+
+    def _finalize_opik_span_or_trace(
+        self,
+        trace_to_close: Optional[trace.TraceData],
+        span_to_close: Optional[span.SpanData],
+        exited_normally: bool,
+    ) -> None:
+        self._finalize_llm_spans_skipped_by_after_model_callback()
+
+        if trace_to_close is not None:
+            self._ensure_trace_is_finalized(trace_to_close.id)
+
+        if span_to_close is not None:
+            # ADK ends its inference span (`generate_content {model}`) as soon
+            # as it records the final response, before running
+            # after_model_callback (google.adk.telemetry._instrumentation.
+            # record_llm_response, seen in google-adk 2.9.2). Finalizing the LLM
+            # span on that normal exit would send it without output and usage,
+            # and that copy races after_model_callback's complete one
+            # downstream. So on a normal exit the span is left on the stack
+            # for after_model_callback. If that callback never runs, the next
+            # span boundary finalizes the span. On any non-normal exit
+            # (exception or cancellation) there may be no after_model_callback,
+            # so the span is finalized here as before.
+            if exited_normally and (
+                llm_span_helpers.is_externally_created_llm_span_that_just_started(
+                    span_to_close
                 )
-            )
-
-            with self._inner_start_as_current_span(
-                name,
-                context=context,
-                kind=kind,
-                attributes=attributes,
-                links=links,
-                start_time=start_time,
-                record_exception=record_exception,
-                set_status_on_exception=set_status_on_exception,
-                end_on_exit=end_on_exit,
-            ) as inner_span:
-                yield inner_span
-            exited_normally = True
-        except Exception as exception:
-            # The expected exception here is the exception that happened during the agent
-            # execution and was re-raised from the `opentelemetry.util._decorator._agnosticcontextmanagergenerator`s
-            # `__exit__` method via the `gen.throw(...)` statement.
-            #
-            # More context: https://docs.python.org/3.12/reference/expressions.html#examples
-            error_info = error_info_collector.collect(exception)
-
-            if trace_to_close_in_finally_block is not None:
-                trace_to_close_in_finally_block.update(error_info=error_info)
-            if span_to_close_in_finally_block is not None:
-                span_to_close_in_finally_block.update(error_info=error_info)
-            raise
-        finally:
-            self._finalize_llm_spans_skipped_by_after_model_callback()
-
-            if trace_to_close_in_finally_block is not None:
-                self._ensure_trace_is_finalized(trace_to_close_in_finally_block.id)
-
-            if span_to_close_in_finally_block is not None:
-                # ADK ends its inference span (`generate_content {model}`) as soon
-                # as it records the final response, before running
-                # after_model_callback (google.adk.telemetry._instrumentation.
-                # record_llm_response, seen in google-adk 2.9.2). Finalizing the LLM
-                # span on that normal exit would send it without output and usage,
-                # and that copy races after_model_callback's complete one
-                # downstream. So on a normal exit the span is left on the stack
-                # for after_model_callback. If that callback never runs, the next
-                # span boundary finalizes the span. On any non-normal exit
-                # (exception or cancellation) there may be no after_model_callback,
-                # so the span is finalized here as before.
-                if exited_normally and (
-                    llm_span_helpers.is_externally_created_llm_span_that_just_started(
-                        span_to_close_in_finally_block
-                    )
-                ):
-                    span_to_close_in_finally_block.update(
-                        metadata={
-                            llm_span_helpers.SPAN_STATUS: llm_span_helpers.LLMSpanStatus.AWAITING_AFTER_MODEL_CALLBACK
-                        }
-                    )
-                else:
-                    self._ensure_span_is_finalized(span_to_close_in_finally_block.id)
-
-            if (
-                trace_to_close_in_finally_block is None
-                and span_to_close_in_finally_block is None
             ):
-                LOGGER.warning(
-                    "No span or trace to finalize in ADK tracer. This is unexpected."
+                span_to_close.update(
+                    metadata={
+                        llm_span_helpers.SPAN_STATUS: llm_span_helpers.LLMSpanStatus.AWAITING_AFTER_MODEL_CALLBACK
+                    }
                 )
+            else:
+                self._ensure_span_is_finalized(span_to_close.id)
+
+        if trace_to_close is None and span_to_close is None:
+            LOGGER.warning(
+                "No span or trace to finalize in ADK tracer. This is unexpected."
+            )
 
     def _finalize_llm_spans_skipped_by_after_model_callback(self) -> None:
         # ADK skips the agent's after_model_callbacks when a plugin (or an earlier
@@ -267,6 +329,121 @@ class OpikADKOtelTracer:
             span_data.init_end_time()
             if opik.is_tracing_active():
                 self.opik_client.__internal_api__span__(**span_data.as_parameters)
+
+
+def _enter_without_start_span_bookkeeping(
+    exit_stack: contextlib.ExitStack,
+    span_context_manager: ContextManager[opentelemetry.trace.Span],
+) -> opentelemetry.trace.Span:
+    token = _ENTERING_INNER_START_AS_CURRENT_SPAN.set(True)
+    try:
+        return exit_stack.enter_context(span_context_manager)
+    finally:
+        _ENTERING_INNER_START_AS_CURRENT_SPAN.reset(token)
+
+
+def _record_error_info(
+    trace_data: Optional[trace.TraceData],
+    span_data: Optional[span.SpanData],
+    exception: BaseException,
+) -> None:
+    error_info = error_info_collector.collect(exception)
+    if trace_data is not None:
+        trace_data.update(error_info=error_info)
+    if span_data is not None:
+        span_data.update(error_info=error_info)
+
+
+class _OpikFinalizingSpan(opentelemetry.trace.Span):
+    """
+    Wraps a span returned by the inner tracer's start_span so that the Opik
+    trace/span opened alongside it is finalized when ADK ends the span. OTel
+    operations are delegated, so exporters and context propagation see the real
+    span; end, record_exception and is_recording also drive the Opik bookkeeping.
+    """
+
+    def __init__(
+        self,
+        inner_span: opentelemetry.trace.Span,
+        on_exception: Callable[[BaseException], None],
+        on_end: Callable[[bool], None],
+    ) -> None:
+        self._inner_span = inner_span
+        self._on_exception = on_exception
+        self._on_end = on_end
+        self._exception_recorded = False
+        self._ended = False
+
+    def end(self, end_time: Optional[int] = None) -> None:
+        try:
+            self._inner_span.end(end_time=end_time)
+        finally:
+            if not self._ended:
+                self._ended = True
+                self._on_end(not self._exception_recorded)
+
+    def record_exception(
+        self,
+        exception: BaseException,
+        attributes: opentelemetry.util.types.Attributes = None,
+        timestamp: Optional[int] = None,
+        escaped: bool = False,
+    ) -> None:
+        self._inner_span.record_exception(
+            exception, attributes=attributes, timestamp=timestamp, escaped=escaped
+        )
+        if not self._exception_recorded:
+            self._exception_recorded = True
+            self._on_exception(exception)
+
+    def get_span_context(self) -> opentelemetry.trace.SpanContext:
+        return self._inner_span.get_span_context()
+
+    def set_attributes(
+        self, attributes: Mapping[str, opentelemetry.util.types.AttributeValue]
+    ) -> None:
+        self._inner_span.set_attributes(attributes)
+
+    def set_attribute(
+        self, key: str, value: opentelemetry.util.types.AttributeValue
+    ) -> None:
+        self._inner_span.set_attribute(key, value)
+
+    def add_event(
+        self,
+        name: str,
+        attributes: opentelemetry.util.types.Attributes = None,
+        timestamp: Optional[int] = None,
+    ) -> None:
+        self._inner_span.add_event(name, attributes=attributes, timestamp=timestamp)
+
+    def add_link(
+        self,
+        context: opentelemetry.trace.SpanContext,
+        attributes: opentelemetry.util.types.Attributes = None,
+    ) -> None:
+        self._inner_span.add_link(context, attributes=attributes)
+
+    def update_name(self, name: str) -> None:
+        self._inner_span.update_name(name)
+
+    def is_recording(self) -> bool:
+        # ADK records an escaping exception only on a recording span. Opik is
+        # recording this span even when the inner one is a NonRecordingSpan
+        # (no TracerProvider installed), whose writes are no-ops anyway.
+        return not self._ended
+
+    def set_status(
+        self,
+        status: Union[opentelemetry.trace.Status, opentelemetry.trace.StatusCode],
+        description: Optional[str] = None,
+    ) -> None:
+        self._inner_span.set_status(status, description)
+
+    def __getattr__(self, name: str) -> Any:
+        # Covers SDK-span attributes ADK reads directly (e.g. start_time and
+        # end_time for its duration metrics).
+        return getattr(self._inner_span, name)
 
 
 def _prepare_trace_and_span_to_be_finalized(

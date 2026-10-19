@@ -27,7 +27,7 @@ This guide explains how to integrate Opik with Pipecat for observability and tra
 
 To use the Pipecat integration with Opik, you will need to have Pipecat and the required OpenTelemetry packages installed:
 
-```bash
+```bash wordWrap
 pip install pipecat-ai[daily,webrtc,silero,cartesia,deepgram,openai,tracing] opentelemetry-exporter-otlp-proto-http websockets
 ```
 
@@ -45,7 +45,7 @@ pip install pipecat-ai[daily,webrtc,silero,cartesia,deepgram,openai,tracing] ope
         ```
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
-        ```bash
+        ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
@@ -56,13 +56,13 @@ pip install pipecat-ai[daily,webrtc,silero,cartesia,deepgram,openai,tracing] ope
 
 For the basic example, you'll need an OpenAI API key. You can set it as an environment variable:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 ```
 
 Or set it programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -72,7 +72,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 Enable tracing in your Pipecat application by setting up OpenTelemetry instrumentation and configuring your pipeline task. For complete details on Pipecat's OpenTelemetry implementation, see the [official Pipecat OpenTelemetry documentation](https://docs.pipecat.ai/server/utilities/opentelemetry):
 
-```python
+```python wordWrap
 # Initialize OpenTelemetry with the http exporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from pipecat.utils.tracing.setup import setup_tracing

@@ -22,7 +22,7 @@ All configuration is via env vars on the opik-backend container.
 
 ## YAML schema
 
-```yaml
+```yaml wordWrap
 openai:
   - id: "gpt-4o"
     label: "GPT 4o"
@@ -82,7 +82,7 @@ Remote fetch failures are logged but non-fatal: the backend keeps using the last
 
 Create `/etc/opik/my-models-override.yaml` on the host:
 
-```yaml
+```yaml wordWrap
 openai:
   - id: "ft:gpt-4o-2024-08-06:my-org::abc123"
     label: "Our Fine-Tuned GPT-4o"
@@ -91,7 +91,7 @@ openai:
 
 Mount it into the backend container and set the path:
 
-```yaml
+```yaml wordWrap
 # docker-compose.override.yaml
 services:
   backend:
@@ -105,14 +105,14 @@ services:
 
 Create a ConfigMap with your override YAML:
 
-```bash
+```bash wordWrap
 kubectl create configmap opik-llm-models-override \
   --from-file=models-override.yaml=/path/to/models-override.yaml
 ```
 
 Mount it in the backend Deployment by extending your Helm values:
 
-```yaml
+```yaml wordWrap
 # values.yaml overrides
 component:
   backend:
@@ -133,7 +133,7 @@ component:
 
 After restart, check that your model appears:
 
-```bash
+```bash wordWrap
 curl -s https://your-opik/api/v1/private/llm/models | jq '.openai[] | select(.id | contains("ft:"))'
 ```
 

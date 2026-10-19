@@ -85,7 +85,7 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
     public AnalyticsQueryResponse runSavedQuery(@NonNull UUID dashboardId, @NonNull DashboardScope scope,
             @NonNull String widgetId, @NonNull DashboardWidgetQueryRequest request) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        if (!serviceToggles.isOllieEnabled() || !customCharts.enabledWorkspaceIds().contains(workspaceId)) {
+        if (!customCharts.isEnabledFor(serviceToggles, workspaceId)) {
             throw new ServerErrorException(Response.Status.NOT_IMPLEMENTED);
         }
 

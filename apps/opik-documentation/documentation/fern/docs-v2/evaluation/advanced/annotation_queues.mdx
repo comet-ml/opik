@@ -159,7 +159,7 @@ You can create and manage annotation queues programmatically using the Python or
 
 ### Creating a Traces Annotation Queue
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -178,7 +178,7 @@ print(f"Created queue: {queue.name} (ID: {queue.id})")
     </Tab>
     <Tab value="TypeScript" title="TypeScript">
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();
@@ -202,7 +202,7 @@ console.log(`Created queue: ${queue.name} (ID: ${queue.id})`);
 <Tabs>
     <Tab value="Python" title="Python">
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -225,7 +225,7 @@ queue.add_traces([single_trace])
     </Tab>
     <Tab value="TypeScript" title="TypeScript">
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();
@@ -255,7 +255,7 @@ Use `get_items()` to retrieve all the traces (or threads, for a thread queue) cu
 <Tabs>
     <Tab value="Python" title="Python">
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -277,7 +277,7 @@ threads = thread_queue.get_items()
     </Tab>
     <Tab value="TypeScript" title="TypeScript">
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();
@@ -305,7 +305,7 @@ const threads = await threadQueue.getItems();
 <Tabs>
     <Tab value="Python" title="Python">
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -328,7 +328,7 @@ thread_queue.add_threads(important_threads)
     </Tab>
     <Tab value="TypeScript" title="TypeScript">
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();
@@ -355,7 +355,7 @@ await threadQueue.addThreads(threads);
 <Tabs>
     <Tab value="Python" title="Python">
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -382,7 +382,7 @@ queue.delete()
 
 ### Listing Annotation Queues
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -403,7 +403,7 @@ for queue in threads_queues:
     </Tab>
     <Tab value="TypeScript" title="TypeScript">
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();
@@ -436,7 +436,7 @@ await queue.delete();
 <Tabs>
     <Tab value="Python" title="Python">
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -457,7 +457,7 @@ for queue in threads_queues:
     </Tab>
     <Tab value="TypeScript" title="TypeScript">
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();

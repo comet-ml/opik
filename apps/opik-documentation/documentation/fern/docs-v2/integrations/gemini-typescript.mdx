@@ -27,13 +27,13 @@ Opik provides seamless integration with the [Google Generative AI Node.js SDK](h
 
 ### Option 1: Using npm
 
-```bash
+```bash wordWrap
 npm install opik-gemini @google/genai
 ```
 
 ### Option 2: Using yarn
 
-```bash
+```bash wordWrap
 yarn add opik-gemini @google/genai
 ```
 
@@ -51,7 +51,7 @@ yarn add opik-gemini @google/genai
 
 To trace your Gemini API calls, you need to wrap your Gemini client instance with the `trackGemini` function:
 
-```typescript
+```typescript wordWrap
 import { GoogleGenAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 
@@ -79,7 +79,7 @@ await trackedGenAI.flush();
 
 The integration fully supports Gemini's streaming responses:
 
-```typescript
+```typescript wordWrap
 import { GoogleGenAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 
@@ -116,7 +116,7 @@ streamingExample();
 
 The `trackGemini` function accepts an optional configuration object to customize the integration:
 
-```typescript
+```typescript wordWrap
 import { GoogleGenAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 import { Opik } from "opik";
@@ -183,7 +183,7 @@ await trackedGenAI.flush();
 
 The integration also supports Google's VertexAI platform. Simply configure your Gemini client for VertexAI and wrap it with `trackGemini`:
 
-```typescript
+```typescript wordWrap
 import { GoogleGenAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 
@@ -211,7 +211,7 @@ await trackedGenAI.flush();
 
 Track multi-turn chat conversations with Gemini:
 
-```typescript
+```typescript wordWrap
 import { GoogleGenAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 

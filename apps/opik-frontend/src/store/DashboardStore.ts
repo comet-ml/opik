@@ -38,6 +38,9 @@ interface DashboardStoreState {
   widgetResolver: WidgetResolver | null;
   previewWidget: DashboardWidget | null;
   readOnly: boolean;
+  // Widget ids the server has; null until the dashboard is loaded. Owned by the persistence hook, so clearing the
+  // dashboard on a reload keeps them.
+  savedWidgetIds: string[] | null;
 }
 
 interface DashboardActions {
@@ -83,6 +86,7 @@ interface DashboardActions {
   updatePreviewWidget: (data: Partial<DashboardWidget>) => void;
 
   setReadOnly: (readOnly: boolean) => void;
+  setSavedWidgetIds: (ids: string[] | null) => void;
 
   clearDashboard: () => void;
 
@@ -129,6 +133,7 @@ export const useDashboardStore = create<DashboardStore>()(
         widgetResolver: null,
         previewWidget: null,
         readOnly: false,
+        savedWidgetIds: null,
 
         addSection: (title?: string) => {
           const newSection = generateEmptySection(title);
@@ -430,6 +435,10 @@ export const useDashboardStore = create<DashboardStore>()(
           set({ readOnly }, false, "setReadOnly");
         },
 
+        setSavedWidgetIds: (savedWidgetIds) => {
+          set({ savedWidgetIds }, false, "setSavedWidgetIds");
+        },
+
         clearDashboard: () => {
           const emptyDashboard = generateEmptyDashboard();
           set(
@@ -530,6 +539,8 @@ export const selectSetWidgetResolver = (state: DashboardStore) =>
 
 export const selectPreviewWidget = (state: DashboardStore) =>
   state.previewWidget;
+export const selectSavedWidgetIds = (state: DashboardStore) =>
+  state.savedWidgetIds;
 export const selectSetPreviewWidget = (state: DashboardStore) =>
   state.setPreviewWidget;
 

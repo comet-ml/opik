@@ -28,11 +28,11 @@ You need three things:
 
 <Steps>
   <Step title="Install uv, if you don't have it">
-    ```bash title="macOS / Linux"
+    ```bash title="macOS / Linux" wordWrap
     curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
 
-    ```powershell title="Windows"
+    ```powershell title="Windows" wordWrap
     powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
 
@@ -43,7 +43,7 @@ You need three things:
 
     <Tabs>
       <Tab title="Claude Code">
-        ```bash
+        ```bash wordWrap
         claude mcp add --scope user opik-cost-intelligence \
           --env OPIK_API_KEY=<your-api-key> \
           --env OPIK_WORKSPACE=<your-cost-intelligence-workspace> \
@@ -53,7 +53,7 @@ You need three things:
       <Tab title="Cursor">
         Edit `~/.cursor/mcp.json`:
 
-        ```json
+        ```json wordWrap
         {
           "mcpServers": {
             "opik-cost-intelligence": {
@@ -70,7 +70,7 @@ You need three things:
         ```
       </Tab>
       <Tab title="Codex">
-        ```bash
+        ```bash wordWrap
         codex mcp add opik-cost-intelligence \
           --env OPIK_API_KEY=<your-api-key> \
           --env OPIK_WORKSPACE=<your-cost-intelligence-workspace> \
@@ -91,7 +91,7 @@ You need three things:
   <Step title="Start a new session and check it works">
     Coding agents read their MCP configuration at startup, so start a new session, then ask:
 
-    ```text title="Check it worked"
+    ```text title="Check it worked" wordWrap
     Summarize our coding agent spend over the last 30 days.
     ```
 

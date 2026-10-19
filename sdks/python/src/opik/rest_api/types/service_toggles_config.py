@@ -36,6 +36,9 @@ class ServiceTogglesConfig(UniversalBaseModel):
     ollama_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="ollamaProviderEnabled")]
     ollie_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="ollieEnabled")]
     agent_insights_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="agentInsightsEnabled")]
+    agent_insights_guidance_enabled: typing_extensions.Annotated[
+        bool, FieldMetadata(alias="agentInsightsGuidanceEnabled")
+    ]
     project_homepage_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="projectHomepageEnabled")]
     online_scoring_tracing_enabled: typing_extensions.Annotated[
         bool, FieldMetadata(alias="onlineScoringTracingEnabled")
@@ -45,6 +48,9 @@ class ServiceTogglesConfig(UniversalBaseModel):
     ]
     event_bridge_alerts_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="eventBridgeAlertsEnabled")]
     default_page_size: typing_extensions.Annotated[typing.Optional[int], FieldMetadata(alias="defaultPageSize")] = None
+    custom_charts_enabled_for_workspace: typing_extensions.Annotated[
+        typing.Optional[bool], FieldMetadata(alias="customChartsEnabledForWorkspace")
+    ] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

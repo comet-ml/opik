@@ -1750,6 +1750,56 @@ class AlertResourceTest {
         }
 
         @Test
+        @DisplayName("Success: should send each deleted prompt with its own latest version to webhook")
+        void deletePromptsEvent__whenPromptsHaveSeveralVersions__thenPayloadHasEachLatestVersion() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(PROMPT_DELETED)
+                    .build());
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            var expectedPrompts = IntStream.range(0, 3)
+                    .mapToObj(i -> {
+                        var prompt = buildPrompt();
+                        var promptId = promptResourceClient.createPrompt(prompt, mock.getLeft(), mock.getRight());
+                        var lastVersion = IntStream.range(0, 3)
+                                .mapToObj(j -> promptResourceClient.createPromptVersion(prompt, mock.getLeft(),
+                                        mock.getRight()))
+                                .toList()
+                                .getLast();
+                        var actualPrompt = promptResourceClient.getPrompt(promptId, mock.getLeft(), mock.getRight());
+                        // The latest version is the last one created, not the one a read returns
+                        return actualPrompt.toBuilder()
+                                .latestVersion(lastVersion)
+                                .build();
+                    })
+                    .toList();
+
+            // When
+            promptResourceClient.deletePromptBatch(expectedPrompts.stream().map(Prompt::id).collect(Collectors.toSet()),
+                    mock.getLeft(), mock.getRight());
+
+            // Then
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            List<Prompt> prompts = JsonUtils.readCollectionValue(payload, List.class, Prompt.class);
+
+            assertThat(prompts)
+                    .usingRecursiveFieldByFieldElementComparator(
+                            RecursiveComparisonConfiguration.builder()
+                                    // The read API's view hides the prompt type, and the payload's version JSON
+                                    // leaves out the template structure the create response carries
+                                    .withIgnoredFields("type", "latestVersion.templateStructure")
+                                    .withComparatorForType(
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .containsExactlyInAnyOrderElementsOf(expectedPrompts);
+        }
+
+        @Test
         @DisplayName("Success: should successfully send prompt commit event to webhook")
         void testPromptCommitEvent__whenWebhookServerReceivesAlert() {
             // Given
