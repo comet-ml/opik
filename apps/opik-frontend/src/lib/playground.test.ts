@@ -772,6 +772,10 @@ describe("isPlaygroundEmpty", () => {
       "two prompts with only empty messages",
       promptMap([userMessage("")], [userMessage("")]),
     ],
+    [
+      "a malformed stored prompt",
+      { p0: null as unknown as PlaygroundPromptType },
+    ],
   ])("treats %s as not empty", (_, prompts) => {
     expect(isPlaygroundEmpty(prompts)).toBe(false);
   });

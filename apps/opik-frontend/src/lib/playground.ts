@@ -318,7 +318,7 @@ export const isPlaygroundEmpty = (
 
   return (
     prompts.length === 0 ||
-    (prompts.length === 1 && !!prompts[0].messages?.every(isEmptyMessage))
+    (prompts.length === 1 && !!prompts[0]?.messages?.every(isEmptyMessage))
   );
 };
 

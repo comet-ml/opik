@@ -78,8 +78,6 @@ function useLoadPlayground() {
     },
   );
 
-  const isEmpty = useMemo(() => isPlaygroundEmpty(promptMap), [promptMap]);
-
   const providerKeys = useMemo(() => {
     return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
   }, [providerKeysData]);
@@ -256,7 +254,7 @@ function useLoadPlayground() {
 
   return {
     loadPlayground,
-    isPlaygroundEmpty: isEmpty,
+    isPlaygroundEmpty: isPlaygroundEmpty(promptMap),
     isPendingProviderKeys,
   };
 }
