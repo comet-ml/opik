@@ -119,6 +119,8 @@ const buildFlagsIndex = (
       const flags: ModelFlags = {
         reasoning: m.reasoning,
         structuredOutput: m.structured_output,
+        supportedParameters: m.supported_parameters,
+        reasoningEfforts: m.reasoning_efforts,
       };
       index.set(
         getRoutableProviderModelValue(

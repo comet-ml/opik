@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -231,6 +232,90 @@ class LlmModelRegistryServiceTest {
         assertThat(merged.get("openai").get(2).id()).isEqualTo("new-model");
 
         assertThat(merged.get("anthropic")).hasSize(1);
+    }
+
+    @Test
+    void mergeUsesTheOverrideCapabilitiesEvenEmptyAndKeepsTheDefaultsWhenUnset() {
+        var defaults = Map.of(
+                "openrouter", List.of(
+                        ModelEntry.builder().id("openai/gpt-5-nano")
+                                .supportedParameters(List.of("max_tokens", "reasoning_effort"))
+                                .reasoningEfforts(List.of("high", "low"))
+                                .build(),
+                        ModelEntry.builder().id("openai/gpt-4o-mini")
+                                .supportedParameters(List.of("temperature"))
+                                .build(),
+                        ModelEntry.builder().id("openai/o3")
+                                .supportedParameters(List.of("max_tokens", "reasoning"))
+                                .reasoningEfforts(List.of("high"))
+                                .build()));
+
+        var overrides = Map.of(
+                "openrouter", List.of(
+                        ModelEntry.builder().id("openai/gpt-5-nano").label("openai/gpt-5-nano").build(),
+                        ModelEntry.builder().id("openai/gpt-4o-mini")
+                                .supportedParameters(List.of("temperature", "top_p"))
+                                .build(),
+                        ModelEntry.builder().id("openai/o3")
+                                .supportedParameters(List.of())
+                                .reasoningEfforts(List.of())
+                                .build()));
+
+        var merged = LlmModelRegistryService.merge(defaults, overrides);
+
+        assertThat(merged.get("openrouter")).containsExactly(
+                ModelEntry.builder().id("openai/gpt-5-nano").label("openai/gpt-5-nano")
+                        .supportedParameters(List.of("max_tokens", "reasoning_effort"))
+                        .reasoningEfforts(List.of("high", "low"))
+                        .build(),
+                ModelEntry.builder().id("openai/gpt-4o-mini")
+                        .supportedParameters(List.of("temperature", "top_p"))
+                        .build(),
+                ModelEntry.builder().id("openai/o3")
+                        .supportedParameters(List.of())
+                        .reasoningEfforts(List.of())
+                        .build());
+    }
+
+    @Test
+    void defaultResourceCarriesOpenRouterCapabilities() {
+        var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
+
+        var result = service.findModel("openai/gpt-5-nano");
+
+        assertThat(result).isPresent();
+        assertThat(result.get().provider()).isEqualTo(LlmProvider.OPEN_ROUTER);
+        assertThat(result.get().model().supportedParameters()).contains("reasoning_effort").doesNotContain("top_k");
+        assertThat(result.get().model().reasoningEfforts()).isNotEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "google/lyria-3-clip-preview",
+            "google/lyria-3-pro-preview",
+            "openai/gpt-audio",
+            "openai/gpt-audio-mini",
+            "openai/gpt-3.5-turbo-instruct",
+            "openai/gpt-5-image",
+            "openai/gpt-5-image-mini",
+            "relace/relace-apply-3",
+            "thinkingmachines/inkling:free",
+            "thinkingmachines/inkling-small:free",
+            "openai/gpt-5.2-chat",
+            "minimax/minimax-m1",
+            "amazon/nova-premier-v1",
+            "inclusionai/ling-3.0-flash-fin",
+            "nousresearch/hermes-3-llama-3.1-70b"
+    })
+    void defaultResourceHidesOpenRouterModelsThatCannotRunButStillResolvesThem(String model) {
+        var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
+
+        var result = service.findModel(model);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().provider()).isEqualTo(LlmProvider.OPEN_ROUTER);
+        assertThat(result.get().model().id()).isEqualTo(model);
+        assertThat(result.get().model().label()).isNull();
     }
 
     @ParameterizedTest
