@@ -16,8 +16,12 @@ export const validateBulkAnnotation = (
     return { valid: false, error: "Feedback score name is required" };
   }
 
-  if (typeof data.value !== "number" || isNaN(data.value)) {
-    return { valid: false, error: "Feedback score value must be a valid number" };
+  if (
+    typeof data.value !== "number" ||
+    isNaN(data.value) ||
+    !Number.isFinite(data.value)
+  ) {
+    return { valid: false, error: "Feedback score value must be a valid finite number" };
   }
 
   return { valid: true };

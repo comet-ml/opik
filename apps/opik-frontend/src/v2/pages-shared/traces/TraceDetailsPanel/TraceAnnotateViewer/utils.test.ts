@@ -26,13 +26,27 @@ describe("validateBulkAnnotation", () => {
     expect(res.error).toContain("Feedback score name is required");
   });
 
-  it("fails if value is not a valid number", () => {
-    const res = validateBulkAnnotation({
+  it("fails if value is not a valid number or not finite", () => {
+    const resNaN = validateBulkAnnotation({
       name: "accuracy",
       value: NaN,
     });
-    expect(res.valid).toBe(false);
-    expect(res.error).toContain("Feedback score value must be a valid number");
+    expect(resNaN.valid).toBe(false);
+    expect(resNaN.error).toContain("Feedback score value must be a valid finite number");
+
+    const resInf = validateBulkAnnotation({
+      name: "accuracy",
+      value: Infinity,
+    });
+    expect(resInf.valid).toBe(false);
+    expect(resInf.error).toContain("Feedback score value must be a valid finite number");
+
+    const resNegInf = validateBulkAnnotation({
+      name: "accuracy",
+      value: -Infinity,
+    });
+    expect(resNegInf.valid).toBe(false);
+    expect(resNegInf.error).toContain("Feedback score value must be a valid finite number");
   });
 });
 
