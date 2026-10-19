@@ -149,24 +149,15 @@ def test_aggregate__terminal_response_failed_event__returns_response():
     assert result.usage.total_tokens == 23
 
 
-# Alias for compatibility with single-underscore naming
-test_aggregate_terminal_response_failed_event__returns_response = (
-    test_aggregate__terminal_response_failed_event__returns_response
-)
-
-
-def test_aggregate__terminal_response_error_event_first__handles_missing_response():
-    # Case 1: When only ResponseErrorEvent is present (no .response attribute), return None
+def test_aggregate__terminal_response_error_event_first__handles_missing_response(
+    aggregator_log_records,
+):
     error_event = openai_responses.ResponseErrorEvent.model_construct(
         code="server_error",
         message="Internal server error",
         sequence_number=1,
         type="error",
     )
-    result_only_error = response_events_aggregator.aggregate([error_event])
-    assert result_only_error is None
-
-    # Case 2: When ResponseErrorEvent is first, but a subsequent terminal event with .response exists
     fake_usage = openai_responses.response_usage.ResponseUsage.model_construct(
         input_tokens=10,
         output_tokens=4,
@@ -185,20 +176,18 @@ def test_aggregate__terminal_response_error_event_first__handles_missing_respons
         type="response.failed",
     )
 
-    result_subsequent = response_events_aggregator.aggregate([error_event, failed_event])
-    assert result_subsequent is not None
-    assert result_subsequent == fake_response
-    assert result_subsequent.status == "failed"
-    assert result_subsequent.id == "resp_subsequent_failed"
-    assert result_subsequent.usage.total_tokens == 14
+    result = response_events_aggregator.aggregate([error_event, failed_event])
+    assert result is not None
+    assert result == fake_response
+    assert result.status == "failed"
+    assert result.id == "resp_subsequent_failed"
+    assert result.usage.total_tokens == 14
+    assert logging.ERROR not in _levels(aggregator_log_records)
 
 
-test_aggregate_terminal_response_error_event_first__handles_missing_response = (
-    test_aggregate__terminal_response_error_event_first__handles_missing_response
-)
-
-
-def test_aggregate_terminal_response_error_event_without_response__returns_none():
+def test_aggregate__terminal_response_error_event_without_response__returns_none(
+    aggregator_log_records,
+):
     event = openai_responses.ResponseErrorEvent.model_construct(
         code="server_error",
         message="Internal server error",
@@ -209,6 +198,4 @@ def test_aggregate_terminal_response_error_event_without_response__returns_none(
     result = response_events_aggregator.aggregate([event])
 
     assert result is None
-
-
-
+    assert logging.ERROR not in _levels(aggregator_log_records)
