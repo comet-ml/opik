@@ -16,6 +16,7 @@ import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.v1.events.SpanWeeksListener;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -96,8 +97,6 @@ class SpanWeeksUnregisteredTraceDeleteTest {
                                 new CustomConfig("uuidValidation.enabled", "false"),
                                 // The successor's columns are non-nullable, as the cutover flips this with it.
                                 new CustomConfig("databaseAnalyticsDataModel.spanColumnsNonNullable", "true"),
-                                // Required for the bound to apply; the disabled listener keeps it from registering.
-                                new CustomConfig("databaseAnalyticsDataModel.spanWeeksWriteEnabled", "true"),
                                 new CustomConfig("databaseAnalyticsDataModel.spanWeeksReadEnabled", "true")))
                         .disableExtensions(List.of(SpanWeeksListener.class))
                         .build());
@@ -119,6 +118,29 @@ class SpanWeeksUnregisteredTraceDeleteTest {
                 traceResourceClient, spanResourceClient,
                 new DatasetResourceClient(clientSupport, baseUrl),
                 new ExperimentResourceClient(clientSupport, baseUrl, factory), spanService);
+    }
+
+    /**
+     * The read flag alone turns the bound on: the listener's flag is off here, and the trace's spans, none of whose
+     * weeks are indexed, are left out of a trace-keyed read while each is still found by its own id.
+     */
+    @Test
+    void traceSpansPageIsBoundedWithoutTheListenerFlag() {
+        var trace = fixtures.createFarFutureTraceWithoutWaiting();
+
+        var actualStatuses = trace.spans().stream()
+                .map(span -> {
+                    try (var response = spanResourceClient.callGetSpanIdApi(span.id(), WORKSPACE_NAME, API_KEY)) {
+                        return response.getStatus();
+                    }
+                })
+                .toList();
+        assertThat(actualStatuses).containsOnly(HttpStatus.SC_OK);
+
+        var actualPage = spanResourceClient.getByTraceIdAndProject(trace.trace().id(), trace.projectName(),
+                WORKSPACE_NAME, API_KEY);
+
+        SpanAssertions.assertPage(actualPage, 1, 0, 0);
     }
 
     /**

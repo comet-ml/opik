@@ -119,7 +119,6 @@ public record DatabaseAnalyticsDataModelConfig(
         boolean spanWeeksReadEnabled) {
 
     public boolean spanWeeksReadBounded() {
-        // Without registration new spans never reach the index, and the bound would hide them.
-        return spanWeeksReadEnabled && spanWeeksWriteEnabled && spanColumnsNonNullable;
+        return spanWeeksReadEnabled && spanColumnsNonNullable;
     }
 }
