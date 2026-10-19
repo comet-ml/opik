@@ -94,9 +94,9 @@ class MediaContentUtilsTest {
     static Stream<Arguments> rawBase64Images() {
         return Stream.of(
                 Arguments.of(BASE64_DATA, "image/png"),
-                Arguments.of("/9j/4AAQSkZJRgABAQAAAQABAAD", "image/jpeg"),
-                Arguments.of("R0lGODlhAQABAIAAAP", "image/gif"),
-                Arguments.of("R0lGODdhAQABAIAAAP", "image/gif"),
+                Arguments.of("/9j/4AAQSkZJRgABAQAAAQABAAA=", "image/jpeg"),
+                Arguments.of("R0lGODlhAQABAIAAAA==", "image/gif"),
+                Arguments.of("R0lGODdhAQABAIAAAA==", "image/gif"),
                 Arguments.of("UklGRiQAAABXRUJQVlA4", "image/webp"),
                 Arguments.of("Qk06AAAAAAAAADYAAAAo", "image/bmp"),
                 Arguments.of("SUkqAAgAAAA=", "image/tiff"),
@@ -110,12 +110,29 @@ class MediaContentUtilsTest {
                 .isEqualTo(ImageContent.from(rawBase64, expectedMimeType));
     }
 
+    static Stream<Arguments> lineWrappedRawBase64Images() {
+        return Stream.of(
+                Arguments.of(BASE64_DATA.replaceAll("(.{20})", "$1\n")),
+                Arguments.of(BASE64_DATA.replaceAll("(.{16})", "$1\r\n ") + "\n"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("lineWrappedRawBase64Images")
+    void toImageContentWhenRawBase64ImageIsLineWrappedReturnsItWithoutWhitespace(String rawBase64) {
+        assertThat(MediaContentUtils.toImageContent(rawBase64))
+                .isEqualTo(ImageContent.from(BASE64_DATA, "image/png"));
+    }
+
     static Stream<String> notRawBase64Images() {
         return Stream.of(
                 "iVBORw0KGgo.png",
                 "Qk:not-base64",
                 "/9j/photos/room.jpg",
-                "AAAAIGZ0eXBpc29tAAACAGlzb21pc28y");
+                "AAAAIGZ0eXBpc29tAAACAGlzb21pc28y",
+                "Qk",
+                "QkAAAAA",
+                "QkAA=AAA",
+                "QkAAA===");
     }
 
     @ParameterizedTest

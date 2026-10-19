@@ -13,6 +13,7 @@ import java.net.URI;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 // langchain4j-google-genai (Vertex AI) reads a media URI's MIME type from its path, and a data: URI has no path,
 // so it throws a NullPointerException. Handing over base64 data with an explicit MIME type avoids that code path.
@@ -21,6 +22,7 @@ public class MediaContentUtils {
 
     private static final String DATA_SCHEME = "data:";
     private static final String BASE64_PARAMETER = "base64";
+    private static final Pattern BASE64_PATTERN = Pattern.compile(ImageUtils.IMAGE_CHARS);
 
     // A dataset cell can hold an image as bare base64, which the UI shows as an image because of these magic
     // prefixes. Sent as-is it would be read as a relative URL, so it is wrapped like a data: URI instead.
@@ -75,10 +77,7 @@ public class MediaContentUtils {
         if (!isBase64 || !mimeType.contains("/")) {
             return Optional.empty();
         }
-        // Vertex AI's client decodes the payload with Java's strict decoder, which rejects the line breaks that
-        // MIME-style encoders insert every 76 characters.
-        String payload = uri.substring(comma + 1);
-        String base64Data = StringUtils.containsWhitespace(payload) ? StringUtils.deleteWhitespace(payload) : payload;
+        String base64Data = withoutWhitespace(uri.substring(comma + 1));
         if (base64Data.isEmpty()) {
             return Optional.empty();
         }
@@ -92,25 +91,20 @@ public class MediaContentUtils {
         return RAW_BASE64_IMAGE_MIME_TYPES.entrySet().stream()
                 .filter(prefixAndMimeType -> value.startsWith(prefixAndMimeType.getKey()))
                 .findFirst()
-                .filter(prefixAndMimeType -> isBase64(value))
                 .map(prefixAndMimeType -> Base64DataUri.builder()
                         .mimeType(prefixAndMimeType.getValue())
-                        .base64Data(value)
-                        .build());
+                        .base64Data(withoutWhitespace(value))
+                        .build())
+                .filter(dataUri -> isBase64(dataUri.base64Data()));
+    }
+
+    // Vertex AI's client decodes the payload with Java's strict decoder, which rejects the line breaks that
+    // MIME-style encoders insert every 76 characters.
+    private static String withoutWhitespace(String base64Data) {
+        return StringUtils.containsWhitespace(base64Data) ? StringUtils.deleteWhitespace(base64Data) : base64Data;
     }
 
     private static boolean isBase64(String value) {
-        if (value.isEmpty()) {
-            return false;
-        }
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            boolean isBase64Char = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
-                    || c == '+' || c == '/' || c == '=';
-            if (!isBase64Char) {
-                return false;
-            }
-        }
-        return true;
+        return value.length() % 4 == 0 && BASE64_PATTERN.matcher(value).matches();
     }
 }
