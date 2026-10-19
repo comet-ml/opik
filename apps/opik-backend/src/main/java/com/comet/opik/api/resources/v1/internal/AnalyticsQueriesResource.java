@@ -123,8 +123,7 @@ public class AnalyticsQueriesResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = ScopedAnalyticsQueryRequest.class))) @NotNull @Valid ScopedAnalyticsQueryRequest request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        if (!serviceToggles.isOllieEnabled()
-                || !customCharts.enabledWorkspaceIds().contains(workspaceId)) {
+        if (!customCharts.isEnabledFor(serviceToggles, workspaceId)) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
 

@@ -1979,6 +1979,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         WHERE workspace_id = :workspace_id
                         <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                         AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                        <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id <if(has_target_projects)>AND project_id IN :target_project_ids<endif> AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope))<endif>
                         GROUP BY workspace_id, project_id, trace_id
                     ) s ON t.id = s.trace_id
                     GROUP BY
@@ -2699,6 +2700,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     WHERE workspace_id = :workspace_id
                     <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                     AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                    <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id <if(has_target_projects)>AND project_id IN :target_project_ids<endif> AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope))<endif>
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON eif.trace_id = s.trace_id
             ), feedback_scores_raw_agg AS (
@@ -3130,6 +3132,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                             criteria.datasetId(), versionId,
                                             CollectionUtils.size(criteria.experimentIds()), page, size));
                             addTracesPartitionedFlag(template);
+                            addSpanWeeksBound(template);
 
                             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
                             template.add("truncationSize",
@@ -3288,6 +3291,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private void addTracesPartitionedFlag(ST template) {
         if (config.getDatabaseAnalyticsDataModel().traceColumnsNonNullable()) {
             template.add("traces_partitioned", true);
+        }
+    }
+
+    private void addSpanWeeksBound(ST template) {
+        if (config.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
         }
     }
 
@@ -4469,6 +4478,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 "dataset_id=%s, version_id=%s, experiment_ids=%s, filters=%s".formatted(datasetId,
                                         versionId, experimentIds.size(), CollectionUtils.size(filters)));
                         addTracesPartitionedFlag(template);
+                        addSpanWeeksBound(template);
 
                         if (CollectionUtils.isNotEmpty(experimentIds)) {
                             template.add("experiment_ids", true);

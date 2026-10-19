@@ -99,8 +99,7 @@ public class DashboardSavedQueriesResource {
     }
 
     private void requireEnabled() {
-        if (!serviceToggles.isOllieEnabled()
-                || !customCharts.enabledWorkspaceIds().contains(requestContext.get().getWorkspaceId())) {
+        if (!customCharts.isEnabledFor(serviceToggles, requestContext.get().getWorkspaceId())) {
             throw new ServerErrorException(Response.Status.NOT_IMPLEMENTED);
         }
     }

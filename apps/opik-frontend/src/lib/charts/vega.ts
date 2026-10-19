@@ -84,7 +84,9 @@ export const buildOpikVegaConfig = (
       tickCount: 5,
     },
     // Value-from-zero charts (bars) draw their baseline on the category axis.
+    // A grid line on a category axis runs through the middle of every bar or heatmap row.
     axisBand: {
+      grid: false,
       domain: true,
       domainColor: tokens.baseline,
       domainWidth: stroke.thin,
@@ -529,7 +531,8 @@ export const renderVegaChart: RenderVegaChart = async (
 
   const result = await embed(el, spec as never, {
     actions: false,
-    renderer: "svg",
+    // SVG gradients reference this window's URL, so in another document (the console iframe) their fill is lost.
+    renderer: el.ownerDocument === document ? "svg" : "canvas",
     loader: withoutNetwork(loader()),
     config: buildOpikVegaConfig(tokens) as never,
     // Model-written expressions are interpreted, never compiled with new Function().

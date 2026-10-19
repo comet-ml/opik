@@ -50,7 +50,7 @@ Task span metrics are particularly valuable for:
 
 To create a task span metric, define a class that inherits from `BaseMetric` and implements a `score` method that accepts a `task_span` parameter (you can still add other parameters as in regular metrics, Opik will perform a separate check for `task_span` argument presence):
 
-```python
+```python wordWrap
 from typing import Any, Dict, Optional
 from opik.evaluation.metrics import BaseMetric, score_result
 from opik.message_processing.emulation.models import SpanModel
@@ -144,7 +144,7 @@ The `SpanModel` object provides rich information about task execution:
 
 ### Basic Properties
 
-```python
+```python wordWrap
 class BasicSpanAnalysisMetric(BaseMetric):
     def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
         # Basic span information
@@ -166,7 +166,7 @@ class BasicSpanAnalysisMetric(BaseMetric):
 
 ### Performance Metrics
 
-```python
+```python wordWrap
 class PerformanceMetric(BaseMetric):
     def _find_model_and_provider_recursively(self, span: SpanModel, model_found: str = None, provider_found: str = None):
         """Recursively search through span tree to find model and provider information."""
@@ -274,7 +274,7 @@ class PerformanceMetric(BaseMetric):
 
 Task span metrics can analyze execution failures and errors:
 
-```python
+```python wordWrap
 class ErrorAnalysisMetric(BaseMetric):
     def _collect_errors_recursively(self, span: SpanModel, errors: list = None):
         """Recursively collect all errors from the span tree."""
@@ -320,7 +320,7 @@ class ErrorAnalysisMetric(BaseMetric):
 
 Task span metrics work seamlessly with regular evaluation metrics. The Opik evaluation engine automatically detects task span metrics by checking if the `score` method includes a `task_span` parameter, and handles them appropriately:
 
-```python
+```python wordWrap
 from opik import evaluate
 from opik.evaluation.metrics import Equals
 
@@ -346,7 +346,7 @@ evaluation = evaluate(
 
 You can validate a task span metric without running a full evaluation by recording spans locally. The SDK provides a context manager that captures all spans/traces created inside its block and exposes them in-memory.
 
-```python
+```python wordWrap
 import opik
 from opik import track
 from opik.evaluation.metrics import score_result
@@ -397,7 +397,7 @@ Note:
 
 Always check for `None` values in optional span attributes:
 
-```python
+```python wordWrap
 def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
     # Safe access to optional fields
     duration = None
@@ -412,7 +412,7 @@ def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.Sco
 
 Use task span metrics to evaluate **how** your application executes, not just the final output:
 
-```python
+```python wordWrap
 # Good: Analyzing execution patterns
 def _analyze_caching_efficiency_recursively(self, span: SpanModel, cache_stats: Dict[str, Any] = None) -> Dict[str, Any]:
     """Recursively analyze caching efficiency across the span tree."""
@@ -544,7 +544,7 @@ def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.Sco
 
 Task span metrics provide the most value when combined with traditional output-based metrics:
 
-```python
+```python wordWrap
 # Comprehensive evaluation approach
 scoring_metrics = [
     # Output quality metrics
@@ -564,7 +564,7 @@ scoring_metrics = [
 
 Be mindful of sensitive data in span information:
 
-```python
+```python wordWrap
 def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
     # Avoid logging sensitive input data
     input_size = len(str(task_span.input)) if task_span.input else 0
@@ -581,7 +581,7 @@ def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.Sco
 
 Here's a comprehensive example that analyzes agent decision-making:
 
-```python
+```python wordWrap
 class AgentTrajectoryMetric(BaseMetric):
     def __init__(self, max_steps: int = 10, name: str = "agent_trajectory_quality"):
         super().__init__(name=name)

@@ -182,6 +182,26 @@ databaseAnalyticsDataModel:
   #   spans already written, one range of weeks at a time. Turn true only once spanWeeksWriteEnabled is live on every
   #   instance: the backfill covers the spans written until its first run, live registration the rest.
   spanWeeksBackfillEnabled: false
+  #  Default: false
+  #  Description: Bound span reads by trace id to the weeks the span_weeks index holds for those traces. Effective only
+  #   while spanWeeksWriteEnabled and spanColumnsNonNullable are also true (without registration new spans never
+  #   reach the index; the legacy spans id_at wraps far-future ids). Turn true once the span
+  #   weeks backfill logs that it is complete; before that, spans it has not indexed yet would be skipped. Registration
+  #   is asynchronous, so a read right after a write can miss the new spans until their week is indexed.
+  spanWeeksReadEnabled: false
+
+# Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
+# switched on by databaseAnalyticsDataModel.spanWeeksWriteEnabled.
+spanWeeksRegistration:
+  #  Default: 3
+  #  Description: Retries after the first attempt; a repeat registration collapses in span_weeks
+  maxRetries: 3
+  #  Default: 200ms
+  #  Description: First backoff; it doubles on each retry, with jitter, up to maxBackoff
+  minBackoff: 200ms
+  #  Default: 2s
+  #  Description: Upper bound of the exponential backoff
+  maxBackoff: 2s
 
 # Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
 # It tiles the span ids into ranges of weeks, from the install week (the first project's created_at) to the plan's own
@@ -987,6 +1007,9 @@ serviceToggles:
   # Default: true
   # Description: Kill switch for Agent Insights, effective only while ollieEnabled is on.
   agentInsightsEnabled: "true"
+  # Default: false
+  # Description: Whether Agent Insights project guidance is enabled, effective only while Agent Insights is active.
+  agentInsightsGuidanceEnabled: "false"
   # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
   onlineScoringTracingEnabled: "true"

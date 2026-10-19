@@ -30,7 +30,7 @@ Every item is a JSON object. Required keys depend on your prompt template; optio
 
 <Steps>
   <Step title="Create via SDK">
-    ```python
+    ```python wordWrap
     import opik
 
     client = opik.Opik()
@@ -48,7 +48,7 @@ Every item is a JSON object. Required keys depend on your prompt template; optio
   </Step>
   <Step title="Use built-in samples">
     The optimizer SDK provides ready-made datasets for quick experiments:
-    ```python
+    ```python wordWrap
     from opik_optimizer import datasets
     hotpot = datasets.hotpot(count=300)
     tiny = datasets.tiny_test()
@@ -69,7 +69,7 @@ Use `filter_by` to select a subset of rows before slicing. Filters support:
 - membership (`{"type": {"bridge", "comparison"}}`)
 - callables (`{"task_id": lambda value: value.startswith("e57")}`)
 
-```python
+```python wordWrap
 from opik_optimizer.datasets import arc_agi2, hotpot
 
 dataset = arc_agi2(
@@ -90,7 +90,7 @@ dataset = hotpot(
 
 If you already have a Hugging Face dataset, you can ingest it into Opik and use it with any optimizer:
 
-```python
+```python wordWrap
 from datasets import load_dataset
 import opik
 
@@ -117,7 +117,7 @@ You can also wrap Hugging Face datasets with a custom helper by following the pa
 
 The optimizer uses the training set for learning and the validation set for selection, ensuring the best prompt works beyond the training examples.
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -157,7 +157,7 @@ result = optimizer.optimize_prompt(
 
 After optimization completes, evaluate the final prompt on a completely held-out test dataset to confirm it generalizes to production scenarios:
 
-```python
+```python wordWrap
 from opik.evaluation import evaluate_prompt
 
 # After optimization, test on unseen data

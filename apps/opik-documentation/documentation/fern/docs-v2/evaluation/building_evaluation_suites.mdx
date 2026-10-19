@@ -36,7 +36,7 @@ In the Opik dashboard, navigate to the Test Suites section to create and manage 
 Define the quality bars you care about as suite-level assertions:
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   import opik
 
   opik_client = opik.Opik()
@@ -53,7 +53,7 @@ Define the quality bars you care about as suite-level assertions:
   )
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   import { Opik, TestSuite } from "opik";
 
   const client = new Opik();
@@ -76,7 +76,7 @@ Define the quality bars you care about as suite-level assertions:
 Add individual items or batches. Items can include item-level assertions that are checked in addition to the suite-level assertions:
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   suite.insert([
       {
           "data": {
@@ -98,7 +98,7 @@ Add individual items or batches. Items can include item-level assertions that ar
   ])
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   await suite.insert([
     {
       data: {
@@ -126,7 +126,7 @@ Add individual items or batches. Items can include item-level assertions that ar
 The task function receives each item's `data` and must return an object with `input` and `output` keys:
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   from openai import OpenAI
   from opik.integrations.openai import track_openai
 
@@ -154,7 +154,7 @@ The task function receives each item's `data` and must return an object with `in
   print(f"v2 pass rate: {result_v2.pass_rate:.0%}")
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   import { runTests } from "opik";
   import OpenAI from "openai";
 
@@ -201,7 +201,7 @@ Each run creates a separate experiment in Opik, making it easy to compare result
 ### Update assertions and execution policy
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   suite.update_test_settings(
       global_assertions=[
           "The response is grounded in the provided context",
@@ -211,7 +211,7 @@ Each run creates a separate experiment in Opik, making it easy to compare result
   )
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   await suite.updateTestSettings({
     globalAssertions: [
       "The response is grounded in the provided context",
@@ -225,7 +225,7 @@ Each run creates a separate experiment in Opik, making it easy to compare result
 ### Inspect suite contents
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   items = suite.get_items()
   assertions = suite.get_global_assertions()
   policy = suite.get_global_execution_policy()
@@ -235,7 +235,7 @@ Each run creates a separate experiment in Opik, making it easy to compare result
   print(f"Policy: {policy}")
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   const items = await suite.getItems();
   const assertions = await suite.getGlobalAssertions();
   const policy = await suite.getGlobalExecutionPolicy();
@@ -249,12 +249,12 @@ Each run creates a separate experiment in Opik, making it easy to compare result
 ### Delete test items
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   items = suite.get_items()
   suite.delete([items[0]["id"]])
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   const items = await suite.getItems();
   await suite.delete([items[0].id]);
   ```
@@ -265,7 +265,7 @@ Each run creates a separate experiment in Opik, making it easy to compare result
 Execution policies control how many times each item is run and how many must pass. This is useful for handling non-deterministic LLM outputs.
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   suite = opik_client.get_or_create_test_suite(
       name="flaky-output-tests",
       global_assertions=["Response follows the expected format"],
@@ -273,7 +273,7 @@ Execution policies control how many times each item is run and how many must pas
   )
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   const suite = await TestSuite.getOrCreate(client, {
     name: "flaky-output-tests",
     globalAssertions: ["Response follows the expected format"],
@@ -290,7 +290,7 @@ Execution policies control how many times each item is run and how many must pas
 You can also override the policy for individual items:
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   suite.insert([{
       "data": {"question": "Is my account compromised?", "context": "..."},
       "assertions": ["Response treats the concern with urgency"],
@@ -298,7 +298,7 @@ You can also override the policy for individual items:
   }])
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   await suite.insert([{
     data: { question: "Is my account compromised?", context: "..." },
     assertions: ["Response treats the concern with urgency"],
