@@ -761,12 +761,21 @@ public class SpanDAO {
             ;
             """;
 
+    /**
+     * With {@code <span_weeks_bound>}, both {@code spans} accesses are bound to the weeks the {@code span_weeks} index
+     * holds for the traces (OPIK-8837). A trace-id predicate prunes no weekly partition, and in nearly every partition
+     * a boundary granule straddles the key range and has to be read, so the unbounded read pays for every week. The
+     * read has no project, so the {@code span_weeks.trace_id} skip indexes serve the lookup. The other trace-keyed
+     * reads carry the same bound and point here; the trace-delete cascade deliberately does not, see
+     * {@link #SELECT_SPAN_IDS_BY_TRACE_ID}.
+     */
     private static final String SELECT_BY_TRACE_IDS = """
             WITH target_projects AS (
                 SELECT DISTINCT project_id
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND trace_id IN :trace_ids
+                <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN :trace_ids)<endif>
             )
             SELECT
                 s.*,
@@ -775,6 +784,7 @@ public class SpanDAO {
             WHERE workspace_id = :workspace_id
             AND project_id IN (SELECT project_id FROM target_projects)
             AND trace_id IN :trace_ids
+            <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN :trace_ids)<endif>
             ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY workspace_id, project_id, id
             SETTINGS log_comment = '<log_comment>'
@@ -789,6 +799,8 @@ public class SpanDAO {
      * version of each span is taken with {@code argMax(..., last_updated_at)} grouped by {@code id} —
      * a hash aggregation that dedups the {@code ReplacingMergeTree} versions without the full-row
      * {@code ORDER BY} + {@code LIMIT 1 BY workspace_id, project_id, id} sort that {@link #SELECT_BY_TRACE_IDS} pays. See OPIK-7454.
+     * <p>
+     * Both {@code spans} accesses carry the {@code <span_weeks_bound>} — see {@link #SELECT_BY_TRACE_IDS}.
      */
     private static final String SELECT_SPANS_SIZE_BY_TRACE_IDS = """
             WITH target_projects AS (
@@ -796,6 +808,7 @@ public class SpanDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND trace_id IN :trace_ids
+                <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN :trace_ids)<endif>
             )
             SELECT sum(span_size) AS size_bytes
             FROM (
@@ -804,6 +817,7 @@ public class SpanDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN (SELECT project_id FROM target_projects)
                 AND trace_id IN :trace_ids
+                <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN :trace_ids)<endif>
                 GROUP BY id
             )
             SETTINGS log_comment = '<log_comment>'
@@ -871,6 +885,12 @@ public class SpanDAO {
      * so each aggregate scans only the page's spans instead of the full filtered project. The aggregate CTEs
      * referencing {@code page_ids} before its definition is fine — CTE names resolve independently of
      * declaration order.
+     * <p>
+     * Scoped to a trace, every {@code spans} access carries the span_weeks bound
+     * ({@code <trace_span_weeks_bound>}, see {@link #SELECT_BY_TRACE_IDS}), {@code page_wide} included: its page-id
+     * predicate prunes no partition either. The lookup takes the project, so it is served by the {@code span_weeks}
+     * primary key. A search then skips its week pre-pass: the bound already prunes, and the pre-pass reads the trace's
+     * keys in every partition.
      */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(span_id_prefilter)>span_id_prefilter AS (
@@ -887,10 +907,13 @@ public class SpanDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned && search_text)>
+                <if(spans_partitioned && search_text && !trace_span_weeks_bound)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     FROM spans
@@ -1081,10 +1104,13 @@ public class SpanDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned && search_text)>
+                <if(spans_partitioned && search_text && !trace_span_weeks_bound)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     FROM spans
@@ -1140,6 +1166,9 @@ public class SpanDAO {
                 AND project_id = :project_id
                 AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
                 <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
                 <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -1201,6 +1230,9 @@ public class SpanDAO {
      * reading it runs on the shard, so a count one level up would make the shard ship every id of the project to the
      * initiator; this one comes back from the shard as one finished row, as {@link #SELECT_SPANS_STATS} does
      * (OPIK-8833).
+     * <p>
+     * Scoped to a trace, carries the span_weeks bound and skips the search week pre-pass, as
+     * {@link #SELECT_BY_PROJECT_ID} does.
      */
     private static final String COUNT_BY_PROJECT_ID = """
             <if(feedback_scores_filters || feedback_scores_empty_filters)>
@@ -1216,10 +1248,13 @@ public class SpanDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned && search_text)>
+                <if(spans_partitioned && search_text && !trace_span_weeks_bound)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     FROM spans
@@ -1306,10 +1341,13 @@ public class SpanDAO {
                 AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
             <if(trace_id)> AND trace_id = :trace_id <endif>
+            <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                SELECT id_week FROM span_weeks
+                WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
             <if(type)> AND type = :type <endif>
             <if(filters)> AND <filters> <endif>
             <if(search_text)> AND <search_text> <endif>
-            <if(spans_partitioned && search_text)>
+            <if(spans_partitioned && search_text && !trace_span_weeks_bound)>
             AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                 FROM spans
@@ -1853,6 +1891,12 @@ public class SpanDAO {
             ;
             """;
 
+    /**
+     * Deliberately not bound by {@code span_weeks}, unlike the other trace-keyed reads (see
+     * {@link #SELECT_BY_TRACE_IDS}). Its ids feed the trace-delete cascade, and the index has no fallback, so a span
+     * whose week is not indexed, as after a partition import, which bypasses {@code span_weeks_mv} until a backfill,
+     * would be left behind by the delete. Correctness wins on a write path that is not user-latency critical.
+     */
     public static final String SELECT_SPAN_IDS_BY_TRACE_ID = """
             SELECT
                   DISTINCT id
@@ -2492,6 +2536,7 @@ public class SpanDAO {
                     var template = getSTWithLogComment(SELECT_BY_TRACE_IDS, "get_spans_by_trace_ids", workspaceId,
                             userName,
                             traceIds.size());
+                    addSpanWeeksBound(template);
                     var statement = connection.createStatement(template.render())
                             .bind("trace_ids", traceIds.toArray(new UUID[0]))
                             .bind("workspace_id", workspaceId);
@@ -2520,6 +2565,7 @@ public class SpanDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(SELECT_SPANS_SIZE_BY_TRACE_IDS, "get_spans_size_by_trace_ids",
                             workspaceId, userName, "traces_size=%s".formatted(traceIds.size()));
+                    addSpanWeeksBound(template);
                     var statement = connection.createStatement(template.render())
                             .bind("trace_ids", traceIds.toArray(new UUID[0]))
                             .bind("workspace_id", workspaceId);
@@ -3078,7 +3124,17 @@ public class SpanDAO {
         if (spanColumnsNonNullable()) {
             template.add("spans_partitioned", true);
         }
+        if (spanSearchCriteria.traceId() != null
+                && configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("trace_span_weeks_bound", true);
+        }
         return template;
+    }
+
+    private void addSpanWeeksBound(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
+        }
     }
 
     /**
