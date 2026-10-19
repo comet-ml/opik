@@ -6,7 +6,7 @@ import PlaygroundProgressIndicator from "./PlaygroundProgressIndicator";
 
 let datasetType: DATASET_TYPE;
 let progressPhase: string | null;
-let watchPaused: boolean;
+let watchLapsed: boolean;
 const onCheckAgain = vi.fn();
 
 vi.mock("@/store/PlaygroundStore", () => ({
@@ -14,14 +14,15 @@ vi.mock("@/store/PlaygroundStore", () => ({
   useProgressCompleted: () => 4,
   useProgressPhase: () => progressPhase,
   useDatasetType: () => datasetType,
-  useWatchPaused: () => watchPaused,
+  useIsAnyWatchLapsed: () => watchLapsed,
+  useShowsRunProgress: () => true,
 }));
 
 describe("PlaygroundProgressIndicator", () => {
   beforeEach(() => {
     datasetType = DATASET_TYPE.DATASET;
     progressPhase = "running";
-    watchPaused = false;
+    watchLapsed = false;
     onCheckAgain.mockClear();
   });
 
@@ -49,7 +50,7 @@ describe("PlaygroundProgressIndicator", () => {
   });
 
   it("replaces the count with the way back once this tab stops following", () => {
-    watchPaused = true;
+    watchLapsed = true;
 
     render(<PlaygroundProgressIndicator onCheckAgain={onCheckAgain} />);
 
@@ -61,7 +62,7 @@ describe("PlaygroundProgressIndicator", () => {
   });
 
   it("asks to pick the run back up when Refresh is pressed", () => {
-    watchPaused = true;
+    watchLapsed = true;
 
     render(<PlaygroundProgressIndicator onCheckAgain={onCheckAgain} />);
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
