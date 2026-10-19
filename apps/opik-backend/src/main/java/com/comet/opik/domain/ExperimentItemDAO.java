@@ -496,6 +496,7 @@ class ExperimentItemDAO {
                           WHERE workspace_id = :workspace_id
                           <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                           AND trace_id IN (SELECT trace_id FROM experiment_items_ids)
+                          <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id <if(has_target_projects)>AND project_id IN :target_project_ids<endif> AND trace_id IN (SELECT trace_id FROM experiment_items_ids))<endif>
                           GROUP BY workspace_id, project_id, trace_id
                       ) s ON s.trace_id = t.id
                   ) AS tfs ON ei.trace_id = tfs.id
@@ -773,6 +774,12 @@ class ExperimentItemDAO {
         }
     }
 
+    private void addSpanWeeksBound(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
+        }
+    }
+
     private Mono<List<UUID>> getTargetProjectIds(Set<UUID> experimentIds) {
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
@@ -803,6 +810,7 @@ class ExperimentItemDAO {
             var template = getSTWithLogComment(STREAM, "get_experiment_items_stream", workspaceId, userName,
                     experimentIds.size());
             addTracesPartitionedFlag(template);
+            addSpanWeeksBound(template);
             if (lastRetrievedId != null) {
                 template.add("lastRetrievedId", lastRetrievedId);
             }

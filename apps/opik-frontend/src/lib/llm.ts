@@ -129,6 +129,24 @@ export const hasAudiosInContent = (
   return content.some((c): c is AudioPart => c.type === "audio_url");
 };
 
+// Providers accept only text in system and assistant messages, so media there would be
+// dropped or rejected at run time.
+export const toContentForRole = (
+  content: MessageContent,
+  role: LLM_MESSAGE_ROLE,
+): { content: MessageContent; mediaDropped: boolean } => {
+  const hasMedia =
+    hasImagesInContent(content) ||
+    hasVideosInContent(content) ||
+    hasAudiosInContent(content);
+
+  if (!hasMedia || isMediaAllowedForRole(role)) {
+    return { content, mediaDropped: false };
+  }
+
+  return { content: getTextFromMessageContent(content), mediaDropped: true };
+};
+
 /**
  * Get all template strings from message content (text, image URLs, video URLs, and audio URLs)
  * Used for extracting mustache variables from all parts of a message

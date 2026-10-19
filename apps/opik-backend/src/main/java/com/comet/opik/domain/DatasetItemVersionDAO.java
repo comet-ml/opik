@@ -1151,7 +1151,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * table is a {@code ReplicatedReplacingMergeTree} ordered by
      * {@code (workspace_id, dataset_id, dataset_version_id, id)} with {@code last_updated_at}
      * as the version column. The upsert flow (PUT {@code /datasets/items} →
-     * {@code BATCH_INSERT_ITEMS}) re-INSERTs the same {@code (ws, ds, dvid, id)} tuple when a
+     * {@link #insertItemsJsonEachRow}) re-INSERTs the same {@code (ws, ds, dvid, id)} tuple when a
      * client PUTs the same item ids twice with changed {@code data} / {@code description} /
      * {@code tags} / {@code evaluators} / {@code execution_policy} (the endpoint contract
      * says: "Each item's id is the stable identifier and upsert key"). Pre-merge duplicates
@@ -1979,6 +1979,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         WHERE workspace_id = :workspace_id
                         <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                         AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                        <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id <if(has_target_projects)>AND project_id IN :target_project_ids<endif> AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope))<endif>
                         GROUP BY workspace_id, project_id, trace_id
                     ) s ON t.id = s.trace_id
                     GROUP BY
@@ -2699,6 +2700,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     WHERE workspace_id = :workspace_id
                     <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                     AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                    <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id <if(has_target_projects)>AND project_id IN :target_project_ids<endif> AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope))<endif>
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON eif.trace_id = s.trace_id
             ), feedback_scores_raw_agg AS (
@@ -3130,6 +3132,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                             criteria.datasetId(), versionId,
                                             CollectionUtils.size(criteria.experimentIds()), page, size));
                             addTracesPartitionedFlag(template);
+                            addSpanWeeksBound(template);
 
                             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
                             template.add("truncationSize",
@@ -3288,6 +3291,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private void addTracesPartitionedFlag(ST template) {
         if (config.getDatabaseAnalyticsDataModel().traceColumnsNonNullable()) {
             template.add("traces_partitioned", true);
+        }
+    }
+
+    private void addSpanWeeksBound(ST template) {
+        if (config.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
         }
     }
 
@@ -4469,6 +4478,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 "dataset_id=%s, version_id=%s, experiment_ids=%s, filters=%s".formatted(datasetId,
                                         versionId, experimentIds.size(), CollectionUtils.size(filters)));
                         addTracesPartitionedFlag(template);
+                        addSpanWeeksBound(template);
 
                         if (CollectionUtils.isNotEmpty(experimentIds)) {
                             template.add("experiment_ids", true);

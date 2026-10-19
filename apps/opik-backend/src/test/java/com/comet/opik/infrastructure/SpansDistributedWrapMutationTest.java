@@ -238,13 +238,20 @@ class SpansDistributedWrapMutationTest {
     /**
      * A trace carrying exactly one span, both keyed on {@code id}. The insert and the read-back both route through
      * {@code spans}, so the assertion here is also what shows that path intact on whichever topology the suite runs.
+     *
+     * <p>The read-back is polled: with {@code prefer_localhost_replica = 0} (OPIK-8255) a write through the wrapper is
+     * queued and shipped to {@code spans_local} by a background sender, so it is visible eventually, not on return.
+     * Awaiting it also ensures the row is on the shard before a test deletes there.
      */
     private Trace seedTraceWithSpanAt(UUID id) {
         var trace = newTrace().id(id).build();
         traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
         var span = newSpan(trace.projectName(), id).build();
         spanResourceClient.createSpan(span, API_KEY, WORKSPACE_NAME);
-        assertThat(spanIdsOf(trace)).containsExactly(span.id());
+        Awaitility.await()
+                .atMost(5, TimeUnit.SECONDS)
+                .pollInterval(200, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(spanIdsOf(trace)).containsExactly(span.id()));
         return trace;
     }
 

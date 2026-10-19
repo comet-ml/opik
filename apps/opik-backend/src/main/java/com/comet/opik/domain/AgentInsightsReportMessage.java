@@ -17,6 +17,8 @@ import java.util.UUID;
  *                      crossing the trace threshold), carried through to the Ollie trigger. Nullable (not
  *                      {@code @NonNull}) so a message queued before this field existed still deserializes on
  *                      a rolling upgrade; the subscriber defaults a null to "scheduled".
+ * @param guidance the project guidance read at enqueue; null when there is none or the guidance toggle is off.
+ * @param guidanceVersion the guidance version the run carries; null when the guidance toggle is off.
  */
 @Builder(toBuilder = true)
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
@@ -26,5 +28,7 @@ public record AgentInsightsReportMessage(
         @NonNull String workspaceId,
         @NonNull Instant periodStart,
         @NonNull Instant periodEnd,
-        String triggerSource) implements RedisSubscriberMessage {
+        String triggerSource,
+        String guidance,
+        Integer guidanceVersion) implements RedisSubscriberMessage {
 }

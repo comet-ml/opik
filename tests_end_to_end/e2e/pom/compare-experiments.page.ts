@@ -614,7 +614,7 @@ export class CompareExperimentsPage {
   /**
    * One column of the row-detail panel, resolved by what it is HEADED with.
    *
-   * The dataset item's column is the one headed "Test suite item"; an
+   * The dataset item's column is the one headed "Dataset item"; an
    * experiment's is the one headed by its own name (the `h2` the viewer
    * renders). `[data-panel]` is the wrapper react-resizable-panels stamps on
    * each, so the heading identifies the column and the attribute bounds it —
@@ -625,7 +625,7 @@ export class CompareExperimentsPage {
   private panelColumn(column: PanelColumn): Locator {
     const heading =
       column === 'dataset'
-        ? this.page.getByRole('heading', { level: 4, name: 'Test suite item' })
+        ? this.page.getByRole('heading', { level: 4, name: 'Dataset item' })
         : this.page.getByRole('heading', { level: 2, name: column.experimentName });
     return this.rowPanel.locator('[data-panel]').filter({ has: heading });
   }

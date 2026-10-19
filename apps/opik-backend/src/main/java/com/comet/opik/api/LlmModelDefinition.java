@@ -16,5 +16,6 @@ public record LlmModelDefinition(
         boolean structuredOutput,
         boolean reasoning,
         List<String> supportedParameters,
-        List<String> reasoningEfforts) {
+        List<String> reasoningEfforts,
+        ModelParams params) {
 }

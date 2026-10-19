@@ -90,6 +90,20 @@ import lombok.Builder;
  * {@code span_weeks} index ({@code SpanService.registerWeeks}). Left {@code false} at deploy time; turn it on before
  * the span weeks backfill starts, so every span written after the backfill's snapshot is indexed. Off writes
  * nothing.</p>
+ *
+ * <p>{@code spanWeeksBackfillEnabled}: when {@code true}, the span weeks backfill job is scheduled
+ * ({@code SpanWeeksBackfillJob}): it fills {@code span_weeks} from the spans already written, one range of weeks at a
+ * time. Turn it on only once {@code spanWeeksWriteEnabled} is live on every instance: the backfill covers the
+ * spans written until its first run, and live registration everything after. Its tuning lives in
+ * {@code spanWeeksBackfill}.</p>
+ *
+ * <p>{@code spanWeeksReadEnabled}: when {@code true}, span reads by trace id bound {@code spans} to the weeks the
+ * {@code span_weeks} index holds for those traces. Effective only while {@code spanWeeksWriteEnabled} and
+ * {@code spanColumnsNonNullable} are also on: without registration new spans never reach the index, and the legacy
+ * {@code spans} keeps {@code id_at} as a 32-bit {@code DateTime} that wraps far-future ids, so a week bound there would
+ * drop rows. Turn it on once the backfill logs that it is complete; before that, unindexed spans would be
+ * skipped. {@code span_weeks_mv} also registers each span's week in the spans insert itself, so the week is indexed by
+ * the time the insert returns; only partition imports bypass it, and need a backfill of the moved range.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
@@ -100,5 +114,11 @@ public record DatabaseAnalyticsDataModelConfig(
         @Min(1) @Max(2_000) int deletionEventsInsertBatchSize,
         boolean tracesDistributedWrapEnabled,
         boolean spansDistributedWrapEnabled,
-        boolean spanWeeksWriteEnabled) {
+        boolean spanWeeksWriteEnabled,
+        boolean spanWeeksBackfillEnabled,
+        boolean spanWeeksReadEnabled) {
+
+    public boolean spanWeeksReadBounded() {
+        return spanWeeksReadEnabled && spanColumnsNonNullable;
+    }
 }

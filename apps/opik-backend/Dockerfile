@@ -32,7 +32,7 @@ LABEL org.opencontainers.image.vendor="Comet ML"
 # Install dependencies, download and verify AWS RDS certificate bundle
 # SHA256 checksum must match the official AWS RDS global bundle
 # Update this checksum when AWS updates the bundle: https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
-ARG RDS_CERT_SHA256=fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c
+ARG RDS_CERT_SHA256=90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b
 # Not a secret: `changeit` is the stock JDK truststore password, and this truststore holds only
 # public AWS RDS CA certificates. Flagged because the variable name matches hadolint's heuristic.
 # hadolint ignore=DL3064

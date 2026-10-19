@@ -17,7 +17,7 @@ LiveKit Agents' primary advantage is its built-in OpenTelemetry support for comp
 
 To use the LiveKit Agents integration with Opik, you will need to have LiveKit Agents and the required OpenTelemetry packages installed:
 
-```bash
+```bash wordWrap
 pip install "livekit-agents[openai,turn-detector,silero,deepgram]" opentelemetry-exporter-otlp-proto-http
 ```
 
@@ -75,7 +75,7 @@ Configure your environment variables based on your Opik deployment:
     If you are self-hosting Opik, you will need to set the following environment
     variables:
 
-    ```bash
+    ```bash wordWrap
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
     ```
 
@@ -83,7 +83,7 @@ Configure your environment variables based on your Opik deployment:
         To log the traces to a specific project, you can add the `projectName`
         parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
 
-        ```bash
+        ```bash wordWrap
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
 
@@ -96,7 +96,7 @@ Configure your environment variables based on your Opik deployment:
 
 LiveKit Agents includes built-in OpenTelemetry support. To enable telemetry, configure a tracer provider using `set_tracer_provider` in your entrypoint function:
 
-```python title="main.py"
+```python title="main.py" wordWrap
 import logging
 
 from dotenv import load_dotenv
@@ -224,7 +224,7 @@ if __name__ == "__main__":
 Make sure to create a `.env` file with the environment variables you configured above as well as LiveKit,
 DeepGram and OpenAI API keys and credentials. It should look something like this:
 
-```md title=".env"
+```md title=".env" wordWrap
 # LiveKit credentials
 # For local development, you can use these placeholder values
 # or get real credentials from https://cloud.livekit.io
@@ -246,7 +246,7 @@ OPENAI_API_KEY=[your-openai-api-key]
 
 Then, run the application with following command:
 
-```bash
+```bash wordWrap
 python main.py console
 ```
 
