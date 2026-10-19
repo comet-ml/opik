@@ -719,6 +719,32 @@ describe("useActionButtonActions lifecycle", () => {
       expect(usePlaygroundStore.getState().stopPending).toBeNull();
     });
 
+    // A stop can reach prompts in both states at once: one whose id arrived long ago, one still
+    // waiting on its launch. Treating the set as all-or-nothing cancels the first and abandons
+    // the second, which then runs to completion with nothing left that can name it.
+    it("should cancel the prompts it can name and queue the ones it cannot", async () => {
+      usePlaygroundStore.setState({
+        promptIds: [PROMPT_A, PROMPT_B],
+        promptMap: {
+          [PROMPT_A]: { id: PROMPT_A, name: "A", messages: [], configs: {} },
+          [PROMPT_B]: { id: PROMPT_B, name: "B", messages: [], configs: {} },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+        // A finished its run earlier, so only it has an id.
+        experimentByPromptId: { [PROMPT_A]: EXPERIMENT_A },
+        isRunningMap: { [PROMPT_A]: true, [PROMPT_B]: true },
+      });
+
+      const { result } = renderActions("dataset-1");
+
+      act(() => result.current.stopAll());
+
+      expect(cancelExperimentRun).toHaveBeenCalledWith({
+        experimentIds: [EXPERIMENT_A],
+      });
+      expect(usePlaygroundStore.getState().stopPending).toEqual([PROMPT_B]);
+    });
+
     // Two prompts stopped one after the other in the same window. Both are waiting on the same
     // response, so the second must not take the first one's place in the queue.
     it("should keep both stops when each prompt is stopped on its own", async () => {

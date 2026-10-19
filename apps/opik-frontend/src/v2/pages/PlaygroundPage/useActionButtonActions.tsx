@@ -249,21 +249,30 @@ const useActionButtonActions = ({
 
       const experimentByPromptId =
         usePlaygroundStore.getState().experimentByPromptId ?? {};
-      const experimentIds = promptIds
-        .map((promptId) => experimentByPromptId[promptId])
-        .filter(Boolean);
 
-      // Nothing to cancel by id yet: /execute has not answered, so the run exists on the server
-      // but this tab cannot name it. Remember the stop and replay it when the ids arrive, keeping
-      // any stop already waiting so a second one does not drop the first.
-      if (experimentIds.length === 0) {
+      // Split rather than all-or-nothing: a stop can cover prompts whose ids have arrived and
+      // prompts whose /execute has not answered yet, and taking the first branch for the whole
+      // set would drop the unnamed ones — their runs carry on with nothing left to cancel them.
+      const named = promptIds.filter(
+        (promptId) => experimentByPromptId[promptId],
+      );
+      const unnamed = promptIds.filter(
+        (promptId) => !experimentByPromptId[promptId],
+      );
+
+      // The run exists on the server but this tab cannot name it. Remember those and replay them
+      // when the ids arrive, keeping any stop already waiting so a second one does not drop it.
+      if (unnamed.length > 0) {
         const waiting = usePlaygroundStore.getState().stopPending ?? [];
-        setStopPending([...new Set([...waiting, ...promptIds])]);
-        return;
+        setStopPending([...new Set([...waiting, ...unnamed])]);
       }
 
+      if (named.length === 0) return;
+
       releaseRunInFlight();
-      cancelExperimentRun({ experimentIds });
+      cancelExperimentRun({
+        experimentIds: named.map((promptId) => experimentByPromptId[promptId]),
+      });
       refreshRunViews();
     },
     [
