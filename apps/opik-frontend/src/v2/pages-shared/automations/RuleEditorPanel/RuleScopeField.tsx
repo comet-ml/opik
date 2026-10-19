@@ -26,12 +26,14 @@ type RuleScopeFieldProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
   onScopeChange: (scope: EVALUATORS_RULE_SCOPE) => void;
   disabled?: boolean;
+  traceScopeOnly?: boolean;
 };
 
 const RuleScopeField: React.FC<RuleScopeFieldProps> = ({
   form,
   onScopeChange,
   disabled = false,
+  traceScopeOnly = false,
 }) => {
   const isSpanLlmJudgeEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED,
@@ -48,11 +50,12 @@ const RuleScopeField: React.FC<RuleScopeFieldProps> = ({
       : isSpanLlmJudgeEnabled;
 
   const scopeOptions = [
-    ...(isDecisionModelRule
+    ...(isDecisionModelRule || traceScopeOnly
       ? []
       : [{ value: EVALUATORS_RULE_SCOPE.thread, label: "Threads" }]),
     { value: EVALUATORS_RULE_SCOPE.trace, label: "Traces" },
-    ...(isSpanScopeEnabled || scope === EVALUATORS_RULE_SCOPE.span
+    ...(!traceScopeOnly &&
+    (isSpanScopeEnabled || scope === EVALUATORS_RULE_SCOPE.span)
       ? [{ value: EVALUATORS_RULE_SCOPE.span, label: "Spans" }]
       : []),
   ];

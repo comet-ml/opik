@@ -21,11 +21,12 @@ const AddItemButton: React.FC<AddItemButtonProps> = ({
   disabledMessage = "",
 }) => {
   const isDashed = variant === "dashed";
-  const button = (
+
+  return (
     <DisabledTooltip
       disabled={disabled}
       message={disabledMessage}
-      className={cn(!isDashed && "self-start")}
+      className={cn(isDashed ? "w-full" : "self-start")}
     >
       <Button
         type="button"
@@ -33,7 +34,9 @@ const AddItemButton: React.FC<AddItemButtonProps> = ({
         size="xs"
         className={cn(
           "text-foreground hover:text-primary-hover",
-          !isDashed && "pl-1",
+          isDashed
+            ? "h-8 w-full rounded-md border border-dashed border-border bg-soft-background"
+            : "pl-1",
         )}
         onClick={onClick}
         disabled={disabled}
@@ -42,14 +45,6 @@ const AddItemButton: React.FC<AddItemButtonProps> = ({
         {label}
       </Button>
     </DisabledTooltip>
-  );
-
-  if (!isDashed) return button;
-
-  return (
-    <div className="flex h-8 w-full items-center justify-center rounded-md border border-dashed border-border bg-soft-background">
-      {button}
-    </div>
   );
 };
 

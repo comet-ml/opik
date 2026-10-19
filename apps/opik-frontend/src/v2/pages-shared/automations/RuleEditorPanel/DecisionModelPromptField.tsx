@@ -83,10 +83,12 @@ const OpenRouterNotice: React.FC = () => {
 
 type DecisionModelPromptFieldProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
+  datasetColumnNames?: string[];
 };
 
 const DecisionModelPromptField: React.FC<DecisionModelPromptFieldProps> = ({
   form,
+  datasetColumnNames,
 }) => {
   const scope = form.watch("scope");
   const decisionModelErrors = getDecisionModelErrors(form);
@@ -94,6 +96,7 @@ const DecisionModelPromptField: React.FC<DecisionModelPromptFieldProps> = ({
     form.watch("projectIds")[0] ?? "",
     scope,
     true,
+    datasetColumnNames,
   );
 
   return (

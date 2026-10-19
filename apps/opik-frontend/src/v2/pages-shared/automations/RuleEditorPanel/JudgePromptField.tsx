@@ -24,6 +24,7 @@ type JudgePromptFieldProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
   onSelectTemplate?: (template: LLMPromptTemplate, label: string) => void;
   mergeInfo?: PromptMergeInfo | null;
+  datasetColumnNames?: string[];
 };
 
 const getJudgeErrors = (form: UseFormReturn<EvaluationRuleFormType>) => {
@@ -52,6 +53,7 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
   form,
   onSelectTemplate,
   mergeInfo,
+  datasetColumnNames,
 }) => {
   const editorRef = useRef<PromptVariableEditorHandle>(null);
   const scope = form.watch("scope");
@@ -59,6 +61,8 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
   const sampleData = useRuleSampleData(
     form.watch("projectIds")[0] ?? "",
     scope,
+    false,
+    datasetColumnNames,
   );
 
   return (

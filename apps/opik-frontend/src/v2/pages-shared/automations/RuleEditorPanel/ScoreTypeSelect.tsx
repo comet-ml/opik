@@ -22,7 +22,9 @@ const renderTypeLabel = (type: string) => {
 
   return (
     <div className="flex min-w-0 items-center gap-1">
-      <Icon className="size-3.5 shrink-0 text-light-slate" />
+      <span className="flex size-4 shrink-0 items-center justify-center">
+        <Icon className="size-3.5 text-light-slate" />
+      </span>
       <span className="truncate">{option.label}</span>
     </div>
   );

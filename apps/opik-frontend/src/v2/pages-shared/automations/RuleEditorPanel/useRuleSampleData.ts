@@ -36,10 +36,30 @@ export type RuleSampleData = {
   emptyState: string;
 };
 
+const getDatasetColumnsData = (
+  treeData: JsonObject,
+  datasetColumnNames: string[],
+): JsonObject => {
+  const metadata = (treeData.metadata ?? {}) as JsonObject;
+  const datasetItemData = (metadata.dataset_item_data ?? {}) as JsonObject;
+  return {
+    metadata: {
+      ...metadata,
+      dataset_item_data: {
+        ...Object.fromEntries(
+          datasetColumnNames.map((name) => [name, "Dataset column"]),
+        ),
+        ...datasetItemData,
+      },
+    },
+  };
+};
+
 const useRuleSampleData = (
   projectId: string,
   scope: EVALUATORS_RULE_SCOPE,
   isDecisionModelRule = false,
+  datasetColumnNames?: string[],
 ): RuleSampleData | null => {
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const enabled = Boolean(projectId) && !isThreadScope;
@@ -72,6 +92,9 @@ const useRuleSampleData = (
     return {
       treeData: {
         ...treeData,
+        ...(datasetColumnNames?.length
+          ? getDatasetColumnsData(treeData, datasetColumnNames)
+          : {}),
         ...(isDecisionModelRule
           ? DECISION_MODEL_RESERVED_VARIABLES
           : RESERVED_VARIABLES)[scope],
@@ -89,6 +112,7 @@ const useRuleSampleData = (
     entityLabel,
     scope,
     isDecisionModelRule,
+    datasetColumnNames,
   ]);
 };
 

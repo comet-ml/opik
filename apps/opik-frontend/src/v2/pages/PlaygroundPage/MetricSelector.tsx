@@ -42,6 +42,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   onSelectionChange,
   projectId,
   canUsePlayground,
+  datasetColumnNames,
   open,
   onOpenChange,
   onRuleCreated,
@@ -315,6 +316,8 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
         projectId={projectId}
         rule={ruleToEdit ?? undefined}
         onRuleCreated={onRuleCreated}
+        datasetColumnNames={datasetColumnNames}
+        traceScopeOnly
       />
     </>
   );

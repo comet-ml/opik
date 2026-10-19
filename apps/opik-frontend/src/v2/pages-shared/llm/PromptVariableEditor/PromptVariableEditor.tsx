@@ -173,6 +173,7 @@ const PromptVariableEditor = forwardRef<
             onOpenChange={handlePopoverOpenChange}
             searchQuery={jsonSearchQuery}
             onFocusedPathChange={setFocusedVariableKey}
+            expandWithArrowKeys={false}
             trigger={
               <span
                 className="pointer-events-none"

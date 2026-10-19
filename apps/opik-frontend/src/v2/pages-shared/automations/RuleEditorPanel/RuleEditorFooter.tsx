@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 
 import { Button } from "@/ui/button";
 import { Switch } from "@/ui/switch";
+import DisabledTooltip from "@/shared/DisabledTooltip/DisabledTooltip";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 
 const ENABLED_SWITCH_ID = "rule-editor-enabled";
@@ -16,6 +17,7 @@ type RuleEditorFooterProps = {
   onSubmit: () => void;
   isSubmitting: boolean;
   hasPendingChanges?: boolean;
+  disabledReason?: string;
 };
 
 const RuleEditorFooter: React.FC<RuleEditorFooterProps> = ({
@@ -25,6 +27,7 @@ const RuleEditorFooter: React.FC<RuleEditorFooterProps> = ({
   onSubmit,
   isSubmitting,
   hasPendingChanges = false,
+  disabledReason,
 }) => {
   const values = useWatch({ control: form.control });
   const hasChanges =
@@ -48,14 +51,21 @@ const RuleEditorFooter: React.FC<RuleEditorFooterProps> = ({
       <Button variant="outline" size="sm" onClick={onCancel}>
         Cancel
       </Button>
-      <Button
-        size="sm"
-        onClick={onSubmit}
-        disabled={isSubmitting || (isEdit && !hasChanges)}
+      <DisabledTooltip
+        disabled={Boolean(disabledReason)}
+        message={disabledReason ?? ""}
       >
-        {isSubmitting && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
-        {isEdit ? "Save changes" : "Create evaluator"}
-      </Button>
+        <Button
+          size="sm"
+          onClick={onSubmit}
+          disabled={
+            isSubmitting || Boolean(disabledReason) || (isEdit && !hasChanges)
+          }
+        >
+          {isSubmitting && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+          {isEdit ? "Save changes" : "Create evaluator"}
+        </Button>
+      </DisabledTooltip>
     </div>
   );
 };

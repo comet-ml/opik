@@ -32,7 +32,7 @@ describe("inline variable round trip", () => {
     });
   });
 
-  it("gives back the saved rule after a load and a save", () => {
+  it("gives back the saved names of nested paths after a load and a save", () => {
     const saved = { var_1: "metadata.test.test", var_2: "output" };
     const loaded = inlineVariableMappings(
       [message("{{var_1}} and {{var_2}}")],
@@ -44,7 +44,27 @@ describe("inline variable round trip", () => {
       saved,
     );
 
-    expect(messages[0].content).toBe("{{var_1}} and {{var_2}}");
-    expect(variables).toEqual(saved);
+    expect(messages[0].content).toBe("{{var_1}} and {{output}}");
+    expect(variables).toEqual({
+      var_1: "metadata.test.test",
+      output: "output",
+    });
+  });
+
+  it("does not chain renames when a name is also a path", () => {
+    const saved = { ctx: "output", output: "output.answer" };
+    const loaded = inlineVariableMappings(
+      [message("FULL {{ctx}} ANS {{output}}")],
+      saved,
+    );
+    expect(loaded[0].content).toBe("FULL {{output}} ANS {{output.answer}}");
+
+    const { messages, variables } = nameInlineVariables(
+      loaded,
+      { output: "output", "output.answer": "output.answer" },
+      saved,
+    );
+    expect(messages[0].content).toBe("FULL {{output}} ANS {{var_1}}");
+    expect(variables).toEqual({ output: "output", var_1: "output.answer" });
   });
 });

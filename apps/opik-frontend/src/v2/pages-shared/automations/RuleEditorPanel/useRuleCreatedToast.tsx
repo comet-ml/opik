@@ -46,7 +46,16 @@ const useRuleCreatedToast = () => {
       scope: EVALUATORS_RULE_SCOPE,
       triggerScope: EVAL_TRIGGER_SCOPE,
       projectIds: string[],
+      enabled: boolean,
     ) => {
+      if (!enabled) {
+        toast({
+          title: "Evaluation rule saved",
+          description:
+            "This rule is disabled, so it does not score anything. Enable it to start scoring.",
+        });
+        return;
+      }
       const hasLogs =
         scope !== EVALUATORS_RULE_SCOPE.trace ||
         triggerScope !== EVAL_TRIGGER_SCOPE.experiment;

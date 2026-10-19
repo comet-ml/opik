@@ -28,6 +28,8 @@ const MAX_HEIGHT = "320px";
 const KEY_CYCLE_FOCUS = "Tab";
 const KEY_FOCUS_NEXT = "ArrowDown";
 const KEY_FOCUS_PREV = "ArrowUp";
+const KEY_EXPAND = "ArrowRight";
+const KEY_COLLAPSE = "ArrowLeft";
 const KEY_SELECT = "Enter";
 const KEY_CLOSE = "Escape";
 
@@ -35,6 +37,8 @@ const NAVIGATION_KEYS = [
   KEY_CYCLE_FOCUS,
   KEY_FOCUS_NEXT,
   KEY_FOCUS_PREV,
+  KEY_EXPAND,
+  KEY_COLLAPSE,
   KEY_SELECT,
   KEY_CLOSE,
 ];
@@ -52,6 +56,7 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
   selectedPath,
   contentClassName,
   sideOffset = 4,
+  expandWithArrowKeys = true,
 }) => {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
     () => new Set(),
@@ -224,7 +229,11 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only handle navigation keys
-      if (!NAVIGATION_KEYS.includes(e.key)) {
+      if (
+        !NAVIGATION_KEYS.includes(e.key) ||
+        (!expandWithArrowKeys &&
+          (e.key === KEY_EXPAND || e.key === KEY_COLLAPSE))
+      ) {
         return;
       }
 
@@ -262,6 +271,27 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
           handleFocusPath(filteredVisiblePaths[prevIndex].path);
           break;
         }
+        case KEY_EXPAND: {
+          e.preventDefault();
+          if (focusedPath) {
+            const item = filteredVisiblePaths.find(
+              (p) => p.path === focusedPath,
+            );
+            if (item && typeof item.value === "object" && item.value !== null) {
+              if (!expandedPaths.has(focusedPath)) {
+                handleToggleExpand(focusedPath);
+              }
+            }
+          }
+          break;
+        }
+        case KEY_COLLAPSE: {
+          e.preventDefault();
+          if (focusedPath && expandedPaths.has(focusedPath)) {
+            handleToggleExpand(focusedPath);
+          }
+          break;
+        }
         case KEY_SELECT: {
           if (focusedPath) {
             e.preventDefault();
@@ -289,8 +319,11 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
     open,
     focusedPath,
     filteredVisiblePaths,
+    expandedPaths,
+    expandWithArrowKeys,
     handleFocusPath,
     handleSelect,
+    handleToggleExpand,
     onOpenChange,
   ]);
 
@@ -391,7 +424,7 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
 
         <div className="p-2">{renderTree()}</div>
 
-        <PopoverFooter />
+        <PopoverFooter expandWithArrowKeys={expandWithArrowKeys} />
       </PopoverContent>
     </Popover>
   );

@@ -32,6 +32,8 @@ type RuleEditorPanelProps = {
   isClone?: boolean;
   defaultScope?: EVALUATORS_RULE_SCOPE;
   onRuleCreated?: (rule: EvaluatorsRule) => void;
+  traceScopeOnly?: boolean;
+  datasetColumnNames?: string[];
 };
 
 const RuleEditorPanel: React.FC<RuleEditorPanelProps> = ({
@@ -43,6 +45,8 @@ const RuleEditorPanel: React.FC<RuleEditorPanelProps> = ({
   isClone = false,
   defaultScope,
   onRuleCreated,
+  traceScopeOnly,
+  datasetColumnNames,
 }) => {
   const isEdit = Boolean(rule) && !isClone;
   const ruleType = rule ? getRuleUIType(rule) : newRuleType;
@@ -87,6 +91,8 @@ const RuleEditorPanel: React.FC<RuleEditorPanelProps> = ({
           defaultModel={defaultModel}
           defaultScope={defaultScope}
           onRuleCreated={onRuleCreated}
+          traceScopeOnly={traceScopeOnly}
+          datasetColumnNames={datasetColumnNames}
         />
       ) : (
         <Loader />

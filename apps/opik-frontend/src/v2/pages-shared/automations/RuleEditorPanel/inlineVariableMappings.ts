@@ -3,15 +3,17 @@ import isString from "lodash/isString";
 import { LLMMessage, MessageContent } from "@/types/llm";
 
 const ENTITY_PATH_REGEX = /^(input|output|metadata)(\.|\[|$)/;
+const NESTED_ENTITY_PATH_REGEX = /^(input|output|metadata)(\.|\[)/;
 
-const escapeRegExp = (value: string) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const TAG_REGEX = /\{\{\s*([^{}]*?)\s*\}\}/g;
 
-const replaceTag = (text: string, from: string, to: string) =>
-  text.replace(
-    new RegExp(`\\{\\{\\s*${escapeRegExp(from)}\\s*\\}\\}`, "g"),
-    () => `{{${to}}}`,
-  );
+const replaceTags = (text: string, renames: Map<string, string>) =>
+  text.replace(TAG_REGEX, (tag, name: string) => {
+    const newName = renames.get(name);
+    return newName === undefined ? tag : `{{${newName}}}`;
+  });
+
+export const isInlinedMapping = (path: string) => ENTITY_PATH_REGEX.test(path);
 
 const mapContentStrings = (
   content: MessageContent,
@@ -33,13 +35,15 @@ const mapContentStrings = (
   });
 };
 
-const renameTags = (messages: LLMMessage[], renames: [string, string][]) =>
-  messages.map((message) => ({
+const renameTags = (messages: LLMMessage[], renames: [string, string][]) => {
+  const renameMap = new Map(renames);
+  return messages.map((message) => ({
     ...message,
     content: mapContentStrings(message.content, (value) =>
-      renames.reduce((text, [from, to]) => replaceTag(text, from, to), value),
+      replaceTags(value, renameMap),
     ),
   }));
+};
 
 export const inlineVariableMappings = (
   messages: LLMMessage[],
@@ -47,9 +51,7 @@ export const inlineVariableMappings = (
 ): LLMMessage[] =>
   renameTags(
     messages,
-    Object.entries(variables).filter(([, path]) =>
-      ENTITY_PATH_REGEX.test(path),
-    ),
+    Object.entries(variables).filter(([, path]) => isInlinedMapping(path)),
   );
 
 export const nameInlineVariables = (
@@ -58,7 +60,7 @@ export const nameInlineVariables = (
   savedVariables: Record<string, string> = {},
 ): { messages: LLMMessage[]; variables: Record<string, string> } => {
   const isInlinePath = (name: string) =>
-    variables[name] === name && ENTITY_PATH_REGEX.test(name);
+    variables[name] === name && NESTED_ENTITY_PATH_REGEX.test(name);
   const usedNames = new Set(
     Object.keys(variables).filter((name) => !isInlinePath(name)),
   );

@@ -3,6 +3,7 @@ import { FieldPathValue, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import cloneDeep from "lodash/cloneDeep";
 import isEqual from "lodash/isEqual";
+import omitBy from "lodash/omitBy";
 
 import {
   EVAL_TRIGGER_SCOPE,
@@ -48,6 +49,7 @@ import {
 } from "@/v2/pages-shared/automations/RuleEditorPanel/helpers";
 import {
   inlineVariableMappings,
+  isInlinedMapping,
   nameInlineVariables,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/inlineVariableMappings";
 import {
@@ -115,11 +117,22 @@ const getPromptVariables = (
 
 type SavedLLMJudgeData = ReturnType<typeof convertLLMJudgeObjectToLLMJudgeData>;
 
-const toFormLLMJudgeDetails = (details: SavedLLMJudgeData) => ({
+const toFormLLMJudgeDetails = (
+  details: SavedLLMJudgeData,
+  uiType: UI_EVALUATORS_RULE_TYPE,
+) => ({
   ...details,
   messages: mergeMessagesIntoPrompt(
     inlineVariableMappings(details.messages, details.variables),
   ),
+  variables: omitBy(details.variables, isInlinedMapping),
+  schema:
+    uiType === UI_EVALUATORS_RULE_TYPE.decision_model
+      ? details.schema.map((score) => ({
+          ...score,
+          description: score.description.trim() || score.name,
+        }))
+      : details.schema,
 });
 
 const withDefaultModel = <
@@ -159,7 +172,10 @@ const getDefaultValues = (
 ): EvaluationRuleFormType => {
   const uiType = rule ? getRuleUIType(rule) : ruleType;
   const scope = rule ? getUIRuleScope(rule.type) : defaultScope;
-  const ruleProjectIds = rule?.projects?.map((p) => p.project_id);
+  const ruleProjectIds =
+    isClone && projectId
+      ? [projectId]
+      : rule?.projects?.map((p) => p.project_id);
 
   return {
     ruleName: rule ? (isClone ? `${rule.name} (Copy)` : rule.name) : "",
@@ -182,7 +198,7 @@ const getDefaultValues = (
     ),
     llmJudgeDetails: withDefaultModel(
       savedJudge
-        ? toFormLLMJudgeDetails(savedJudge)
+        ? toFormLLMJudgeDetails(savedJudge, uiType)
         : cloneDeep(getDefaultJudgeData(uiType)[scope]),
       defaultModel,
     ),
@@ -250,6 +266,7 @@ const useRuleEditorForm = ({
   );
 
   useEffect(() => {
+    if (isEdit) return;
     let previousRuleName = form.getValues("ruleName").trim();
     const subscription = form.watch((values, { name }) => {
       if (name !== "ruleName") return;
@@ -264,7 +281,7 @@ const useRuleEditorForm = ({
       previousRuleName = ruleName;
     });
     return () => subscription.unsubscribe();
-  }, [form]);
+  }, [form, isEdit]);
 
   const scopeDraftsRef = useRef<
     Partial<Record<EVALUATORS_RULE_SCOPE, ScopeDraft>>

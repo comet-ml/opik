@@ -26,6 +26,8 @@ import DecisionModelPromptField from "@/v2/pages-shared/automations/RuleEditorPa
 import DecisionModelQuestionsCard from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelQuestionsCard";
 import CodeEvaluatorField from "@/v2/pages-shared/automations/RuleEditorPanel/CodeEvaluatorField";
 import { RuleDefaultModel } from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleDefaultModel";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type RuleEditorFormProps = {
   onClose: () => void;
@@ -37,6 +39,8 @@ type RuleEditorFormProps = {
   defaultModel: RuleDefaultModel;
   defaultScope?: EVALUATORS_RULE_SCOPE;
   onRuleCreated?: (rule: EvaluatorsRule) => void;
+  traceScopeOnly?: boolean;
+  datasetColumnNames?: string[];
 };
 
 const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
@@ -49,6 +53,8 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
   defaultModel,
   defaultScope,
   onRuleCreated,
+  traceScopeOnly,
+  datasetColumnNames,
 }) => {
   const {
     form,
@@ -71,17 +77,20 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
   const { mutate: updateRule, isPending: isUpdatePending } =
     useRuleUpdateMutation();
   const showRuleCreatedToast = useRuleCreatedToast();
+  const isPythonEvaluatorEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
+  );
 
   const handleSubmit = useCallback(async () => {
     prepareForSubmit();
     await form.handleSubmit(() => {
-      const { scope, triggerScope, projectIds } = form.getValues();
+      const { scope, triggerScope, projectIds, enabled } = form.getValues();
       if (rule && isEdit) {
         updateRule(
           { ruleId: rule.id, rule: buildRule() },
           {
             onSuccess: () => {
-              showRuleCreatedToast(scope, triggerScope, projectIds);
+              showRuleCreatedToast(scope, triggerScope, projectIds, enabled);
               onClose();
             },
           },
@@ -92,7 +101,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
         { rule: buildRule() },
         {
           onSuccess: (rule: EvaluatorsRule) => {
-            showRuleCreatedToast(scope, triggerScope, projectIds);
+            showRuleCreatedToast(scope, triggerScope, projectIds, enabled);
             onRuleCreated?.(rule);
             onClose();
           },
@@ -116,6 +125,9 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
   const isDecisionModelRule =
     ruleType === UI_EVALUATORS_RULE_TYPE.decision_model;
   const isSpanScope = form.watch("scope") === EVALUATORS_RULE_SCOPE.span;
+  const isCodeBlocked =
+    ruleType === UI_EVALUATORS_RULE_TYPE.python_code &&
+    !isPythonEvaluatorEnabled;
 
   return (
     <Form {...form}>
@@ -134,10 +146,14 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
                       form={form}
                       onSelectTemplate={applyTemplate}
                       mergeInfo={promptMergeInfo}
+                      datasetColumnNames={datasetColumnNames}
                     />
                   )}
                   {isDecisionModelRule && (
-                    <DecisionModelPromptField form={form} />
+                    <DecisionModelPromptField
+                      form={form}
+                      datasetColumnNames={datasetColumnNames}
+                    />
                   )}
                   {ruleType === UI_EVALUATORS_RULE_TYPE.python_code && (
                     <CodeEvaluatorField
@@ -160,6 +176,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
                     form={form}
                     onScopeChange={changeScope}
                     disabled={isEdit}
+                    traceScopeOnly={traceScopeOnly}
                   />
                   <FilteringSamplingCard form={form} projectId={projectId} />
                   {isLLMJudge && <ScoreConfigurationCard form={form} />}
@@ -179,6 +196,11 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
           onSubmit={handleSubmit}
           isSubmitting={isCreatePending || isUpdatePending}
           hasPendingChanges={Boolean(promptMergeInfo)}
+          disabledReason={
+            isCodeBlocked
+              ? "Code evaluators are not available in this environment."
+              : undefined
+          }
         />
       </div>
     </Form>
