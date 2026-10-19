@@ -2,330 +2,236 @@ package com.comet.opik.domain.ailabels;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ContainerNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import lombok.NonNull;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
- * Fits a canonical state into a byte budget, in steps that stop as soon as it fits:
+ * Fits a canonical state, together with the trace's earlier turns when a task uses them, into one byte budget, in
+ * steps that stop as soon as the two fit:
  * <ol>
  *   <li>{@code full}: nothing removed.</li>
- *   <li>{@code spans_io_pruned:<d>}: span {@code input}, {@code output} and {@code metadata} dropped from the deepest
- *       level up, {@code d} being the shallowest level dropped.</li>
- *   <li>Every span string longer than a cap L is cut in the middle, keeping 70% of L at the start and 30% at the end
- *       around a {@code …[N chars truncated]…} marker; L is the largest that fits, never below 64. Trace-level strings
- *       are cut last: {@code truncated_spans:<L>} when cutting span strings is enough, otherwise the span strings stay
- *       at 64 and the trace-level ones are cut at L too, {@code truncated:<L>}.</li>
+ *   <li>{@code spans_pruned:<d>}: the spans at depth {@code d} and below are gone (top-level spans are depth 1), and
+ *       {@code spans_summary} counts the whole tree; {@code spans_summarized} once every span is gone.</li>
+ *   <li>{@code history_outputs_dropped:<n>}: the outputs of the {@code n} oldest earlier turns are gone.</li>
+ *   <li>{@code history_turns:<n>}: only the {@code n} newest earlier turns are left.</li>
+ *   <li>{@code output_truncated:<L>}: every string in the trace's output keeps its first L code points, followed by a
+ *       {@code …[N chars truncated]…} marker; L is the largest that fits, never below 64.</li>
+ *   <li>{@code input_truncated:<L>}: the output at 64, and the input's strings cut the same way.</li>
  * </ol>
- * A state still over budget with every string at 64 is {@link OverBudget}.
+ * Without history, steps 2 and 3 are skipped. A state still over budget with both at 64 is {@link OverBudget}.
  *
- * <p>Sizes are computed once, in one pass over the state; the steps then adjust them arithmetically and change the
- * state only once a step is known to fit. Lengths and caps count code points, so a cut never splits a surrogate pair
- * or a UTF-8 sequence. The state is changed in place.
+ * <p>The size is the state's canonical UTF-8 bytes plus the history's. It is computed rather than serialized, and
+ * the span levels are measured in one pass, so a deep span chain costs one walk, not one per level. Caps count code
+ * points, so a cut never splits a surrogate pair or a UTF-8 sequence. The state and history are changed in place.
  */
 final class AiLabelStateFitter {
 
-    private static final int MIN_CAP = 64;
-
-    private static final String FULL = "full";
-    private static final String SPANS_IO_PRUNED = "spans_io_pruned:";
-    private static final String TRUNCATED_SPANS = "truncated_spans:";
-    private static final String TRUNCATED = "truncated:";
+    static final int MIN_CAP = 64;
+    static final String MARKER_OPEN = "…[";
+    static final String MARKER_CLOSE = " chars truncated]…";
 
     private static final String SPANS = "spans";
-    private static final Set<String> SPAN_IO = Set.of("input", "output", "metadata");
-
-    private static final String MARKER_OPEN = "…[";
-    private static final String MARKER_CLOSE = " chars truncated]…";
-    private static final long MARKER_BYTES = AiLabelJson.stringBytes(MARKER_OPEN) - 2
-            + AiLabelJson.stringBytes(MARKER_CLOSE) - 2;
+    private static final String SPANS_SUMMARY = "spans_summary";
+    private static final String INPUT = "input";
+    private static final String OUTPUT = "output";
+    /** {@code "spans":[]}: the key, its colon and the brackets. */
+    private static final long SPANS_FRAMING = AiLabelJson.stringBytes(SPANS) + 3;
 
     sealed interface Fit permits Fitted, OverBudget {
     }
 
-    record Fitted(@NonNull ObjectNode state, long bytes, @NonNull String compactionLevel) implements Fit {
+    /** {@code history} is null when none was asked for. */
+    record Fitted(@NonNull ObjectNode state, ArrayNode history, long bytes, @NonNull String compactionLevel)
+            implements
+                Fit {
     }
 
     record OverBudget(long bytes) implements Fit {
     }
 
-    private final ObjectNode state;
-    /** Index d: the bytes dropping span I/O at depth d saves, and the spans at d that carry any. */
-    private final List<Long> spanIoBytesByDepth = new ArrayList<>();
-    private final List<List<ObjectNode>> spansWithIoByDepth = new ArrayList<>();
-    /** Strings longer than {@link #MIN_CAP}, the only ones step 2 can cut. Span I/O is gone by then. */
-    private final List<StringSlot> spanStrings = new ArrayList<>();
-    private final List<StringSlot> traceStrings = new ArrayList<>();
-
-    private AiLabelStateFitter(ObjectNode state) {
-        this.state = state;
+    private AiLabelStateFitter() {
     }
 
-    static Fit fit(@NonNull ObjectNode state, long budgetBytes) {
-        return new AiLabelStateFitter(state).fitWithin(budgetBytes);
-    }
-
-    /** The serialized size of a state, by the same arithmetic the steps use. */
-    static long sizeOf(@NonNull ObjectNode state) {
-        return new AiLabelStateFitter(state).annotateTrace();
-    }
-
-    private Fit fitWithin(long budget) {
-        long bytes = annotateTrace();
-        if (bytes <= budget) {
-            return new Fitted(state, bytes, FULL);
+    /** {@code history} is oldest first, or null for a task that doesn't use it. */
+    static Fit fit(@NonNull ObjectNode state, ArrayNode history, @NonNull ObjectNode spansSummary, long budget) {
+        long historyBytes = history == null ? 0 : AiLabelJson.sizeOf(history);
+        long stateBytes = AiLabelJson.sizeOf(state);
+        if (stateBytes + historyBytes <= budget) {
+            return new Fitted(state, history, stateBytes + historyBytes, "full");
         }
 
-        for (int depth = spanIoBytesByDepth.size() - 1; depth >= 1; depth--) {
-            bytes -= spanIoBytesByDepth.get(depth);
-            if (bytes <= budget) {
-                pruneSpanIo(depth);
-                return new Fitted(state, bytes, SPANS_IO_PRUNED + depth);
+        if (state.has(SPANS)) {
+            state.set(SPANS_SUMMARY, spansSummary);
+            var levels = new ArrayList<long[]>();
+            measureLevels(state, 0, levels);
+            for (int depth = levels.size() - 1; depth >= 1; depth--) {
+                stateBytes = bytesKeepingAbove(levels, depth);
+                if (stateBytes + historyBytes <= budget) {
+                    removeSpansFrom(state, 0, depth);
+                    return new Fitted(state, history, stateBytes + historyBytes,
+                            depth == 1 ? "spans_summarized" : "spans_pruned:" + depth);
+                }
+            }
+            removeSpansFrom(state, 0, 1);
+            stateBytes = bytesKeepingAbove(levels, 1);
+        }
+
+        if (history != null) {
+            int dropped = 0;
+            for (var turn : history) {
+                if (((ObjectNode) turn).remove(OUTPUT) == null) {
+                    continue;
+                }
+                dropped++;
+                historyBytes = AiLabelJson.sizeOf(history);
+                if (stateBytes + historyBytes <= budget) {
+                    return new Fitted(state, history, stateBytes + historyBytes,
+                            "history_outputs_dropped:" + dropped);
+                }
+            }
+            while (!history.isEmpty()) {
+                history.remove(0);
+                historyBytes = AiLabelJson.sizeOf(history);
+                if (stateBytes + historyBytes <= budget) {
+                    return new Fitted(state, history, stateBytes + historyBytes, "history_turns:" + history.size());
+                }
             }
         }
-        pruneSpanIo(1);
 
-        int spanCap = largestFittingCap(spanStrings, bytes, budget);
-        if (spanCap > 0) {
-            return new Fitted(state, bytes + truncate(spanStrings, spanCap), TRUNCATED_SPANS + spanCap);
+        var output = truncate(state, OUTPUT, stateBytes, budget - historyBytes);
+        if (output.fits()) {
+            return new Fitted(state, history, output.stateBytes() + historyBytes, "output_truncated:" + output.cap());
         }
-
-        bytes += delta(spanStrings, MIN_CAP);
-        int traceCap = largestFittingCap(traceStrings, bytes, budget);
-        if (traceCap > 0) {
-            truncate(spanStrings, MIN_CAP);
-            return new Fitted(state, bytes + truncate(traceStrings, traceCap), TRUNCATED + traceCap);
+        var input = truncate(state, INPUT, output.stateBytes(), budget - historyBytes);
+        if (input.fits()) {
+            return new Fitted(state, history, input.stateBytes() + historyBytes, "input_truncated:" + input.cap());
         }
-        return new OverBudget(bytes + delta(traceStrings, MIN_CAP));
+        return new OverBudget(input.stateBytes() + historyBytes);
     }
 
-    private long annotateTrace() {
-        long bytes = 2;
-        int entries = 0;
-        for (Map.Entry<String, JsonNode> entry : state.properties()) {
-            entries++;
-            bytes += AiLabelJson.stringBytes(entry.getKey()) + 1;
-            if (SPANS.equals(entry.getKey()) && entry.getValue() instanceof ArrayNode spans) {
-                bytes += annotateSpans(spans, 1);
-            } else {
-                bytes += annotate(entry.getValue(), traceStrings, state, entry.getKey(), -1);
+    /**
+     * Index k: the bytes of the nodes at depth k without their {@code spans}, and the bytes their {@code spans}
+     * arrays add around the children (key, brackets and commas).
+     */
+    private static void measureLevels(ObjectNode node, int depth, List<long[]> levels) {
+        if (levels.size() == depth) {
+            levels.add(new long[2]);
+        }
+        var spans = node.get(SPANS);
+        int otherKeys = node.size() - (spans == null ? 0 : 1);
+        long own = 2 + Math.max(0, otherKeys - 1);
+        for (var entry : node.properties()) {
+            if (!SPANS.equals(entry.getKey())) {
+                own += AiLabelJson.stringBytes(entry.getKey()) + 1 + AiLabelJson.sizeOf(entry.getValue());
             }
         }
-        return bytes + Math.max(entries - 1, 0);
+        levels.get(depth)[0] += own;
+        if (spans instanceof ArrayNode children) {
+            levels.get(depth)[1] += SPANS_FRAMING + Math.max(0, children.size() - 1) + (otherKeys > 0 ? 1 : 0);
+            children.forEach(child -> measureLevels((ObjectNode) child, depth + 1, levels));
+        }
     }
 
-    private long annotateSpans(ArrayNode spans, int depth) {
-        long bytes = 2 + Math.max(spans.size() - 1, 0);
-        for (JsonNode span : spans) {
-            bytes += annotateSpan((ObjectNode) span, depth);
+    /** The state's size with only the levels above {@code depth} left. */
+    private static long bytesKeepingAbove(List<long[]> levels, int depth) {
+        long bytes = 0;
+        for (int level = 0; level < depth; level++) {
+            bytes += levels.get(level)[0];
+            if (level < depth - 1) {
+                bytes += levels.get(level)[1];
+            }
         }
         return bytes;
     }
 
-    private long annotateSpan(ObjectNode span, int depth) {
-        long bytes = 2;
-        int entries = 0;
-        long ioBytes = 0;
-        int ioEntries = 0;
-        for (Map.Entry<String, JsonNode> entry : span.properties()) {
-            entries++;
-            String key = entry.getKey();
-            long entryBytes = AiLabelJson.stringBytes(key) + 1;
-            if (SPANS.equals(key) && entry.getValue() instanceof ArrayNode children) {
-                entryBytes += annotateSpans(children, depth + 1);
-            } else if (SPAN_IO.contains(key)) {
-                entryBytes += annotate(entry.getValue(), null, span, key, -1);
-                ioBytes += entryBytes;
-                ioEntries++;
-            } else {
-                entryBytes += annotate(entry.getValue(), spanStrings, span, key, -1);
-            }
-            bytes += entryBytes;
+    private static void removeSpansFrom(ObjectNode node, int nodeDepth, int depth) {
+        if (nodeDepth + 1 >= depth) {
+            node.remove(SPANS);
+            return;
         }
-        if (ioEntries > 0) {
-            // Dropping m of n entries drops m separators, or all n - 1 of them when none is left.
-            addSpanIo(depth, span, ioBytes + Math.min(ioEntries, entries - 1));
+        if (node.get(SPANS) instanceof ArrayNode spans) {
+            spans.forEach(span -> removeSpansFrom((ObjectNode) span, nodeDepth + 1, depth));
         }
-        return bytes + Math.max(entries - 1, 0);
     }
 
-    private long annotate(JsonNode node, List<StringSlot> slots, ContainerNode<?> parent, String key, int index) {
-        if (node.isTextual()) {
-            String text = node.textValue();
-            long bytes = AiLabelJson.stringBytes(text);
-            // A code point takes at least a byte, so a string within the cap in bytes is within it in code points.
-            if (slots != null && bytes - 2 > MIN_CAP) {
-                int codePoints = text.codePointCount(0, text.length());
-                if (codePoints > MIN_CAP) {
-                    slots.add(new StringSlot(parent, key, index, text, codePoints, bytes));
-                }
-            }
-            return bytes;
-        }
-        if (node instanceof ObjectNode object) {
-            long bytes = 2 + Math.max(object.size() - 1, 0);
-            for (Map.Entry<String, JsonNode> entry : object.properties()) {
-                bytes += AiLabelJson.stringBytes(entry.getKey()) + 1
-                        + annotate(entry.getValue(), slots, object, entry.getKey(), -1);
-            }
-            return bytes;
-        }
-        if (node instanceof ArrayNode array) {
-            long bytes = 2 + Math.max(array.size() - 1, 0);
-            for (int i = 0; i < array.size(); i++) {
-                bytes += annotate(array.get(i), slots, array, null, i);
-            }
-            return bytes;
-        }
-        return AiLabelJson.scalarBytes(node);
-    }
-
-    private void addSpanIo(int depth, ObjectNode span, long bytes) {
-        while (spanIoBytesByDepth.size() <= depth) {
-            spanIoBytesByDepth.add(0L);
-            spansWithIoByDepth.add(new ArrayList<>());
-        }
-        spanIoBytesByDepth.set(depth, spanIoBytesByDepth.get(depth) + bytes);
-        spansWithIoByDepth.get(depth).add(span);
-    }
-
-    private void pruneSpanIo(int shallowestDepth) {
-        for (int depth = shallowestDepth; depth < spansWithIoByDepth.size(); depth++) {
-            spansWithIoByDepth.get(depth).forEach(span -> span.remove(SPAN_IO));
-        }
+    private record Cut(boolean fits, int cap, long stateBytes) {
     }
 
     /**
-     * The largest cap in [{@link #MIN_CAP}, longest - 1] that brings {@code bytes} within budget, or 0 if none does.
-     * The size only grows with the cap, so a binary search finds it. No cap above the budget can fit: a string cut at
-     * L keeps L code points.
+     * Cuts every string under {@code key} at the largest cap that fits {@code budget}, or at {@link #MIN_CAP} when
+     * none does. The size only grows with the cap, so a binary search finds it.
      */
-    private static int largestFittingCap(List<StringSlot> slots, long bytes, long budget) {
-        if (slots.isEmpty()) {
-            return 0;
+    private static Cut truncate(ObjectNode state, String key, long stateBytes, long budget) {
+        var original = state.get(key);
+        if (original == null) {
+            return new Cut(false, MIN_CAP, stateBytes);
         }
-        int longest = slots.stream().mapToInt(StringSlot::codePoints).max().orElseThrow();
-        int high = (int) Math.min(longest - 1L, budget);
-        // Readied at least to the floor, which the next step and the over-budget size are measured at.
-        slots.forEach(slot -> slot.prepare(Math.max(high, MIN_CAP)));
-        if (high < MIN_CAP || bytes + delta(slots, MIN_CAP) > budget) {
-            return 0;
+        long others = stateBytes - AiLabelJson.sizeOf(original);
+        var best = cut(original, MIN_CAP);
+        long bestBytes = others + AiLabelJson.sizeOf(best);
+        state.set(key, best);
+        if (bestBytes > budget) {
+            return new Cut(false, MIN_CAP, bestBytes);
         }
         int low = MIN_CAP;
-        int up = high;
-        while (low < up) {
-            int mid = (int) ((low + (long) up + 1) / 2);
-            if (bytes + delta(slots, mid) <= budget) {
+        int high = longestString(original) - 1;
+        while (low < high) {
+            int mid = (int) ((low + (long) high + 1) / 2);
+            var candidate = cut(original, mid);
+            long bytes = others + AiLabelJson.sizeOf(candidate);
+            if (bytes <= budget) {
                 low = mid;
+                best = candidate;
+                bestBytes = bytes;
             } else {
-                up = mid - 1;
+                high = mid - 1;
             }
         }
-        return low;
+        state.set(key, best);
+        return new Cut(true, low, bestBytes);
     }
 
-    private static long delta(List<StringSlot> slots, int cap) {
-        long delta = 0;
-        for (StringSlot slot : slots) {
-            delta += slot.delta(cap);
+    private static int longestString(JsonNode node) {
+        if (node.isTextual()) {
+            return node.textValue().codePointCount(0, node.textValue().length());
         }
-        return delta;
+        int longest = 0;
+        for (JsonNode child : node) {
+            longest = Math.max(longest, longestString(child));
+        }
+        return longest;
     }
 
-    private static long truncate(List<StringSlot> slots, int cap) {
-        long delta = 0;
-        for (StringSlot slot : slots) {
-            delta += slot.truncate(cap);
-        }
-        return delta;
-    }
-
-    private static int headCodePoints(int cap) {
-        return (int) (cap * 7L / 10);
-    }
-
-    private static final class StringSlot {
-
-        private final ContainerNode<?> parent;
-        private final String key;
-        private final int index;
-        private final String value;
-        private final int codePoints;
-        private final long bytes;
-        /** The serialized bytes of the first i code points, and of the last i. */
-        private int[] headBytes;
-        private int[] tailBytes;
-
-        private StringSlot(ContainerNode<?> parent, String key, int index, String value, int codePoints,
-                long bytes) {
-            this.parent = parent;
-            this.key = key;
-            this.index = index;
-            this.value = value;
-            this.codePoints = codePoints;
-            this.bytes = bytes;
-        }
-
-        int codePoints() {
-            return codePoints;
-        }
-
-        /** Readies {@link #delta} for every cap up to {@code maxCap}. */
-        void prepare(int maxCap) {
-            int heads = Math.min(headCodePoints(maxCap), codePoints);
-            int tails = Math.min(maxCap - headCodePoints(maxCap), codePoints);
-            if (headBytes != null && headBytes.length > heads && tailBytes.length > tails) {
-                return;
-            }
-            headBytes = new int[heads + 1];
-            for (int i = 0, offset = 0; i < heads; i++) {
-                int codePoint = value.codePointAt(offset);
-                headBytes[i + 1] = headBytes[i] + AiLabelJson.codePointBytes(codePoint);
-                offset += Character.charCount(codePoint);
-            }
-            tailBytes = new int[tails + 1];
-            for (int i = 0, end = value.length(); i < tails; i++) {
-                int codePoint = value.codePointBefore(end);
-                tailBytes[i + 1] = tailBytes[i] + AiLabelJson.codePointBytes(codePoint);
-                end -= Character.charCount(codePoint);
-            }
-        }
-
-        /**
-         * The change in bytes from cutting this string at {@code cap}. A cut that would not make it shorter, which
-         * the marker can cause just above the cap, is skipped, so the size never grows as the cap shrinks.
-         */
-        long delta(int cap) {
+    /**
+     * A copy of {@code node} with every string over {@code cap} code points cut to its first {@code cap}. A cut that
+     * wouldn't make a string shorter, which the marker can cause just under its length, is skipped, so the size never
+     * grows as the cap shrinks.
+     */
+    private static JsonNode cut(JsonNode node, int cap) {
+        if (node.isTextual()) {
+            String text = node.textValue();
+            int codePoints = text.codePointCount(0, text.length());
             if (codePoints <= cap) {
-                return 0;
+                return node;
             }
-            int head = headCodePoints(cap);
-            long cut = 2 + headBytes[head] + tailBytes[cap - head] + MARKER_BYTES
-                    + String.valueOf(codePoints - cap).length();
-            return Math.min(0, cut - bytes);
+            String cut = text.substring(0, text.offsetByCodePoints(0, cap))
+                    + MARKER_OPEN + (codePoints - cap) + MARKER_CLOSE;
+            return AiLabelJson.stringBytes(cut) < AiLabelJson.stringBytes(text) ? TextNode.valueOf(cut) : node;
         }
-
-        long truncate(int cap) {
-            long delta = delta(cap);
-            if (delta == 0) {
-                return 0;
-            }
-            int head = headCodePoints(cap);
-            var cut = TextNode.valueOf(value.substring(0, value.offsetByCodePoints(0, head))
-                    + MARKER_OPEN + (codePoints - cap) + MARKER_CLOSE
-                    + value.substring(value.offsetByCodePoints(value.length(), head - cap)));
-            if (parent instanceof ObjectNode object) {
-                object.set(key, cut);
-            } else {
-                ((ArrayNode) parent).set(index, cut);
-            }
-            return delta;
+        if (node instanceof ObjectNode object) {
+            var copy = AiLabelJson.NODE_FACTORY.objectNode();
+            object.properties().forEach(entry -> copy.set(entry.getKey(), cut(entry.getValue(), cap)));
+            return copy;
         }
+        if (node instanceof ArrayNode array) {
+            var copy = AiLabelJson.NODE_FACTORY.arrayNode();
+            array.forEach(child -> copy.add(cut(child, cap)));
+            return copy;
+        }
+        return node;
     }
 }

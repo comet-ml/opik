@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.cfg.JsonNodeFeature;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -64,8 +65,27 @@ class AiLabelJson {
         }
     }
 
+    /** The size of {@link #toCanonicalString(JsonNode)} in UTF-8 bytes, computed without serializing. */
+    static long sizeOf(JsonNode node) {
+        if (node instanceof ObjectNode object) {
+            long bytes = 2 + Math.max(0, object.size() - 1);
+            for (var entry : object.properties()) {
+                bytes += stringBytes(entry.getKey()) + 1 + sizeOf(entry.getValue());
+            }
+            return bytes;
+        }
+        if (node instanceof ArrayNode array) {
+            long bytes = 2 + Math.max(0, array.size() - 1);
+            for (var element : array) {
+                bytes += sizeOf(element);
+            }
+            return bytes;
+        }
+        return scalarBytes(node);
+    }
+
     /** The serialized size of a non-container node; a string's quotes included. */
-    static long scalarBytes(JsonNode node) {
+    private static long scalarBytes(JsonNode node) {
         return switch (node.getNodeType()) {
             case STRING -> stringBytes(node.textValue());
             // Jackson writes NaN and the infinities as quoted strings.
@@ -99,19 +119,6 @@ class AiLabelJson {
                         }
         }
         return bytes;
-    }
-
-    static int codePointBytes(int codePoint) {
-        if (codePoint < 0x80) {
-            return ASCII_BYTES[codePoint];
-        }
-        if (codePoint < 0x800) {
-            return 2;
-        }
-        if (codePoint < 0x10000) {
-            return Character.isSurrogate((char) codePoint) ? 1 : 3;
-        }
-        return 4;
     }
 
     private static String replaceLoneSurrogates(String value) {

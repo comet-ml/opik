@@ -3,7 +3,6 @@ package com.comet.opik.domain.ailabels;
 import com.comet.opik.domain.ailabels.AiLabelRenderDAO.SpanRow;
 import com.comet.opik.domain.ailabels.AiLabelRenderDAO.TraceRow;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -57,9 +56,6 @@ final class AiLabelRenderFixtures {
                 .name("trace " + text(8))
                 .input(json(ioChars))
                 .output(json(ioChars))
-                .metadata(json(ioChars / 4))
-                .startTime(BASE_TIME)
-                .endTime(BASE_TIME.plusMillis(random.nextInt(60_000)).plus(random.nextInt(1000), ChronoUnit.MICROS))
                 .build();
     }
 
@@ -82,8 +78,6 @@ final class AiLabelRenderFixtures {
     }
 
     SpanRow span(TraceRow trace, String parentSpanId, int ioChars) {
-        var start = BASE_TIME.plus(random.nextInt(50) * 1000L, ChronoUnit.MICROS);
-        boolean open = random.nextInt(10) == 0;
         return SpanRow.builder()
                 .traceId(trace.id())
                 .id(uuid().toString())
@@ -92,21 +86,8 @@ final class AiLabelRenderFixtures {
                 .type(List.of("general", "tool", "llm", "guardrail").get(random.nextInt(4)))
                 .input(json(ioChars))
                 .output(json(ioChars))
-                .metadata(random.nextBoolean() ? json(ioChars / 4) : null)
-                .startTime(start)
-                .endTime(open ? null : start.plus(random.nextInt(5_000_000), ChronoUnit.MICROS))
-                .model(random.nextBoolean() ? "gpt-4o" : null)
-                .provider(random.nextBoolean() ? "openai" : null)
-                .errorInfo(random.nextInt(20) == 0 ? errorInfo() : null)
+                .startTime(BASE_TIME.plus(random.nextInt(50) * 1000L, ChronoUnit.MICROS))
                 .build();
-    }
-
-    String errorInfo() {
-        var error = JsonNodeFactory.instance.objectNode();
-        error.put("exception_type", "ValueError");
-        error.put("message", text(40));
-        error.put("traceback", text(300));
-        return error.toString();
     }
 
     /** JSON text of roughly {@code chars} characters of string content. */
@@ -141,12 +122,20 @@ final class AiLabelRenderFixtures {
                 yield array;
             }
             default -> {
+                // Ordered maps: earlier turns keep their stored text as is, so its key order must be stable.
                 var messages = new ArrayList<Object>();
-                messages.add(Map.of("role", "system", "content", text(chars / 3)));
-                messages.add(Map.of("role", "user", "content", text(chars - chars / 3)));
-                yield Map.of("messages", messages);
+                messages.add(message("system", text(chars / 3)));
+                messages.add(message("user", text(chars - chars / 3)));
+                yield new LinkedHashMap<>(Map.of("messages", messages));
             }
         };
+    }
+
+    private static Map<String, Object> message(String role, String content) {
+        var message = new LinkedHashMap<String, Object>();
+        message.put("role", role);
+        message.put("content", content);
+        return message;
     }
 
     String text(int codePoints) {

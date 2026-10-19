@@ -1,5 +1,6 @@
 package com.comet.opik.domain.ailabels;
 
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.domain.ailabels.AiLabelRenderDAO.SpanRow;
@@ -100,6 +101,8 @@ class AiLabelRendererClickHouseTest {
         config.setMaxFieldBytes(MAX_FIELD_BYTES);
         config.setMaxSpansPerTrace(MAX_SPANS);
         config.setRenderBudgetBytes(BUDGET);
+        // Several span reads per chunk: the batches must render the same as one read.
+        config.setRenderReadBytes(5_000);
         config.setRenderThreads(2);
 
         seed();
@@ -166,6 +169,68 @@ class AiLabelRendererClickHouseTest {
                 .isEqualTo(Map.of(trace.id(), expected(trace, spans.subList(0, spans.size() - 1))));
     }
 
+    /**
+     * Earlier turns are read from the cut-over traces by id range: a deleted turn, an older version, a turn after the
+     * rendered one, a thread of the same id in another project and a turn before the lookback are not among them.
+     */
+    @Test
+    @Order(5)
+    void renderReadsTheLatestEarlierTurnsOfTheThread() {
+        var projectId = UUID.randomUUID();
+        var base = AiLabelRenderFixtures.BASE_TIME;
+        var current = threadTurn(projectId, base.plusSeconds(600), "current");
+        var kept = threadTurn(projectId, base.plusSeconds(300), "kept");
+        var deleted = threadTurn(projectId, base.plusSeconds(200), "deleted");
+        var later = threadTurn(projectId, base.plusSeconds(900), "later");
+        var otherProject = threadTurn(UUID.randomUUID(), base.plusSeconds(400), "other project");
+        var beforeLookback = threadTurn(projectId, base.minus(2, ChronoUnit.DAYS), "before lookback");
+        var olderVersion = Instant.now().minusSeconds(60);
+        insertTraces("traces_local", List.of(kept.toBuilder().input("\"old version\"").build(), deleted),
+                olderVersion, 0);
+        insertTraces("traces_local", List.of(current, kept, later, otherProject, beforeLookback), Instant.now(), 0);
+        insertTraces("traces_local", List.of(deleted), Instant.now(), 1);
+
+        var outcome = renderer(CUT_OVER_SPANS)
+                .render(WORKSPACE_ID, List.of(refOf(current)), List.of(AiLabelTaskFixtures.generateWithHistory("s")))
+                .single()
+                .block();
+
+        assertThat(AiLabelRenderer.canonicalJson(((RenderOutcome.Rendered) outcome).history()))
+                .isEqualTo("[{\"input\":\"\\\"kept\\\"\",\"output\":\"\\\"kept\\\"\"}]");
+    }
+
+    /** A trace's spans are read in start order until their input and output reach the per-trace cap. */
+    @Test
+    @Order(6)
+    void renderReadsATracesSpansUpToItsByteCap() {
+        var trace = fixtures.trace(10).toBuilder().id(uuidV7(AiLabelRenderFixtures.BASE_TIME)).build();
+        projectByTrace.put(trace.id(), trace.projectId());
+        var spans = new ArrayList<SpanRow>();
+        for (int i = 0; i < 5; i++) {
+            spans.add(spanAt(trace, null, i).toBuilder()
+                    .id(uuidV7(AiLabelRenderFixtures.BASE_TIME.plusSeconds(i)).toString())
+                    .input("{\"x\":\"" + "a".repeat(1_000) + "\"}")
+                    .output("")
+                    .build());
+        }
+        insertTraces("traces_local", List.of(trace), Instant.now(), 0);
+        insertSpans(WORKSPACE_ID, "spans_local", spans, Instant.now(), 0, true);
+        // Each span holds 1,010 bytes: two fit under 2,500, and the third would not.
+        config.setMaxSpanBytesPerTrace(2_500);
+        try {
+            assertThat(render(CUT_OVER_SPANS, List.of(refOf(trace))))
+                    .isEqualTo(Map.of(trace.id(), expected(trace, spans.subList(0, 2))));
+        } finally {
+            config.setMaxSpanBytesPerTrace(new AiLabelsConfig().getMaxSpanBytesPerTrace());
+        }
+    }
+
+    private TraceRow threadTurn(UUID projectId, Instant at, String text) {
+        var json = "\"" + text + "\"";
+        return TraceRow.builder().id(uuidV7(at)).projectId(projectId).threadId("thread-1").name(text).input(json)
+                .output(json).build();
+    }
+
     private void seed() {
         var olderVersion = AiLabelRenderFixtures.BASE_TIME.plusSeconds(60);
         var latestVersion = olderVersion.plusSeconds(60);
@@ -174,20 +239,15 @@ class AiLabelRendererClickHouseTest {
         var rich = fixtures.trace(400);
         rich = addTrace(rich, fixtures.spans(rich, 25, 6, 60));
 
-        // An open trace with outsized fields, which the reads swap for a marker of their size.
+        // A trace with outsized fields, which the reads swap for a marker of their size.
         var outsized = fixtures.trace(30).toBuilder()
                 .input("{\"blob\":\"" + "x".repeat((int) MAX_FIELD_BYTES) + "\"}")
-                .errorInfo("{\"message\":\"" + "e".repeat((int) MAX_FIELD_BYTES) + "\"}")
                 .name("n".repeat((int) MAX_FIELD_BYTES + 1))
-                .endTime(null)
                 .build();
         var outsizedSpans = new ArrayList<>(fixtures.spans(outsized, 3, 2, 20));
         outsizedSpans.set(1, outsizedSpans.get(1).toBuilder()
                 .output("\"" + fixtures.text((int) MAX_FIELD_BYTES) + "\"")
                 .name("n".repeat((int) MAX_FIELD_BYTES + 1))
-                .model("m".repeat((int) MAX_FIELD_BYTES + 1))
-                .provider("p".repeat((int) MAX_FIELD_BYTES + 1))
-                .errorInfo("{\"message\":\"" + "e".repeat((int) MAX_FIELD_BYTES) + "\"}")
                 .build());
         addTrace(outsized, outsizedSpans);
 
@@ -207,7 +267,7 @@ class AiLabelRendererClickHouseTest {
         // A trace and a span written twice: the latest version is read.
         var versioned = fixtures.trace(30);
         versioned = addTrace(versioned, fixtures.spans(versioned, 4, 2, 20));
-        insertTraces(List.of(versioned.toBuilder().name("old name").build()), olderVersion, 0);
+        insertTraces("traces_local_v2", List.of(versioned.toBuilder().name("old name").build()), olderVersion, 0);
         insertSpans(WORKSPACE_ID, "spans", List.of(expectedSpans.get(versioned.id()).getFirst().toBuilder()
                 .output("{\"old\":true}").build()), olderVersion, 0, false);
 
@@ -218,15 +278,15 @@ class AiLabelRendererClickHouseTest {
         var deleted = fixtures.trace(30).toBuilder().id(uuidV7(AiLabelRenderFixtures.BASE_TIME)).build();
         projectByTrace.put(deleted.id(), deleted.projectId());
         refs.add(refOf(deleted));
-        insertTraces(List.of(deleted), olderVersion, 0);
-        insertTraces(List.of(deleted), latestVersion, 1);
+        insertTraces("traces_local_v2", List.of(deleted), olderVersion, 0);
+        insertTraces("traces_local_v2", List.of(deleted), latestVersion, 1);
         insertSpans(WORKSPACE_ID, "spans", withV7Ids(fixtures.spans(deleted, 3, 2, 20)), latestVersion, 0, false);
 
         // Another workspace's spans under a rendered trace id are never read.
         insertSpans(OTHER_WORKSPACE_ID, "spans", withV7Ids(fixtures.spans(rich, 2, 1, 20)), latestVersion, 0,
                 false);
 
-        insertTraces(List.copyOf(expectedTraces.values()), latestVersion, 0);
+        insertTraces("traces_local_v2", List.copyOf(expectedTraces.values()), latestVersion, 0);
         var allSpans = new ArrayList<SpanRow>();
         expectedSpans.values().forEach(allSpans::addAll);
         Collections.shuffle(allSpans, random);
@@ -235,7 +295,7 @@ class AiLabelRendererClickHouseTest {
 
     /** Gives the trace and its spans UUIDv7 ids, as ingestion does, so the spans land in their real weeks. */
     private TraceRow addTrace(TraceRow trace, List<SpanRow> spans) {
-        var stored = trace.toBuilder().id(uuidV7(trace.startTime())).build();
+        var stored = trace.toBuilder().id(uuidV7(AiLabelRenderFixtures.BASE_TIME)).build();
         var rows = withV7Ids(spans).stream()
                 .map(span -> span.toBuilder().traceId(stored.id()).build())
                 .toList();
@@ -276,22 +336,15 @@ class AiLabelRendererClickHouseTest {
                 .map(span -> span.toBuilder()
                         .input(guard(span.input()))
                         .output(guard(span.output()))
-                        .metadata(guard(span.metadata()))
-                        .errorInfo(guard(span.errorInfo()))
                         .name(guardName(span.name()))
-                        .model(guardName(span.model()))
-                        .provider(guardName(span.provider()))
                         .build())
                 .toList();
         var guardedTrace = trace.toBuilder()
                 .input(guard(trace.input()))
                 .output(guard(trace.output()))
-                .metadata(guard(trace.metadata()))
-                .errorInfo(guard(trace.errorInfo()))
                 .name(guardName(trace.name()))
                 .build();
-        return canonical(AiLabelRenderer.render(new TraceRef(trace.projectId(), trace.id(), trace.startTime()),
-                guardedTrace, read, BUDGET));
+        return canonical(AiLabelRenderer.render(refOf(trace), guardedTrace, read, null, BUDGET));
     }
 
     private static String guardName(String name) {
@@ -315,10 +368,14 @@ class AiLabelRendererClickHouseTest {
     }
 
     private Map<UUID, String> render(DatabaseAnalyticsDataModelConfig dataModel, List<TraceRef> traces) {
-        var renderer = new AiLabelRenderer(new AiLabelRenderDAO(template, dataModel, config), config);
-        return renderer.render(WORKSPACE_ID, traces)
+        return renderer(dataModel).render(WORKSPACE_ID, traces, List.of(AiLabelTaskFixtures.decide("a", false, 1)))
                 .collectMap(outcome -> outcome.trace().traceId(), AiLabelRendererClickHouseTest::canonical)
                 .block();
+    }
+
+    private AiLabelRenderer renderer(DatabaseAnalyticsDataModelConfig dataModel) {
+        return new AiLabelRenderer(new AiLabelRenderDAO(template, dataModel, config), config,
+                new InstantToUUIDMapper());
     }
 
     private static String canonical(RenderOutcome outcome) {
@@ -346,25 +403,24 @@ class AiLabelRendererClickHouseTest {
         assertThat(settings).containsExactly(List.of("2", "100", "2147483648"));
     }
 
-    private void insertTraces(List<TraceRow> traces, Instant lastUpdatedAt, int isDeleted) {
+    /** Into the successor before the traces cutover ({@code traces_local_v2}), into its shard after. */
+    private void insertTraces(String table, List<TraceRow> traces, Instant lastUpdatedAt, int isDeleted) {
         for (TraceRow trace : traces) {
             execute("""
-                    INSERT INTO traces_local_v2 (id, workspace_id, project_id, name, start_time, end_time, input,
-                        output, metadata, error_info, last_updated_at, is_deleted)
-                    VALUES (:id, :workspace_id, :project_id, :name, :start_time, :end_time, :input, :output,
-                        :metadata, :error_info, :last_updated_at, :is_deleted)
-                    """, statement -> statement
+                    INSERT INTO %s (id, workspace_id, project_id, thread_id, name, start_time, end_time, input,
+                        output, last_updated_at, is_deleted)
+                    VALUES (:id, :workspace_id, :project_id, :thread_id, :name, :start_time, :end_time, :input,
+                        :output, :last_updated_at, :is_deleted)
+                    """.formatted(table), statement -> statement
                     .bind("id", trace.id().toString())
                     .bind("workspace_id", WORKSPACE_ID)
                     .bind("project_id", trace.projectId().toString())
+                    .bind("thread_id", orEmpty(trace.threadId()))
                     .bind("name", orEmpty(trace.name()))
-                    .bind("start_time", ClickHouseDateTimeFormat.formatNanos(trace.startTime()))
-                    .bind("end_time", ClickHouseDateTimeFormat.formatNanos(
-                            trace.endTime() == null ? EPOCH : trace.endTime()))
+                    .bind("start_time", ClickHouseDateTimeFormat.formatNanos(AiLabelRenderFixtures.BASE_TIME))
+                    .bind("end_time", ClickHouseDateTimeFormat.formatNanos(AiLabelRenderFixtures.BASE_TIME))
                     .bind("input", orEmpty(trace.input()))
                     .bind("output", orEmpty(trace.output()))
-                    .bind("metadata", orEmpty(trace.metadata()))
-                    .bind("error_info", orEmpty(trace.errorInfo()))
                     .bind("last_updated_at", ClickHouseDateTimeFormat.formatMicros(lastUpdatedAt))
                     .bind("is_deleted", isDeleted));
         }
@@ -377,10 +433,10 @@ class AiLabelRendererClickHouseTest {
             UUID projectId = projectByTrace.get(span.traceId());
             execute("""
                     INSERT INTO %s (id, workspace_id, project_id, trace_id, parent_span_id, name, type, start_time,
-                        end_time, input, output, metadata, model, provider, error_info, last_updated_at
+                        end_time, input, output, last_updated_at
                         %s)
                     VALUES (:id, :workspace_id, :project_id, :trace_id, :parent_span_id, :name, :type, :start_time,
-                        :end_time, :input, :output, :metadata, :model, :provider, :error_info, :last_updated_at
+                        :end_time, :input, :output, :last_updated_at
                         %s)
                     """.formatted(table, successor ? ", is_deleted" : "", successor ? ", :is_deleted" : ""),
                     statement -> {
@@ -395,19 +451,8 @@ class AiLabelRendererClickHouseTest {
                                         span.startTime().plusNanos(successor ? 0 : SUB_MICROSECOND_NANOS)))
                                 .bind("input", orEmpty(span.input()))
                                 .bind("output", orEmpty(span.output()))
-                                .bind("metadata", orEmpty(span.metadata()))
-                                .bind("model", orEmpty(span.model()))
-                                .bind("provider", orEmpty(span.provider()))
-                                .bind("error_info", orEmpty(span.errorInfo()))
+                                .bind("end_time", ClickHouseDateTimeFormat.formatNanos(EPOCH))
                                 .bind("last_updated_at", ClickHouseDateTimeFormat.formatMicros(lastUpdatedAt));
-                        if (span.endTime() != null) {
-                            statement.bind("end_time", ClickHouseDateTimeFormat.formatNanos(
-                                    span.endTime().plusNanos(successor ? 0 : SUB_MICROSECOND_NANOS)));
-                        } else if (successor) {
-                            statement.bind("end_time", ClickHouseDateTimeFormat.formatNanos(EPOCH));
-                        } else {
-                            statement.bindNull("end_time", String.class);
-                        }
                         if (successor) {
                             statement.bind("is_deleted", isDeleted);
                         }
@@ -471,8 +516,8 @@ class AiLabelRendererClickHouseTest {
         }).block();
     }
 
-    private TraceRef refOf(TraceRow trace) {
-        return new TraceRef(trace.projectId(), trace.id(), trace.startTime());
+    private static TraceRef refOf(TraceRow trace) {
+        return new TraceRef(trace.projectId(), trace.id(), AiLabelRenderFixtures.BASE_TIME);
     }
 
     /** A UUIDv7 at the given instant, so the row lands in that instant's weekly partition. */

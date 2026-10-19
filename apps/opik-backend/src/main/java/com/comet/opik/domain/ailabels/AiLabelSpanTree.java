@@ -6,8 +6,6 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -35,10 +33,13 @@ class AiLabelSpanTree {
             .comparing(SpanRow::startTime, Comparator.nullsLast(Comparator.naturalOrder()))
             .thenComparing(SpanRow::id);
 
-    static List<AiLabelSpan> build(@NonNull List<SpanRow> spans) {
-        if (spans.isEmpty()) {
+    static List<AiLabelSpan> build(@NonNull List<SpanRow> rows) {
+        if (rows.isEmpty()) {
             return List.of();
         }
+        // An exact duplicate (same id and version, not yet merged away) is the same span.
+        Set<String> distinct = new HashSet<>();
+        List<SpanRow> spans = rows.stream().filter(span -> distinct.add(span.id())).toList();
         Map<String, List<SpanRow>> childrenByParent = new HashMap<>();
         Set<String> presentIds = new HashSet<>();
         for (SpanRow span : spans) {
@@ -95,25 +96,9 @@ class AiLabelSpanTree {
         return AiLabelSpan.builder()
                 .name(StringUtils.defaultIfBlank(span.name(), null))
                 .type(SpanType.fromString(span.type()))
-                .startTime(span.startTime())
-                .endTime(span.endTime())
-                .duration(durationMillis(span.startTime(), span.endTime()))
                 .input(AiLabelJson.parse(span.input()))
                 .output(AiLabelJson.parse(span.output()))
-                .metadata(AiLabelJson.parse(span.metadata()))
-                .model(span.model())
-                .provider(span.provider())
-                .errorInfo(AiLabelJson.parse(span.errorInfo()))
                 .spans(children.isEmpty() ? null : children)
                 .build();
-    }
-
-    /** Milliseconds with microsecond precision, as the {@code duration} column computes it. */
-    static Double durationMillis(Instant startTime, Instant endTime) {
-        if (startTime == null || endTime == null || Instant.EPOCH.equals(startTime)) {
-            return null;
-        }
-        var elapsed = Duration.between(startTime, endTime);
-        return (elapsed.getSeconds() * 1_000_000L + elapsed.getNano() / 1_000) / 1000.0;
     }
 }
