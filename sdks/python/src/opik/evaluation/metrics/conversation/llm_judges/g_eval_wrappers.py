@@ -21,9 +21,6 @@ from opik.evaluation.metrics.llm_judges.g_eval_presets import (
     qa_suite as qa_presets,
 )
 
-_bad_content = conversation_content._bad_content
-_text_from_parts = conversation_content.text_from_parts
-
 
 def _latest_assistant_text(conversation: conversation_types.Conversation) -> str:
     """The most recent assistant message that carries text, or ``""`` when there is none.
@@ -44,13 +41,13 @@ def _latest_assistant_text(conversation: conversation_types.Conversation) -> str
             continue
         content = turn.get("content")
         if isinstance(content, (list, tuple)):
-            content = _text_from_parts(content)
+            content = conversation_content.text_from_parts(content)
         elif content is None:
             content = ""
         elif isinstance(content, str):
             pass
         else:
-            raise _bad_content(content)
+            raise conversation_content.bad_content_error(content)
 
         if content.strip():
             return content
