@@ -13,7 +13,7 @@ import { EvaluatorsRule } from "@/types/automations";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import DropdownEmptyState from "@/v2/pages-shared/DropdownEmptyState/DropdownEmptyState";
-import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
+import RuleEditorPanel from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorPanel";
 import {
   isAlwaysRunRule,
   isTraceRule,
@@ -42,7 +42,6 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   onSelectionChange,
   projectId,
   canUsePlayground,
-  datasetColumnNames,
   open,
   onOpenChange,
   onRuleCreated,
@@ -309,15 +308,12 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
         </PopoverContent>
       </Popover>
 
-      <AddEditRuleDialog
+      <RuleEditorPanel
         key={ruleToEdit ? `edit-${ruleToEdit.id}` : "create"}
         open={isRuleDialogOpen}
         setOpen={handleDialogOpenChange}
-        projectId={projectId || ""}
+        projectId={projectId}
         rule={ruleToEdit ?? undefined}
-        mode={ruleToEdit ? "edit" : "create"}
-        datasetColumnNames={datasetColumnNames}
-        hideScopeSelector
         onRuleCreated={onRuleCreated}
       />
     </>
