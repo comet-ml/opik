@@ -26,7 +26,7 @@ A dataset in Opik is a named collection of data items. Each dataset:
 
 One of the key features of the Opik SDK is strong TypeScript typing support for datasets. You can define custom types for your dataset items to ensure type safety throughout your application:
 
-```typescript
+```typescript wordWrap
 // Define a custom dataset item type
 type QuestionAnswerItem = {
   question: string;
@@ -49,7 +49,7 @@ const dataset = await opik.createDataset<QuestionAnswerItem>(
 
 ### Creating Datasets
 
-```typescript
+```typescript wordWrap
 // Create a new dataset
 await opik.createDataset<YourItemType>(
   "dataset-name",
@@ -67,7 +67,7 @@ const dataset = await opik.getOrCreateDataset<YourItemType>(
 
 ### Managing Dataset Items
 
-```typescript
+```typescript wordWrap
 // Insert items
 await dataset.insert([
   { id: "item1", question: "What is ML?", answer: "Machine learning is..." },
@@ -102,7 +102,7 @@ await dataset.clear();
 
 ### Retrieving Dataset Items
 
-```typescript
+```typescript wordWrap
 // Get a specific number of items
 const items = await dataset.getItems(10);
 
@@ -114,7 +114,7 @@ const nextBatch = await dataset.getItems(10, lastItemId);
 
 ### Working with JSON
 
-```typescript
+```typescript wordWrap
 // Import items from a JSON string
 const jsonData = JSON.stringify([
   {
@@ -148,7 +148,7 @@ Dataset versions are immutable snapshots. Use `DatasetVersion` for reproducible 
 
 ### Get a Specific Version
 
-```typescript
+```typescript wordWrap
 const dataset = await opik.getDataset("my-dataset");
 
 // Get a read-only view of version v2
@@ -168,7 +168,7 @@ const json = await v2.toJson({ input: "question", output: "answer" });
 
 ### Check Current Version
 
-```typescript
+```typescript wordWrap
 // Get the latest version name
 const currentVersion = await dataset.getCurrentVersionName();
 // Returns: "v3" (or undefined if no versions)
@@ -185,7 +185,7 @@ if (info) {
 
 Pass a `DatasetVersion` to `evaluate()` for reproducible experiments:
 
-```typescript
+```typescript wordWrap
 import { evaluate, Opik, ExactMatch } from "opik";
 
 const opik = new Opik();

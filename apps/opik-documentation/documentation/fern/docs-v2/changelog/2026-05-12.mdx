@@ -11,7 +11,7 @@ You can now tag traces, spans, and threads with an **environment** field — `pr
 - **Python SDK support** - Pass `environment` to `@track`, `opik.trace()`, or `opik.span()` — and it's preserved through `.end()` and `.update()` calls
 - **TypeScript SDK support** - Set `environment` on trace and span creation
 
-```python
+```python wordWrap
 import opik
 
 @opik.track(environment="production")

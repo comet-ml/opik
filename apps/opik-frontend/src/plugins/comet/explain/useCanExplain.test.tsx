@@ -32,9 +32,14 @@ describe("useCanExplain gate", () => {
     expect(canExplain()).toBe(true);
   });
 
-  it("is false when the console bridge is OLDER than ours", () => {
-    setGate(true, ["explain"], BRIDGE_PROTOCOL_VERSION - 1);
+  it("is false when the console bridge predates the Explain events (v2)", () => {
+    setGate(true, ["explain"], 1);
     expect(canExplain()).toBe(false);
+  });
+
+  it("stays on for a v2 console after a later bridge bump", () => {
+    setGate(true, ["explain"], 2);
+    expect(canExplain()).toBe(true);
   });
 
   it("is false before console:ready (bridge version still unknown)", () => {

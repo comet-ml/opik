@@ -821,10 +821,24 @@ public class SpanDAO {
      * immaterial since it is id-bounded and {@code LIMIT 1 BY id}. Field exclusion ({@code exclude_fields}) and
      * truncation are layered on top without dropping the sort key.
      * <p>
+     * <b>When the page order is the dedup order</b> ({@code page_in_dedup_order}: the stream, and the list with no
+     * custom sort), {@code page_ids} dedups and paginates in the level that reads {@code spans}, and
+     * {@code spans_deduped} is not rendered. When {@code spans} is a {@code Distributed} table, each subquery reading it
+     * runs on the shard, so a page {@code LIMIT} one level above the dedup would make the shard dedup and ship the whole
+     * project to the initiator (OPIK-8833). The page is the same either way, since {@code LIMIT BY} applies before
+     * {@code LIMIT} within a level, and it stays correct across shards: rows shard by {@code project_id}, so every
+     * version of a span is on one shard, and the initiator merges the shards' top rows. A custom sort orders differently
+     * from the dedup, so it keeps both levels and reads the whole project either way.
+     * <p>
      * Each {@code spans} id-range bound carries a parallel week-start bound: a strict consequence of the
      * id-range — and, unlike a {@code created_at} predicate, safe against late-arriving rows since it derives from
      * {@code id} — that lets the planner prune partitions once {@code spans} is partitioned. The {@code page_wide}
      * re-read carries the same week bounds via the window it re-reads.
+     * <p>
+     * When the request is scoped to a trace, {@code page_wide} also repeats the {@code trace_id} predicate. The page
+     * ids already belong to that trace, so the result is unchanged, but {@code id} follows {@code trace_id} in the
+     * {@code spans} sort key: without it the re-read can't use the primary key past {@code project_id} and scans the
+     * whole project.
      * <p>
      * <b>Both</b> operands are the partition expression of 000115, {@code toDate32(E) -
      * toIntervalDay(toDayOfWeek(E, 1))}, and never {@code toMonday(E)} (OPIK-8241): {@code toMonday} returns a 16-bit
@@ -1045,12 +1059,15 @@ public class SpanDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
-            <endif>, spans_deduped AS (
+            <endif>, <if(page_in_dedup_order)>page_ids AS (
+                SELECT id
+            <else>spans_deduped AS (
                 SELECT
                       s.* EXCEPT (input_slim, output_slim<if(!sort_needs_wide)><if(!exclude_input)>, input<endif><if(!exclude_output)>, output<endif><if(!exclude_metadata)>, metadata<endif><endif>) <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
                       input_length,
                       output_length,
                       duration
+            <endif>
                 FROM spans s
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
@@ -1095,6 +1112,9 @@ public class SpanDAO {
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 <endif>
                 LIMIT 1 BY id
+            <if(page_in_dedup_order)>
+                LIMIT :limit <if(offset)>OFFSET :offset <endif>
+            <else>
             ), page_ids AS (
                 SELECT sd.id
                 FROM spans_deduped sd
@@ -1107,6 +1127,7 @@ public class SpanDAO {
                 ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 <endif>
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
+            <endif>
             ), page_wide AS (
                 SELECT
                     s.* EXCEPT (input_slim, output_slim)<if(exclude_fields)> EXCEPT (<exclude_fields>)<endif>,
@@ -1118,6 +1139,7 @@ public class SpanDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -1171,6 +1193,15 @@ public class SpanDAO {
             SETTINGS log_comment = '<log_comment>'
             """;
 
+    /**
+     * The total of the spans list: the distinct spans with at least one version matching the filters, the set
+     * {@link #SELECT_BY_PROJECT_ID} pages through.
+     * <p>
+     * It counts in the level that reads {@code spans}. When {@code spans} is a {@code Distributed} table, each subquery
+     * reading it runs on the shard, so a count one level up would make the shard ship every id of the project to the
+     * initiator; this one comes back from the shard as one finished row, as {@link #SELECT_SPANS_STATS} does
+     * (OPIK-8833).
+     */
     private static final String COUNT_BY_PROJECT_ID = """
             <if(feedback_scores_filters || feedback_scores_empty_filters)>
             WITH <if(span_id_prefilter)>span_id_prefilter AS (
@@ -1261,53 +1292,44 @@ public class SpanDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
-            SELECT
-                count(id) as count
-            FROM
-            (
-               SELECT
-                    id,
-                    duration
+            SELECT count(DISTINCT id) AS count
+            FROM spans
+            <if(feedback_scores_empty_filters)>
+                LEFT JOIN fsc ON fsc.entity_id = spans.id
+            <endif>
+            WHERE project_id = :project_id
+            AND workspace_id = :workspace_id
+            <if(uuid_from_time)> AND id >= :uuid_from_time
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+            <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+            <if(trace_id)> AND trace_id = :trace_id <endif>
+            <if(type)> AND type = :type <endif>
+            <if(filters)> AND <filters> <endif>
+            <if(search_text)> AND <search_text> <endif>
+            <if(spans_partitioned && search_text)>
+            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                 FROM spans
-                <if(feedback_scores_empty_filters)>
-                    LEFT JOIN fsc ON fsc.entity_id = spans.id
-                <endif>
-                WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
-                <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                <if(trace_id)> AND trace_id = :trace_id <endif>
-                <if(type)> AND type = :type <endif>
-                <if(filters)> AND <filters> <endif>
-                <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned && search_text)>
-                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                    FROM spans
-                    WHERE workspace_id = :workspace_id AND project_id = :project_id
-                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
-                    <if(trace_id)> AND trace_id = :trace_id<endif>)
-                <endif>
-                <if(feedback_scores_filters)>
-                AND id in (
-                    SELECT
-                        entity_id
-                    FROM feedback_scores_final
-                    GROUP BY entity_id
-                    HAVING <feedback_scores_filters>
-                )
-                <endif>
-                <if(feedback_scores_empty_filters)>
-                AND fsc.feedback_scores_count = 0
-                <endif>
-                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ) AS latest_rows
+                WHERE workspace_id = :workspace_id AND project_id = :project_id
+                <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                <if(trace_id)> AND trace_id = :trace_id<endif>)
+            <endif>
+            <if(feedback_scores_filters)>
+            AND id in (
+                SELECT
+                    entity_id
+                FROM feedback_scores_final
+                GROUP BY entity_id
+                HAVING <feedback_scores_filters>
+            )
+            <endif>
+            <if(feedback_scores_empty_filters)>
+            AND fsc.feedback_scores_count = 0
+            <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1398,8 +1420,8 @@ public class SpanDAO {
      * The per-workspace bounded counterpart of {@link #DELETE_FOR_RETENTION} (applyToPast=false): each workspace
      * carries its own {@code trace_id} floor, so the windows are OR-ed rather than sharing one {@code :lower_bound}.
      * <p>
-     * The OR-ed predicates are a template loop over {@code getQueryItemPlaceHolder}, matching {@code BULK_INSERT} and
-     * the other variable-arity queries in this DAO, so the query text is declared once and every value is bound.
+     * The OR-ed predicates are a template loop over {@code getQueryItemPlaceHolder}, matching the other
+     * variable-arity queries in this DAO, so the query text is declared once and every value is bound.
      * Declaring it rather than assembling it at runtime is also what puts it in reach of the routing guard, which
      * reads these constants.
      * <p>
@@ -1475,6 +1497,19 @@ public class SpanDAO {
             ;
             """;
 
+    /**
+     * Split-A of the span stats: the per-project span aggregates, computed in the level that reads {@code spans FINAL}
+     * ({@code spans_stats}). When {@code spans} is a {@code Distributed} table, each subquery reading it runs on the
+     * shard, so an aggregate one level up would make the shard ship every row of the project to the initiator. Here
+     * the shard returns the finished row instead (OPIK-8833): a read filtered on {@code project_id}, the sharding key,
+     * reaches only the project's shard ({@code optimize_skip_unused_shards}, which the app sets), and ClickHouse
+     * completes a single-shard read on that shard.
+     * <p>
+     * The aggregates get their output names one level up, because ClickHouse resolves a {@code WHERE} identifier to a
+     * same-named {@code SELECT} alias first: an alias such as {@code duration}, {@code tags}, {@code usage},
+     * {@code input}, {@code output} or {@code metadata} at the reading level would turn a user filter on that column
+     * into an aggregate in {@code WHERE}, and the query would fail.
+     */
     private static final String SELECT_SPANS_STATS = """
             WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -1571,19 +1606,20 @@ public class SpanDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
-            , spans_final AS (
+            , spans_stats AS (
                 SELECT
-                     workspace_id,
                      project_id,
-                     id,
-                     duration,
-                     if(input_length > 0, 1, 0) as input_count,
-                     if(output_length > 0, 1, 0) as output_count,
-                     if(metadata_length > 0, 1, 0) as metadata_count,
-                     length(tags) as tags_count,
-                     usage,
-                     total_estimated_cost,
-                     error_info
+                     count(DISTINCT id) AS span_count,
+                     quantiles(0.5, 0.9, 0.99)(duration) AS duration_quantiles,
+                     sum(if(input_length > 0, 1, 0)) AS input_count,
+                     sum(if(output_length > 0, 1, 0)) AS output_count,
+                     sum(if(metadata_length > 0, 1, 0)) AS metadata_count,
+                     avg(length(tags)) AS tags_avg,
+                     avgMap(usage) AS usage_avg,
+                     sumMap(usage) AS usage_total,
+                     avgIf(total_estimated_cost, total_estimated_cost > 0) AS cost_avg,
+                     sumIf(total_estimated_cost, total_estimated_cost > 0) AS cost_sum,
+                     countIf(error_info, error_info != '') AS error_count
                 FROM spans final
                 <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = spans.id
@@ -1621,10 +1657,11 @@ public class SpanDAO {
                 <if(feedback_scores_empty_filters)>
                 AND fsc.feedback_scores_count = 0
                 <endif>
+                GROUP BY project_id
             )
             SELECT
-                project_id as project_id,
-                count(DISTINCT id) as span_count,
+                project_id,
+                span_count,
                 arrayMap(
                   v -> toDecimal64(
                          greatest(
@@ -1633,31 +1670,33 @@ public class SpanDAO {
                          ),
                          9
                        ),
-                  quantiles(0.5, 0.9, 0.99)(duration)
+                  duration_quantiles
                 ) AS duration,
-                sum(input_count) as input,
-                sum(output_count) as output,
-                sum(metadata_count) as metadata,
-                avg(tags_count) as tags,
-                avgMap(s.usage) as usage,
-                sumMap(s.usage) as usage_sum,
-                avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
-                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
-                sumIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_sum_,
-                toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
-                countIf(error_info, error_info != '') AS error_count
-            FROM spans_final s
-            GROUP BY project_id
+                input_count AS input,
+                output_count AS output,
+                metadata_count AS metadata,
+                tags_avg AS tags,
+                usage_avg AS usage,
+                usage_total AS usage_sum,
+                toDecimal128(if(isNaN(cost_avg), 0, cost_avg), 12) AS total_estimated_cost_avg,
+                toDecimal128(cost_sum, 12) AS total_estimated_cost_sum,
+                error_count
+            FROM spans_stats
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
-    // Split-B: per-project span-feedback-score aggregates.
-    // - Mirrors the trace-side SELECT_FEEDBACK_SCORES_STATS pattern but at span granularity.
-    // - filters_present gates an embedded spans_final filter resolution (must stay in sync with
-    //   the spans_final CTE inside SELECT_SPANS_STATS).
-    // - has_legacy_scores gates the legacy feedback_scores table UNION branch.
-    // - Skips the rich tuple groupArray of the listing CTEs — only `value` is projected.
+    /**
+     * Split-B of the span stats: the per-project feedback-score averages, run alongside {@link #SELECT_SPANS_STATS}
+     * (split-A) and merged with it by {@code StatsMerger}, as {@code TraceDAO.SELECT_FEEDBACK_SCORES_STATS} is for
+     * traces.
+     * <ul>
+     * <li>{@code filters_present} adds a {@code spans_final} CTE that narrows the scores to the filtered spans. It must
+     * select the same spans as {@link #SELECT_SPANS_STATS}; only its week-pruning hint may differ.</li>
+     * <li>{@code has_legacy_scores} adds the legacy {@code feedback_scores} table as a {@code UNION ALL} branch.</li>
+     * <li>Only {@code value} is projected, not the per-score tuples the listing queries build.</li>
+     * </ul>
+     */
     private static final String SELECT_SPAN_FEEDBACK_SCORES_STATS = """
             <if(filters_present)>
             WITH feedback_scores_deduped AS (
@@ -1737,7 +1776,6 @@ public class SpanDAO {
             )
             <endif>
             , spans_final AS (
-                -- IMPORTANT: keep this WHERE clause in sync with SELECT_SPANS_STATS.spans_final.
                 SELECT id, project_id
                 FROM spans final
                 <if(feedback_scores_empty_filters)>
@@ -2867,6 +2905,7 @@ public class SpanDAO {
             template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
             template = template.add("stream", true);
+            template = template.add("page_in_dedup_order", true);
 
             var statement = connection.createStatement(template.render())
                     .bind("project_id", criteria.projectId())
@@ -2909,12 +2948,12 @@ public class SpanDAO {
 
             var finalTemplate = template;
             Optional.ofNullable(orderBySql)
-                    .ifPresent(sortFields -> {
+                    .ifPresentOrElse(sortFields -> {
                         if (sortHasFeedbackScores) {
                             finalTemplate.add("sort_has_feedback_scores", true);
                         }
                         finalTemplate.add("sort_fields", sortFields);
-                    });
+                    }, () -> finalTemplate.add("page_in_dedup_order", true));
 
             var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(spanSearchCriteria.sortingFields());
 
