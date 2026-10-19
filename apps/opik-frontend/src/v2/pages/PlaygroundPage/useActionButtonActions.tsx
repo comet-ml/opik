@@ -25,6 +25,7 @@ import useRunExperimentExecution from "@/api/playground/useRunExperimentExecutio
 import useCancelExperimentExecution from "@/api/playground/useCancelExperimentExecution";
 import usePlaygroundStore, {
   getExperimentNameForPrompt,
+  getRunningPromptIds,
   getExperimentNamesForPrompts,
   usePromptIds,
   usePromptMap,
@@ -42,8 +43,12 @@ import usePlaygroundStore, {
   useSetProgress,
   useSetProgressPhase,
   useResetProgress,
-  useSetWatchPaused,
-  useSetStopPending,
+  useClearAllStopPending,
+  useClearAllWatchLapsed,
+  useMarkWatchLapsed,
+  useClearWatchLapsed,
+  useQueueStopPending,
+  useClearStopPending,
   useForgetExperimentForPrompt,
   useUpdateOutputTraceId,
   useDatasetType,
@@ -205,8 +210,12 @@ const useActionButtonActions = ({
   const setProgress = useSetProgress();
   const setProgressPhase = useSetProgressPhase();
   const resetProgress = useResetProgress();
-  const setWatchPaused = useSetWatchPaused();
-  const setStopPending = useSetStopPending();
+  const clearAllStopPending = useClearAllStopPending();
+  const clearAllWatchLapsed = useClearAllWatchLapsed();
+  const markWatchLapsed = useMarkWatchLapsed();
+  const clearWatchLapsed = useClearWatchLapsed();
+  const queueStopPending = useQueueStopPending();
+  const clearStopPending = useClearStopPending();
   const forgetExperimentForPrompt = useForgetExperimentForPrompt();
 
   const stopPolling = useCallback(() => {
@@ -238,8 +247,7 @@ const useActionButtonActions = ({
   // isRunInFlight is shared by every prompt, and the sidebar watches the run through it. An action
   // scoped to one prompt may only clear it once no sibling is left running.
   const releaseRunInFlight = useCallback(() => {
-    const { isRunningMap } = usePlaygroundStore.getState();
-    if (!Object.values(isRunningMap).some(Boolean)) {
+    if (getRunningPromptIds().length === 0) {
       setIsRunInFlight(false);
     }
   }, [setIsRunInFlight]);
@@ -263,10 +271,7 @@ const useActionButtonActions = ({
 
       // The run exists on the server but this tab cannot name it. Remember those and replay them
       // when the ids arrive, keeping any stop already waiting so a second one does not drop it.
-      if (unnamed.length > 0) {
-        const waiting = usePlaygroundStore.getState().stopPending ?? [];
-        setStopPending([...new Set([...waiting, ...unnamed])]);
-      }
+      queueStopPending(unnamed);
 
       if (named.length === 0) return;
 
@@ -281,22 +286,8 @@ const useActionButtonActions = ({
       cancelExperimentRun,
       releaseRunInFlight,
       refreshRunViews,
-      setStopPending,
+      queueStopPending,
     ],
-  );
-
-  /**
-   * The launch failed, so a stop waiting on its ids has nothing left to cancel. Dropping only this
-   * prompt leaves a stop queued against a sibling launch that is still open.
-   */
-  const dropQueuedStop = useCallback(
-    (promptId: string) => {
-      const waiting = usePlaygroundStore.getState().stopPending;
-      if (!waiting) return;
-
-      setStopPending(waiting.filter((id) => id !== promptId));
-    },
-    [setStopPending],
   );
 
   /**
@@ -307,17 +298,17 @@ const useActionButtonActions = ({
   const applyQueuedStop = useCallback(
     (launched: string[]) => {
       const queued = usePlaygroundStore.getState().stopPending;
-      if (!queued) return false;
+      if (queued.size === 0) return false;
 
       // Cleared first: the ids exist now, so the cancel below lands rather than queueing again.
-      setStopPending(null);
-      cancelBackendRun(queued);
+      clearAllStopPending();
+      cancelBackendRun([...queued]);
 
       // Only a launch whose every prompt was stopped is over. A stop aimed at one of several
       // leaves its siblings running on the server, and they still need watching.
-      return launched.every((promptId) => queued.includes(promptId));
+      return launched.every((promptId) => queued.has(promptId));
     },
-    [cancelBackendRun, setStopPending],
+    [cancelBackendRun, clearAllStopPending],
   );
 
   /**
@@ -339,9 +330,10 @@ const useActionButtonActions = ({
     // Read before settling, which empties both: these are the prompts the stop covers, and a
     // stop that has to wait for ids needs to name them. A prompt stopped on its own is already
     // out of the running map with its stop still queued, so carry that across or it is lost.
-    const { isRunningMap, stopPending } = usePlaygroundStore.getState();
-    const running = Object.keys(isRunningMap).filter((id) => isRunningMap[id]);
-    const covered = [...new Set([...running, ...(stopPending ?? [])])];
+    const { stopPending } = usePlaygroundStore.getState();
+    const covered = [
+      ...new Set([...getRunningPromptIds(), ...(stopPending ?? [])]),
+    ];
 
     announcePendingRef.current = false;
     scopedAnnounceRef.current.clear();
@@ -415,14 +407,14 @@ const useActionButtonActions = ({
     openAiPipelineMode,
   });
 
-  const pauseWatching = useCallback(
+  const stopFollowingRun = useCallback(
     (description: string) => {
       stopPolling();
-      setWatchPaused(true);
+      markWatchLapsed(getRunningPromptIds());
       refreshRunViews();
       toast({ title: "Still running", description });
     },
-    [stopPolling, setWatchPaused, refreshRunViews, toast],
+    [stopPolling, markWatchLapsed, refreshRunViews, toast],
   );
 
   const finishPollScope = useCallback(
@@ -485,7 +477,11 @@ const useActionButtonActions = ({
         if (!isScoped && isToStopRef.current) return;
 
         if (Date.now() - startTime > MAX_POLL_DURATION_MS) {
-          pauseWatching(STILL_RUNNING_DESCRIPTION);
+          if (isScoped) {
+            markWatchLapsed(scope?.scopedPromptIds ?? []);
+          } else {
+            stopFollowingRun(STILL_RUNNING_DESCRIPTION);
+          }
           return;
         }
 
@@ -575,12 +571,13 @@ const useActionButtonActions = ({
       workspaceName,
       setProgress,
       resetProgress,
-      pauseWatching,
+      stopFollowingRun,
       refreshRunViews,
       announceRunComplete,
       finishPollScope,
       queryClient,
       handlePollError,
+      markWatchLapsed,
     ],
   );
 
@@ -601,7 +598,11 @@ const useActionButtonActions = ({
         if (!isScoped && isToStopRef.current) return;
 
         if (Date.now() - startTime > MAX_POLL_DURATION_MS) {
-          pauseWatching(STILL_RUNNING_DESCRIPTION);
+          if (isScoped) {
+            markWatchLapsed(scope?.scopedPromptIds ?? []);
+          } else {
+            stopFollowingRun(STILL_RUNNING_DESCRIPTION);
+          }
           return;
         }
 
@@ -682,11 +683,12 @@ const useActionButtonActions = ({
       finishPollScope,
       refreshRunViews,
       announceRunComplete,
-      pauseWatching,
+      stopFollowingRun,
       queryClient,
       pollAssertionEvaluation,
       handlePollError,
       isTestSuite,
+      markWatchLapsed,
     ],
   );
 
@@ -893,6 +895,7 @@ const useActionButtonActions = ({
 
       setPromptRunning(promptId, true);
       scopedAnnounceRef.current.add(promptId);
+      clearWatchLapsed([promptId]);
       // Until /execute answers, this prompt's previous experiment is the only id on hand, and a
       // stop pressed now would cancel that finished run instead of queueing for this one.
       const previousExperimentId =
@@ -932,7 +935,7 @@ const useActionButtonActions = ({
         const experiment = response.experiments[0];
         if (!experiment) {
           setPromptRunning(promptId, false);
-          dropQueuedStop(promptId);
+          clearStopPending([promptId]);
           keepShowingThePreviousRun();
           return;
         }
@@ -976,7 +979,7 @@ const useActionButtonActions = ({
         );
       } catch {
         setPromptRunning(promptId, false);
-        dropQueuedStop(promptId);
+        clearStopPending([promptId]);
         keepShowingThePreviousRun();
       }
     },
@@ -1000,8 +1003,9 @@ const useActionButtonActions = ({
       datasetItemFilters,
       evaluationMethod,
       applyQueuedStop,
+      clearWatchLapsed,
       forgetExperimentForPrompt,
-      dropQueuedStop,
+      clearStopPending,
     ],
   );
 
@@ -1130,10 +1134,15 @@ const useActionButtonActions = ({
   // still running
   const checkAgain = useCallback(() => {
     stopPolling();
-    setWatchPaused(false);
+    clearAllWatchLapsed();
     refreshRunViews();
     pickUpRunningExperiments();
-  }, [stopPolling, setWatchPaused, refreshRunViews, pickUpRunningExperiments]);
+  }, [
+    stopPolling,
+    clearAllWatchLapsed,
+    refreshRunViews,
+    pickUpRunningExperiments,
+  ]);
 
   return {
     isRunning,

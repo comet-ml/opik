@@ -97,7 +97,7 @@ beforeEach(() => {
     isResumingRun: false,
     experimentByPromptId: {},
     runTotalItemsByPromptId: {},
-    watchPaused: false,
+    watchLapsed: new Set<string>(),
   });
 });
 
@@ -348,7 +348,6 @@ describe("useActionButtonActions lifecycle", () => {
       act(() => result.current.stopSingle(PROMPT_A));
 
       expect(usePlaygroundStore.getState().isRunningMap).toEqual({
-        [PROMPT_A]: false,
         [PROMPT_B]: true,
       });
     });
@@ -426,7 +425,11 @@ describe("useActionButtonActions lifecycle", () => {
 
       await runScoped(result.current.runSingle, PROMPT_A, EXPERIMENT_A);
 
-      expect(usePlaygroundStore.getState().isRunningMap[PROMPT_A]).toBe(false);
+      // A is gone from the map rather than recorded as stopped; B is still running, which is why
+      // the run as a whole stays in flight.
+      expect(usePlaygroundStore.getState().isRunningMap).toEqual({
+        [PROMPT_B]: true,
+      });
       expect(usePlaygroundStore.getState().isRunInFlight).toBe(true);
     });
 
@@ -555,14 +558,16 @@ describe("useActionButtonActions lifecycle", () => {
       });
 
       act(() => result.current.stopSingle(PROMPT_A));
-      expect(usePlaygroundStore.getState().stopPending).toEqual([PROMPT_A]);
+      expect(usePlaygroundStore.getState().stopPending).toEqual(
+        new Set([PROMPT_A]),
+      );
 
       await act(async () => {
         fail(new Error("execute never answered"));
         await running;
       });
 
-      expect(usePlaygroundStore.getState().stopPending).toBeNull();
+      expect(usePlaygroundStore.getState().stopPending.size).toBe(0);
     });
 
     // Each prompt launches on its own request, so one failing says nothing about the other. Its
@@ -602,7 +607,9 @@ describe("useActionButtonActions lifecycle", () => {
         await runningA;
       });
 
-      expect(usePlaygroundStore.getState().stopPending).toEqual([PROMPT_B]);
+      expect(usePlaygroundStore.getState().stopPending).toEqual(
+        new Set([PROMPT_B]),
+      );
     });
 
     const twoPromptsLaunching = () => {
@@ -720,7 +727,7 @@ describe("useActionButtonActions lifecycle", () => {
 
       act(() => result.current.stopAll());
 
-      expect(usePlaygroundStore.getState().stopPending).toBeNull();
+      expect(usePlaygroundStore.getState().stopPending.size).toBe(0);
     });
 
     // A stop can reach prompts in both states at once: one whose id arrived long ago, one still
@@ -746,7 +753,9 @@ describe("useActionButtonActions lifecycle", () => {
       expect(cancelExperimentRun).toHaveBeenCalledWith({
         experimentIds: [EXPERIMENT_A],
       });
-      expect(usePlaygroundStore.getState().stopPending).toEqual([PROMPT_B]);
+      expect(usePlaygroundStore.getState().stopPending).toEqual(
+        new Set([PROMPT_B]),
+      );
     });
 
     // Two prompts stopped one after the other in the same window. Both are waiting on the same
@@ -846,6 +855,92 @@ describe("useActionButtonActions lifecycle", () => {
       const shown = await failPollWith(new Error("Network Error"));
 
       expect(shown?.description).toContain("Network Error");
+    });
+  });
+
+  // One prompt's poll giving up used to pause the whole run, because the generation it moves and
+  // the paused flag it sets are both the run's rather than the scope's. Its siblings were left
+  // stuck on Stop even after their own runs finished.
+  describe("a single prompt's poll outliving the watch window", () => {
+    const PAST_THE_WATCH_WINDOW = 6 * 60 * 1000;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      runExperimentExecution.mockReset();
+      runExperimentExecution.mockResolvedValue({
+        experiments: [{ experiment_id: EXPERIMENT_A }],
+        total_items: 1,
+      });
+      getExperimentById.mockReset();
+      getExperimentById.mockResolvedValue({
+        status: EXPERIMENT_STATUS.RUNNING,
+        trace_count: 0,
+      });
+      usePlaygroundStore.setState({
+        promptIds: [PROMPT_A, PROMPT_B],
+        promptMap: {
+          [PROMPT_A]: { id: PROMPT_A, name: "A", messages: [], configs: {} },
+          [PROMPT_B]: { id: PROMPT_B, name: "B", messages: [], configs: {} },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+      });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const runOneUntilItGivesUp = async () => {
+      const rendered = renderActions("dataset-1");
+      await act(async () => {
+        await rendered.result.current.runSingle(PROMPT_A);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PAST_THE_WATCH_WINDOW);
+      });
+      return rendered;
+    };
+
+    it("should mark only that prompt as no longer followed", async () => {
+      await runOneUntilItGivesUp();
+
+      expect(usePlaygroundStore.getState().watchLapsed).toEqual(
+        new Set([PROMPT_A]),
+      );
+    });
+
+    // Two prompts run at different times give up at different times. The second to lapse must not
+    // take the first one's place.
+    it("should keep both when a second prompt gives up later", async () => {
+      const { result } = await runOneUntilItGivesUp();
+      expect(usePlaygroundStore.getState().watchLapsed).toEqual(
+        new Set([PROMPT_A]),
+      );
+
+      await act(async () => {
+        await result.current.runSingle(PROMPT_B);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PAST_THE_WATCH_WINDOW);
+      });
+
+      expect(usePlaygroundStore.getState().watchLapsed).toEqual(
+        new Set([PROMPT_A, PROMPT_B]),
+      );
+    });
+
+    // Otherwise the row keeps offering to refresh a run that is already being followed again.
+    it("should follow it again once it is re-run", async () => {
+      const { result } = await runOneUntilItGivesUp();
+      expect(usePlaygroundStore.getState().watchLapsed).toEqual(
+        new Set([PROMPT_A]),
+      );
+
+      await act(async () => {
+        await result.current.runSingle(PROMPT_A);
+      });
+
+      expect(usePlaygroundStore.getState().watchLapsed.size).toBe(0);
     });
   });
 
@@ -970,15 +1065,19 @@ describe("useActionButtonActions lifecycle", () => {
       expect(usePlaygroundStore.getState().isRunInFlight).toBe(true);
     });
 
-    it("should say it stopped following, which is what it actually did", async () => {
+    // Marked per prompt rather than as one flag: the same fact drives the progress bar for a run
+    // followed as a whole and a single prompt's row when there is no bar.
+    it("should say it stopped following every prompt it had been", async () => {
       await watchUntilItGivesUp();
 
-      expect(usePlaygroundStore.getState().watchPaused).toBe(true);
+      expect(usePlaygroundStore.getState().watchLapsed).toEqual(
+        new Set([PROMPT_A, PROMPT_B]),
+      );
     });
 
     it("should pick the run back up and settle it when asked to check again", async () => {
       const { result } = await watchUntilItGivesUp();
-      expect(usePlaygroundStore.getState().watchPaused).toBe(true);
+      expect(usePlaygroundStore.getState().watchLapsed.size).toBeGreaterThan(0);
 
       getExperimentById.mockResolvedValue({
         status: EXPERIMENT_STATUS.COMPLETED,
@@ -992,7 +1091,7 @@ describe("useActionButtonActions lifecycle", () => {
         await vi.advanceTimersByTimeAsync(EXPERIMENT_POLL_INTERVAL_MS);
       });
 
-      expect(usePlaygroundStore.getState().watchPaused).toBe(false);
+      expect(usePlaygroundStore.getState().watchLapsed.size).toBe(0);
       expect(usePlaygroundStore.getState().isRunningMap).toEqual({});
     });
   });

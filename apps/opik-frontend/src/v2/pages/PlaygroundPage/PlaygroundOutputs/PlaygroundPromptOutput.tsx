@@ -18,6 +18,7 @@ interface PlaygroundPromptOutputProps {
   promptIndex: number;
   onRun?: () => void;
   onStop?: () => void;
+  onCheckAgain?: () => void;
 }
 
 const PlaygroundPromptOutput = ({
@@ -25,6 +26,7 @@ const PlaygroundPromptOutput = ({
   promptIndex,
   onRun,
   onStop,
+  onCheckAgain,
 }: PlaygroundPromptOutputProps) => {
   // One subscription, not four. This already read the whole output object for
   // `usage`, while three sibling hooks re-ran the same selector for fields that
@@ -77,6 +79,7 @@ const PlaygroundPromptOutput = ({
           promptId={promptId}
           onRun={onRun}
           onStop={onStop}
+          onCheckAgain={onCheckAgain}
         />
       )}
       {hasOutput ? (
