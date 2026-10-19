@@ -1,7 +1,8 @@
-import { test } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { PlaygroundPage } from './playground.page';
+import { VersionRecordsSidebarPage } from './version-records-sidebar.page';
 
 /**
  * Per-suite items page. The underlying FE component is shared with DatasetItemsPage
@@ -96,6 +97,42 @@ export class TestSuiteItemsPage {
 
   draftBadge(): Locator {
     return this.page.getByText('Draft', { exact: true });
+  }
+
+  /**
+   * Second tab of the suite page: one row per committed version. Mirrors
+   * `DatasetItemsPage.openVersionHistory` — the tab is the same shared
+   * component, and a suite's rows differ only in what the sheet they open
+   * renders.
+   */
+  async openVersionHistory(): Promise<void> {
+    return test.step('Open the Version history tab', async () => {
+      await this.page.getByRole('tab', { name: 'Version history' }).click();
+      const realRow = this.versionsTableBody.locator('tr[data-row-id]').first();
+      const emptyState = this.page.getByText('No version history yet');
+      await Promise.race([
+        realRow.waitFor({ state: 'visible' }),
+        emptyState.waitFor({ state: 'visible' }),
+      ]);
+    });
+  }
+
+  versionHistoryRow(versionName: string): Locator {
+    return this.versionsTableBody
+      .locator('tr[data-row-id]')
+      .filter({ has: this.page.getByRole('cell', { name: versionName, exact: true }) });
+  }
+
+  /** Open one version's read-only records sheet — see `DatasetItemsPage.openVersionRecords`. */
+  async openVersionRecords(versionName: string): Promise<VersionRecordsSidebarPage> {
+    return test.step(`Open version ${versionName}'s test cases sheet`, async () => {
+      const row = this.versionHistoryRow(versionName);
+      await expect(row).toHaveCount(1);
+      await row.click();
+      const sidebar = new VersionRecordsSidebarPage(this.page);
+      await sidebar.waitForReady();
+      return sidebar;
+    });
   }
 
   async clickAddItem(): Promise<void> {
@@ -195,6 +232,10 @@ export class TestSuiteItemsPage {
 
   private get itemsTableBody(): Locator {
     return this.page.getByRole('tabpanel', { name: 'Test cases' }).locator('tbody');
+  }
+
+  private get versionsTableBody(): Locator {
+    return this.page.getByRole('tabpanel', { name: 'Version history' }).locator('tbody');
   }
 
   private pageLevelCommitButton(): Locator {

@@ -1,0 +1,31 @@
+# pending capabilities from opik#8837 — applied by the release job
+#
+# opik#8837 put a read-only sheet behind every non-latest Version history row,
+# and moved "Restore" inside it. Two of the three specs it produced have no key
+# they could honestly claim.
+#
+# `datasets.version-history-view` DOES fit the sheet itself, and
+# dataset-version-records-sidebar.spec.ts is filed there. It does not fit the
+# other two:
+#
+#  - Restore is the one control in the sheet that WRITES, and its contract is
+#    about scope — which version got restored, what the new latest holds, and
+#    what was left alone. Filing that under a key whose name says "view" would
+#    mean a destructive action nobody had tested read as tested the moment the
+#    next viewing spec landed. `edit-item-versions`, the nearest alternative,
+#    is about committing an edit from the Records tab, which is a different
+#    endpoint and a different dialog.
+#
+#  - On a test suite the sheet renders the version's own suite assertions and
+#    execution policy, and a per-case assertion and policy column — none of
+#    which `test-suites.view-suite-items` names. That key is about the live Test
+#    cases tab ("3 SDK-seeded items render"), and the failure this spec exists
+#    to catch is precisely a sheet that shows the right CASES under the wrong
+#    POLICY. Stretching view-suite-items over it would record version-scoping as
+#    covered by a spec that never looked at a version.
+- area: datasets
+  capability: restore-version
+  note: "Restoring a version from inside the read-only version sheet (dataset-version-restore-from-sidebar.spec.ts): the confirmation names the version that was opened, confirming closes the sheet and clears every dvs_* param, and a third version becomes the only is_latest one, holding the opened version's items by id and value with the counters that say WHICH version was restored (+0 ~2 −2 against a v1-of-3 restored over a v2-of-5). Every earlier version survives. The Version history tab and the Records tab both follow without a reload — the restored version renders as the new un-openable latest while the previous latest becomes openable, asserted behaviourally by clicking both — and a bystander dataset in the same project is asserted unchanged in its version count, its item ids and its values. NOT covered: restoring the latest version (a documented no-op), and restoring over a staged draft, whose dialog says 'Discard & Restore' and needs a draft seeded through the UI first."
+- area: test-suites
+  capability: version-history-view
+  note: "A test suite's read-only version sheet (test-suite-version-records-sidebar.spec.ts): the meta block lists the OPENED version's suite assertions and its execution policy formatted '<pass_threshold> of <runs_per_item> must pass', the table holds exactly that version's test cases by id, and each row's Execution policy cell reports the version's policy while its Custom assertions cell reports none. Opening a case shows its Data, 'Only suite assertions', and the inherited policy marked '(suite default)'. The seed makes the two versions differ on assertions AND policy as well as on their cases — the older carries two assertions and 1-of-2, the latest one different assertion and 2-of-3 — so every assertion would pass against a sheet wired to the latest if it were symmetric; the latest's assertion text and policy string are both asserted absent from the sheet. Cutting that second version needs POST /datasets/{id}/items/changes, since the SDK can only set a suite's assertions and policy at creation. NOT covered: a per-ITEM execution policy override, which no seeding route can set today, and the viewer-only variant of the row menu (OSS hardcodes canEditDatasets)."

@@ -127,6 +127,14 @@ export interface RawApiResult {
 
 /** One row of the dataset's Version history tab. */
 export interface DatasetVersionRef {
+  /**
+   * The version's own row id — what the Version history table stamps as
+   * `data-row-id`, and what `POST /datasets/{id}/items/changes` wants as its
+   * `base_version`. Distinct from `versionHash`, which is the content hash the
+   * sidebar and the items endpoint address a version by; passing one where the
+   * other is wanted is accepted-looking and wrong.
+   */
+  id: string;
   versionName: string;
   /**
    * The version's content hash. Nullable because the API's own shape makes it
@@ -139,6 +147,80 @@ export interface DatasetVersionRef {
   itemsModified: number;
   itemsDeleted: number;
   isLatest: boolean;
+}
+
+/**
+ * A version's execution policy, as the suite surfaces render it: the sheet's
+ * meta block and the per-item Execution policy cell both format it as
+ * "<passThreshold> of <runsPerItem> must pass".
+ */
+export interface ExecutionPolicyRef {
+  passThreshold: number;
+  runsPerItem: number;
+}
+
+/**
+ * One version as `GET /v1/private/datasets/{id}/versions/hash/{hash}` answers
+ * it — the read the version-records sidebar makes when a row is opened.
+ *
+ * A superset of `DatasetVersionRef`, which is the shape the *list* endpoint
+ * answers and is mapped for the Version history tab's columns. This read is
+ * kept separate rather than folded into that mapper because what the sidebar
+ * needs from it is the suite half — `assertionNames` and `executionPolicy` —
+ * which the version table has no column for, and because the two are different
+ * endpoints that are allowed to disagree.
+ *
+ * `versionHash` is not nullable here: the caller addressed the version BY its
+ * hash, so a response that came back without one is a response about something
+ * else. `executionPolicy` is `null` only where the version genuinely carries
+ * none (a plain dataset), never defaulted — the sheet renders an em dash there,
+ * and a `{0, 0}` stand-in would read as a real policy.
+ */
+export interface DatasetVersionDetailRef {
+  id: string;
+  versionName: string;
+  versionHash: string;
+  itemsTotal: number;
+  itemsAdded: number;
+  itemsModified: number;
+  itemsDeleted: number;
+  isLatest: boolean;
+  /**
+   * The suite-level assertion names, derived the same way the FE's
+   * `extractAssertions` does — the `schema[].name` list of the FIRST evaluator,
+   * and only when that evaluator is an `llm_judge`. Mirroring the FE's rule
+   * rather than flattening every evaluator is deliberate: what the sheet's
+   * "Suite assertions" block shows is what this returns, so a spec asserting
+   * the two agree has to compute it the same way.
+   */
+  assertionNames: string[];
+  executionPolicy: ExecutionPolicyRef | null;
+}
+
+/**
+ * One item as of a particular version — the rows the version sidebar's table
+ * renders.
+ *
+ * `assertionNames` and `executionPolicy` are the per-item suite overrides, and
+ * `executionPolicy: null` is the load-bearing case rather than a gap: the
+ * sidebar renders an item with no policy of its own in grey, showing the
+ * SUITE's policy instead, so a spec asserting which rows inherit needs the
+ * absence itself.
+ */
+export interface VersionedDatasetItemRef {
+  id: string;
+  data: Record<string, unknown>;
+  assertionNames: string[];
+  executionPolicy: ExecutionPolicyRef | null;
+}
+
+/** One page of `GET /v1/private/datasets/{id}/items`, version-scoped or not. */
+export interface VersionedDatasetItemPage {
+  /** The server's own count, which is what the sidebar's pagination reads. */
+  total: number;
+  /** Dynamic data column names, sorted — the sheet's data columns come from these. */
+  columns: string[];
+  items: VersionedDatasetItemRef[];
 }
 
 /**
@@ -1110,6 +1192,80 @@ function toDatasetSummary(row: unknown): DatasetSummaryRef {
     lastCreatedExperimentAt: d.last_created_experiment_at ?? null,
     mostRecentOptimizationAt: d.most_recent_optimization_at ?? null,
   };
+}
+
+/** The evaluator shape a version or an item carries, as far as the suite surfaces read it. */
+type RawEvaluator = {
+  type?: string;
+  config?: { schema?: Array<{ name?: string }> };
+};
+
+/**
+ * The assertion names a list of evaluators resolves to, computed the way the
+ * FE's `extractAssertions` computes it: the FIRST evaluator only, and only when
+ * it is an `llm_judge`.
+ *
+ * Deliberately not "every assertion on every evaluator". The sheet's meta block
+ * and its per-item Assertions section both go through `extractAssertions`, so a
+ * spec comparing the API against the screen has to apply the same rule — a
+ * helper that flattened all of them would disagree with the UI on exactly the
+ * suite that has two evaluators, and report that disagreement as a product bug.
+ */
+function toAssertionNames(evaluators: unknown): string[] {
+  const first = (Array.isArray(evaluators) ? evaluators : [])[0] as RawEvaluator | undefined;
+  if (!first || first.type !== 'llm_judge') return [];
+  return (first.config?.schema ?? []).map((entry) => String(entry.name ?? ''));
+}
+
+/**
+ * Assertion names back into the `llm_judge` evaluator the backend stores and
+ * `extractAssertions` reads — the inverse of `toAssertionNames`.
+ *
+ * The `messages` are required by the shared LlmAsJudgeCode schema and are
+ * replaced by the backend's own copy, so their content is irrelevant here; only
+ * `schema[].name` is ever read back. Kept minimal on purpose rather than
+ * copying the FE's full default prompt, which would go stale silently.
+ */
+function packLlmJudge(assertionNames: string[]): unknown[] {
+  return [
+    {
+      name: 'llm_judge',
+      type: 'llm_judge',
+      config: {
+        version: '1',
+        name: 'llm_judge',
+        model: { name: null, temperature: null, seed: null, customParameters: null },
+        messages: [
+          { role: 'SYSTEM', content: 'replaced by the backend' },
+          { role: 'USER', content: 'replaced by the backend' },
+        ],
+        variables: { input: 'input', output: 'output' },
+        schema: assertionNames.map((name) => ({
+          name,
+          type: 'BOOLEAN',
+          description: name,
+        })),
+      },
+    },
+  ];
+}
+
+/**
+ * `{pass_threshold, runs_per_item}` onto `ExecutionPolicyRef`, keeping absence
+ * absent. A version or item that carries no policy must come back `null`,
+ * because inheriting the suite default is a distinct rendered state (grey, and
+ * showing the suite's numbers) from carrying one of your own.
+ */
+function toExecutionPolicy(raw: unknown): ExecutionPolicyRef | null {
+  const policy = raw as { pass_threshold?: number; runs_per_item?: number } | null | undefined;
+  if (!policy) return null;
+  const { pass_threshold: passThreshold, runs_per_item: runsPerItem } = policy;
+  if (typeof passThreshold !== 'number' || typeof runsPerItem !== 'number') {
+    throw new Error(
+      `toExecutionPolicy: execution_policy present but not numeric: ${JSON.stringify(policy)}`,
+    );
+  }
+  return { passThreshold, runsPerItem };
 }
 
 /** One clause of the `sorting` query param the grids serialise. */
@@ -2331,6 +2487,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       const page = await opik.api.datasets.listDatasetVersions(datasetId, { size: 100 });
       const content = page.content ?? [];
       return content.map((v) => ({
+        id: String(v.id ?? ''),
         versionName: String(v.versionName ?? ''),
         versionHash: v.versionHash ?? null,
         itemsTotal: Number(v.itemsTotal ?? 0),
@@ -2339,6 +2496,193 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         itemsDeleted: Number(v.itemsDeleted ?? 0),
         isLatest: Boolean(v.isLatest),
       }));
+    },
+
+    /**
+     * `POST /v1/private/datasets/{id}/items/changes` — the delta commit the
+     * Records tab's "Save changes" makes, exposed for the one thing no other
+     * seeding route can do: cut a new SUITE version whose assertions and
+     * execution policy differ from the previous one's.
+     *
+     * The SDK's `create_test_suite` sets `global_assertions` and the policy
+     * once, at creation, and `TestSuite.insert` carries whatever is already
+     * there forward — so through the SDK alone every version of a suite has the
+     * same policy. A spec checking that a version sheet shows the version's OWN
+     * policy rather than the latest one cannot discriminate against a seed like
+     * that: both answers look identical. This is what makes the two versions
+     * differ.
+     *
+     * `baseVersion` is the previous version's row **id**, not its hash, and the
+     * endpoint rejects a stale one with 409 rather than silently forking — so
+     * the caller must pass the version that is latest right now.
+     */
+    async applyDatasetItemChanges(args: {
+      datasetId: string;
+      /** The current latest version's `id`. */
+      baseVersionId: string;
+      addedItems?: Array<{ id: string; data: Record<string, unknown> }>;
+      deletedIds?: string[];
+      changeDescription?: string;
+      /** Version-level assertion names, packed into the llm_judge shape the FE reads. */
+      assertionNames?: string[];
+      executionPolicy?: ExecutionPolicyRef;
+    }): Promise<void> {
+      const { status, message } = await rawFetch(
+        'POST',
+        `/v1/private/datasets/${args.datasetId}/items/changes`,
+        {
+          body: {
+            added_items: (args.addedItems ?? []).map((item) => ({
+              id: item.id,
+              source: 'manual',
+              data: item.data,
+            })),
+            edited_items: [],
+            deleted_ids: args.deletedIds ?? [],
+            base_version: args.baseVersionId,
+            ...(args.changeDescription ? { change_description: args.changeDescription } : {}),
+            ...(args.assertionNames ? { evaluators: packLlmJudge(args.assertionNames) } : {}),
+            ...(args.executionPolicy
+              ? {
+                  execution_policy: {
+                    pass_threshold: args.executionPolicy.passThreshold,
+                    runs_per_item: args.executionPolicy.runsPerItem,
+                  },
+                }
+              : {}),
+          },
+        },
+      );
+      if (status !== 201) {
+        throw new Error(
+          `applyDatasetItemChanges(${args.datasetId}): expected 201, got ${status}: ${message}`,
+        );
+      }
+    },
+
+    /**
+     * One version by its hash — `GET /v1/private/datasets/{id}/versions/hash/
+     * {versionHash}`, the read the version-records sidebar makes when a row is
+     * opened.
+     *
+     * Through `rawFetch` rather than the pinned SDK client, which predates the
+     * endpoint. Throws on anything but a 200 rather than handing back a
+     * nullable ref: every caller so far is asking what a version HOLDS, and a
+     * null they would have to assert away first is just a way for a missing
+     * version to arrive as a confusing comparison instead of as the failure it
+     * is. A spec covering the endpoint's rejections — an unknown hash, or one
+     * belonging to a different dataset — wants the status, and should take it
+     * from a sibling built for that.
+     */
+    async getDatasetVersionByHash(args: {
+      datasetId: string;
+      versionHash: string;
+    }): Promise<DatasetVersionDetailRef> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${args.datasetId}/versions/hash/${args.versionHash}`,
+      );
+      if (status !== 200) {
+        throw new Error(
+          `getDatasetVersionByHash(${args.datasetId}, ${args.versionHash}): ` +
+            `answered ${status}: ${message}`,
+        );
+      }
+      const v = json as {
+        id?: string;
+        version_name?: string;
+        version_hash?: string;
+        items_total?: number;
+        items_added?: number;
+        items_modified?: number;
+        items_deleted?: number;
+        is_latest?: boolean;
+        evaluators?: unknown;
+        execution_policy?: unknown;
+      };
+      if (typeof v.version_hash !== 'string' || typeof v.version_name !== 'string') {
+        throw new Error(
+          `getDatasetVersionByHash(${args.versionHash}): 200 carried no version_hash/version_name`,
+        );
+      }
+      return {
+        id: String(v.id ?? ''),
+        versionName: v.version_name,
+        versionHash: v.version_hash,
+        itemsTotal: Number(v.items_total ?? 0),
+        itemsAdded: Number(v.items_added ?? 0),
+        itemsModified: Number(v.items_modified ?? 0),
+        itemsDeleted: Number(v.items_deleted ?? 0),
+        isLatest: Boolean(v.is_latest),
+        assertionNames: toAssertionNames(v.evaluators),
+        executionPolicy: toExecutionPolicy(v.execution_policy),
+      };
+    },
+
+    /**
+     * Items as of one version — `GET /v1/private/datasets/{id}/items` with the
+     * `version` query param the sidebar's table sends. Omit `versionHash` for
+     * the unversioned read, which is what the live Records tab makes.
+     *
+     * One page, deliberately: the server's own `total` comes back alongside the
+     * rows, so a caller can assert the whole answer — the count AND the
+     * collection — rather than hunting its own rows inside it. A version read
+     * that returned the right rows plus some it should have excluded is the
+     * failure this exists to catch, and a paging loop would hide the count the
+     * sidebar actually renders.
+     *
+     * `truncate: false` so item payloads come back whole; the markers a
+     * version-scoping spec compares live in the data.
+     */
+    async listDatasetItemsAtVersion(args: {
+      datasetId: string;
+      /** Omitted entirely when absent — a null `version` is not the same request. */
+      versionHash?: string;
+      page?: number;
+      size?: number;
+    }): Promise<VersionedDatasetItemPage> {
+      const query = new URLSearchParams({
+        page: String(args.page ?? 1),
+        size: String(args.size ?? 100),
+        truncate: 'false',
+        ...(args.versionHash ? { version: args.versionHash } : {}),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${args.datasetId}/items`,
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `listDatasetItemsAtVersion(${args.datasetId}, ${args.versionHash ?? 'latest'}): ` +
+            `answered ${status}: ${message}`,
+        );
+      }
+      const body = json as {
+        total?: number;
+        columns?: Array<{ name?: string }>;
+        content?: Array<{
+          id?: string;
+          data?: Record<string, unknown>;
+          evaluators?: unknown;
+          execution_policy?: unknown;
+        }>;
+      };
+      if (typeof body.total !== 'number') {
+        throw new Error('listDatasetItemsAtVersion: response carried no `total`');
+      }
+      return {
+        total: body.total,
+        // Sorted to match the sheet, whose data columns are sorted by name
+        // before they become grid columns.
+        columns: (body.columns ?? []).map((c) => String(c.name ?? '')).sort(),
+        items: (body.content ?? []).map((item) => ({
+          id: String(item.id ?? ''),
+          data: item.data ?? {},
+          assertionNames: toAssertionNames(item.evaluators),
+          executionPolicy: toExecutionPolicy(item.execution_policy),
+        })),
+      };
     },
 
     /**

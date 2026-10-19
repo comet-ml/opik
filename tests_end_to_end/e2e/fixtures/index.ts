@@ -1,4 +1,4 @@
-export { test, expect } from './outer-prompt-tokens-spans.fixture';
+export { test, expect } from './version-history-seed.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -396,4 +396,19 @@ export type {
   OuterPromptTokensSpansRef,
   OuterPromptTokensSpansFixtures,
 } from './outer-prompt-tokens-spans.fixture';
+export type {
+  VersionedItemSeed,
+  SeededVersionRef,
+  VersionedDatasetRef,
+  VersionedSuiteRef,
+  VersionHistorySeedFixtures,
+} from './version-history-seed.fixture';
+export {
+  V1_MARKER,
+  V2_EDITED_MARKER,
+  V2_NEW_MARKER,
+  BYSTANDER_MARKER,
+  ANSWER_FIELD,
+  QUESTION_FIELD,
+} from './version-history-seed.fixture';
 export type { ProjectRef } from '../core/backend';
