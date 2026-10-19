@@ -106,15 +106,13 @@ class SpanWeeksMaterializedViewCutoverTest {
         applyCutover();
         assertCutOver();
 
-        // The listener stays off, so every span_weeks row here comes from span_weeks_mv. The other two flags match
-        // the post-cutover topology: sentinel columns, and mutations routed to spans_local.
+        // The two flags match the post-cutover topology: sentinel columns, and mutations routed to spans_local.
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(MYSQL.getJdbcUrl())
                 .databaseAnalyticsFactory(databaseAnalyticsFactory)
                 .runtimeInfo(wireMock.runtimeInfo())
                 .redisUrl(REDIS.getRedisURI())
                 .customConfigs(List.of(new CustomConfig("uuidValidation.enabled", "false"),
-                        new CustomConfig("databaseAnalyticsDataModel.spanWeeksWriteEnabled", "false"),
                         new CustomConfig("databaseAnalyticsDataModel.spanColumnsNonNullable", "true"),
                         new CustomConfig("databaseAnalyticsDataModel.spansDistributedWrapEnabled", "true")))
                 .build());

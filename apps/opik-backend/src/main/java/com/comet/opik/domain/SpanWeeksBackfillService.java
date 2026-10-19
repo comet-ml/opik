@@ -35,10 +35,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * the current week and any later id. Each later step backfills the oldest pending chunk; once none is pending, steps do
  * nothing. Nothing here needs spans to be partitioned: a span's week always comes from its id.
  *
- * <p>The plan covers the spans written until it is taken; live registration ({@code spanWeeksWriteEnabled}) covers
- * everything after. So the job ({@code spanWeeksBackfillEnabled}) must only be switched on once live registration is on
- * for every instance: a rollout rule, not checked here, since no single instance can see the others' flags. A chunk
- * that fails is retried by the next step; re-registering a week is harmless, as span_weeks collapses repeats.
+ * <p>The plan covers the spans written until it is taken; {@code span_weeks_mv} registers every span inserted since it
+ * was created, so planning after the MV leaves no gap. A chunk that fails is retried by the next step; re-registering a
+ * week is harmless, as span_weeks collapses repeats.
  */
 @Singleton
 @Slf4j

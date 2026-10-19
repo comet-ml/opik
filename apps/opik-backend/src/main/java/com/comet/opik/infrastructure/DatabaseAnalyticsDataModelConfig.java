@@ -86,16 +86,10 @@ import lombok.Builder;
  * independently, so an operator has to see which of the two disagrees with its table. The same source-of-truth rule
  * holds: the probe only reports, it never re-routes.</p>
  *
- * <p>{@code spanWeeksWriteEnabled}: when {@code true}, span writes register their weekly partitions in the
- * {@code span_weeks} index ({@code SpanService.registerWeeks}). Left {@code false} at deploy time; turn it on before
- * the span weeks backfill starts, so every span written after the backfill's snapshot is indexed. Off writes
- * nothing.</p>
- *
  * <p>{@code spanWeeksBackfillEnabled}: when {@code true}, the span weeks backfill job is scheduled
  * ({@code SpanWeeksBackfillJob}): it fills {@code span_weeks} from the spans already written, one range of weeks at a
- * time. Turn it on only once {@code spanWeeksWriteEnabled} is live on every instance: the backfill covers the
- * spans written until its first run, and live registration everything after. Its tuning lives in
- * {@code spanWeeksBackfill}.</p>
+ * time. It covers the spans written before {@code span_weeks_mv}, which registers every span inserted since. Its tuning
+ * lives in {@code spanWeeksBackfill}.</p>
  *
  * <p>{@code spanWeeksReadEnabled}: when {@code true}, the spans reads keyed by traces or by a project bound
  * {@code spans} to the weeks the {@code span_weeks} index holds for them. Effective only while
@@ -114,7 +108,6 @@ public record DatabaseAnalyticsDataModelConfig(
         @Min(1) @Max(2_000) int deletionEventsInsertBatchSize,
         boolean tracesDistributedWrapEnabled,
         boolean spansDistributedWrapEnabled,
-        boolean spanWeeksWriteEnabled,
         boolean spanWeeksBackfillEnabled,
         boolean spanWeeksReadEnabled) {
 
