@@ -191,6 +191,25 @@ describe("usePlaygroundExperimentItem", () => {
       });
     };
 
+    const rowsStaleTime = (updatedAt = rowsReadAt) => {
+      renderItem();
+      const options = compareExperimentsSpy.mock.calls.at(-1)?.[1];
+      return options?.staleTime?.({ state: { dataUpdatedAt: updatedAt } });
+    };
+
+    // Scrolling a column out of view and back remounts its cells. Without this the page is read
+    // again in full, untruncated, for a run that cannot produce anything more.
+    it("should never go stale once read after the run finished", () => {
+      expect(rowsStaleTime(experimentReadAt + 1_000)).toBe(Infinity);
+    });
+
+    it("should still go stale while the run may yet write something", () => {
+      finishedAt = null;
+      createdAt = new Date().toISOString();
+
+      expect(rowsStaleTime()).toBe(0);
+    });
+
     it("should stop once this row has its item", () => {
       finishedAt = null;
       createdAt = new Date().toISOString();

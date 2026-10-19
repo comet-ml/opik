@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import asyncLib from "async";
 import { useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import { getExperimentById } from "@/api/datasets/useExperimentById";
 
 import { COMPARE_EXPERIMENTS_KEY, PROJECTS_KEY } from "@/api/api";
@@ -17,6 +17,7 @@ import {
   ExperimentsCompare,
 } from "@/types/datasets";
 import { isExperimentTerminal } from "@/lib/experiments";
+import { extractErrorMessage } from "@/lib/errors";
 import { processFilters, transformDataColumnFilters } from "@/lib/filters";
 import { isItemScored } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
 import { LogExperiment } from "@/types/playground";
@@ -458,7 +459,9 @@ const useActionButtonActions = ({
 
       toast({
         title: "Error",
-        description,
+        description: `${description}: ${extractErrorMessage(
+          error as AxiosError,
+        )}`,
         variant: "destructive",
       });
     },
