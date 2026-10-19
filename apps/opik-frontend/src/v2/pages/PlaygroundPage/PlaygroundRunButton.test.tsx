@@ -21,12 +21,16 @@ let datasetItemsTotal: number | null = null;
 let isResumingRun = false;
 let isPromptRunning = false;
 let isStopPending = false;
+let isWatchLapsed = false;
+let showsRunProgress = false;
 
 vi.mock("@/store/PlaygroundStore", () => ({
   usePromptById: () => prompt,
   useIsPromptRunning: () => isPromptRunning,
   useIsResumingRun: () => isResumingRun,
   useIsStopPending: () => isStopPending,
+  useIsWatchLapsed: () => isWatchLapsed,
+  useShowsRunProgress: () => showsRunProgress,
   useDatasetType: () => datasetType,
   useDatasetItemsTotal: () => datasetItemsTotal,
 }));
@@ -88,6 +92,8 @@ beforeEach(() => {
   isResumingRun = false;
   isPromptRunning = false;
   isStopPending = false;
+  isWatchLapsed = false;
+  showsRunProgress = false;
 });
 
 describe("PlaygroundRunButton", () => {
@@ -296,5 +302,71 @@ describe("PlaygroundRunButton stop state", () => {
     expect(button).toBeDisabled();
     expect(onStop).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+  });
+});
+
+describe("a run this tab stopped following", () => {
+  const onCheckAgain = vi.fn();
+
+  const renderLapsed = () =>
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlaygroundRunButton
+          promptId="prompt-1"
+          onRun={onRun}
+          onStop={onStop}
+          onCheckAgain={onCheckAgain}
+        />
+      </TooltipProvider>,
+    );
+
+  beforeEach(() => {
+    onCheckAgain.mockClear();
+    prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4O, "Hello");
+    isPromptRunning = true;
+    isWatchLapsed = true;
+  });
+
+  it("should say the run continues on the server and offer to refresh", () => {
+    renderLapsed();
+
+    expect(
+      screen.getByText("Still running on the server, refresh to update"),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    expect(onCheckAgain).toHaveBeenCalledTimes(1);
+  });
+
+  // The run has not ended, so stopping it is still something the user can ask for.
+  it("should keep offering Stop alongside", () => {
+    renderLapsed();
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+
+    expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
+  // A run followed as a whole has a progress bar, and it already carries this message and its own
+  // Refresh. Repeating both on every prompt's row would be the same offer N+1 times.
+  it("should leave the message to the progress bar when there is one", () => {
+    showsRunProgress = true;
+    renderLapsed();
+
+    expect(
+      screen.queryByText("Still running on the server, refresh to update"),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+  });
+
+  it("should show nothing extra while the run is still being followed", () => {
+    isWatchLapsed = false;
+    renderLapsed();
+
+    expect(
+      screen.queryByText("Still running on the server, refresh to update"),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
   });
 });

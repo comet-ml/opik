@@ -77,6 +77,7 @@ interface PlaygroundPromptProps {
   modelResolver: ModelResolver;
   onRun?: () => void;
   onStop?: () => void;
+  onCheckAgain?: () => void;
 }
 
 const PlaygroundPrompt = ({
@@ -90,6 +91,7 @@ const PlaygroundPrompt = ({
   modelResolver,
   onRun,
   onStop,
+  onCheckAgain,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
   const activeProjectId = useActiveProjectId();
@@ -548,6 +550,7 @@ const PlaygroundPrompt = ({
           promptId={promptId}
           onRun={onRun}
           onStop={onStop}
+          onCheckAgain={onCheckAgain}
           className="flex items-center justify-end border-t px-4 py-2"
         />
       )}

@@ -151,8 +151,11 @@ export type PlaygroundStore = {
   progressTotal: number;
   progressCompleted: number;
   progressPhase: "running" | "evaluating" | null;
-  watchPaused: boolean;
-  stopPending: string[] | null;
+  // Sets rather than arrays so there is one way to say "nothing" — an empty array beside null is
+  // what let an empty stop queue read as a stop still pending. Safe to hold a Set only because
+  // partialize strips both: neither survives JSON, and neither should outlive the tab.
+  watchLapsed: Set<string>;
+  stopPending: Set<string>;
   experimentName: string | null;
   lastSuggestedExperimentName: string | null;
   datasetType: DATASET_TYPE | null;
@@ -204,8 +207,12 @@ export type PlaygroundStore = {
   setProgress: (completed: number, total: number) => void;
   setProgressPhase: (phase: "running" | "evaluating" | null) => void;
   resetProgress: () => void;
-  setWatchPaused: (paused: boolean) => void;
-  setStopPending: (promptIds: string[] | null) => void;
+  markWatchLapsed: (promptIds: string[]) => void;
+  clearWatchLapsed: (promptIds: string[]) => void;
+  clearAllWatchLapsed: () => void;
+  queueStopPending: (promptIds: string[]) => void;
+  clearStopPending: (promptIds: string[]) => void;
+  clearAllStopPending: () => void;
   setLastActiveProjectId: (projectId: string | null) => void;
   setDatasetType: (type: DATASET_TYPE | null) => void;
   setExperimentByPromptId: (map: Record<string, string>) => void;
@@ -233,8 +240,8 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       progressTotal: 0,
       progressCompleted: 0,
       progressPhase: null,
-      watchPaused: false,
-      stopPending: null,
+      watchLapsed: new Set<string>(),
+      stopPending: new Set<string>(),
       experimentName: null,
       lastSuggestedExperimentName: null,
       datasetType: null,
@@ -421,19 +428,23 @@ const usePlaygroundStore = create<PlaygroundStore>()(
         set((state) => ({ ...state, isRunning }));
       },
       setPromptRunning: (promptId, running) => {
-        set((state) => ({
-          ...state,
-          isRunningMap: { ...state.isRunningMap, [promptId]: running },
-        }));
+        set((state) => {
+          const isRunningMap = { ...state.isRunningMap };
+          if (running) {
+            isRunningMap[promptId] = true;
+          } else {
+            delete isRunningMap[promptId];
+          }
+          return { ...state, isRunningMap };
+        });
       },
       setAllRunning: (running) => {
-        set((state) => {
-          const map: Record<string, boolean> = {};
-          state.promptIds.forEach((id) => {
-            map[id] = running;
-          });
-          return { ...state, isRunningMap: map };
-        });
+        set((state) => ({
+          ...state,
+          isRunningMap: running
+            ? Object.fromEntries(state.promptIds.map((id) => [id, true]))
+            : {},
+        }));
       },
       clearRunningMap: () => {
         set((state) => ({ ...state, isRunningMap: {} }));
@@ -444,8 +455,8 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           isRunningMap: {},
           isRunInFlight: false,
           isResumingRun: false,
-          watchPaused: false,
-          stopPending: null,
+          watchLapsed: new Set<string>(),
+          stopPending: new Set<string>(),
         }));
       },
       setIsResumingRun: (value) => {
@@ -518,20 +529,40 @@ const usePlaygroundStore = create<PlaygroundStore>()(
             progressCompleted: 0,
             progressTotal: 0,
             progressPhase: null,
-            watchPaused: false,
           };
         });
       },
-      setWatchPaused: (paused) => {
-        set((state) => ({ ...state, watchPaused: paused }));
-      },
-      setStopPending: (promptIds) => {
-        // Normalised here so no caller can leave an empty set behind: it is not null, so every
-        // reader takes it for a stop still waiting, and the controls never come back.
+      markWatchLapsed: (promptIds) => {
         set((state) => ({
           ...state,
-          stopPending: promptIds?.length ? promptIds : null,
+          watchLapsed: new Set([...state.watchLapsed, ...promptIds]),
         }));
+      },
+      clearWatchLapsed: (promptIds) => {
+        set((state) => {
+          const watchLapsed = new Set(state.watchLapsed);
+          promptIds.forEach((promptId) => watchLapsed.delete(promptId));
+          return { ...state, watchLapsed };
+        });
+      },
+      clearAllWatchLapsed: () => {
+        set((state) => ({ ...state, watchLapsed: new Set<string>() }));
+      },
+      queueStopPending: (promptIds) => {
+        set((state) => ({
+          ...state,
+          stopPending: new Set([...state.stopPending, ...promptIds]),
+        }));
+      },
+      clearStopPending: (promptIds) => {
+        set((state) => {
+          const stopPending = new Set(state.stopPending);
+          promptIds.forEach((promptId) => stopPending.delete(promptId));
+          return { ...state, stopPending };
+        });
+      },
+      clearAllStopPending: () => {
+        set((state) => ({ ...state, stopPending: new Set<string>() }));
       },
       setLastActiveProjectId: (projectId) => {
         set((state) => ({ ...state, lastActiveProjectId: projectId }));
@@ -626,7 +657,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           isRunning,
           isRunningMap,
           isResumingRun,
-          watchPaused,
+          watchLapsed,
           stopPending,
           ...rest
         } = state;
@@ -755,6 +786,9 @@ export const useSetIsRunning = () =>
 export const useIsPromptRunning = (promptId: string) =>
   usePlaygroundStore((state) => !!state.isRunningMap[promptId]);
 
+export const getRunningPromptIds = () =>
+  Object.keys(usePlaygroundStore.getState().isRunningMap);
+
 export const useSetPromptRunning = () =>
   usePlaygroundStore((state) => state.setPromptRunning);
 
@@ -809,6 +843,9 @@ export const useResetDatasetFilters = () =>
 export const useProgressTotal = () =>
   usePlaygroundStore((state) => state.progressTotal);
 
+export const useShowsRunProgress = () =>
+  usePlaygroundStore((state) => state.progressTotal > 0);
+
 export const useProgressCompleted = () =>
   usePlaygroundStore((state) => state.progressCompleted);
 
@@ -821,14 +858,29 @@ export const useProgressPhase = () =>
 export const useSetProgressPhase = () =>
   usePlaygroundStore((state) => state.setProgressPhase);
 
-export const useWatchPaused = () =>
-  usePlaygroundStore((state) => state.watchPaused);
+export const useIsAnyWatchLapsed = () =>
+  usePlaygroundStore((state) => state.watchLapsed.size > 0);
 
-export const useSetWatchPaused = () =>
-  usePlaygroundStore((state) => state.setWatchPaused);
+export const useClearAllWatchLapsed = () =>
+  usePlaygroundStore((state) => state.clearAllWatchLapsed);
 
-export const useSetStopPending = () =>
-  usePlaygroundStore((state) => state.setStopPending);
+export const useMarkWatchLapsed = () =>
+  usePlaygroundStore((state) => state.markWatchLapsed);
+
+export const useClearWatchLapsed = () =>
+  usePlaygroundStore((state) => state.clearWatchLapsed);
+
+export const useIsWatchLapsed = (promptId: string) =>
+  usePlaygroundStore((state) => state.watchLapsed.has(promptId));
+
+export const useClearAllStopPending = () =>
+  usePlaygroundStore((state) => state.clearAllStopPending);
+
+export const useQueueStopPending = () =>
+  usePlaygroundStore((state) => state.queueStopPending);
+
+export const useClearStopPending = () =>
+  usePlaygroundStore((state) => state.clearStopPending);
 
 export const useForgetExperimentForPrompt = () =>
   usePlaygroundStore((state) => state.forgetExperimentForPrompt);
@@ -836,8 +888,8 @@ export const useForgetExperimentForPrompt = () =>
 export const useIsStopPending = (promptId?: string) =>
   usePlaygroundStore((state) =>
     promptId === undefined
-      ? state.stopPending !== null
-      : state.stopPending?.includes(promptId) ?? false,
+      ? state.stopPending.size > 0
+      : state.stopPending.has(promptId),
   );
 
 export const useResetProgress = () =>
