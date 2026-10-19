@@ -44,8 +44,12 @@ vi.mock("@/contexts/PermissionsContext", () => ({
   usePermissions: () => ({ permissions: { canLogTraceSpanThread: true } }),
 }));
 
+// Module-scope spy: vi.mock factories run lazily, after this is initialized. Hoisted out of the
+// factory so a test can read what was actually shown.
+const toastSpy = vi.fn();
+
 vi.mock("@/ui/use-toast", () => ({
-  useToast: () => ({ toast: vi.fn() }),
+  useToast: () => ({ toast: toastSpy }),
 }));
 
 const PROMPT_A = "prompt-a";
@@ -788,6 +792,60 @@ describe("useActionButtonActions lifecycle", () => {
       expect(cancelExperimentRun).toHaveBeenCalledWith({
         experimentIds: [EXPERIMENT_A, EXPERIMENT_B],
       });
+    });
+  });
+
+  // A poll that fails had a reason, and the backend usually says what it was. Showing only the
+  // caller's "Failed to poll …" line leaves the user with no way to tell a permission problem
+  // from an outage.
+  describe("a poll the server refuses", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      toastSpy.mockClear();
+      runExperimentExecution.mockReset();
+      runExperimentExecution.mockResolvedValue({
+        experiments: [{ experiment_id: EXPERIMENT_A, prompt_index: 0 }],
+        total_items: 1,
+      });
+      getExperimentById.mockReset();
+      usePlaygroundStore.setState({
+        promptIds: [PROMPT_A],
+        promptMap: {
+          [PROMPT_A]: { id: PROMPT_A, name: "A", messages: [], configs: {} },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+      });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const failPollWith = async (error: unknown) => {
+      getExperimentById.mockRejectedValue(error);
+      const { result } = renderActions("dataset-1");
+      await act(async () => {
+        await result.current.runAll();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(EXPERIMENT_POLL_INTERVAL_MS);
+      });
+      return toastSpy.mock.calls.at(-1)?.[0];
+    };
+
+    it("should show what the server said alongside the read that failed", async () => {
+      const shown = await failPollWith({
+        response: { data: { message: "Workspace not found" } },
+      });
+
+      expect(shown?.description).toContain("Workspace not found");
+      expect(shown?.description).toContain("Failed to poll experiment");
+    });
+
+    it("should fall back to something sayable when the error explains nothing", async () => {
+      const shown = await failPollWith(new Error("Network Error"));
+
+      expect(shown?.description).toContain("Network Error");
     });
   });
 
