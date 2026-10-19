@@ -1,40 +1,25 @@
-import React, { useEffect, useState, useId } from "react";
-import mermaid from "mermaid";
+import React from "react";
 
-mermaid.initialize({
-  startOnLoad: false,
-  htmlLabels: true,
-  securityLevel: "antiscript",
-});
+import MermaidDiagramError from "@/shared/MermaidDiagram/MermaidDiagramError";
+import useMermaidSvg, {
+  MERMAID_CONTAINER_CLASSNAME,
+} from "@/shared/MermaidDiagram/useMermaidSvg";
 
 type MermaidDiagramProps = {
   chart: string;
 };
 
 const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart }) => {
-  const [svg, setSvg] = useState<string>("");
-  const id = useId();
-  const diagramId = `mermaid-diagram-${id.replace(/:/g, "")}`;
+  const { svg, hasError } = useMermaidSvg(chart);
 
-  useEffect(() => {
-    const renderChart = async () => {
-      try {
-        const { svg } = await mermaid.render(diagramId, chart);
-        setSvg(svg);
-      } catch (error) {
-        console.error("Failed to render mermaid diagram", error);
-      }
-    };
-
-    renderChart();
-  }, [chart, diagramId]);
+  if (hasError) return <MermaidDiagramError />;
 
   return (
     <div
       dangerouslySetInnerHTML={{
         __html: svg,
       }}
-      className="mermaid flex size-full [&>svg]:m-auto [&>svg]:size-auto [&>svg]:!max-h-full [&>svg]:!max-w-full"
+      className={MERMAID_CONTAINER_CLASSNAME}
     />
   );
 };

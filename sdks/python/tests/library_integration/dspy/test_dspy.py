@@ -446,6 +446,76 @@ def test_dspy_no_log_graph(
     assert "_opik_graph_definition" not in fake_backend.trace_trees[0].metadata
 
 
+def test_dspy_log_graph__nested_modules__spans_carry_their_graph_node_ids(
+    fake_backend,
+):
+    lm = dspy.LM(
+        cache=False,
+        model=llm_constants.LITELLM_OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        temperature=1.0,
+    )
+    draft_lm = dspy.LM(
+        cache=False,
+        model=llm_constants.LITELLM_OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        temperature=1.0,
+    )
+    dspy.configure(lm=lm)
+
+    opik_callback = OpikCallback(project_name="dspy-graph-node-ids", log_graph=True)
+    dspy.settings.configure(callbacks=[opik_callback])
+
+    class Pipeline(dspy.Module):
+        def __init__(self):
+            super().__init__()
+            self.draft = dspy.Predict("question -> draft")
+            self.draft.lm = draft_lm
+            self.refine = dspy.ChainOfThought("question, draft -> answer")
+
+        def forward(self, question):
+            draft = self.draft(question=question).draft
+            return self.refine(question=question, draft=draft)
+
+    pipeline = Pipeline()
+    pipeline(question="What is the meaning of life?")
+
+    opik_callback.flush()
+
+    trace_tree = fake_backend.trace_trees[0]
+    graph = trace_tree.metadata["_opik_graph_definition"]["data"]
+
+    def collect(spans):
+        for span_model in spans:
+            yield span_model
+            yield from collect(span_model.spans)
+
+    spans = list(collect(trace_tree.spans))
+    module_node_ids = {
+        span_model.metadata["_opik"]["graph_node_id"]
+        for span_model in spans
+        if span_model.name in ("Predict", "ChainOfThought")
+    }
+    lm_node_ids = {
+        span_model.metadata["_opik"]["graph_node_id"]
+        for span_model in spans
+        if span_model.name.startswith("LM")
+    }
+    trace_node_id = trace_tree.metadata["_opik"]["graph_node_id"]
+
+    expected_module_node_ids = {
+        f"module_{id(pipeline.draft)}",
+        f"module_{id(pipeline.refine)}",
+    }
+
+    assert len(module_node_ids) == 3
+    assert trace_node_id == f"module_{id(pipeline)}"
+    assert expected_module_node_ids <= module_node_ids
+    assert lm_node_ids == {f"lm_{id(lm)}", f"lm_{id(draft_lm)}"}
+    for node_id in [trace_node_id, *module_node_ids, *lm_node_ids]:
+        assert f"{node_id}(" in graph
+
+
 def test_dspy__cache_disabled__usage_present_and_cache_hit_false(
     fake_backend,
 ):

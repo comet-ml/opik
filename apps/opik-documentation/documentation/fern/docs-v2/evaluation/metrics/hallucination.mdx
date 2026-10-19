@@ -15,7 +15,7 @@ The hallucination metric allows you to check if the LLM response contains any ha
 You can use the `Hallucination` metric as follows:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import Hallucination
 
 metric = Hallucination()
@@ -27,7 +27,7 @@ output="The capital of France is Paris. It is famous for its iconic Eiffel Tower
 
 ````
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { Hallucination } from 'opik';
 
 const metric = new Hallucination();
@@ -43,7 +43,7 @@ await metric.score({
 If you want to check for hallucinations based on context, you can also pass the context to the `score` method:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 metric.score(
     input="What is the capital of France?",
     output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
@@ -51,7 +51,7 @@ metric.score(
 )
 ```
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 await metric.score({
   input: "What is the capital of France?",
   output:
@@ -78,7 +78,7 @@ Opik uses an LLM as a Judge to detect hallucinations, for this we have a prompt 
 
 The template uses a few-shot prompting technique to detect hallucinations. The template is as follows:
 
-```markdown
+```markdown wordWrap
 You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context. Analyze the provided INPUT, CONTEXT, and OUTPUT to determine if the OUTPUT contains any hallucinations or unfaithful information.
 
 Guidelines:
