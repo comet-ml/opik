@@ -3,10 +3,13 @@ package com.comet.opik.domain;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.eventbus.EventBus;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -14,6 +17,7 @@ import org.mockito.quality.Strictness;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -30,6 +34,8 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("Experiment Item Service")
 class ExperimentItemServiceTest {
+
+    private static final TimeBasedEpochGenerator UUID_GENERATOR = Generators.timeBasedEpochGenerator();
 
     @Mock
     private ExperimentItemDAO experimentItemDAO;
@@ -54,53 +60,72 @@ class ExperimentItemServiceTest {
      * thread from that same pool: a blocking subscribe holds workers hostage to work only those
      * workers can do, and a run wide enough to hold all of them takes every read down with it.
      *
-     * Every dependency the chain reaches is stubbed, and both an error and a validation never
-     * subscribed fail the test: either would let it pass on a chain that stopped short of the
-     * blocking call rather than on one that no longer blocks.
+     * Both lookups answer through a future that is still pending while the assertions run, so a
+     * blocking call on either parks the subscriber rather than returning at once — a stub that
+     * completed synchronously would let one through. Run against both sides of the versioning
+     * flag, since each reads a different table and either could regress.
+     *
+     * The chain is then released and asserted to complete without error, so the test cannot pass
+     * on one that stopped short of the call it is about.
      */
-    @Test
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
     @DisplayName("creating items should not block the subscribing thread while validation is in flight")
-    void createDoesNotBlockTheSubscribingThread() throws Exception {
+    void createDoesNotBlockTheSubscribingThread(boolean datasetVersioningEnabled) throws Exception {
         var service = new ExperimentItemService(experimentItemDAO, experimentService, datasetItemDAO,
                 datasetItemVersionDAO, traceDAO, projectService, featureFlags, eventBus);
 
-        // Never completed during the assertion: the point is that subscribing returns regardless.
-        var validationInFlight = new CompletableFuture<Boolean>();
-        var validationSubscribed = new CountDownLatch(1);
+        // Pending while the assertions run: the point is that subscribing returns regardless.
+        var experimentWorkspaceInFlight = new CompletableFuture<Boolean>();
+        var experimentWorkspaceSubscribed = new CountDownLatch(1);
         when(experimentService.validateExperimentWorkspace(any(), anySet()))
-                .thenReturn(Mono.fromFuture(validationInFlight)
-                        .doOnSubscribe(subscription -> validationSubscribed.countDown()));
+                .thenReturn(Mono.fromFuture(experimentWorkspaceInFlight)
+                        .doOnSubscribe(subscription -> experimentWorkspaceSubscribed.countDown()));
 
-        // Reached while the chain is assembled, so an unstubbed one returns null and fails the
-        // whole chain before the validation above is ever subscribed.
-        when(datasetItemDAO.getDatasetItemWorkspace(anySet())).thenReturn(Mono.just(List.of()));
+        // Reached while the chain is assembled, so a blocking call here parks the subscriber
+        // before the lookup above is ever subscribed.
+        var datasetWorkspaceInFlight = new CompletableFuture<List<WorkspaceAndResourceId>>();
+        when(featureFlags.isDatasetVersioningEnabled()).thenReturn(datasetVersioningEnabled);
+        when(datasetItemDAO.getDatasetItemWorkspace(anySet()))
+                .thenReturn(Mono.fromFuture(datasetWorkspaceInFlight));
+        when(datasetItemVersionDAO.getDatasetItemWorkspace(anySet()))
+                .thenReturn(Mono.fromFuture(datasetWorkspaceInFlight));
 
+        var workspaceId = UUID.randomUUID().toString();
         var experimentItem = ExperimentItem.builder()
-                .id(UUID.randomUUID())
-                .experimentId(UUID.randomUUID())
-                .datasetItemId(UUID.randomUUID())
-                .traceId(UUID.randomUUID())
+                .id(UUID_GENERATOR.generate())
+                .experimentId(UUID_GENERATOR.generate())
+                .datasetItemId(UUID_GENERATOR.generate())
+                .traceId(UUID_GENERATOR.generate())
+                .projectId(UUID_GENERATOR.generate())
                 .build();
+
+        when(experimentService.getExecutionPolicies(anySet())).thenReturn(Mono.just(Map.of()));
+        when(experimentItemDAO.insert(anySet())).thenReturn(Mono.just(1L));
 
         var failure = new AtomicReference<Throwable>();
         var subscribeReturned = new CompletableFuture<Void>();
+        var completed = new CountDownLatch(1);
         var subscriber = new Thread(() -> {
             service.create(Set.of(experimentItem))
-                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, UUID.randomUUID().toString())
+                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
                             .put(RequestContext.USER_NAME, "user"))
                     .subscribe(__ -> {
-                    }, failure::set);
+                    }, failure::set, completed::countDown);
             subscribeReturned.complete(null);
         });
         subscriber.start();
 
-        try {
-            assertThat(validationSubscribed.await(5, TimeUnit.SECONDS)).isTrue();
-            assertThat(subscribeReturned.get(5, TimeUnit.SECONDS)).isNull();
-            assertThat(failure.get()).isNull();
-        } finally {
-            validationInFlight.complete(true);
-            subscriber.join(TimeUnit.SECONDS.toMillis(5));
-        }
+        assertThat(experimentWorkspaceSubscribed.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(subscribeReturned.get(5, TimeUnit.SECONDS)).isNull();
+        assertThat(failure.get()).isNull();
+
+        // Released only now, so the rest of the chain runs and has to finish cleanly.
+        experimentWorkspaceInFlight.complete(true);
+        datasetWorkspaceInFlight.complete(List.of(new WorkspaceAndResourceId(workspaceId, experimentItem.id())));
+
+        assertThat(completed.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(failure.get()).isNull();
+        subscriber.join(TimeUnit.SECONDS.toMillis(5));
     }
 }
