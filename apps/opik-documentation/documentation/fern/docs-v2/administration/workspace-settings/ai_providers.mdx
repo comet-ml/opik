@@ -128,7 +128,7 @@ Once saved, you can use your Azure OpenAI models directly from Online Scores and
 
 1. **Create a Custom IAM Role**
 
-```bash
+```bash wordWrap
 gcloud iam roles create opik \
   --project=<my-project> \
   --title="Opik" \
@@ -139,7 +139,7 @@ gcloud iam roles create opik \
 
 2. **Create a Service Account**
 
-```bash
+```bash wordWrap
 gcloud iam service-accounts create opik-sa \
   --description="Service account for Opik role" \
   --display-name="Opik Service Account"
@@ -147,7 +147,7 @@ gcloud iam service-accounts create opik-sa \
 
 3. **Assign the Role to the Service Account**
 
-```bash
+```bash wordWrap
 gcloud projects add-iam-policy-binding <my-project> \
   --member="serviceAccount:opik-sa@<my-project>.iam.gserviceaccount.com" \
   --role="projects/<my-project>/roles/opik"
@@ -155,7 +155,7 @@ gcloud projects add-iam-policy-binding <my-project> \
 
 4. **Generate the Service Account Key File**
 
-```bash
+```bash wordWrap
 gcloud iam service-accounts keys create opik-key.json \
   --iam-account=opik-sa@<my-project>.iam.gserviceaccount.com
 ```

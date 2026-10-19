@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.metrics;
 
+import com.comet.opik.infrastructure.auth.MatchedTemplatePathResolver;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.opentelemetry.api.common.AttributeKey;
 import jakarta.inject.Provider;
@@ -7,10 +8,7 @@ import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.UriInfo;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.glassfish.jersey.server.ExtendedUriInfo;
-import org.glassfish.jersey.uri.UriTemplate;
 
-import java.util.List;
 import java.util.function.Function;
 
 /**
@@ -52,20 +50,7 @@ public class ErrorMetricsResolver {
     }
 
     public static String endpoint(UriInfo uriInfo) {
-        if (!(uriInfo instanceof ExtendedUriInfo extendedUriInfo)) {
-            return UNKNOWN;
-        }
-        List<UriTemplate> templates = extendedUriInfo.getMatchedTemplates();
-        if (templates == null || templates.isEmpty()) {
-            return UNKNOWN;
-        }
-        // getMatchedTemplates() is ordered from most specific (leaf) to least specific (root); reverse
-        // to reconstruct the full route template.
-        var builder = new StringBuilder();
-        for (int i = templates.size() - 1; i >= 0; i--) {
-            builder.append(templates.get(i).getTemplate());
-        }
-        return builder.toString();
+        return MatchedTemplatePathResolver.resolve(uriInfo).orElse(UNKNOWN);
     }
 
     /**

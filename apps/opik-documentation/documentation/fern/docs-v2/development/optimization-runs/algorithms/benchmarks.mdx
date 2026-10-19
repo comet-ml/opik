@@ -42,12 +42,12 @@ Results shown below use `openai/gpt-5-nano` for evaluation on non multi-hop base
 ## Run benchmarks locally
 
 1. Install dependencies (ideally in a virtualenv):
-   ```bash
+   ```bash wordWrap
    pip install -r sdks/opik_optimizer/benchmarks/requirements.txt
    ```
 2. Configure provider keys (e.g., `OPENAI_API_KEY`).
 3. Execute the runner:
-   ```bash
+   ```bash wordWrap
    python sdks/opik_optimizer/benchmarks/run_benchmark.py \
      --model openai/gpt-5-nano \
      --output results.json

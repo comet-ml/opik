@@ -43,7 +43,7 @@ In [Claude.ai](https://claude.ai), go to **Admin Settings → Claude Code → Ma
 
 Paste the bootstrap snippet from Cost Intelligence, or start from this template:
 
-```json
+```json wordWrap
 {
   "extraKnownMarketplaces": {
     "opik-enterprise": {
@@ -111,7 +111,7 @@ The proxy binds loopback only and Claude Code talks plain HTTP to it, so no cert
 
 On a developer machine, in a **fresh** Claude Code session:
 
-```bash
+```bash wordWrap
 claude plugin list        # opik-cipx@opik-enterprise -> enabled / managed
 opik-cipx status          # daemon up, config resolved, spans shipped
 ```
@@ -122,7 +122,7 @@ Then confirm traces are landing in the target Opik workspace. That's the check t
 
 If your traffic goes through a corporate LLM gateway, LiteLLM, or an AWS Bedrock access gateway rather than straight to the provider, add its origin:
 
-```json
+```json wordWrap
 {
   "env": {
     "OPIK_CIPX_UPSTREAM_BASE_URL": "https://gateway.internal.example.com"
