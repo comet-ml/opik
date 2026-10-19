@@ -1,0 +1,31 @@
+## Together AI Integration
+
+Opik now has a native integration for the [Together AI](https://www.together.ai/) Python SDK. Wrap your client with `track_together` and every `chat.completions.create()` call, from both `together.Together` and `together.AsyncTogether`, is logged with its messages, response, model and token usage. Streaming is supported, and the integration nests inside other Opik-tracked functions, so Together calls show up in context alongside the rest of your traces.
+
+[Learn more in the Together AI integration docs](/integrations/together-ai).
+
+## Cost Estimates for More Providers
+
+Span cost estimates now cover every provider in the LiteLLM price file, and each span is priced from its own provider's usage format. Cached, reasoning and other provider-specific token buckets are priced with the matching rates, so costs for spans from providers that previously showed no estimate now appear in your traces and metrics.
+
+## Bug Fixes & Improvements
+
+- **Unchanged prompt versions aren't duplicated** — Saving a prompt whose content hasn't changed returns the latest version instead of creating an identical one, and the TypeScript SDK scopes its latest-version check to the prompt's project.
+- **Clearer Playground errors** — When a reasoning model uses its whole **Max output tokens** budget on thinking, the Playground says so and suggests raising the limit or lowering the reasoning effort. It also tells you when the picked model isn't available for your API key.
+- **Cleaner model pickers** — Models the Playground can't run (realtime voice, video and music models) are no longer listed.
+- **Playground settings are kept** — Switching between models of the same Custom LLM, Ollama or Bedrock provider keeps your temperature, max output tokens, penalties and extra body, and loading a prompt with media into a system or assistant message loads its text and notes that the media wasn't added.
+- **More reliable model parameters** — The extra body is sent on OpenAI keys set to the Responses API, Gemini no longer receives a max output tokens of 0, Claude judges that think get a larger default `max_tokens`, and OpenRouter errors show the upstream provider's own reason.
+- **Optimization runs honour model settings** — Max tokens and Top P are kept, and OpenRouter `openai/*` models run through OpenRouter.
+- **SDK fixes** — Anthropic streams are no longer drained after an early exit, a null Bedrock token count no longer raises in the wrapper, ADK agent spans opened with `start_span` are tracked on google-adk 2.12.0, and cache tokens are counted once for Anthropic and Bedrock Converse LangChain usage.
+- **Self-hosted MinIO volumes are repaired** — `opik.sh` and `opik.ps1` fix the ownership of MinIO volumes written by older images and restart MinIO, instead of requiring you to delete data.
+
+## Performance Improvements
+
+- **Faster annotation queue views** — Trace and thread lists, stats and filters for an annotation queue now scale with the size of the queue rather than the project.
+- **Faster span reads** — The spans list, stream and stats queries do their work closer to the data, and paging through a single trace's spans uses the primary key.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.96...2.2.103)
+
+_Releases_: `2.2.97`, `2.2.98`, `2.2.99`, `2.2.100`, `2.2.101`, `2.2.102`, `2.2.103`
