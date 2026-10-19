@@ -185,7 +185,7 @@ The `score` method takes fixed parameters that Opik fills from each item:
 
 Declare only the parameters you need. Opik fetches the trace's spans only when `score` declares `spans`, so add `spans=None` only when your metric reads them:
 
-```python
+```python wordWrap
 from opik.evaluation.metrics import base_metric, score_result
 
 class MyCustomMetric(base_metric.BaseMetric):
@@ -204,7 +204,7 @@ class MyCustomMetric(base_metric.BaseMetric):
 
 On thread scope, `conversation` is a list of messages:
 
-```python
+```python wordWrap
 [
     {"role": "user", "content": "Hello, how are you?"},
     {"role": "assistant", "content": "I'm good, thank you!"}
@@ -229,7 +229,7 @@ Traces from the playground and optimization runs are only evaluated when you sel
 
 Thread evaluators score the full conversation. In LLM-as-a-Judge, the prompt must contain `{{context}}` exactly once, and no other variables. By default, `{{context}}` holds the messages exchanged:
 
-```json
+```json wordWrap
 [
   { "role": "user", "content": "Hello, how are you?" },
   { "role": "assistant", "content": "I'm good, thank you!" }

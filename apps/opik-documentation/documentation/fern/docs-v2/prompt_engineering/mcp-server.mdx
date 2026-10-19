@@ -23,7 +23,7 @@ SDK:
 
 <Steps>
   <Step title="Run the setup command">
-    ```bash
+    ```bash wordWrap
     uvx opik mcp configure
     ```
 
@@ -33,11 +33,11 @@ SDK:
         Accordion stays shut. */}
     <AccordionGroup>
       <Accordion title={<>Install <code>uv</code>, if you don't have it</>}>
-        ```bash title="macOS / Linux"
+        ```bash title="macOS / Linux" wordWrap
         curl -LsSf https://astral.sh/uv/install.sh | sh
         ```
 
-        ```powershell title="Windows"
+        ```powershell title="Windows" wordWrap
         powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
         ```
       </Accordion>
@@ -52,7 +52,7 @@ SDK:
     before trying anything. On Opik Cloud, complete the browser sign-in when your
     client prompts for it, then ask your assistant to confirm the connection:
 
-    ```text title="Check it worked"
+    ```text title="Check it worked" wordWrap
     List my Opik projects.
     ```
   </Step>

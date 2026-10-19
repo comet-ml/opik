@@ -17,7 +17,7 @@ Opik’s metrics expose several power-user controls so you can tailor evaluation
 
 Every built-in metric inherits from `BaseMetric`, which defines an async counterpart to `score` named `ascore`. Use it when you need to run evaluations inside an async pipeline or when the underlying provider (e.g., LangChain, Ragas) requires an event loop.
 
-```python title="Awaiting an async metric"
+```python title="Awaiting an async metric" wordWrap
 import asyncio
 
 from opik.evaluation.metrics import Hallucination
@@ -41,7 +41,7 @@ Within synchronous code you can still call `score`—Opik will run the async imp
 
 GEval-based judges accept a `temperature` argument. Lower temperatures improve reproducibility by keeping the evaluator deterministic; higher values explore more rubric variations and can surface edge cases.
 
-```python title="Custom temperature"
+```python title="Custom temperature" wordWrap
 from opik.evaluation.metrics import ComplianceRiskJudge
 
 deterministic = ComplianceRiskJudge(temperature=0.0)
@@ -56,14 +56,14 @@ When the LiteLLM backend supports `logprobs` and `top_logprobs`, Opik automatica
 
 You can inspect the evaluator’s capabilities at runtime:
 
-```python
+```python wordWrap
 metric = ComplianceRiskJudge(model="gpt-4o-mini")
 print("logprobs" in metric._model.supported_params)
 ```
 
 If you need to propagate additional LiteLLM options (for example, `response_format` or `frequency_penalty`), instantiate `LiteLLMChatModel` manually and pass it to the metric:
 
-```python title="Custom LiteLLM configuration"
+```python title="Custom LiteLLM configuration" wordWrap
 from opik.evaluation.models.litellm import LiteLLMChatModel
 from opik.evaluation.metrics import Hallucination
 
@@ -82,7 +82,7 @@ Because the model fingerprint is part of the cache key, changing these kwargs fo
 
 Most metrics accept `track` and `project_name` keyword arguments so you can decide whether each run writes to Opik and which project it belongs to:
 
-```python
+```python wordWrap
 metric = DialogueHelpfulnessJudge(track=False)
 ```
 

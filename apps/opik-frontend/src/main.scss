@@ -97,6 +97,7 @@
     --chart-orange: #fb9341;
     --chart-teal: #12a4b4;
     --chart-gray-light: #ebf2f5;
+    --chart-yellow-light: #fef0c8;
     --chart-gray-dark: #45575f;
 
     /* Optimization Studio icon accents (per-algorithm / per-metric) */
@@ -312,6 +313,9 @@
 
     /* Recoverable-waste callout (AI Spend) */
     --waste-bg: #fee8d7;
+
+    /* Diagnostics guidance-changed callout */
+    --guidance-callout-bg: #fee8d7;
     --waste-border: #fb9341;
     --waste-text: #000000;
 
@@ -466,6 +470,7 @@
     --chart-orange: #fb9341;
     --chart-teal: #12a4b4;
     --chart-gray-light: #2e2e2e;
+    --chart-yellow-light: #3f320e;
     --chart-gray-dark: #e2e8f0;
 
     /* 2.0 accent colors - Dark Mode */
@@ -592,6 +597,9 @@
 
     /* Recoverable-waste callout (AI Spend) - Dark Mode */
     --waste-bg: #fb934126;
+
+    /* Diagnostics guidance-changed callout - Dark Mode */
+    --guidance-callout-bg: #fb934126;
     --waste-border: #fb9341;
     --waste-text: #fee8d7;
 

@@ -52,7 +52,7 @@ require:
 
 Many optimizers can optimize **agents that use function calling**, but this is different from true tool optimization. Here's an example from the GEPA optimizer:
 
-```python
+```python wordWrap
 from opik_optimizer import GepaOptimizer, ChatPrompt
 
 # GEPA example: optimizing an agent with function calling
@@ -97,7 +97,7 @@ result = optimizer.optimize_prompt(prompt=prompt, dataset=dataset, metric=metric
 
 **True tool optimization** is available for MCP tools and function-calling tools across supported optimizers. MCP tools provide standardized interfaces for external integrations:
 
-```python
+```python wordWrap
 # MCP tool optimization example
 # See scripts/litellm_metaprompt_context7_remote_example.py for a working example
 
@@ -151,7 +151,7 @@ Tool optimization also improves:
 
 Let's see how tool optimization works with a research assistant that uses multiple tools:
 
-```python
+```python wordWrap
 from opik_optimizer import MetaPromptOptimizer, ChatPrompt
 from opik.evaluation.metrics import LevenshteinRatio
 
