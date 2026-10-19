@@ -56,20 +56,22 @@ public class ExperimentItemService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            var experimentItemsWithValidIds = validateExperimentItemIdsAndWorkspace(experimentItems, workspaceId,
-                    userName);
+            return validateExperimentItemIdsAndWorkspace(experimentItems, workspaceId, userName)
+                    .flatMap(experimentItemsWithValidIds -> {
 
-            log.info("Creating experiment items, count '{}'", experimentItemsWithValidIds.size());
+                        log.info("Creating experiment items, count '{}'", experimentItemsWithValidIds.size());
 
-            var experimentIds = experimentItemsWithValidIds.stream()
-                    .map(ExperimentItem::experimentId)
-                    .collect(Collectors.toUnmodifiableSet());
+                        var experimentIds = experimentItemsWithValidIds.stream()
+                                .map(ExperimentItem::experimentId)
+                                .collect(Collectors.toUnmodifiableSet());
 
-            return resolveProjectIdFromProjectName(experimentItemsWithValidIds)
-                    .flatMap(this::populateProjectIdFromTraces)
-                    .flatMap(this::populateExecutionPolicy)
-                    .flatMap(experimentItemDAO::insert)
-                    .doOnSuccess(__ -> eventBus.post(new ExperimentItemsCreated(experimentIds, workspaceId, userName)))
+                        return resolveProjectIdFromProjectName(experimentItemsWithValidIds)
+                                .flatMap(this::populateProjectIdFromTraces)
+                                .flatMap(this::populateExecutionPolicy)
+                                .flatMap(experimentItemDAO::insert)
+                                .doOnSuccess(__ -> eventBus
+                                        .post(new ExperimentItemsCreated(experimentIds, workspaceId, userName)));
+                    })
                     .then();
         });
     }
@@ -198,12 +200,16 @@ public class ExperimentItemService {
         return item.projectId() == null && traceToProjectMap.containsKey(item.traceId());
     }
 
-    private Set<ExperimentItem> validateExperimentItemIdsAndWorkspace(
+    private Mono<Set<ExperimentItem>> validateExperimentItemIdsAndWorkspace(
             Set<ExperimentItem> experimentItems, String workspaceId, String userName) {
-        validateExperimentsWorkspace(experimentItems, workspaceId);
+        return validateExperimentsWorkspace(experimentItems, workspaceId)
+                .then(validateDatasetItemsWorkspace(experimentItems, workspaceId, userName))
+                // Not thenReturn: its argument is a value, so the id checks would run at assembly
+                // and report before the workspace ones they follow.
+                .then(Mono.fromCallable(() -> validateExperimentItemIds(experimentItems)));
+    }
 
-        validateDatasetItemsWorkspace(experimentItems, workspaceId, userName);
-
+    private Set<ExperimentItem> validateExperimentItemIds(Set<ExperimentItem> experimentItems) {
         return experimentItems.stream()
                 .map(item -> {
                     IdGenerator.validateVersion(item.id(), "Experiment Item");
@@ -215,19 +221,18 @@ public class ExperimentItemService {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
-    private void validateExperimentsWorkspace(Set<ExperimentItem> experimentItems, String workspaceId) {
+    private Mono<Void> validateExperimentsWorkspace(Set<ExperimentItem> experimentItems, String workspaceId) {
         Set<UUID> experimentIds = experimentItems
                 .stream()
                 .map(ExperimentItem::experimentId)
                 .collect(toSet());
 
-        boolean allExperimentsBelongToWorkspace = Boolean.TRUE
-                .equals(experimentService.validateExperimentWorkspace(workspaceId, experimentIds)
-                        .block());
-
-        if (!allExperimentsBelongToWorkspace) {
-            throw createConflict("Upserting experiment item with 'experiment_id' not belonging to the workspace");
-        }
+        return experimentService.validateExperimentWorkspace(workspaceId, experimentIds)
+                .flatMap(allBelongToWorkspace -> Boolean.TRUE.equals(allBelongToWorkspace)
+                        ? Mono.empty()
+                        : Mono.error(createConflict(
+                                "Upserting experiment item with 'experiment_id' not belonging to the workspace")))
+                .then();
     }
 
     private ClientErrorException createConflict(String message) {
@@ -235,22 +240,21 @@ public class ExperimentItemService {
         return new ClientErrorException(message, Response.Status.CONFLICT);
     }
 
-    private void validateDatasetItemsWorkspace(
+    private Mono<Void> validateDatasetItemsWorkspace(
             Set<ExperimentItem> experimentItems, String workspaceId, String userName) {
         Set<UUID> datasetItemIds = experimentItems
                 .stream()
                 .map(ExperimentItem::datasetItemId)
                 .collect(toSet());
 
-        boolean allDatasetItemsBelongToWorkspace = Boolean.TRUE
-                .equals(validateDatasetItemWorkspace(workspaceId, datasetItemIds)
-                        .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
-                                .put(RequestContext.USER_NAME, userName))
-                        .block());
-
-        if (!allDatasetItemsBelongToWorkspace) {
-            throw createConflict("Upserting experiment item with 'dataset_item_id' not belonging to the workspace");
-        }
+        return validateDatasetItemWorkspace(workspaceId, datasetItemIds)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .flatMap(allBelongToWorkspace -> Boolean.TRUE.equals(allBelongToWorkspace)
+                        ? Mono.empty()
+                        : Mono.error(createConflict(
+                                "Upserting experiment item with 'dataset_item_id' not belonging to the workspace")))
+                .then();
     }
 
     private Mono<Boolean> validateDatasetItemWorkspace(String workspaceId, Set<UUID> datasetItemIds) {
