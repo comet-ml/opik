@@ -1,4 +1,4 @@
-export { test, expect } from './open-router-native-models.fixture';
+export { test, expect } from './new-provider-cost-spans.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -353,4 +353,32 @@ export {
   SAMPLING_CONTROLS,
   PENALTY_CONTROLS,
 } from './open-router-native-models.fixture';
+export type {
+  CacheWriteTtl,
+  PromptTier,
+  CacheWriteTtlSpanSeed,
+  CacheWriteTtlSpansRef,
+  CacheWriteTtlSpansFixtures,
+} from './cache-write-ttl-spans.fixture';
+export {
+  CACHE_WRITE_5M_KEY,
+  CACHE_WRITE_1H_KEY,
+  CACHE_WRITE_TOTAL_KEY,
+  CACHE_WRITE_RATES,
+} from './cache-write-ttl-spans.fixture';
+export type {
+  CacheDialectWriter,
+  CacheDialectSpanSeed,
+  CacheDialectSpansRef,
+  CacheDialectSpansFixtures,
+} from './cache-dialect-spans.fixture';
+export {
+  CACHE_DIALECT_NATIVE_KEY,
+  CACHE_DIALECT_OTLP_KEY,
+} from './cache-dialect-spans.fixture';
+export type {
+  NewProviderCostSpanSeed,
+  NewProviderCostSpansRef,
+  NewProviderCostSpansFixtures,
+} from './new-provider-cost-spans.fixture';
 export type { ProjectRef } from '../core/backend';

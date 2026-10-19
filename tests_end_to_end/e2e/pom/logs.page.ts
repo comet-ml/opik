@@ -772,6 +772,19 @@ export class LogsPage {
   }
 
   /**
+   * The Estimated cost cell of a trace row.
+   *
+   * The same cell {@link explainCell} addresses under the `cost` kind, named
+   * for what it renders rather than for the Ollie affordance that happens to
+   * live in it — a spec asserting the table's own cost column should not have
+   * to ask for an "explain cell". Delegates rather than repeating the
+   * `data-cell-id` so the column id stays declared once, in `EXPLAIN_COLUMN`.
+   */
+  estimatedCostCell(traceId: string): Locator {
+    return this.explainCell(traceId, 'cost');
+  }
+
+  /**
    * Hover a trace's Errors/Duration/Estimated cost cell and click its Ollie
    * "Explain" owl trigger, opening the popover. The trigger only renders once
    * the Ollie assistant bridge handshake (mounted via the page's assistant
