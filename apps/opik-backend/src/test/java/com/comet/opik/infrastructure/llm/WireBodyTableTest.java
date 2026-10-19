@@ -188,6 +188,7 @@ class WireBodyTableTest {
         freeModelConfig.setEnabled(false);
         var opikConfiguration = mock(OpikConfiguration.class);
         when(opikConfiguration.getFreeModel()).thenReturn(freeModelConfig);
+        when(opikConfiguration.getLlmProviderClient()).thenReturn(config.getLlmProviderClient());
 
         llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, opikConfiguration,
                 new LlmModelRegistryService(registryConfig));

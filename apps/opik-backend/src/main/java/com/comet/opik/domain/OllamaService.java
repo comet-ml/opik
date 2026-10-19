@@ -2,6 +2,9 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.OllamaConnectionTestResponse;
 import com.comet.opik.api.OllamaModel;
+import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardException;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -15,8 +18,10 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
 import java.util.Collections;
@@ -35,6 +40,7 @@ import java.util.List;
 public class OllamaService {
 
     private final @NonNull Client httpClient;
+    private final @NonNull @Config("llmProviderClient") LlmProviderClientConfig llmProviderClientConfig;
 
     /**
      * Tests connection to an Ollama instance and retrieves a server version.
@@ -68,6 +74,11 @@ public class OllamaService {
                     }
                 })
                 .onErrorResume(e -> {
+                    if (e instanceof DestinationGuardException) {
+                        log.warn("Refused Ollama destination '{}'",
+                                ValidationUtils.redactCredentialsFromUrl(normalizedUrl));
+                        return Mono.just(createErrorResponse(e.getMessage()));
+                    }
                     log.error("Failed to connect to Ollama", e);
                     String errorMsg = "Failed to connect to Ollama due to an internal error";
                     return Mono.just(createErrorResponse(errorMsg));
@@ -131,7 +142,16 @@ public class OllamaService {
      */
     private Mono<Response> performAsyncGet(String url, String apiKey) {
         return Mono.create(sink -> {
+            var mode = llmProviderClientConfig.getDestinationGuard();
+            DestinationGuard.builder()
+                    .mode(mode)
+                    .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                    .build()
+                    .validate(url);
+
+            // the guard checks only this URL, so a redirect must not take the request elsewhere
             var requestBuilder = httpClient.target(url)
+                    .property(ClientProperties.FOLLOW_REDIRECTS, mode != DestinationGuard.Mode.STRICT)
                     .request(MediaType.APPLICATION_JSON);
 
             if (apiKey != null && !apiKey.isBlank()) {
