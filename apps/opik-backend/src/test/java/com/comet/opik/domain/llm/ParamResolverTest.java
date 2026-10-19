@@ -3,8 +3,11 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.ModelParams.NumberParam;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.ParamResolver.ParamChange;
+import com.comet.opik.domain.llm.ParamResolver.ParamChange.Reason;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
+import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -14,7 +17,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -273,11 +275,7 @@ class ParamResolverTest {
         assertThat(resolve(original)).isSameAs(original);
     }
 
-    @Test
-    void followsALocalOverrideOfTheShippedCatalog(@TempDir Path tempDir) throws IOException {
-        var request = request("claude-opus-4-6", 0.7, null);
-        assertThat(resolve(request).temperature()).isEqualTo(0.7);
-
+    private ParamResolver resolverWithOverride(Path tempDir, String curatedResource) throws IOException {
         var overridePath = tempDir.resolve("override.yaml");
         try (var override = getClass().getClassLoader()
                 .getResourceAsStream("llm-models-override-claude-no-sampling.yaml")) {
@@ -285,16 +283,35 @@ class ParamResolverTest {
         }
         var registryConfig = new LlmModelRegistryConfig();
         registryConfig.setLocalOverridePath(overridePath.toString());
-        var resolver = new ParamResolver(mock(LlmProviderFactory.class),
-                LlmModelRegistryTestUtils.registry(registryConfig));
+        registryConfig.setCuratedResource(curatedResource);
+        return new ParamResolver(mock(LlmProviderFactory.class), LlmModelRegistryTestUtils.registry(registryConfig));
+    }
+
+    @Test
+    void followsALocalOverrideOfTheShippedCatalog(@TempDir Path tempDir) throws IOException {
+        var request = request("claude-opus-4-6", 0.7, null);
+        assertThat(resolve(request).temperature()).isEqualTo(0.7);
+
+        var resolver = resolverWithOverride(tempDir, new LlmModelRegistryConfig().getCuratedResource());
 
         var resolution = resolver.resolve(request);
 
         assertThat(resolution.request().temperature()).isNull();
-        assertThat(resolution.changes()).containsExactly("temperature not sent: claude-opus-4-6 does not take it");
+        assertThat(resolution.changes()).containsExactly(new ParamChange("temperature", Reason.REFUSED_BY_MODEL));
         assertThat(resolver.resolve(request("claude-sonnet-4-6", 0.7, null)).request().temperature()).isEqualTo(0.7);
         assertThat(resolver.resolve(request("claude-sonnet-4-6", null, 0.9)).changes())
-                .containsExactly("top_p not sent: claude-sonnet-4-6 does not take it");
+                .containsExactly(new ParamChange("top_p", Reason.REFUSED_BY_MODEL));
+    }
+
+    @Test
+    void followsALocalOverrideWithTheCuratedLayerTurnedOff(@TempDir Path tempDir) throws IOException {
+        var resolver = resolverWithOverride(tempDir, "");
+
+        assertThat(resolver.resolve(request("claude-opus-4-6", 0.7, null)).changes())
+                .containsExactly(new ParamChange("temperature", Reason.REFUSED_BY_MODEL));
+        assertThat(resolver.resolve(request("claude-sonnet-4-6", 0.7, null)).request().temperature()).isEqualTo(0.7);
+        assertThat(resolver.resolve(request("claude-sonnet-4-6", null, 0.9)).changes())
+                .containsExactly(new ParamChange("top_p", Reason.REFUSED_BY_MODEL));
     }
 
     @Test
@@ -302,8 +319,8 @@ class ParamResolverTest {
         var resolution = RESOLVER.resolve(request("claude-sonnet-5", 0.7, 0.9));
 
         assertThat(resolution.changes()).containsExactly(
-                "temperature not sent: claude-sonnet-5 does not take it",
-                "top_p not sent: claude-sonnet-5 does not take it");
+                new ParamChange("temperature", Reason.REFUSED_BY_MODEL),
+                new ParamChange("top_p", Reason.REFUSED_BY_MODEL));
     }
 
     @Test
@@ -311,7 +328,7 @@ class ParamResolverTest {
         var resolution = RESOLVER.resolve(request("claude-sonnet-4-6", 0.7, 0.9));
 
         assertThat(resolution.changes())
-                .containsExactly("top_p not sent: claude-sonnet-4-6 takes temperature or top_p, not both");
+                .containsExactly(new ParamChange("top_p", Reason.EXCLUSIVE_SAMPLING));
     }
 
     @Test
@@ -337,10 +354,10 @@ class ParamResolverTest {
         assertThat(normalized.maxCompletionTokens()).isEqualTo(100);
         assertThat(normalized.seed()).isEqualTo(7);
         assertThat(resolution.changes()).containsExactly(
-                "temperature not sent: gpt-5-mini does not take it",
-                "top_p not sent: gpt-5-mini does not take it",
-                "frequency_penalty not sent: gpt-5-mini does not take it",
-                "presence_penalty not sent: gpt-5-mini does not take it");
+                new ParamChange("temperature", Reason.REFUSED_BY_MODEL),
+                new ParamChange("top_p", Reason.REFUSED_BY_MODEL),
+                new ParamChange("frequency_penalty", Reason.REFUSED_BY_MODEL),
+                new ParamChange("presence_penalty", Reason.REFUSED_BY_MODEL));
     }
 
     @Test
@@ -361,6 +378,54 @@ class ParamResolverTest {
 
         assertThat(resolution.request().temperature()).isNull();
         assertThat(resolution.request().seed()).isEqualTo(3);
-        assertThat(resolution.changes()).isEqualTo(List.of("temperature not sent: o3 does not take it"));
+        assertThat(resolution.changes()).containsExactly(new ParamChange("temperature", Reason.REFUSED_BY_MODEL));
+    }
+
+    private static LlmAsJudgeModelParameters judge(String model, String customParameters) {
+        return LlmAsJudgeModelParameters.builder()
+                .name(model)
+                .temperature(0.7)
+                .customParameters(customParameters == null ? null : JsonUtils.getJsonNodeFromString(customParameters))
+                .build();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"claude-sonnet-5", "anthropic/claude-opus-4.7", "custom-llm/gw/claude-fable-5-1"})
+    void dropsAJudgeTemperatureAClaudeRefuses(String model) {
+        var resolution = RESOLVER.resolve(judge(model, null));
+
+        assertThat(resolution.request().temperature()).isNull();
+        assertThat(resolution.changes()).containsExactly(new ParamChange("temperature", Reason.REFUSED_BY_MODEL));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"claude-sonnet-4-6", "custom-llm/gw/claude-sonnet-4-6",
+            "us.anthropic.claude-sonnet-4-5-20250929-v1:0"})
+    void dropsAJudgeTemperatureWhenAClaudeThinks(String model) {
+        var resolution = RESOLVER.resolve(judge(model, """
+                {"thinking": {"type": "enabled", "budget_tokens": 1024}}"""));
+
+        assertThat(resolution.request().temperature()).isNull();
+        assertThat(resolution.changes()).containsExactly(new ParamChange("temperature", Reason.THINKING_ENABLED));
+    }
+
+    @Test
+    void keepsAJudgeTemperatureWhenAnotherModelThinks() {
+        var parameters = judge("custom-llm/gw/glm-4.6", """
+                {"thinking": {"type": "enabled"}}""");
+
+        assertThat(RESOLVER.resolve(parameters).request()).isSameAs(parameters);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{\"thinking\": {\"type\": \"disabled\"}}", "{\"thinking\": {\"type\": \"\"}}",
+            "{\"thinking\": {\"budget_tokens\": 1024}}", "{\"thinking\": {\"type\": 1}}"})
+    void keepsAJudgeTemperatureWhenThinkingIsNotOn(String customParameters) {
+        var parameters = judge("claude-sonnet-4-6", customParameters);
+
+        var resolution = RESOLVER.resolve(parameters);
+
+        assertThat(resolution.request()).isSameAs(parameters);
+        assertThat(resolution.changes()).isEmpty();
     }
 }

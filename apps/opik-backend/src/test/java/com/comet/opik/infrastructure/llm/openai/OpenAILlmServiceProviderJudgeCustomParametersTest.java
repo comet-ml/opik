@@ -28,7 +28,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.util.List;
 import java.util.Map;
 
-import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
@@ -59,7 +58,7 @@ class OpenAILlmServiceProviderJudgeCustomParametersTest {
         var clientConfig = new LlmProviderClientConfig();
         clientConfig.setLogRequests(false);
         clientConfig.setLogResponses(false);
-        serviceProvider = new OpenAILlmServiceProvider(new OpenAIClientGenerator(clientConfig, bundledRegistry()),
+        serviceProvider = new OpenAILlmServiceProvider(new OpenAIClientGenerator(clientConfig),
                 mock(LlmProviderFactory.class));
     }
 

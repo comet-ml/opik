@@ -263,7 +263,7 @@ public class ChatCompletionService {
         return resolved.request();
     }
 
-    private void logChanges(String model, List<String> changes) {
+    private void logChanges(String model, List<ParamResolver.ParamChange> changes) {
         if (!changes.isEmpty()) {
             log.debug("Request to model '{}' changed: {}", model, changes);
         }

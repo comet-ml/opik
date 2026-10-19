@@ -167,6 +167,12 @@ public class LlmModelRegistryService {
             return name == null ? null : profiles.get(name);
         }
 
+        Optional<ModelEntry> row(String provider, String modelId) {
+            return models.getOrDefault(provider, List.of()).stream()
+                    .filter(row -> row != null && row.id() != null && row.id().equals(modelId))
+                    .findFirst();
+        }
+
         // The file ships with the release, so a name it gets wrong is a bug to stop at startup, not a warning
         // to repeat on every reload.
         CuratedCatalog requireKnownProfiles() {
@@ -296,41 +302,66 @@ public class LlmModelRegistryService {
     private Map<String, List<LlmModelDefinition>> toRegistry(Map<String, List<ModelEntry>> merged) {
         var copy = new LinkedHashMap<String, List<LlmModelDefinition>>(merged.size());
         merged.forEach((provider, models) -> copy.put(provider,
-                models.stream().map(m -> m.toDefinition(catalog.resolve(provider, m))).toList()));
+                models.stream().map(m -> m.toDefinition(resolve(provider, m))).toList()));
         // Not Map.copyOf: its iteration order changes between JVM starts, and the API lists providers in it.
         return Collections.unmodifiableMap(copy);
+    }
+
+    /**
+     * A deployment that turns the curated layer off still resolves against the shipped profiles and rows, placed
+     * under every other layer. Without them a row that a layer gives only some params keeps only those, and a
+     * missing field reads as refused: a Claude model would lose its temperature and every effort level.
+     */
+    private ModelParams resolve(String provider, ModelEntry entry) {
+        if (!curatedLayerOff()) {
+            return catalog.resolve(provider, entry);
+        }
+        var shipped = shippedCatalog.get();
+        var shippedParams = shipped.row(provider, entry.id())
+                .map(shipped::foldProfile)
+                .map(ModelEntry::params)
+                .orElse(null);
+        return shipped.resolve(provider,
+                entry.toBuilder().params(ModelParams.overlay(shippedParams, entry.params())).build());
     }
 
     /**
      * The params the registry serves for a model id, the same ones the API lists; an unlisted or null id gets its
      * provider's profile. Null when no layer and no profile says anything about the model, as for a provider the
      * catalog has no profile for.
-     *
-     * <p>A deployment that turns the curated layer off still gets the shipped rules for a model no layer gives
-     * params, so turning it off cannot make a reasoning or Claude model fail with a 400.
      */
     public @Nullable ModelParams paramsOf(@NonNull String provider, @Nullable String modelId) {
-        var listed = registry.getOrDefault(provider, List.of()).stream()
-                .filter(model -> model.id() != null && model.id().equals(modelId))
-                .findFirst();
+        var listed = listed(provider, modelId);
         if (listed.isPresent() && listed.get().params() != null) {
             return listed.get().params();
         }
-        var row = ModelEntry.builder()
-                .id(modelId)
-                .reasoning(listed.map(LlmModelDefinition::reasoning).orElse(false))
-                .build();
-        return ObjectUtils.getIfNull(catalog.resolve(provider, row), () -> shippedParams(provider, row));
+        var reasoning = listed.map(LlmModelDefinition::reasoning).orElse(false);
+        return resolve(provider, ModelEntry.builder().id(modelId).reasoning(reasoning).build());
     }
 
-    private ModelParams shippedParams(String provider, ModelEntry row) {
-        var shipped = shippedCatalog.get();
-        var shippedRow = shipped.models().getOrDefault(provider, List.of()).stream()
-                .filter(m -> m.id() != null && m.id().equals(row.id()))
-                .findFirst()
-                .map(m -> m.toBuilder().reasoning(row.reasoning()).build())
-                .orElse(row);
-        return shipped.resolve(provider, shipped.foldProfile(shippedRow));
+    /**
+     * The params the release's own rules give a model: the curated row and profiles (the shipped ones when the
+     * curated layer is off), without the generated, CDN or local-override layers. A rule that rejects a request
+     * reads these instead of {@link #paramsOf}, so a bad row in remote data can cost a param but never fail every
+     * request for a model.
+     */
+    public @Nullable ModelParams curatedParamsOf(@NonNull String provider, @Nullable String modelId) {
+        var rules = curatedLayerOff() ? shippedCatalog.get() : catalog;
+        var reasoning = listed(provider, modelId).map(LlmModelDefinition::reasoning).orElse(false);
+        var row = rules.row(provider, modelId)
+                .map(curated -> curated.toBuilder().reasoning(reasoning).build())
+                .orElseGet(() -> ModelEntry.builder().id(modelId).reasoning(reasoning).build());
+        return rules.resolve(provider, rules.foldProfile(row));
+    }
+
+    private boolean curatedLayerOff() {
+        return StringUtils.isBlank(config.getCuratedResource());
+    }
+
+    private Optional<LlmModelDefinition> listed(String provider, String modelId) {
+        return registry.getOrDefault(provider, List.of()).stream()
+                .filter(model -> model.id() != null && model.id().equals(modelId))
+                .findFirst();
     }
 
     private CuratedCatalog loadCuratedCatalog() {

@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -64,7 +63,7 @@ class LlmProviderOpenAiResponsesUsageTest {
         openAi = new WireMockServer(0);
         openAi.start();
         provider = new LlmProviderOpenAiResponses(
-                new OpenAIClientGenerator(new LlmProviderClientConfig(), bundledRegistry()),
+                new OpenAIClientGenerator(new LlmProviderClientConfig()),
                 LlmProviderClientApiConfig.builder()
                         .apiKey("test-key")
                         .baseUrl(openAi.baseUrl())

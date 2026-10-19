@@ -1,10 +1,8 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
-import com.comet.opik.domain.llm.ModelCapabilities;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.CustomParametersOverrides;
-import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
@@ -55,7 +53,6 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     }
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
-    private final @NonNull LlmModelRegistryService registryService;
 
     public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
         var openAiClientBuilder = OpenAiClient.builder()
@@ -151,21 +148,13 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .filter(MapUtils::isNotEmpty)
                 .ifPresent(builder::customHeaders);
 
-        var judgeRequest = ChatCompletionRequest.builder().seed(modelParameters.seed());
+        var judgeRequest = ChatCompletionRequest.builder()
+                .temperature(modelParameters.temperature())
+                .seed(modelParameters.seed());
         Optional.ofNullable(modelParameters.customParameters())
                 .filter(JsonNode::isObject)
                 .map(customParameters -> JsonUtils.getMapper().convertValue(customParameters, MAP_TYPE))
                 .ifPresent(judgeRequest::customParameters);
-
-        // This generator also serves OPEN_ROUTER, whose catalog includes the Claude models that take
-        // no sampling params. The judge path never reaches SamplingParamsNormalizer, so the capability
-        // gate has to be here too, or an evaluator rule on one fails every scoring run with a 400.
-        // OpenAI reasoning models lose their temperature earlier, in ChatCompletionService.scoreTrace,
-        // because that check needs the model registry and must skip OPEN_ROUTER.
-        // Like ParamResolver on the chat path, the gate leaves an extra body temperature alone.
-        if (!ModelCapabilities.rejectsTemperature(modelParameters.name(), registryService)) {
-            judgeRequest.temperature(modelParameters.temperature());
-        }
 
         // Round-tripped through a request so an extra body key replaces the typed field of the same name
         // by the chat path's rule; langchain4j would otherwise send that key twice.
@@ -223,9 +212,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .modelName(modelParameters.name())
                 .strictJsonSchema(strictJsonSchema);
 
-        if (!ModelCapabilities.rejectsTemperature(modelParameters.name(), registryService)) {
-            Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
-        }
+        Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
 
         return builder;
     }

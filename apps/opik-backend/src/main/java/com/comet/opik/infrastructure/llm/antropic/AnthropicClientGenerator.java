@@ -93,13 +93,8 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
         var customParameters = modelParameters.customParameters();
         var thinking = parseThinking(customParameters);
 
-        // Anthropic rejects temperature with a 400 in two cases: (1) adaptive-thinking models
-        // (claude-sonnet-5, claude-opus-4-7/4-8) that report no sampling-param support, and (2) any model
-        // once extended thinking is enabled per-rule via custom_parameters. Gate on both server-side so
-        // API-created rules (which bypass the FE sanitizer) don't fail.
-        if (!ModelCapabilities.rejectsTemperature(modelParameters.name(), registryService) && !thinking.enabled()) {
-            Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
-        }
+        // ParamResolver has already dropped a temperature the model or the rule's thinking refuses.
+        Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
 
         applyCustomParameters(builder, customParameters, thinking, willThink(thinking, modelParameters.name()));
 

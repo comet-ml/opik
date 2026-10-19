@@ -2,7 +2,11 @@ package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ModelParams;
+import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ParamResolver;
+import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
@@ -23,6 +27,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -30,6 +35,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,11 +90,7 @@ public class AnthropicMappersTest {
             assertThat(actual.model).isEqualTo(request.model());
             assertThat(actual.stream).isEqualTo(request.stream());
             assertThat(actual.temperature).isEqualTo(request.temperature());
-            if (request.temperature() != null) {
-                assertThat(actual.topP).isNull();
-            } else {
-                assertThat(actual.topP).isEqualTo(request.topP());
-            }
+            assertThat(actual.topP).isEqualTo(request.topP());
             assertThat(actual.stopSequences).isEqualTo(request.stop());
             assertThat(actual.messages).usingRecursiveComparison().ignoringCollectionOrder().isEqualTo(
                     request.messages().stream()
@@ -150,14 +154,18 @@ public class AnthropicMappersTest {
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    @DisplayName("Sampling params gating")
+    @DisplayName("Sampling params on the Anthropic chat path, after ParamResolver")
     class SamplingParamsGating {
+
+        private final ParamResolver resolver = new ParamResolver(Mockito.mock(LlmProviderFactory.class),
+                bundledRegistry());
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("samplingGatingCases")
         void gatesSamplingParams(String description, ChatCompletionRequest request, Double expectedTemperature,
                 Double expectedTopP) {
-            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request, bundledRegistry());
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(
+                    resolver.resolve(request).request(), bundledRegistry());
 
             // Build the expected payload independently of the mapper (not by re-calling it), so a regression in
             // any collateral field — model, messages, max_tokens, etc. — can't hide by changing actual and
@@ -319,12 +327,34 @@ public class AnthropicMappersTest {
         @Test
         void leavesAnEffortWithoutNamedLevelsToAnthropic() {
             var registry = Mockito.mock(LlmModelRegistryService.class);
-            Mockito.when(registry.paramsOf(LlmProvider.ANTHROPIC.getValue(), "claude-opus-4-6"))
+            Mockito.when(registry.curatedParamsOf(LlmProvider.ANTHROPIC.getValue(), "claude-opus-4-6"))
                     .thenReturn(ModelParams.builder().effort(new ModelParams.EffortParam(true, null, null)).build());
             var withUnnamedLevels = new LlmProviderAnthropic(Mockito.mock(AnthropicClient.class), registry);
 
             assertThatCode(() -> withUnnamedLevels.validateRequest(requestWithEffort("claude-opus-4-6", "xhigh")))
                     .doesNotThrowAnyException();
+        }
+
+        @Test
+        void rejectsOnlyWhatTheShippedRulesRefuse(@TempDir Path tempDir) throws IOException {
+            var override = tempDir.resolve("override.yaml");
+            Files.writeString(override, """
+                    anthropic:
+                      - id: "claude-opus-4-8"
+                        params:
+                          effort: {accepted: false}
+                    """);
+            var config = new LlmModelRegistryConfig();
+            config.setLocalOverridePath(override.toString());
+            var registry = LlmModelRegistryTestUtils.registry(config);
+            var withBadRow = new LlmProviderAnthropic(Mockito.mock(AnthropicClient.class), registry);
+
+            assertThat(registry.paramsOf(LlmProvider.ANTHROPIC.getValue(), "claude-opus-4-8").effort().accepted())
+                    .isFalse();
+            assertThatCode(() -> withBadRow.validateRequest(requestWithEffort("claude-opus-4-8", "high")))
+                    .doesNotThrowAnyException();
+            assertThatThrownBy(() -> withBadRow.validateRequest(requestWithEffort("claude-haiku-4-5-20251001", "low")))
+                    .isInstanceOf(BadRequestException.class);
         }
 
         @Test

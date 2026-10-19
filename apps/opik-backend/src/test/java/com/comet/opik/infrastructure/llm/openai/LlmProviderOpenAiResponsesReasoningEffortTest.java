@@ -19,7 +19,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -99,7 +98,7 @@ class LlmProviderOpenAiResponsesReasoningEffortTest {
 
     private List<Throwable> sendBlockingAndStreaming(ChatCompletionRequest request) {
         var provider = new LlmProviderOpenAiResponses(
-                new OpenAIClientGenerator(new LlmProviderClientConfig(), bundledRegistry()),
+                new OpenAIClientGenerator(new LlmProviderClientConfig()),
                 LlmProviderClientApiConfig.builder()
                         .apiKey("test-key")
                         .baseUrl(openAi.baseUrl())

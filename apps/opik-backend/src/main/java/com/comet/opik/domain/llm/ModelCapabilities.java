@@ -122,6 +122,8 @@ public class ModelCapabilities {
         return isAnthropicModelWithout(modelName, registryService, params -> isAccepted(params.topP()));
     }
 
+    // A Claude param the catalog leaves out counts as refused, failing safe by omitting it, for the reason given on
+    // rejectsTemperature. ParamResolver.isRefused reads a missing OpenAI param the other way on purpose.
     private boolean isAccepted(ModelParams.NumberParam param) {
         return param != null && Boolean.TRUE.equals(param.accepted());
     }

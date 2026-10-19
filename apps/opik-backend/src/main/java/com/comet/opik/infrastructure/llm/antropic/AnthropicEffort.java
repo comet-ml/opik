@@ -61,10 +61,13 @@ class AnthropicEffort {
                     "custom_parameters.output_config.effort must be a string, model '%s', effort '%s'"
                             .formatted(model, effort));
         }
-        // A model without a row, such as one the model sync just added, gets the provider profile, which names
-        // every level. Anthropic has the final word on it, so a stale catalog never blocks a new model; for the same
-        // reason an accepted effort that names no levels is left to Anthropic to check.
-        var supported = effortLevels(registryService.paramsOf(LlmProvider.ANTHROPIC.getValue(), model));
+        // Unlike the other rules, which only drop a param, this one fails the request, so it reads only the rules
+        // shipped with the release: a bad generated or CDN row would otherwise 400 every effort request for the
+        // model until the data is fixed. A model without a curated row, such as one the model sync just added, gets
+        // the provider profile, which names every level. Anthropic has the final word on it, so a stale catalog
+        // never blocks a new model; for the same reason an accepted effort that names no levels is left to
+        // Anthropic to check.
+        var supported = effortLevels(registryService.curatedParamsOf(LlmProvider.ANTHROPIC.getValue(), model));
         if (supported == null) {
             return;
         }

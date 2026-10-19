@@ -3,7 +3,9 @@ package com.comet.opik.infrastructure.llm.antropic;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
+import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.ModelCapabilities;
+import com.comet.opik.domain.llm.ParamResolver;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
@@ -46,6 +48,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 class AnthropicClientGeneratorTest {
 
@@ -181,13 +184,19 @@ class AnthropicClientGeneratorTest {
     }
 
     @Nested
-    @DisplayName("Temperature gating on the judge path")
+    @DisplayName("Temperature on the judge path, after ParamResolver")
     class TemperatureGating {
+
+        private final ParamResolver resolver = new ParamResolver(mock(LlmProviderFactory.class), bundledRegistry());
+
+        private AnthropicChatRequestParameters resolvedChatParameters(LlmAsJudgeModelParameters modelParameters) {
+            return generateChatParameters(resolver.resolve(modelParameters).request());
+        }
 
         @ParameterizedTest
         @ValueSource(strings = {"claude-sonnet-5", "claude-opus-4-8"})
         void temperatureIsNotForwardedForAdaptiveThinkingModels(String modelName) {
-            var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
+            var parameters = resolvedChatParameters(LlmAsJudgeModelParameters.builder()
                     .name(modelName)
                     .temperature(0.7)
                     .build());
@@ -197,7 +206,7 @@ class AnthropicClientGeneratorTest {
 
         @Test
         void temperatureIsForwardedForModelsThatSupportSamplingParams() {
-            var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
+            var parameters = resolvedChatParameters(LlmAsJudgeModelParameters.builder()
                     .name("claude-3-7-sonnet-20250219")
                     .temperature(0.7)
                     .build());
@@ -208,7 +217,7 @@ class AnthropicClientGeneratorTest {
         @ParameterizedTest
         @ValueSource(strings = {"enabled", "adaptive", "some-future-mode"})
         void temperatureIsNotForwardedWhenThinkingNotDisabledOnSamplingCapableModel(String thinkingType) {
-            var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
+            var parameters = resolvedChatParameters(LlmAsJudgeModelParameters.builder()
                     .name("claude-3-7-sonnet-20250219")
                     .temperature(0.7)
                     .customParameters(JsonUtils.getJsonNodeFromString(
@@ -220,7 +229,7 @@ class AnthropicClientGeneratorTest {
 
         @Test
         void temperatureIsForwardedWhenThinkingDisabledOnSamplingCapableModel() {
-            var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
+            var parameters = resolvedChatParameters(LlmAsJudgeModelParameters.builder()
                     .name("claude-3-7-sonnet-20250219")
                     .temperature(0.7)
                     .customParameters(JsonUtils.getJsonNodeFromString("{\"thinking\": {\"type\": \"disabled\"}}"))
@@ -233,7 +242,7 @@ class AnthropicClientGeneratorTest {
         @ValueSource(strings = {"{\"thinking\": {}}", "{\"thinking\": {\"type\": \"\"}}",
                 "{\"thinking\": {\"budget_tokens\": 1024}}"})
         void temperatureIsForwardedWhenThinkingTypeMissingOrBlankOnSamplingCapableModel(String customParameters) {
-            var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
+            var parameters = resolvedChatParameters(LlmAsJudgeModelParameters.builder()
                     .name("claude-3-7-sonnet-20250219")
                     .temperature(0.7)
                     .customParameters(JsonUtils.getJsonNodeFromString(customParameters))

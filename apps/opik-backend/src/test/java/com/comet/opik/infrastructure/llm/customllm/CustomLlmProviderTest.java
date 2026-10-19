@@ -29,7 +29,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
-import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -70,8 +69,7 @@ class CustomLlmProviderTest {
         var clientConfig = new LlmProviderClientConfig();
         clientConfig.setLogRequests(false);
         clientConfig.setLogResponses(false);
-        clientGenerator = new CustomLlmClientGenerator(clientConfig, mock(AuthTokenProvider.class),
-                bundledRegistry());
+        clientGenerator = new CustomLlmClientGenerator(clientConfig, mock(AuthTokenProvider.class));
     }
 
     @AfterAll

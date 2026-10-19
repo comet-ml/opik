@@ -122,12 +122,10 @@ class LlmProviderFactoryTest {
         GeminiClientGenerator geminiClientGenerator = geminiModule.clientGenerator(llmProviderClientConfig);
         geminiModule.llmServiceProvider(llmProviderFactory, geminiClientGenerator);
 
-        OpenAIClientGenerator openAIClientGenerator = openAIModule.clientGenerator(llmProviderClientConfig,
-                registryService);
+        OpenAIClientGenerator openAIClientGenerator = openAIModule.clientGenerator(llmProviderClientConfig);
         openAIModule.llmServiceProvider(llmProviderFactory, openAIClientGenerator);
 
-        OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig,
-                registryService);
+        OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig);
         openRouterModule.llmServiceProvider(llmProviderFactory, openRouterClientGenerator);
 
         VertexAIClientGenerator vertexAIClientGenerator = vertexAIModule.clientGenerator(llmProviderClientConfig,
@@ -189,7 +187,7 @@ class LlmProviderFactoryTest {
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
-                mock(AuthTokenProvider.class), registryService);
+                mock(AuthTokenProvider.class));
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should successfully get the service
@@ -226,7 +224,7 @@ class LlmProviderFactoryTest {
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
-                mock(AuthTokenProvider.class), registryService);
+                mock(AuthTokenProvider.class));
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should throw BadRequestException
