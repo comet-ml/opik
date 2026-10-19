@@ -15,6 +15,11 @@ on:
         required: false
         default: false
         description: "Reuse an existing git tag for this version instead of creating + pushing a new one. Use to replay a release whose tag was already created (e.g. by a prior failed run)."
+      ignore_pypi_preflight_failure:
+        type: boolean
+        required: false
+        default: false
+        description: "Don't block the release when the PyPI Trusted Publishing preflight fails (e.g. a PyPI outage). Re-publish the SDK afterwards by dispatching build_and_publish_sdk.yaml."
   workflow_call: #  in order to make this action been called from outside
     inputs:
       reuse_existing_tag:
@@ -22,6 +27,11 @@ on:
         required: false
         default: false
         description: "Reuse an existing git tag for this version instead of creating + pushing a new one."
+      ignore_pypi_preflight_failure:
+        type: boolean
+        required: false
+        default: false
+        description: "Don't block the release when the PyPI Trusted Publishing preflight fails (e.g. a PyPI outage). Re-publish the SDK afterwards by dispatching build_and_publish_sdk.yaml."
     outputs:
       version:
         description: 'The release version'
@@ -54,6 +64,7 @@ jobs:
     with:
       version: ${{needs.set-version.outputs.version}}
       preflight_only: true
+      preflight_non_blocking: ${{ inputs.ignore_pypi_preflight_failure }}
 
   create-git-tag:
     needs:
@@ -118,7 +129,6 @@ jobs:
       contents: read
       id-token: write
     uses: ./.github/workflows/build_and_publish_sdk.yaml
-    secrets: inherit
     with:
       version: ${{needs.set-version.outputs.version}}
       is_release: true

@@ -24,6 +24,11 @@ on:
           required: false
           default: false
           description: Only check that PyPI Trusted Publishing accepts this workflow; build and upload nothing
+        preflight_non_blocking:
+          type: boolean
+          required: false
+          default: false
+          description: Let the preflight fail without failing the job, so a PyPI outage doesn't block a release
     workflow_call:
       inputs:
         version:
@@ -39,6 +44,11 @@ on:
           required: false
           default: false
           description: Only check that PyPI Trusted Publishing accepts this workflow; build and upload nothing
+        preflight_non_blocking:
+          type: boolean
+          required: false
+          default: false
+          description: Let the preflight fail without failing the job, so a PyPI outage doesn't block a release
 
     push:
         branches:
@@ -62,6 +72,7 @@ jobs:
         timeout-minutes: 5
         steps:
         - name: PyPI Trusted Publishing preflight
+          continue-on-error: ${{ inputs.preflight_non_blocking }}
           run: |
             set -euo pipefail
             # Tokens go via stdin, never argv; a 200 body holds a live upload
