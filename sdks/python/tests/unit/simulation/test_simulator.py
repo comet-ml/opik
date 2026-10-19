@@ -1,6 +1,8 @@
 """Tests for run_simulation function."""
 
 from unittest.mock import patch
+
+import opik
 from opik.simulation.simulator import run_simulation
 from opik.simulation.simulated_user import SimulatedUser
 
@@ -172,6 +174,48 @@ class TestRunSimulation:
         )
 
         assert result["project_name"] == "test_project"
+
+    def test_run_simulation_with_project_name__traces_logged_to_that_project(
+        self, fake_backend
+    ):
+        def mock_app(message, *, thread_id, **kwargs):
+            return {"role": "assistant", "content": "Response"}
+
+        user_simulator = SimulatedUser(
+            persona="Test user", fixed_responses=["Hello", "Bye"]
+        )
+
+        run_simulation(
+            app=mock_app,
+            user_simulator=user_simulator,
+            project_name="simulation-project",
+            max_turns=2,
+        )
+        opik.flush_tracker()
+
+        assert len(fake_backend.trace_trees) == 2
+        for trace_tree in fake_backend.trace_trees:
+            assert trace_tree.project_name == "simulation-project"
+
+    def test_run_simulation_with_project_name__already_tracked_app__traces_logged_to_that_project(
+        self, fake_backend
+    ):
+        @opik.track
+        def tracked_app(message, *, thread_id, **kwargs):
+            return {"role": "assistant", "content": "Response"}
+
+        user_simulator = SimulatedUser(persona="Test user", fixed_responses=["Hello"])
+
+        run_simulation(
+            app=tracked_app,
+            user_simulator=user_simulator,
+            project_name="simulation-project",
+            max_turns=1,
+        )
+        opik.flush_tracker()
+
+        assert len(fake_backend.trace_trees) == 1
+        assert fake_backend.trace_trees[0].project_name == "simulation-project"
 
     def test_run_simulation_max_turns_zero(self, fake_backend):
         """Test simulation with zero max_turns."""
