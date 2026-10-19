@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { ArrowRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -170,20 +171,21 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
           </div>
         </div>
 
-        {!isEditMode && ollieEnabled && (
-          <div className="flex items-center justify-between gap-4 border-t pt-4">
-            <span className="comet-body-s text-light-slate">
-              Need something these don&apos;t cover? Describe the widget you
-              need.
-            </span>
-            <Button variant="outline" onClick={handleDescribeToOllie}>
-              <OllieIcon className="mr-2 size-4 text-[var(--color-ollie)]" />
-              Describe it to Ollie
-            </Button>
-          </div>
-        )}
-
-        <DialogFooter className="flex flex-row justify-end gap-2 border-t pt-4 sm:flex-row sm:justify-end">
+        <DialogFooter className="flex flex-row items-center justify-end gap-2 border-t pt-4 sm:flex-row sm:justify-end">
+          {!isEditMode && ollieEnabled && (
+            <div className="comet-code mr-auto flex items-center gap-2 text-foreground">
+              Need a custom widget?
+              <button
+                type="button"
+                onClick={handleDescribeToOllie}
+                className="inline-flex items-center gap-1 border-b border-current pb-0.5 hover:text-primary-hover"
+              >
+                <OllieIcon className="size-4 text-[var(--color-ollie)]" />
+                Ask Ollie
+                <ArrowRight className="size-4" />
+              </button>
+            </div>
+          )}
           <Button variant="outline" onClick={handleCancel}>
             Cancel
           </Button>
