@@ -227,6 +227,7 @@ class SpansDistributedWrapReadTest {
     private UUID bulkProjectId;
     private UUID streamProjectId;
     private UUID statsProjectId;
+    private UUID countProjectId;
 
     @BeforeAll
     void beforeAll(ClientSupport clientSupport) {
@@ -243,6 +244,7 @@ class SpansDistributedWrapReadTest {
         seedBulkSpans(bulkProjectId);
         streamProjectId = createProjectWithSpans(PAGE_SIZE * 3);
         statsProjectId = createProjectWithSpans(PAGE_SIZE);
+        countProjectId = createProjectWithSpans(PAGE_SIZE);
     }
 
     @AfterAll
@@ -425,7 +427,7 @@ class SpansDistributedWrapReadTest {
         assertThat(actualShardQueries.maxResultRows()).isLessThanOrEqualTo(PAGE_SIZE);
     }
 
-    /** Aggregated where it reads, grouped by the sharding key, so the shard returns one partially aggregated row. */
+    /** Aggregated where it reads, so the shard returns one finished row. */
     @Test
     void statsShipOneRowFromTheShard() {
         assumeTrue(topology == Topology.DISTRIBUTED_WRAPPER, "only the wrapper reads through a shard");
@@ -433,6 +435,20 @@ class SpansDistributedWrapReadTest {
         spanResourceClient.getSpansStats(null, statsProjectId, null, API_KEY, WORKSPACE_NAME, Map.of());
 
         var actualShardQueries = shardQueriesOf("get_span_stats", statsProjectId);
+
+        assertThat(actualShardQueries.maxResultRows()).isEqualTo(1);
+    }
+
+    /** Counted where it reads, so the shard returns the finished count rather than every id of the project. */
+    @Test
+    void countShipsOneRowFromTheShard() {
+        assumeTrue(topology == Topology.DISTRIBUTED_WRAPPER, "only the wrapper reads through a shard");
+
+        var actualPage = spanResourceClient.findSpans(WORKSPACE_NAME, API_KEY, null, countProjectId, 1, PAGE_SIZE,
+                null, null, null, null, null);
+        assertThat(actualPage.total()).isEqualTo(PAGE_SIZE);
+
+        var actualShardQueries = shardQueriesOf("count_spans_by_project_id", countProjectId);
 
         assertThat(actualShardQueries.maxResultRows()).isEqualTo(1);
     }
