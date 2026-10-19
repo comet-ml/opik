@@ -8,12 +8,7 @@ import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
-
-import java.util.Set;
-import java.util.UUID;
 
 @EagerSingleton
 @Slf4j
@@ -30,26 +25,12 @@ public class ProjectDeletedListener {
      */
     @Subscribe
     public void onProjectsDeleted(@NonNull ProjectsDeleted event) {
-        Set<UUID> projectIds = event.projectIds();
-        String workspaceId = event.workspaceId();
-        String userName = event.userName();
-
         log.info("Received ProjectsDeleted event, deleting the projects' traces, project count '{}', workspace '{}'",
-                projectIds.size(), workspaceId);
+                event.projectIds().size(), event.workspaceId());
 
-        Flux.fromIterable(projectIds)
-                .concatMap(projectId -> traceService.deleteByProjectId(projectId)
-                        .onErrorResume(error -> {
-                            log.error("Failed to delete the project's traces, project id '{}', workspace '{}'",
-                                    projectId, workspaceId, error);
-                            return Mono.empty();
-                        }))
-                .then()
-                .doOnSuccess(__ -> log.info(
-                        "Finished processing ProjectsDeleted event, project count '{}', workspace '{}'",
-                        projectIds.size(), workspaceId))
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, userName))
+        traceService.deleteByProjectIds(event.projectIds())
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, event.workspaceId())
+                        .put(RequestContext.USER_NAME, event.userName()))
                 .subscribe();
     }
 }

@@ -94,7 +94,7 @@ public interface TraceService {
 
     Mono<Void> delete(Set<UUID> ids, UUID projectId);
 
-    Mono<Void> deleteByProjectId(UUID projectId);
+    Mono<Void> deleteByProjectIds(Set<UUID> projectIds);
 
     Mono<TracePage> find(int page, int size, TraceSearchCriteria criteria);
 
@@ -138,8 +138,10 @@ class TraceServiceImpl implements TraceService {
 
     public static final String TRACE_KEY = "Trace";
 
-    // Same as the batch delete endpoint's max, so each TracesDeleted cascade posted per page is no larger than one a
-    // user's batch delete can post.
+    /**
+     * Same as the batch delete endpoint's max, so each {@code TracesDeleted} cascade posted per page is no larger than
+     * one a user's batch delete can post.
+     */
     static final int DELETE_BY_PROJECT_ID_PAGE_SIZE = 1_000;
 
     private final @NonNull TraceDAO dao;
@@ -554,14 +556,31 @@ class TraceServiceImpl implements TraceService {
     }
 
     /**
+     * Deletes every trace of the given projects one project at a time, so a large project's delete doesn't run
+     * alongside the others. A failure on one project is logged and doesn't stop the rest.
+     */
+    @Override
+    @WithSpan
+    public Mono<Void> deleteByProjectIds(@NonNull Set<UUID> projectIds) {
+        log.info("Deleting all traces of projects, count '{}'", projectIds.size());
+
+        return Mono.deferContextual(ctx -> Flux.fromIterable(projectIds)
+                .concatMap(projectId -> deleteByProjectId(projectId)
+                        .onErrorResume(error -> {
+                            log.error("Failed to delete all traces of a project, project id '{}', workspace '{}'",
+                                    projectId, ctx.get(RequestContext.WORKSPACE_ID), error);
+                            return Mono.empty();
+                        }))
+                .then());
+    }
+
+    /**
      * Deletes every trace of the project page by page, each page through {@link #delete(Set, UUID)}, so it gets the
      * same deletion-events capture and {@code TracesDeleted} cascade as a user's delete. Pages are id-ordered, which
      * keeps each page's ids within few weekly partitions, and the next page is read only after the previous one is
      * deleted.
      */
-    @Override
-    @WithSpan
-    public Mono<Void> deleteByProjectId(@NonNull UUID projectId) {
+    private Mono<Void> deleteByProjectId(UUID projectId) {
         log.info("Deleting all traces of a project, project id '{}'", projectId);
 
         return deleteTracesPage(projectId, null)
@@ -577,7 +596,7 @@ class TraceServiceImpl implements TraceService {
 
     private Mono<List<UUID>> deleteTracesPage(UUID projectId, UUID lastId) {
         return template.nonTransaction(connection -> dao.getTraceIdsByProjectId(projectId, lastId,
-                DELETE_BY_PROJECT_ID_PAGE_SIZE, connection))
+                DELETE_BY_PROJECT_ID_PAGE_SIZE, connection).collectList())
                 .flatMap(page -> page.isEmpty()
                         ? Mono.just(page)
                         : delete(Set.copyOf(page), projectId).thenReturn(page));

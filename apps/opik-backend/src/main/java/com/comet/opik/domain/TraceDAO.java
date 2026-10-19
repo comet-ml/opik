@@ -175,7 +175,7 @@ public interface TraceDAO {
 
     Mono<Set<UUID>> getTraceIdsByThreadIds(UUID projectId, List<String> threadIds, Connection connection);
 
-    Mono<List<UUID>> getTraceIdsByProjectId(UUID projectId, UUID lastId, int limit, Connection connection);
+    Flux<UUID> getTraceIdsByProjectId(UUID projectId, UUID lastId, int limit, Connection connection);
 
     Mono<Trace> getPartialById(UUID id);
 
@@ -3490,12 +3490,34 @@ class TraceDAOImpl implements TraceDAO {
             SETTINGS log_comment = '<log_comment>'
             """;
 
+    /**
+     * Also reads the trace ids of the project's spans, so spans whose trace was never stored are found too. Each side
+     * is limited before the union, since the first {@code limit} ids of the union are within the first {@code limit}
+     * of each side.
+     */
     private static final String SELECT_TRACE_IDS_BY_PROJECT_ID = """
-            SELECT DISTINCT id
-            FROM traces
-            WHERE workspace_id = :workspace_id
-            AND project_id = :project_id
-            <if(last_id)>AND id > :last_id<endif>
+            SELECT id
+            FROM (
+                SELECT id FROM (
+                    SELECT DISTINCT id
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    <if(last_id)>AND id > :last_id<endif>
+                    ORDER BY id
+                    LIMIT :limit
+                )
+                UNION DISTINCT
+                SELECT id FROM (
+                    SELECT DISTINCT trace_id AS id
+                    FROM spans
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    <if(last_id)>AND trace_id > :last_id<endif>
+                    ORDER BY trace_id
+                    LIMIT :limit
+                )
+            )
             ORDER BY id
             LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
@@ -5366,13 +5388,13 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Mono<List<UUID>> getTraceIdsByProjectId(@NonNull UUID projectId, UUID lastId, int limit,
+    public Flux<UUID> getTraceIdsByProjectId(@NonNull UUID projectId, UUID lastId, int limit,
             @NonNull Connection connection) {
-        log.info("Getting trace IDs by project id '{}', after id '{}', limit '{}'", projectId, lastId, limit);
+        log.debug("Getting trace IDs by project id '{}', after id '{}', limit '{}'", projectId, lastId, limit);
 
-        return makeMonoContextAware((userName, workspaceId) -> {
+        return makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_TRACE_IDS_BY_PROJECT_ID, "get_trace_ids_by_project_id",
-                    workspaceId, userName, "project_id=%s".formatted(projectId));
+                    workspaceId, userName, "project_id=%s, last_id=%s, limit=%s".formatted(projectId, lastId, limit));
             Optional.ofNullable(lastId).ifPresent(id -> template.add("last_id", id));
 
             var statement = connection.createStatement(template.render())
@@ -5385,8 +5407,7 @@ class TraceDAOImpl implements TraceDAO {
 
             return Mono.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment))
-                    .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)))
-                    .collectList();
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)));
         });
     }
 
