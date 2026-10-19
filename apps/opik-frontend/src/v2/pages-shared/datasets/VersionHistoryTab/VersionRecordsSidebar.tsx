@@ -142,6 +142,7 @@ const VersionRecordsSidebar: React.FC<VersionRecordsSidebarProps> = ({
                 datasetId={datasetId}
                 versionId={version.version_hash}
                 isTestSuite={isTestSuite}
+                suitePolicy={version.execution_policy}
                 renderItemPanel={renderItemPanel}
               />
             ) : isVersionError ? (

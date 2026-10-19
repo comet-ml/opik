@@ -10,6 +10,8 @@ import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -107,6 +109,7 @@ public class DatasetVersionsResource {
             @ApiResponse(responseCode = "404", description = "Version not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
     })
     @JsonView(DatasetVersion.View.Public.class)
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     public Response getVersionByHash(@PathParam("versionHash") String versionHash) {
         featureFlags.checkDatasetVersioningEnabled();
 

@@ -8,7 +8,7 @@ import { ExecutionPolicy } from "@/types/test-suites";
 
 export const formatExecutionPolicy = (policy?: ExecutionPolicy) =>
   policy
-    ? `${policy.pass_threshold} of ${policy.runs_per_item} runs must pass`
+    ? `${policy.pass_threshold} of ${policy.runs_per_item} must pass`
     : "—";
 
 export const SuiteItemAssertionsCell = (
@@ -30,6 +30,9 @@ export const SuiteItemExecutionPolicyCell = (
   context: CellContext<DatasetItem, unknown>,
 ) => {
   const policy = context.row.original.execution_policy;
+  const { suitePolicy } = (context.column.columnDef.meta?.custom ?? {}) as {
+    suitePolicy?: ExecutionPolicy;
+  };
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
@@ -38,7 +41,9 @@ export const SuiteItemExecutionPolicyCell = (
       {policy ? (
         formatExecutionPolicy(policy)
       ) : (
-        <span className="text-muted-slate">Suite default</span>
+        <span className="text-light-slate">
+          {formatExecutionPolicy(suitePolicy)}
+        </span>
       )}
     </CellWrapper>
   );

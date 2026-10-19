@@ -55,6 +55,7 @@ import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesServic
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -435,10 +436,7 @@ class DatasetVersionResourceTest {
             var version = datasetResourceClient.getVersionByHash(datasetId, expected.versionHash(), API_KEY,
                     TEST_WORKSPACE);
 
-            assertThat(version.id()).isEqualTo(expected.id());
-            assertThat(version.versionName()).isEqualTo("v2");
-            assertThat(version.versionHash()).isEqualTo(expected.versionHash());
-            assertThat(version.itemsTotal()).isEqualTo(expected.itemsTotal());
+            assertThat(version).usingRecursiveComparison().isEqualTo(expected);
             assertThat(version.isLatest()).isFalse();
         }
 
@@ -451,6 +449,21 @@ class DatasetVersionResourceTest {
             try (var response = datasetResourceClient.callGetVersionByHash(datasetId, "deadbeef", API_KEY,
                     TEST_WORKSPACE)) {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: Returns forbidden when DATASET_VIEW permission is denied")
+        void getVersionByHash__whenDatasetViewDenied__thenReturnForbidden() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.DATASET_VIEW.getValue());
+
+            try (var response = datasetResourceClient.callGetVersionByHash(UUID.randomUUID(), "deadbeef", apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
         }
 

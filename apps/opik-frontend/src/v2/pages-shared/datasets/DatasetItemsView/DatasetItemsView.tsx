@@ -19,6 +19,7 @@ import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import { DatasetItem } from "@/types/datasets";
+import { ExecutionPolicy } from "@/types/test-suites";
 import { Filters } from "@/types/filters";
 import {
   COLUMN_DATA_ID,
@@ -60,6 +61,7 @@ type DatasetItemsViewProps = {
   datasetId: string;
   versionId?: string;
   isTestSuite: boolean;
+  suitePolicy?: ExecutionPolicy;
   renderItemPanel: (props: EditPanelRenderProps) => React.ReactNode;
 };
 
@@ -67,6 +69,7 @@ const DatasetItemsView: React.FC<DatasetItemsViewProps> = ({
   datasetId,
   versionId,
   isTestSuite,
+  suitePolicy,
   renderItemPanel,
 }) => {
   const storageKeys = isTestSuite
@@ -175,11 +178,15 @@ const DatasetItemsView: React.FC<DatasetItemsViewProps> = ({
       isTestSuite
         ? buildSuiteColumns().map((column) =>
             SUITE_ROW_DATA_CELLS[column.id]
-              ? { ...column, cell: SUITE_ROW_DATA_CELLS[column.id] as never }
+              ? {
+                  ...column,
+                  cell: SUITE_ROW_DATA_CELLS[column.id] as never,
+                  customMeta: { suitePolicy },
+                }
               : column,
           )
         : buildDatasetColumns(datasetColumns, dynamicDatasetColumns),
-    [isTestSuite, datasetColumns, dynamicDatasetColumns],
+    [isTestSuite, suitePolicy, datasetColumns, dynamicDatasetColumns],
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
