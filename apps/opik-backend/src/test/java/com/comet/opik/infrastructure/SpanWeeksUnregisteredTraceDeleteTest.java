@@ -118,6 +118,29 @@ class SpanWeeksUnregisteredTraceDeleteTest {
     }
 
     /**
+     * The read flag alone turns the bound on: the listener's flag is off here, and the trace's spans, none of whose
+     * weeks are indexed, are left out of a trace-keyed read while each is still found by its own id.
+     */
+    @Test
+    void traceSpansPageIsBoundedWithoutTheListenerFlag() {
+        var trace = fixtures.createFarFutureTraceWithoutWaiting();
+
+        var actualStatuses = trace.spans().stream()
+                .map(span -> {
+                    try (var response = spanResourceClient.callGetSpanIdApi(span.id(), WORKSPACE_NAME, API_KEY)) {
+                        return response.getStatus();
+                    }
+                })
+                .toList();
+        assertThat(actualStatuses).containsOnly(HttpStatus.SC_OK);
+
+        var actualPage = spanResourceClient.getByTraceIdAndProject(trace.trace().id(), trace.projectName(),
+                WORKSPACE_NAME, API_KEY);
+
+        SpanAssertions.assertPage(actualPage, 1, 0, 0);
+    }
+
+    /**
      * The trace-delete cascade is not bound by span_weeks, so it removes spans whose weeks are not indexed. Each span
      * is read back by its own id, whose read derives its week from the id rather than from the index.
      */
