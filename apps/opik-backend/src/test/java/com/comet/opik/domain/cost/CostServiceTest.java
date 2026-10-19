@@ -271,6 +271,132 @@ class CostServiceTest {
         assertThat(cost).isEqualByComparingTo("0.000442");
     }
 
+    /**
+     * Cache tokens are read from whichever usage shape the client sent, whatever the provider (issue #7773). The
+     * payloads are the ones of PR #8723.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideCacheUsageShapeCases")
+    void calculateCostReadsCacheTokensFromAnyUsageShape_issue7773(String description, String model,
+            String provider, Map<String, Integer> usage, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideCacheUsageShapeCases() {
+        // claude-haiku-4-5 (anthropic): input 1e-6, output 5e-6, cache_read 1e-7, cache_creation 1.25e-6
+        // gpt-4o (openai): input 2.5e-6, output 1e-5, cache_read 1.25e-6, no cache_creation rate
+        // deepinfra/anthropic/claude-3-7-sonnet-latest: input 3.3e-6, output 1.65e-5, cache_read 3.3e-7,
+        // no cache_creation rate
+        // anthropic.claude-3-5-haiku-20241022-v1:0 (bedrock): input 8e-7, output 4e-6, cache_read 8e-8,
+        // cache_creation 1e-6
+        return Stream.of(
+                // 800*1e-6 + 200*1e-7 + 100*5e-6
+                Arguments.of("OpenAI shape on anthropic provider", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 100,
+                                "original_usage.prompt_tokens_details.cached_tokens", 200),
+                        "0.00132"),
+                Arguments.of("OpenAI shape with zero Anthropic cache key", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 100,
+                                "original_usage.prompt_tokens_details.cached_tokens", 200,
+                                "original_usage.cache_read_input_tokens", 0),
+                        "0.00132"),
+                // OpenAI Responses usage: input_tokens includes input_tokens_details.cached_tokens.
+                Arguments.of("OpenAI responses shape on anthropic provider", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.input_tokens_details.cached_tokens", 200),
+                        "0.00132"),
+                // The SDK's prompt_tokens (1200) is input_tokens plus the cache, so input_tokens excludes it:
+                // 1000*3.3e-6 + 200*3.3e-7 + 100*1.65e-5
+                Arguments.of("Anthropic shape on deepinfra provider",
+                        "deepinfra/anthropic/claude-3-7-sonnet-latest", "deepinfra",
+                        Map.of("prompt_tokens", 1200, "completion_tokens", 100,
+                                "original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.cache_read_input_tokens", 200),
+                        "0.005016"),
+                // Cache writes without a rate of their own bill at the input rate:
+                // 1000*3.3e-6 + 200*3.3e-7 + 50*3.3e-6 + 100*1.65e-5. #8723 expected 0.005775, which bills the
+                // 200 cache reads at the full input rate.
+                Arguments.of("Anthropic shape with unpriced cache creation falls back",
+                        "deepinfra/anthropic/claude-3-7-sonnet-latest", "deepinfra",
+                        Map.of("prompt_tokens", 1250, "completion_tokens", 100,
+                                "original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.cache_read_input_tokens", 200,
+                                "original_usage.cache_creation_input_tokens", 50),
+                        "0.005181"),
+                Arguments.of("Bedrock shape on anthropic provider", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.inputTokens", 800,
+                                "original_usage.outputTokens", 100,
+                                "original_usage.cacheReadInputTokens", 200),
+                        "0.00132"),
+                // 800*1e-6 + 200*1e-7 + 50*1.25e-6 + 100*5e-6
+                Arguments.of("Bedrock shape with cache writes on anthropic provider", "claude-haiku-4-5",
+                        "anthropic",
+                        Map.of("prompt_tokens", 1050, "completion_tokens", 100,
+                                "original_usage.inputTokens", 800,
+                                "original_usage.outputTokens", 100,
+                                "original_usage.cacheReadInputTokens", 200,
+                                "original_usage.cacheWriteInputTokens", 50),
+                        "0.0013825"),
+                // 1000*8e-7 + 200*8e-8 + 50*1e-6 + 100*4e-6
+                Arguments.of("Anthropic shape with cache creation on bedrock provider",
+                        "anthropic.claude-3-5-haiku-20241022-v1:0", "bedrock",
+                        Map.of("prompt_tokens", 1250, "completion_tokens", 100,
+                                "original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.cache_read_input_tokens", 200,
+                                "original_usage.cache_creation_input_tokens", 50),
+                        "0.001266"),
+                Arguments.of("OpenAI responses shape without aliases", "claude-haiku-4-5", "anthropic",
+                        Map.of("original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.input_tokens_details.cached_tokens", 200),
+                        "0.00132"),
+                // 800*2.5e-6 + 200*1.25e-6 + 100*1e-5
+                Arguments.of("Gemini shape on openai provider", "gpt-4o", "openai",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.prompt_token_count", 1000,
+                                "original_usage.candidates_token_count", 100,
+                                "original_usage.cached_content_token_count", 200),
+                        "0.00325"),
+                Arguments.of("OpenAI shape without cache tokens unchanged", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 100,
+                                "original_usage.prompt_tokens_details.cached_tokens", 0),
+                        "0.0015"),
+                // Bare keys on an Anthropic span read as Anthropic's, cache on top of the input:
+                // 1000*1e-6 + 200*1e-7 + 100*5e-6
+                Arguments.of("bare cache key unchanged", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "cache_read_input_tokens", 200),
+                        "0.00152"),
+                // Without an input count of its own, the prompt count is taken to include the cache:
+                // 800*2.5e-6 + 200*1.25e-6 + 100*1e-5. #8723 expected 0.0035, which ignores the cache reads.
+                Arguments.of("Anthropic cache key without its input count", "gpt-4o", "openai",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.cache_read_input_tokens", 200),
+                        "0.00325"),
+                // LiteLLM reports one cache read under both names, and its prompt_tokens includes it:
+                // 1000*1e-6 + 200*1e-7 + 100*5e-6. #8723 expected 0.00172, which bills the cache twice.
+                Arguments.of("mixed shapes", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1200, "completion_tokens", 100,
+                                "original_usage.prompt_tokens", 1200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 200,
+                                "original_usage.cache_read_input_tokens", 200),
+                        "0.00152"));
+    }
+
     @ParameterizedTest
     @MethodSource("provideAudioSpeechModels")
     void calculateCostForAudioSpeech(String model, int inputCharacters, String expectedCost) {
