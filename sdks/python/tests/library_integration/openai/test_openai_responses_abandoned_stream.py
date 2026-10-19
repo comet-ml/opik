@@ -109,16 +109,22 @@ async def test_openai_async_responses_stream__consumer_breaks_early__no_error_lo
     assert responses_span.end_time is not None
     assert logging.ERROR not in _levels(aggregator_log_records)
 
-def test_aggregate__terminal_response_failed_event__returns_response():
+def test_aggregate_terminal_response_failed_event__returns_response():
     fake_usage = openai_responses.response_usage.ResponseUsage.model_construct(
         input_tokens=15,
-        output_tokens=0,
-        total_tokens=15,
+        output_tokens=8,
+        total_tokens=23,
     )
+    fake_output_item = {
+        "id": "msg_failed_1",
+        "type": "message",
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Generation failed midway"}],
+    }
     fake_response = openai_responses.Response.model_construct(
         id="resp_failed_test_1",
         status="failed",
-        output=[],
+        output=[fake_output_item],
         usage=fake_usage,
         model="gpt-4.1",
     )
@@ -134,7 +140,31 @@ def test_aggregate__terminal_response_failed_event__returns_response():
     assert result == fake_response
     assert result.status == "failed"
     assert result.id == "resp_failed_test_1"
-    assert result.output == []
+    assert result.output == fake_response.output
+    assert len(result.output) == 1
+    assert result.output[0].id == "msg_failed_1"
+    assert result.usage is not None
     assert result.usage.input_tokens == 15
-    assert result.usage.total_tokens == 15
+    assert result.usage.output_tokens == 8
+    assert result.usage.total_tokens == 23
+
+
+# Alias for compatibility with double-underscore naming
+test_aggregate__terminal_response_failed_event__returns_response = (
+    test_aggregate_terminal_response_failed_event__returns_response
+)
+
+
+def test_aggregate_terminal_response_error_event_without_response__returns_none():
+    event = openai_responses.ResponseErrorEvent.model_construct(
+        code="server_error",
+        message="Internal server error",
+        sequence_number=1,
+        type="error",
+    )
+
+    result = response_events_aggregator.aggregate([event])
+
+    assert result is None
+
 
