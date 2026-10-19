@@ -130,7 +130,7 @@ export const DEFAULT_GEMINI_CONFIGS = {
 };
 
 export const DEFAULT_OPEN_ROUTER_CONFIGS = {
-  MAX_TOKENS: 0,
+  MAX_TOKENS: 4000,
   TEMPERATURE: 0,
   TOP_P: 1,
   TOP_K: 0,

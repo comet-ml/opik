@@ -40,6 +40,8 @@ tags:
   description: Internal auto-first-run rollout enrollment
 - name: System analytics queries
   description: Internal endpoints to run free-form analytics SQL
+- name: Dashboard saved queries
+  description: Internal endpoints for the queries Ollie chart widgets run
 - name: System usage
   description: System usage related resource
 - name: Agent Configs
@@ -431,6 +433,66 @@ paths:
         "501":
           description: "Agent Insights is disabled, or Custom Charts is not enabled\
             \ for this workspace"
+  /v1/internal/dashboard-saved-queries:
+    post:
+      tags:
+      - Dashboard saved queries
+      summary: Save a chart query
+      description: Saves the query of an Ollie chart so a dashboard widget can reference
+        it by id.
+      operationId: createDashboardSavedQuery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardSavedQuery"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/internal/dashboard-saved-queries/{id}"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSavedQuery"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Ollie or Custom Charts is not enabled for this workspace
+  /v1/internal/dashboard-saved-queries/{id}:
+    get:
+      tags:
+      - Dashboard saved queries
+      summary: Get a chart query
+      description: Gets a dashboard saved query by id.
+      operationId: getDashboardSavedQuery
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Dashboard saved query
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSavedQuery"
+        "404":
+          description: Not found
+        "501":
+          description: Ollie or Custom Charts is not enabled for this workspace
   /v1/internal/usage/projects:
     post:
       tags:
@@ -1146,6 +1208,54 @@ paths:
           description: Run accepted
         "404":
           description: Job not found
+  /v1/private/agent-insights/jobs/{projectId}/guidance:
+    put:
+      tags:
+      - Agent Insights Jobs
+      summary: Update Agent Insights project guidance
+      description: "Saves the project guidance sent to every Agent Insights run, creating\
+        \ the job (disabled) if the project has none. Empty or whitespace-only clears\
+        \ it. The guidance version is bumped only when the text changes. 404 while\
+        \ guidance is not enabled."
+      operationId: updateAgentInsightsGuidance
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentInsightsGuidanceUpdate"
+        required: true
+      responses:
+        "200":
+          description: Job with the saved guidance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsJob"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: "Project not found, or guidance not enabled"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Guidance missing or over the length limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/agent-insights/issues:
     get:
       tags:
@@ -1320,7 +1430,8 @@ paths:
       tags:
       - Agent Insights
       summary: Update agent insights issue status
-      description: "Moves an issue through its lifecycle: open, resolved or closed"
+      description: "Moves an issue through its lifecycle: open, resolved or closed.\
+        \ close_note is kept only with closed; any other status clears it"
       operationId: updateAgentInsightsIssue
       parameters:
       - name: issue_id
@@ -1343,8 +1454,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: "Missing project_id or status, or close_note over the length\
+            \ limit"
           content:
             application/json:
               schema:
@@ -2586,6 +2710,63 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/dashboards/{dashboardId}/widgets/{widgetId}/query:
+    post:
+      tags:
+      - Dashboards
+      summary: Run a saved widget query
+      description: Runs the query saved on an Ollie chart widget of this dashboard
+        over the given date range and returns its rows. The query is read from the
+        saved widget; the request carries no SQL. Returns 501 when Ollie or Custom
+        Charts is not enabled for the workspace.
+      operationId: runDashboardWidgetQuery
+      parameters:
+      - name: dashboardId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: widgetId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardWidgetQueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsQueryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: "Dashboard not found, or the widget has no dashboard saved\
+            \ query"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many queries are running; retry after the Retry-After delay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Ollie or Custom Charts is not enabled for this workspace
   /v1/private/datasets/{id}/items/changes:
     post:
       tags:
@@ -4612,6 +4793,63 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/insights-views/{insightsViewId}/widgets/{widgetId}/query:
+    post:
+      tags:
+      - Insights Views
+      summary: Run a saved widget query
+      description: Runs the query saved on an Ollie chart widget of this insights
+        view over the given date range and returns its rows. The query is read from
+        the saved widget; the request carries no SQL. Returns 501 when Ollie or Custom
+        Charts is not enabled for the workspace.
+      operationId: runInsightsViewWidgetQuery
+      parameters:
+      - name: insightsViewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: widgetId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardWidgetQueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsQueryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: "Insights view not found, or the widget has no dashboard saved\
+            \ query"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many queries are running; retry after the Retry-After delay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Ollie or Custom Charts is not enabled for this workspace
   /v1/private/llm/models:
     get:
       tags:
@@ -9907,6 +10145,16 @@ components:
             description: "Ids whose automatic run already happened, so enrolling has\
               \ no effect"
             format: uuid
+        reset_project_ids:
+          uniqueItems: true
+          type: array
+          description: "Ids whose automatic run never finished, so clearing forgot\
+            \ it and enrolling them again gives it one more free run"
+          items:
+            type: string
+            description: "Ids whose automatic run never finished, so clearing forgot\
+              \ it and enrolling them again gives it one more free run"
+            format: uuid
     Request:
       required:
       - enrolled
@@ -9966,6 +10214,31 @@ components:
           type: string
           description: Restrict query to this project. Omit to query the whole workspace.
           format: uuid
+    DashboardSavedQuery:
+      required:
+      - sql
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          description: Project the query is bounded to. Omit for every project in
+            the workspace.
+          format: uuid
+        sql:
+          maxLength: 65536
+          minLength: 0
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
     UsageProjectsResponse:
       type: object
       properties:
@@ -10443,6 +10716,30 @@ components:
           type: string
           format: date-time
           readOnly: true
+        guidance:
+          type: string
+          description: Project guidance sent to every run; null when none
+          readOnly: true
+        guidance_updated_by:
+          type: string
+          description: Who last saved the guidance
+          readOnly: true
+        guidance_updated_at:
+          type: string
+          description: When the guidance was last saved
+          format: date-time
+          readOnly: true
+        guidance_version:
+          type: integer
+          description: Bumped each time the guidance text changes; 0 = never saved
+          format: int32
+          readOnly: true
+        results_guidance_version:
+          type: integer
+          description: Guidance version the current results were produced with; null
+            = no run since guidance existed
+          format: int32
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -10468,6 +10765,17 @@ components:
           enum:
           - enabled
           - disabled
+    AgentInsightsGuidanceUpdate:
+      required:
+      - guidance
+      type: object
+      properties:
+        guidance:
+          maxLength: 5000
+          minLength: 0
+          type: string
+          description: Project guidance for Agent Insights runs. Empty or whitespace-only
+            clears it
     AgentInsightsIssue:
       type: object
       properties:
@@ -10532,6 +10840,17 @@ components:
           type: integer
           description: COUNT(DISTINCT report_day) in the requested window
           format: int64
+        close_note:
+          type: string
+          description: The team's reason for closing the issue as not useful; set
+            only while status is closed
+        status_changed_by:
+          type: string
+          description: Who last changed the status
+        status_changed_at:
+          type: string
+          description: When the status was last changed
+          format: date-time
         created_by:
           type: string
         created_at:
@@ -10609,6 +10928,17 @@ components:
           - low
         traces_query:
           type: string
+        close_note:
+          type: string
+          description: The team's reason for closing the issue as not useful; set
+            only while status is closed
+        status_changed_by:
+          type: string
+          description: Who last changed the status
+        status_changed_at:
+          type: string
+          description: When the status was last changed
+          format: date-time
         created_by:
           type: string
         created_at:
@@ -10703,6 +11033,12 @@ components:
           - open
           - resolved
           - closed
+        close_note:
+          maxLength: 500
+          minLength: 0
+          type: string
+          description: Why the issue is closed as not useful. Stored only with status
+            closed; any other status clears it
     Alert:
       required:
       - webhook
@@ -14102,6 +14438,19 @@ components:
           type: array
           items:
             type: string
+    DashboardWidgetQueryRequest:
+      type: object
+      properties:
+        interval_start:
+          type: string
+          description: "Start of the date range, bound to {{window_start}} in the\
+            \ dashboard saved query. Omit for all time."
+          format: date-time
+        interval_end:
+          type: string
+          description: "End of the date range, bound to {{window_end}} in the dashboard\
+            \ saved query. Omit for now."
+          format: date-time
     DashboardUpdate_Public:
       type: object
       properties:
@@ -21791,6 +22140,7 @@ components:
     ServiceTogglesConfig:
       required:
       - agentInsightsEnabled
+      - agentInsightsGuidanceEnabled
       - alertsEnabled
       - annotationQueueAutomationEnabled
       - anthropicProviderEnabled
@@ -21800,6 +22150,7 @@ components:
       - datasetExportEnabled
       - datasetVersioningEnabled
       - demoDataEnabled
+      - eventBridgeAlertsEnabled
       - exportEnabled
       - geminiProviderEnabled
       - guardrailsEnabled
@@ -21864,17 +22215,24 @@ components:
           type: boolean
         agentInsightsEnabled:
           type: boolean
+        agentInsightsGuidanceEnabled:
+          type: boolean
         projectHomepageEnabled:
           type: boolean
         onlineScoringTracingEnabled:
           type: boolean
         annotationQueueAutomationEnabled:
           type: boolean
+        eventBridgeAlertsEnabled:
+          type: boolean
         defaultPageSize:
           maximum: 100
           minimum: 5
           type: integer
           format: int32
+        customChartsEnabledForWorkspace:
+          type: boolean
+          readOnly: true
     SpanBatchUpdate:
       required:
       - ids

@@ -27,13 +27,7 @@ import {
   useIsRunning,
   usePromptCount,
   useSetPromptMap,
-  useSetSelectedRuleIds,
   useClearCreatedExperiments,
-  useClearRunningMap,
-  useResetDatasetFilters,
-  useSetDatasetVariables,
-  useSetExperimentName,
-  useSetDatasetType,
   useDatasetFilters,
   useDatasetPage,
   useDatasetSize,
@@ -49,6 +43,7 @@ import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import { generateDefaultPrompt } from "@/lib/playground";
+import useResetPlaygroundSession from "@/v2/pages-shared/playground/useResetPlaygroundSession";
 import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 
 import { DEFAULT_LOADED_DATASETS } from "@/v2/pages-shared/DatasetVersionSelectBox/useDatasetVersionSelect";
@@ -100,13 +95,8 @@ const PlaygroundPage = () => {
     usePlaygroundDataset();
 
   const setPromptMap = useSetPromptMap();
-  const setSelectedRuleIds = useSetSelectedRuleIds();
   const clearCreatedExperiments = useClearCreatedExperiments();
-  const clearRunningMap = useClearRunningMap();
-  const resetDatasetFilters = useResetDatasetFilters();
-  const setDatasetVariables = useSetDatasetVariables();
-  const setExperimentName = useSetExperimentName();
-  const setDatasetType = useSetDatasetType();
+  const resetPlaygroundSession = useResetPlaygroundSession();
   const lastActiveProjectId = useLastActiveProjectId();
   const setLastActiveProjectId = useSetLastActiveProjectId();
 
@@ -127,6 +117,7 @@ const PlaygroundPage = () => {
   const {
     calculateModelProvider,
     calculateDefaultModel,
+    isDropdownModel,
     isFetched: isFetchedModels,
   } = useLLMProviderModelsData();
 
@@ -147,6 +138,7 @@ const PlaygroundPage = () => {
       lastPickedModel,
       providerResolver: calculateModelProvider,
       modelResolver: calculateDefaultModel,
+      isDropdownModel,
     });
     setPromptMap([prompt.id], { [prompt.id]: prompt });
   }, [
@@ -155,30 +147,14 @@ const PlaygroundPage = () => {
     lastPickedModel,
     calculateModelProvider,
     calculateDefaultModel,
+    isDropdownModel,
     setPromptMap,
   ]);
 
   const resetPlayground = useCallback(() => {
     resetPrompts();
-    setDatasetId(null);
-    setSelectedRuleIds(null);
-    clearCreatedExperiments();
-    clearRunningMap();
-    resetDatasetFilters();
-    setDatasetVariables([]);
-    setExperimentName(null);
-    setDatasetType(null);
-  }, [
-    resetPrompts,
-    setDatasetId,
-    setSelectedRuleIds,
-    clearCreatedExperiments,
-    clearRunningMap,
-    resetDatasetFilters,
-    setDatasetVariables,
-    setExperimentName,
-    setDatasetType,
-  ]);
+    resetPlaygroundSession();
+  }, [resetPrompts, resetPlaygroundSession]);
 
   useEffect(() => {
     if (lastActiveProjectId != activeProjectId) {

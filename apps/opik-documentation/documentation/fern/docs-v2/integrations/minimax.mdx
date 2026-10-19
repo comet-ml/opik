@@ -15,19 +15,19 @@ MiniMax provides OpenAI-compatible and Anthropic-compatible APIs for its languag
 
 Install Opik and the SDK for the protocol you plan to use:
 
-```bash
+```bash wordWrap
 pip install opik openai anthropic
 ```
 
 Configure Opik for your deployment:
 
-```bash
+```bash wordWrap
 opik configure
 ```
 
 Set your MiniMax API key:
 
-```bash
+```bash wordWrap
 export MINIMAX_API_KEY="<MINIMAX_API_KEY>"
 ```
 
@@ -46,7 +46,7 @@ You can find additional API details in the [global MiniMax documentation](https:
 
 Wrap the OpenAI client with `track_openai` and pass the MiniMax base URL:
 
-```python
+```python wordWrap
 import os
 
 from openai import OpenAI
@@ -72,7 +72,7 @@ For a China account, change `base_url` to `https://api.minimaxi.com/v1`.
 
 Wrap the Anthropic client with `track_anthropic` and pass the MiniMax base URL:
 
-```python
+```python wordWrap
 import os
 
 import anthropic

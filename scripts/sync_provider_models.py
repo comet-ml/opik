@@ -155,6 +155,16 @@ OPENAI_DROPDOWN_EXCLUDE = [
     r"-chat-latest$",
     r"^o1-preview",
     r"^o1-mini",
+    r"^gpt-live",               # realtime voice model, 400 "not a chat model" on /v1/chat/completions
+]
+
+# Retired, 404 "model: ...". The deprecated filter hid them only while the prices JSON listed them with a
+# deprecation_date; LiteLLM later drops a retired model's entry, and the next sync would show it again.
+ANTHROPIC_DROPDOWN_EXCLUDE = [
+    r"^claude-mythos-preview$",
+    r"^claude-3-7-sonnet-",
+    r"^claude-opus-4-1-",
+    r"^claude-(opus|sonnet)-4-2025",
 ]
 
 GEMINI_DROPDOWN_EXCLUDE = [
@@ -166,6 +176,13 @@ GEMINI_DROPDOWN_EXCLUDE = [
     r"^nano-banana",
     r"-image",
     r"-tts",
+    r"-exp$",                    # experimental, removed without a deprecation date
+    r"^gemini-robotics",         # robotics models, 404 on Vertex AI
+    # Retired: Gemini answers "no longer available", Vertex AI 404. The deprecated filter misses them: their
+    # vertex_ai/ entries have no deprecation_date or are gone, and LiteLLM dropped gemini-3-pro-preview's gemini/ entry.
+    r"^gemini-2\.0-",
+    r"^gemini-3-pro-preview$",
+    r"^gemini-3\.1-flash-lite-preview$",
     # Google removed Gemma 2 and Gemma 3 from the AI Studio Gemini API in
     # April 2026 (replaced by Gemma 4). The LiteLLM prices JSON still ships
     # `gemini/gemma-3-*-it` and `gemini/gemini-gemma-2-*-it` entries, but
@@ -174,11 +191,14 @@ GEMINI_DROPDOWN_EXCLUDE = [
     # sync sources.
     r"^gemma-(2|3)-",
     r"^gemini-gemma-",
+    r"^gemini-omni",             # video generation, 400 "only supports Interactions API" on generateContent
+    r"^lyria-",                  # music generation, answers with audio the playground cannot show
 ]
 
 VERTEXAI_DROPDOWN_EXCLUDE = [
     r"-exp-",                    # experimental
     r"-preview-\d{2}-\d{2}$",   # dated previews
+    r"/gemini-omni",             # video generation, Interactions API only
 ]
 
 
@@ -298,6 +318,7 @@ def filter_for_dropdown(
     """Filter and sort model entries for the frontend dropdown."""
     exclude = {
         "openai": OPENAI_DROPDOWN_EXCLUDE,
+        "anthropic": ANTHROPIC_DROPDOWN_EXCLUDE,
         "gemini": GEMINI_DROPDOWN_EXCLUDE,
         "vertexai": VERTEXAI_DROPDOWN_EXCLUDE,
     }.get(provider, [])
@@ -312,6 +333,9 @@ def filter_for_dropdown(
     filtered = entries
     if exclude:
         filtered = [e for e in filtered if not matches_any(e.value, exclude)]
+    # Vertex AI serves the same Gemini models; the Gemini patterns are ^-anchored, so they match only without the prefix.
+    if provider == "vertexai":
+        filtered = [e for e in filtered if not matches_any(e.value.removeprefix("vertex_ai/"), GEMINI_DROPDOWN_EXCLUDE)]
     if deprecated:
         filtered = [e for e in filtered if e.value not in deprecated]
     if provider == "anthropic":
@@ -842,6 +866,7 @@ def sync_simple_provider(
     label_fn,
     java_format: str = "2arg",
     label_overrides: dict[str, str] | None = None,
+    yaml_structured_output_ids: set[str] | None = None,
 ) -> tuple[str, list[ModelEntry], list[str], list[str]]:
     """Generic add-only sync for OpenAI/Anthropic/Gemini providers.
 
@@ -860,6 +885,7 @@ def sync_simple_provider(
 
     source_dict = {k: so for k, so in source_models}
     label_overrides = label_overrides or {}
+    yaml_structured_output_ids = yaml_structured_output_ids or set()
 
     # Preserve hand-crafted enum names from existing Java entries
     if java_format == "2arg":
@@ -904,7 +930,10 @@ def sync_simple_provider(
         model_entries.append(ModelEntry(
             enum_name=enum_name,
             value=value,
-            structured_output=current_so_by_value.get(value, source_dict.get(value, False)),
+            # A 1-arg enum stores no flag, so a kept model that left the source would otherwise lose the one the YAML has.
+            structured_output=current_so_by_value.get(
+                value, source_dict.get(value, value in yaml_structured_output_ids)
+            ),
             label=label,
         ))
 
@@ -1036,6 +1065,18 @@ def _yaml_sections(yaml_content: str) -> dict[str, list[str]]:
         if current_section is not None:
             current_section.append(line)
     return sections
+
+
+def _yaml_structured_output_ids(yaml_content: str, section: str) -> set[str]:
+    ids: set[str] = set()
+    current_id: str | None = None
+    for line in _yaml_sections(yaml_content).get(section, []):
+        id_match = re.match(r'^\s+- id:\s+"([^"]+)"', line)
+        if id_match:
+            current_id = id_match.group(1)
+        elif current_id and re.match(r'^\s+structuredOutput:\s+true', line):
+            ids.add(current_id)
+    return ids
 
 
 def regenerate_llm_models_yaml(
@@ -1309,6 +1350,7 @@ def main():
     va_java = read_file(VERTEXAI_JAVA)
     providers_ts = read_file(PROVIDERS_TS)
     models_data_ts = read_file(MODELS_DATA_TS)
+    llm_models_yaml_content = read_file(LLM_MODELS_YAML)
 
     # 3. Sync each provider
     all_changes = {}
@@ -1326,6 +1368,7 @@ def main():
     new_an_java, an_entries, an_added, an_stale, an_collisions = sync_simple_provider(
         "anthropic", anthropic_models, an_java, generate_anthropic_label, "1arg",
         label_overrides=anthropic_labels,
+        yaml_structured_output_ids=_yaml_structured_output_ids(llm_models_yaml_content, "anthropic"),
     )
     all_changes["anthropic"] = {"entries": an_entries, "added": an_added, "stale": an_stale, "collisions": an_collisions}
 
@@ -1361,7 +1404,6 @@ def main():
     # every routable model. Dropdown-curated entries lead their provider
     # section in curated order and carry human-readable labels; the rest
     # follow alphabetically without a label.
-    llm_models_yaml_content = read_file(LLM_MODELS_YAML)
     openai_reasoning = _build_reasoning_lookup(prices)
     new_llm_models_yaml = regenerate_llm_models_yaml(
         llm_models_yaml_content, models_by_provider, dropdown_by_provider,

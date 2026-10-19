@@ -2955,6 +2955,26 @@ describe("OpenRouter request contract", () => {
       request: { ...WITHOUT_MAX_TOKENS, maxTokens: 20 },
     },
     {
+      model: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
+      maxTokens: 4000,
+      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 2048 },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
+      maxTokens: 1000,
+      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 1000 },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B_FREE,
+      maxTokens: 9000,
+      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 7372 },
+    },
+    {
+      model: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
+      maxTokens: 9000,
+      request: { ...WITHOUT_MAX_TOKENS, maxTokens: 8192 },
+    },
+    {
       model: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH,
       maxTokens: 0,
       request: omit(WITHOUT_MAX_TOKENS, ["temperature", "topP"]),

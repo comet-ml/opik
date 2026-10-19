@@ -30,7 +30,7 @@ So, once evaluation is completed, you can also [see the results in the UI](#usin
 
 To run the threads evaluation, you can use the following code:
 
-```python
+```python wordWrap
 from opik.evaluation import evaluate_threads
 from opik.evaluation.metrics import ConversationalCoherenceMetric, UserFrustrationMetric
 
@@ -75,7 +75,7 @@ Without transform functions, Opik wouldn't know where to find the actual user qu
 
 Using these functions, the Opik evaluation engine will convert your threads chosen for evaluation into the standardized format expected by all Opik thread evaluation metrics:
 
-```json
+```json wordWrap
 [
     {
         "role": "user",
@@ -100,7 +100,7 @@ Using these functions, the Opik evaluation engine will convert your threads chos
 
 If your trace input has the following structure:
 
-```json
+```json wordWrap
 {
     "content": {
         "user_question": "Tell me about your service?"
@@ -111,7 +111,7 @@ If your trace input has the following structure:
 
 Then your `trace_input_transform` should be:
 
-```python
+```python wordWrap
 lambda x: x["content"]["user_question"]
 ```
 
@@ -124,7 +124,7 @@ Don't want to deal with transformations because your traces don't have a consist
 Relevance and faithfulness metrics need to know what the agent's answer was grounded on. If your agent
 retrieves documents, pass a third transform, `trace_context_transform`, to extract them:
 
-```python
+```python wordWrap
 from opik.evaluation import evaluate_threads
 from opik.evaluation.metrics import ConversationalCoherenceMetric
 
@@ -146,7 +146,7 @@ with no context.
 
 The extracted context is attached to the agent message produced by the same trace:
 
-```json
+```json wordWrap
 [
     {
         "role": "user",
@@ -174,14 +174,14 @@ The `evaluate_threads` function takes a filter string as an argument. This strin
 should be evaluated. For example, if you want to evaluate only threads that have a specific ID, you can use the
 following filter string:
 
-```python
+```python wordWrap
 filter_string='id = "0197ad2a"'
 ```
 
 You can combine multiple filter strings using the `AND` operator. For example, if you want to evaluate only threads
 that have a specific ID and were created after a certain date, you can use the following filter string:
 
-```python
+```python wordWrap
 filter_string='id = "0197ad2a" AND start_time > "2024-01-01T00:00:00Z"'
 ```
 
@@ -225,7 +225,7 @@ The `feedback_scores` field is a dictionary where the keys are the metric names 
 You can use it to filter threads based on their feedback scores. For example, if you want to evaluate only threads
 that have a specific user frustration score, you can use the following filter string:
 
-```python
+```python wordWrap
 filter_string='feedback_scores.user_frustration_score >= 0.5'
 ```
 

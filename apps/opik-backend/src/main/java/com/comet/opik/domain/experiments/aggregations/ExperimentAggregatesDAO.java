@@ -378,6 +378,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND trace_id IN (SELECT trace_id FROM experiment_items)
+                <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND project_id IN :project_ids AND trace_id IN (SELECT trace_id FROM experiment_items))<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 by id
             ), spans_agg AS (
@@ -819,6 +820,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND trace_id IN :trace_ids
+                <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND project_id IN :project_ids AND trace_id IN :trace_ids)<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, id
             )
@@ -1729,6 +1731,12 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         }
     }
 
+    private void addSpanWeeksBound(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
+        }
+    }
+
     private Mono<ExperimentData> getExperimentData(UUID experimentId) {
         return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(GET_EXPERIMENT_DATA,
@@ -1844,6 +1852,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(query, logName, workspaceId, userName, experimentId.toString());
             addTracesPartitionedFlag(template);
+            addSpanWeeksBound(template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
@@ -2006,6 +2015,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             // Only the traces read declares the slot; the siblings are keyed by trace id but partitioned on ids of
             // their own, so the flag is inert for them.
             addTracesPartitionedFlag(template);
+            addSpanWeeksBound(template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
@@ -2199,9 +2209,9 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
      * statement's parameter names — so binding is O(n²) and dominates the aggregation job at that batch
      * size. This path was the first to move, measured at ~500× end-to-end on large batches; it has
      * since become the shared helper that the feedback score, experiment item and dataset item writers
-     * use behind {@code bulkInsert.v2ClientEnabled}.
+     * use.
      *
-     * <p>This one is <b>not</b> behind that toggle. It has always been JSONEachRow, so there is no
+     * <p>This one never had an R2DBC counterpart. It has always been JSONEachRow, so there is no
      * second writer to fall back to and nothing to compare against — the flag exists to A/B paths that
      * have an R2DBC equivalent, and this does not.
      *

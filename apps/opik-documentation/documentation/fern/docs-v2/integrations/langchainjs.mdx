@@ -23,13 +23,13 @@ Opik provides seamless integration with [LangChain](https://js.langchain.com/) t
 
 ### Option 1: Using npm
 
-```bash
+```bash wordWrap
 npm install opik-langchain
 ```
 
 ### Option 2: Using yarn
 
-```bash
+```bash wordWrap
 yarn add opik-langchain
 ```
 
@@ -45,7 +45,7 @@ yarn add opik-langchain
 
 You can add the OpikCallbackHandler in two ways in LangChain: at construction time and at execution time. Here's how to use both approaches:
 
-```typescript
+```typescript wordWrap
 import { OpikCallbackHandler } from "opik-langchain";
 import { ChatOpenAI } from "@langchain/openai";
 
@@ -79,7 +79,7 @@ await opikHandler.flushAsync();
 
 You can also set up the handler to be used across all LangChain components in your application:
 
-```typescript
+```typescript wordWrap
 import { OpikCallbackHandler } from "opik-langchain";
 import { ChatOpenAI } from "@langchain/openai";
 import { PromptTemplate } from "@langchain/core/prompts";
@@ -111,7 +111,7 @@ await opikHandler.flushAsync();
 
 The `OpikCallbackHandler` constructor accepts several options to customize the integration:
 
-```typescript
+```typescript wordWrap
 const opikHandler = new OpikCallbackHandler({
   // Optional array of tags to apply to all traces
   tags: ["langchain", "production", "user-query"],

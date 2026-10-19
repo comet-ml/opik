@@ -15,7 +15,7 @@ As of today, `Opik` does not provide a Ruby SDK. However, you can use the Opik O
 
 You can configure your application to use OpenTelemetry SDK by setting up the following dependencies:
 
-```ruby
+```ruby wordWrap
 # gemfile
 # ... other gems
 
@@ -26,7 +26,7 @@ gem 'opentelemetry-instrumentation-all'
 
 Next, you need to set up the OpenTelemetry SDK and configure it to use the Opik as the traces backend.
 
-```ruby
+```ruby wordWrap
 # opentelemetry_config.rb
 require 'opentelemetry/sdk'
 require 'opentelemetry/exporter/otlp'
@@ -69,7 +69,7 @@ OpenTelemetryConfig.configure
 
 Once configured, you can start using the OpenTelemetry SDK in your application. The following example demonstrates how to create a simple trace and span:
 
-```ruby
+```ruby wordWrap
 # app.rb
 require_relative './opentelemetry_config'
 
