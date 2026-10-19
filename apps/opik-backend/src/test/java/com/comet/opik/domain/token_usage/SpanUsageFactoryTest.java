@@ -146,7 +146,8 @@ class SpanUsageFactoryTest {
         }
 
         // Gemini usage logged under Bedrock (production): Llama's prompt_token_count must not make it Llama usage,
-        // which has no candidates_token_count and would lose the completion.
+        // which has no candidates_token_count and would lose the completion. Google ADK reports LiteLLM's cached
+        // prompt tokens as cached_content_token_count, inside the prompt (issue #7773).
         @Test
         void createWhenBedrockUsageIsGeminiShapedReadsTheSdkTotals() {
             var usage = usage("prompt_tokens", 55659, "completion_tokens", 438, "total_tokens", 56097,
@@ -156,7 +157,7 @@ class SpanUsageFactoryTest {
             var spanUsage = SpanUsageFactory.create("bedrock", usage);
 
             assertThat(spanUsage.nativeUsage()).isInstanceOf(OpenAiNativeUsage.class);
-            assertThat(spanUsage.openAiLike()).isEqualTo(OpenAiLikeUsage.of(55659, 438, 56097, 0));
+            assertThat(spanUsage.openAiLike()).isEqualTo(OpenAiLikeUsage.of(55659, 438, 56097, 54719));
         }
     }
 

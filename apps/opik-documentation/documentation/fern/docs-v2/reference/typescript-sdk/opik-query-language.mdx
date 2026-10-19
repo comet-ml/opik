@@ -13,7 +13,7 @@ OQL provides a powerful, SQL-like syntax for filtering data in Opik. It's used w
 
 ### String Operators
 
-```typescript
+```typescript wordWrap
 // Exact match
 'name = "greeting-prompt"';
 
@@ -35,7 +35,7 @@ OQL provides a powerful, SQL-like syntax for filtering data in Opik. It's used w
 
 ### Comparison Operators
 
-```typescript
+```typescript wordWrap
 // Greater than (alphabetical for strings, numeric for numbers)
 'name > "m"'; // Names starting with n-z
 'duration > 300'; // Threads longer than 300 seconds
@@ -53,7 +53,7 @@ OQL provides a powerful, SQL-like syntax for filtering data in Opik. It's used w
 
 ### Numeric Operators
 
-```typescript
+```typescript wordWrap
 // Equality
 'number_of_messages = 3';
 
@@ -69,7 +69,7 @@ OQL provides a powerful, SQL-like syntax for filtering data in Opik. It's used w
 
 ### DateTime Operators
 
-```typescript
+```typescript wordWrap
 // Use ISO 8601 format for dates
 'start_time >= "2024-01-01T00:00:00Z"';
 'end_time < "2024-12-31T23:59:59Z"';
@@ -79,7 +79,7 @@ OQL provides a powerful, SQL-like syntax for filtering data in Opik. It's used w
 
 Used for fields with a fixed set of values, such as `environment`:
 
-```typescript
+```typescript wordWrap
 // Exact match
 'environment = "production"';
 
@@ -95,7 +95,7 @@ Used for fields with a fixed set of values, such as `environment`:
 
 ### List Operators
 
-```typescript
+```typescript wordWrap
 // Check if list contains value
 'tags contains "production"';
 
@@ -107,7 +107,7 @@ Used for fields with a fixed set of values, such as `environment`:
 
 Use `AND` to combine multiple filter conditions. All conditions must be true for a result to match:
 
-```typescript
+```typescript wordWrap
 // Multiple conditions with AND
 'tags contains "production" AND name contains "greeting" AND created_by = "user@example.com"';
 
@@ -123,7 +123,7 @@ Use `AND` to combine multiple filter conditions. All conditions must be true for
 
 ### Searching Prompts
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();
@@ -144,7 +144,7 @@ const results = await client.searchPrompts(
 
 ### Searching Threads
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();
@@ -200,7 +200,7 @@ const recentThreads = await client.searchThreads({
 
 ### Searching Traces
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();
@@ -241,7 +241,7 @@ const goodProdTraces = await client.searchTraces({
 
 Always wrap string values in double quotes:
 
-```typescript
+```typescript wordWrap
 // ✅ Correct - double quotes around values
 await client.searchPrompts('name = "my-prompt"');
 await client.searchPrompts('tags contains "production"');
@@ -255,7 +255,7 @@ await client.searchPrompts("name = 'my-prompt'"); // Will fail
 
 ### Error Handling
 
-```typescript
+```typescript wordWrap
 try {
   const results = await client.searchPrompts("invalid syntax ===");
 } catch (error) {

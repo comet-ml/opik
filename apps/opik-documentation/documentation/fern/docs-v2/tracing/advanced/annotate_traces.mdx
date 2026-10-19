@@ -22,7 +22,7 @@ conversation flows, you can:
 You can use the SDKs to log user feedback and score traces:
 
 <CodeBlocks>
-```typescript title="Typescript SDK" language="typescript"
+```typescript title="Typescript SDK" language="typescript" wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();
@@ -57,7 +57,7 @@ client.logSpansFeedbackScores([
 await client.flush();
 ```
 
-```python title="Python Function Decorator" language="python"
+```python title="Python Function Decorator" language="python" wordWrap
 import opik
 from opik import opik_context
 
@@ -76,7 +76,7 @@ def my_function():
   return "Hello, world!"
 ```
 
-```python title="Python SDK" language="python"
+```python title="Python SDK" language="python" wordWrap
 import opik
 
 client = opik.Opik()

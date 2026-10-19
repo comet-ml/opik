@@ -54,4 +54,13 @@ interface ReportFailureDAO {
     long count(@Bind("workspaceId") String workspaceId,
             @Bind("type") String type,
             @Bind("projectId") UUID projectId);
+
+    @SqlQuery("""
+            SELECT COUNT(*) FROM report_failures
+            WHERE workspace_id = :workspaceId AND type = :type AND project_id = :projectId AND reason = :reason
+            """)
+    long countByReason(@Bind("workspaceId") String workspaceId,
+            @Bind("type") String type,
+            @Bind("projectId") UUID projectId,
+            @Bind("reason") String reason);
 }

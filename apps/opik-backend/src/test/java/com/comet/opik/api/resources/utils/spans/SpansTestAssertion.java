@@ -48,7 +48,8 @@ public final class SpansTestAssertion implements SpanPageTestAssertion<Span, Spa
                 List.of(),
                 List.of(),
                 queryParams.get("from_time"),
-                queryParams.get("to_time"));
+                queryParams.get("to_time"),
+                queryParams.get("search"));
 
         SpanAssertions.assertPage(actualPage, page, expected.size(), expected.size());
         assertSpan(actualPage.content(), expected, unexpected, userName);

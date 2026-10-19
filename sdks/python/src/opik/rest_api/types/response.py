@@ -19,6 +19,11 @@ class Response(UniversalBaseModel):
     Ids whose automatic run already happened, so enrolling has no effect
     """
 
+    reset_project_ids: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Ids whose automatic run never finished, so clearing forgot it and enrolling them again gives it one more free run
+    """
+
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
     else:
