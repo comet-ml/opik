@@ -1193,6 +1193,15 @@ public class SpanDAO {
             SETTINGS log_comment = '<log_comment>'
             """;
 
+    /**
+     * The total of the spans list: the distinct spans with at least one version matching the filters, the set
+     * {@link #SELECT_BY_PROJECT_ID} pages through.
+     * <p>
+     * It counts in the level that reads {@code spans}. When {@code spans} is a {@code Distributed} table, each subquery
+     * reading it runs on the shard, so a count one level up would make the shard ship every id of the project to the
+     * initiator; this one comes back from the shard as one finished row, as {@link #SELECT_SPANS_STATS} does
+     * (OPIK-8833).
+     */
     private static final String COUNT_BY_PROJECT_ID = """
             <if(feedback_scores_filters || feedback_scores_empty_filters)>
             WITH <if(span_id_prefilter)>span_id_prefilter AS (
@@ -1283,53 +1292,44 @@ public class SpanDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
-            SELECT
-                count(id) as count
-            FROM
-            (
-               SELECT
-                    id,
-                    duration
+            SELECT count(DISTINCT id) AS count
+            FROM spans
+            <if(feedback_scores_empty_filters)>
+                LEFT JOIN fsc ON fsc.entity_id = spans.id
+            <endif>
+            WHERE project_id = :project_id
+            AND workspace_id = :workspace_id
+            <if(uuid_from_time)> AND id >= :uuid_from_time
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+            <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+            <if(trace_id)> AND trace_id = :trace_id <endif>
+            <if(type)> AND type = :type <endif>
+            <if(filters)> AND <filters> <endif>
+            <if(search_text)> AND <search_text> <endif>
+            <if(spans_partitioned && search_text)>
+            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                 FROM spans
-                <if(feedback_scores_empty_filters)>
-                    LEFT JOIN fsc ON fsc.entity_id = spans.id
-                <endif>
-                WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
-                <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                <if(trace_id)> AND trace_id = :trace_id <endif>
-                <if(type)> AND type = :type <endif>
-                <if(filters)> AND <filters> <endif>
-                <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned && search_text)>
-                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                    FROM spans
-                    WHERE workspace_id = :workspace_id AND project_id = :project_id
-                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
-                    <if(trace_id)> AND trace_id = :trace_id<endif>)
-                <endif>
-                <if(feedback_scores_filters)>
-                AND id in (
-                    SELECT
-                        entity_id
-                    FROM feedback_scores_final
-                    GROUP BY entity_id
-                    HAVING <feedback_scores_filters>
-                )
-                <endif>
-                <if(feedback_scores_empty_filters)>
-                AND fsc.feedback_scores_count = 0
-                <endif>
-                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ) AS latest_rows
+                WHERE workspace_id = :workspace_id AND project_id = :project_id
+                <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                <if(trace_id)> AND trace_id = :trace_id<endif>)
+            <endif>
+            <if(feedback_scores_filters)>
+            AND id in (
+                SELECT
+                    entity_id
+                FROM feedback_scores_final
+                GROUP BY entity_id
+                HAVING <feedback_scores_filters>
+            )
+            <endif>
+            <if(feedback_scores_empty_filters)>
+            AND fsc.feedback_scores_count = 0
+            <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1500,9 +1500,10 @@ public class SpanDAO {
     /**
      * Split-A of the span stats: the per-project span aggregates, computed in the level that reads {@code spans FINAL}
      * ({@code spans_stats}). When {@code spans} is a {@code Distributed} table, each subquery reading it runs on the
-     * shard, so an aggregate one level up would make the shard ship every row of the project to the initiator.
-     * Grouped by {@code project_id}, the sharding key, the shard returns one partially aggregated row instead, which the
-     * initiator merges (OPIK-8833).
+     * shard, so an aggregate one level up would make the shard ship every row of the project to the initiator. Here
+     * the shard returns the finished row instead (OPIK-8833): a read filtered on {@code project_id}, the sharding key,
+     * reaches only the project's shard ({@code optimize_skip_unused_shards}, which the app sets), and ClickHouse
+     * completes a single-shard read on that shard.
      * <p>
      * The aggregates get their output names one level up, because ClickHouse resolves a {@code WHERE} identifier to a
      * same-named {@code SELECT} alias first: an alias such as {@code duration}, {@code tags}, {@code usage},
@@ -1775,7 +1776,6 @@ public class SpanDAO {
             )
             <endif>
             , spans_final AS (
-                -- IMPORTANT: keep this WHERE clause in sync with SELECT_SPANS_STATS.spans_stats.
                 SELECT id, project_id
                 FROM spans final
                 <if(feedback_scores_empty_filters)>
