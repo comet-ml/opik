@@ -2363,20 +2363,27 @@ aiLabels:
     credential: ${AI_LABELS_INFERENCE_CREDENTIAL:-}
     connectTimeout: ${AI_LABELS_INFERENCE_CONNECT_TIMEOUT:-5s}
     readTimeout: ${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}
+  #  Default: 16777216 (16 MiB, about 3 minutes of one L40S on the 4B model at 22K tokens/s)
+  #  Description: Global in-flight work: the cost of submitted items not yet loaded. Set as throughput x the queue time accepted
+  budgetBytes: ${AI_LABELS_BUDGET_BYTES:-16777216}
   #  Default: 2000
-  #  Description: Global in-flight engine calls (decide items × questions, plus generate items)
-  budgetEngineCalls: ${AI_LABELS_BUDGET_ENGINE_CALLS:-2000}
-  tickInterval: ${AI_LABELS_TICK_INTERVAL:-30s}
+  #  Description: An item's cost per engine call beyond its request bytes. Fit from the pool's load test
+  perCallBytes: ${AI_LABELS_PER_CALL_BYTES:-2000}
+  #  Default: 16384 (16 KiB)
+  #  Description: The least an item costs. At most budgetBytes / (2 x the dispatchers' batch slots)
+  minItemBytes: ${AI_LABELS_MIN_ITEM_BYTES:-16384}
+  tickInterval: ${AI_LABELS_TICK_INTERVAL:-60s}
   tickBudget: ${AI_LABELS_TICK_BUDGET:-25s}
-  sweepInterval: ${AI_LABELS_SWEEP_INTERVAL:-1m}
+  #  Default: 55s
+  #  Description: Under tickInterval, so every tick sweeps; a tick only submits what its own sweep found
+  sweepInterval: ${AI_LABELS_SWEEP_INTERVAL:-55s}
   healthInterval: ${AI_LABELS_HEALTH_INTERVAL:-5m}
-  pollInterval: ${AI_LABELS_POLL_INTERVAL:-30s}
-  #  Default: 7d
-  #  Description: H, how far back (by trace created_at) traces are labeled
-  horizon: ${AI_LABELS_HORIZON:-7d}
-  #  Default: 30m
+  #  Default: 24h
+  #  Description: H, how far back (by trace created_at) traces are labeled; under overload the oldest age out of it
+  horizon: ${AI_LABELS_HORIZON:-24h}
+  #  Default: 1h
   #  Description: Q, how long a trace must go without updates before it is labeled
-  quietPeriod: ${AI_LABELS_QUIET_PERIOD:-30m}
+  quietPeriod: ${AI_LABELS_QUIET_PERIOD:-1h}
   sloSlack: ${AI_LABELS_SLO_SLACK:-15m}
   retry:
     #  Default: 2
@@ -2385,29 +2392,54 @@ aiLabels:
     #  Default: 15m
     #  Description: D, the wait before a retryable failure is picked up again
     delay: ${AI_LABELS_RETRY_DELAY:-15m}
-  #  Default: 24h
-  #  Description: P, a pending status older than this is treated as an orphan and resubmitted
-  pendingOrphanAge: ${AI_LABELS_PENDING_ORPHAN_AGE:-24h}
+  #  Default: 1000
+  #  Description: The most traces one submit turn renders
   chunkTraces: ${AI_LABELS_CHUNK_TRACES:-1000}
-  #  Default: 10000
-  #  Description: C, the most candidates one sweep returns per workspace
-  perWorkspaceCandidates: ${AI_LABELS_PER_WORKSPACE_CANDIDATES:-10000}
-  #  Default: 33554432 (32 MiB; the service's limit is 128 MiB)
-  maxJobBytes: ${AI_LABELS_MAX_JOB_BYTES:-33554432}
-  #  Default: 80000 (about 20k tokens at UTF-8 bytes / 4)
+  #  Default: 4
+  #  Description: Finished jobs whose results are read in parallel
+  loadConcurrency: ${AI_LABELS_LOAD_CONCURRENCY:-4}
+  #  Default: 200000
+  #  Description: A tick stops starting job loads once it holds this many label and status rows
+  loadMaxRows: ${AI_LABELS_LOAD_MAX_ROWS:-200000}
+  #  Default: 2000
+  #  Description: C, the most candidates one sweep returns per workspace. About 2 x budgetBytes / minItemBytes, the most
+  #  traces one tick admits; scale it with the budget
+  perWorkspaceCandidates: ${AI_LABELS_PER_WORKSPACE_CANDIDATES:-2000}
+  #  Default: 2097152 (2 MiB; the opik-inference gateway rejects bodies over 8 MiB)
+  maxJobBytes: ${AI_LABELS_MAX_JOB_BYTES:-2097152}
+  #  Default: 49152 (48 KiB, about 12k tokens at UTF-8 bytes / 4)
   #  Description: The rendered trace's share of the model input
-  renderBudgetBytes: ${AI_LABELS_RENDER_BUDGET_BYTES:-80000}
+  renderBudgetBytes: ${AI_LABELS_RENDER_BUDGET_BYTES:-49152}
   modelInputBudgetBytes: ${AI_LABELS_MODEL_INPUT_BUDGET_BYTES:-100000}
   renderThreads: ${AI_LABELS_RENDER_THREADS:-4}
-  maxSpansPerTrace: ${AI_LABELS_MAX_SPANS_PER_TRACE:-2000}
+  #  Default: 200
+  #  Description: A trace's spans are read in start order up to this many; 200 keeps every span of 99.8% of traces
+  maxSpansPerTrace: ${AI_LABELS_MAX_SPANS_PER_TRACE:-200}
+  #  Default: 16777216 (16 MiB)
+  #  Description: A trace's spans are read in start order up to this much input and output
+  maxSpanBytesPerTrace: ${AI_LABELS_MAX_SPAN_BYTES_PER_TRACE:-16777216}
+  #  Default: 67108864 (64 MiB)
+  #  Description: A chunk's spans are read in batches of traces up to this much span input and output
+  renderReadBytes: ${AI_LABELS_RENDER_READ_BYTES:-67108864}
   #  Default: 1048576 (1 MiB)
   #  Description: A larger trace or span field is replaced whole in SQL, before it reaches the JVM
   maxFieldBytes: ${AI_LABELS_MAX_FIELD_BYTES:-1048576}
+  history:
+    #  Default: 20
+    #  Description: K, the most earlier turns of a trace's thread read for tasks that use {{history}}
+    turns: ${AI_LABELS_HISTORY_TURNS:-20}
+    #  Default: 2048
+    #  Description: Each earlier turn's input and output is cut in the middle to this many UTF-8 bytes
+    maxFieldBytes: ${AI_LABELS_HISTORY_MAX_FIELD_BYTES:-2048}
+    #  Default: 24h
+    #  Description: Earlier turns whose id time is more than this before the trace's are not read
+    lookback: ${AI_LABELS_HISTORY_LOOKBACK:-24h}
   sweep:
     #  Default: 8
     #  Description: N, enabled workspaces are split into this many buckets, one sweep query each
     buckets: ${AI_LABELS_SWEEP_BUCKETS:-8}
     maxRowsToRead: ${AI_LABELS_SWEEP_MAX_ROWS_TO_READ:-30000000}
-    #  Default: 4294967296 (4 GiB)
-    maxMemoryUsage: ${AI_LABELS_SWEEP_MAX_MEMORY_USAGE:-4294967296}
+    #  Default: 1073741824 (1 GiB)
+    #  Description: Per sweep query on the shared ClickHouse; a trip skips that bucket for the tick
+    maxMemoryUsage: ${AI_LABELS_SWEEP_MAX_MEMORY_USAGE:-1073741824}
     maxExecutionTime: ${AI_LABELS_SWEEP_MAX_EXECUTION_TIME:-50s}

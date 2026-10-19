@@ -23,7 +23,7 @@ import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 
 /**
- * {@code ai_label_status}: the pipeline state, one row per (trace, task) whose latest row is authoritative. Writes are
+ * {@code ai_label_status}: the outcome of each (trace, task), whose latest row is authoritative. Writes are
  * plain batched inserts; {@code updated_at} is stamped by ClickHouse. Reads dedupe explicitly with {@code LIMIT 1 BY}
  * and never rely on merges. The sweep and headline queries live with the sweep.
  */
@@ -45,30 +45,6 @@ public class AiLabelStatusDAO {
             AND trace_id IN :trace_ids
             ORDER BY workspace_id, project_id, task, trace_id, updated_at DESC
             LIMIT 1 BY workspace_id, project_id, task, trace_id
-            SETTINGS log_comment = '<log_comment>'
-            """;
-
-    /**
-     * The (trace, task) pairs still pending in one job. The bloom filter on {@code job_id} only finds the candidate
-     * keys: a key's later rows may carry another job (a resubmission), so the job and status are checked on the latest
-     * row of each candidate.
-     */
-    private static final String PENDING_TRACE_TASKS = """
-            SELECT * FROM (
-                SELECT workspace_id, project_id, task, trace_id, trace_created_at, task_version, renderer_version,
-                    status, retryable, attempt, error_code, job_id, compaction_level
-                FROM ai_label_status
-                WHERE workspace_id = :workspace_id
-                AND (project_id, task, trace_id) IN (
-                    SELECT project_id, task, trace_id FROM ai_label_status
-                    WHERE workspace_id = :workspace_id
-                    AND job_id = :job_id
-                )
-                ORDER BY workspace_id, project_id, task, trace_id, updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, task, trace_id
-            )
-            WHERE job_id = :job_id
-            AND status = 'pending'
             SETTINGS log_comment = '<log_comment>'
             """;
 
@@ -113,17 +89,6 @@ public class AiLabelStatusDAO {
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
                         .bind("trace_ids", traceIds.stream().map(UUID::toString).toArray(String[]::new))
-                        .execute())
-                .flatMap(result -> result.map((row, metadata) -> toStatus(row)));
-    }
-
-    public Flux<AiLabelStatus> pendingTraceTasks(@NonNull String workspaceId, @NonNull String jobId) {
-        var template = getSTWithLogComment(PENDING_TRACE_TASKS, "ai-labels:pending_trace_tasks", workspaceId, null,
-                "job_id=%s".formatted(jobId));
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement(template.render())
-                        .bind("workspace_id", workspaceId)
-                        .bind("job_id", jobId)
                         .execute())
                 .flatMap(result -> result.map((row, metadata) -> toStatus(row)));
     }

@@ -10,8 +10,8 @@ import lombok.RequiredArgsConstructor;
 import java.time.Instant;
 
 /**
- * One row of {@code ai_label_jobs}: an opik-inference batch job. {@code engineCalls} is what it costs against the
- * in-flight budget while {@code submitted}.
+ * One row of {@code ai_label_jobs}: an opik-inference batch job. {@code bytes}, its items' cost, is what it costs
+ * against the in-flight budget while {@code submitted}.
  */
 @Builder(toBuilder = true)
 public record AiLabelJob(
@@ -20,10 +20,9 @@ public record AiLabelJob(
         @NonNull AiLabelEndpoint endpoint,
         boolean cache,
         int itemCount,
-        int engineCalls,
+        long bytes,
         @NonNull Status status,
         @NonNull Instant submittedAt,
-        @Nullable Instant lastPolledAt,
         @Nullable Instant terminalAt) {
 
     @Getter

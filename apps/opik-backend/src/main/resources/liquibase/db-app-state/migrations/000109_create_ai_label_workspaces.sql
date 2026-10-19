@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset collinc:000107_create_ai_label_workspaces
+--changeset collinc:000109_create_ai_label_workspaces
 --comment: The ai-labels opt-in: workspaces whose ended traces are labeled while aiLabels.enabled is on
 
 -- Onboarding is a row change, not a deploy. A disabled workspace keeps its row (and its labels); the next sweep drops

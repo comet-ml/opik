@@ -121,63 +121,29 @@ class AiLabelsStorageTest {
     class Status {
 
         @Test
-        @DisplayName("pending, then done, then failed reads back as failed, before and after OPTIMIZE FINAL")
+        @DisplayName("failed, then done, then failed reads back as the last, before and after OPTIMIZE FINAL")
         void latestRowWins() {
             var workspaceId = UUID.randomUUID().toString();
-            var pending = status(workspaceId, UUID.randomUUID(), ID_GENERATOR.generateId(), "summary",
-                    AiLabelStatus.Status.PENDING, "job-" + UUID.randomUUID());
-            var done = pending.toBuilder().status(AiLabelStatus.Status.DONE).build();
-            var failed = pending.toBuilder()
+            var first = status(workspaceId, UUID.randomUUID(), ID_GENERATOR.generateId(), "summary",
+                    AiLabelStatus.Status.FAILED, "job-" + UUID.randomUUID());
+            var done = first.toBuilder().status(AiLabelStatus.Status.DONE).build();
+            var failed = first.toBuilder()
                     .status(AiLabelStatus.Status.FAILED)
                     .retryable(true)
                     .attempt(2)
                     .errorCode("job_lost")
                     .build();
 
-            insert(pending);
+            insert(first);
             insert(done);
             insert(failed);
 
-            assertThat(findLatestStatus(workspaceId, pending.traceId())).containsExactly(failed);
+            assertThat(findLatestStatus(workspaceId, first.traceId())).containsExactly(failed);
 
             optimizeFinal(AiLabelStatusDAO.TABLE);
 
             assertThat(countRows(AiLabelStatusDAO.TABLE, workspaceId)).isOne();
-            assertThat(findLatestStatus(workspaceId, pending.traceId())).containsExactly(failed);
-        }
-
-        @Test
-        @DisplayName("pendingTraceTasks finds the pending rows of one job, among other jobs and workspaces")
-        void pendingTraceTasksFindsOneJob() {
-            var workspaceId = UUID.randomUUID().toString();
-            var otherWorkspaceId = UUID.randomUUID().toString();
-            var projectId = UUID.randomUUID();
-            var jobId = "job-" + UUID.randomUUID();
-            var otherJobId = "job-" + UUID.randomUUID();
-            var resubmittedJobId = "job-" + UUID.randomUUID();
-            var pendingTraceId = ID_GENERATOR.generateId();
-            var doneTraceId = ID_GENERATOR.generateId();
-            var resubmittedTraceId = ID_GENERATOR.generateId();
-
-            var pendingSummary = status(workspaceId, projectId, pendingTraceId, "summary",
-                    AiLabelStatus.Status.PENDING, jobId);
-            var pendingTopic = pendingSummary.toBuilder().task("topic").build();
-            var done = status(workspaceId, projectId, doneTraceId, "summary", AiLabelStatus.Status.PENDING, jobId);
-            var resubmitted = status(workspaceId, projectId, resubmittedTraceId, "summary",
-                    AiLabelStatus.Status.PENDING, jobId);
-
-            statusDAO.insert(List.of(pendingSummary, pendingTopic, done, resubmitted,
-                    status(workspaceId, projectId, ID_GENERATOR.generateId(), "summary",
-                            AiLabelStatus.Status.PENDING, otherJobId),
-                    status(otherWorkspaceId, projectId, ID_GENERATOR.generateId(), "summary",
-                            AiLabelStatus.Status.PENDING, jobId)))
-                    .block();
-            insert(done.toBuilder().status(AiLabelStatus.Status.DONE).build());
-            insert(resubmitted.toBuilder().jobId(resubmittedJobId).attempt(2).build());
-
-            var actual = statusDAO.pendingTraceTasks(workspaceId, jobId).collectList().block();
-
-            assertThat(actual).containsExactlyInAnyOrder(pendingSummary, pendingTopic);
+            assertThat(findLatestStatus(workspaceId, first.traceId())).containsExactly(failed);
         }
 
         @Test
@@ -261,12 +227,15 @@ class AiLabelsStorageTest {
 
         @BeforeEach
         void clear() {
-            template.inTransaction(WRITE, handle -> handle.execute("DELETE FROM ai_label_jobs"));
+            template.inTransaction(WRITE, handle -> {
+                handle.execute("DELETE FROM ai_label_jobs");
+                return handle.execute("DELETE FROM ai_label_job_items");
+            });
         }
 
         @Test
-        @DisplayName("inFlightEngineCalls sums only submitted jobs")
-        void inFlightEngineCallsSumsSubmittedJobs() {
+        @DisplayName("inFlightBytes sums only submitted jobs")
+        void inFlightBytesSumsSubmittedJobs() {
             insertJob(job(AiLabelEndpoint.DECIDE, 10));
             insertJob(job(AiLabelEndpoint.GENERATE, 5));
             insertJob(job(AiLabelEndpoint.DECIDE, 100).toBuilder()
@@ -274,30 +243,61 @@ class AiLabelsStorageTest {
                     .terminalAt(now())
                     .build());
 
-            assertThat(inFlightEngineCalls()).isEqualTo(15);
+            assertThat(inFlightBytes()).isEqualTo(15);
         }
 
         @Test
-        @DisplayName("due returns submitted jobs not polled within the interval, least recently polled first")
-        void due() {
-            var polled = job(AiLabelEndpoint.DECIDE, 1);
-            var neverPolled = job(AiLabelEndpoint.GENERATE, 1);
+        @DisplayName("submitted lists only submitted jobs, oldest first")
+        void submitted() {
+            var older = job(AiLabelEndpoint.DECIDE, 1);
+            var newer = job(AiLabelEndpoint.GENERATE, 1).toBuilder().submittedAt(now().plusSeconds(1)).build();
             var loaded = job(AiLabelEndpoint.DECIDE, 1);
-            insertJob(polled);
-            insertJob(neverPolled);
+            insertJob(newer);
+            insertJob(older);
             insertJob(loaded);
-            withJobs(dao -> dao.markPolled(polled.jobId()));
-            withJobs(dao -> dao.markLoaded(loaded.jobId(), now()));
+            withJobs(dao -> dao.markLoaded(List.of(loaded.jobId()), now()));
 
-            List<AiLabelJob> dueWithinInterval = withJobs(dao -> dao.due(Duration.ofMinutes(5), 10));
-            assertThat(dueWithinInterval).containsExactly(neverPolled);
+            List<AiLabelJob> submitted = withJobs(AiLabelJobDAO::submitted);
+            assertThat(submitted).containsExactly(older, newer);
+        }
 
-            List<AiLabelJob> dueNow = withJobs(dao -> dao.due(Duration.ZERO, 10));
-            assertThat(dueNow).extracting(AiLabelJob::jobId).containsExactly(neverPolled.jobId(), polled.jobId());
-            assertThat(dueNow.getLast().lastPolledAt()).isNotNull();
+        @Test
+        @DisplayName("job items round-trip, list the in-flight traces per workspace, and are deleted per job")
+        void jobItems() {
+            var workspaceId = UUID.randomUUID().toString();
+            var otherWorkspaceId = UUID.randomUUID().toString();
+            var traceId = ID_GENERATOR.generateId();
+            var otherTraceId = ID_GENERATOR.generateId();
+            var item = AiLabelJobItem.builder()
+                    .jobId("job-" + UUID.randomUUID())
+                    .workspaceId(workspaceId)
+                    .projectId(UUID.randomUUID())
+                    .traceId(traceId)
+                    .traceCreatedAt(now())
+                    .task("summary")
+                    .taskVersion(2)
+                    .rendererVersion(1)
+                    .compactionLevel("output_truncated:4096")
+                    .attempt(1)
+                    .build();
+            var sameTraceOtherTask = item.toBuilder().task("topic").build();
+            var otherJob = item.toBuilder().jobId("job-" + UUID.randomUUID()).traceId(otherTraceId).build();
+            var otherWorkspace = otherJob.toBuilder().workspaceId(otherWorkspaceId)
+                    .traceId(ID_GENERATOR.generateId()).build();
+            withJobs(dao -> {
+                dao.insertItems(List.of(item, sameTraceOtherTask, otherJob, otherWorkspace));
+                return null;
+            });
 
-            List<AiLabelJob> dueLimited = withJobs(dao -> dao.due(Duration.ZERO, 1));
-            assertThat(dueLimited).containsExactly(neverPolled);
+            List<AiLabelJobItem> found = withJobs(dao -> dao.findItems(List.of(item.jobId())));
+            assertThat(found).containsExactlyInAnyOrder(item, sameTraceOtherTask);
+            List<String> inFlight = withJobs(dao -> dao.inFlightTraceIds(List.of(workspaceId)));
+            assertThat(inFlight).containsExactlyInAnyOrder(traceId.toString(), otherTraceId.toString());
+
+            int deleted = withJobs(dao -> dao.deleteItems(List.of(item.jobId())));
+            assertThat(deleted).isEqualTo(2);
+            List<String> stillInFlight = withJobs(dao -> dao.inFlightTraceIds(List.of(workspaceId)));
+            assertThat(stillInFlight).containsExactly(otherTraceId.toString());
         }
 
         @Test
@@ -311,23 +311,23 @@ class AiLabelsStorageTest {
             insertJob(submitted);
             var cutoff = now().minus(7, ChronoUnit.DAYS);
 
-            withJobs(dao -> dao.markLoaded(oldLoaded.jobId(), cutoff.minus(1, ChronoUnit.HOURS)));
-            withJobs(dao -> dao.markLoaded(recentLoaded.jobId(), now()));
+            withJobs(dao -> dao.markLoaded(List.of(oldLoaded.jobId()), cutoff.minus(1, ChronoUnit.HOURS)));
+            withJobs(dao -> dao.markLoaded(List.of(recentLoaded.jobId()), now()));
 
-            assertThat(inFlightEngineCalls()).isEqualTo(5);
+            assertThat(inFlightBytes()).isEqualTo(5);
             int deleted = withJobs(dao -> dao.deleteLoadedBefore(cutoff));
             assertThat(deleted).isOne();
             assertThat(jobIds()).containsExactlyInAnyOrder(recentLoaded.jobId(), submitted.jobId());
         }
 
-        private AiLabelJob job(AiLabelEndpoint endpoint, int engineCalls) {
+        private AiLabelJob job(AiLabelEndpoint endpoint, int bytes) {
             return AiLabelJob.builder()
                     .jobId("job-" + UUID.randomUUID())
                     .workspaceId(UUID.randomUUID().toString())
                     .endpoint(endpoint)
                     .cache(endpoint == AiLabelEndpoint.GENERATE)
-                    .itemCount(engineCalls)
-                    .engineCalls(engineCalls)
+                    .itemCount(1)
+                    .bytes(bytes)
                     .status(AiLabelJob.Status.SUBMITTED)
                     .submittedAt(now())
                     .build();
@@ -340,8 +340,8 @@ class AiLabelsStorageTest {
             });
         }
 
-        private long inFlightEngineCalls() {
-            return withJobs(AiLabelJobDAO::inFlightEngineCalls);
+        private long inFlightBytes() {
+            return withJobs(AiLabelJobDAO::inFlightBytes);
         }
 
         private List<String> jobIds() {

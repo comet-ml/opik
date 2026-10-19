@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset collinc:000135_create_ai_labels
+--changeset collinc:000140_create_ai_labels
 --comment: Create ai_labels, the ai-labels values: one row per (trace, task, key), typed so values are queryable without parsing
 
 -- ai_labels holds the AI-generated labels. key is a question id (without its task prefix), or 'output' for a generate
@@ -10,7 +10,7 @@
 --     explicitly (LIMIT 1 BY the sort key) and take each key's latest task_version.
 --   * id_at and the partition key are traces_local_v2's (000114), derived from trace_id, so labels follow their
 --     trace's weekly partition and retention's week predicate prunes them the same way.
--- Codecs follow traces_local_v2 (see 000134_create_ai_label_status).
+-- Codecs follow traces_local_v2 (see 000139_create_ai_label_status).
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.ai_labels ON CLUSTER '{cluster}'
 (
     workspace_id  String                                                          CODEC(ZSTD(3)),

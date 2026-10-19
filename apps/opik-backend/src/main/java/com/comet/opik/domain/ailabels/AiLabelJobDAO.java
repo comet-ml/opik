@@ -1,61 +1,68 @@
 package com.comet.opik.domain.ailabels;
 
 import com.comet.opik.infrastructure.db.AbstractEnumColumnMapper;
+import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 
 /**
- * The opik-inference jobs ai-labels has submitted. Timestamps the poller compares are taken from MySQL's clock, so pods
- * with skewed clocks agree on which jobs are due.
+ * The opik-inference jobs ai-labels has submitted, and the (trace, task) items of those still in flight. A job and its
+ * items are written in one transaction, and its items are deleted in the one that marks it loaded.
  */
 @RegisterArgumentFactory(AiLabelJobDAO.EndpointMapper.class)
 @RegisterArgumentFactory(AiLabelJobDAO.StatusMapper.class)
+@RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterColumnMapper(AiLabelJobDAO.EndpointMapper.class)
 @RegisterColumnMapper(AiLabelJobDAO.StatusMapper.class)
 @RegisterConstructorMapper(AiLabelJob.class)
+@RegisterConstructorMapper(AiLabelJobItem.class)
 public interface AiLabelJobDAO {
 
     @SqlUpdate("""
-            INSERT INTO ai_label_jobs (job_id, workspace_id, endpoint, cache, item_count, engine_calls, status,
-                submitted_at, last_polled_at, terminal_at)
-            VALUES (:jobId, :workspaceId, :endpoint, :cache, :itemCount, :engineCalls, :status,
-                :submittedAt, :lastPolledAt, :terminalAt)
+            INSERT INTO ai_label_jobs (job_id, workspace_id, endpoint, cache, item_count, bytes, status, submitted_at,
+                terminal_at)
+            VALUES (:jobId, :workspaceId, :endpoint, :cache, :itemCount, :bytes, :status, :submittedAt, :terminalAt)
             """)
     void insert(@BindMethods AiLabelJob job);
 
-    /** Submitted jobs not polled within {@code pollInterval}, never-polled and least recently polled first. */
-    default List<AiLabelJob> due(Duration pollInterval, int limit) {
-        return due(pollInterval.toNanos() / 1_000, limit);
-    }
-
-    @SqlQuery("""
-            SELECT * FROM ai_label_jobs
-            WHERE status = 'submitted'
-            AND (last_polled_at IS NULL
-                OR last_polled_at <= TIMESTAMPADD(MICROSECOND, -:pollIntervalMicros, CURRENT_TIMESTAMP(6)))
-            ORDER BY last_polled_at, submitted_at
-            LIMIT :limit
+    @SqlBatch("""
+            INSERT INTO ai_label_job_items (job_id, workspace_id, project_id, trace_id, trace_created_at, task,
+                task_version, renderer_version, compaction_level, attempt)
+            VALUES (:jobId, :workspaceId, :projectId, :traceId, :traceCreatedAt, :task, :taskVersion, :rendererVersion,
+                :compactionLevel, :attempt)
             """)
-    List<AiLabelJob> due(@Bind("pollIntervalMicros") long pollIntervalMicros, @Bind("limit") int limit);
+    void insertItems(@BindMethods List<AiLabelJobItem> items);
 
-    @SqlUpdate("UPDATE ai_label_jobs SET last_polled_at = CURRENT_TIMESTAMP(6) WHERE job_id = :jobId")
-    int markPolled(@Bind("jobId") String jobId);
+    @SqlQuery("SELECT * FROM ai_label_jobs WHERE status = 'submitted' ORDER BY submitted_at")
+    List<AiLabelJob> submitted();
 
-    @SqlUpdate("UPDATE ai_label_jobs SET status = 'loaded', terminal_at = :terminalAt WHERE job_id = :jobId")
-    int markLoaded(@Bind("jobId") String jobId, @Bind("terminalAt") Instant terminalAt);
+    @SqlQuery("SELECT * FROM ai_label_job_items WHERE job_id IN (<jobIds>)")
+    List<AiLabelJobItem> findItems(@BindList("jobIds") Collection<String> jobIds);
 
-    @SqlQuery("SELECT COALESCE(SUM(engine_calls), 0) FROM ai_label_jobs WHERE status = 'submitted'")
-    long inFlightEngineCalls();
+    /** The traces with a task in flight in any of the workspaces: the sweep leaves them out. */
+    @SqlQuery("SELECT DISTINCT trace_id FROM ai_label_job_items WHERE workspace_id IN (<workspaceIds>)")
+    List<String> inFlightTraceIds(@BindList("workspaceIds") Collection<String> workspaceIds);
+
+    @SqlUpdate("UPDATE ai_label_jobs SET status = 'loaded', terminal_at = :terminalAt WHERE job_id IN (<jobIds>)")
+    int markLoaded(@BindList("jobIds") Collection<String> jobIds, @Bind("terminalAt") Instant terminalAt);
+
+    @SqlUpdate("DELETE FROM ai_label_job_items WHERE job_id IN (<jobIds>)")
+    int deleteItems(@BindList("jobIds") Collection<String> jobIds);
+
+    @SqlQuery("SELECT COALESCE(SUM(bytes), 0) FROM ai_label_jobs WHERE status = 'submitted'")
+    long inFlightBytes();
 
     @SqlUpdate("DELETE FROM ai_label_jobs WHERE status = 'loaded' AND terminal_at < :before")
     int deleteLoadedBefore(@Bind("before") Instant before);

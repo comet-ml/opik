@@ -32,7 +32,6 @@ public record AiLabelStatus(
     @Getter
     @RequiredArgsConstructor
     public enum Status {
-        PENDING("pending"),
         DONE("done"),
         FAILED("failed");
 
