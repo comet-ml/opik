@@ -48,6 +48,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -70,6 +71,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.MATRIX_PARAMETERS_RESPONSE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NOT_FOUND_RESPONSE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -159,6 +162,48 @@ class UsageResourceTest {
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId, String user) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, user);
+    }
+
+    @Nested
+    @DisplayName("Request path:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class RequestPath {
+
+        @ParameterizedTest
+        @ValueSource(strings = {
+                "/v1;version=1/internal/usage/workspace-trace-counts",
+                "/v1/internal;scope=all/usage/workspace-trace-counts",
+                "/v1/internal/usage/workspace-trace-counts;format=json"})
+        @DisplayName("when the path carries matrix parameters, then not found")
+        void whenPathCarriesMatrixParameters__thenNotFound(String path) {
+            try (var actualResponse = client.target(baseURI + path).request().get()) {
+                assertThat(actualResponse.getStatus()).isEqualTo(404);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(MATRIX_PARAMETERS_RESPONSE);
+            }
+        }
+
+        @Test
+        @DisplayName("when the path carries an empty segment, then bad request")
+        void whenPathCarriesEmptySegment__thenBadRequest() {
+            try (var actualResponse = client.target(baseURI + "/v1//internal/usage/workspace-trace-counts")
+                    .request()
+                    .get()) {
+                assertThat(actualResponse.getStatus()).isEqualTo(400);
+            }
+        }
+
+        @Test
+        @DisplayName("when the path carries a dot segment, then not found")
+        void whenPathCarriesDotSegment__thenNotFound() {
+            try (var actualResponse = client.target(baseURI + "/v1/./internal/usage/workspace-trace-counts")
+                    .request()
+                    .get()) {
+                assertThat(actualResponse.getStatus()).isEqualTo(404);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(NOT_FOUND_RESPONSE);
+            }
+        }
     }
 
     @Nested

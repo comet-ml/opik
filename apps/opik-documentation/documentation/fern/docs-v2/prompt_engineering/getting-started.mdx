@@ -23,7 +23,7 @@ to its trace.
 
     <Steps>
       <Step title="Install the Opik skill">
-        ```bash
+        ```bash wordWrap
         uvx opik mcp configure
         ```
 
@@ -50,7 +50,7 @@ to its trace.
 
     <CodeBlocks>
 
-    ```python title="Python"
+    ```python title="Python" wordWrap
     import opik
 
     client = opik.Opik()
@@ -62,7 +62,7 @@ to its trace.
     )
     ```
 
-    ```ts title="TypeScript"
+    ```ts title="TypeScript" wordWrap
     import { Opik } from "opik";
 
     const client = new Opik();
@@ -85,7 +85,7 @@ to its trace.
     with your runtime values.
 
     <CodeBlocks>
-      ```python title="Python"
+      ```python title="Python" wordWrap
       import opik
 
       client = opik.Opik()
@@ -107,7 +107,7 @@ to its trace.
           return response
       ```
 
-      ```ts title="TypeScript"
+      ```ts title="TypeScript" wordWrap
       import { Opik, track } from "opik";
 
       const client = new Opik();
@@ -149,7 +149,7 @@ Pass the `version` parameter to control which version is returned:
 - **`"v3"`** (or any `v<N>` name) — A specific version. Useful when you want the prompt to stay fixed regardless of newer edits — for example, when reproducing a past run or comparing versions.
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   # Fetch a specific version
   v3 = client.get_prompt(name="system_prompt", version="v3", project_name="my-agent")
 
@@ -157,7 +157,7 @@ Pass the `version` parameter to control which version is returned:
   latest = client.get_prompt(name="system_prompt", project_name="my-agent")
   ```
 
-  ```ts title="TypeScript"
+  ```ts title="TypeScript" wordWrap
   // Fetch a specific version
   const v3 = await client.getPrompt({
     name: "system_prompt",
@@ -181,7 +181,7 @@ For multi-turn agents with system, user, and assistant roles, use `create_chat_p
 multimodal content, and template engines.
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   client.create_chat_prompt(
       name="support_assistant",
       messages=[
@@ -202,7 +202,7 @@ multimodal content, and template engines.
   )
   ```
 
-  ```ts title="TypeScript"
+  ```ts title="TypeScript" wordWrap
   await client.createChatPrompt({
     name: "support_assistant",
     messages: [

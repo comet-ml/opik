@@ -35,7 +35,7 @@ you're happy with the results, save the edit as a new prompt version for your ag
     inside the entrypoint, so that you can edit them from the playground.
 
     <CodeBlocks>
-      ```python title="Python"
+      ```python title="Python" wordWrap
       import threading
 
       import opik
@@ -65,7 +65,7 @@ you're happy with the results, save the edit as a new prompt version for your ag
           threading.Event().wait()
       ```
 
-      ```ts title="TypeScript"
+      ```ts title="TypeScript" wordWrap
       import { Opik, track } from "opik";
 
       const client = new Opik();
@@ -125,11 +125,11 @@ you're happy with the results, save the edit as a new prompt version for your ag
   </Step>
   <Step title="Start the playground">
     <CodeBlocks>
-      ```bash title="Python"
+      ```bash title="Python" wordWrap
       opik endpoint --project my-agent -- python3 my_agent.py
       ```
 
-      ```bash title="TypeScript"
+      ```bash title="TypeScript" wordWrap
       opik endpoint --project my-agent -- npx tsx my_agent.ts
       ```
     </CodeBlocks>

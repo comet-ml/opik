@@ -262,7 +262,7 @@ We have built-in templates for the LLM as a Judge metrics that you can use to sc
 
 For the LLM as a Judge metrics, keep in mind the only variable available is the `{{context}}` one, which is a dictionary containing the entire conversation:
 
-```json
+```json wordWrap
 [
   {
       "role": "user",
@@ -285,7 +285,7 @@ This makes it possible to write rules that evaluate an agent's full execution pa
 
 Because a full thread can contain many spans, Opik truncates long field values before injecting them into the prompt, and gives the judge model tools to fetch anything beyond the truncated preview:
 
-```json
+```json wordWrap
 {
   "name": "answer_question",
   "type": "llm",
@@ -308,7 +308,7 @@ This keeps evaluation prompts token-efficient even for long-running threads or d
 
 Similarly, for the Python metrics, you have the `Conversation` object available to you. This object is a `List[Dict]` where each dict represents a message in the conversation.
 
-```python
+```python wordWrap
 [
   {
       "role": "user",
