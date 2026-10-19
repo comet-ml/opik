@@ -24,7 +24,7 @@ const ROWS_REFETCH_INTERVAL = 3000;
  */
 const hasFinished = (experiment: Experiment | undefined) =>
   !!experiment?.finished_at ||
-  // Transitional, for runs predating migration 000134, whose stamp is null forever: remove once
+  // Transitional, for runs predating migration 000139, whose stamp is null forever: remove once
   // they are gone or backfilled.
   experiment?.status === EXPERIMENT_STATUS.COMPLETED ||
   experiment?.status === EXPERIMENT_STATUS.FAILED ||
