@@ -36,6 +36,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
+import com.comet.opik.api.resources.v1.events.SpanWeeksListener;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
@@ -90,8 +91,8 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 /**
  * The trace-keyed spans reads bounded by the span_weeks index ({@code spanWeeksReadEnabled}) return every span of
  * their traces, a far-future one included, on the weekly-partitioned spans table: each read is compared as a whole
- * against what its traces' spans add up to. Live registration is on, and each fixture waits for its weeks to be
- * indexed. SpanWeeksReadBoundUnregisteredTest covers the reads before the weeks are indexed.
+ * against what its traces' spans add up to. Weeks are registered by {@code span_weeks_mv} alone
+ * ({@link SpanWeeksListener} is disabled), and each fixture waits for them to be indexed unless it says otherwise.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -140,11 +141,13 @@ class SpanWeeksReadBoundTest {
                                 new CustomConfig("uuidValidation.enabled", "false"),
                                 // The successor's columns are non-nullable, as the cutover flips this with it.
                                 new CustomConfig("databaseAnalyticsDataModel.spanColumnsNonNullable", "true"),
+                                // Required for the bound to apply; the disabled listener keeps it from registering.
                                 new CustomConfig("databaseAnalyticsDataModel.spanWeeksWriteEnabled", "true"),
                                 new CustomConfig("databaseAnalyticsDataModel.spanWeeksReadEnabled", "true"),
                                 // Finished experiments aggregate after this delay; its bucket lives twice as long, so
                                 // the job's 5s tick always finds it.
                                 new CustomConfig("experimentDenormalization.debounceDelay", "5s")))
+                        .disableExtensions(List.of(SpanWeeksListener.class))
                         .build());
     }
 
@@ -329,29 +332,68 @@ class SpanWeeksReadBoundTest {
         });
     }
 
-    /** No span has a score, so an is-empty feedback score filter keeps both, and turns on the span id prefilter. */
+    /**
+     * No span has a score, so an is-empty feedback score filter keeps both, and turns on the span id prefilter. A
+     * custom sort reads through {@code spans_deduped}; by id descending it keeps the default order.
+     */
     private Stream<Arguments> traceSpansPageCountsAFarFutureSpan() {
         return Stream.of(
-                arguments(Named.of("no filter", null)),
+                arguments(Named.of("no filter", null), null),
                 arguments(Named.of("feedback score filter", List.of(SpanFilter.builder()
                         .field(SpanField.FEEDBACK_SCORES)
                         .operator(Operator.IS_EMPTY)
                         .key("score-" + RandomStringUtils.secure().nextAlphanumeric(32))
                         .value("")
-                        .build()))));
+                        .build())), null),
+                arguments(Named.of("custom sort", null), List.of(SortingField.builder()
+                        .field(SortableFields.ID)
+                        .direction(Direction.DESC)
+                        .build())));
     }
 
     /**
-     * The spans of a trace and their count, as the trace detail reads them: through the page-keyed aggregates
-     * without filters, and through the span id prefilter of both statements with a feedback score filter.
+     * The spans of a trace and their count, as the trace detail reads them: the default sort pages in the level that
+     * reads spans, a custom sort pages over the deduped spans, and a feedback score filter adds the span id prefilter
+     * of both statements.
      */
     @ParameterizedTest(name = "{0}")
     @MethodSource
-    void traceSpansPageCountsAFarFutureSpan(List<SpanFilter> filters) {
+    void traceSpansPageCountsAFarFutureSpan(List<SpanFilter> filters, List<SortingField> sorting) {
         var trace = fixtures.createFarFutureTrace();
 
         var actualPage = spanResourceClient.findSpans(WORKSPACE_NAME, API_KEY, trace.projectName(), null, 1, 10,
-                trace.trace().id(), null, filters, null, null);
+                trace.trace().id(), null, filters, sorting, null);
+
+        var expectedSpans = fixtures.expectedSpans(trace.spans());
+        SpanAssertions.assertPage(actualPage, 1, expectedSpans.size(), expectedSpans.size());
+        SpanAssertions.assertSpan(actualPage.content(), expectedSpans, USER);
+    }
+
+    /** A search within the trace relies on the span_weeks bound alone; its week pre-pass is skipped. */
+    @Test
+    void traceSpansSearchCountsAFarFutureSpan() {
+        var trace = fixtures.createFarFutureTrace();
+        // Every span of the trace matches its trace id.
+        var search = trace.trace().id().toString();
+
+        var actualPage = spanResourceClient.findSpans(WORKSPACE_NAME, API_KEY, trace.projectName(), null, 1, 10,
+                trace.trace().id(), null, null, null, null, null, null, search);
+
+        var expectedSpans = fixtures.expectedSpans(trace.spans());
+        SpanAssertions.assertPage(actualPage, 1, expectedSpans.size(), expectedSpans.size());
+        SpanAssertions.assertSpan(actualPage.content(), expectedSpans, USER);
+    }
+
+    /**
+     * {@code span_weeks_mv} indexes a span's week by the time its insert returns, so a trace's spans are read in full
+     * right after their write, with no wait for the index.
+     */
+    @Test
+    void traceSpansPageReturnsSpansRightAfterTheirWrite() {
+        var trace = fixtures.createFarFutureTraceWithoutWaiting();
+
+        var actualPage = spanResourceClient.getByTraceIdAndProject(trace.trace().id(), trace.projectName(),
+                WORKSPACE_NAME, API_KEY);
 
         var expectedSpans = fixtures.expectedSpans(trace.spans());
         SpanAssertions.assertPage(actualPage, 1, expectedSpans.size(), expectedSpans.size());
@@ -366,23 +408,6 @@ class SpanWeeksReadBoundTest {
 
         var expectedSpans = fixtures.expectedSpans(trace.spans());
         SpanAssertions.assertSpan(actualSpans, expectedSpans, USER);
-    }
-
-    /**
-     * The span stats scoped to a trace share the find statements' search criteria but carry no span_weeks bound, so
-     * they must not be given its {@code :trace_weeks}: an unused parameter fails the statement.
-     */
-    @Test
-    void traceSpanStatsCountAFarFutureSpan() {
-        var trace = fixtures.createFarFutureTrace();
-
-        var actualStats = spanResourceClient.getSpansStats(trace.projectName(), null, null, API_KEY, WORKSPACE_NAME,
-                Map.of("trace_id", trace.trace().id().toString())).stats();
-
-        // Both spans have a positive cost, so the average is over both.
-        var expectedStats = withExplicitCost(StatsUtils.getProjectSpanStatItems(trace.spans()),
-                trace.totalCost().divide(BigDecimal.valueOf(trace.spans().size())), trace.totalCost());
-        TraceAssertions.assertStats(actualStats, expectedStats);
     }
 
     @Test

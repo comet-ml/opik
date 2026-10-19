@@ -102,8 +102,8 @@ import lombok.Builder;
  * {@code spanColumnsNonNullable} are also on: without registration new spans never reach the index, and the legacy
  * {@code spans} keeps {@code id_at} as a 32-bit {@code DateTime} that wraps far-future ids, so a week bound there would
  * drop rows. Turn it on once the backfill logs that it is complete; before that, unindexed spans would be
- * skipped. Registration is asynchronous, so a read right after a write can miss the new spans until their week is
- * indexed, except for {@code SpanDAO}'s trace-keyed reads, which also admit the weeks of the traces themselves.</p>
+ * skipped. {@code span_weeks_mv} also registers each span's week in the spans insert itself, so the week is indexed by
+ * the time the insert returns; only partition imports bypass it, and need a backfill of the moved range.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(

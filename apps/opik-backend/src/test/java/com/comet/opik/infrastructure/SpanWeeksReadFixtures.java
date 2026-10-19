@@ -75,7 +75,7 @@ class SpanWeeksReadFixtures {
     private final @NonNull ExperimentResourceClient experimentResourceClient;
     private final @NonNull SpanService spanService;
 
-    /** A trace with one span near its id (this week, unless placed elsewhere), first, and one far in the future. */
+    /** A trace with one span this week, first, and one far in the future. */
     @Builder(toBuilder = true)
     record FarFutureTrace(String projectName, UUID projectId, Trace trace, List<Span> spans) {
 
@@ -101,32 +101,26 @@ class SpanWeeksReadFixtures {
     }
 
     FarFutureTrace createFarFutureTrace(String threadId) {
-        var now = now();
-        var farFutureTrace = writeFarFutureTrace(now, now, threadId);
+        var farFutureTrace = writeFarFutureTrace(threadId);
         awaitIndexed(farFutureTrace.projectId(), farFutureTrace.trace().id(), farFutureTrace.spans());
         return farFutureTrace;
     }
 
     /** The trace of {@link #createFarFutureTrace}, without waiting for its weeks to be indexed. */
-    FarFutureTrace createUnindexedFarFutureTrace() {
+    FarFutureTrace createFarFutureTraceWithoutWaiting() {
+        return writeFarFutureTrace(randomThreadId());
+    }
+
+    private FarFutureTrace writeFarFutureTrace(String threadId) {
         var now = now();
-        return createUnindexedFarFutureTrace(now, now);
-    }
-
-    /** As {@link #createUnindexedFarFutureTrace()}, with the trace id and its near span's id at the given instants. */
-    FarFutureTrace createUnindexedFarFutureTrace(Instant traceIdAt, Instant nearSpanIdAt) {
-        return writeFarFutureTrace(traceIdAt, nearSpanIdAt, randomThreadId());
-    }
-
-    private FarFutureTrace writeFarFutureTrace(Instant traceIdAt, Instant nearSpanIdAt, String threadId) {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
         var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                .id(ID_GENERATOR.getTimeOrderedEpoch(traceIdAt.toEpochMilli()))
+                .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
                 .projectName(projectName)
                 .threadId(threadId)
-                .startTime(traceIdAt)
-                .endTime(traceIdAt.plusMillis(RandomUtils.secure().randomInt(10, 1_000)))
+                .startTime(now)
+                .endTime(now.plusMillis(RandomUtils.secure().randomInt(10, 1_000)))
                 .feedbackScores(null)
                 .spanFeedbackScores(null)
                 .guardrailsValidations(null)
@@ -134,13 +128,13 @@ class SpanWeeksReadFixtures {
                 .usage(null)
                 .build();
         traceResourceClient.createTrace(trace, apiKey, workspaceName);
-        var spans = Stream.of(nearSpanIdAt, farFutureInstant())
+        var spans = Stream.of(now, farFutureInstant())
                 .map(idAt -> factory.manufacturePojo(Span.class).toBuilder()
                         .id(ID_GENERATOR.getTimeOrderedEpoch(idAt.toEpochMilli()))
                         .projectName(projectName)
                         .traceId(trace.id())
                         .parentSpanId(null)
-                        .startTime(traceIdAt)
+                        .startTime(now)
                         .endTime(null)
                         .feedbackScores(null)
                         .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomInt(1, 100_000), 2))
@@ -156,13 +150,6 @@ class SpanWeeksReadFixtures {
      * to add up to, for reads whose result cannot be computed from the spans written.
      */
     FarFutureTrace createThisWeekCopy(FarFutureTrace source) {
-        var copy = createUnindexedThisWeekCopy(source);
-        awaitIndexed(copy.projectId(), copy.trace().id(), copy.spans());
-        return copy;
-    }
-
-    /** The copy of {@link #createThisWeekCopy}, without waiting for its weeks to be indexed. */
-    FarFutureTrace createUnindexedThisWeekCopy(FarFutureTrace source) {
         var now = now();
         var trace = source.trace().toBuilder()
                 .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
@@ -176,6 +163,7 @@ class SpanWeeksReadFixtures {
                         .build())
                 .toList();
         spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+        awaitIndexed(source.projectId(), trace.id(), spans);
         return source.toBuilder().trace(trace).spans(spans).build();
     }
 
@@ -245,7 +233,7 @@ class SpanWeeksReadFixtures {
                 .build();
     }
 
-    /** Registration is asynchronous by design; waits until the index holds every span's week. */
+    /** Waits until the index holds every span's week. */
     private void awaitIndexed(UUID projectId, UUID traceId, List<Span> spans) {
         var expected = spans.stream()
                 .map(span -> SpanWeek.builder().projectId(projectId).traceId(traceId).idWeek(week(span.id())).build())
