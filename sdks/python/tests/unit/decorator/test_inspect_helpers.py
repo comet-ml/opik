@@ -1,6 +1,6 @@
 import functools
 
-from opik.decorator.inspect_helpers import get_function_name
+from opik.decorator.inspect_helpers import get_function_name, is_async
 
 
 class TestGetFunctionName:
@@ -80,3 +80,76 @@ class TestGetFunctionName:
         """Test partial function created from built-in function"""
         partial_int = functools.partial(int, base=16)
         assert get_function_name(partial_int) == "int"
+
+
+class TestIsAsync:
+    """Test cases for the is_async function."""
+
+    def test_plain_async_function_detected(self):
+        async def my_async():
+            pass
+
+        assert is_async(my_async) is True
+
+    def test_plain_sync_function_not_detected(self):
+        def my_sync():
+            pass
+
+        assert is_async(my_sync) is False
+
+    def test_async_wrapped_by_one_sync_decorator_detected(self):
+        """Async function wrapped once with a sync functools.wraps decorator."""
+
+        async def my_async():
+            pass
+
+        @functools.wraps(my_async)
+        def wrapper(*args, **kwargs):
+            return my_async(*args, **kwargs)
+
+        assert is_async(wrapper) is True
+
+    def test_async_wrapped_by_two_sync_decorators_detected(self):
+        """Async function wrapped twice; inspect.iscoroutinefunction does not
+        traverse the __wrapped__ chain, so is_async must do it."""
+
+        async def my_async():
+            pass
+
+        @functools.wraps(my_async)
+        def wrapper1(*args, **kwargs):
+            return my_async(*args, **kwargs)
+
+        @functools.wraps(wrapper1)
+        def wrapper2(*args, **kwargs):
+            return wrapper1(*args, **kwargs)
+
+        # wrapper2.__wrapped__ is wrapper1 (a sync function), so a single-level
+        # check misses the coroutine buried deeper in the chain.
+        assert is_async(wrapper2) is True
+
+    def test_sync_wrapped_by_sync_decorator_not_detected(self):
+        """A sync function wrapped by a sync decorator is still not async."""
+
+        def my_sync():
+            pass
+
+        @functools.wraps(my_sync)
+        def wrapper(*args, **kwargs):
+            return my_sync(*args, **kwargs)
+
+        assert is_async(wrapper) is False
+
+    def test_circular_wrapped_reference_does_not_loop(self):
+        """Guard against a pathological circular __wrapped__ chain."""
+
+        def func_a():
+            pass
+
+        def func_b():
+            pass
+
+        func_a.__wrapped__ = func_b  # type: ignore[attr-defined]
+        func_b.__wrapped__ = func_a  # type: ignore[attr-defined]
+
+        assert is_async(func_a) is False
