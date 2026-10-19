@@ -1,4 +1,5 @@
 import React from "react";
+import { RotateCcw } from "lucide-react";
 import { Button } from "@/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -6,7 +7,8 @@ import {
   useProgressCompleted,
   useProgressPhase,
   useProgressTotal,
-  useWatchPaused,
+  useShowsRunProgress,
+  useIsAnyWatchLapsed,
 } from "@/store/PlaygroundStore";
 import { DATASET_TYPE } from "@/types/datasets";
 
@@ -30,9 +32,10 @@ const PlaygroundProgressIndicator: React.FC<
   const progressCompleted = useProgressCompleted();
   const progressPhase = useProgressPhase();
   const datasetType = useDatasetType();
-  const watchPaused = useWatchPaused();
+  const watchLapsed = useIsAnyWatchLapsed();
+  const showsRunProgress = useShowsRunProgress();
 
-  if (progressTotal === 0) {
+  if (!showsRunProgress) {
     return null;
   }
 
@@ -56,7 +59,7 @@ const PlaygroundProgressIndicator: React.FC<
             {phaseLabel}
           </span>
           <span className="comet-body-s text-light-slate">
-            {watchPaused ? (
+            {watchLapsed ? (
               "Still running on the server, refresh to update"
             ) : (
               <>
@@ -70,19 +73,20 @@ const PlaygroundProgressIndicator: React.FC<
           <div
             className={cn(
               "h-2 rounded-full bg-primary transition-all duration-300",
-              watchPaused && "motion-safe:animate-pulse",
+              watchLapsed && "motion-safe:animate-pulse",
             )}
             style={{ width: `${progressPercentage}%` }}
           />
         </div>
       </div>
-      {watchPaused && (
+      {watchLapsed && (
         <Button
           variant="secondary"
           size="xs"
           className="shrink-0"
           onClick={onCheckAgain}
         >
+          <RotateCcw className="mr-1 size-3.5" />
           Refresh
         </Button>
       )}

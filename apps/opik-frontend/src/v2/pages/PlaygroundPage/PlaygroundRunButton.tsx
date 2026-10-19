@@ -1,5 +1,5 @@
 import React from "react";
-import { Loader2, Pause, Play } from "lucide-react";
+import { Loader2, Pause, Play, RotateCcw } from "lucide-react";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/ui/button";
@@ -9,6 +9,8 @@ import {
   usePromptById,
   useDatasetItemsTotal,
   useIsStopPending,
+  useIsWatchLapsed,
+  useShowsRunProgress,
 } from "@/store/PlaygroundStore";
 import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
@@ -17,6 +19,7 @@ interface PlaygroundRunButtonProps {
   promptId: string;
   onRun: () => void;
   onStop: () => void;
+  onCheckAgain?: () => void;
   className?: string;
 }
 
@@ -24,12 +27,17 @@ const PlaygroundRunButton = ({
   promptId,
   onRun,
   onStop,
+  onCheckAgain,
   className,
 }: PlaygroundRunButtonProps) => {
   const prompt = usePromptById(promptId);
   const isPromptRunning = useIsPromptRunning(promptId);
   const isResumingRun = useIsResumingRun();
   const isStopPending = useIsStopPending(promptId);
+  const isWatchLapsed = useIsWatchLapsed(promptId);
+  const showsRunProgress = useShowsRunProgress();
+
+  const showsWatchLapsed = isWatchLapsed && !showsRunProgress && !!onCheckAgain;
 
   const { datasetId } = usePlaygroundDataset();
   const datasetItemsTotal = useDatasetItemsTotal();
@@ -63,6 +71,22 @@ const PlaygroundRunButton = ({
         className ?? "flex items-center justify-end border-b px-4 py-2"
       }
     >
+      {showsWatchLapsed && (
+        <>
+          <span className="comet-body-s mr-2 text-light-slate">
+            Still running on the server, refresh to update
+          </span>
+          <Button
+            variant="secondary"
+            size="2xs"
+            className="mr-2 shrink-0"
+            onClick={onCheckAgain}
+          >
+            <RotateCcw className="mr-1 size-3.5" />
+            Refresh
+          </Button>
+        </>
+      )}
       {isStopPending ? (
         <Button size="2xs" variant="outline" disabled>
           <Loader2 className="mr-1 size-3.5 animate-spin" />

@@ -199,6 +199,7 @@ const PlaygroundOutputs = ({
                   ? () => stopSingle(promptId)
                   : undefined
               }
+              onCheckAgain={checkAgain}
             />
           ))}
         </div>

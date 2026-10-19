@@ -279,6 +279,7 @@ const PlaygroundPage = () => {
                   hasLoadedProviderKeys={hasLoadedProviderKeys}
                   runSingle={runSingle}
                   stopSingle={stopSingle}
+                  checkAgain={checkAgain}
                 />
               </div>
 
