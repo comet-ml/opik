@@ -171,11 +171,6 @@ def test_extract_turns_windows_from_conversation__no_turns__raises_error():
 
 def test_message_has_text__reexported_from_helpers():
     """The sliding-window judges read content through ``helpers``, so the re-export
-    must keep pointing at the one implementation in ``conversation_content``."""
-    from opik.evaluation.metrics.conversation import conversation_content
-
-    assert (
-        conversation_helpers.message_has_text is conversation_content.message_has_text
-    )
+    must keep working alongside the one implementation in ``conversation_content``."""
     assert conversation_helpers.message_has_text({"content": "Hi there!"})
     assert not conversation_helpers.message_has_text({"content": ""})

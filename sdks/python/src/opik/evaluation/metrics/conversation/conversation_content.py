@@ -23,6 +23,9 @@ _NON_TEXT_PART_TYPES = frozenset(
         "image_url",
         "input_audio",
         "audio",
+        "audio_url",
+        "video",
+        "video_url",
         "file",
         "refusal",
     }
@@ -70,9 +73,10 @@ def text_from_parts(parts: Any) -> str:
                 if not isinstance(text, str):
                     raise bad_content_error(part)
                 texts.append(text)
-            elif part.get("type") in _NON_TEXT_PART_TYPES:
-                continue
             else:
+                part_type = part.get("type")
+                if isinstance(part_type, str) and part_type in _NON_TEXT_PART_TYPES:
+                    continue
                 raise bad_content_error(part)
         else:
             raise bad_content_error(part)

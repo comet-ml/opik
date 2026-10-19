@@ -40,6 +40,20 @@ def test_message_has_text__unknown_part_shape__raises():
         conversation_content.message_has_text({"content": [{"anything": "else"}]})
 
 
+def test_message_has_text__malformed_part_type__raises_content_error():
+    """A non-string ``type`` is an unreadable shape, not a raw ``TypeError``.
+
+    The metric's contract is that an unreadable reply fails with
+    ``MetricComputationError``; leaking the membership check's own exception would
+    report an implementation error instead.
+    """
+    with pytest.raises(exceptions.MetricComputationError):
+        conversation_content.message_has_text({"content": [{"type": []}]})
+
+    with pytest.raises(exceptions.MetricComputationError):
+        conversation_content.message_has_text({"content": [{"type": 42}]})
+
+
 def test_message_has_text__unreadable_content__raises():
     with pytest.raises(exceptions.MetricComputationError):
         conversation_content.message_has_text({"content": 42})
@@ -67,4 +81,21 @@ def test_text_from_parts__joins_only_the_text_parts():
             ]
         )
         == "the answer"
+    )
+    # The url-shaped media parts are known non-text parts too.
+    assert (
+        conversation_content.text_from_parts(
+            [
+                {"type": "audio_url", "audio_url": {"url": "..."}},
+                {"type": "video_url", "video_url": {"url": "..."}},
+                {"type": "text", "text": "the answer"},
+            ]
+        )
+        == "the answer"
+    )
+    assert (
+        conversation_content.text_from_parts(
+            [{"type": "video_url", "video_url": "..."}]
+        )
+        == ""
     )
