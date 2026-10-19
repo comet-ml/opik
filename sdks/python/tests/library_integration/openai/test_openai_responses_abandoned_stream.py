@@ -109,7 +109,7 @@ async def test_openai_async_responses_stream__consumer_breaks_early__no_error_lo
     assert responses_span.end_time is not None
     assert logging.ERROR not in _levels(aggregator_log_records)
 
-def test_aggregate_terminal_response_failed_event__returns_response():
+def test_aggregate__terminal_response_failed_event__returns_response():
     fake_usage = openai_responses.response_usage.ResponseUsage.model_construct(
         input_tokens=15,
         output_tokens=8,
@@ -149,9 +149,52 @@ def test_aggregate_terminal_response_failed_event__returns_response():
     assert result.usage.total_tokens == 23
 
 
-# Alias for compatibility with double-underscore naming
-test_aggregate__terminal_response_failed_event__returns_response = (
-    test_aggregate_terminal_response_failed_event__returns_response
+# Alias for compatibility with single-underscore naming
+test_aggregate_terminal_response_failed_event__returns_response = (
+    test_aggregate__terminal_response_failed_event__returns_response
+)
+
+
+def test_aggregate__terminal_response_error_event_first__handles_missing_response():
+    # Case 1: When only ResponseErrorEvent is present (no .response attribute), return None
+    error_event = openai_responses.ResponseErrorEvent.model_construct(
+        code="server_error",
+        message="Internal server error",
+        sequence_number=1,
+        type="error",
+    )
+    result_only_error = response_events_aggregator.aggregate([error_event])
+    assert result_only_error is None
+
+    # Case 2: When ResponseErrorEvent is first, but a subsequent terminal event with .response exists
+    fake_usage = openai_responses.response_usage.ResponseUsage.model_construct(
+        input_tokens=10,
+        output_tokens=4,
+        total_tokens=14,
+    )
+    fake_response = openai_responses.Response.model_construct(
+        id="resp_subsequent_failed",
+        status="failed",
+        output=[],
+        usage=fake_usage,
+        model="gpt-4.1",
+    )
+    failed_event = openai_responses.ResponseFailedEvent.model_construct(
+        response=fake_response,
+        sequence_number=2,
+        type="response.failed",
+    )
+
+    result_subsequent = response_events_aggregator.aggregate([error_event, failed_event])
+    assert result_subsequent is not None
+    assert result_subsequent == fake_response
+    assert result_subsequent.status == "failed"
+    assert result_subsequent.id == "resp_subsequent_failed"
+    assert result_subsequent.usage.total_tokens == 14
+
+
+test_aggregate_terminal_response_error_event_first__handles_missing_response = (
+    test_aggregate__terminal_response_error_event_first__handles_missing_response
 )
 
 
@@ -166,5 +209,6 @@ def test_aggregate_terminal_response_error_event_without_response__returns_none(
     result = response_events_aggregator.aggregate([event])
 
     assert result is None
+
 
 
