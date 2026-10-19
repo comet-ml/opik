@@ -36,7 +36,6 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
-import com.comet.opik.api.resources.v1.events.SpanWeeksListener;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
@@ -91,8 +90,8 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 /**
  * The trace-keyed spans reads bounded by the span_weeks index ({@code spanWeeksReadEnabled}) return every span of
  * their traces, a far-future one included, on the weekly-partitioned spans table: each read is compared as a whole
- * against what its traces' spans add up to. Weeks are registered by {@code span_weeks_mv} alone
- * ({@link SpanWeeksListener} is disabled), and each fixture waits for them to be indexed unless it says otherwise.
+ * against what its traces' spans add up to. Weeks are registered by {@code span_weeks_mv}, and each fixture waits for
+ * them to be indexed unless it says otherwise.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -141,13 +140,10 @@ class SpanWeeksReadBoundTest {
                                 new CustomConfig("uuidValidation.enabled", "false"),
                                 // The successor's columns are non-nullable, as the cutover flips this with it.
                                 new CustomConfig("databaseAnalyticsDataModel.spanColumnsNonNullable", "true"),
-                                // Required for the bound to apply; the disabled listener keeps it from registering.
-                                new CustomConfig("databaseAnalyticsDataModel.spanWeeksWriteEnabled", "true"),
                                 new CustomConfig("databaseAnalyticsDataModel.spanWeeksReadEnabled", "true"),
                                 // Finished experiments aggregate after this delay; its bucket lives twice as long, so
                                 // the job's 5s tick always finds it.
                                 new CustomConfig("experimentDenormalization.debounceDelay", "5s")))
-                        .disableExtensions(List.of(SpanWeeksListener.class))
                         .build());
     }
 

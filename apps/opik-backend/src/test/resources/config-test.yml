@@ -173,35 +173,14 @@ databaseAnalyticsDataModel:
   #   rather than serving traffic whose span deletes are guaranteed to fail.
   spansDistributedWrapEnabled: false
   #  Default: false
-  #  Description: Register each written span's weekly partition in the span_weeks index (OPIK-8706). Leave false at
-  #   deploy time; turn true before the span weeks backfill starts, so every span written after its snapshot is
-  #   indexed. Off writes nothing.
-  spanWeeksWriteEnabled: false
-  #  Default: false
   #  Description: Schedule the span weeks backfill job (tuned under spanWeeksBackfill), which fills span_weeks from the
-  #   spans already written, one range of weeks at a time. Turn true only once spanWeeksWriteEnabled is live on every
-  #   instance: the backfill covers the spans written until its first run, live registration the rest.
+  #   spans written before span_weeks_mv, one range of weeks at a time. The MV registers every span inserted since.
   spanWeeksBackfillEnabled: false
   #  Default: false
   #  Description: Bound span reads by trace id to the weeks the span_weeks index holds for those traces. Effective only
-  #   while spanWeeksWriteEnabled and spanColumnsNonNullable are also true (without registration new spans never
-  #   reach the index; the legacy spans id_at wraps far-future ids). Turn true once the span
-  #   weeks backfill logs that it is complete; before that, spans it has not indexed yet would be skipped. Registration
-  #   is asynchronous, so a read right after a write can miss the new spans until their week is indexed.
+  #   while spanColumnsNonNullable is also true (the legacy spans id_at wraps far-future ids). Turn true once the span
+  #   weeks backfill has no pending chunk; before that, spans it has not indexed yet would be skipped.
   spanWeeksReadEnabled: false
-
-# Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
-# switched on by databaseAnalyticsDataModel.spanWeeksWriteEnabled.
-spanWeeksRegistration:
-  #  Default: 3
-  #  Description: Retries after the first attempt; a repeat registration collapses in span_weeks
-  maxRetries: 3
-  #  Default: 200ms
-  #  Description: First backoff; it doubles on each retry, with jitter, up to maxBackoff
-  minBackoff: 200ms
-  #  Default: 2s
-  #  Description: Upper bound of the exponential backoff
-  maxBackoff: 2s
 
 # Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
 # It tiles the span ids into ranges of weeks, from the install week (the first project's created_at) to the plan's own

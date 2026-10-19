@@ -16,7 +16,6 @@ import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
-import com.comet.opik.api.resources.v1.events.SpanWeeksListener;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -49,8 +48,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The trace-delete cascade with the span_weeks read bound on, for spans whose weeks are not indexed, as after a
- * partition import, which bypasses {@code span_weeks_mv} until a backfill. Neither registration path runs here: the
- * view is dropped and {@link SpanWeeksListener} is disabled, so no week is ever indexed.
+ * partition import, which bypasses {@code span_weeks_mv} until a backfill. The view is dropped here, so no week is ever
+ * indexed.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -96,10 +95,7 @@ class SpanWeeksUnregisteredTraceDeleteTest {
                                 new CustomConfig("uuidValidation.enabled", "false"),
                                 // The successor's columns are non-nullable, as the cutover flips this with it.
                                 new CustomConfig("databaseAnalyticsDataModel.spanColumnsNonNullable", "true"),
-                                // Required for the bound to apply; the disabled listener keeps it from registering.
-                                new CustomConfig("databaseAnalyticsDataModel.spanWeeksWriteEnabled", "true"),
                                 new CustomConfig("databaseAnalyticsDataModel.spanWeeksReadEnabled", "true")))
-                        .disableExtensions(List.of(SpanWeeksListener.class))
                         .build());
     }
 
