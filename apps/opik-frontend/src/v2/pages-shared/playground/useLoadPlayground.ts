@@ -8,6 +8,7 @@ import {
   useSetPromptMap,
   useSetDatasetType,
   useSetExperimentName,
+  useLastActiveProjectId,
   useSetLastActiveProjectId,
 } from "@/store/PlaygroundStore";
 import { generateDefaultPrompt, isPlaygroundEmpty } from "@/lib/playground";
@@ -27,6 +28,7 @@ import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { MessageContent } from "@/types/llm";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { formatDatasetVersionKey } from "@/utils/datasetVersionStorage";
+import useResetPlaygroundSession from "@/v2/pages-shared/playground/useResetPlaygroundSession";
 
 interface NamedPromptContent {
   name: string;
@@ -54,7 +56,9 @@ function useLoadPlayground() {
   const setPromptMap = useSetPromptMap();
   const setDatasetType = useSetDatasetType();
   const setExperimentName = useSetExperimentName();
+  const lastActiveProjectId = useLastActiveProjectId();
   const setLastActiveProjectId = useSetLastActiveProjectId();
+  const resetPlaygroundSession = useResetPlaygroundSession();
 
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
@@ -206,6 +210,13 @@ function useLoadPlayground() {
         promptMap = { [newPrompt.id]: newPrompt };
       }
 
+      // The Playground resets on a project switch, which would also drop the prompts loaded here,
+      // so do the switch's reset now (before the dataset below is applied) and mark it done.
+      if (lastActiveProjectId != activeProjectId) {
+        resetPlaygroundSession();
+        setLastActiveProjectId(activeProjectId);
+      }
+
       setPromptMap(promptIds, promptMap);
 
       if (datasetId && datasetVersionId) {
@@ -219,8 +230,6 @@ function useLoadPlayground() {
 
       setDatasetType(datasetType ?? null);
       setExperimentName(null);
-      // Otherwise the Playground reads the arrival as a project switch and resets what was loaded.
-      setLastActiveProjectId(activeProjectId);
 
       navigate({
         to: "/$workspaceName/projects/$projectId/playground",
@@ -237,7 +246,9 @@ function useLoadPlayground() {
       setDatasetVersionKey,
       setDatasetType,
       setExperimentName,
+      lastActiveProjectId,
       setLastActiveProjectId,
+      resetPlaygroundSession,
       workspaceName,
       activeProjectId,
     ],
