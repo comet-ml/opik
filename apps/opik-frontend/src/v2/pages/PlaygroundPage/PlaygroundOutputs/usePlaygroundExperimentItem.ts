@@ -131,6 +131,9 @@ export default function usePlaygroundExperimentItem(
     },
     {
       enabled: !!experimentId && !!datasetId,
+      // Rows read after the run finished cannot change, so they never go stale
+      staleTime: (query) =>
+        wasReadAfterFinish(query.state.dataUpdatedAt) ? Infinity : 0,
       refetchInterval: (query) => {
         const rows = query.state.data?.content ?? [];
         const hasItem = rows.some(
