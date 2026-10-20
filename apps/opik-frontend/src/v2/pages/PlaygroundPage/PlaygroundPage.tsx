@@ -26,9 +26,6 @@ import {
   usePromptCount,
   useSetPromptMap,
   useClearCreatedExperiments,
-  useDatasetFilters,
-  useDatasetPage,
-  useDatasetSize,
   useLastActiveProjectId,
   useSetLastActiveProjectId,
 } from "@/store/PlaygroundStore";
