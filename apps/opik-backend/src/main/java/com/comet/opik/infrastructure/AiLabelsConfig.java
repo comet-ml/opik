@@ -135,10 +135,11 @@ public class AiLabelsConfig {
 
     /**
      * A trace's spans are read in start order up to this many; the rest are left out. 200 keeps every span of 99.8% of
-     * the dev agent's traces (p99 117, max 848).
+     * the dev agent's traces (p99 117, max 848). At most 1,000: the span tree is built and walked recursively, and a
+     * chain of spans each nested in the last is as deep as the span count.
      */
     @JsonProperty
-    @Min(1) @Max(100_000) private int maxSpansPerTrace = 200;
+    @Min(1) @Max(1_000) private int maxSpansPerTrace = 200;
 
     /**
      * A trace's spans are read in start order until their name, input and output reach this; the rest are left out, as past

@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,6 +76,15 @@ class AiLabelSpanTreeTest {
 
         assertThat(flatten(AiLabelSpanTree.build(spans)).map(AiLabelSpan::name))
                 .containsExactlyInAnyOrderElementsOf(spans.stream().map(SpanRow::name).toList());
+    }
+
+    @Test
+    void buildHandlesAChainAsDeepAsTheSpanCap() {
+        var chain = IntStream.range(0, 1_000)
+                .mapToObj(i -> span("s" + i, i == 0 ? null : "s" + (i - 1), i))
+                .toList();
+
+        assertThat(flatten(AiLabelSpanTree.build(chain))).hasSize(1_000);
     }
 
     private static Stream<AiLabelSpan> flatten(List<AiLabelSpan> spans) {
