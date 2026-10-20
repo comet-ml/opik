@@ -56,6 +56,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean openrouterProviderEnabled;
     @JsonProperty
+    @NotNull boolean requestyProviderEnabled;
+    @JsonProperty
     @NotNull boolean vertexaiProviderEnabled;
     @JsonProperty
     @NotNull boolean bedrockProviderEnabled;
