@@ -70,6 +70,23 @@ class AiLabelTaskRequiredSqlTest {
                 .contains(0, 1, 2);
     }
 
+    /** created_at has microseconds: one in the microsecond before a sub-microsecond applies_from is before it. */
+    @Test
+    void subMicrosecondAppliesFromAgrees() {
+        var appliesFrom = BASE.plusNanos(500);
+        var task = AiLabelTaskFixtures.generate("summary", false).toBuilder()
+                .version(1)
+                .appliesFrom(appliesFrom)
+                .build();
+        var cases = List.of(new Case(task, BASE), new Case(task, BASE.plus(1, ChronoUnit.MICROS)));
+
+        var required = Flux.fromIterable(cases).concatMap(this::sqlRequired).collectList().block();
+
+        assertThat(required).containsExactly(0, 1);
+        assertThat(cases).extracting(testCase -> testCase.task().required(testCase.createdAt()))
+                .containsExactly(0, 1);
+    }
+
     private Mono<Integer> sqlRequired(Case testCase) {
         return Mono.usingWhen(Mono.from(connectionFactory.create()),
                 connection -> Mono.from(AiLabelSweepDAO.bindTasks(connection.createStatement(REQUIRED),

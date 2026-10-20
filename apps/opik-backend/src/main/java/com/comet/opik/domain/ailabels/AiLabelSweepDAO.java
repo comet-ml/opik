@@ -260,8 +260,14 @@ class AiLabelSweepDAO {
         return statement;
     }
 
+    /**
+     * Rounded up: created_at has microseconds, so a trace created within the microsecond before a sub-microsecond
+     * {@code applies_from} stays before it, as {@link AiLabelTask#required(Instant)} compares it.
+     */
     private static long toEpochMicros(Instant instant) {
-        return Math.addExact(Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1_000L);
+        long micros = Math.addExact(Math.multiplyExact(instant.getEpochSecond(), 1_000_000L),
+                instant.getNano() / 1_000L);
+        return instant.getNano() % 1_000 == 0 ? micros : Math.addExact(micros, 1);
     }
 
     private static Candidate toCandidate(Row row) {
