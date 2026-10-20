@@ -269,21 +269,28 @@ model acts as the judge depends on where you run the suite.
 provider credentials:
 
 - The default judge model is `gpt-5-nano`, so `OPENAI_API_KEY` must be set.
-- Pass `model=` to use another model. Any [LiteLLM model name](https://docs.litellm.ai/docs/providers)
-  works, for example `anthropic/claude-haiku-4-5`, `bedrock/...` or `azure/...`.
+- Pass `model` to use another model.
+  - **Python:** any [LiteLLM model name](https://docs.litellm.ai/docs/providers) works, for example
+    `claude-haiku-4-5`, `bedrock/...` or `azure/...`.
+  - **TypeScript:** OpenAI (`gpt-*`, `o1*`, `o3*`, `chatgpt-*`, with `OPENAI_API_KEY`), Anthropic
+    (`claude-*`, with `ANTHROPIC_API_KEY`) or Google Gemini (`gemini-*`, `gemma-*`, with
+    `GOOGLE_API_KEY`) model IDs.
 - To check tool calls and intermediate steps, the judge can open the trace's spans with tools
   (agentic judging). Under the default `scoring_tool_strategy="auto"`, this happens only for models
   Opik has profiled for it, such as `gpt-5-mini`, `gpt-4o`, `claude-haiku-4-5` and the Claude Opus
   models. The default `gpt-5-nano` judges in a single call from `input` and `output`. To judge
   assertions about intermediate steps, pass one of those models, or set
   `scoring_tool_strategy="always"`.
+- In Python, the profiled models are matched by their plain names. A provider-prefixed name such as
+  `anthropic/claude-haiku-4-5`, `bedrock/...` or `azure/...` judges in a single call under `"auto"`,
+  so pass `scoring_tool_strategy="always"` with it when assertions need the intermediate steps.
 
 <CodeBlocks>
   ```python title="Python" wordWrap
   result = opik.run_tests(
       test_suite=suite,
       task=make_task(PROMPT_V2),
-      model="anthropic/claude-haiku-4-5",
+      model="claude-haiku-4-5",
   )
   ```
 
