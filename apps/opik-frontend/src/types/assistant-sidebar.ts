@@ -33,6 +33,15 @@ export interface BridgeContext {
 }
 
 // An Ollie chart widget opened for editing ("Edit in Ollie"). The dashboard is the bridge context's `dashboard`.
+// The host button that started a chat, reported to BI with the new session.
+export type ConversationOrigin = "describe_widget";
+
+export interface ConversationStartOptions {
+  origin?: ConversationOrigin;
+  // Id of the click, so BI matches it to the session it opens.
+  entryId?: string;
+}
+
 export interface ChartEditRequest {
   widgetId: string;
   title: string;
@@ -42,6 +51,8 @@ export interface ChartEditRequest {
   query: { id: string };
   // The rows the widget shows now, so the chat can show the chart being edited without re-running it.
   rows?: Record<string, unknown>[] | null;
+  // Id of the click, so BI matches it to the session it opens.
+  entryId?: string;
 }
 
 export interface BridgeDashboard {
@@ -112,19 +123,21 @@ export interface ExplainButtonProps {
  * 3 = Ollie charts: `charts` and `dashboard` in the context, `chart:edit`
  * (host → shell), `dashboard:updated` (shell → host), and the `charts`
  * capability in `console:ready`.
+ * 4 = `origin` and `entryId` on `conversation:start`, and `entryId` on
+ * `chart:edit`, so BI can match a host click to the session it opens.
  *
  * ⚠️ MUST move in lockstep with `ollie-console/src/bridge.ts`; the console's
  * VER-4 assertions guard the event-shape contract. Bump here AND there together
  * whenever a bridge event is added/removed/reshaped.
  */
-export const BRIDGE_PROTOCOL_VERSION = 3;
+export const BRIDGE_PROTOCOL_VERSION = 4;
 
 /** Host → Sidebar events */
 export interface HostEventMap {
   "context:changed": BridgeContext;
   "visibility:changed": { isOpen: boolean };
   "runner:state-changed": RunnerBridgeState;
-  "conversation:start": { message: string };
+  "conversation:start": { message: string } & ConversationStartOptions;
   // Open Ollie on an existing chart widget so the user can change it, then save or duplicate it.
   "chart:edit": ChartEditRequest;
   // Explain (host → shell). `explainId` correlates concurrent explains over
@@ -174,7 +187,7 @@ export interface AssistantSidebarBridge {
     event: E,
     data: SidebarEventMap[E],
   ): void;
-  startConversation(message: string): void;
+  startConversation(message: string, options?: ConversationStartOptions): void;
   // Opens the sidebar and hands it the widget; replayed if the console is not listening yet.
   editChart?(request: ChartEditRequest): void;
   // Whether the console announced the `charts` capability; an older console never handles `chart:edit`.
