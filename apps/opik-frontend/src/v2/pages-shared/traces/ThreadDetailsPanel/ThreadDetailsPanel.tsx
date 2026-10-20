@@ -53,6 +53,8 @@ import useThreadById from "@/api/traces/useThreadById";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadBatchDeleteMutation from "@/api/traces/useThreadBatchDeleteMutation";
 import TraceMessages from "@/v2/pages-shared/traces/TraceMessages/TraceMessages";
+import HiddenSpansToggle from "@/v2/pages-shared/traces/HiddenSpansToggle";
+import { useVisibleTraces } from "@/v2/pages-shared/traces/hiddenSpans";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import {
   ButtonLayoutSize,
@@ -253,7 +255,12 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     [tracesData],
   );
 
-  const { media } = useThreadMedia(traces);
+  // Internal traces (e.g. an integration's title-generation call) are not conversation
+  // turns, so Messages hides them by default, the same way the trace tree hides spans.
+  const visibleTraces = useVisibleTraces(traces);
+  const hiddenTracesCount = traces.length - visibleTraces.length;
+
+  const { media } = useThreadMedia(visibleTraces);
 
   const handleOpenTrace = useCallback(
     (id: string, shouldFilterToolCalls: boolean) => {
@@ -422,11 +429,23 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               {thread?.start_time ? formatDate(thread?.start_time) : "NA"}
             </div>
           </TooltipWrapper>
-          <TooltipWrapper content="Number of messages in the thread">
+          <TooltipWrapper
+            content={
+              hiddenTracesCount && thread?.number_of_messages
+                ? `${thread.number_of_messages} messages in the thread, hidden ones included`
+                : "Number of messages in the thread"
+            }
+          >
             <div className="flex items-center gap-1">
               <Hash className="size-3.5 shrink-0 text-muted-slate" />
               {thread?.number_of_messages
-                ? `${thread.number_of_messages} messages`
+                ? `${
+                    // The backend counts two messages (input + output) per trace.
+                    Math.max(
+                      thread.number_of_messages - hiddenTracesCount * 2,
+                      0,
+                    )
+                  } messages`
                 : "NA"}
             </div>
           </TooltipWrapper>
@@ -504,7 +523,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               )}
               <div style={bodyStyle}>
                 <TraceMessages
-                  traces={traces}
+                  traces={visibleTraces}
                   handleOpenTrace={handleOpenTrace}
                   traceId={traceId}
                 />
@@ -555,6 +574,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                   Inspect
                 </span>
                 <div className="flex-auto" />
+                <HiddenSpansToggle spans={traces} entityName="traces" />
                 {!hideAnnotateActions && (
                   <AddToDropdown
                     getDataForExport={async () => rows}

@@ -8,6 +8,8 @@ import { Filter } from "@/types/filters";
 import { useSMEFlow } from "../SMEFlowContext";
 import useTracesList from "@/api/traces/useTracesList";
 import TraceMessages from "@/v2/pages-shared/traces/TraceMessages/TraceMessages";
+import HiddenSpansToggle from "@/v2/pages-shared/traces/HiddenSpansToggle";
+import { useVisibleTraces } from "@/v2/pages-shared/traces/hiddenSpans";
 import { COLUMN_TYPE } from "@/types/shared";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import ThreadDetailsPanel from "@/v2/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
@@ -95,6 +97,9 @@ const useThreadData = () => {
     [tracesData],
   );
 
+  // Same as the thread panel: internal traces are not conversation turns.
+  const visibleTraces = useVisibleTraces(traces);
+
   const handleOpenTrace = useCallback(
     (id: string, shouldFilterToolCalls: boolean) => {
       setTracePanelFilters((previousFilters: Filter[] | null | undefined) =>
@@ -126,6 +131,7 @@ const useThreadData = () => {
   return {
     thread,
     traces,
+    visibleTraces,
     isFetching,
     traceId,
     setTraceId,
@@ -140,7 +146,7 @@ const useThreadData = () => {
 };
 
 const ThreadHeader: React.FC = () => {
-  const { thread, isFetching, handleOpenThread } = useThreadData();
+  const { thread, traces, isFetching, handleOpenThread } = useThreadData();
 
   const dateRange = formatThreadDateRange(thread?.start_time, thread?.end_time);
 
@@ -157,6 +163,7 @@ const ThreadHeader: React.FC = () => {
         <TraceIdentifier name={dateRange} id={thread?.id || ""} />
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        <HiddenSpansToggle spans={traces} entityName="traces" />
         <Button variant="ghost" size="2xs" onClick={handleOpenThread}>
           Thread
           <ArrowUpRight className="ml-1 size-3" />
@@ -169,7 +176,7 @@ const ThreadHeader: React.FC = () => {
 const ThreadContent: React.FC = () => {
   const {
     thread,
-    traces,
+    visibleTraces,
     traceId,
     setTraceId,
     spanId,
@@ -185,8 +192,8 @@ const ThreadContent: React.FC = () => {
   return (
     <>
       <TraceMessages
-        traces={traces}
-        traceId={last(traces)?.id}
+        traces={visibleTraces}
+        traceId={last(visibleTraces)?.id}
         handleOpenTrace={handleOpenTrace}
       />
       <TraceDetailsPanel
