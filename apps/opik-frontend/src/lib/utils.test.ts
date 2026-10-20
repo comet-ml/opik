@@ -545,7 +545,10 @@ describe("parseJSONPath", () => {
 
   it.each([
     [[{ key: "a" }, { index: 2 }, { key: "b" }], JSON_PATH_FORMAT.dot],
-    [[{ key: "a.b" }, { index: 0 }, { key: 'say "hi"' }], JSON_PATH_FORMAT.bracket],
+    [
+      [{ key: "a.b" }, { index: 0 }, { key: 'say "hi"' }],
+      JSON_PATH_FORMAT.bracket,
+    ],
   ])("reads back what buildJSONPath writes", (parts, format) => {
     expect(parseJSONPath(buildJSONPath(parts, format))).toEqual(parts);
   });
