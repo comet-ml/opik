@@ -1315,8 +1315,7 @@ class OpenTelemetryResourceTest {
                     .build();
         }
 
-        /** A root span and its child, with the given attributes on the root span only. */
-        private List<Span> rootAndChild(KeyValue... rootAttributes) {
+        private List<Span> rootAndChild(KeyValue... attributes) {
             var otelTraceId = ByteString.copyFrom(UUID.randomUUID().toString().getBytes());
             var root = Span.newBuilder()
                     .setName("root span")
@@ -1324,7 +1323,7 @@ class OpenTelemetryResourceTest {
                     .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
                     .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
                     .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
-                    .addAllAttributes(List.of(rootAttributes))
+                    .addAllAttributes(List.of(attributes))
                     .build();
             var child = Span.newBuilder()
                     .setName("child span")
@@ -1333,6 +1332,7 @@ class OpenTelemetryResourceTest {
                     .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
                     .setStartTimeUnixNano((System.currentTimeMillis() - 500) * 1_000_000L)
                     .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAllAttributes(List.of(attributes))
                     .build();
             return List.of(root, child);
         }
