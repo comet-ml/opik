@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { useForm } from "react-hook-form";
 import { Form } from "@/ui/form";
 import { ALERT_TYPE } from "@/types/alerts";
@@ -25,6 +25,7 @@ const Harness: React.FC = () => {
       url: "",
       secretToken: "",
       headers: [],
+      customFields: [],
       triggers: [],
     },
   });
@@ -67,5 +68,30 @@ describe("WebhookSettings", () => {
     render(<Harness />);
 
     expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+  });
+
+  it("shows custom fields in advanced settings when the toggle is on", () => {
+    mockIsFeatureEnabled.mockImplementation(
+      (feature: FeatureToggleKeys) =>
+        feature === FeatureToggleKeys.EVENT_BRIDGE_ALERTS_ENABLED,
+    );
+
+    render(<Harness />);
+    fireEvent.click(screen.getByText("Advanced webhook settings"));
+
+    expect(screen.getByText("Headers (optional)")).toBeInTheDocument();
+    expect(screen.getByText("Custom fields (optional)")).toBeInTheDocument();
+  });
+
+  it("hides custom fields in advanced settings when the toggle is off", () => {
+    mockIsFeatureEnabled.mockReturnValue(false);
+
+    render(<Harness />);
+    fireEvent.click(screen.getByText("Advanced webhook settings"));
+
+    expect(screen.getByText("Headers (optional)")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Custom fields (optional)"),
+    ).not.toBeInTheDocument();
   });
 });

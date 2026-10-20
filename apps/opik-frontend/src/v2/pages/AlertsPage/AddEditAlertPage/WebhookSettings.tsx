@@ -22,6 +22,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import DestinationSelector from "./DestinationSelector";
 import WebhookHeaders from "./WebhookHeaders";
+import WebhookCustomFields from "./WebhookCustomFields";
 import { AlertFormType } from "./schema";
 
 type WebhookSettingsProps = {
@@ -186,6 +187,8 @@ const WebhookSettings: React.FC<WebhookSettingsProps> = ({
               />
 
               <WebhookHeaders form={form} />
+
+              {isEventBridgeEnabled && <WebhookCustomFields form={form} />}
             </div>
           </AccordionContent>
         </AccordionItem>

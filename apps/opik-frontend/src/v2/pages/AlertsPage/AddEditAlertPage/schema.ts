@@ -7,6 +7,17 @@ export const HeaderSchema = z.object({
   value: z.string().min(1, { message: "Header value is required" }),
 });
 
+export const CustomFieldSchema = z.object({
+  key: z
+    .string()
+    .min(1, { message: "Field key is required" })
+    .max(64, { message: "Field key must be at most 64 characters" }),
+  value: z
+    .string()
+    .min(1, { message: "Field value is required" })
+    .max(255, { message: "Field value must be at most 255 characters" }),
+});
+
 export const FeedbackScoreConditionSchema = z.object({
   threshold: z.string(),
   window: z.string(),
@@ -137,6 +148,10 @@ export const AlertFormSchema = z
       .url({ message: "Please enter a valid URL" }),
     secretToken: z.string().optional(),
     headers: z.array(HeaderSchema).default([]),
+    customFields: z
+      .array(CustomFieldSchema)
+      .max(20, { message: "At most 20 custom fields are allowed" })
+      .default([]),
     triggers: z.array(TriggerSchema).default([]),
   })
   .refine(
