@@ -60,6 +60,7 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -237,6 +238,21 @@ class FindTraceThreadsResourceTest {
 
     private void batchCreateSpansAndAssert(List<Span> expectedSpans, String apiKey, String workspaceName) {
         spanResourceClient.batchCreateSpans(expectedSpans, apiKey, workspaceName);
+    }
+
+    private List<Span> createSpans(Trace trace) {
+        var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                .map(span -> span.toBuilder()
+                        .projectName(trace.projectName())
+                        .traceId(trace.id())
+                        .usage(spanResourceClient.getTokenUsage())
+                        .model(spanResourceClient.randomModel().toString())
+                        .provider(spanResourceClient.provider())
+                        .totalEstimatedCost(null)
+                        .build())
+                .toList();
+        batchCreateSpansAndAssert(spans, API_KEY, TEST_WORKSPACE);
+        return spans;
     }
 
     private UUID getProjectId(String projectName, String workspaceName, String apiKey) {
@@ -2063,6 +2079,41 @@ class FindTraceThreadsResourceTest {
             assertThat(actualPage.total()).isEqualTo(0);
             assertThat(actualPage.content()).isEmpty();
         }
+
+        /**
+         * A search keeps the page pushdown, whose spans reads take every trace of the page's threads, the ones the
+         * search drops included: only the spans of the matching traces count towards the thread.
+         */
+        @Test
+        void searchThreadsCountsOnlyTheSpansOfTheMatchingTraces() {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var threadId = "thread-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var term = "term-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            var matchingTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .input(JsonUtils.getJsonNodeFromString("{\"content\": \"%s\"}".formatted(term)))
+                    .startTime(now)
+                    .endTime(now.plusMillis(10))
+                    .build();
+            var otherTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .startTime(now.plusMillis(20))
+                    .endTime(now.plusMillis(30))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(matchingTrace, otherTrace), API_KEY, TEST_WORKSPACE);
+            var matchingSpans = createSpans(matchingTrace);
+            createSpans(otherTrace);
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            var expectedThreads = getExpectedThreads(List.of(matchingTrace), projectId, threadId, matchingSpans,
+                    TraceThreadStatus.ACTIVE);
+
+            assertThreadPage(null, projectId, expectedThreads, List.of(), Map.of("search", term), API_KEY,
+                    TEST_WORKSPACE);
+        }
     }
 
     @Nested
@@ -2619,6 +2670,52 @@ class FindTraceThreadsResourceTest {
                     .operator(Operator.NOT_CONTAINS)
                     .value(RandomStringUtils.secure().nextAlphabetic(24))
                     .build();
+        }
+
+        private Stream<Arguments> windowedThreadsCountOnlyTheSpansOfTheirInWindowTraces() {
+            var now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            var fromTime = now.minus(60, ChronoUnit.SECONDS);
+            var toTime = now.minus(20, ChronoUnit.SECONDS);
+            var beforeWindow = fromTime.minusSeconds(30);
+            var firstInWindow = fromTime.plusSeconds(1);
+            var lastInWindow = toTime.minusSeconds(1);
+            var afterWindow = toTime.plusSeconds(10);
+            var startTimes = List.of(beforeWindow, firstInWindow, lastInWindow, afterWindow);
+            return Stream.of(
+                    arguments(Named.of("from and to", Map.of("from_time", fromTime.toString(),
+                            "to_time", toTime.toString())), startTimes, List.of(firstInWindow, lastInWindow)),
+                    arguments(Named.of("from only", Map.of("from_time", fromTime.toString())), startTimes,
+                            List.of(firstInWindow, lastInWindow, afterWindow)),
+                    arguments(Named.of("to only", Map.of("to_time", toTime.toString())), startTimes,
+                            List.of(beforeWindow, firstInWindow, lastInWindow)));
+        }
+
+        /**
+         * On a window, the page pushdown's spans reads take the page's trace ids within that window: the thread counts
+         * the spans of its in-window traces, the ones at the edges included, and not those of its traces outside it.
+         */
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        void windowedThreadsCountOnlyTheSpansOfTheirInWindowTraces(Map<String, String> window,
+                List<Instant> startTimes, List<Instant> inWindowStartTimes) {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            var threadId = "thread-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var environment = "environment-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var tracesByStartTime = startTimes.stream()
+                    .collect(Collectors.toMap(Function.identity(), startTime -> threadTrace(projectName, threadId,
+                            startTime).toBuilder().environment(environment).build()));
+            traceResourceClient.batchCreateTraces(List.copyOf(tracesByStartTime.values()), API_KEY, TEST_WORKSPACE);
+            var spansByStartTime = tracesByStartTime.entrySet().stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey, entry -> createSpans(entry.getValue())));
+            awaitThreadRows(List.of(threadId), projectId);
+
+            var expectedThreads = getExpectedThreads(inWindowStartTimes.stream().map(tracesByStartTime::get).toList(),
+                    projectId, threadId,
+                    inWindowStartTimes.stream().flatMap(startTime -> spansByStartTime.get(startTime).stream()).toList(),
+                    TraceThreadStatus.ACTIVE);
+
+            assertThreadPage(null, projectId, expectedThreads, List.of(), window, API_KEY, TEST_WORKSPACE);
         }
 
         // Closing a thread whose row is not written yet writes it with an id of about now, not of its first trace.
