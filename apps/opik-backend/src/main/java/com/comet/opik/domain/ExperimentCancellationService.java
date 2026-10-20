@@ -120,7 +120,7 @@ public class ExperimentCancellationService {
                                             log.info("Removed '{}' queued messages for cancelled experiment '{}',"
                                                     + " leaving '{}' already with a consumer",
                                                     removed, experimentId, ids.size() - queued.size());
-                                            return releaseItemSlots(workspaceId, experimentId, removed);
+                                            return subtractPurgedItems(workspaceId, experimentId, removed);
                                         });
                             });
                 })
@@ -158,7 +158,7 @@ public class ExperimentCancellationService {
      * Subtracts the purged messages from the experiment's own counter. What remains is what a
      * consumer still holds, and at zero there is none of it left.
      */
-    private Mono<Boolean> releaseItemSlots(String workspaceId, UUID experimentId, long removed) {
+    private Mono<Boolean> subtractPurgedItems(String workspaceId, UUID experimentId, long removed) {
         if (removed == 0) {
             return Mono.just(false);
         }
