@@ -23,6 +23,7 @@ models:
   no-sampling:
     - claude-fable-5
     - claude-fable-5-1
+    - claude-haiku-5-5
     - claude-mythos-5
     - claude-mythos-5-1
     - claude-mythos-preview
@@ -32,6 +33,7 @@ models:
     - claude-opus-5
     - claude-opus-5-5
     - claude-sonnet-5
+    - claude-sonnet-5-5
   # In the registry only, not in AnthropicModelName: what a model the sync or the CDN just added looks like.
   registry-only:
     - claude-opus-6
@@ -40,16 +42,19 @@ models:
   thinks-by-default:
     - claude-fable-5
     - claude-fable-5-1
+    - claude-haiku-5-5
     - claude-mythos-5
     - claude-mythos-5-1
     - claude-mythos-preview
     - claude-opus-5
     - claude-opus-5-5
     - claude-sonnet-5
+    - claude-sonnet-5-5
   # AnthropicModelName.EFFORT_LEVELS_BY_MODEL_ID, by the levels each model is listed with.
   effort-all:
     - claude-fable-5
     - claude-fable-5-1
+    - claude-haiku-5-5
     - claude-mythos-5
     - claude-mythos-5-1
     - claude-opus-4-7
@@ -58,6 +63,7 @@ models:
     - claude-opus-5
     - claude-opus-5-5
     - claude-sonnet-5
+    - claude-sonnet-5-5
   effort-to-max:
     - claude-mythos-preview
     - claude-opus-4-6

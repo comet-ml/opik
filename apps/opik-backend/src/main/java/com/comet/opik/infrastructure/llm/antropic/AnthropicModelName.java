@@ -38,7 +38,9 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     CLAUDE_MYTHOS_PREVIEW("claude-mythos-preview"),
     CLAUDE_OPUS_4_6_20260205("claude-opus-4-6-20260205"),
     CLAUDE_OPUS_4_7_20260416("claude-opus-4-7-20260416"),
-    CLAUDE_OPUS_5_5("claude-opus-5-5");
+    CLAUDE_OPUS_5_5("claude-opus-5-5"),
+    CLAUDE_HAIKU_5_5("claude-haiku-5-5"),
+    CLAUDE_SONNET_5_5("claude-sonnet-5-5");
 
     private final String value;
 
@@ -105,6 +107,8 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     // thinkingEffortOptions in the frontend's ANTHROPIC_MODEL_CAPABILITIES must offer a subset of these.
     private static final Map<String, List<String>> EFFORT_LEVELS_BY_MODEL_ID = Map.ofEntries(
             Map.entry(CLAUDE_OPUS_5_5.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_HAIKU_5_5.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_SONNET_5_5.value, ALL_EFFORT_LEVELS),
             Map.entry(CLAUDE_OPUS_5.value, ALL_EFFORT_LEVELS),
             Map.entry(CLAUDE_OPUS_4_8.value, ALL_EFFORT_LEVELS),
             Map.entry(CLAUDE_OPUS_4_7.value, ALL_EFFORT_LEVELS),

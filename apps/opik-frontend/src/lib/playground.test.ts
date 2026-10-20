@@ -256,7 +256,9 @@ describe("getDefaultConfigByProvider — Anthropic thinking effort", () => {
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, "medium"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5, "medium"],
   ])("seeds %s with Anthropic's default effort, %s", (model, effort) => {
     const config = getDefaultConfigByProvider(
       PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
