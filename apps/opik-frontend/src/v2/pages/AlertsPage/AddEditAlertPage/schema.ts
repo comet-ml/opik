@@ -10,14 +10,23 @@ export const HeaderSchema = z.object({
 export const MAX_CUSTOM_FIELDS = 20;
 
 export const CustomFieldSchema = z.object({
+  // Not trimmed: the backend rejects blank keys/values but stores the rest as entered
   key: z
     .string()
-    .min(1, { message: "Field key is required" })
-    .max(64, { message: "Field key must be at most 64 characters" }),
+    .refine((key) => key.trim().length > 0, {
+      message: "Field key is required",
+    })
+    .refine((key) => key.length <= 64, {
+      message: "Field key must be at most 64 characters",
+    }),
   value: z
     .string()
-    .min(1, { message: "Field value is required" })
-    .max(255, { message: "Field value must be at most 255 characters" }),
+    .refine((value) => value.trim().length > 0, {
+      message: "Field value is required",
+    })
+    .refine((value) => value.length <= 255, {
+      message: "Field value must be at most 255 characters",
+    }),
 });
 
 export const FeedbackScoreConditionSchema = z.object({
