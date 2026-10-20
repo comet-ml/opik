@@ -39,6 +39,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -106,7 +107,8 @@ class ExperimentExecutionServiceTest {
                 featureFlags);
 
         lenient().when(featureFlags.isDatasetVersioningEnabled()).thenReturn(true);
-        lenient().when(itemPublisher.publish(any(), any(), anyBoolean())).thenReturn(Mono.empty());
+        lenient().when(itemPublisher.publish(any(), any())).thenReturn(Mono.empty());
+        lenient().when(itemPublisher.trackRun(any(), anyBoolean())).thenReturn(Mono.empty());
         // An empty queue, so only the tests that fill it see the run refused.
         lenient().when(itemPublisher.queuedMessageCount()).thenReturn(Mono.just(0L));
         // Every publish asks whether a stop landed while it was running; almost no test is about that.
@@ -163,7 +165,8 @@ class ExperimentExecutionServiceTest {
     }
 
     private void stubExperimentCreate() {
-        when(experimentService.create(any(Experiment.class)))
+        // Lenient: the test about what runs before the experiments exist stubs this itself
+        lenient().when(experimentService.create(any(Experiment.class)))
                 .thenReturn(Mono.just(UUID.randomUUID()));
     }
 
@@ -731,7 +734,7 @@ class ExperimentExecutionServiceTest {
                     .hasMessageContaining("more than")
                     .hasMessageContaining("1,000");
 
-            verify(itemPublisher, never()).publish(any(), any(), anyBoolean());
+            verify(itemPublisher, never()).publish(any(), any());
 
             // Nothing written at all. The variants are planned with ids of our own and only persisted
             // once the run is one we will accept, so a refusal leaves no experiments behind rather
@@ -753,7 +756,7 @@ class ExperimentExecutionServiceTest {
                     .prompts(List.of(buildPrompt("gpt-4", "Hello")))
                     .build());
 
-            verify(itemPublisher).publish(any(), any(), anyBoolean());
+            verify(itemPublisher).publish(any(), any());
         }
 
         // The bound belongs to the stream, which every workspace shares. A run small enough on its
@@ -814,7 +817,7 @@ class ExperimentExecutionServiceTest {
                     .prompts(List.of(buildPrompt("gpt-4", "Hello")))
                     .build());
 
-            verify(itemPublisher).publish(any(), any(), anyBoolean());
+            verify(itemPublisher).publish(any(), any());
         }
     }
 
@@ -835,6 +838,7 @@ class ExperimentExecutionServiceTest {
             lenient().when(cancellationService.claimFinish(any(), any(UUID.class))).thenReturn(Mono.just(true));
             // Runs this service queued; the one test about SDK-logged experiments overrides it.
             lenient().when(itemPublisher.isTracked(any(UUID.class))).thenReturn(Mono.just(true));
+            lenient().when(cancellationService.releaseFinish(any(), any(UUID.class))).thenReturn(Mono.just(true));
 
         }
 
@@ -893,6 +897,11 @@ class ExperimentExecutionServiceTest {
 
             verify(experimentService).update(eq(sibling), any());
             verify(cancellationService).purgeQueued(WORKSPACE_ID, sibling);
+            // The claim decides who writes a terminal status, so holding one on a write that failed
+            // leaves the retry the error asks for reading the run as already finished — and writing
+            // nothing. Only the one that could not write gives it back.
+            verify(cancellationService).releaseFinish(WORKSPACE_ID, failing);
+            verify(cancellationService, never()).releaseFinish(WORKSPACE_ID, sibling);
         }
 
         // Reproduced: an experiment created through POST /experiments, then cancelled, became
@@ -1089,7 +1098,7 @@ class ExperimentExecutionServiceTest {
 
         @Test
         void markTheRunFailedWhenPublishingStopsPartway() {
-            when(itemPublisher.publish(any(), any(), anyBoolean()))
+            when(itemPublisher.publish(any(), any()))
                     .thenReturn(Mono.error(new IllegalStateException("redis is down")));
 
             assertThatThrownBy(() -> executeRequest(request()))
@@ -1108,7 +1117,7 @@ class ExperimentExecutionServiceTest {
         // purged. Marking the run is what stops a consumer calling a provider for work already lost.
         @Test
         void stopConsumersWorkingOnWhatDidGetPublished() {
-            when(itemPublisher.publish(any(), any(), anyBoolean()))
+            when(itemPublisher.publish(any(), any()))
                     .thenReturn(Mono.error(new IllegalStateException("redis is down")));
 
             assertThatThrownBy(() -> executeRequest(request())).isInstanceOf(IllegalStateException.class);
@@ -1120,7 +1129,7 @@ class ExperimentExecutionServiceTest {
         // are discarded regardless, and a counter that is gone reads as a run that drained.
         @Test
         void keepTheClaimWhenTheRunCannotBeMarkedFailed() {
-            when(itemPublisher.publish(any(), any(), anyBoolean()))
+            when(itemPublisher.publish(any(), any()))
                     .thenReturn(Mono.error(new IllegalStateException("redis is down")));
             when(experimentService.update(any(UUID.class), any()))
                     .thenReturn(Mono.error(new IllegalStateException("clickhouse is down")));
@@ -1135,7 +1144,7 @@ class ExperimentExecutionServiceTest {
 
         @Test
         void discardTheCountersSoNothingHoldsAnUnreachableTotal() {
-            when(itemPublisher.publish(any(), any(), anyBoolean()))
+            when(itemPublisher.publish(any(), any()))
                     .thenReturn(Mono.error(new IllegalStateException("redis is down")));
 
             assertThatThrownBy(() -> executeRequest(request())).isInstanceOf(IllegalStateException.class);
@@ -1147,7 +1156,7 @@ class ExperimentExecutionServiceTest {
         // cannot report the run complete over the failure.
         @Test
         void leaveTheFailureAloneWhenSomethingElseOwnsTheEnding() {
-            when(itemPublisher.publish(any(), any(), anyBoolean()))
+            when(itemPublisher.publish(any(), any()))
                     .thenReturn(Mono.error(new IllegalStateException("redis is down")));
             when(cancellationService.claimFinish(any(), any(UUID.class))).thenReturn(Mono.just(false));
 
@@ -1158,7 +1167,7 @@ class ExperimentExecutionServiceTest {
 
         @Test
         void carryOnAbortingWhenOneRecordCannotBeMarked() {
-            when(itemPublisher.publish(any(), any(), anyBoolean()))
+            when(itemPublisher.publish(any(), any()))
                     .thenReturn(Mono.error(new IllegalStateException("redis is down")));
             when(experimentService.update(any(UUID.class), any()))
                     .thenReturn(Mono.error(new IllegalStateException("persistence is down")));
@@ -1195,6 +1204,30 @@ class ExperimentExecutionServiceTest {
                     .datasetName("test-dataset")
                     .prompts(List.of(buildPrompt("gpt-4", "hi")))
                     .build();
+        }
+
+        // A stop reaches only a run this service is counting down, and the experiments are stoppable
+        // the moment they exist. Tracked any later and a stop landing in between finds nothing to
+        // stop, reports that it stopped, and the run queues every item anyway.
+        @Test
+        void countTheRunDownBeforeItsExperimentsExist() {
+            when(cancellationService.isCancelled(any(), any(UUID.class))).thenReturn(Mono.just(false));
+            // Recorded as each step runs, not as each is called: the whole chain is assembled before
+            // any of it is subscribed, so the order the mocks are invoked in says nothing
+            var order = new ArrayList<String>();
+            when(itemPublisher.trackRun(any(), anyBoolean()))
+                    .thenReturn(Mono.fromRunnable(() -> order.add("tracked")));
+            when(experimentService.create(any(Experiment.class)))
+                    .thenReturn(Mono.fromCallable(() -> {
+                        order.add("created");
+                        return UUID.randomUUID();
+                    }));
+            when(itemPublisher.publish(any(UUID.class), any()))
+                    .thenReturn(Mono.fromRunnable(() -> order.add("published")));
+
+            executeRequest(singlePromptRequest());
+
+            assertThat(order).containsExactly("tracked", "created", "published");
         }
 
         @Test
@@ -1308,7 +1341,7 @@ class ExperimentExecutionServiceTest {
                     .build());
 
             var captor = ArgumentCaptor.forClass(List.class);
-            verify(itemPublisher).publish(any(UUID.class), captor.capture(), anyBoolean());
+            verify(itemPublisher).publish(any(UUID.class), captor.capture());
             assertThat((List<ExperimentItemToProcess>) captor.getValue())
                     .isNotEmpty()
                     .allSatisfy(message -> assertThat(message.versionHash()).isEqualTo("the-latest-hash"));
@@ -1500,7 +1533,7 @@ class ExperimentExecutionServiceTest {
             executeRequest(buildRequest(ruleIds, null));
 
             var captor = ArgumentCaptor.<List<ExperimentItemToProcess>>captor();
-            verify(itemPublisher).publish(any(UUID.class), captor.capture(), anyBoolean());
+            verify(itemPublisher).publish(any(UUID.class), captor.capture());
 
             assertThat(captor.getValue())
                     .isNotEmpty()
@@ -1528,7 +1561,7 @@ class ExperimentExecutionServiceTest {
             executeRequest(request);
 
             var captor = ArgumentCaptor.<List<ExperimentItemToProcess>>captor();
-            verify(itemPublisher).publish(any(UUID.class), captor.capture(), anyBoolean());
+            verify(itemPublisher).publish(any(UUID.class), captor.capture());
             return captor.getValue();
         }
 
@@ -1548,7 +1581,7 @@ class ExperimentExecutionServiceTest {
         void createAndExecuteSkipsAssertionCountersForARegularDataset() {
             runAndCaptureMessages(DatasetType.DATASET);
 
-            verify(itemPublisher).publish(any(UUID.class), any(), eq(false));
+            verify(itemPublisher).trackRun(any(), eq(false));
         }
     }
 
@@ -1571,7 +1604,7 @@ class ExperimentExecutionServiceTest {
         @SuppressWarnings("unchecked")
         private List<ExperimentItemToProcess> capturePublishedMessages() {
             var captor = ArgumentCaptor.forClass(List.class);
-            verify(itemPublisher).publish(any(UUID.class), captor.capture(), anyBoolean());
+            verify(itemPublisher).publish(any(UUID.class), captor.capture());
             return (List<ExperimentItemToProcess>) captor.getValue();
         }
 
