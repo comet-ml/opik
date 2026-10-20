@@ -100,15 +100,15 @@ class AiLabelSweepDAO {
             by_trace AS (
                 SELECT workspace_id, project_id, trace_id,
                     groupArrayIf(task, settled) AS settled_tasks,
-                    groupArrayIf(task, is_current AND NOT settled) AS retry_tasks,
-                    groupArrayIf(attempt, is_current AND NOT settled) AS retry_attempts
+                    -- As pairs: two separate groupArrays aren't guaranteed to come back in the same order.
+                    groupArrayIf((task, attempt), is_current AND NOT settled) AS retries
                 FROM judged
                 GROUP BY workspace_id, project_id, trace_id
             ),
             candidates AS (
                 SELECT e.workspace_id AS workspace_id, e.project_id AS project_id, e.id AS id, e.created_at AS created_at,
                     arrayFilter(t -> <required_trace> > 0 AND NOT has(s.settled_tasks, t), :task_names) AS missing,
-                    arrayMap(t -> if(has(s.retry_tasks, t), toUInt32(s.retry_attempts[indexOf(s.retry_tasks, t)]), 0), missing) AS attempts
+                    arrayMap(t -> toUInt32(arrayFirst(r -> r.1 = t, s.retries).2), missing) AS attempts
                 FROM eligible AS e
                 -- By project too: a trace id reused in another project is another trace, with its own statuses.
                 LEFT ANY JOIN by_trace AS s ON s.workspace_id = e.workspace_id AND s.project_id = e.project_id
