@@ -4,6 +4,7 @@ import com.comet.opik.domain.ailabels.AiLabelSweepDAO.Candidate;
 import com.comet.opik.domain.ailabels.AiLabelSweepDAO.SweepTask;
 import com.comet.opik.domain.ailabels.AiLabelSweepDAO.WorkspaceHealth;
 import com.comet.opik.infrastructure.AiLabelsConfig;
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import com.google.common.hash.Hashing;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
@@ -179,7 +180,8 @@ public class AiLabelSweepService {
                     "ai-labels '{}' query for bucket '{}' tripped guard '{}'; skipping the bucket, raise the bucket count",
                     query, bucket, guard.get());
         } else {
-            errors.add(1, Attributes.of(longKey("bucket"), (long) bucket));
+            errors.add(1, Attributes.of(longKey("bucket"), (long) bucket, stringKey("query"), query,
+                    stringKey("error_type"), ErrorMetricsResolver.errorType(error)));
             log.error("ai-labels '{}' query for bucket '{}' failed; skipping the bucket", query, bucket, error);
         }
         return Flux.empty();

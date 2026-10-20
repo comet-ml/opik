@@ -512,7 +512,14 @@ public class AiLabelsTickService {
             }
         }
         jobs.sendAll();
-        statusDAO.insert(jobs.failures).block();
+        try {
+            statusDAO.insert(jobs.failures).block();
+        } catch (RuntimeException exception) {
+            // Not in flight, so the next sweep finds these pairs again and fails them again.
+            log.error("ai-labels failed to write '{}' submit failures; they are retried by the next sweep",
+                    jobs.failures.size(), exception);
+            return;
+        }
         countOutcomes(null, jobs.failures);
     }
 

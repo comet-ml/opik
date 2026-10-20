@@ -536,7 +536,7 @@ class AiLabelsTickTest {
     }
 
     @Test
-    @DisplayName("one trace id in two projects of a workspace goes out once, never twice in one job")
+    @DisplayName("one trace id in two projects of a workspace: never twice in one job, and each project's is labeled")
     void traceIdInTwoProjects() {
         var workspaceId = enabledWorkspace();
         var traceId = trace(workspaceId, UUID.randomUUID(), 0);
@@ -549,12 +549,18 @@ class AiLabelsTickTest {
         assertThat(submits(GENERATE_PATH, workspaceId)).singleElement()
                 .satisfies(body -> assertThat(itemIds(body)).containsExactly(traceId + ":" + GENERATE_TASK));
 
+        // Settled is judged per project, so the copy goes out once the first loads, in a job of its own.
+        completeJobs(workspaceId);
+        tick();
+
+        assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(2)
+                .allSatisfy(body -> assertThat(itemIds(body)).containsExactly(traceId.toString()));
+
         completeJobs(workspaceId);
         tick();
         tick();
 
-        // Settled is judged per trace id, so the copy counts as labeled once the first loads.
-        assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
+        assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(2);
         assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
     }
 
