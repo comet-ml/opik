@@ -117,17 +117,6 @@ public class InferenceClient {
                 .map(BatchJobStatusResponse::jobs);
     }
 
-    public Mono<JobView> cancelJob(@NonNull String jobId, @NonNull Instant deadline) {
-        return execute(Call.<JobView>builder()
-                .method(HttpMethod.DELETE)
-                .path(JOB_PATH_TEMPLATE)
-                .target(base -> base.path(JOB_PATH_TEMPLATE).resolveTemplate("job_id", jobId))
-                .readTimeout(config.getInference().getReadTimeout().toJavaDuration())
-                .deadline(deadline)
-                .type(JobView.class)
-                .build());
-    }
-
     private Mono<BatchSubmitResponse> submit(String path, Object request, int items, Instant deadline) {
         Preconditions.checkArgument(items >= 1 && items <= MAX_BATCH_ITEMS,
                 "a batch must have 1 to '%s' items, items '%s'", MAX_BATCH_ITEMS, items);
