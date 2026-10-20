@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { QueryParamProvider } from "use-query-params";
 import { WindowHistoryAdapter } from "use-query-params/adapters/window";
@@ -133,10 +133,29 @@ const renderPanel = (props: { traceId?: string } = {}) => {
   );
 };
 
-const renderedMessageIds = (container: HTMLElement) =>
-  Array.from(
-    container.ownerDocument.querySelectorAll("[data-trace-message-id]"),
-  ).map((node) => node.getAttribute("data-trace-message-id"));
+const INTERNAL_TOOLTIP =
+  "Internal call (e.g. title generation), hidden by default";
+
+// One entry per rendered message, in order: its trace id and its internal badge (null when
+// the message is not badged). Lets each test assert the whole Messages list at once.
+const renderedMessages = () =>
+  Array.from(document.querySelectorAll("[data-trace-message-id]")).map(
+    (node) => ({
+      id: node.getAttribute("data-trace-message-id"),
+      badge:
+        within(node as HTMLElement).queryByRole("note", {
+          name: INTERNAL_TOOLTIP,
+        })?.textContent ?? null,
+    }),
+  );
+
+const turn = (id: string) => ({ id, badge: null });
+const internal = (id: string) => ({ id, badge: "Internal" });
+
+const hoverForTooltip = async (element: HTMLElement) => {
+  fireEvent.pointerMove(element, { pointerType: "mouse" });
+  return (await screen.findByRole("tooltip")).textContent;
+};
 
 describe("ThreadDetailsPanel messages", () => {
   beforeEach(() => {
@@ -145,7 +164,7 @@ describe("ThreadDetailsPanel messages", () => {
     mocks.thread = undefined;
   });
 
-  it("hides internal traces by default and reveals them with the toggle", () => {
+  it("hides internal traces by default, and the toggle shows them badged and hides them again", () => {
     mocks.traces = [
       makeTrace("trace-1"),
       makeTrace("trace-2", INTERNAL_METADATA),
@@ -153,26 +172,76 @@ describe("ThreadDetailsPanel messages", () => {
     ];
     mocks.thread = makeThread(6);
 
-    const { container } = renderPanel();
+    renderPanel();
 
-    expect(renderedMessageIds(container)).toEqual(["trace-1", "trace-3"]);
-    expect(screen.getByText("4 messages")).toBeTruthy();
+    expect(renderedMessages()).toEqual([turn("trace-1"), turn("trace-3")]);
+    expect(screen.getByText("4 messages")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("Show hidden traces"));
+    fireEvent.click(screen.getByRole("button", { name: "Show hidden traces" }));
 
-    expect(renderedMessageIds(container)).toEqual([
-      "trace-1",
-      "trace-2",
-      "trace-3",
+    expect(renderedMessages()).toEqual([
+      turn("trace-1"),
+      internal("trace-2"),
+      turn("trace-3"),
     ]);
-    expect(screen.getByText("6 messages")).toBeTruthy();
+    expect(screen.getByText("6 messages")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("Collapse hidden traces"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Collapse hidden traces" }),
+    );
 
-    expect(renderedMessageIds(container)).toEqual(["trace-1", "trace-3"]);
+    expect(renderedMessages()).toEqual([turn("trace-1"), turn("trace-3")]);
+    expect(screen.getByText("4 messages")).toBeInTheDocument();
   });
 
-  it("keeps the selected trace in Messages when it is internal", () => {
+  it("explains the internal badge in its tooltip", async () => {
+    mocks.traces = [
+      makeTrace("trace-1"),
+      makeTrace("trace-2", INTERNAL_METADATA),
+    ];
+    mocks.thread = makeThread(4);
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Show hidden traces" }));
+
+    expect(
+      await hoverForTooltip(
+        screen.getByRole("note", { name: INTERNAL_TOOLTIP }),
+      ),
+    ).toBe(INTERNAL_TOOLTIP);
+  });
+
+  it("explains the hidden traces in the toggle tooltip", async () => {
+    mocks.traces = [
+      makeTrace("trace-1"),
+      makeTrace("trace-2", INTERNAL_METADATA),
+    ];
+    mocks.thread = makeThread(4);
+
+    renderPanel();
+
+    expect(
+      await hoverForTooltip(
+        screen.getByRole("button", { name: "Show hidden traces" }),
+      ),
+    ).toBe("Some traces are hidden. Click to show all traces.");
+  });
+
+  it("gives the full message count in the count tooltip while traces are hidden", async () => {
+    mocks.traces = [
+      makeTrace("trace-1"),
+      makeTrace("trace-2", INTERNAL_METADATA),
+    ];
+    mocks.thread = makeThread(4);
+
+    renderPanel();
+
+    expect(await hoverForTooltip(screen.getByText("2 messages"))).toBe(
+      "4 messages in the thread, hidden ones included",
+    );
+  });
+
+  it("keeps the selected trace in Messages, badged, when it is internal", () => {
     mocks.traces = [
       makeTrace("trace-1"),
       makeTrace("trace-2", INTERNAL_METADATA),
@@ -180,20 +249,24 @@ describe("ThreadDetailsPanel messages", () => {
     ];
     mocks.thread = makeThread(6);
 
-    const { container } = renderPanel({ traceId: "trace-2" });
+    renderPanel({ traceId: "trace-2" });
 
-    expect(renderedMessageIds(container)).toEqual(["trace-1", "trace-2"]);
-    expect(screen.getByText("4 messages")).toBeTruthy();
+    expect(renderedMessages()).toEqual([turn("trace-1"), internal("trace-2")]);
+    expect(screen.getByText("4 messages")).toBeInTheDocument();
   });
 
-  it("renders every trace and no toggle when the thread has no internal traces", () => {
+  it("renders every trace unbadged, with no toggle, when the thread has no internal traces", async () => {
     mocks.traces = [makeTrace("trace-1"), makeTrace("trace-2")];
     mocks.thread = makeThread(4);
 
-    const { container } = renderPanel();
+    renderPanel();
 
-    expect(renderedMessageIds(container)).toEqual(["trace-1", "trace-2"]);
-    expect(screen.getByText("4 messages")).toBeTruthy();
-    expect(screen.queryByLabelText("Show hidden traces")).toBeNull();
+    expect(renderedMessages()).toEqual([turn("trace-1"), turn("trace-2")]);
+    expect(
+      screen.queryByRole("button", { name: /hidden traces/ }),
+    ).not.toBeInTheDocument();
+    expect(await hoverForTooltip(screen.getByText("4 messages"))).toBe(
+      "Number of messages in the thread",
+    );
   });
 });
