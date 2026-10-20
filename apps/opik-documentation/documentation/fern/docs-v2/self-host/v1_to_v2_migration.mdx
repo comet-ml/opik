@@ -25,31 +25,58 @@ Opik 2.0 organizes everything around **projects**. Data created after upgrading 
 
 ### Pin a supported version
 
+**First, check the version you run now.** If `opik-backend` is already on 2.2.18 or later, stop here
+and do not follow the commands below: 2.2.18 changes the database schema, so 2.2.17 cannot run
+against it. Restore the snapshot you took before that upgrade, or contact the Opik team.
+
 <Tabs>
   <Tab title="Docker Compose">
-    Check out the `2.2.17` tag of the Opik repository so the Compose files match the images, then start Opik on that version:
+    Find your stack and the backend image it runs. `./opik.sh` names the Compose project
+    `opik-<folder>` after the folder of your Opik checkout, for example `opik-opik`:
+
+    ```bash wordWrap
+    docker compose ls
+    docker ps --filter "label=com.docker.compose.service=backend" --format '{{.Names}}  {{.Image}}'
+    ```
+
+    Export the project name from the first command so every `docker compose` command on this page
+    targets that stack. Without it, Docker Compose uses the project name `opik` from the Compose
+    file and starts a separate, empty stack:
+
+    ```bash wordWrap
+    export COMPOSE_PROJECT_NAME=opik-opik  # the NAME shown by docker compose ls
+    ```
+
+    Then check out the `2.2.17` tag of the Opik repository so the Compose files match the images,
+    and start Opik on that version:
 
     ```bash wordWrap
     git fetch --tags && git checkout 2.2.17
-    OPIK_VERSION=2.2.17 ./opik.sh
+    export OPIK_VERSION=2.2.17
+    ./opik.sh
     ```
 
-    Export `OPIK_VERSION=2.2.17` in the shell you use for the `docker compose` commands below, so the backend stays on that version when you restart it.
+    Keep `COMPOSE_PROJECT_NAME` and `OPIK_VERSION` exported in the shell you use for the
+    `docker compose` commands below.
   </Tab>
   <Tab title="Kubernetes / Helm">
-    Pin both the chart and the images to `2.2.17`:
+    Check the current version in the `APP VERSION` column:
 
     ```bash wordWrap
-    VERSION=2.2.17
-    helm repo update
-    helm upgrade opik opik/opik -n opik -f values.yaml --version $VERSION \
-        --set component.backend.image.tag=$VERSION \
-        --set component.python-backend.image.tag=$VERSION \
-        --set component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_TAG="$VERSION" \
-        --set component.frontend.image.tag=$VERSION
+    helm list -n opik
     ```
 
-    The `helm upgrade` commands in the steps below keep `--version 2.2.17` and add `--reuse-values`, so the chart and image tags stay on 2.2.17 while you toggle the flags.
+    Remove any `image.tag` overrides (and `PYTHON_CODE_EXECUTOR_IMAGE_TAG`) from your `values.yaml`
+    for the migration. Without them, the chart runs the images that match its own version. Then pin
+    the chart to `2.2.17`:
+
+    ```bash wordWrap
+    helm repo update
+    helm upgrade opik opik/opik -n opik -f values.yaml --version 2.2.17
+    ```
+
+    The `helm upgrade` commands in the steps below keep `--version 2.2.17`, so the chart and images
+    stay on 2.2.17 while you toggle the flags.
   </Tab>
 </Tabs>
 
@@ -102,7 +129,7 @@ When an item's associated data spans multiple projects, it is assigned to the **
 
     ```bash wordWrap
     docker compose -f deployment/docker-compose/docker-compose.yaml \
-      -f deployment/docker-compose/docker-compose.migration.yaml up -d backend
+      -f deployment/docker-compose/docker-compose.migration.yaml --profile opik up -d backend
     ```
   </Tab>
   <Tab title="Kubernetes / Helm">
@@ -118,7 +145,7 @@ When an item's associated data spans multiple projects, it is assigned to the **
     Apply:
 
     ```bash wordWrap
-    helm upgrade opik opik/opik -n opik -f values.yaml --version 2.2.17 --reuse-values
+    helm upgrade opik opik/opik -n opik -f values.yaml --version 2.2.17
     ```
   </Tab>
 </Tabs>
@@ -128,7 +155,7 @@ When an item's associated data spans multiple projects, it is assigned to the **
 <Tabs>
   <Tab title="Docker Compose">
     ```bash wordWrap
-    docker compose -f deployment/docker-compose/docker-compose.yaml logs -f backend \
+    docker compose -f deployment/docker-compose/docker-compose.yaml --profile opik logs -f backend \
       | grep -i "experiment.*migration"
     ```
   </Tab>
@@ -164,7 +191,7 @@ Enable both once Step 1 is complete. They are independent of each other and can 
     ```
     ```bash wordWrap
     docker compose -f deployment/docker-compose/docker-compose.yaml \
-      -f deployment/docker-compose/docker-compose.migration.yaml up -d backend
+      -f deployment/docker-compose/docker-compose.migration.yaml --profile opik up -d backend
     ```
   </Tab>
   <Tab title="Kubernetes / Helm">
@@ -176,7 +203,7 @@ Enable both once Step 1 is complete. They are independent of each other and can 
           PROMPT_PROJECT_MIGRATION_ENABLED: "true"
     ```
     ```bash wordWrap
-    helm upgrade opik opik/opik -n opik -f values.yaml --version 2.2.17 --reuse-values
+    helm upgrade opik opik/opik -n opik -f values.yaml --version 2.2.17
     ```
   </Tab>
 </Tabs>
@@ -204,7 +231,7 @@ Enable only after both Step 1 and Step 2 are complete. Optimizations infer their
     ```
     ```bash wordWrap
     docker compose -f deployment/docker-compose/docker-compose.yaml \
-      -f deployment/docker-compose/docker-compose.migration.yaml up -d backend
+      -f deployment/docker-compose/docker-compose.migration.yaml --profile opik up -d backend
     ```
   </Tab>
   <Tab title="Kubernetes / Helm">
@@ -215,7 +242,7 @@ Enable only after both Step 1 and Step 2 are complete. Optimizations infer their
           OPTIMIZATION_PROJECT_MIGRATION_ENABLED: "true"
     ```
     ```bash wordWrap
-    helm upgrade opik opik/opik -n opik -f values.yaml --version 2.2.17 --reuse-values
+    helm upgrade opik opik/opik -n opik -f values.yaml --version 2.2.17
     ```
   </Tab>
 </Tabs>
@@ -243,7 +270,7 @@ These jobs inspect project references already stored in their own rows and have 
     ```
     ```bash wordWrap
     docker compose -f deployment/docker-compose/docker-compose.yaml \
-      -f deployment/docker-compose/docker-compose.migration.yaml up -d backend
+      -f deployment/docker-compose/docker-compose.migration.yaml --profile opik up -d backend
     ```
   </Tab>
   <Tab title="Kubernetes / Helm">
@@ -255,7 +282,7 @@ These jobs inspect project references already stored in their own rows and have 
           ALERT_PROJECT_MIGRATION_ENABLED: "true"
     ```
     ```bash wordWrap
-    helm upgrade opik opik/opik -n opik -f values.yaml --version 2.2.17 --reuse-values
+    helm upgrade opik opik/opik -n opik -f values.yaml --version 2.2.17
     ```
   </Tab>
 </Tabs>
@@ -319,7 +346,7 @@ SELECT COUNT(*) FROM alerts WHERE project_id IS NULL;
 | Symptom | Likely cause | Action |
 |---------|-------------|--------|
 | `Could not acquire lock` in logs | Normal on multi-replica deployments — only one replica runs per cycle | Harmless as long as `success` also appears each cycle |
-| No progress after several cycles | Flag didn't propagate | Verify: Docker: `docker exec opik-backend-1 env \| grep MIGRATION` · Kubernetes: `kubectl exec deploy/opik-backend -n opik -- env \| grep MIGRATION` |
+| No progress after several cycles | Flag didn't propagate | Verify: Docker: `docker compose -f deployment/docker-compose/docker-compose.yaml --profile opik exec backend env \| grep MIGRATION` (with `COMPOSE_PROJECT_NAME` exported) · Kubernetes: `kubectl exec deploy/opik-backend -n opik -- env \| grep MIGRATION` |
 | Items landed in Default Project unexpectedly | A dependent job ran before its prerequisite finished | Use [`opik migrate`](/tracing/advanced/migrate-data) to relocate them |
 | High MySQL or ClickHouse load during the run | Too many workspaces per cycle | Contact the Opik team — the batch size defaults are tunable |
 | Sustained `error` results in job logs | Infrastructure or connectivity issue | Disable the job immediately, find the stack trace in the backend logs, resolve the underlying issue, then re-enable |
@@ -330,7 +357,17 @@ SELECT COUNT(*) FROM alerts WHERE project_id IS NULL;
 Once every verification query returns 0:
 
 1. Remove the six `*_PROJECT_MIGRATION_ENABLED` variables from your Helm values, or delete `docker-compose.migration.yaml` for Docker Compose. Opik 2.2.18 and later no longer read them.
-2. Upgrade to the latest release as usual: `OPIK_VERSION=latest ./opik.sh` (after checking out the latest Opik repository) for Docker Compose, or the `helm upgrade` command from [Kubernetes deployment](/self-host/kubernetes) without `--version` for Helm.
+2. Upgrade to the latest release:
+
+   - **Docker Compose:** check out the latest Opik repository (`git checkout main && git pull`),
+     unset `OPIK_VERSION` (or set it to `latest`), and run `./opik.sh`.
+   - **Kubernetes / Helm:** keep your values file and drop `--version`, so Helm installs the latest
+     chart and its matching images:
+
+     ```bash wordWrap
+     helm repo update
+     helm upgrade opik opik/opik -n opik -f values.yaml
+     ```
 
 ## Next steps
 
