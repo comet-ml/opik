@@ -159,7 +159,8 @@ public class InferenceClient {
     private <T> Mono<T> attempt(Call<T> call, int attempt) {
         return Mono.defer(() -> {
             var left = Duration.between(Instant.now(), call.deadline());
-            return left.isPositive() ? send(call, left) : Mono.<T>error(InferenceException.outOfTime());
+            // Under 1 ms is out of time: Jersey's timeouts are whole milliseconds, so the attempt would outlast it.
+            return left.toMillis() >= 1 ? send(call, left) : Mono.<T>error(InferenceException.outOfTime());
         }).onErrorResume(InferenceException.class, exception -> {
             if (attempt >= MAX_RETRIES || !exception.isRetryable() || (call.submit() && exception.isQuotaExceeded())) {
                 return Mono.error(exception);
@@ -170,7 +171,8 @@ public class InferenceClient {
             if (!Instant.now().plus(backoff).isBefore(call.deadline())) {
                 return Mono.error(exception);
             }
-            log.warn("Retrying opik-inference call, method '{}', path '{}', code '{}', status '{}', attempt '{}'",
+            // DEBUG: a retry that recovers is routine, and the caller logs a call that fails for good.
+            log.debug("Retrying opik-inference call, method '{}', path '{}', code '{}', status '{}', attempt '{}'",
                     call.method(), call.path(), exception.getCode(), exception.getHttpStatus(), attempt + 1);
             return Mono.delay(backoff).then(Mono.defer(() -> attempt(call, attempt + 1)));
         });
