@@ -1,10 +1,14 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.ProjectStats;
+import com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.filter.Operator;
@@ -28,6 +32,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
@@ -40,7 +45,10 @@ import com.comet.opik.api.resources.v1.events.SpanWeeksListener;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanService;
+import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -81,6 +89,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -102,6 +112,12 @@ class SpanWeeksReadBoundTest {
     private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
+
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+
+    /** The project stats a trace's spans make up, and the project they belong to. */
+    private static final String[] PROJECT_STATS_COMPARED_FIELDS = {"projectId", "traceCount",
+            "totalEstimatedCostSum", "usage"};
 
     private static final String[] OPTIMIZATION_IGNORED_FIELDS = {"datasetId", "createdAt", "lastUpdatedAt",
             "createdBy", "lastUpdatedBy", "studioConfig", "datasetName", "baselineObjectiveScore",
@@ -150,10 +166,12 @@ class SpanWeeksReadBoundTest {
     }
 
     private TraceResourceClient traceResourceClient;
+    private ProjectResourceClient projectResourceClient;
     private SpanResourceClient spanResourceClient;
     private ExperimentResourceClient experimentResourceClient;
     private OptimizationResourceClient optimizationResourceClient;
     private DatasetResourceClient datasetResourceClient;
+    private AnnotationQueuesResourceClient annotationQueuesResourceClient;
     private ExperimentAggregatesService experimentAggregatesService;
     private SpanService spanService;
     private SpanWeeksReadFixtures fixtures;
@@ -165,14 +183,16 @@ class SpanWeeksReadBoundTest {
         ClientSupportUtils.config(clientSupport);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         this.traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
+        this.projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
         this.spanResourceClient = new SpanResourceClient(clientSupport, baseUrl);
         this.experimentResourceClient = new ExperimentResourceClient(clientSupport, baseUrl, factory);
         this.optimizationResourceClient = new OptimizationResourceClient(clientSupport, baseUrl, factory);
         this.datasetResourceClient = new DatasetResourceClient(clientSupport, baseUrl);
+        this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(clientSupport, baseUrl);
         this.experimentAggregatesService = experimentAggregatesService;
         this.spanService = spanService;
         this.fixtures = new SpanWeeksReadFixtures(API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER, factory,
-                new ProjectResourceClient(clientSupport, baseUrl, factory), traceResourceClient,
+                projectResourceClient, traceResourceClient,
                 spanResourceClient, datasetResourceClient, experimentResourceClient,
                 spanService);
     }
@@ -180,18 +200,136 @@ class SpanWeeksReadBoundTest {
     @Test
     void traceCountFilteredOnSpanCostCountsAFarFutureSpan() {
         var trace = fixtures.createFarFutureTrace();
-        // The trace reaches its full cost only with the far-future span, so the filter keeps it only if that is read.
-        var filters = List.of(TraceFilter.builder()
-                .field(TraceField.TOTAL_ESTIMATED_COST)
-                .operator(Operator.GREATER_THAN_EQUAL)
-                .value(trace.totalCost().toPlainString())
-                .build());
 
-        var actual = traceResourceClient.getTraces(trace.projectName(), null, API_KEY, WORKSPACE_NAME, filters, null,
-                10, Map.of());
+        var actual = traceResourceClient.getTraces(trace.projectName(), null, API_KEY, WORKSPACE_NAME,
+                fullCostFilter(trace), null, 10, Map.of());
 
         TraceAssertions.assertPage(actual, 1, 1, 1);
         TraceAssertions.assertTraces(actual.content(), List.of(expectedTrace(trace)), USER);
+    }
+
+    /**
+     * The trace reads whose spans sub-reads are bound to the trace's span weeks: by trace ids (the trace detail), and
+     * by project, keyed on the page, on the trace id prefilter (a trace filter, with a sort on a span statistic so the
+     * page is not keyed) and on the trace time window alone (the same sort, no filter), and the stream.
+     */
+    private Stream<Arguments> traceReadCountsAFarFutureSpan() {
+        var costSort = List.of(SortingField.builder()
+                .field(SortableFields.TOTAL_ESTIMATED_COST)
+                .direction(Direction.DESC)
+                .build());
+        return Stream.of(
+                arguments(Named.of("trace detail", (Function<FarFutureTrace, List<Trace>>) trace -> List.of(
+                        traceResourceClient.getById(trace.trace().id(), WORKSPACE_NAME, API_KEY)))),
+                arguments(Named.of("traces list, page",
+                        (Function<FarFutureTrace, List<Trace>>) trace -> traceResourceClient
+                                .getTraces(trace.projectName(), null, API_KEY, WORKSPACE_NAME, null, null, 10, Map.of())
+                                .content())),
+                arguments(Named.of("traces list, prefilter",
+                        (Function<FarFutureTrace, List<Trace>>) trace -> traceResourceClient
+                                .getTraces(trace.projectName(), null, API_KEY, WORKSPACE_NAME, nameFilter(trace),
+                                        costSort, 10, Map.of())
+                                .content())),
+                arguments(Named.of("traces list, time window",
+                        (Function<FarFutureTrace, List<Trace>>) trace -> traceResourceClient
+                                .getTraces(trace.projectName(), null, API_KEY, WORKSPACE_NAME, null, costSort, 10,
+                                        timeWindow(trace))
+                                .content())),
+                arguments(Named.of("trace stream", (Function<FarFutureTrace, List<Trace>>) trace -> traceResourceClient
+                        .getStreamAndAssertContent(API_KEY, WORKSPACE_NAME, TraceSearchStreamRequest.builder()
+                                .projectName(trace.projectName())
+                                .build()))));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void traceReadCountsAFarFutureSpan(Function<FarFutureTrace, List<Trace>> read) {
+        var trace = fixtures.createFarFutureTrace();
+
+        var actual = read.apply(trace);
+
+        TraceAssertions.assertTraces(actual, List.of(expectedTrace(trace)), USER);
+    }
+
+    /** An unknown trace has no project, so its detail looks the span weeks up across the workspace's projects. */
+    @Test
+    void traceDetailOfAnUnknownTraceIsNotFound() {
+        try (var actualResponse = traceResourceClient.callGetById(ID_GENERATOR.generateId(), API_KEY, WORKSPACE_NAME,
+                Map.of())) {
+            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    /**
+     * The trace stats of a project, all-time, over a trace time window, and filtered on the trace's full cost, which
+     * also scopes the feedback-score stats to the filtered traces: the trace's own score is averaged only if the
+     * far-future span is read.
+     */
+    private Stream<Arguments> traceStatsCountAFarFutureSpan() {
+        return Stream.of(
+                arguments(Named.of("project", (Function<FarFutureTrace, ProjectStats>) trace -> traceResourceClient
+                        .getTraceStats(null, trace.projectId(), API_KEY, WORKSPACE_NAME, null, Map.of()))),
+                arguments(Named.of("time window", (Function<FarFutureTrace, ProjectStats>) trace -> traceResourceClient
+                        .getTraceStats(null, trace.projectId(), API_KEY, WORKSPACE_NAME, null, timeWindow(trace)))),
+                arguments(Named.of("filtered", (Function<FarFutureTrace, ProjectStats>) trace -> traceResourceClient
+                        .getTraceStats(null, trace.projectId(), API_KEY, WORKSPACE_NAME, fullCostFilter(trace),
+                                Map.of()))));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void traceStatsCountAFarFutureSpan(Function<FarFutureTrace, ProjectStats> read) {
+        var trace = fixtures.createFarFutureTrace();
+        var score = factory.manufacturePojo(FeedbackScore.class);
+        traceResourceClient.feedbackScore(trace.trace().id(), score, WORKSPACE_NAME, API_KEY);
+
+        var actual = read.apply(trace);
+
+        var expectedTrace = expectedStatsTrace(trace).toBuilder().feedbackScores(List.of(score)).build();
+        TraceAssertions.assertStats(actual.stats(), StatsUtils.getProjectTraceStatItems(List.of(expectedTrace)));
+    }
+
+    /** The span weeks of a queue's stats are looked up by the queue's traces. */
+    @Test
+    void annotationQueueTraceStatsCountAFarFutureSpan() {
+        var trace = fixtures.createFarFutureTrace();
+        var queue = factory.manufacturePojo(AnnotationQueue.class).toBuilder()
+                .projectId(trace.projectId())
+                .scope(AnnotationQueue.AnnotationScope.TRACE)
+                .build();
+        var queueId = annotationQueuesResourceClient.createAnnotationQueue(queue, API_KEY, WORKSPACE_NAME,
+                HttpStatus.SC_CREATED);
+        annotationQueuesResourceClient.addItemsToAnnotationQueue(queueId, Set.of(trace.trace().id()), API_KEY,
+                WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+
+        var actual = traceResourceClient.getTraceStats(null, trace.projectId(), API_KEY, WORKSPACE_NAME, null,
+                Map.of("annotation_queue_id", queueId.toString()));
+
+        TraceAssertions.assertStats(actual.stats(),
+                StatsUtils.getProjectTraceStatItems(List.of(expectedStatsTrace(trace))));
+    }
+
+    /** The projects page lists the newest projects first, so the trace's own project is on its first page. */
+    @Test
+    void projectsStatsCountAFarFutureSpan() {
+        var trace = fixtures.createFarFutureTrace();
+
+        var actual = projectResourceClient.getProjectStatsSummary(null, API_KEY, WORKSPACE_NAME).content();
+
+        var expected = ProjectStatsSummaryItem.builder()
+                .projectId(trace.projectId())
+                .traceCount(1L)
+                .totalEstimatedCostSum(trace.totalCost().doubleValue())
+                .usage(trace.totalUsage().entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().doubleValue())))
+                .build();
+        assertThat(actual)
+                .filteredOn(item -> trace.projectId().equals(item.projectId()))
+                .singleElement()
+                .usingRecursiveComparison()
+                .comparingOnlyFields(PROJECT_STATS_COMPARED_FIELDS)
+                .withComparatorForType(StatsUtils::compareDoubles, Double.class)
+                .isEqualTo(expected);
     }
 
     @Test
@@ -302,6 +440,24 @@ class SpanWeeksReadBoundTest {
         Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var actualThreads = traceResourceClient.getTraceThreads(trace.projectId(), null, API_KEY, WORKSPACE_NAME,
                     filters, sorting, Map.of()).content();
+            TraceAssertions.assertThreads(expectedThreads, actualThreads);
+        });
+    }
+
+    /**
+     * A search keeps the page pushdown, whose spans reads take every trace of the page's threads, the ones the search
+     * drops included: the search matches the trace by id, so its copy in the same thread must not count.
+     */
+    @Test
+    void threadListSearchCountsOnlyTheSpansOfTheMatchingTrace() {
+        var trace = fixtures.createFarFutureTrace();
+        fixtures.createThisWeekCopy(trace, trace.trace().threadId());
+
+        var expectedThreads = List.of(expectedThread(trace));
+        // Threads are materialised from their traces asynchronously.
+        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            var actualThreads = traceResourceClient.getTraceThreads(trace.projectId(), null, API_KEY, WORKSPACE_NAME,
+                    null, null, Map.of("search", trace.trace().id().toString())).content();
             TraceAssertions.assertThreads(expectedThreads, actualThreads);
         });
     }
@@ -443,6 +599,31 @@ class SpanWeeksReadBoundTest {
                 .block();
     }
 
+    private List<TraceFilter> nameFilter(FarFutureTrace trace) {
+        return List.of(TraceFilter.builder()
+                .field(TraceField.NAME)
+                .operator(Operator.EQUAL)
+                .value(trace.trace().name())
+                .build());
+    }
+
+    /** The trace reaches its full cost only with the far-future span, so the filter keeps it only if that is read. */
+    private List<TraceFilter> fullCostFilter(FarFutureTrace trace) {
+        return List.of(TraceFilter.builder()
+                .field(TraceField.TOTAL_ESTIMATED_COST)
+                .operator(Operator.GREATER_THAN_EQUAL)
+                .value(trace.totalCost().toPlainString())
+                .build());
+    }
+
+    /** A trace time window around the trace, which the far-future span sits far outside of. */
+    private Map<String, String> timeWindow(FarFutureTrace trace) {
+        var traceTime = trace.trace().startTime();
+        return Map.of(
+                "from_time", traceTime.minus(Duration.ofHours(1)).toString(),
+                "to_time", traceTime.plus(Duration.ofMinutes(5)).toString());
+    }
+
     /** The stats helpers price spans from their model and usage; the fixture's spans carry an explicit cost instead. */
     private List<ProjectStats.ProjectStatItem<?>> withExplicitCost(List<ProjectStats.ProjectStatItem<?>> stats,
             BigDecimal averageCost, BigDecimal totalCost) {
@@ -466,6 +647,12 @@ class SpanWeeksReadBoundTest {
                 .usage(trace.totalUsage())
                 .totalEstimatedCost(trace.totalCost())
                 .spanCount(trace.spans().size())
+                .build();
+    }
+
+    private Trace expectedStatsTrace(FarFutureTrace trace) {
+        return expectedTrace(trace).toBuilder()
+                .llmSpanCount((int) trace.spans().stream().filter(span -> span.type() == SpanType.llm).count())
                 .build();
     }
 

@@ -28,7 +28,8 @@ const PlaygroundOutputError: React.FC<PlaygroundOutputErrorProps> = ({
       >
         <CircleX className="size-3 shrink-0" />
         <span className="min-w-0 truncate">
-          <span className="font-medium">Run failed:</span> {message}
+          <span className="font-medium">Run failed:</span>{" "}
+          {hint?.title ?? message}
         </span>
       </span>
     </TooltipWrapper>
