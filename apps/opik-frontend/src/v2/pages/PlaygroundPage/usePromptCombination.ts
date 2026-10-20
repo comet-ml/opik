@@ -31,9 +31,7 @@ import { hasVisibleControls } from "@/v2/pages-shared/llm/PromptModelSettings/pr
 import { parseComposedProviderType } from "@/lib/provider";
 import { useHydratePromptMetadata } from "@/v2/pages/PlaygroundPage/useHydratePromptMetadata";
 import { collectPromptVersionRefs } from "@/api/playground/promptLinkage";
-import {
-  getTextFromMessageContent,
-} from "@/lib/llm";
+import { getTextFromMessageContent } from "@/lib/llm";
 
 export interface PromptCombination {
   prompt: PlaygroundPromptType;
