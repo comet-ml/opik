@@ -119,43 +119,33 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
     private Map<String, List<Span>> groupSpansByProjectName(ExportTraceServiceRequest traceRequest,
             String fallbackProjectName) {
-        var routedSpans = traceRequest.getResourceSpansList().stream()
-                .flatMap(resourceSpans -> {
-                    var resourceProjectName = OpenTelemetryMapper
-                            .extractOpikProjectName(resourceSpans.getResource().getAttributesList());
-                    return resourceSpans.getScopeSpansList().stream()
-                            .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
-                            .map(span -> new RoutedSpan(span, OpenTelemetryMapper
-                                    .extractOpikProjectName(span.getAttributesList())
-                                    .or(() -> resourceProjectName)
-                                    .orElse(null)));
-                })
-                .toList();
+        var rootProjectNames = new HashMap<ByteString, String>();
+        var otherProjectNames = new HashMap<ByteString, String>();
+        for (var resourceSpans : traceRequest.getResourceSpansList()) {
+            var resourceProjectName = OpenTelemetryMapper
+                    .extractOpikProjectName(resourceSpans.getResource().getAttributesList());
+            for (var scopeSpans : resourceSpans.getScopeSpansList()) {
+                for (var span : scopeSpans.getSpansList()) {
+                    OpenTelemetryMapper.extractOpikProjectName(span.getAttributesList())
+                            .or(() -> resourceProjectName)
+                            .ifPresent(projectName -> (isRootSpan(span) ? rootProjectNames : otherProjectNames)
+                                    .putIfAbsent(span.getTraceId(), projectName));
+                }
+            }
+        }
 
-        var projectNameByOtelTraceId = new HashMap<ByteString, String>();
-        routedSpans.stream()
-                .filter(routed -> routed.projectName() != null && isRootSpan(routed.span()))
-                .forEach(routed -> projectNameByOtelTraceId.putIfAbsent(routed.span().getTraceId(),
-                        routed.projectName()));
-        routedSpans.stream()
-                .filter(routed -> routed.projectName() != null)
-                .forEach(routed -> projectNameByOtelTraceId.putIfAbsent(routed.span().getTraceId(),
-                        routed.projectName()));
-
-        return routedSpans.stream()
-                .map(RoutedSpan::span)
+        return traceRequest.getResourceSpansList().stream()
+                .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
+                .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
                 .collect(Collectors.groupingBy(
-                        span -> WorkspaceUtils.getProjectName(
-                                projectNameByOtelTraceId.getOrDefault(span.getTraceId(), fallbackProjectName)),
+                        span -> WorkspaceUtils.getProjectName(rootProjectNames.getOrDefault(span.getTraceId(),
+                                otherProjectNames.getOrDefault(span.getTraceId(), fallbackProjectName))),
                         LinkedHashMap::new,
                         Collectors.toList()));
     }
 
     private static boolean isRootSpan(Span span) {
         return span.getParentSpanId().isEmpty() || span.getParentSpanId().equals(span.getTraceId());
-    }
-
-    private record RoutedSpan(Span span, String projectName) {
     }
 
     private Mono<Long> storeProjectSpans(List<Span> otelSpans, Project project, String integrationName) {
