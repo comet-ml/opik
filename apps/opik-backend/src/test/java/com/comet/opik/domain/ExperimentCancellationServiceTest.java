@@ -320,7 +320,7 @@ class ExperimentCancellationServiceTest {
     }
 
     private RAtomicLongReactive itemCounter(UUID experimentId) {
-        return redissonClient.getAtomicLong(ExperimentExecutionConfig.itemCounterKey(experimentId));
+        return redissonClient.getAtomicLong(ExperimentExecutionConfig.itemCounterKey(WORKSPACE_ID, experimentId));
     }
 
     private List<ExperimentItemToProcess> messages(UUID experimentId, int count) {

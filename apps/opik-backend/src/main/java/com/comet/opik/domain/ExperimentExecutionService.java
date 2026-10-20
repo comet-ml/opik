@@ -145,13 +145,13 @@ public class ExperimentExecutionService {
                                                     workspaceName, userName, batchId,
                                                     opikPromptsByVariant, testSuite))
                                             // One past the cap is already too many
-                                            .take(experimentExecutionConfig.getStreamMaxLen() + 1L)
+                                            .take(experimentExecutionConfig.getStreamAdmissionLen() + 1L)
                                             .collectList()
                                             .flatMap(messages -> {
                                                 // Refused before anything is written, so a run
                                                 // we will not accept leaves nothing behind
                                                 if (messages.size() > experimentExecutionConfig
-                                                        .getStreamMaxLen()) {
+                                                        .getStreamAdmissionLen()) {
                                                     return Mono.error(tooLargeToRun());
                                                 }
 
@@ -407,7 +407,7 @@ public class ExperimentExecutionService {
      */
     private Mono<Set<UUID>> stillRunning(String workspaceId, Set<UUID> experimentIds) {
         return Flux.fromIterable(experimentIds)
-                .filterWhen(experimentId -> itemPublisher.isTracked(experimentId)
+                .filterWhen(experimentId -> itemPublisher.isTracked(workspaceId, experimentId)
                         .doOnNext(tracked -> {
                             if (!tracked) {
                                 log.info("Experiment '{}' is not a run this service queued, leaving it alone",
@@ -517,7 +517,7 @@ public class ExperimentExecutionService {
                                             + " finish claimed so nothing records it as completed", id, error);
                                     return Mono.empty();
                                 })))
-                .then(itemPublisher.discardCounters(experimentIds));
+                .then(itemPublisher.discardCounters(workspaceId, experimentIds));
     }
 
     /**
@@ -537,20 +537,21 @@ public class ExperimentExecutionService {
      * in flight — and the trim takes the oldest entries whether or not anyone has them yet, which
      * silently deletes another tenant's work and leaves their run unable to finish.
      *
-     * Checked, not reserved: two launches can still pass together. It narrows a window that loses
-     * data to one that refuses a run, which is the trade worth making until runs stop sharing a
-     * queue at all.
+     * Checked, not reserved: two launches can still pass together, which is why this admits against
+     * a lower bound than the stream is trimmed to. Overshooting the admission bound costs nothing;
+     * reaching the trim length destroys whatever no consumer has taken yet. The gap is what the
+     * race is allowed to spend until runs stop sharing a queue at all.
      */
     private Mono<Void> refuseIfQueueIsFull(int runSize) {
         return itemPublisher.queuedMessageCount()
-                .flatMap(queued -> queued + runSize > experimentExecutionConfig.getStreamMaxLen()
+                .flatMap(queued -> queued + runSize > experimentExecutionConfig.getStreamAdmissionLen()
                         ? Mono.<Void>error(queueTooBusy(queued, runSize))
                         : Mono.<Void>empty());
     }
 
     private ClientErrorException queueTooBusy(long queued, int runSize) {
-        log.warn("Refusing a run of '{}' items: '{}' already queued against a bound of '{}'",
-                runSize, queued, experimentExecutionConfig.getStreamMaxLen());
+        log.warn("Refusing a run of '{}' items: '{}' already queued against an admission bound of '{}'",
+                runSize, queued, experimentExecutionConfig.getStreamAdmissionLen());
         return new ClientErrorException(
                 "The processing queue is too busy to accept this run right now. Try again in a few minutes.",
                 Response.Status.TOO_MANY_REQUESTS);
@@ -563,13 +564,13 @@ public class ExperimentExecutionService {
      * The exact size is not reported: the run is refused as soon as one message past the bound exists.
      */
     private BadRequestException tooLargeToRun() {
-        log.warn("Refusing a run of more than '{}' items, the bound of the processing queue",
-                experimentExecutionConfig.getStreamMaxLen());
+        log.warn("Refusing a run of more than '{}' items, the bound a run is admitted against",
+                experimentExecutionConfig.getStreamAdmissionLen());
 
         return new BadRequestException(
                 String.format(Locale.ROOT,
-                        "This run would queue more than the %,d items the processing queue holds. Narrow the dataset with filters, or run fewer prompts at once.",
-                        experimentExecutionConfig.getStreamMaxLen()));
+                        "This run would queue more than the %,d items the processing queue accepts. Narrow the dataset with filters, or run fewer prompts at once.",
+                        experimentExecutionConfig.getStreamAdmissionLen()));
     }
 
     private Mono<Void> markExperimentsCompleted(List<UUID> experimentIds) {
