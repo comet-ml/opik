@@ -10,6 +10,7 @@ import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -303,8 +304,8 @@ public class CostService {
         return modelName.toLowerCase(Locale.ROOT).replaceFirst(VERSION_SUFFIX_PATTERN, "");
     }
 
-    public static boolean isKnownProvider(@Nullable String provider) {
-        return StringUtils.isNotBlank(provider) && pricedProviders.contains(ProviderRegistry.toLiteLlmName(provider));
+    static boolean isPricedProvider(@NonNull String provider) {
+        return pricedProviders.contains(provider);
     }
 
     public static BigDecimal getCostFromMetadata(JsonNode metadata) {
