@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
 
+import java.util.List;
+
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -13,5 +15,7 @@ public record LlmModelDefinition(
         String label,
         boolean structuredOutput,
         boolean reasoning,
+        List<String> supportedParameters,
+        List<String> reasoningEfforts,
         ModelParams params) {
 }
