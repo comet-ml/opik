@@ -193,6 +193,13 @@ public class AiLabelsConfig {
         return renderBudgetBytes < modelInputBudgetBytes;
     }
 
+    /** A render read started at the end of a tick must still finish within the leader lease. */
+    @JsonIgnore
+    @AssertTrue(message = "aiLabels.renderMaxExecutionTime must not be longer than aiLabels.tickBudget") public boolean isRenderMaxExecutionTimeValid() {
+        return renderMaxExecutionTime == null || tickBudget == null
+                || renderMaxExecutionTime.toMilliseconds() <= tickBudget.toMilliseconds();
+    }
+
     @Data
     public static class InferenceConfig {
 

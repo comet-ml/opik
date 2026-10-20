@@ -314,14 +314,19 @@ public class AiLabelRenderer {
     }
 
     /**
-     * Cuts {@code text} over {@code maxBytes} UTF-8 bytes in the middle: it keeps up to 70% of {@code maxBytes} from
-     * the start and the rest from the end, whole code points only, around a {@code …[N chars truncated]…} marker.
+     * Cuts {@code text} over {@code maxBytes} UTF-8 bytes in the middle, around a {@code …[N chars truncated]…} marker:
+     * of what the marker leaves, it keeps up to 70% from the start and the rest from the end, whole code points only.
+     * The result fits {@code maxBytes} unless the marker alone doesn't.
      */
     static String capMiddle(String text, int maxBytes) {
         if (text == null || utf8Length(text) <= maxBytes) {
             return text;
         }
-        int headBytes = maxBytes * 7 / 10;
+        // N is at most the text's length in chars, so its digits are reserved at that length.
+        long markerBytes = utf8Length(AiLabelStateFitter.MARKER_OPEN) + utf8Length(AiLabelStateFitter.MARKER_CLOSE)
+                + String.valueOf(text.length()).length();
+        int contentBytes = (int) Math.max(0, maxBytes - markerBytes);
+        int headBytes = contentBytes * 7 / 10;
         int headEnd = 0;
         for (int bytes = 0; headEnd < text.length();) {
             int codePoint = text.codePointAt(headEnd);
@@ -335,7 +340,7 @@ public class AiLabelRenderer {
         for (int bytes = 0; tailStart > headEnd;) {
             int codePoint = text.codePointBefore(tailStart);
             bytes += utf8Length(codePoint);
-            if (bytes > maxBytes - headBytes) {
+            if (bytes > contentBytes - headBytes) {
                 break;
             }
             tailStart -= Character.charCount(codePoint);

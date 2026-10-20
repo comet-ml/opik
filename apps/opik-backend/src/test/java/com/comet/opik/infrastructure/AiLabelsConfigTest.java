@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import io.dropwizard.util.Duration;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -40,6 +41,29 @@ class AiLabelsConfigTest {
         } else {
             config.setInference(null);
         }
+
+        var violations = VALIDATOR.validate(config).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .toList();
+
+        assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
+    }
+
+    static Stream<Arguments> renderMaxExecutionTimes() {
+        return Stream.of(
+                arguments(Duration.seconds(1), List.of()),
+                arguments(Duration.seconds(25), List.of()),
+                arguments(Duration.seconds(26), List.of("renderMaxExecutionTimeValid")),
+                arguments(Duration.milliseconds(999), List.of("renderMaxExecutionTime")));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("renderMaxExecutionTimes")
+    void renderMaxExecutionTimeIsAtLeastASecondAndAtMostTheTickBudget(Duration renderMaxExecutionTime,
+            List<String> expectedViolations) {
+        var config = new AiLabelsConfig();
+        config.setTickBudget(Duration.seconds(25));
+        config.setRenderMaxExecutionTime(renderMaxExecutionTime);
 
         var violations = VALIDATOR.validate(config).stream()
                 .map(violation -> violation.getPropertyPath().toString())

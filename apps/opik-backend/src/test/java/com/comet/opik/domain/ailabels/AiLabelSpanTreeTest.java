@@ -73,11 +73,13 @@ class AiLabelSpanTreeTest {
         // Drop a few parents, as the per-trace span cap does.
         spans.subList(0, 50).clear();
 
-        assertThat(count(AiLabelSpanTree.build(spans))).isEqualTo(spans.size());
+        assertThat(flatten(AiLabelSpanTree.build(spans)).map(AiLabelSpan::name))
+                .containsExactlyInAnyOrderElementsOf(spans.stream().map(SpanRow::name).toList());
     }
 
-    private static long count(List<AiLabelSpan> spans) {
-        return spans == null ? 0 : spans.stream().mapToLong(span -> 1 + count(span.spans())).sum();
+    private static Stream<AiLabelSpan> flatten(List<AiLabelSpan> spans) {
+        return Stream.ofNullable(spans).flatMap(List::stream).flatMap(span -> Stream.concat(Stream.of(span),
+                flatten(span.spans())));
     }
 
     private static List<String> names(List<AiLabelSpan> spans) {

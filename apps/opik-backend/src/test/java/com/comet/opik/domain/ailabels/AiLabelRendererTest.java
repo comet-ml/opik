@@ -52,7 +52,7 @@ class AiLabelRendererTest {
      * here.
      */
     private static final Map<Integer, String> GOLDEN_FINGERPRINTS = Map.of(
-            1, "e8674fb1dfa19459b6580dbb720b7c62a5212e0d6d8a81133bec10d58eaa04df");
+            1, "2e107dc51185d3a04a30a48cd8b1b308ab3054b8ecb19a4dfa9dd86dc3dc788b");
 
     private static final String GOLDEN_DIR = "src/test/resources/ai-labels/renderer/v%d"
             .formatted(AiLabelRenderer.RENDERER_VERSION);
@@ -286,10 +286,15 @@ class AiLabelRendererTest {
     void capMiddleKeepsTheStartAndEndOfAFieldOverTheCap() {
         var text = "a".repeat(100) + "é".repeat(500) + "z".repeat(100);
 
-        assertThat(AiLabelRenderer.capMiddle(text, 200))
-                .isEqualTo("a".repeat(100) + "é".repeat(20) + "…[520 chars truncated]…" + "z".repeat(60));
-        assertThat(AiLabelRenderer.capMiddle("😀".repeat(100), 64))
-                .isEqualTo("😀".repeat(11) + "…[84 chars truncated]…" + "😀".repeat(5));
+        var capped = AiLabelRenderer.capMiddle(text, 200);
+        var cappedEmoji = AiLabelRenderer.capMiddle("😀".repeat(100), 64);
+
+        assertThat(capped)
+                .isEqualTo("a".repeat(100) + "é".repeat(10) + "…[538 chars truncated]…" + "z".repeat(52));
+        assertThat(capped.getBytes(StandardCharsets.UTF_8)).hasSizeLessThanOrEqualTo(200);
+        assertThat(cappedEmoji)
+                .isEqualTo("😀".repeat(6) + "…[91 chars truncated]…" + "😀".repeat(3));
+        assertThat(cappedEmoji.getBytes(StandardCharsets.UTF_8)).hasSizeLessThanOrEqualTo(64);
         assertThat(AiLabelRenderer.capMiddle(text, 1_300)).isSameAs(text);
     }
 
@@ -317,8 +322,11 @@ class AiLabelRendererTest {
         var spansByTrace = chunk.spans().stream().collect(Collectors.groupingBy(SpanRow::traceId));
         when(renderDAO.findTraces(anyString(), any())).thenReturn(Flux.fromIterable(chunk.traces()));
         when(renderDAO.findSelectedSpans(anyString(), any())).thenReturn(Flux.fromIterable(chunk.spans())
-                .map(span -> new SelectedSpan(span.traceId(), span.id(),
-                        length(span.input()) + length(span.output()))));
+                .map(span -> SelectedSpan.builder()
+                        .traceId(span.traceId())
+                        .key(span.id())
+                        .bytes(length(span.input()) + length(span.output()))
+                        .build()));
         when(renderDAO.findSpans(anyString(), any(), any())).thenAnswer(invocation -> {
             List<TraceRef> traces = invocation.getArgument(1);
             Set<String> keys = invocation.<List<SelectedSpan>>getArgument(2).stream()

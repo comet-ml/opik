@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -85,7 +86,7 @@ class AiLabelRenderDAO {
      * The spans a render reads, narrow, one row each: the latest version of each span, not deleted; the earliest
      * {@code max_spans} of each trace; and of those, the ones within {@code max_trace_bytes} of input and output in
      * start order (the first is always kept). {@code bytes} counts what the content read returns, an outsized field as
-     * its marker. Only string lengths are read, never the content. Start order is in microseconds, so the cut is the
+     * its marker ({@code "[N bytes omitted]"}, 18 bytes and N's digits). Only string lengths are read, never the content. Start order is in microseconds, so the cut is the
      * same on both layouts.
      */
     private static final String SELECTED_SPANS = """
@@ -98,8 +99,9 @@ class AiLabelRenderDAO {
                     SELECT trace_id, id, last_updated_at, bytes, toDateTime64(start_time, 6) AS start_order
                     FROM (
                         SELECT trace_id, id, start_time, last_updated_at,
-                            if(length(input) > :max_field_bytes, 32, length(input))
-                                + if(length(output) > :max_field_bytes, 32, length(output)) AS bytes
+                            if(length(input) > :max_field_bytes, 18 + length(toString(length(input))), length(input))
+                                + if(length(output) > :max_field_bytes, 18 + length(toString(length(output))),
+                                    length(output)) AS bytes
                             <if(spans_v2)>, is_deleted<endif>
                         FROM spans
                         """ + SPAN_FILTER + """
@@ -190,26 +192,30 @@ class AiLabelRenderDAO {
     record TraceRow(
             @NonNull UUID id,
             @NonNull UUID projectId,
-            String threadId,
-            String name,
-            String input,
-            String output) {
+            @Nullable String threadId,
+            @Nullable String name,
+            @Nullable String input,
+            @Nullable String output) {
     }
 
-    /** Span ids stay strings: the tree only compares them, and a malformed one must not fail the whole read. */
+    /**
+     * Span ids stay strings: the tree only compares them, and a malformed one must not fail the whole read. A root span
+     * has no {@code parentSpanId}; the other nullable fields are null when the span never set them.
+     */
     @Builder(toBuilder = true)
     record SpanRow(
             @NonNull UUID traceId,
             @NonNull String id,
-            String parentSpanId,
-            String name,
-            String type,
-            String input,
-            String output,
-            Instant startTime) {
+            @Nullable String parentSpanId,
+            @Nullable String name,
+            @Nullable String type,
+            @Nullable String input,
+            @Nullable String output,
+            @Nullable Instant startTime) {
     }
 
     /** {@code key} is opaque: {@link #findSpans} takes it back. */
+    @Builder(toBuilder = true)
     record SelectedSpan(@NonNull UUID traceId, @NonNull String key, long bytes) {
     }
 
@@ -219,8 +225,8 @@ class AiLabelRenderDAO {
             @NonNull UUID id,
             @NonNull UUID projectId,
             @NonNull String threadId,
-            String input,
-            String output) {
+            @Nullable String input,
+            @Nullable String output) {
     }
 
     Flux<TraceRow> findTraces(@NonNull String workspaceId, @NonNull List<TraceRef> traces) {
@@ -251,9 +257,11 @@ class AiLabelRenderDAO {
                         .bind("max_spans", config.getMaxSpansPerTrace())
                         .bind("max_trace_bytes", config.getMaxSpanBytesPerTrace())
                         .execute())
-                .flatMap(result -> result.map((row, rowMetadata) -> new SelectedSpan(
-                        row.get("trace_id", UUID.class), row.get("span_key", String.class),
-                        row.get("bytes", Long.class)))));
+                .flatMap(result -> result.map((row, rowMetadata) -> SelectedSpan.builder()
+                        .traceId(row.get("trace_id", UUID.class))
+                        .key(row.get("span_key", String.class))
+                        .bytes(row.get("bytes", Long.class))
+                        .build())));
     }
 
     /** The content of the given selected spans of the traces, grouped by trace. */
@@ -311,7 +319,9 @@ class AiLabelRenderDAO {
                     .bind("thread_ids", threadIds.toArray(String[]::new))
                     .bind("min_id", minId.toString())
                     .bind("max_id", maxId.toString())
-                    .bind("max_field_bytes", config.getMaxFieldBytes());
+                    // The renderer cuts each turn's fields to history.maxFieldBytes, so SQL must not drop less.
+                    .bind("max_field_bytes",
+                            Math.max(config.getMaxFieldBytes(), config.getHistory().getMaxFieldBytes()));
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> ThreadTurnRow.builder()
                             .id(row.get("id", UUID.class))
