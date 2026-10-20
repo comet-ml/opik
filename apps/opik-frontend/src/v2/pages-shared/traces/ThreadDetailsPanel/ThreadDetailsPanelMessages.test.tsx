@@ -107,7 +107,7 @@ vi.mock("@/hooks/useThreadMedia", () => ({
   useThreadMedia: () => ({ media: [] }),
 }));
 
-const renderPanel = () => {
+const renderPanel = (props: { traceId?: string } = {}) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -124,6 +124,7 @@ const renderPanel = () => {
               setTraceId={vi.fn()}
               open
               onClose={vi.fn()}
+              {...props}
             />
           </TooltipProvider>
         </PermissionsProvider>
@@ -169,6 +170,20 @@ describe("ThreadDetailsPanel messages", () => {
     fireEvent.click(screen.getByLabelText("Collapse hidden traces"));
 
     expect(renderedMessageIds(container)).toEqual(["trace-1", "trace-3"]);
+  });
+
+  it("keeps the selected trace in Messages when it is internal", () => {
+    mocks.traces = [
+      makeTrace("trace-1"),
+      makeTrace("trace-2", INTERNAL_METADATA),
+      makeTrace("trace-3", INTERNAL_METADATA),
+    ];
+    mocks.thread = makeThread(6);
+
+    const { container } = renderPanel({ traceId: "trace-2" });
+
+    expect(renderedMessageIds(container)).toEqual(["trace-1", "trace-2"]);
+    expect(screen.getByText("4 messages")).toBeTruthy();
   });
 
   it("renders every trace and no toggle when the thread has no internal traces", () => {

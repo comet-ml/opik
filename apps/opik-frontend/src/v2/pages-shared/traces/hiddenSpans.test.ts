@@ -159,6 +159,16 @@ describe("hiddenSpans", () => {
       ]);
     });
 
+    it("should keep the selected trace even when it is internal", () => {
+      const first = makeTrace({ id: "turn-1" });
+      const selected = makeTrace({ id: "selected", metadata: hiddenMeta });
+      const other = makeTrace({ id: "other", metadata: hiddenMeta });
+
+      expect(excludeHiddenTraces([first, selected, other], "selected")).toEqual(
+        [first, selected],
+      );
+    });
+
     it("should return every trace unchanged when none is internal", () => {
       const traces = [makeTrace({ id: "turn-1" }), makeTrace({ id: "turn-2" })];
 
