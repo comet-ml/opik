@@ -159,6 +159,68 @@ A typical rollout with environments:
 3. Deploy `v4` to `production`. Agents that fetch `production` load `v4` on their next fetch.
 4. To roll back, deploy the previous version to `production` again.
 
+## Separating development, staging, and production
+
+Keep one project per agent and use one environment per stage, instead of a separate project or
+workspace for each stage. Production and development traces then sit side by side, the agent's
+prompts live in one Prompt Library, and you can compare stages with a filter.
+
+<Steps>
+  <Step title="Set the stage once per deployment">
+    Set `OPIK_ENVIRONMENT` where the agent runs: for example
+    `development` on your machine, `staging` in the staging container, and `production` in the
+    production container. Every trace and span the SDK logs gets that environment. See
+    [Logging to a specific environment](/tracing/advanced/log_traces#logging-to-a-specific-environment).
+  </Step>
+  <Step title="Fetch the prompt for the same stage">
+    `OPIK_ENVIRONMENT` only tags traces; it doesn't choose
+    which prompt version `get_prompt` returns. Pass the same value as `environment`:
+
+    <CodeBlocks>
+      ```python title="Python" wordWrap
+      import os
+      import opik
+
+      client = opik.Opik()
+
+      prompt = client.get_prompt(
+          name="travel-assistant-system",
+          environment=os.environ.get("OPIK_ENVIRONMENT", "development"),
+          project_name="travel-assistant",
+      )
+      ```
+
+      ```ts title="TypeScript" wordWrap
+      import { Opik } from "opik";
+
+      const client = new Opik();
+
+      const prompt = await client.getPrompt({
+        name: "travel-assistant-system",
+        environment: process.env.OPIK_ENVIRONMENT ?? "development",
+        projectName: "travel-assistant",
+      });
+      ```
+    </CodeBlocks>
+  </Step>
+  <Step title="Filter by stage">
+    Use the environment selector on the **Logs** page to look at one stage at a
+    time, including traces logged without an environment. From the SDK, filter searches with
+    `filter_string='environment = "production"'`.
+  </Step>
+  <Step title="Promote through the stages">
+    Deploy a new prompt version to `staging`, check its traces and
+    experiments, then deploy it to `production`, as in [Promoting a version](#promoting-a-version).
+  </Step>
+</Steps>
+
+<Note>
+  Environments don't have their own permissions: anyone who can edit prompts in the workspace can
+  deploy a version to any environment, and anyone who can see the project sees every stage's traces.
+  If production data must be visible to fewer people than development data, or must stay in a
+  different region, use a separate workspace for production.
+</Note>
+
 ## Next steps
 
 - [Version control](/development/prompt-library/version-control): create and compare versions.
