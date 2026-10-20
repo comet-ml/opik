@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.metrics.LongCounter;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -254,12 +255,12 @@ public class AiLabelRenderer {
 
     /** {@code history} is oldest first, or null to render the state alone. */
     static RenderOutcome render(@NonNull TraceRef ref, @NonNull TraceRow trace, @NonNull List<SpanRow> spans,
-            List<ThreadTurnRow> history, long budgetBytes) {
+            @Nullable List<ThreadTurnRow> history, long budgetBytes) {
         return fit(ref, trace, AiLabelSpanTree.build(spans), history, budgetBytes);
     }
 
     private static RenderOutcome fit(TraceRef ref, TraceRow trace, List<AiLabelSpan> tree,
-            List<ThreadTurnRow> history, long budgetBytes) {
+            @Nullable List<ThreadTurnRow> history, long budgetBytes) {
         var fit = AiLabelStateFitter.fit(toState(trace, tree), history == null ? null : toHistory(history),
                 spansSummary(tree), budgetBytes);
         return switch (fit) {
