@@ -23,10 +23,21 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
  *
  * `online-evaluation-edit-rule-preserves-model-parameters.spec.ts` is the other
  * half of this contract and the two must be read together: it pins that an
- * UNEDITED save keeps every free-form key, this one pins that a MODEL SWITCH
- * drops exactly one of them and keeps the rest. The fourth test below is the
- * control that holds the pair apart — without it, every assertion here would
- * pass just as well on a build that dropped the effort on every save.
+ * UNEDITED save keeps every free-form key, this one pins what a MODEL SWITCH
+ * does to them. The fourth test below is the control that holds the pair apart
+ * — without it, every assertion here would pass just as well on a build that
+ * dropped the effort on every save.
+ *
+ * ## A switch WITHIN Anthropic and a switch ACROSS providers differ
+ *
+ * Only the within-provider switch is the effort-only strip opik#8822 is about:
+ * the effort goes and `output_config.format` and `unrelated_marker` stay.
+ * A switch to another PROVIDER clears `custom_parameters` wholesale, bystanders
+ * included — `updateConfigForModelChange` does it on purpose, since the extra
+ * body belongs to the provider that is being left, and `schema.effort.test.ts`
+ * pins it as `toBeUndefined()`. The two cases are therefore asserted against
+ * different expectations, and conflating them is how this spec was first
+ * written: the cross-provider test expected the within-provider shape.
  *
  * ## Both surfaces, deliberately
  *
@@ -155,7 +166,7 @@ test.describe(
   { tag: ['@t2-cuj', '@area:online-evaluation'] },
   () => {
     test(
-      'Switching onto a non-Anthropic model drops the stored effort and keeps every other key',
+      'Switching onto another provider drops the whole free-form block, the effort with it',
       { tag: ['@cap:online-evaluation.edit-rule'] },
       async ({
         modelRegistryProviders,
@@ -196,20 +207,34 @@ test.describe(
           return submitAndCaptureUpdate(page, onlineEval, ruleId);
         });
 
-        await test.step('The outbound PATCH carries the block without the effort', async () => {
+        await test.step('The outbound PATCH carries no free-form block at all', async () => {
+          // A PROVIDER change clears `custom_parameters` wholesale — it is not
+          // the effort-only strip the within-Anthropic tests below assert.
+          // `updateConfigForModelChange` does it deliberately ("the extra body
+          // belongs to the previous provider"), and the shipped unit test
+          // `schema.effort.test.ts` → "drops it on a switch to OpenRouter"
+          // pins the same thing as `toBeUndefined()`.
+          //
+          // So the bystander keys do NOT survive here, and this test must not
+          // claim they do: an earlier version of it expected EFFORT_DROPPED,
+          // which is the within-provider shape. That expectation passed nowhere
+          // and would have had to be weakened to go green — the behaviour it
+          // described has a unit test saying the opposite.
           expect(
-            readSentCustomParameters(update),
-            'the switch dropped output_config.effort and nothing else',
-          ).toEqual(EFFORT_DROPPED);
+            sentCustomParameters(update),
+            'a cross-provider switch sends no custom_parameters block, so the next provider is not handed the previous one\'s extra body',
+          ).toBeUndefined();
         });
 
         await test.step('And that is what persisted, on the new model', async () => {
           const model = await backendClient.getLlmJudgeModel(ruleId);
           expect(model.name, 'the rule moved onto the OpenAI model').toBe('gpt-4o-mini');
+          // Null and absent are the same answer for "the rule holds no
+          // free-form parameters", and the backend may store either.
           expect(
-            model.customParameters,
-            'the persisted blob agrees with the payload',
-          ).toEqual(EFFORT_DROPPED);
+            model.customParameters ?? null,
+            'nothing of the previous provider\'s block survived the save',
+          ).toBeNull();
         });
 
         await test.step('The rule is still listed, still disabled, still at 0%', async () => {
@@ -513,10 +538,21 @@ async function submitAndCaptureUpdate(
  * the difference.
  */
 function readSentCustomParameters(request: Request): Record<string, unknown> {
+  const sent = sentCustomParameters(request);
+  expect(sent, 'the update payload carries a model custom_parameters block').toBeDefined();
+  return sent as Record<string, unknown>;
+}
+
+/**
+ * The same read, without requiring the block to be there.
+ *
+ * Needed by the cross-provider case, whose whole expectation is that no block
+ * is sent at all — `readSentCustomParameters` cannot express that, since
+ * asserting absence through a helper that asserts presence is a contradiction.
+ */
+function sentCustomParameters(request: Request): Record<string, unknown> | undefined {
   const body = request.postDataJSON() as {
     code?: { model?: { custom_parameters?: Record<string, unknown> } };
   };
-  const sent = body.code?.model?.custom_parameters;
-  expect(sent, 'the update payload carries a model custom_parameters block').toBeDefined();
-  return sent as Record<string, unknown>;
+  return body.code?.model?.custom_parameters;
 }

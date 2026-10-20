@@ -293,9 +293,19 @@ test.describe(
           await page.goBack();
           const cell = logs.estimatedCostCell(newProviderCostSpans.traceId);
           await expect(cell, 'exactly one Estimated cost cell for the seeded trace').toHaveCount(1);
-          await expect(cell).toHaveText(
-            displayedCost(newProviderCostSpans.expectedTraceCost),
-          );
+          // Matched as the node whose OWN text is the amount, rather than as the
+          // cell's full text content. On a deployment where the Ollie assistant
+          // bridge is up — staging is, a local OSS build generally is not — this
+          // cell also holds the hover "Explain" trigger, so its text content
+          // reads "$2.02Explain" and the whole-cell form fails for a reason
+          // that has nothing to do with the cost. `exact` is kept rather than
+          // relaxed to a substring so that "$2.0" still cannot pass for "$2.02".
+          await expect(
+            cell.getByText(displayedCost(newProviderCostSpans.expectedTraceCost), {
+              exact: true,
+            }),
+            'the Estimated cost cell names the trace total exactly once',
+          ).toHaveCount(1);
         });
       },
     );
