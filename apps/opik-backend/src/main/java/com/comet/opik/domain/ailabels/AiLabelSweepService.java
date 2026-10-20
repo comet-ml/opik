@@ -53,7 +53,8 @@ public class AiLabelSweepService {
     private final DoubleHistogram duration;
     private final LongCounter guardTrips;
     private final LongCounter errors;
-    private final AtomicReference<HealthSnapshot> health = new AtomicReference<>(HealthSnapshot.EMPTY);
+    // Null until a refresh completes: the gauges report nothing rather than a backlog of 0 that was never measured.
+    private final AtomicReference<HealthSnapshot> health = new AtomicReference<>();
 
     record HealthSnapshot(List<WorkspaceHealth> workspaces, long neverEnded) {
         static final HealthSnapshot EMPTY = new HealthSnapshot(List.of(), 0);
@@ -80,20 +81,20 @@ public class AiLabelSweepService {
         meter.gaugeBuilder("ai_labels.unsettled_past_slo")
                 .ofLongs()
                 .setDescription("Unsettled (trace, task) pairs past the SLO, per workspace that has any")
-                .buildWithCallback(measurement -> health.get().workspaces().stream()
+                .buildWithCallback(measurement -> measured().ifPresent(snapshot -> snapshot.workspaces().stream()
                         .filter(workspace -> workspace.unsettledPastSlo() > 0)
                         .forEach(workspace -> measurement.record(workspace.unsettledPastSlo(),
-                                Attributes.of(stringKey("workspace_id"), workspace.workspaceId()))));
+                                Attributes.of(stringKey("workspace_id"), workspace.workspaceId())))));
         meter.gaugeBuilder("ai_labels.unsettled")
                 .ofLongs()
                 .setDescription("Unsettled (trace, task) pairs across all enabled workspaces")
-                .buildWithCallback(measurement -> measurement.record(health.get().workspaces().stream()
-                        .mapToLong(WorkspaceHealth::unsettled)
-                        .sum()));
+                .buildWithCallback(measurement -> measured().ifPresent(snapshot -> measurement.record(
+                        snapshot.workspaces().stream().mapToLong(WorkspaceHealth::unsettled).sum())));
         meter.gaugeBuilder("ai_labels.never_ended")
                 .ofLongs()
                 .setDescription("Traces in the horizon that never ended, so are out of scope")
-                .buildWithCallback(measurement -> measurement.record(health.get().neverEnded()));
+                .buildWithCallback(measurement -> measured()
+                        .ifPresent(snapshot -> measurement.record(snapshot.neverEnded())));
     }
 
     /** The enabled workspaces split into N stable buckets by {@code murmur3_32(workspace_id) mod N}. */
@@ -132,8 +133,8 @@ public class AiLabelSweepService {
 
     /**
      * Runs the headline query and the never-ended count over every bucket and publishes them as gauges, then returns
-     * what the gauges show. If any bucket's query fails, the gauges keep the last complete snapshot: a partial one
-     * would read as a smaller backlog during an outage.
+     * what the gauges show. If any bucket's query fails, the gauges keep the last complete snapshot, or report nothing
+     * before the first: a partial one would read as a smaller backlog during an outage.
      */
     public Mono<HealthSnapshot> refreshHealth(@NonNull List<List<String>> buckets, @NonNull List<SweepTask> tasks) {
         return Mono.defer(() -> {
@@ -156,13 +157,17 @@ public class AiLabelSweepService {
                         workspaces.addAll(bucket.getT1());
                         return new HealthSnapshot(List.copyOf(workspaces), snapshot.neverEnded() + bucket.getT2());
                     })
-                    .map(snapshot -> {
+                    .flatMap(snapshot -> {
                         if (complete.get()) {
                             health.set(snapshot);
                         }
-                        return health.get();
+                        return Mono.justOrEmpty(health.get());
                     });
         });
+    }
+
+    private Optional<HealthSnapshot> measured() {
+        return Optional.ofNullable(health.get());
     }
 
     private <T> Flux<T> skipBucket(String query, int bucket, Throwable error) {

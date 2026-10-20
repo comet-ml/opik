@@ -52,6 +52,17 @@ class AiLabelSweepServiceTest {
     }
 
     @Test
+    void healthReportsNothingUntilARefreshCompletes() {
+        when(sweepDAO.health(anyList(), anyList(), anyInt()))
+                .thenReturn(Flux.error(new IllegalStateException("bucket down")));
+        when(sweepDAO.neverEnded(anyList(), anyInt())).thenReturn(Mono.just(3L));
+
+        var snapshot = service.refreshHealth(BUCKETS, TASKS).blockOptional();
+
+        assertThat(snapshot).isEmpty();
+    }
+
+    @Test
     void failedInFlightReadSkipsOnlyItsBucket() {
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenThrow(new IllegalStateException("mysql down"));
