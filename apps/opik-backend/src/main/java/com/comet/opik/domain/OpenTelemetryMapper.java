@@ -553,7 +553,8 @@ public class OpenTelemetryMapper {
     }
 
     private static boolean isValidProjectName(String projectName) {
-        if (projectName.strip().length() > MAX_PROJECT_NAME_LENGTH) {
+        var stripped = projectName.strip();
+        if (stripped.codePointCount(0, stripped.length()) > MAX_PROJECT_NAME_LENGTH) {
             log.warn("Attribute '{}' exceeds {} characters, ignoring", GeneralMappingRules.OPIK_PROJECT_NAME_ATTR,
                     MAX_PROJECT_NAME_LENGTH);
             return false;
