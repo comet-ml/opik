@@ -59,7 +59,7 @@ client = OpenAI(
 client = track_openai(client, project_name="minimax-demo")
 
 response = client.chat.completions.create(
-    model="MiniMax-M3",
+    model=os.environ.get("MINIMAX_MODEL", "MiniMax-M3.1-Flash"),
     messages=[{"role": "user", "content": "Explain observability in one sentence."}],
 )
 
@@ -85,7 +85,7 @@ client = anthropic.Anthropic(
 client = track_anthropic(client, project_name="minimax-demo")
 
 response = client.messages.create(
-    model="MiniMax-M3",
+    model=os.environ.get("MINIMAX_MODEL", "MiniMax-M3.1-Flash"),
     max_tokens=512,
     messages=[{"role": "user", "content": "Explain observability in one sentence."}],
 )
@@ -97,9 +97,8 @@ For a China account, change `base_url` to `https://api.minimaxi.com/anthropic`.
 
 ## Model identifiers
 
-Use the model identifier exposed by your MiniMax account. Current text model identifiers include:
+The examples default to `MiniMax-M3.1-Flash`. Set `MINIMAX_MODEL=MiniMax-M3` to use the other current text model, or set it to an explicit model identifier available to your account. Opik preserves that selection.
 
-- `MiniMax-M3`
-- `MiniMax-M2.7`
+For Opik's OpenRouter integration, the corresponding identifiers are `minimax/minimax-m3.1-flash:free` and `minimax/minimax-m3`. Flash appears first among MiniMax text choices when it is available in the model registry. Older registry versions offer M3 until the registry sync adds Flash. These gateway identifiers are different from the direct MiniMax API identifiers used above.
 
 The wrapped clients preserve the normal SDK response objects while Opik records the request, response, token usage, and model metadata.

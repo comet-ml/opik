@@ -74,13 +74,42 @@ const MINIMAL_FALLBACK: ProviderModelsMap = {
 const isDropdownVisible = (m: LlmModelsByProvider[string][number]): boolean =>
   Boolean(m.label);
 
+const MINIMAX_TEXT_MODELS = [
+  "minimax/minimax-m3.1-flash:free",
+  "minimax/minimax-m3",
+];
+
+const getDropdownModels = (
+  provider: string,
+  models: LlmModelsByProvider[string],
+) => {
+  const visible = models.filter(isDropdownVisible);
+  if (provider !== PROVIDER_TYPE.OPEN_ROUTER) return visible;
+
+  // Keep the full registry for saved selections. Curate only ordinary text
+  // choices; custom providers and MiniMax media models are untouched.
+  const filtered = visible.filter(
+    (m) =>
+      !/^minimax\/minimax-(?:m\d|01(?:$|:))/i.test(m.id) ||
+      MINIMAX_TEXT_MODELS.includes(m.id),
+  );
+  const preferred = MINIMAX_TEXT_MODELS.flatMap((id) =>
+    filtered.filter((m) => m.id === id),
+  );
+  let index = 0;
+  // Replace only MiniMax text slots so other models keep their ordering.
+  return filtered.map((m) =>
+    MINIMAX_TEXT_MODELS.includes(m.id) ? preferred[index++] : m,
+  );
+};
+
 const transformFetched = (
   fetched: LlmModelsByProvider,
   { onlyVisible }: { onlyVisible: boolean },
 ): ProviderModelsMap => {
   const out: ProviderModelsMap = {};
   for (const [provider, models] of Object.entries(fetched)) {
-    const filtered = onlyVisible ? models.filter(isDropdownVisible) : models;
+    const filtered = onlyVisible ? getDropdownModels(provider, models) : models;
     out[provider] = filtered.map((m) => ({
       value: getRoutableProviderModelValue(
         provider as COMPOSED_PROVIDER_TYPE,
