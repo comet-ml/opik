@@ -24,7 +24,7 @@ import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 
 /**
- * {@code ai_labels}: one row per (trace, task, key). Writes are plain batched inserts, one per results page;
+ * {@code ai_labels}: one row per (trace, task, key). Writes are plain batched inserts, one per tick;
  * {@code updated_at} is stamped by ClickHouse. Reads dedupe explicitly with {@code LIMIT 1 BY}, taking each key's
  * latest write: the same row a merge keeps, so a read never changes once parts merge. A relabel writes its higher
  * {@code task_version} later, so the latest write is also the latest version.
