@@ -1,28 +1,38 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemStreamRequest;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentExecutionResponse;
+import com.comet.opik.api.ExperimentExecutionResponse.ExperimentInfo;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.OpikPromptEntry;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.TemplateStructure;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.events.ExperimentItemToProcess;
+import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.InternalServerErrorException;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -31,13 +41,13 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -45,7 +55,11 @@ import java.util.stream.IntStream;
 @Slf4j
 public class ExperimentExecutionService {
 
+    private static final int STREAM_PAGE_SIZE = 2000;
+
     private final ExperimentService experimentService;
+    private final ExperimentCancellationService cancellationService;
+    private final DatasetService datasetService;
     private final DatasetItemService datasetItemService;
     private final DatasetVersionService datasetVersionService;
     private final ExperimentItemPublisher itemPublisher;
@@ -53,18 +67,24 @@ public class ExperimentExecutionService {
     private final TestSuiteEvaluatorMapper testSuiteEvaluatorMapper;
     private final ExperimentExecutionConfig experimentExecutionConfig;
     private final PromptService promptService;
+    private final FeatureFlags featureFlags;
 
     @Inject
     public ExperimentExecutionService(
             @NonNull ExperimentService experimentService,
+            @NonNull ExperimentCancellationService cancellationService,
+            @NonNull DatasetService datasetService,
             @NonNull DatasetItemService datasetItemService,
             @NonNull DatasetVersionService datasetVersionService,
             @NonNull ExperimentItemPublisher itemPublisher,
             @NonNull IdGenerator idGenerator,
             @NonNull TestSuiteEvaluatorMapper testSuiteEvaluatorMapper,
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig experimentExecutionConfig,
-            @NonNull PromptService promptService) {
+            @NonNull PromptService promptService,
+            @NonNull FeatureFlags featureFlags) {
         this.experimentService = experimentService;
+        this.cancellationService = cancellationService;
+        this.datasetService = datasetService;
         this.datasetItemService = datasetItemService;
         this.datasetVersionService = datasetVersionService;
         this.itemPublisher = itemPublisher;
@@ -72,15 +92,18 @@ public class ExperimentExecutionService {
         this.testSuiteEvaluatorMapper = testSuiteEvaluatorMapper;
         this.experimentExecutionConfig = experimentExecutionConfig;
         this.promptService = promptService;
+        this.featureFlags = featureFlags;
     }
 
     /**
-     * Creates experiments and publishes item processing messages to Redis Streams.
-     * Returns immediately with experiment IDs so the caller can start polling.
-     * Dataset items are streamed rather than collected into memory to support large datasets.
+     * Creates experiments and publishes item processing messages to Redis Streams. Answers once the
+     * whole run is queued, not straight away: every message is collected first, because the counter
+     * each experiment settles against must be set before a consumer reaches the first item. That
+     * collection is the ceiling a too-large run is refused against. A retried timeout starts a
+     * second run; there is no idempotency key.
      */
     public Mono<ExperimentExecutionResponse> createAndExecute(
-            @NonNull ExperimentExecutionRequest request) {
+            @NonNull ExperimentExecutionRequest request, @NonNull List<DatasetItemFilter> filters) {
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -91,40 +114,67 @@ public class ExperimentExecutionService {
                     ? request.projectName()
                     : experimentExecutionConfig.getDefaultProjectName();
 
-            return fetchDatasetExecutionPolicyReactive(request.datasetId(), request.versionHash())
-                    .flatMap(optPolicy -> {
-                        ExecutionPolicy datasetExecutionPolicy = optPolicy.orElse(null);
-                        return createExperiments(request, projectName)
-                                .collectSortedList(Comparator.comparingInt(e -> e.info().promptIndex()))
-                                .flatMap(experimentEntries -> resolveOpikPromptsByVariant(request)
-                                        .flatMap(opikPromptsByVariant -> {
-                                            List<UUID> experimentIds = experimentEntries.stream()
-                                                    .map(ExperimentEntry::experimentId).toList();
-                                            List<ExperimentExecutionResponse.ExperimentInfo> experimentInfos = experimentEntries
-                                                    .stream()
-                                                    .map(ExperimentEntry::info).toList();
+            return Mono.zip(
+                    fetchRunSourceReactive(request.datasetId(), request.versionHash()),
+                    resolveDataset(request.datasetId()))
+                    .flatMap(tuple -> {
+                        ExecutionPolicy datasetExecutionPolicy = tuple.getT1().executionPolicy();
+                        String versionHash = tuple.getT1().versionHash();
+                        var dataset = tuple.getT2();
+                        boolean testSuite = dataset.type() == DatasetType.TEST_SUITE;
+                        String datasetName = dataset.name();
+                        var plannedExperiments = planExperiments(request, projectName, testSuite, datasetName);
+                        return resolveOpikPromptsByVariant(request)
+                                .flatMap(opikPromptsByVariant -> {
+                                    List<UUID> experimentIds = plannedExperiments.stream()
+                                            .map(Experiment::id).toList();
+                                    List<ExperimentInfo> experimentInfos = IntStream
+                                            .range(0, experimentIds.size())
+                                            .mapToObj(i -> ExperimentInfo.builder()
+                                                    .experimentId(experimentIds.get(i))
+                                                    .promptIndex(i)
+                                                    .build())
+                                            .toList();
 
-                                            UUID batchId = idGenerator.generateId();
+                                    UUID batchId = idGenerator.generateId();
 
-                                            return streamDatasetItems(request)
-                                                    .flatMapIterable(item -> buildMessages(
-                                                            item, request, experimentIds, datasetExecutionPolicy,
-                                                            projectName, workspaceId, workspaceName, userName, batchId,
-                                                            opikPromptsByVariant))
-                                                    .collectList()
-                                                    .flatMap(messages -> {
-                                                        if (messages.isEmpty()) {
-                                                            log.warn(
-                                                                    "No dataset items found for dataset '{}', workspaceId '{}'",
-                                                                    request.datasetName(), workspaceId);
-                                                            return markExperimentsCompleted(experimentIds)
-                                                                    .thenReturn(ExperimentExecutionResponse.builder()
-                                                                            .experiments(experimentInfos)
-                                                                            .totalItems(0)
-                                                                            .build());
-                                                        }
+                                    return streamDatasetItems(request, datasetName, filters, versionHash)
+                                            .flatMapIterable(item -> buildMessages(
+                                                    item, request, versionHash, experimentIds,
+                                                    datasetExecutionPolicy, projectName, workspaceId,
+                                                    workspaceName, userName, batchId,
+                                                    opikPromptsByVariant, testSuite))
+                                            // One past the cap is already too many
+                                            .take(experimentExecutionConfig.getStreamMaxLen() + 1L)
+                                            .collectList()
+                                            .flatMap(messages -> {
+                                                // Refused before anything is written, so a run
+                                                // we will not accept leaves nothing behind
+                                                if (messages.size() > experimentExecutionConfig
+                                                        .getStreamMaxLen()) {
+                                                    return Mono.error(tooLargeToRun());
+                                                }
 
-                                                        return itemPublisher.publish(batchId, messages)
+                                                if (messages.isEmpty()) {
+                                                    log.warn(
+                                                            "No dataset items found for dataset '{}', workspaceId '{}'",
+                                                            request.datasetName(), workspaceId);
+                                                    return persistExperiments(plannedExperiments)
+                                                            .then(markExperimentsCompleted(experimentIds))
+                                                            .thenReturn(ExperimentExecutionResponse.builder()
+                                                                    .experiments(experimentInfos)
+                                                                    .totalItems(0)
+                                                                    .build())
+                                                            .onErrorResume(error -> abortRun(workspaceId,
+                                                                    experimentIds).then(Mono.error(error)));
+                                                }
+
+                                                return refuseIfQueueIsFull(messages.size())
+                                                        .then(itemPublisher.startTrackingRun(messages, testSuite)
+                                                                .then(persistExperiments(plannedExperiments))
+                                                                .then(itemPublisher.publish(batchId, messages))
+                                                                .then(purgeIfCancelledWhilePublishing(
+                                                                        workspaceId, experimentIds))
                                                                 .then(Mono.fromCallable(() -> {
                                                                     log.info(
                                                                             "Created '{}' experiments with '{}' total items for dataset '{}', workspaceId '{}'",
@@ -133,21 +183,100 @@ public class ExperimentExecutionService {
                                                                             workspaceId);
 
                                                                     return ExperimentExecutionResponse.builder()
-                                                                            .experiments(experimentInfos)
+                                                                            .experiments(withItemCounts(
+                                                                                    experimentInfos, messages))
                                                                             .totalItems(messages.size())
                                                                             .build();
-                                                                }));
-                                                    });
-                                        }));
+                                                                }))
+                                                                // Every failure from the first write on;
+                                                                // the caller still gets the error, just
+                                                                // not a run left running over work that
+                                                                // never started.
+                                                                .onErrorResume(error -> abortRun(workspaceId,
+                                                                        experimentIds)
+                                                                        .then(Mono.error(error))));
+                                            });
+                                });
                     });
         });
     }
 
-    private record ExperimentEntry(UUID experimentId, ExperimentExecutionResponse.ExperimentInfo info) {
+    /**
+     * Stops a run: the experiments are marked cancelled for the consumer to skip what it has not
+     * reached, and their status is set now rather than when the stream drains, so the caller sees
+     * the run stop instead of watching it wind down.
+     *
+     * Items already handed to a provider finish — stopping prevents work starting, not work in
+     * flight.
+     */
+    public Mono<Void> cancel(@NonNull Set<UUID> experimentIds) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            var statusUpdate = ExperimentUpdate.builder()
+                    .status(ExperimentStatus.CANCELLED)
+                    .build();
+
+            return stillRunning(workspaceId, experimentIds)
+                    .flatMap(running -> {
+                        if (running.isEmpty()) {
+                            log.info("Nothing to cancel, all '{}' experiments had already finished",
+                                    experimentIds.size());
+                            return Mono.<Void>empty();
+                        }
+
+                        // Marked first: the mark is what stops an item a consumer already holds, and
+                        // purging before marking would leave that window unguarded
+                        var notStopped = new AtomicInteger();
+
+                        return cancellationService.cancel(workspaceId, running)
+                                .thenMany(Flux.fromIterable(running)
+                                        .concatMap(experimentId -> writeCancelledIfUnclaimed(workspaceId,
+                                                experimentId, statusUpdate)
+                                                .then(cancellationService.purgeQueued(workspaceId, experimentId))
+                                                .flatMap(drained -> recordFinishedIfDrained(experimentId, drained))
+                                                .onErrorResume(error -> {
+                                                    // Counted, not swallowed: one failing must not
+                                                    // strand the others, but nor can the caller be
+                                                    // told a run stopped when it did not
+                                                    notStopped.incrementAndGet();
+                                                    log.error("Failed to cancel experiment '{}', workspaceId '{}'",
+                                                            experimentId, workspaceId, error);
+                                                    return Mono.empty();
+                                                })))
+                                .then(Mono.defer(() -> {
+                                    if (notStopped.get() > 0) {
+                                        return Mono.error(stopDidNotApply(notStopped.get(), running.size()));
+                                    }
+                                    log.info("Cancelled '{}' experiments, workspaceId '{}'",
+                                            running.size(), workspaceId);
+                                    return Mono.<Void>empty();
+                                }));
+                    });
+        });
     }
 
-    private Flux<ExperimentEntry> createExperiments(ExperimentExecutionRequest request, String projectName) {
-        var monos = IntStream.range(0, request.prompts().size())
+    /**
+     * What each variant dispatched, counted from the messages themselves rather than divided out of
+     * the batch total.
+     */
+    private static List<ExperimentInfo> withItemCounts(
+            List<ExperimentInfo> experimentInfos,
+            List<ExperimentItemToProcess> messages) {
+
+        var countsByExperiment = messages.stream()
+                .collect(Collectors.groupingBy(ExperimentItemToProcess::experimentId, Collectors.counting()));
+
+        return experimentInfos.stream()
+                .map(info -> info.toBuilder()
+                        .totalItems(countsByExperiment.getOrDefault(info.experimentId(), 0L).intValue())
+                        .build())
+                .toList();
+    }
+
+    private List<Experiment> planExperiments(ExperimentExecutionRequest request, String projectName,
+            boolean testSuite, String datasetName) {
+        return IntStream.range(0, request.prompts().size())
                 .mapToObj(i -> {
                     var prompt = request.prompts().get(i);
                     UUID experimentId = idGenerator.generateId();
@@ -162,11 +291,12 @@ public class ExperimentExecutionService {
                     var experiment = Experiment.builder()
                             .id(experimentId)
                             .name(prompt.experimentName())
-                            .datasetName(request.datasetName())
+                            .datasetName(datasetName)
                             .datasetVersionId(request.datasetVersionId())
+                            .projectId(request.projectId())
                             .projectName(projectName)
                             .metadata(metadata)
-                            .evaluationMethod(EvaluationMethod.TEST_SUITE)
+                            .evaluationMethod(testSuite ? EvaluationMethod.TEST_SUITE : EvaluationMethod.DATASET)
                             .status(ExperimentStatus.RUNNING)
                             .promptVersions(
                                     prompt.promptVersions() != null
@@ -174,56 +304,278 @@ public class ExperimentExecutionService {
                                             : request.promptVersions())
                             .build();
 
-                    return experimentService.create(experiment)
-                            .map(id -> new ExperimentEntry(experimentId,
-                                    ExperimentExecutionResponse.ExperimentInfo.builder()
-                                            .experimentId(experimentId)
-                                            .promptIndex(i)
-                                            .build()));
+                    return experiment;
                 })
                 .toList();
-        return Flux.merge(monos);
     }
 
-    private Flux<DatasetItem> streamDatasetItems(ExperimentExecutionRequest request) {
+    private Mono<Void> persistExperiments(List<Experiment> experiments) {
+        return Flux.fromIterable(experiments)
+                .concatMap(experimentService::create)
+                .then();
+    }
+
+    /**
+     * Pages through every matching item. A single call caps at {@link DatasetItemStreamRequest}'s maximum, so
+     * asking for the dataset in one go would silently run only the first {@value #STREAM_PAGE_SIZE} items —
+     * the whole point of running server-side is that a large dataset completes.
+     * <p>
+     * Both the versioned and the legacy query order by item id descending and take {@code id < lastRetrievedId},
+     * so the last item of a page is the cursor for the next one. A short page means the dataset is exhausted.
+     */
+    private Flux<DatasetItem> streamDatasetItems(ExperimentExecutionRequest request, String datasetName,
+            List<DatasetItemFilter> filters, String versionHash) {
+        return fetchItemPage(request, datasetName, filters, versionHash, null)
+                .expand(page -> page.size() < STREAM_PAGE_SIZE
+                        ? Mono.empty()
+                        : fetchItemPage(request, datasetName, filters, versionHash, page.getLast().id()))
+                .flatMapIterable(page -> page);
+    }
+
+    private Mono<List<DatasetItem>> fetchItemPage(ExperimentExecutionRequest request, String datasetName,
+            List<DatasetItemFilter> filters, String versionHash, UUID lastRetrievedId) {
         var streamRequest = DatasetItemStreamRequest.builder()
-                .datasetName(request.datasetName())
-                .datasetVersion(request.versionHash())
+                .datasetName(datasetName)
+                .datasetVersion(versionHash)
+                .steamLimit(STREAM_PAGE_SIZE)
+                .lastRetrievedId(lastRetrievedId)
                 .build();
-        return datasetItemService.getItems(streamRequest, List.of());
+        return datasetItemService.getItems(streamRequest, filters).collectList();
     }
 
-    private Mono<Optional<ExecutionPolicy>> fetchDatasetExecutionPolicyReactive(UUID datasetId, String versionHash) {
+    /**
+     * The stored dataset, which the run's type and name are both taken from rather than the request. Its
+     * whole downstream shape hangs off the type — assertion counters, how the subscriber decides an
+     * experiment is finished, the metadata the assertion sampler keys on — so it must not be something a
+     * caller can claim; and taking the name from the same row is what stops a request pairing one
+     * dataset's id with another's name from running its items under the other's semantics.
+     */
+    private Mono<Dataset> resolveDataset(UUID datasetId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            return Mono.fromCallable(
-                    () -> Optional.ofNullable(fetchDatasetExecutionPolicy(datasetId, versionHash, workspaceId)))
+            Visibility visibility = ctx.get(RequestContext.VISIBILITY);
+            return Mono
+                    .fromCallable(() -> datasetService.findById(datasetId, workspaceId, visibility))
                     .subscribeOn(Schedulers.boundedElastic());
         });
     }
 
-    private ExecutionPolicy fetchDatasetExecutionPolicy(UUID datasetId, String versionHash, String workspaceId) {
-        try {
-            if (versionHash != null) {
-                var versionId = datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash);
-                var version = datasetVersionService.getVersionById(workspaceId, datasetId, versionId);
-                return version.executionPolicy();
-            }
-            return datasetVersionService.getLatestVersion(datasetId, workspaceId)
-                    .map(v -> v.executionPolicy())
-                    .orElse(null);
-        } catch (NotFoundException e) {
-            throw e;
-        } catch (Exception e) {
-            log.warn("Failed to fetch dataset execution policy for dataset '{}', versionHash '{}'",
-                    datasetId, versionHash, e);
-            return null;
+    /**
+     * The version a run reads its items from, and the policy that version carries. Both come from one
+     * read: a request that pins no version is answered with the latest, rather than taking the policy
+     * from the latest and then letting the items page from whatever the dataset holds at the time -
+     * which lets the two disagree, and lets the items change between pages. A dataset with no version
+     * at all is answered with neither, and streams live as before.
+     */
+    private record RunSource(ExecutionPolicy executionPolicy, String versionHash) {
+    }
+
+    private Mono<RunSource> fetchRunSourceReactive(UUID datasetId, String versionHash) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            return Mono.fromCallable(() -> fetchRunSource(datasetId, versionHash, workspaceId))
+                    .subscribeOn(Schedulers.boundedElastic());
+        });
+    }
+
+    /**
+     * Failures are not caught: the policy decides how many times each item runs and what counts as a
+     * pass, so defaulting on a read that failed runs a suite configured for three runs once and
+     * reports its pass rate against thresholds nobody chose. Null is still a valid answer — it means
+     * the version carries no policy — but it has to come from the version, not from an error.
+     */
+    private RunSource fetchRunSource(UUID datasetId, String versionHash, String workspaceId) {
+        if (versionHash != null) {
+            var versionId = datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash);
+            var version = datasetVersionService.getVersionById(workspaceId, datasetId, versionId);
+            return new RunSource(version.executionPolicy(), versionHash);
         }
+        return datasetVersionService.getLatestVersion(datasetId, workspaceId)
+                .map(version -> new RunSource(version.executionPolicy(),
+                        featureFlags.isDatasetVersioningEnabled() ? version.versionHash() : null))
+                .orElseGet(() -> new RunSource(null, null));
+    }
+
+    /**
+     * The ones a stop can still affect. An experiment that has already finished must keep the outcome
+     * it earned: a prompt that completes before its siblings keeps its Stop button until the whole run
+     * settles, so cancelling what is already done is a click away and would relabel it.
+     *
+     * A status read only rules out what had already finished when it was taken, which is why this is a
+     * filter and not the decision. What stops a stop from overwriting an ending written in the moment
+     * between the two is the claim, taken in {@link #writeCancelledIfUnclaimed}.
+     */
+    private Mono<Set<UUID>> stillRunning(String workspaceId, Set<UUID> experimentIds) {
+        return Flux.fromIterable(experimentIds)
+                .filterWhen(experimentId -> itemPublisher.isTracked(experimentId)
+                        .doOnNext(tracked -> {
+                            if (!tracked) {
+                                log.info("Experiment '{}' is not a run this service queued, leaving it alone",
+                                        experimentId);
+                            }
+                        }))
+                .filterWhen(experimentId -> experimentService.getMetadataById(experimentId)
+                        .map(experiment -> experiment.status() == null || !experiment.status().isTerminal())
+                        .onErrorResume(error -> {
+                            log.warn("Could not read experiment '{}' before cancelling, leaving it alone",
+                                    experimentId, error);
+                            return Mono.just(false);
+                        }))
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * Writes CANCELLED only if nothing has written how this run ended. The stop and the consumer
+     * draining its last item can reach that point together, and the claim is what settles which of
+     * them owns the outcome — rather than each reading the other's state and both writing.
+     *
+     * Losing it is not a failure: the run ended as it ended, and the stop still purges what is queued.
+     */
+    private Mono<Void> writeCancelledIfUnclaimed(String workspaceId, UUID experimentId,
+            ExperimentUpdate statusUpdate) {
+        return cancellationService.claimFinish(workspaceId, experimentId)
+                .flatMap(won -> {
+                    if (!won) {
+                        log.info("Experiment '{}' finished as the stop arrived, leaving its outcome alone",
+                                experimentId);
+                        return Mono.<Void>empty();
+                    }
+                    return experimentService.update(experimentId, statusUpdate)
+                            // Given back when nothing could be written: held by a write that failed, it
+                            // answers "already finished" to the retry this error asks for, and the run
+                            // keeps a status no one will ever correct.
+                            .onErrorResume(error -> cancellationService.releaseFinish(workspaceId, experimentId)
+                                    .onErrorResume(releaseError -> {
+                                        log.error("Failed to release the finish of experiment '{}'",
+                                                experimentId, releaseError);
+                                        return Mono.just(false);
+                                    })
+                                    .then(Mono.error(error)));
+                });
+    }
+
+    /**
+     * A stop that lands while this run is still publishing purges an empty queue: the messages it
+     * meant to delete are not on the stream yet, and a cancel only purges once. Repeating it here,
+     * now that they are, is what keeps those messages from being walked one by one.
+     *
+     * The run is cancelled either way — the mark is set before the purge, so a consumer skips
+     * whatever this misses. What is saved is the walk, which on a large dataset is the whole queue.
+     */
+    private Mono<Void> purgeIfCancelledWhilePublishing(String workspaceId, List<UUID> experimentIds) {
+        return Flux.fromIterable(experimentIds)
+                .filterWhen(experimentId -> cancellationService.isCancelled(workspaceId, experimentId))
+                .concatMap(experimentId -> cancellationService.purgeQueued(workspaceId, experimentId)
+                        .flatMap(drained -> recordFinishedIfDrained(experimentId, drained))
+                        .onErrorResume(error -> {
+                            // Only the walk is lost, and the run still settles through its consumer
+                            log.warn("Failed to purge cancelled experiment '{}' after publishing, workspaceId '{}'",
+                                    experimentId, workspaceId, error);
+                            return Mono.empty();
+                        }))
+                .then();
+    }
+
+    /**
+     * A run whose remaining items were all purged has stopped producing with nothing left to notice
+     * it: no message will reach a consumer to count the last one down. Anything above zero is still
+     * with a consumer, which will record it on the way out. Unclaimed, because the stamp is not the outcome.
+     */
+    private Mono<Void> recordFinishedIfDrained(UUID experimentId, boolean drained) {
+        if (!drained) {
+            return Mono.empty();
+        }
+
+        return experimentService.update(experimentId, ExperimentUpdate.builder().finished(true).build());
+    }
+
+    /**
+     * Ends a launch that failed after its records were written. A half-started run can still be
+     * half-queued, hence three steps: the mark stops consumers working on whatever did get
+     * published, the claim stops a late item reporting the run complete over the failure, and the
+     * counters go with it.
+     */
+    private Mono<Void> abortRun(String workspaceId, List<UUID> experimentIds) {
+        var statusUpdate = ExperimentUpdate.builder()
+                .status(ExperimentStatus.FAILED)
+                .finished(true)
+                .build();
+
+        return cancellationService.cancel(workspaceId, experimentIds)
+                .thenMany(Flux.fromIterable(experimentIds)
+                        .concatMap(id -> cancellationService.claimFinish(workspaceId, id)
+                                .flatMap(won -> won
+                                        ? experimentService.update(id, statusUpdate)
+                                                .retryWhen(RetryUtils.handleConnectionError())
+                                        : Mono.<Void>empty())
+                                .onErrorResume(error -> {
+                                    // One record failing must not strand the others. The claim is
+                                    // kept rather than handed back: the counters are discarded just
+                                    // below, and a counter that is gone reads as a run that drained,
+                                    // so releasing it invites a consumer to record COMPLETED.
+                                    log.error("Failed to mark aborted experiment '{}' as failed, leaving the"
+                                            + " finish claimed so nothing records it as completed", id, error);
+                                    return Mono.empty();
+                                })))
+                .then(itemPublisher.discardCounters(experimentIds));
+    }
+
+    /**
+     * The stop itself did not land, not that the run had failures: the mark is set, so items are
+     * already being skipped under a status that still reads as running.
+     */
+    private InternalServerErrorException stopDidNotApply(int notStopped, int total) {
+        log.error("Could not stop '{}' of '{}' experiments", notStopped, total);
+        return new InternalServerErrorException(
+                "Could not stop %d of %d experiments. Their items are no longer being processed, but their status could not be updated — try again."
+                        .formatted(notStopped, total));
+    }
+
+    /**
+     * The bound is on the stream, not on one run. It is shared by every workspace and trimmed by
+     * length, so a run that fits on its own still pushes the backlog past the bound when others are
+     * in flight — and the trim takes the oldest entries whether or not anyone has them yet, which
+     * silently deletes another tenant's work and leaves their run unable to finish.
+     *
+     * Checked, not reserved: two launches can still pass together. It narrows a window that loses
+     * data to one that refuses a run, which is the trade worth making until runs stop sharing a
+     * queue at all.
+     */
+    private Mono<Void> refuseIfQueueIsFull(int runSize) {
+        return itemPublisher.queuedMessageCount()
+                .flatMap(queued -> queued + runSize > experimentExecutionConfig.getStreamMaxLen()
+                        ? Mono.<Void>error(queueTooBusy(queued, runSize))
+                        : Mono.<Void>empty());
+    }
+
+    private ClientErrorException queueTooBusy(long queued, int runSize) {
+        log.warn("Refusing a run of '{}' items: '{}' already queued against a bound of '{}'",
+                runSize, queued, experimentExecutionConfig.getStreamMaxLen());
+        return new ClientErrorException(
+                "The processing queue is too busy to accept this run right now. Try again in a few minutes.",
+                Response.Status.TOO_MANY_REQUESTS);
+    }
+
+    /**
+     * Refused rather than published: the queue trims by length without sparing what no consumer has
+     * taken, so a run this size would delete its own items. They would never execute and the run
+     * would never finish, with nothing to say why.
+     * The exact size is not reported: the run is refused as soon as one message past the bound exists.
+     */
+    private BadRequestException tooLargeToRun() {
+        log.warn("Refusing a run of more than '{}' items, the bound of the processing queue",
+                experimentExecutionConfig.getStreamMaxLen());
+
+        return new BadRequestException(
+                String.format(Locale.ROOT,
+                        "This run would queue more than the %,d items the processing queue holds. Narrow the dataset with filters, or run fewer prompts at once.",
+                        experimentExecutionConfig.getStreamMaxLen()));
     }
 
     private Mono<Void> markExperimentsCompleted(List<UUID> experimentIds) {
         var statusUpdate = ExperimentUpdate.builder()
                 .status(ExperimentStatus.COMPLETED)
+                .finished(true)
                 .build();
         return Flux.fromIterable(experimentIds)
                 .concatMap(id -> experimentService.update(id, statusUpdate))
@@ -238,6 +590,7 @@ public class ExperimentExecutionService {
     private List<ExperimentItemToProcess> buildMessages(
             DatasetItem item,
             ExperimentExecutionRequest request,
+            String versionHash,
             List<UUID> experimentIds,
             ExecutionPolicy datasetExecutionPolicy,
             String projectName,
@@ -245,7 +598,8 @@ public class ExperimentExecutionService {
             String workspaceName,
             String userName,
             UUID batchId,
-            List<List<OpikPromptEntry>> opikPromptsByVariant) {
+            List<List<OpikPromptEntry>> opikPromptsByVariant,
+            boolean testSuite) {
 
         int runsPerItem = getEffectiveRunsPerItem(item.executionPolicy(), datasetExecutionPolicy);
         var messages = new ArrayList<ExperimentItemToProcess>();
@@ -262,13 +616,15 @@ public class ExperimentExecutionService {
                         .datasetItemId(item.id())
                         .experimentId(experimentId)
                         .datasetId(request.datasetId())
-                        .versionHash(request.versionHash())
+                        .versionHash(versionHash)
                         .projectName(projectName)
                         .workspaceId(workspaceId)
                         .workspaceName(workspaceName)
                         .userName(userName)
                         .allExperimentIds(experimentIds)
                         .opikPrompts(opikPrompts)
+                        .testSuite(testSuite)
+                        .selectedRuleIds(request.selectedRuleIds())
                         .build());
             }
         }
