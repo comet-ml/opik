@@ -64,9 +64,10 @@ template variable such as `{{image}}` that reads a dataset column holding a URL 
 URI.
 
 To send a different number of images for each dataset item, store them as a list in one column and
-add that column once as `{{images}}`. Each entry in the list becomes its own image, so an item with
-three entries sends three images and an item with an empty list sends none. Lists saved as JSON
-text, as a CSV upload stores them, work the same way.
+add that column once as `{{images}}`. Each entry in the list becomes its own part, so an item with
+three entries sends three images and an item with an empty list sends none. Video and audio lists
+work the same way, and so do lists saved as JSON text, as a CSV upload stores them. Test-suite runs
+read top-level columns only, so use `{{images}}` rather than `{{input.images}}` there.
 
 ```json
 { "images": ["https://example.com/front.jpg", "data:image/png;base64,iVBORw0KGgo..."] }
