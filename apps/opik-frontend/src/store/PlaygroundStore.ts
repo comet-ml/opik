@@ -168,7 +168,6 @@ export type PlaygroundStore = {
   setIsRunning: (isRunning: boolean) => void;
   setPromptRunning: (promptId: string, running: boolean) => void;
   setAllRunning: (running: boolean) => void;
-  clearRunningMap: () => void;
   settleRun: () => void;
   setIsResumingRun: (value: boolean) => void;
   setExperimentName: (name: string | null) => void;
@@ -417,9 +416,6 @@ const usePlaygroundStore = create<PlaygroundStore>()(
             ? Object.fromEntries(state.promptIds.map((id) => [id, true]))
             : {},
         }));
-      },
-      clearRunningMap: () => {
-        set((state) => ({ ...state, isRunningMap: {} }));
       },
       settleRun: () => {
         set((state) => ({
@@ -751,9 +747,6 @@ export const useSetPromptRunning = () =>
 
 export const useSetAllRunning = () =>
   usePlaygroundStore((state) => state.setAllRunning);
-
-export const useClearRunningMap = () =>
-  usePlaygroundStore((state) => state.clearRunningMap);
 
 export const useSettleRun = () =>
   usePlaygroundStore((state) => state.settleRun);
