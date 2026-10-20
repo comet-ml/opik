@@ -79,7 +79,7 @@
     "codemirror": "^6.0.1",
     "date-fns": "^3.6.0",
     "dayjs": "^1.11.11",
-    "diff": "^7.0.0",
+    "diff": "^8.0.0",
     "file-saver": "^2.0.5",
     "flattie": "^1.1.1",
     "json-2-csv": "^5.5.6",
