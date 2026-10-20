@@ -84,10 +84,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
     public Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest,
             @NonNull String fallbackProjectName) {
 
-        // An exporter may legitimately send a batch carrying no spans, and OTLP treats that as a valid,
-        // empty export. It used to reach SpanService.create, whose non-empty precondition surfaced it to the
-        // exporter as a 500. Answered as a no-op — and before retrieveByNamesOrCreate below, so an empty export does not
-        // leave a project behind either.
+        // OTLP allows an export with no spans. Return before any project is created.
         var carriesSpans = traceRequest.getResourceSpansList().stream()
                 .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
                 .anyMatch(scopeSpans -> scopeSpans.getSpansCount() > 0);
