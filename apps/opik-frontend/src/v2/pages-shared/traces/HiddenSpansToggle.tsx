@@ -11,17 +11,12 @@ import {
 
 type HiddenSpansToggleProps = {
   spans: Array<Span | Trace>;
-  // What the list holds, for the tooltip: span trees or thread traces.
-  entityName?: "spans" | "traces";
 };
 
 // Self-contained toggle for collapsing spans the SDK marked as hidden-by-default. Renders
 // nothing when the tree has no such spans. Shares its state with the rendering panel via
 // the persisted preference, so no state needs to be threaded through the toolbar.
-const HiddenSpansToggle: React.FC<HiddenSpansToggleProps> = ({
-  spans,
-  entityName = "spans",
-}) => {
+const HiddenSpansToggle: React.FC<HiddenSpansToggleProps> = ({ spans }) => {
   const [hidden, setHidden] = useHideSpansPreference();
   const canHide = useMemo(() => hasHiddenSpans(spans), [spans]);
 
@@ -31,15 +26,12 @@ const HiddenSpansToggle: React.FC<HiddenSpansToggleProps> = ({
     <TooltipWrapper
       content={
         hidden
-          ? `Some ${entityName} are hidden. Click to show all ${entityName}.`
-          : `Showing all ${entityName}. Click to hide non-essential ${entityName}.`
+          ? "Some spans are hidden. Click to show all spans."
+          : "Showing all spans. Click to hide non-essential spans."
       }
     >
       <Button
         onClick={() => setHidden(!hidden)}
-        aria-label={
-          hidden ? `Show hidden ${entityName}` : `Collapse hidden ${entityName}`
-        }
         variant="ghost"
         size="icon-2xs"
       >

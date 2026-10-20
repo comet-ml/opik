@@ -53,7 +53,7 @@ import useThreadById from "@/api/traces/useThreadById";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadBatchDeleteMutation from "@/api/traces/useThreadBatchDeleteMutation";
 import TraceMessages from "@/v2/pages-shared/traces/TraceMessages/TraceMessages";
-import HiddenSpansToggle from "@/v2/pages-shared/traces/HiddenSpansToggle";
+import InternalTracesToggle from "@/v2/pages-shared/traces/InternalTracesToggle";
 import { useVisibleTraces } from "@/v2/pages-shared/traces/hiddenSpans";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import {
@@ -496,7 +496,10 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         value={currentActiveTab}
         onValueChange={setActiveTab}
       >
-        <div className="mx-4" data-panel-tabs="true">
+        <div
+          className="mx-4 flex items-center justify-between gap-2"
+          data-panel-tabs="true"
+        >
           <TabsList variant="segmented-primary">
             <TabsTrigger variant="segmented-primary" size="sm" value="messages">
               Messages
@@ -509,6 +512,9 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               Feedback scores
             </TabsTrigger>
           </TabsList>
+          {currentActiveTab === "messages" && (
+            <InternalTracesToggle traces={traces} />
+          )}
         </div>
         <TabsContent value="messages">
           {isTracesPending ? (
@@ -575,7 +581,6 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                   Inspect
                 </span>
                 <div className="flex-auto" />
-                <HiddenSpansToggle spans={traces} entityName="traces" />
                 {!hideAnnotateActions && (
                   <AddToDropdown
                     getDataForExport={async () => rows}

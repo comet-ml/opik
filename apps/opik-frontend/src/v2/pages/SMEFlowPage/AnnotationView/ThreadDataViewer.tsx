@@ -8,7 +8,7 @@ import { Filter } from "@/types/filters";
 import { useSMEFlow } from "../SMEFlowContext";
 import useTracesList from "@/api/traces/useTracesList";
 import TraceMessages from "@/v2/pages-shared/traces/TraceMessages/TraceMessages";
-import HiddenSpansToggle from "@/v2/pages-shared/traces/HiddenSpansToggle";
+import InternalTracesToggle from "@/v2/pages-shared/traces/InternalTracesToggle";
 import { useVisibleTraces } from "@/v2/pages-shared/traces/hiddenSpans";
 import { COLUMN_TYPE } from "@/types/shared";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
@@ -164,7 +164,7 @@ const ThreadHeader: React.FC = () => {
         <TraceIdentifier name={dateRange} id={thread?.id || ""} />
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <HiddenSpansToggle spans={traces} entityName="traces" />
+        <InternalTracesToggle traces={traces} />
         <Button variant="ghost" size="2xs" onClick={handleOpenThread}>
           Thread
           <ArrowUpRight className="ml-1 size-3" />

@@ -177,7 +177,9 @@ describe("ThreadDetailsPanel messages", () => {
     expect(renderedMessages()).toEqual([turn("trace-1"), turn("trace-3")]);
     expect(screen.getByText("4 messages")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Show hidden traces" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show internal calls (1)" }),
+    );
 
     expect(renderedMessages()).toEqual([
       turn("trace-1"),
@@ -185,9 +187,12 @@ describe("ThreadDetailsPanel messages", () => {
       turn("trace-3"),
     ]);
     expect(screen.getByText("6 messages")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Hide internal calls (1)" }),
+    ).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Collapse hidden traces" }),
+      screen.getByRole("button", { name: "Hide internal calls (1)" }),
     );
 
     expect(renderedMessages()).toEqual([turn("trace-1"), turn("trace-3")]);
@@ -202,7 +207,9 @@ describe("ThreadDetailsPanel messages", () => {
     mocks.thread = makeThread(4);
 
     renderPanel();
-    fireEvent.click(screen.getByRole("button", { name: "Show hidden traces" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show internal calls (1)" }),
+    );
 
     expect(
       await hoverForTooltip(
@@ -211,7 +218,7 @@ describe("ThreadDetailsPanel messages", () => {
     ).toBe(INTERNAL_TOOLTIP);
   });
 
-  it("explains the hidden traces in the toggle tooltip", async () => {
+  it("explains internal calls in the toggle tooltip", async () => {
     mocks.traces = [
       makeTrace("trace-1"),
       makeTrace("trace-2", INTERNAL_METADATA),
@@ -222,9 +229,11 @@ describe("ThreadDetailsPanel messages", () => {
 
     expect(
       await hoverForTooltip(
-        screen.getByRole("button", { name: "Show hidden traces" }),
+        screen.getByRole("button", { name: "Show internal calls (1)" }),
       ),
-    ).toBe("Some traces are hidden. Click to show all traces.");
+    ).toBe(
+      "Helper LLM calls such as conversation-title generation. Hidden by default; still counted in thread cost and usage.",
+    );
   });
 
   it("gives the full message count in the count tooltip while traces are hidden", async () => {
@@ -252,6 +261,9 @@ describe("ThreadDetailsPanel messages", () => {
     renderPanel({ traceId: "trace-2" });
 
     expect(renderedMessages()).toEqual([turn("trace-1"), internal("trace-2")]);
+    expect(
+      screen.getByRole("button", { name: "Show internal calls (2)" }),
+    ).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByText("4 messages")).toBeInTheDocument();
   });
 
@@ -263,7 +275,7 @@ describe("ThreadDetailsPanel messages", () => {
 
     expect(renderedMessages()).toEqual([turn("trace-1"), turn("trace-2")]);
     expect(
-      screen.queryByRole("button", { name: /hidden traces/ }),
+      screen.queryByRole("button", { name: /internal calls/ }),
     ).not.toBeInTheDocument();
     expect(await hoverForTooltip(screen.getByText("4 messages"))).toBe(
       "Number of messages in the thread",

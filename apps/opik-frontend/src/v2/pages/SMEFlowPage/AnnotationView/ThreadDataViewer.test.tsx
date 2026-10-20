@@ -125,7 +125,9 @@ describe("ThreadDataViewer (annotation queue thread view)", () => {
 
     expect(renderedMessages()).toEqual([turn("trace-1"), turn("trace-3")]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Show hidden traces" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show internal calls (1)" }),
+    );
 
     expect(renderedMessages()).toEqual([
       turn("trace-1"),
@@ -134,7 +136,7 @@ describe("ThreadDataViewer (annotation queue thread view)", () => {
     ]);
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Collapse hidden traces" }),
+      screen.getByRole("button", { name: "Hide internal calls (1)" }),
     );
 
     expect(renderedMessages()).toEqual([turn("trace-1"), turn("trace-3")]);
@@ -147,7 +149,7 @@ describe("ThreadDataViewer (annotation queue thread view)", () => {
 
     expect(renderedMessages()).toEqual([turn("trace-1"), turn("trace-2")]);
     expect(
-      screen.queryByRole("button", { name: /hidden traces/ }),
+      screen.queryByRole("button", { name: /internal calls/ }),
     ).not.toBeInTheDocument();
   });
 
