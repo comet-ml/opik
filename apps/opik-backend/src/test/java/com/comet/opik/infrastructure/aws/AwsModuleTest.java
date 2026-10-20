@@ -13,6 +13,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 import software.amazon.awssdk.regions.Region;
@@ -155,6 +156,7 @@ class AwsModuleTest {
 
                         assertThat(credentials).isInstanceOfSatisfying(AwsSessionCredentials.class, session -> {
                             assertThat(session.accessKeyId()).isEqualTo("CUSTOMER1");
+                            assertThat(session.secretAccessKey()).isEqualTo("secret-CUSTOMER1");
                             assertThat(session.sessionToken()).isEqualTo("token-CUSTOMER1");
                         });
                     });
@@ -177,8 +179,12 @@ class AwsModuleTest {
             stubCredentials("second", "second", "CUSTOMER2", Instant.now().plus(1, ChronoUnit.HOURS));
             var provider = AwsModule.eventBridgeCredentialsProvider(config());
 
-            assertThat(provider.resolveCredentials().accessKeyId()).isEqualTo("CUSTOMER1");
-            assertThat(provider.resolveCredentials().accessKeyId()).isEqualTo("CUSTOMER2");
+            assertThat(provider.resolveCredentials())
+                    .extracting(AwsCredentials::accessKeyId, AwsCredentials::secretAccessKey)
+                    .containsExactly("CUSTOMER1", "secret-CUSTOMER1");
+            assertThat(provider.resolveCredentials())
+                    .extracting(AwsCredentials::accessKeyId, AwsCredentials::secretAccessKey)
+                    .containsExactly("CUSTOMER2", "secret-CUSTOMER2");
             endpoint.verify(2, getRequestedFor(urlEqualTo(PATH)));
         }
 
