@@ -703,7 +703,8 @@ const THINKING_AMOUNT_RANK: ReadonlyMap<string, number> = new Map([
 // Where a level picked on the previous model lands on a model that does not
 // offer it: the nearest offered level, a tie going to the lower, cheaper one. A
 // level the previous model did not offer either was never on screen (a Max on a
-// Chat Completions key shows as High), so it gets none and falls to the default.
+// Chat Completions key shows as the model's default), so it gets none and falls
+// to the default.
 const getNearestOfferedLevel = <L extends string>(
   level: L | undefined,
   options: Array<{ value: L }>,
@@ -775,11 +776,14 @@ export const updateProviderConfig = <
     // API list, a superset of the Chat Completions one, so a stored max is
     // kept: assuming Chat Completions here would rewrite it to the model's
     // default for good.
+    // The previous model's list is the one its panel showed, which reads an
+    // unknown mode as Chat Completions: a max shown there as the default
+    // follows the next model's default rather than moving to xhigh.
     const mode = params.openAiPipelineMode ?? "responses_api";
     const effortOptions = getOpenAIReasoningEffortOptions(params.model, mode);
     const previousEffortOptions = getOpenAIReasoningEffortOptions(
       params.previousModel,
-      mode,
+      params.openAiPipelineMode,
     );
     const previousDefault =
       previousEffortOptions.length > 0

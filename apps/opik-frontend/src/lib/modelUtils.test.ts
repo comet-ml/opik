@@ -2562,6 +2562,15 @@ describe("max on the OpenAI Responses API only", () => {
     });
   });
 
+  it("moves a max the panel showed as the default to the next model's default, when the mode is unknown", () => {
+    const result = updateProviderConfig(STORED_MAX, {
+      model: PROVIDER_MODEL_TYPE.GPT_5_5,
+      provider: OPEN_AI,
+      previousModel: PROVIDER_MODEL_TYPE.GPT_6_SOL,
+    });
+    expect(result?.reasoningEffort).toBe("medium");
+  });
+
   describe("a model switch made while the provider keys are loading", () => {
     it("keeps the stored max, then coerces it once the key turns out to be on Chat Completions", () => {
       const whileLoading = updateProviderConfig(STORED_MAX, {
