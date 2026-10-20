@@ -218,6 +218,42 @@ test.describe(
           'the store really holds the ids the run was composed from',
         ).toBeGreaterThan(0);
 
+        /**
+         * The composer's message ids once a prompt (re-)application has landed.
+         *
+         * `waitForLoadedPromptVersion` settles as soon as the loaded-version
+         * label renders, and the store's messages are rebuilt a tick later — so
+         * reading the ids straight after it intermittently returns the
+         * PREVIOUS set and the "fresh ids" assertions below fail on a load that
+         * was merely still in flight. Waiting on the ids changing waits for the
+         * state those assertions are about instead of for a proxy of it.
+         *
+         * Deliberately the weaker condition: this settles on "the set changed
+         * at all", leaving "the count held and not one id survived" to the hard
+         * assertions at the call site. Polling on the full claim would make
+         * them restate the wait and assert nothing of their own.
+         */
+        const settledMessageIdsAfter = async (
+          previous: readonly string[],
+          what: string,
+        ): Promise<string[]> => {
+          let ids: string[] = previous.slice();
+          await expect
+            .poll(
+              async () => {
+                ids = await playground.storedMessageIds();
+                return ids.join(',') !== previous.join(',');
+              },
+              {
+                timeout: 15_000,
+                intervals: [250, 500, 1_000],
+                message: `${what} never rebuilt the composer messages`,
+              },
+            )
+            .toBe(true);
+          return ids;
+        };
+
         await test.step('Reload the page', async () => {
           // The plainest case, and the one a user hits most: the output is
           // rehydrated from the persisted store, which is also where `stale`
@@ -250,7 +286,10 @@ test.describe(
           await playground.waitForLoadedPromptVersion(promptName, 'v1');
         });
 
-        const idsAfterLibraryLoad = await playground.storedMessageIds();
+        const idsAfterLibraryLoad = await settledMessageIdsAfter(
+          idsBeforeLibrary,
+          'the reload that re-applied the library prompt',
+        );
         // "Same messages, new ids" is the exact payload this change is about, so
         // both halves are asserted: the count is unchanged, and not one id is.
         expect(
@@ -280,7 +319,10 @@ test.describe(
           await playground.waitForLoadedPromptVersion(promptName, 'v1');
         });
 
-        const idsAfterExplicitLoad = await playground.storedMessageIds();
+        const idsAfterExplicitLoad = await settledMessageIdsAfter(
+          idsAfterLibraryLoad,
+          'the explicit library load',
+        );
         expect(
           idsAfterExplicitLoad,
           'the explicit load holds the same messages again',

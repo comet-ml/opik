@@ -3963,15 +3963,26 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * no spans".
      */
     async listSpanCosts(args: { projectId: string; traceId: string }): Promise<SpanCostRef[]> {
-      const content = await fetchAllPages(
-        (page) =>
-          opik.api.spans.getSpansByProject({
-            projectId: args.projectId,
-            traceId: args.traceId,
-            page,
-            size: 100,
-          }),
-        100,
+      // `withRateLimitRetry`, for the same reason `listTrackedSpans` takes it:
+      // the spans listing is limited per workspace (`getSpans:{workspaceId}`),
+      // and every cost spec seeds a population and then polls this method until
+      // it is queryable — so several of them running together on a shared cloud
+      // workspace is precisely the burst the limit is there to shed. Unretried,
+      // the 429 escapes from inside the caller's `expect.poll` and fails the
+      // test, which reads like a pricing defect rather than an infrastructure
+      // budget. Observed on staging: four cost tests failing all three attempts
+      // on 429 alone, with the prices they assert never read at all.
+      const content = await withRateLimitRetry(() =>
+        fetchAllPages(
+          (page) =>
+            opik.api.spans.getSpansByProject({
+              projectId: args.projectId,
+              traceId: args.traceId,
+              page,
+              size: 100,
+            }),
+          100,
+        ),
       );
       return content.map((s) => ({
         id: String(s.id ?? ''),

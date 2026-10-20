@@ -249,7 +249,12 @@ test.describe(
         await test.step('And the trace panel renders the score', async () => {
           const logs = new LogsPage(page);
           await logs.goto(project.id);
-          await logs.waitForReady();
+          // Raised from the 15s default, which `waitForReady` documents as the
+          // case for doing so: this project was created inside this test and
+          // holds a single trace written moments ago, so the listing and its
+          // count query are both racing the write path. Observed failing here
+          // once on staging while every API assertion above had already passed.
+          await logs.waitForReady({ timeout: 60_000 });
 
           const panel = await logs.openTraceById(trace.id);
           await panel.waitForFullyLoaded();

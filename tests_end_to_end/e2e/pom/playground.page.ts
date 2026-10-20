@@ -1538,6 +1538,30 @@ export class PlaygroundPage {
    * The row-scoped counterpart of `waitForLoadedPromptVersion`, which addresses
    * variant 0's User row specifically and so cannot see a load into a System or
    * Assistant row.
+   *
+   * Two races make this a poll rather than two `toBeVisible()` calls, and both
+   * have been seen on staging.
+   *
+   * **The hover is re-applied on every attempt.** The strip holding the chip is
+   * `invisible group-hover:visible`, so it is on screen only while the cursor is
+   * over the row — and applying a loaded prompt REBUILDS the message rows as
+   * fresh DOM nodes. A single `hover()` is one synthetic mouse move: once the
+   * node under the cursor has been replaced nothing re-fires it, so the strip
+   * goes hidden again and a plain `toBeVisible()` waits out its whole timeout
+   * watching a hidden element it can never un-hide.
+   *
+   * **The store has to have the content, not just the chip the name.** The chip
+   * and the persisted messages are written by different effects and the chip
+   * wins, so settling on the chip alone hands the caller a row whose stored
+   * content is still its PRE-LOAD value — empty, on the default card. Every
+   * caller then reads `storedMessages()` and compares, so that is a wrong
+   * answer rather than a slow one.
+   *
+   * The store condition is deliberately only "the row has content at all",
+   * which is weaker than any caller's claim: whether that content is the exact
+   * string, or the exact array with its media parts intact, is what the
+   * assertions at the call sites are for. Waiting on the full claim would make
+   * them restate this wait and assert nothing of their own.
    */
   async waitForLoadedPromptVersionInMessage(
     messageIndex: number,
@@ -1549,9 +1573,27 @@ export class PlaygroundPage {
       `wait for "${promptName}" ${versionLabel} to be loaded into message ${messageIndex}`,
       async () => {
         const row = this.messageRowAt(messageIndex, variantIndex);
-        await this.hoverMessageRow(messageIndex, variantIndex);
-        await expect(this.loadedPromptChip(messageIndex, promptName, variantIndex)).toBeVisible();
-        await expect(row.getByText(versionLabel, { exact: true })).toBeVisible();
+        const chip = this.loadedPromptChip(messageIndex, promptName, variantIndex);
+        const version = row.getByText(versionLabel, { exact: true });
+        await expect
+          .poll(
+            async () => {
+              await this.messageRowAt(messageIndex, variantIndex).hover();
+              if (!(await chip.isVisible()) || !(await version.isVisible())) return false;
+              const content = (await this.readStoredMessages())?.[messageIndex]?.content;
+              return Array.isArray(content)
+                ? content.length > 0
+                : typeof content === 'string' && content.length > 0;
+            },
+            {
+              timeout: 30_000,
+              intervals: [250, 500, 1_000],
+              message:
+                `message ${messageIndex} never ended up holding "${promptName}" at ` +
+                `${versionLabel} — chip and persisted content both have to land`,
+            },
+          )
+          .toBe(true);
       },
     );
   }
@@ -1661,33 +1703,48 @@ export class PlaygroundPage {
    */
   async storedMessages(): Promise<Array<{ id: string; role: string; content: unknown }>> {
     return test.step('read variant 0\'s messages from PLAYGROUND_STATE', async () => {
-      const messages = await this.page.evaluate(() => {
-        const raw = window.localStorage.getItem('PLAYGROUND_STATE');
-        if (!raw) return null;
-        const state = (JSON.parse(raw) as { state?: unknown }).state as
-          | {
-              promptIds?: string[];
-              promptMap?: Record<
-                string,
-                { messages?: Array<{ id?: string; role?: string; content?: unknown }> }
-              >;
-            }
-          | undefined;
-        const first = state?.promptIds?.[0];
-        if (!first) return null;
-        const stored = state?.promptMap?.[first]?.messages;
-        if (!stored) return null;
-        return stored.map((m) => ({
-          id: m.id ?? '',
-          role: m.role ?? '',
-          content: m.content,
-        }));
-      });
+      const messages = await this.readStoredMessages();
       // Asserted rather than defaulted to []: an absent store is a different
       // failure from a prompt with no messages, and an empty array would
       // satisfy a "no media in any message" check without reading anything.
       expect(messages, 'PLAYGROUND_STATE holds variant 0 and its messages').not.toBeNull();
       return messages as Array<{ id: string; role: string; content: unknown }>;
+    });
+  }
+
+  /**
+   * The same read as {@link storedMessages}, without the `test.step` or the
+   * not-null assertion.
+   *
+   * Exists so a poll can call it repeatedly: wrapped in a step it would stamp
+   * one entry per attempt onto the trace and bury the phase being waited for,
+   * and the assertion would fail the poll outright on the first tick before the
+   * store exists rather than waiting for it.
+   */
+  private async readStoredMessages(): Promise<
+    Array<{ id: string; role: string; content: unknown }> | null
+  > {
+    return this.page.evaluate(() => {
+      const raw = window.localStorage.getItem('PLAYGROUND_STATE');
+      if (!raw) return null;
+      const state = (JSON.parse(raw) as { state?: unknown }).state as
+        | {
+            promptIds?: string[];
+            promptMap?: Record<
+              string,
+              { messages?: Array<{ id?: string; role?: string; content?: unknown }> }
+            >;
+          }
+        | undefined;
+      const first = state?.promptIds?.[0];
+      if (!first) return null;
+      const stored = state?.promptMap?.[first]?.messages;
+      if (!stored) return null;
+      return stored.map((m) => ({
+        id: m.id ?? '',
+        role: m.role ?? '',
+        content: m.content,
+      }));
     });
   }
 
