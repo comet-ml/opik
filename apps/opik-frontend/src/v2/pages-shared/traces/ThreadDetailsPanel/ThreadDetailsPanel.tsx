@@ -108,6 +108,8 @@ export type ThreadDetailsPanelProps = {
 };
 
 const DEFAULT_TAB = "messages";
+// The backend counts two messages (input + output) per trace in `number_of_messages`.
+const MESSAGES_PER_TRACE = 2;
 
 const ThreadHeaderSkeleton: React.FC = () => (
   <div className="flex flex-col gap-2">
@@ -440,13 +442,11 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             <div className="flex items-center gap-1">
               <Hash className="size-3.5 shrink-0 text-muted-slate" />
               {thread?.number_of_messages
-                ? `${
-                    // The backend counts two messages (input + output) per trace.
-                    Math.max(
-                      thread.number_of_messages - hiddenTracesCount * 2,
-                      0,
-                    )
-                  } messages`
+                ? `${Math.max(
+                    thread.number_of_messages -
+                      hiddenTracesCount * MESSAGES_PER_TRACE,
+                    0,
+                  )} messages`
                 : "NA"}
             </div>
           </TooltipWrapper>

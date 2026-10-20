@@ -110,6 +110,7 @@ const internal = (id: string) => ({ id, badge: "Internal" });
 describe("ThreadDataViewer (annotation queue thread view)", () => {
   beforeEach(() => {
     localStorage.clear();
+    window.history.replaceState(null, "", "/");
     mocks.traces = [];
   });
 
@@ -148,5 +149,18 @@ describe("ThreadDataViewer (annotation queue thread view)", () => {
     expect(
       screen.queryByRole("button", { name: /hidden traces/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps the trace open in the trace panel listed, badged, when it is internal", () => {
+    mocks.traces = [
+      makeTrace("trace-1"),
+      makeTrace("trace-2", INTERNAL_METADATA),
+      makeTrace("trace-3", INTERNAL_METADATA),
+    ];
+    window.history.replaceState(null, "", "/?trace=trace-2");
+
+    renderViewer();
+
+    expect(renderedMessages()).toEqual([turn("trace-1"), internal("trace-2")]);
   });
 });

@@ -97,8 +97,9 @@ const useThreadData = () => {
     [tracesData],
   );
 
-  // Same as the thread panel: internal traces are not conversation turns.
-  const visibleTraces = useVisibleTraces(traces);
+  // Same as the thread panel: internal traces are not conversation turns, but the one open
+  // in the trace panel stays listed.
+  const visibleTraces = useVisibleTraces(traces, traceId || undefined);
 
   const handleOpenTrace = useCallback(
     (id: string, shouldFilterToolCalls: boolean) => {
