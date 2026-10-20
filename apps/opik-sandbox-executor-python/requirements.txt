@@ -12,7 +12,7 @@ click==8.1.8
 distro==1.9.0
 filelock==3.25.2
 frozenlist==1.8.0
-fsspec==2026.3.0
+fsspec==2026.6.0
 h11==0.16.0
 hf-xet==1.4.2
 httpcore==1.0.9
