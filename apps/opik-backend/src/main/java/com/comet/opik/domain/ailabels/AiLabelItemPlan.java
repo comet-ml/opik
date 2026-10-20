@@ -7,7 +7,7 @@ import java.util.List;
 
 /**
  * Which tasks one batch item carries, and its {@code item_id}. Plans depend only on the trace id and the task set, so
- * the loader can rebuild an item's tasks from a job's pending rows.
+ * the loader can rebuild an item's tasks from a job's in-flight item rows.
  */
 @Builder(toBuilder = true)
 public record AiLabelItemPlan(@NonNull String itemId, @NonNull AiLabelEndpoint endpoint, boolean cache,
