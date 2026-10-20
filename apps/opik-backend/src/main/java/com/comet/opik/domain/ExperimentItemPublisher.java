@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Singleton
 @Slf4j
@@ -95,16 +96,21 @@ public class ExperimentItemPublisher {
     }
 
     /**
-     * Removes what a run was counting itself down against. A launch that failed partway leaves its
-     * counters holding a total no one will ever reach, and an item that arrives late then decrements
-     * one that should not exist.
+     * Removes a run's item totals and recorded outcomes. A launch that failed partway leaves totals no one
+     * will ever reach, and outcomes nothing will read, holding one field per item until the TTL.
      */
     public Mono<Void> discardCounters(@NonNull String workspaceId, @NonNull Collection<UUID> experimentIds) {
-        return Flux.fromIterable(experimentIds)
-                .flatMap(experimentId -> Flux.just(
+        if (CollectionUtils.isEmpty(experimentIds)) {
+            return Mono.empty();
+        }
+
+        var keys = experimentIds.stream()
+                .flatMap(experimentId -> Stream.of(
                         ExperimentExecutionConfig.itemCounterKey(workspaceId, experimentId),
-                        ExperimentExecutionConfig.itemEntriesKey(workspaceId, experimentId))
-                        .flatMap(key -> redisClient.getAtomicLong(key).delete()))
+                        ExperimentExecutionConfig.itemEntriesKey(workspaceId, experimentId)))
+                .toArray(String[]::new);
+
+        return redisClient.getKeys().delete(keys)
                 .then()
                 .onErrorResume(error -> {
                     // The TTL still clears them; failing the abort over it would lose the status write
