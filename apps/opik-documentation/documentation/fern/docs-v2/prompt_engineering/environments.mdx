@@ -1,0 +1,166 @@
+---
+headline: Environments
+og:description: Deploy Prompt Library versions to environments such as production and staging, and fetch prompts by environment from the Opik SDK
+og:site_name: Opik Documentation
+og:title: Prompt Library Environments
+title: Environments
+---
+
+An environment, such as `production` or `staging`, points to one version of a prompt. Your code fetches the prompt by environment, and you choose which version each environment serves from the Opik UI or the SDK. To roll out a new version or roll back to an old one, deploy it to the environment. You don't need to change or redeploy your code.
+
+## How environments work
+
+- **Environments belong to the workspace.** You create them once and use them for every prompt in every project. Traces, spans, and threads use the same list of environments.
+- **An environment points to one version per prompt.** When you deploy a version to `production`, the version that held `production` before loses it.
+- **A version can hold several environments.** For example, `v4` can serve both `staging` and `development`.
+- **New versions don't inherit environments.** When you save `v5`, `production` still points to the version you deployed last. Deploy `v5` when it's ready.
+
+## Managing environments
+
+To see and edit the environments of your workspace, select **Configuration** in the workspace sidebar and open the **Environments** tab.
+
+<Frame>
+  <img src="/img/v2/prompt-library/environments-configuration.png" alt="The Environments tab of the workspace Configuration page" />
+</Frame>
+
+To create an environment:
+
+1. Click **Create environment**.
+2. Enter a **Name** with letters, numbers, dashes, or underscores. The name must be unique in the workspace.
+3. Optionally, add a **Description** and pick a color.
+4. Click **Create environment**.
+
+Use the row menu to **Edit**, **Clone**, or **Delete** an environment. The `production`, `staging`, and `development` environments always use their default colors.
+
+You can also manage environments from code:
+
+<CodeBlocks>
+  ```python title="Python" wordWrap
+  import opik
+
+  client = opik.Opik()
+
+  client.create_environment(name="staging", description="Pre-release checks")
+  environments = client.get_environments()
+  client.delete_environment("staging")
+  ```
+
+  ```ts title="TypeScript" wordWrap
+  import { Opik } from "opik";
+
+  const client = new Opik();
+
+  await client.createEnvironment("staging", { description: "Pre-release checks" });
+  const environments = await client.getEnvironments();
+  await client.deleteEnvironment("staging");
+  ```
+</CodeBlocks>
+
+## Deploying a version
+
+<Tabs>
+  <Tab title="Opik UI">
+    1. Open the prompt in the **Prompt library**.
+    2. Select the version in **Version history**.
+    3. Click **Deploy to** and select an environment.
+
+    The menu shows a check mark next to the environments the version already holds. For the other environments, it shows the version they point to now, for example **Currently v3**. Select an environment with a check mark to remove the version from it, or click **Remove from all** to remove the version from all of its environments.
+
+    <Frame>
+      <img src="/img/v2/prompt-library/prompt-deploy-to.png" alt="The Deploy to menu on a prompt version, with production currently on v3" />
+    </Frame>
+
+    Environment badges show next to each version in **Version history**, so you can see at a glance which version each environment serves.
+  </Tab>
+  <Tab title="Python SDK">
+    Call `set_prompt_environments` with the full list of environments the version should hold:
+
+    ```python wordWrap
+    import opik
+
+    client = opik.Opik()
+
+    # Deploy v4 to staging
+    client.set_prompt_environments(
+        "travel-assistant-system",
+        ["staging"],
+        version="v4",
+        project_name="travel-assistant",
+    )
+    ```
+
+    The list replaces the environments of the version: an environment you leave out is removed from it. Pass `[]` to remove all of them. If you omit `version`, the SDK updates the latest version. Every environment must already exist in the workspace.
+  </Tab>
+  <Tab title="TypeScript SDK">
+    Call `setPromptEnvironments` with the full list of environments the version should hold:
+
+    ```ts wordWrap
+    import { Opik } from "opik";
+
+    const client = new Opik();
+
+    // Deploy v4 to staging
+    await client.setPromptEnvironments({
+      promptName: "travel-assistant-system",
+      environments: ["staging"],
+      version: "v4",
+      projectName: "travel-assistant",
+    });
+    ```
+
+    The list replaces the environments of the version: an environment you leave out is removed from it. Pass `[]` to remove all of them. If you omit `version`, the SDK updates the latest version. Every environment must already exist in the workspace.
+  </Tab>
+</Tabs>
+
+## Fetching a prompt by environment
+
+Pass `environment` to get the version that the environment points to:
+
+<CodeBlocks>
+  ```python title="Python" wordWrap
+  import opik
+
+  client = opik.Opik()
+
+  prompt = client.get_prompt(
+      name="travel-assistant-system",
+      environment="production",
+      project_name="travel-assistant",
+  )
+  ```
+
+  ```ts title="TypeScript" wordWrap
+  import { Opik } from "opik";
+
+  const client = new Opik();
+
+  const prompt = await client.getPrompt({
+    name: "travel-assistant-system",
+    environment: "production",
+    projectName: "travel-assistant",
+  });
+  ```
+</CodeBlocks>
+
+`get_chat_prompt` and `getChatPrompt` accept `environment` too. You can't combine `environment` with `version`. If no version of the prompt holds the environment, the SDK returns `None` in Python and `null` in TypeScript.
+
+<Note>
+  The SDKs cache fetched prompts for 300 seconds, so a running agent can take up to five minutes to pick up a new
+  deployment. Set `OPIK_PROMPT_CACHE_TTL_SECONDS` to change the cache duration, or pass `no_cache=True` to
+  `get_prompt` in Python to skip the cache.
+</Note>
+
+## Promoting a version
+
+A typical rollout with environments:
+
+1. Save the new version, for example `v4`, from the UI or the SDK.
+2. Deploy `v4` to `staging` and test it there. You can also run an [experiment](/evaluation/overview) on it to compare it with the version in production.
+3. Deploy `v4` to `production`. Agents that fetch `production` load `v4` on their next fetch.
+4. To roll back, deploy the previous version to `production` again.
+
+## Next steps
+
+- [Version control](/development/prompt-library/version-control): create and compare versions.
+- [Getting started](/development/prompt-library/getting-started): fetch prompts from your agent code.
+- [Log traces](/tracing/advanced/log_traces): log traces with an environment, using the same list of environments.
