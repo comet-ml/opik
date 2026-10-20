@@ -444,6 +444,24 @@ class SpanWeeksReadBoundTest {
         });
     }
 
+    /**
+     * A search keeps the page pushdown, whose spans reads take every trace of the page's threads, the ones the search
+     * drops included: the search matches the trace by id, so its copy in the same thread must not count.
+     */
+    @Test
+    void threadListSearchCountsOnlyTheSpansOfTheMatchingTrace() {
+        var trace = fixtures.createFarFutureTrace();
+        fixtures.createThisWeekCopy(trace, trace.trace().threadId());
+
+        var expectedThreads = List.of(expectedThread(trace));
+        // Threads are materialised from their traces asynchronously.
+        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            var actualThreads = traceResourceClient.getTraceThreads(trace.projectId(), null, API_KEY, WORKSPACE_NAME,
+                    null, null, Map.of("search", trace.trace().id().toString())).content();
+            TraceAssertions.assertThreads(expectedThreads, actualThreads);
+        });
+    }
+
     private Stream<Arguments> threadStatsCountAFarFutureSpanOfItsTrace() {
         var projectThreadId = fixtures.randomThreadId();
         var traceSetThreadId = fixtures.randomThreadId();
