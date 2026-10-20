@@ -45,7 +45,7 @@ import java.util.stream.Collectors;
 public interface OpenTelemetryService {
 
     Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest,
-            @NonNull String defaultProjectName);
+            @NonNull String fallbackProjectName);
 }
 
 @Singleton
@@ -82,7 +82,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
     @Override
     public Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest,
-            @NonNull String defaultProjectName) {
+            @NonNull String fallbackProjectName) {
 
         // An exporter may legitimately send a batch carrying no spans, and OTLP treats that as a valid,
         // empty export. It used to reach SpanService.create, whose non-empty precondition surfaced it to the
@@ -92,8 +92,8 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
                 .anyMatch(scopeSpans -> scopeSpans.getSpansCount() > 0);
         if (!carriesSpans) {
-            log.info("Received an OpenTelemetry batch with no spans; nothing to store, project='{}'",
-                    defaultProjectName);
+            log.info("Received an OpenTelemetry batch with no spans; nothing to store, fallback project='{}'",
+                    fallbackProjectName);
             return Mono.just(0L);
         }
 
@@ -106,7 +106,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 .findFirst()
                 .orElse(null);
 
-        var spansByProjectName = groupSpansByProjectName(traceRequest, defaultProjectName);
+        var spansByProjectName = groupSpansByProjectName(traceRequest, fallbackProjectName);
 
         return projectService.retrieveByNamesOrCreate(spansByProjectName.keySet())
                 .map(ProjectService::groupByName)
@@ -122,7 +122,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
     }
 
     private Map<String, List<Span>> groupSpansByProjectName(ExportTraceServiceRequest traceRequest,
-            String defaultProjectName) {
+            String fallbackProjectName) {
         var routedSpans = traceRequest.getResourceSpansList().stream()
                 .flatMap(resourceSpans -> {
                     var resourceProjectName = OpenTelemetryMapper
@@ -150,7 +150,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 .map(RoutedSpan::span)
                 .collect(Collectors.groupingBy(
                         span -> WorkspaceUtils.getProjectName(
-                                projectNameByOtelTraceId.getOrDefault(span.getTraceId(), defaultProjectName)),
+                                projectNameByOtelTraceId.getOrDefault(span.getTraceId(), fallbackProjectName)),
                         LinkedHashMap::new,
                         Collectors.toList()));
     }

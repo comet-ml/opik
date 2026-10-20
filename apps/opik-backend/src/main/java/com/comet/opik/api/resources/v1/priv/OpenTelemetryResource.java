@@ -55,22 +55,22 @@ public class OpenTelemetryResource {
     // both endpoints above rejects it in the validation layer instead, before this method runs and before
     // the "Received spans batch" log line announces a batch that never arrived.
     private Response handleOtelTraceRequest(ExportTraceServiceRequest traceRequest) {
-        var defaultProjectName = requestContext.get().getHeaders()
+        var fallbackProjectName = requestContext.get().getHeaders()
                 .getOrDefault(RequestContext.PROJECT_NAME, List.of(ProjectService.DEFAULT_PROJECT))
                 .getFirst();
         var userName = requestContext.get().getUserName();
         var workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Received spans batch via OpenTelemetry for default project '{}' in workspaceId '{}'",
-                defaultProjectName, workspaceId);
+        log.info("Received spans batch via OpenTelemetry for fallback project '{}' in workspaceId '{}'",
+                fallbackProjectName, workspaceId);
 
         Long stored = openTelemetryService
-                .parseAndStoreSpans(traceRequest, defaultProjectName)
+                .parseAndStoreSpans(traceRequest, fallbackProjectName)
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                 .block();
 
-        log.info("Stored {} spans via OpenTelemetry for default project '{}' in workspaceId '{}'", stored,
-                defaultProjectName, workspaceId);
+        log.info("Stored {} spans via OpenTelemetry for fallback project '{}' in workspaceId '{}'", stored,
+                fallbackProjectName, workspaceId);
 
         // Return a successful HTTP response
         return Response.ok().build();
