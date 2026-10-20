@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.gemini;
 import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
+import com.comet.opik.infrastructure.llm.MediaContentUtils;
 import com.comet.opik.infrastructure.llm.VideoMimeTypeUtils;
 import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.ChatMessage;
@@ -86,7 +87,7 @@ public interface GeminiLangChainMapper {
             case TEXT -> TextContent.from(opikContent.text());
             case IMAGE_URL -> {
                 if (opikContent.imageUrl() != null) {
-                    yield ImageContent.from(opikContent.imageUrl().getUrl());
+                    yield MediaContentUtils.toImageContent(opikContent.imageUrl().getUrl());
                 }
                 throw new BadRequestException("Image URL is null");
             }
@@ -94,6 +95,10 @@ public interface GeminiLangChainMapper {
                 // Gemini treats videos as images - convert VIDEO_URL to ImageContent
                 if (opikContent.videoUrl() != null) {
                     String videoUrl = opikContent.videoUrl().url();
+                    var dataUri = MediaContentUtils.parseBase64DataUri(videoUrl);
+                    if (dataUri.isPresent()) {
+                        yield ImageContent.from(dataUri.get().base64Data(), dataUri.get().mimeType());
+                    }
                     var imageBuilder = Image.builder()
                             .url(URI.create(videoUrl));
 

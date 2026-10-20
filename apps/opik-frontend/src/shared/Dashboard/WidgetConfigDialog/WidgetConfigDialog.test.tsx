@@ -13,7 +13,7 @@ vi.mock("@/contexts/feature-toggles-provider", () => ({
 vi.mock("./WidgetTypeSelector", () => ({ default: () => null }));
 vi.mock("./WidgetConfigPreview", () => ({ default: () => null }));
 
-const OLLIE_PROMPT = /Describe the widget you need/;
+const OLLIE_PROMPT = /Need a custom widget\?/;
 
 const renderDialog = (widgetId?: string) =>
   render(
@@ -44,7 +44,7 @@ describe("WidgetConfigDialog Ollie prompt", () => {
 
     expect(screen.getByText(OLLIE_PROMPT)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Describe it to Ollie" }),
+      screen.getByRole("button", { name: "Ask Ollie" }),
     ).toBeInTheDocument();
   });
 

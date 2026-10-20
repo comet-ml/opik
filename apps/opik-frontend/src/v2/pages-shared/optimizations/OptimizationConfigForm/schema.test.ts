@@ -359,7 +359,7 @@ describe("convertFormDataToStudioConfig — controls the optimizer does not offe
 
   // The optimizer reaches OpenAI through LiteLLM on Chat Completions whatever the key's pipeline
   // mode, and Chat Completions rejects max.
-  it("sends a stored max reasoning effort as high", () => {
+  it("sends a stored max reasoning effort as the model's default", () => {
     const parameters = convertFormDataToStudioConfig(
       {
         ...formData({ maxCompletionTokens: 4000, reasoningEffort: "max" }),
@@ -368,7 +368,7 @@ describe("convertFormDataToStudioConfig — controls the optimizer does not offe
       "my-dataset",
     ).llm_model.parameters as Record<string, unknown>;
 
-    expect(parameters.reasoning_effort).toBe("high");
+    expect(parameters.reasoning_effort).toBe("medium");
   });
 });
 
