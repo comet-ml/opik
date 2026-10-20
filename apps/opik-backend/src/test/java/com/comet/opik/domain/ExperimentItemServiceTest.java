@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.eventbus.EventBus;
@@ -15,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import reactor.core.publisher.Mono;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -36,6 +38,9 @@ import static org.mockito.Mockito.when;
 class ExperimentItemServiceTest {
 
     private static final TimeBasedEpochGenerator UUID_GENERATOR = Generators.timeBasedEpochGenerator();
+    private static final long TIMEOUT_SECONDS = 5;
+
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     @Mock
     private ExperimentItemDAO experimentItemDAO;
@@ -62,13 +67,14 @@ class ExperimentItemServiceTest {
      *
      * Both lookups answer through a future that is still pending while the assertions run, so a
      * blocking call on either parks the subscriber rather than returning at once — a stub that
-     * completed synchronously would let one through. Run against both sides of the versioning
-     * flag, since each reads a different table and either could regress.
+     * completed synchronously would let one through. The versioning flag only decides which table
+     * the dataset lookup reads, and either side could regress, so the same assertions run over
+     * both rather than being duplicated into two tests.
      *
      * The chain is then released and asserted to complete without error, so the test cannot pass
      * on one that stopped short of the call it is about.
      */
-    @ParameterizedTest
+    @ParameterizedTest(name = "dataset versioning enabled: {0}")
     @ValueSource(booleans = {false, true})
     @DisplayName("creating items should not block the subscribing thread while validation is in flight")
     void createDoesNotBlockTheSubscribingThread(boolean datasetVersioningEnabled) throws Exception {
@@ -82,8 +88,6 @@ class ExperimentItemServiceTest {
                 .thenReturn(Mono.fromFuture(experimentWorkspaceInFlight)
                         .doOnSubscribe(subscription -> experimentWorkspaceSubscribed.countDown()));
 
-        // Reached while the chain is assembled, so a blocking call here parks the subscriber
-        // before the lookup above is ever subscribed.
         var datasetWorkspaceInFlight = new CompletableFuture<List<WorkspaceAndResourceId>>();
         when(featureFlags.isDatasetVersioningEnabled()).thenReturn(datasetVersioningEnabled);
         when(datasetItemDAO.getDatasetItemWorkspace(anySet()))
@@ -92,7 +96,9 @@ class ExperimentItemServiceTest {
                 .thenReturn(Mono.fromFuture(datasetWorkspaceInFlight));
 
         var workspaceId = UUID.randomUUID().toString();
-        var experimentItem = ExperimentItem.builder()
+        // Ids are overridden because the service requires version 7, and the project id because a
+        // null one sends the chain through a trace lookup this test has nothing to say about.
+        var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
                 .id(UUID_GENERATOR.generate())
                 .experimentId(UUID_GENERATOR.generate())
                 .datasetItemId(UUID_GENERATOR.generate())
@@ -100,6 +106,7 @@ class ExperimentItemServiceTest {
                 .projectId(UUID_GENERATOR.generate())
                 .build();
 
+        when(projectService.retrieveByNamesOrCreate(anySet())).thenReturn(Mono.just(List.of()));
         when(experimentService.getExecutionPolicies(anySet())).thenReturn(Mono.just(Map.of()));
         when(experimentItemDAO.insert(anySet())).thenReturn(Mono.just(1L));
 
@@ -116,16 +123,35 @@ class ExperimentItemServiceTest {
         });
         subscriber.start();
 
-        assertThat(experimentWorkspaceSubscribed.await(5, TimeUnit.SECONDS)).isTrue();
-        assertThat(subscribeReturned.get(5, TimeUnit.SECONDS)).isNull();
-        assertThat(failure.get()).isNull();
+        // The dataset lookup is deferred, so it is subscribed by whoever completes the first one.
+        // Releasing from a thread of its own keeps that caller measurable: a blocking dataset
+        // lookup parks the releaser, where releasing inline would park the test itself.
+        var releaseReturned = new CompletableFuture<Void>();
+        var releaser = new Thread(() -> {
+            experimentWorkspaceInFlight.complete(true);
+            releaseReturned.complete(null);
+        });
 
-        // Released only now, so the rest of the chain runs and has to finish cleanly.
-        experimentWorkspaceInFlight.complete(true);
-        datasetWorkspaceInFlight.complete(List.of(new WorkspaceAndResourceId(workspaceId, experimentItem.id())));
+        try {
+            assertThat(experimentWorkspaceSubscribed.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)).isTrue();
+            assertThat(subscribeReturned.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)).isNull();
+            assertThat(failure.get()).isNull();
 
-        assertThat(completed.await(5, TimeUnit.SECONDS)).isTrue();
-        assertThat(failure.get()).isNull();
-        subscriber.join(TimeUnit.SECONDS.toMillis(5));
+            releaser.start();
+            assertThat(releaseReturned.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)).isNull();
+
+            // Released only now, so the rest of the chain runs and has to finish cleanly.
+            datasetWorkspaceInFlight
+                    .complete(List.of(new WorkspaceAndResourceId(workspaceId, experimentItem.datasetItemId())));
+
+            assertThat(completed.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)).isTrue();
+            assertThat(failure.get()).isNull();
+        } finally {
+            // A failed assertion above would otherwise leave these parked for good.
+            experimentWorkspaceInFlight.complete(true);
+            datasetWorkspaceInFlight.complete(List.of());
+            subscriber.join(TimeUnit.SECONDS.toMillis(TIMEOUT_SECONDS));
+            releaser.join(TimeUnit.SECONDS.toMillis(TIMEOUT_SECONDS));
+        }
     }
 }

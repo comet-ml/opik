@@ -203,9 +203,7 @@ public class ExperimentItemService {
     private Mono<Set<ExperimentItem>> validateExperimentItemIdsAndWorkspace(
             Set<ExperimentItem> experimentItems, String workspaceId, String userName) {
         return validateExperimentsWorkspace(experimentItems, workspaceId)
-                .then(validateDatasetItemsWorkspace(experimentItems, workspaceId, userName))
-                // Not thenReturn: its argument is a value, so the id checks would run at assembly
-                // and report before the workspace ones they follow.
+                .then(Mono.defer(() -> validateDatasetItemsWorkspace(experimentItems, workspaceId, userName)))
                 .then(Mono.fromCallable(() -> validateExperimentItemIds(experimentItems)));
     }
 
