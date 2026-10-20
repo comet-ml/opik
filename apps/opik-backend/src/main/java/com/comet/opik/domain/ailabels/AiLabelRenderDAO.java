@@ -84,9 +84,9 @@ class AiLabelRenderDAO {
 
     /**
      * The spans a render reads, narrow, one row each: the latest version of each span, not deleted; the earliest
-     * {@code max_spans} of each trace; and of those, the ones within {@code max_trace_bytes} of input and output in
-     * start order (the first is always kept). {@code bytes} counts what the content read returns, an outsized field as
-     * its marker ({@code "[N bytes omitted]"}, 18 bytes and N's digits). Only string lengths are read, never the content. Start order is in microseconds, so the cut is the
+     * {@code max_spans} of each trace; and of those, the ones within {@code max_trace_bytes} of name, input and output
+     * in start order (the first is always kept). {@code bytes} counts what the content read returns, an outsized field
+     * as its marker ({@code "[N bytes omitted]"}, 18 bytes and N's digits; 16 for a name, which is unquoted). Only string lengths are read, never the content. Start order is in microseconds, so the cut is the
      * same on both layouts.
      */
     private static final String SELECTED_SPANS = """
@@ -99,7 +99,9 @@ class AiLabelRenderDAO {
                     SELECT trace_id, id, last_updated_at, bytes, toDateTime64(start_time, 6) AS start_order
                     FROM (
                         SELECT trace_id, id, start_time, last_updated_at,
-                            if(length(input) > :max_field_bytes, 18 + length(toString(length(input))), length(input))
+                            if(length(name) > :max_field_bytes, 16 + length(toString(length(name))), length(name))
+                                + if(length(input) > :max_field_bytes, 18 + length(toString(length(input))),
+                                    length(input))
                                 + if(length(output) > :max_field_bytes, 18 + length(toString(length(output))),
                                     length(output)) AS bytes
                             <if(spans_v2)>, is_deleted<endif>

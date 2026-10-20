@@ -141,14 +141,14 @@ public class AiLabelsConfig {
     @Min(1) @Max(100_000) private int maxSpansPerTrace = 200;
 
     /**
-     * A trace's spans are read in start order until their input and output reach this; the rest are left out, as past
+     * A trace's spans are read in start order until their name, input and output reach this; the rest are left out, as past
      * {@code maxSpansPerTrace}. Fitting keeps far less, so a trace's read is bounded without changing what a normal
      * trace renders to.
      */
     @JsonProperty
     @Min(1) private long maxSpanBytesPerTrace = 16L * 1024 * 1024;
 
-    /** A chunk's spans are read in batches of traces whose span input and output add up to at most this. */
+    /** A chunk's spans are read in batches of traces whose span name, input and output add up to at most this. */
     @JsonProperty
     @Min(1) private long renderReadBytes = 64L * 1024 * 1024;
 

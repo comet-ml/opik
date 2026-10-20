@@ -266,7 +266,8 @@ public class AiLabelRenderer {
             case AiLabelStateFitter.Fitted fitted -> new RenderOutcome.Rendered(ref, fitted.state(), fitted.history(),
                     toInt(fitted.bytes()), fitted.compactionLevel());
             case AiLabelStateFitter.OverBudget overBudget -> {
-                log.info("Trace over the render budget after every step, traceId '{}', withHistory '{}', "
+                // Counted as compaction level over_budget; one line per trace is too many at INFO.
+                log.debug("Trace over the render budget after every step, traceId '{}', withHistory '{}', "
                         + "bytes '{}', budget '{}'", trace.id(), history != null, overBudget.bytes(), budgetBytes);
                 yield new RenderOutcome.OverBudget(ref, history != null, toInt(overBudget.bytes()));
             }
