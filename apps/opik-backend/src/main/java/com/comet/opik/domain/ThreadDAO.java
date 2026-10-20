@@ -180,8 +180,12 @@ class ThreadDAOImpl implements ThreadDAO {
      * re-reads the set.
      * <p>
      * The page pushdown reads its page's trace ids once, without FINAL or payload, into {@code page_trace_ids}
-     * (OPIK-8894), and traces_final, the spans filter and the span_weeks lookup all take them through that scalar. The
-     * set may hold traces that traces_final drops: a trace whose older version carried one of the page's thread ids
+     * (OPIK-8894), and traces_final, the spans filter and the span_weeks lookup all take them through that scalar.
+     * traces_final filters its FINAL read on those ids, which are in the sort key, so it reads only their granules.
+     * Filtering on thread_id alone would read every window trace's payload: FINAL merges versions before it filters,
+     * and thread_id is not in the sort key.
+     * <p>
+     * The set may hold traces that traces_final drops: a trace whose older version carried one of the page's thread ids
      * before it moved to another thread, or a trace the filters or the search reject. That changes no result: spans_agg
      * is joined to traces_final, and span_weeks only bounds the weeks read.
      */
@@ -270,9 +274,6 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND project_id = :project_id
                       AND thread_id \\<> ''
                       <if(page_pushdown)>
-                          -- FINAL merges versions before it filters on thread_id, which is not in the sort key, so it
-                          -- would read every window trace's payload. The page's ids are found narrowly first and are
-                          -- on the sort key, so FINAL then reads only their granules.
                           AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_trace_ids)))
                           AND thread_id IN :page_thread_ids
                           <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
