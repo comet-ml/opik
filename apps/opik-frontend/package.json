@@ -121,7 +121,7 @@
     "unist-util-visit": "^5.0.0",
     "use-local-storage-state": "^19.3.1",
     "use-query-params": "^2.2.1",
-    "uuid": "^10.0.0",
+    "uuid": "^11.0.0",
     "vega": "^6.4.0",
     "vega-embed": "^7.3.0",
     "vega-interpreter": "^2.3.2",
