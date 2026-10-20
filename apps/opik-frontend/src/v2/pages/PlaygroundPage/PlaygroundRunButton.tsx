@@ -10,9 +10,10 @@ import {
   useDatasetItemsTotal,
   useIsStopPending,
   useIsWatchLapsed,
-  useShowsRunProgress,
+  useHasRunProgress,
 } from "@/store/PlaygroundStore";
 import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
+import { STILL_RUNNING_REFRESH_MESSAGE } from "@/constants/experiments";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 
 interface PlaygroundRunButtonProps {
@@ -35,9 +36,9 @@ const PlaygroundRunButton = ({
   const isResumingRun = useIsResumingRun();
   const isStopPending = useIsStopPending(promptId);
   const isWatchLapsed = useIsWatchLapsed(promptId);
-  const showsRunProgress = useShowsRunProgress();
+  const hasRunProgress = useHasRunProgress();
 
-  const showsWatchLapsed = isWatchLapsed && !showsRunProgress && !!onCheckAgain;
+  const showsWatchLapsed = isWatchLapsed && !hasRunProgress && !!onCheckAgain;
 
   const { datasetId } = usePlaygroundDataset();
   const datasetItemsTotal = useDatasetItemsTotal();
@@ -74,7 +75,7 @@ const PlaygroundRunButton = ({
       {showsWatchLapsed && (
         <>
           <span className="comet-body-s mr-2 text-light-slate">
-            Still running on the server, refresh to update
+            {STILL_RUNNING_REFRESH_MESSAGE}
           </span>
           <Button
             variant="secondary"

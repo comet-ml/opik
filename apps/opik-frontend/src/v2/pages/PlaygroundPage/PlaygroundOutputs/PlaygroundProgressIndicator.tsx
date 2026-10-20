@@ -7,10 +7,11 @@ import {
   useProgressCompleted,
   useProgressPhase,
   useProgressTotal,
-  useShowsRunProgress,
+  useHasRunProgress,
   useIsAnyWatchLapsed,
 } from "@/store/PlaygroundStore";
 import { DATASET_TYPE } from "@/types/datasets";
+import { STILL_RUNNING_REFRESH_MESSAGE } from "@/constants/experiments";
 
 const TEST_SUITE_PHASE_LABELS: Record<string, string> = {
   running: "Step 1: Gathering LLM output",
@@ -33,9 +34,9 @@ const PlaygroundProgressIndicator: React.FC<
   const progressPhase = useProgressPhase();
   const datasetType = useDatasetType();
   const watchLapsed = useIsAnyWatchLapsed();
-  const showsRunProgress = useShowsRunProgress();
+  const hasRunProgress = useHasRunProgress();
 
-  if (!showsRunProgress) {
+  if (!hasRunProgress) {
     return null;
   }
 
@@ -60,7 +61,7 @@ const PlaygroundProgressIndicator: React.FC<
           </span>
           <span className="comet-body-s text-light-slate">
             {watchLapsed ? (
-              "Still running on the server, refresh to update"
+              STILL_RUNNING_REFRESH_MESSAGE
             ) : (
               <>
                 {progressCompleted}/{progressTotal} completed (
