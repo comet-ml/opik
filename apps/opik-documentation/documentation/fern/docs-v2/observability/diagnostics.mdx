@@ -23,7 +23,8 @@ hallucinated outputs, or latency regressions.
 - **On-demand scans:** click **Run diagnostic** at any time to analyze the traces logged in the
   last 24 hours.
 - **Daily scans:** when automatic daily diagnostics is on, Opik scans the previous day's traces
-  (midnight to midnight UTC) every day at 00:05 UTC. Days with no new traces are skipped.
+  (midnight to midnight UTC) every day, at 00:05 UTC by default. Days with no new traces are
+  skipped.
 - **One window per scan:** each scan covers only its own window. A scan doesn't pick up from the
   previous one, and days missed while daily scans were off aren't scanned later.
 - **Deduplicated issues:** matching failures across traces are grouped into a single issue rather
@@ -41,6 +42,10 @@ hallucinated outputs, or latency regressions.
 
 The first time you open a project's **Diagnostics** page, click **Run your first diagnostic** to
 scan the last 24 hours. This runs a single scan: it doesn't turn on daily scans.
+
+On Opik Cloud, some projects get their first scan automatically instead: the page then tells you
+that the first diagnostic runs for free once the project has logged 100 traces in the last 7 days.
+That first scan covers those 7 days and doesn't use your credits.
 
 To scan the project every day, open the settings icon next to **Run diagnostic** and switch on
 **Automatic daily diagnostics** (see [Settings](#settings)).
@@ -83,8 +88,9 @@ scans are paused.
 
 ## Cost and credits
 
-Each scan uses Ollie credits, so a project with automatic daily diagnostics turned on uses credits
-every day it logs traces. Turn the daily scan off for projects you don't need watched, such as demo
+Scans you start with **Run diagnostic** and daily scans use Ollie credits, so a project with
+automatic daily diagnostics turned on uses credits every day it logs traces. An automatic first
+scan is free. Turn the daily scan off for projects you don't need watched, such as demo
 or test projects, and run a scan on demand when you want one.
 
 If your organization runs out of Ollie credits, the scan doesn't run and the page shows
@@ -95,7 +101,9 @@ back on once credits are added. Issues already found stay available.
 
 On self-hosted Opik, Diagnostics is available when Ollie is enabled. To turn Diagnostics off for the
 whole installation while keeping the Ollie chat, set `TOGGLE_AGENT_INSIGHTS_ENABLED=false` on
-`opik-backend`. This stops the daily scans and hides the Diagnostics page.
+`opik-backend`. This stops the daily scans and hides the Diagnostics page. To run the daily scan at
+a different time, set `AGENT_INSIGHTS_REPORT_SCHEDULE` to a Quartz cron expression (the default is
+`0 5 0 * * ?`, 00:05 UTC).
 
 ## Next steps
 
