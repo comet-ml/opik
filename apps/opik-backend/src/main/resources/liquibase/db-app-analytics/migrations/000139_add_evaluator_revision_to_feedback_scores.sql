@@ -13,3 +13,4 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.authored_feedback_scores ON CLUSTER '{
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.authored_feedback_scores ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS evaluator_revision;
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS evaluator_revision;
+
