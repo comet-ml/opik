@@ -2975,15 +2975,6 @@ describe("OpenRouter request contract", () => {
     });
   });
 
-  it("rounds a fractional Top K stored by the old 0.01 slider step", () => {
-    expect(
-      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O, {
-        ...CONFIG,
-        topK: 39.6,
-      }).custom_parameters,
-    ).toMatchObject({ top_k: 40 });
-  });
-
   it("merges into custom_parameters, letting the panel's values win", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O, {
@@ -3202,6 +3193,20 @@ describe("OpenRouter parameters follow the model's OpenRouter lists", () => {
     ],
   ])("sends %s only the parameters it lists", (model, request) => {
     expect(sanitizeConfigForRequest(model, { ...CONFIG })).toEqual(request);
+  });
+
+  // The Top K input keeps a typed fraction on screen, and prompts stored while its slider stepped
+  // by 0.01 can carry one too, so the integer guarantee lives in the request builder.
+  it.each([
+    [7.5, 8],
+    [39.6, 40],
+  ])("sends a Top K of %s as %s", (topK, sent) => {
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_8B_INSTRUCT,
+        { ...CONFIG, topK },
+      ).custom_parameters,
+    ).toMatchObject({ top_k: sent });
   });
 
   it("drops a stale nested copy of a parameter the model does not list", () => {
