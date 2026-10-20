@@ -45,8 +45,8 @@ class AiLabelSweepServiceTest {
     }
 
     private void assertKeepsTheLastCompleteSnapshot(Runnable failBucket) {
-        var a = new WorkspaceHealth("workspace-a", 10, 2);
-        var b = new WorkspaceHealth("workspace-b", 5, 1);
+        var a = WorkspaceHealth.builder().workspaceId("workspace-a").unsettled(10).unsettledPastSlo(2).build();
+        var b = WorkspaceHealth.builder().workspaceId("workspace-b").unsettled(5).unsettledPastSlo(1).build();
         when(sweepDAO.health(eq(BUCKETS.get(0)), anyList(), eq(0))).thenReturn(Flux.just(a));
         when(sweepDAO.health(eq(BUCKETS.get(1)), anyList(), eq(1))).thenReturn(Flux.just(b));
         when(sweepDAO.neverEnded(anyList(), anyInt())).thenReturn(Mono.just(3L));

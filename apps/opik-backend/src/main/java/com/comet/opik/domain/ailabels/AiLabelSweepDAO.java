@@ -46,16 +46,20 @@ class AiLabelSweepDAO {
 
         static SweepTask of(AiLabelTask task) {
             var versions = task.versions();
-            return new SweepTask(task.name(),
-                    versions.stream().map(AiLabelTask.Version::version).toList(),
-                    versions.stream().map(AiLabelTask.Version::appliesFrom).toList());
+            return SweepTask.builder()
+                    .name(task.name())
+                    .versions(versions.stream().map(AiLabelTask.Version::version).toList())
+                    .appliesFrom(versions.stream().map(AiLabelTask.Version::appliesFrom).toList())
+                    .build();
         }
     }
 
+    @Builder(toBuilder = true)
     record Candidate(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID traceId,
             @NonNull Instant createdAt, @NonNull Map<String, Integer> missing) {
     }
 
+    @Builder(toBuilder = true)
     record WorkspaceHealth(@NonNull String workspaceId, long unsettled, long unsettledPastSlo) {
     }
 
@@ -178,10 +182,11 @@ class AiLabelSweepDAO {
         long sloSeconds = config.getQuietPeriod().toSeconds() + config.getSloSlack().toSeconds();
         return query(HEALTH, "ai-labels:health", workspaceIds, tasks, bucket,
                 statement -> statement.bind("slo_seconds", sloSeconds))
-                .flatMap(result -> result.map((row, metadata) -> new WorkspaceHealth(
-                        row.get("workspace_id", String.class),
-                        row.get("unsettled", Long.class),
-                        row.get("unsettled_past_slo", Long.class))));
+                .flatMap(result -> result.map((row, metadata) -> WorkspaceHealth.builder()
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .unsettled(row.get("unsettled", Long.class))
+                        .unsettledPastSlo(row.get("unsettled_past_slo", Long.class))
+                        .build()));
     }
 
     Mono<Long> neverEnded(@NonNull List<String> workspaceIds, int bucket) {
@@ -278,11 +283,12 @@ class AiLabelSweepDAO {
         for (int i = 0; i < missing.length; i++) {
             missingWithAttempts.put(missing[i], ((Number) Array.get(attempts, i)).intValue());
         }
-        return new Candidate(
-                row.get("workspace_id", String.class),
-                UUID.fromString(row.get("project_id", String.class)),
-                UUID.fromString(row.get("id", String.class)),
-                row.get("created_at", Instant.class),
-                Map.copyOf(missingWithAttempts));
+        return Candidate.builder()
+                .workspaceId(row.get("workspace_id", String.class))
+                .projectId(UUID.fromString(row.get("project_id", String.class)))
+                .traceId(UUID.fromString(row.get("id", String.class)))
+                .createdAt(row.get("created_at", Instant.class))
+                .missing(Map.copyOf(missingWithAttempts))
+                .build();
     }
 }

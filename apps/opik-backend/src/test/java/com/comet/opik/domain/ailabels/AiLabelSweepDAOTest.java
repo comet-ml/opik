@@ -312,7 +312,8 @@ class AiLabelSweepDAOTest {
             var health = dao().health(List.of(workspaceId), List.of(SUMMARY, topic), 0).collectList().block();
             var neverEnded = dao().neverEnded(List.of(workspaceId), 0).block();
 
-            assertThat(health).containsExactly(new WorkspaceHealth(workspaceId, 3, 2));
+            assertThat(health).containsExactly(
+                    WorkspaceHealth.builder().workspaceId(workspaceId).unsettled(3).unsettledPastSlo(2).build());
             assertThat(neverEnded).isEqualTo(2);
         }
     }
