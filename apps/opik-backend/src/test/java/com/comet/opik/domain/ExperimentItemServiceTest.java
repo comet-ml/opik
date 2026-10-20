@@ -71,8 +71,10 @@ class ExperimentItemServiceTest {
      * the dataset lookup reads, and either side could regress, so the same assertions run over
      * both rather than being duplicated into two tests.
      *
-     * The chain is then released and asserted to complete without error, so the test cannot pass
-     * on one that stopped short of the call it is about.
+     * Completing without error would not on its own prove the dataset lookup ran, since a chain
+     * with it removed finishes sooner and just as cleanly, so the lookup is observed directly:
+     * the table the flag selects has to be subscribed, and the other one left untouched, before
+     * the chain is allowed to finish.
      */
     @ParameterizedTest(name = "dataset versioning enabled: {0}")
     @ValueSource(booleans = {false, true})
@@ -88,12 +90,18 @@ class ExperimentItemServiceTest {
                 .thenReturn(Mono.fromFuture(experimentWorkspaceInFlight)
                         .doOnSubscribe(subscription -> experimentWorkspaceSubscribed.countDown()));
 
+        // One future behind both tables, but a latch each: which of the two is reached is the
+        // only thing the versioning flag decides, so the cases have to be able to tell them apart.
         var datasetWorkspaceInFlight = new CompletableFuture<List<WorkspaceAndResourceId>>();
+        var unversionedSubscribed = new CountDownLatch(1);
+        var versionedSubscribed = new CountDownLatch(1);
         when(featureFlags.isDatasetVersioningEnabled()).thenReturn(datasetVersioningEnabled);
         when(datasetItemDAO.getDatasetItemWorkspace(anySet()))
-                .thenReturn(Mono.fromFuture(datasetWorkspaceInFlight));
+                .thenReturn(Mono.fromFuture(datasetWorkspaceInFlight)
+                        .doOnSubscribe(subscription -> unversionedSubscribed.countDown()));
         when(datasetItemVersionDAO.getDatasetItemWorkspace(anySet()))
-                .thenReturn(Mono.fromFuture(datasetWorkspaceInFlight));
+                .thenReturn(Mono.fromFuture(datasetWorkspaceInFlight)
+                        .doOnSubscribe(subscription -> versionedSubscribed.countDown()));
 
         var workspaceId = UUID.randomUUID().toString();
         // Ids are overridden because the service requires version 7, and the project id because a
@@ -139,6 +147,13 @@ class ExperimentItemServiceTest {
 
             releaser.start();
             assertThat(releaseReturned.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)).isNull();
+
+            // Completing the first gate drives the deferred dataset lookup, so by now the flag's
+            // table has been read and the other one left alone.
+            var selected = datasetVersioningEnabled ? versionedSubscribed : unversionedSubscribed;
+            var ignored = datasetVersioningEnabled ? unversionedSubscribed : versionedSubscribed;
+            assertThat(selected.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)).isTrue();
+            assertThat(ignored.getCount()).isEqualTo(1);
 
             // Released only now, so the rest of the chain runs and has to finish cleanly.
             datasetWorkspaceInFlight
