@@ -12,7 +12,7 @@ itsdangerous==2.2.0
 Jinja2==3.1.6
 MarkupSafe==3.0.3
 packaging==26.0
-pydantic-settings>=2.0.0,<3.0.0,!=2.9.0
+pydantic-settings>=2.14.2,<3.0.0,!=2.9.0
 requests==2.33.1
 urllib3==2.7.0
 Werkzeug==3.1.3
