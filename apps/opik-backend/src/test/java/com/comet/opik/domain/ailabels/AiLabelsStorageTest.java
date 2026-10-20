@@ -494,16 +494,18 @@ class AiLabelsStorageTest {
                     });
             assertThat(countRows(AiLabelStatusDAO.TABLE, otherWorkspaceId)).isOne();
             assertThat(countRows(AiLabelsDAO.TABLE, otherWorkspaceId)).isOne();
-            // Scoped to the trace's partition, so the mutation does not visit every part of the table.
+            // Both tables' deletes are scoped to the trace's partition, so the mutation does not visit every part.
             assertThat(partitionScopedCascadeDeletes(workspaceId)).isEqualTo(2);
         }
 
+        /** The tables whose cascade delete ran partition-scoped, however many statements each took. */
         private long partitionScopedCascadeDeletes(String workspaceId) {
             return templateAsync.nonTransaction(connection -> Mono
                     .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
                     .flatMap(result -> Mono.from(result.getRowsUpdated()))
                     .then(Mono.from(connection.createStatement("""
-                            SELECT count() AS cnt FROM system.query_log
+                            SELECT uniqExact(extract(log_comment, 'delete_by_trace_ids_([a-z_]+):')) AS cnt
+                            FROM system.query_log
                             WHERE type = 'QueryFinish'
                             AND log_comment LIKE concat('ai-labels:delete_by_trace_ids_%:', :workspace_id, ':%')
                             AND query LIKE '%IN PARTITION%'

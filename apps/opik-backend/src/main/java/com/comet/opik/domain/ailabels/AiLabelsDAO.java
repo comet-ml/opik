@@ -19,6 +19,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -34,6 +36,9 @@ import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 public class AiLabelsDAO {
 
     static final String TABLE = "ai_labels";
+
+    private static final Map<String, AiLabel.AnswerType> ANSWER_TYPES = Arrays.stream(AiLabel.AnswerType.values())
+            .collect(Collectors.toUnmodifiableMap(AiLabel.AnswerType::getValue, Function.identity()));
 
     private static final String FIND_LATEST_BY_TRACE_IDS = """
             SELECT workspace_id, project_id, task, trace_id, key, task_version, answer_type, noul, score, choice,
@@ -108,7 +113,6 @@ public class AiLabelsDAO {
 
     @SuppressWarnings("unchecked")
     private static AiLabel toLabel(Row row) {
-        var answerType = row.get("answer_type", String.class);
         return AiLabel.builder()
                 .workspaceId(row.get("workspace_id", String.class))
                 .projectId(UUID.fromString(row.get("project_id", String.class)))
@@ -116,10 +120,7 @@ public class AiLabelsDAO {
                 .traceId(UUID.fromString(row.get("trace_id", String.class)))
                 .key(row.get("key", String.class))
                 .taskVersion(row.get("task_version", Long.class).intValue())
-                .answerType(Arrays.stream(AiLabel.AnswerType.values())
-                        .filter(value -> value.getValue().equals(answerType))
-                        .findFirst()
-                        .orElseThrow())
+                .answerType(Objects.requireNonNull(ANSWER_TYPES.get(row.get("answer_type", String.class))))
                 .noul(row.get("noul", Float.class))
                 .score(row.get("score", Float.class))
                 .choice(row.get("choice", String.class))
