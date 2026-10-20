@@ -909,6 +909,19 @@ describe("useActionButtonActions lifecycle", () => {
       );
     });
 
+    // Stopping it ends the run, so there is nothing left to pick back up. Leaving it marked keeps
+    // the row offering a Refresh beside a Run button, for a run the user just stopped.
+    it("should stop offering to pick it back up once it is stopped", async () => {
+      const { result } = await runOneUntilItGivesUp();
+      expect(usePlaygroundStore.getState().watchLapsed).toEqual(
+        new Set([PROMPT_A]),
+      );
+
+      act(() => result.current.stopSingle(PROMPT_A));
+
+      expect(usePlaygroundStore.getState().watchLapsed.size).toBe(0);
+    });
+
     // Two prompts run at different times give up at different times. The second to lapse must not
     // take the first one's place.
     it("should keep both when a second prompt gives up later", async () => {

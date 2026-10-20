@@ -347,6 +347,7 @@ const useActionButtonActions = ({
     (promptId: string) => {
       scopedAnnounceRef.current.delete(promptId);
       setPromptRunning(promptId, false);
+      clearWatchLapsed([promptId]);
       for (const [key, entry] of abortControllersRef.current.entries()) {
         if (entry.promptId === promptId) {
           entry.controller.abort();
@@ -355,7 +356,7 @@ const useActionButtonActions = ({
       }
       cancelBackendRun([promptId]);
     },
-    [setPromptRunning, cancelBackendRun],
+    [setPromptRunning, clearWatchLapsed, cancelBackendRun],
   );
 
   const storeExperiments = useCallback(
