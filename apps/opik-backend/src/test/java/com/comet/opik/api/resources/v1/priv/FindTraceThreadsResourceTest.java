@@ -2089,10 +2089,13 @@ class FindTraceThreadsResourceTest {
             var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var threadId = "thread-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var term = "term-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            // Shared, as the thread row, written asynchronously, takes the environment of the thread's earliest trace
+            var environment = "environment-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
             var matchingTrace = createTrace().toBuilder()
                     .projectName(projectName)
                     .threadId(threadId)
+                    .environment(environment)
                     .input(JsonUtils.getJsonNodeFromString("{\"content\": \"%s\"}".formatted(term)))
                     .startTime(now)
                     .endTime(now.plusMillis(10))
@@ -2100,6 +2103,7 @@ class FindTraceThreadsResourceTest {
             var otherTrace = createTrace().toBuilder()
                     .projectName(projectName)
                     .threadId(threadId)
+                    .environment(environment)
                     .startTime(now.plusMillis(20))
                     .endTime(now.plusMillis(30))
                     .build();
