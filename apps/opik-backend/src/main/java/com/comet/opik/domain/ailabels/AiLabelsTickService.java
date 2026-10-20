@@ -62,7 +62,8 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * local, and losing it costs at most one more 429.
  *
  * <p>No tick outlives the leader lease, so two pods never run one at once: every opik-inference call stops at its
- * phase's deadline, and once a submit fails with the service down (5xx or timeout) the tick tries no other job.
+ * phase's deadline, and once a submit fails with the service down (5xx or timeout) the tick tries no other job. Turns
+ * stop at the tick budget; the jobs they filled may still be sent for one read timeout past it.
  */
 @Slf4j
 @Singleton
@@ -177,10 +178,15 @@ public class AiLabelsTickService {
                 .build();
     }
 
-    /** How long the leader lock must last: the tick budget, plus one sweep query that started just before its end. */
+    /**
+     * How long the leader lock must last: the tick budget, plus whichever runs longer past its end, a sweep query that
+     * started just before it or the sends of the jobs its turns filled.
+     */
     public Duration leaderLease() {
+        var sweep = config.getSweep().getMaxExecutionTime().toJavaDuration();
+        var send = config.getInference().getReadTimeout().toJavaDuration();
         return config.getTickBudget().toJavaDuration()
-                .plus(config.getSweep().getMaxExecutionTime().toJavaDuration())
+                .plus(sweep.compareTo(send) >= 0 ? sweep : send)
                 .plusSeconds(5);
     }
 
@@ -469,7 +475,8 @@ public class AiLabelsTickService {
                         .computeIfAbsent(candidate.workspaceId(), workspaceId -> new ArrayDeque<>())
                         .add(candidate));
         var ready = new HashMap<String, Deque<Admissible>>();
-        var jobs = new Jobs(start, deadline);
+        // Turns stop at the deadline, and the jobs they filled are sent after it, so sends get one read timeout more.
+        var jobs = new Jobs(start, deadline, deadline.plus(config.getInference().getReadTimeout().toJavaDuration()));
 
         var active = new ArrayList<>(queues.keySet());
         Collections.shuffle(active);
@@ -523,7 +530,7 @@ public class AiLabelsTickService {
                 return new Turn(0, true);
             }
             tracesRendered.add(chunk.size());
-            ready.addAll(renderChunk(workspaceId, chunk, tasksByName, jobs.failures));
+            ready.addAll(renderChunk(workspaceId, chunk, tasksByName, jobs.failures, jobs.turnsEnd));
         }
         long admitted = 0;
         while (!ready.isEmpty()) {
@@ -555,13 +562,13 @@ public class AiLabelsTickService {
      * failures.
      */
     private List<Admissible> renderChunk(String workspaceId, List<Candidate> chunk,
-            Map<String, AiLabelTask> tasksByName, List<AiLabelStatus> failures) {
+            Map<String, AiLabelTask> tasksByName, List<AiLabelStatus> failures, Instant deadline) {
         var byTrace = chunk.stream().collect(Collectors.toMap(Candidate::traceId, Function.identity()));
         var refs = chunk.stream()
                 .map(candidate -> new TraceRef(candidate.projectId(), candidate.traceId(), candidate.createdAt()))
                 .toList();
         var itemsByTrace = new HashMap<UUID, List<AiLabelItem>>();
-        for (var outcome : render(workspaceId, refs, failures, byTrace, tasksByName)) {
+        for (var outcome : render(workspaceId, refs, failures, byTrace, tasksByName, deadline)) {
             var candidate = byTrace.get(outcome.trace().traceId());
             // The trace is rendered for each kind of task the chunk misses; this outcome serves only its own kind.
             var missing = missingTasks(candidate, tasksByName).stream()
@@ -606,11 +613,12 @@ public class AiLabelsTickService {
     }
 
     /**
-     * Renders the chunk. If the chunk's read fails, its traces are rendered one at a time, so that one bad trace
-     * can't hold back the rest; a trace that still fails becomes a retryable {@code render_error}.
+     * Renders the chunk. If the chunk's read fails, its traces are rendered one at a time until {@code deadline}, so
+     * that one bad trace can't hold back the rest; a trace that still fails becomes a retryable {@code render_error}.
+     * Traces left when the deadline passes aren't in flight and have no failure, so a later sweep finds them.
      */
     private List<RenderOutcome> render(String workspaceId, List<TraceRef> refs, List<AiLabelStatus> failures,
-            Map<UUID, Candidate> byTrace, Map<String, AiLabelTask> tasksByName) {
+            Map<UUID, Candidate> byTrace, Map<String, AiLabelTask> tasksByName, Instant deadline) {
         var tasks = refs.stream()
                 .flatMap(ref -> missingTasks(byTrace.get(ref.traceId()), tasksByName).stream())
                 .collect(Collectors.toSet());
@@ -622,6 +630,11 @@ public class AiLabelsTickService {
         }
         var outcomes = new ArrayList<RenderOutcome>();
         for (var ref : refs) {
+            if (!Instant.now().isBefore(deadline)) {
+                log.warn("ai-labels ran out of tick time rendering one at a time, workspace '{}', traces left '{}'",
+                        workspaceId, refs.size() - refs.indexOf(ref));
+                break;
+            }
             try {
                 outcomes.addAll(renderer.render(workspaceId, List.of(ref), tasks).collectList().block());
             } catch (RuntimeException exception) {
@@ -647,14 +660,16 @@ public class AiLabelsTickService {
     private class Jobs {
 
         private final Instant start;
+        private final Instant turnsEnd;
         private final Instant deadline;
         private final Map<String, Map<JobKey, JobBuffer>> open = new LinkedHashMap<>();
         private final List<AiLabelStatus> failures = new ArrayList<>();
         // A submit failed with the service down: the tick tries no other job, and the next tick tries again.
         private boolean serviceDown;
 
-        Jobs(Instant start, Instant deadline) {
+        Jobs(Instant start, Instant turnsEnd, Instant deadline) {
             this.start = start;
+            this.turnsEnd = turnsEnd;
             this.deadline = deadline;
         }
 

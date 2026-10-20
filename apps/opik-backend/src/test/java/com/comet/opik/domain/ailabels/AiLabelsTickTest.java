@@ -92,6 +92,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -220,6 +221,7 @@ class AiLabelsTickTest {
     private long defaultMinItemBytes;
     private long defaultPerCallBytes;
     private io.dropwizard.util.Duration defaultTickBudget;
+    private io.dropwizard.util.Duration defaultReadTimeout;
     // What the status call reports for each job: absent is running, and a lost job is left out.
     private final Map<String, String> jobStatuses = new ConcurrentHashMap<>();
     private final Set<String> lostJobs = ConcurrentHashMap.newKeySet();
@@ -250,6 +252,7 @@ class AiLabelsTickTest {
         this.defaultMinItemBytes = config().getMinItemBytes();
         this.defaultPerCallBytes = config().getPerCallBytes();
         this.defaultTickBudget = config().getTickBudget();
+        this.defaultReadTimeout = config().getInference().getReadTimeout();
 
         // The job fires once at startup: wait for that tick to release the leader lock, so it can't race the tests.
         lockService.bestEffortLock(new LockService.Lock("ai_labels:leader"), Mono.just(true), Mono.empty(),
@@ -286,6 +289,7 @@ class AiLabelsTickTest {
         config().setMinItemBytes(defaultMinItemBytes);
         config().setPerCallBytes(defaultPerCallBytes);
         config().setTickBudget(defaultTickBudget);
+        config().getInference().setReadTimeout(defaultReadTimeout);
         config().getSweep().setBuckets(1);
     }
 
@@ -780,6 +784,7 @@ class AiLabelsTickTest {
         @DisplayName("a hung submit is cut at the tick's deadline, so the tick never outlives the leader lease")
         void hungSubmitEndsTheTickOnTime() {
             config().setTickBudget(io.dropwizard.util.Duration.seconds(3));
+            config().getInference().setReadTimeout(io.dropwizard.util.Duration.seconds(2));
             var workspaceId = enabledWorkspace();
             trace(workspaceId, UUID.randomUUID(), 0);
             List.of(DECIDE_PATH, GENERATE_PATH).forEach(path -> wireMock.server().stubFor(post(urlEqualTo(path))
@@ -790,12 +795,54 @@ class AiLabelsTickTest {
             tick(service);
             var took = Duration.between(lastTick, Instant.now());
 
-            // Against 3 attempts of the 30 s read timeout per job before the deadline.
-            assertThat(took).isLessThan(Duration.ofSeconds(5));
-            // One attempt, cut at the deadline with no time to retry; with the service down, the other job isn't tried.
-            assertThat(submits(DECIDE_PATH, workspaceId).size() + submits(GENERATE_PATH, workspaceId).size())
-                    .isEqualTo(1);
+            // Sends may run one read timeout past the 3 s budget: against 3 attempts of 20 s per job without it.
+            assertThat(took).isLessThan(Duration.ofSeconds(7));
+            // One job's attempts, cut at the send deadline; with the service down, the other job isn't tried.
+            var decides = submits(DECIDE_PATH, workspaceId).size();
+            var generates = submits(GENERATE_PATH, workspaceId).size();
+            assertThat(Math.min(decides, generates)).isZero();
+            assertThat(decides + generates).isBetween(1, 3);
             assertThat(jobs(workspaceId)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a chunk whose read fails renders trace by trace until the deadline, and what's rendered is sent")
+        void renderFallbackStopsAtTheDeadline() {
+            config().setTickBudget(io.dropwizard.util.Duration.seconds(3));
+            var workspaceId = enabledWorkspace();
+            var projectId = UUID.randomUUID();
+            var traceIds = IntStream.range(0, 6).mapToObj(i -> trace(workspaceId, projectId, 0)).toList();
+            var slowRenderer = spy(renderer);
+            doAnswer(invocation -> {
+                List<TraceRef> refs = invocation.getArgument(1);
+                if (refs.size() > 1) {
+                    return Flux.error(new IllegalStateException("the chunk's read failed"));
+                }
+                return Mono.delay(Duration.ofSeconds(1)).thenMany(Flux.defer(() -> {
+                    try {
+                        return (Flux<?>) invocation.callRealMethod();
+                    } catch (Throwable exception) {
+                        return Flux.error(exception);
+                    }
+                }));
+            }).when(slowRenderer).render(anyString(), anyList(), anyCollection());
+            var service = new AiLabelsTickService(config(), template, client, lockService, sweepService, registry,
+                    slowRenderer, itemBuilder, resultMapper, statusDAO, labelsDAO);
+
+            tick(service);
+            var took = Duration.between(lastTick, Instant.now());
+
+            // 6 traces at 1 s each against a 3 s budget: the ones rendered in time still go out after it.
+            assertThat(took).isLessThan(Duration.ofSeconds(6));
+            var sent = inFlight(workspaceId).stream().map(AiLabelJobItem::traceId).collect(Collectors.toSet());
+            assertThat(sent).hasSizeBetween(1, 5);
+            // The rest have no failure, so the next sweep finds them.
+            assertThat(statuses(workspaceId, traceIds)).isEmpty();
+
+            tick();
+
+            assertThat(inFlight(workspaceId).stream().map(AiLabelJobItem::traceId).distinct())
+                    .containsExactlyInAnyOrderElementsOf(traceIds);
         }
 
         @Test
