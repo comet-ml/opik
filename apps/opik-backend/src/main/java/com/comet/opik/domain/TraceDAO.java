@@ -507,11 +507,19 @@ class TraceDAOImpl implements TraceDAO {
      * <p>The {@code traces} access carries the {@code <id_weeks>} week bound — see
      * {@link #SELECT_TARGET_PROJECTS_FOR_TRACES} (OPIK-8332). Only that access: the other arms read other tables,
      * whose partitioning is a separate slice.
+     *
+     * <p>Both {@code spans} accesses are bounded to {@code trace_span_weeks}, sourced as described in
+     * {@link #SELECT_TRACES_SPANS_STATS}.
      */
     private static final String SELECT_BY_IDS = """
             WITH <if(spans_partitioned)>trace_span_weeks AS (
+                <if(span_weeks_bound)>
+                SELECT DISTINCT id_week AS week
+                FROM span_weeks
+                <else>
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
+                <endif>
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
@@ -1010,6 +1018,9 @@ class TraceDAOImpl implements TraceDAO {
      * whose operators all accept an empty queue list ({@code annotation_queue_filters_match_unqueued}) exclude
      * the failing traces instead of selecting the passing ones. The same applies to the count and stats
      * templates.
+     * <p>
+     * On partitioned spans, with a page, a prefilter or a time window, {@code target_spans} and {@code spans_deduped}
+     * are bounded to {@code trace_span_weeks}, sourced as described in {@link #SELECT_TRACES_SPANS_STATS}.
      */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
@@ -1030,8 +1041,13 @@ class TraceDAOImpl implements TraceDAO {
                 <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
             ), <endif><if(trace_span_weeks)>trace_span_weeks AS (
+                <if(span_weeks_bound)>
+                SELECT DISTINCT id_week AS week
+                FROM span_weeks
+                <else>
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
+                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(page_keyed_aggregates)>AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
@@ -2588,6 +2604,14 @@ class TraceDAOImpl implements TraceDAO {
      * matching spans' own ids resolve to, read off the key and {@code id_at} without {@code FINAL}. Every row the read
      * can return is in one of those weeks, so the bound prunes without assuming where a span sits relative to its
      * trace, and a set rather than a min/max range so one far-future id cannot widen it across every week between.
+     * <p>
+     * Under {@code <span_weeks_bound>} the set is read from the {@code span_weeks} index instead, with the same
+     * predicate (OPIK-8893): read from {@code spans} it has no week bound of its own, so it reads a boundary granule of
+     * the key range in nearly every weekly partition. The index holds a row per (trace, week) of every span and is read
+     * by its sort key, by its {@code trace_id} skip indexes when there is no project, or through
+     * {@code prj_project_weeks} when only the projects bound the read. A row left by a deleted span only widens the
+     * set. The {@code trace_span_weeks} of {@link #SELECT_BY_IDS} and {@link #SELECT_BY_PROJECT_ID} is sourced the same
+     * way.
      */
     @VisibleForTesting
     static final String SELECT_TRACES_SPANS_STATS = """
@@ -2610,8 +2634,13 @@ class TraceDAOImpl implements TraceDAO {
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
             ), <endif><if(spans_partitioned)>
             trace_span_weeks AS (
+                <if(span_weeks_bound)>
+                SELECT DISTINCT id_week AS week
+                FROM span_weeks
+                <else>
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
+                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
@@ -3075,8 +3104,13 @@ class TraceDAOImpl implements TraceDAO {
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
             ), <endif><if(spans_partitioned)>
             trace_span_weeks AS (
+                <if(span_weeks_bound)>
+                SELECT DISTINCT id_week AS week
+                FROM span_weeks
+                <else>
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
+                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
@@ -4137,6 +4171,7 @@ class TraceDAOImpl implements TraceDAO {
                     }
 
                     addSpansPartitionedFlag(template);
+                    addSpanWeeksBound(template);
 
                     var idWeeks = idWeeks(ids);
                     idWeeks.ifPresent(_ -> template.add("id_weeks", true));
@@ -4565,6 +4600,7 @@ class TraceDAOImpl implements TraceDAO {
                 && Stream.of("page_keyed_aggregates", "trace_id_prefilter", "uuid_from_time", "uuid_to_time")
                         .anyMatch(name -> template.getAttribute(name) != null)) {
             template.add("trace_span_weeks", true);
+            addSpanWeeksBound(template);
         }
     }
 
@@ -4857,6 +4893,7 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("log_comment", logComment);
                         template.add("has_legacy_scores", hasLegacyScores);
                         addSpansPartitionedFlag(template);
+                        addSpanWeeksBound(template);
 
                         var statement = connection.createStatement(template.render())
                                 .bind("project_ids", List.of(criteria.projectId()))
@@ -4905,6 +4942,7 @@ class TraceDAOImpl implements TraceDAO {
         }
         template.add("has_legacy_scores", hasLegacyScores);
         addSpansPartitionedFlag(template);
+        addSpanWeeksBound(template);
         if (canDedupByArgMax(template)) {
             template.add("dedup_by_argmax", true);
         }
@@ -4929,6 +4967,7 @@ class TraceDAOImpl implements TraceDAO {
         var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORES_STATS).add("log_comment", logComment);
         template.add("has_legacy_scores", hasLegacyScores);
         addSpansPartitionedFlag(template);
+        addSpanWeeksBound(template);
         if (uuidFromTime != null) {
             template.add("uuid_from_time", true);
         }
@@ -5065,6 +5104,7 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("project_stats", true);
                         template.add("has_legacy_scores", hasLegacyScores);
                         addSpansPartitionedFlag(template);
+                        addSpanWeeksBound(template);
                         if (uuidFromTime != null) {
                             template.add("uuid_from_time", true);
                         }
