@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pause, Play, RotateCcw } from "lucide-react";
+import { Loader2, Pause, Play, RotateCcw } from "lucide-react";
 
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
@@ -25,6 +25,7 @@ import {
   useClearCreatedExperiments,
   useCreatedExperiments,
   useIsRunning,
+  useIsResumingRun,
   useSetSelectedRuleIds,
   useResetDatasetFilters,
   useResetOutputMap,
@@ -33,6 +34,8 @@ import {
   useDatasetType,
   useDatasetFilters,
   useSetDatasetFilters,
+  useDatasetItemsTotal,
+  useIsStopPending,
 } from "@/store/PlaygroundStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -68,6 +71,8 @@ const PlaygroundHeader = ({
   const resetOutputMap = useResetOutputMap();
   const setExperimentName = useSetExperimentName();
   const isRunning = useIsRunning();
+  const isStopPending = useIsStopPending();
+  const isResumingRun = useIsResumingRun();
   const setDatasetType = useSetDatasetType();
   const currentDatasetType = useDatasetType();
   const filters = useDatasetFilters();
@@ -136,15 +141,22 @@ const PlaygroundHeader = ({
     [promptMap],
   );
 
+  const datasetItemsTotal = useDatasetItemsTotal();
+
   const allMessagesRunnable = useMemo(
     () => Object.values(promptMap).every((p) => canRunMessages(p.messages)),
     [promptMap],
   );
 
+  // Zero rows is a real state, not a loading one: a filter can exclude everything
+  const hasNoDatasetItems = isExperimentMode && datasetItemsTotal === 0;
+
   const isRunDisabled =
+    isResumingRun ||
     !allPromptsHaveModels ||
     !allMessagesRunnable ||
     hasMediaCompatibilityIssues ||
+    hasNoDatasetItems ||
     (isExperimentMode && !datasetName);
 
   const runDisabledReason = useMemo(() => {
@@ -156,11 +168,13 @@ const PlaygroundHeader = ({
       return "Some prompts contain media but the selected model doesn't support media input";
     if (isExperimentMode && !datasetName)
       return "Your dataset has been removed. Select another one";
+    if (hasNoDatasetItems) return "No dataset items match the current filters";
     return null;
   }, [
     allPromptsHaveModels,
     allMessagesRunnable,
     hasMediaCompatibilityIssues,
+    hasNoDatasetItems,
     isExperimentMode,
     datasetName,
   ]);
@@ -239,6 +253,15 @@ const PlaygroundHeader = ({
             Stop all
           </Button>
         </TooltipWrapper>
+      );
+    }
+
+    if (isStopPending) {
+      return (
+        <Button size="2xs" variant="outline" disabled>
+          <Loader2 className="mr-1 size-3.5 animate-spin" />
+          Stopping...
+        </Button>
       );
     }
 

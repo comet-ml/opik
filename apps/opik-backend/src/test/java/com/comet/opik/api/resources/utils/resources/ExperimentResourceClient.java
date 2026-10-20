@@ -133,6 +133,15 @@ public class ExperimentResourceClient {
         }
     }
 
+    public Response callExecute(ExperimentExecutionRequest request, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("execute")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
     public Experiment getExperiment(UUID experimentId, String apiKey, String workspaceName) {
         try (var response = callGetExperiment(experimentId, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);

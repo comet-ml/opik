@@ -14,7 +14,9 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -25,44 +27,110 @@ public class ExperimentItemPublisher {
     private final RedissonReactiveClient redisClient;
     private final ExperimentExecutionConfig config;
     private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
+    private final ExperimentCancellationService cancellationService;
 
     @Inject
     public ExperimentItemPublisher(
             @NonNull RedissonReactiveClient redisClient,
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig config,
-            @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService) {
+            @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService,
+            @NonNull ExperimentCancellationService cancellationService) {
         this.redisClient = redisClient;
         this.config = config;
         this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
+        this.cancellationService = cancellationService;
     }
 
     /**
-     * Sets the batch counter atomically, then publishes all messages to the Redis stream.
-     * The counter is set BEFORE publishing to prevent the race where a fast consumer
-     * decrements to zero before all messages are published.
+     * Starts counting a run down, before anything of it is published or made visible. A stop reaches
+     * only what this service is counting down, and the experiments become stoppable the moment they
+     * are persisted — so a run tracked any later than this has a window where a stop finds nothing to
+     * stop, returns as though it had, and the run goes on to queue every item.
      */
+    public Mono<Void> trackRun(List<ExperimentItemToProcess> messages, boolean testSuite) {
+        if (CollectionUtils.isEmpty(messages)) {
+            return Mono.empty();
+        }
+
+        return setItemCounters(messages)
+                .then(testSuite ? setAssertionCounters(messages) : Mono.empty());
+    }
+
+    /** Publishes all messages to the Redis stream. Counters are already set by {@link #trackRun}. */
     public Mono<Void> publish(@NonNull UUID batchId, List<ExperimentItemToProcess> messages) {
         if (CollectionUtils.isEmpty(messages)) {
             return Mono.empty();
         }
 
-        var counterKey = ExperimentExecutionConfig.BATCH_COUNTER_KEY_PREFIX + batchId;
-        RAtomicLongReactive counter = redisClient.getAtomicLong(counterKey);
-
         var stream = redisClient.getStream(config.getStreamName(), config.getCodec());
 
-        return counter.set(messages.size())
-                .then(counter.expire(config.getBatchCounterTtl().toJavaDuration()))
-                .then(setAssertionCounters(messages))
-                .thenMany(Flux.fromIterable(messages)
-                        .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
-                                ExperimentExecutionConfig.PAYLOAD_FIELD, message, config))
-                                .doOnNext(id -> log.debug("Published experiment item message with ID: '{}'", id))
-                                .doOnError(throwable -> log.error("Error publishing experiment item message",
-                                        throwable))))
-                .then()
+        return Flux.fromIterable(messages)
+                .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
+                        ExperimentExecutionConfig.PAYLOAD_FIELD, message, config))
+                        .doOnNext(id -> log.debug("Published experiment item message with ID: '{}'", id))
+                        .map(id -> Map.entry(message.experimentId(), id))
+                        .doOnError(throwable -> log.error("Error publishing experiment item message",
+                                throwable)))
+                .collectMultimap(Map.Entry::getKey, Map.Entry::getValue)
+                .flatMap(idsByExperiment -> cancellationService.recordQueued(
+                        messages.getFirst().workspaceId(), idsByExperiment))
                 .doOnSuccess(v -> log.info("Published '{}' experiment item messages for batch '{}'",
                         messages.size(), batchId));
+    }
+
+    /**
+     * How much is already queued, across every run and every workspace. The stream is shared and
+     * trimmed by length, so what another tenant has in flight decides whether this run fits.
+     */
+    public Mono<Long> queuedMessageCount() {
+        return redisClient.getStream(config.getStreamName(), config.getCodec()).size();
+    }
+
+    /**
+     * Whether this service is still counting a run down. Experiments logged by an SDK never had a
+     * counter, and one whose counter has expired has no consumer left to tell either — stopping
+     * those writes a status nothing will ever stamp finished, which reads as a run still going.
+     */
+    public Mono<Boolean> isTracked(@NonNull UUID experimentId) {
+        return redisClient.getAtomicLong(ExperimentExecutionConfig.itemCounterKey(experimentId)).isExists();
+    }
+
+    /**
+     * Removes what a run was counting itself down against. A launch that failed partway leaves its
+     * counters holding a total no one will ever reach, and an item that arrives late then decrements
+     * one that should not exist.
+     */
+    public Mono<Void> discardCounters(@NonNull Collection<UUID> experimentIds) {
+        return Flux.fromIterable(experimentIds)
+                .flatMap(experimentId -> Flux.just(
+                        ExperimentExecutionConfig.itemCounterKey(experimentId),
+                        ExperimentExecutionConfig.itemFailureCounterKey(experimentId))
+                        .flatMap(key -> redisClient.getAtomicLong(key).delete()))
+                .then()
+                .onErrorResume(error -> {
+                    // The TTL still clears them; failing the abort over it would lose the status write
+                    log.warn("Failed to discard counters for '{}' experiments", experimentIds.size(), error);
+                    return Mono.empty();
+                });
+    }
+
+    /**
+     * One counter per prompt variant, all set before the first message is published so a fast
+     * consumer cannot drain a variant before its own counter exists.
+     */
+    private Mono<Void> setItemCounters(List<ExperimentItemToProcess> messages) {
+        var itemsByExperiment = messages.stream()
+                .collect(Collectors.groupingBy(ExperimentItemToProcess::experimentId, Collectors.counting()));
+
+        return Flux.fromIterable(itemsByExperiment.entrySet())
+                .flatMap(entry -> {
+                    RAtomicLongReactive counter = redisClient
+                            .getAtomicLong(ExperimentExecutionConfig.itemCounterKey(entry.getKey()));
+
+                    return counter.set(entry.getValue())
+                            .then(counter.expire(config.getBatchCounterTtl().toJavaDuration()));
+                })
+                .then();
     }
 
     private Mono<Void> setAssertionCounters(List<ExperimentItemToProcess> messages) {
