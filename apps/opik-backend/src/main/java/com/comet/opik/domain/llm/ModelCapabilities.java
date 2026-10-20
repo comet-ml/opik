@@ -134,7 +134,7 @@ public class ModelCapabilities {
      * The newest listed member of a family, which is what {@code claude-opus-latest} names.
      *
      * <p>A floating alias has to be read as the model it currently resolves to, not left unplaceable:
-     * when that model takes sampling params, as Haiku 4.5 does, classifying the alias by the
+     * when that model takes sampling params, as Haiku 4.5 did until Haiku 5.5, classifying the alias by the
      * unplaceable default would silently drop a temperature someone set — the same model under its
      * own id keeps one.
      */
