@@ -235,6 +235,20 @@ class SpanCostCalculatorTest {
         }
 
         @Test
+        void textGenerationCostBillsOneHourCacheWritesAtTheOneHourRate() {
+            var modelPrice = CACHE_PRICES.toBuilder()
+                    .cacheCreationInputTokenPriceAbove1hr(new BigDecimal("0.02"))
+                    .build();
+            // Claude behind an OpenAI-compatible API: the prompt includes the 150 writes, 100 of them for an hour.
+            var usage = spanUsage("openrouter", "prompt_tokens", 1150, "completion_tokens", 100,
+                    "prompt_tokens_details.cache_creation_tokens", 150,
+                    "prompt_tokens_details.cache_creation_token_details.ephemeral_1h_input_tokens", 100);
+
+            // 1000 * 0.01 + 50 * 0.015 + 100 * 0.02 + 100 * 0.02
+            assertThat(textCost(modelPrice, usage)).isEqualByComparingTo("14.75");
+        }
+
+        @Test
         void textGenerationCostAppliesTheTierOfTheWholePrompt() {
             var tiered = CACHE_PRICES.toBuilder()
                     .promptTiers(List.of(ModelPrice.PromptTier.builder()
@@ -311,6 +325,26 @@ class SpanCostCalculatorTest {
         }
 
         @Test
+        void textGenerationCostBillsOneHourCacheWritesAtLeastAtTheTiersWriteRate() {
+            // The tier's five-minute write rate is above the base one-hour rate, and the tier has no one-hour rate.
+            var tiered = CACHE_PRICES.toBuilder()
+                    .cacheCreationInputTokenPriceAbove1hr(new BigDecimal("0.02"))
+                    .promptTiers(List.of(ModelPrice.PromptTier.builder()
+                            .threshold(ModelPrice.TIER_THRESHOLD_200K)
+                            .inputPrice(new BigDecimal("0.1"))
+                            .outputPrice(new BigDecimal("0.2"))
+                            .cacheCreationInputTokenPrice(new BigDecimal("0.15"))
+                            .cacheReadInputTokenPrice(BigDecimal.ZERO)
+                            .build()))
+                    .build();
+            var usage = spanUsage("anthropic", "input_tokens", 200_000, "output_tokens", 10,
+                    "cache_creation_input_tokens", 1_000, "cache_creation.ephemeral_1h_input_tokens", 1_000);
+
+            // 200,000 * 0.1 + 1,000 * 0.15 + 10 * 0.2
+            assertThat(textCost(tiered, usage)).isEqualByComparingTo("20152.00");
+        }
+
+        @Test
         void textGenerationCostBillsCacheAsInputWithoutCacheRates() {
             var usage = spanUsage("anthropic", "input_tokens", 1000, "output_tokens", 100,
                     "cache_read_input_tokens", 200, "cache_creation_input_tokens", 50);
@@ -358,6 +392,19 @@ class SpanCostCalculatorTest {
                     Arguments.of("Converse provider",
                             spanUsage("bedrock_converse", "inputTokens", 1000, "outputTokens", 100,
                                     "cacheReadInputTokens", 200, "cacheWriteInputTokens", 50)));
+        }
+
+        @Test
+        void textGenerationCostBillsOneHourCacheWritesAtTheOneHourRate() {
+            var modelPrice = CACHE_PRICES.toBuilder()
+                    .cacheCreationInputTokenPriceAbove1hr(new BigDecimal("0.02"))
+                    .build();
+            var usage = spanUsage("bedrock", "inputTokens", 1000, "outputTokens", 100,
+                    "cacheWriteInputTokens", 150, "cacheDetails.5m.inputTokens", 50, "cacheDetails.1h.inputTokens",
+                    100);
+
+            // 1000 * 0.01 + 100 * 0.02 + 50 * 0.015 + 100 * 0.02
+            assertThat(textCost(modelPrice, usage)).isEqualByComparingTo("14.75");
         }
     }
 

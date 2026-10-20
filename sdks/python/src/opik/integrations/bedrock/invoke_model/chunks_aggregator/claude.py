@@ -38,6 +38,7 @@ class ClaudeAggregator(ChunkAggregator):
         output_tokens = 0
         cache_creation_input_tokens = 0
         cache_read_input_tokens = 0
+        cache_creation: Dict[str, Any] = {}
 
         for item in items:
             if "chunk" not in item:
@@ -64,6 +65,7 @@ class ClaudeAggregator(ChunkAggregator):
                     cache_read_input_tokens = updated_token_count(
                         usage.get("cache_read_input_tokens"), cache_read_input_tokens
                     )
+                    cache_creation = usage.get("cache_creation") or cache_creation
                     LOGGER.debug(
                         "Claude message_start: input_tokens=%d, output_tokens=%d",
                         input_tokens,
@@ -147,6 +149,7 @@ class ClaudeAggregator(ChunkAggregator):
                 "output_tokens": output_tokens,
                 "cache_creation_input_tokens": cache_creation_input_tokens,
                 "cache_read_input_tokens": cache_read_input_tokens,
+                "cache_creation": cache_creation,
             }
         )
 

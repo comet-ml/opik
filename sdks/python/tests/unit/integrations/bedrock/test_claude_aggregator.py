@@ -175,6 +175,33 @@ class TestClaudeStreamAggregation:
         assert backend_usage["original_usage.inputTokens"] == 12
         assert backend_usage["original_usage.outputTokens"] == 7
 
+    def test_aggregate_chunks__message_start_splits_cache_writes_by_ttl__backend_usage_keeps_the_split(
+        self,
+    ):
+        chunks = _stream(
+            message_start_usage={
+                "input_tokens": 12,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 1024,
+                "cache_read_input_tokens": 4096,
+                "cache_creation": {
+                    "ephemeral_5m_input_tokens": 768,
+                    "ephemeral_1h_input_tokens": 256,
+                },
+            },
+            invocation_metrics={},
+        )
+
+        response = chunks_aggregator.aggregate_chunks_to_dataclass(chunks)
+        opik_usage = llm_usage.build_opik_usage(
+            provider=opik.LLMProvider.BEDROCK, usage=response.usage
+        )
+        backend_usage = opik_usage.to_backend_compatible_full_usage_dict()
+
+        assert backend_usage["original_usage.cacheDetails.5m.inputTokens"] == 768
+        assert backend_usage["original_usage.cacheDetails.1h.inputTokens"] == 256
+        assert backend_usage["original_usage.cacheWriteInputTokens"] == 1024
+
     def test_aggregate_chunks__message_delta_reports_null_cache__earlier_counts_kept(
         self,
     ):
