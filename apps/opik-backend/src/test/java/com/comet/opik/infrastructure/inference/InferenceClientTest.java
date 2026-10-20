@@ -174,6 +174,38 @@ class InferenceClientTest {
     }
 
     @Test
+    void bodyCutOffAfterTheHeadersIsRetried() {
+        stubSequence(() -> get(urlPathEqualTo(JOB_PATH)),
+                aResponse().withFault(Fault.MALFORMED_RESPONSE_CHUNK), jobView());
+
+        var view = client.getJob(JOB_ID, 0, false, later()).block();
+
+        assertThat(view).isNotNull();
+        assertThat(server.findAll(getRequestedFor(urlPathEqualTo(JOB_PATH)))).hasSize(2);
+    }
+
+    static Stream<Arguments> nullBodies() {
+        return Stream.of(arguments(200), arguments(500));
+    }
+
+    @ParameterizedTest
+    @MethodSource("nullBodies")
+    void jsonNullBodyBecomesRetryableUpstreamError(int status) {
+        server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(aResponse().withStatus(status)
+                .withHeader("Content-Type", "application/json")
+                .withBody("null")));
+
+        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, true, later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo("upstream_error");
+                    assertThat(exception.isRetryable()).isTrue();
+                    assertThat(exception.getHttpStatus()).isEqualTo(status);
+                });
+        assertThat(server.findAll(getRequestedFor(urlPathEqualTo(JOB_PATH))))
+                .hasSize(InferenceClient.MAX_RETRIES + 1);
+    }
+
+    @Test
     void submitQuotaExceededIsNotRetriedAndCarriesRetryAfter() {
         server.stubFor(post(urlEqualTo(GENERATE_PATH))
                 .willReturn(error("quota_exceeded", 429).withHeader("Retry-After", "3")));

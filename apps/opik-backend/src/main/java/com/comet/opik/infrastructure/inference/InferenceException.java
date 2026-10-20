@@ -57,6 +57,9 @@ public class InferenceException extends RuntimeException {
         } catch (IOException | RuntimeException exception) {
             return upstreamError(httpStatus, retryAfter, exception);
         }
+        if (envelope == null) {
+            return upstreamError(httpStatus, retryAfter, null);
+        }
         var error = envelope.error();
         var retryable = InferenceErrorCode.find(error.code())
                 .map(InferenceErrorCode::isRetryable)

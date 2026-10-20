@@ -53,8 +53,9 @@ public record AiLabelTask(
     /**
      * {@link #required(Instant)} as two parallel arrays, ready to bind for the sweep's SQL:
      * {@code arrayMax(arrayFilter((v, a) -> a <= created_at, versions, applies_from))}, with {@code applies_from}
-     * parsed by {@code parseDateTime64BestEffort}. Both come from {@link #versions()}, as {@code required} does.
+     * parsed by {@code parseDateTime64BestEffort}, from {@link #versions()}.
      */
+    @Builder(toBuilder = true)
     public record SqlVersions(@NonNull Integer[] versions, @NonNull String[] appliesFrom) {
     }
 
@@ -65,20 +66,27 @@ public record AiLabelTask(
                 .toList();
     }
 
-    /** The highest version whose {@code applies_from} is at or before {@code createdAt}, or 0 if none is. */
+    /**
+     * The highest version whose {@code applies_from} is at or before {@code createdAt}, or 0 if none is. Called per
+     * trace, so it scans in place rather than building {@link #versions()}.
+     */
     public int required(@NonNull Instant createdAt) {
-        return versions().stream()
-                .filter(candidate -> !candidate.appliesFrom().isAfter(createdAt))
-                .mapToInt(Version::version)
-                .max()
-                .orElse(0);
+        var required = appliesFrom.isAfter(createdAt) ? 0 : version;
+        for (var candidate : history) {
+            if (!candidate.appliesFrom().isAfter(createdAt)) {
+                required = Math.max(required, candidate.version());
+            }
+        }
+        return required;
     }
 
     public SqlVersions sqlVersions() {
         var versions = versions();
-        return new SqlVersions(
-                versions.stream().map(Version::version).toArray(Integer[]::new),
-                versions.stream().map(candidate -> candidate.appliesFrom().toString()).toArray(String[]::new));
+        return SqlVersions.builder()
+                .versions(versions.stream().map(Version::version).toArray(Integer[]::new))
+                .appliesFrom(versions.stream().map(candidate -> candidate.appliesFrom().toString())
+                        .toArray(String[]::new))
+                .build();
     }
 
     /** Whether the task is given the trace's earlier turns: its prompt has {@link #HISTORY_PLACEHOLDER}. */

@@ -9,12 +9,15 @@ import com.comet.opik.infrastructure.inference.Usage;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.NODES;
 import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.WORKSPACE_ID;
@@ -22,6 +25,7 @@ import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.generate;
 import static com.comet.opik.domain.ailabels.AiLabelTaskFixtures.rendered;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 class AiLabelResultMapperTest {
 
@@ -105,7 +109,7 @@ class AiLabelResultMapperTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void errorFailsEveryTaskWithTheEnvelopesCodeAndRetryability(boolean retryable) {
+    void errorFailsEveryTaskWithTheErrorEnvelopeCodeAndRetryability(boolean retryable) {
         var item = item(List.of(OUTCOME, TONE));
         var inFlight = item.jobItems(JOB_ID, 1, Map.of("outcome", 2, "tone", 2));
         var result = ItemResult.builder()
@@ -156,19 +160,24 @@ class AiLabelResultMapperTest {
         assertThat(results.statuses()).containsExactly(inFlight.getFirst().done());
     }
 
-    @Test
-    void generateOutputMissingARequiredPropertyFailsAsMissingAnswer() {
+    static Stream<Arguments> outputsWithoutTheRequiredProperty() {
+        return Stream.of(
+                arguments("missing property", NODES.objectNode().put("other", "x")),
+                arguments("null", NODES.nullNode()),
+                arguments("scalar", NODES.textNode("summary")));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("outputsWithoutTheRequiredProperty")
+    void generateOutputMissingARequiredPropertyFailsAsMissingAnswer(String name, JsonNode output) {
         var item = item(List.of(generate("summary", false)));
         var inFlight = item.jobItems(JOB_ID, 1, Map.of("summary", 1));
 
-        for (var output : List.<JsonNode>of(NODES.objectNode().put("other", "x"), NODES.nullNode(),
-                NODES.textNode("summary"))) {
-            var results = mapper.map(generateResult(item, output), item.plan(), inFlight);
+        var results = mapper.map(generateResult(item, output), item.plan(), inFlight);
 
-            assertThat(results.labels()).isEmpty();
-            assertThat(results.statuses())
-                    .containsExactly(inFlight.getFirst().failed(AiLabelResultMapper.MISSING_ANSWER, true));
-        }
+        assertThat(results.labels()).isEmpty();
+        assertThat(results.statuses())
+                .containsExactly(inFlight.getFirst().failed(AiLabelResultMapper.MISSING_ANSWER, true));
     }
 
     private AiLabelItem item(List<AiLabelTask> tasks) {

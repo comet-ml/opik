@@ -5,6 +5,7 @@ import com.google.common.base.Preconditions;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.HttpMethod;
+import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.InvocationCallback;
@@ -57,7 +58,7 @@ public class InferenceClient {
 
     private static final String BATCH_DECIDE_PATH = "v1/batch/decide";
     private static final String BATCH_GENERATE_PATH = "v1/batch/generate";
-    private static final String JOB_PATH = "v1/batch/jobs/{job_id}";
+    private static final String JOB_PATH_TEMPLATE = "v1/batch/jobs/{job_id}";
     private static final String JOBS_STATUS_PATH = "v1/batch/jobs/status";
 
     private final @NonNull Client client;
@@ -83,9 +84,10 @@ public class InferenceClient {
         Preconditions.checkArgument(cursor >= 0, "Argument 'cursor' must not be negative");
         return execute(Call.<JobView>builder()
                 .method(HttpMethod.GET)
-                .path(JOB_PATH)
+                .path(JOB_PATH_TEMPLATE)
                 .target(base -> {
-                    var target = base.path(JOB_PATH).resolveTemplate("job_id", jobId).queryParam("cursor", cursor);
+                    var target = base.path(JOB_PATH_TEMPLATE).resolveTemplate("job_id", jobId).queryParam("cursor",
+                            cursor);
                     return results ? target : target.queryParam("results", false);
                 })
                 .readTimeout(config.getInference().getReadTimeout().toJavaDuration())
@@ -118,8 +120,8 @@ public class InferenceClient {
     public Mono<JobView> cancelJob(@NonNull String jobId, @NonNull Instant deadline) {
         return execute(Call.<JobView>builder()
                 .method(HttpMethod.DELETE)
-                .path(JOB_PATH)
-                .target(base -> base.path(JOB_PATH).resolveTemplate("job_id", jobId))
+                .path(JOB_PATH_TEMPLATE)
+                .target(base -> base.path(JOB_PATH_TEMPLATE).resolveTemplate("job_id", jobId))
                 .readTimeout(config.getInference().getReadTimeout().toJavaDuration())
                 .deadline(deadline)
                 .type(JobView.class)
@@ -213,22 +215,33 @@ public class InferenceClient {
     private <T> T read(Call<T> call, Response response) {
         try (response) {
             var status = response.getStatus();
-            var body = response.hasEntity() ? response.readEntity(byte[].class) : new byte[0];
+            byte[] body;
+            try {
+                body = response.hasEntity() ? response.readEntity(byte[].class) : new byte[0];
+            } catch (ProcessingException exception) {
+                // A connection reset or truncated body after the headers: as retryable as one before them.
+                throw InferenceException.transport(exception);
+            }
             if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL) {
                 throw InferenceException.fromResponse(status, response.getHeaderString(HttpHeaders.RETRY_AFTER),
                         body);
             }
+            T value;
             try {
-                return InferenceJson.MAPPER.readValue(body, call.type());
+                value = InferenceJson.MAPPER.readValue(body, call.type());
             } catch (IOException | RuntimeException exception) {
                 throw InferenceException.upstreamError(status, null, exception);
             }
+            if (value == null) {
+                throw InferenceException.upstreamError(status, null, null);
+            }
+            return value;
         }
     }
 
     /** The timeout cut to the time left, and at least 1 ms: Jersey reads 0 as no timeout at all. */
     private static int timeoutMillis(Duration timeout, Duration left) {
-        return (int) Math.max(1, (timeout.compareTo(left) <= 0 ? timeout : left).toMillis());
+        return (int) Math.clamp((timeout.compareTo(left) <= 0 ? timeout : left).toMillis(), 1, Integer.MAX_VALUE);
     }
 
     private static String newRequestId() {
