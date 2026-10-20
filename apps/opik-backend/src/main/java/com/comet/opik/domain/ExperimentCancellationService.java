@@ -130,14 +130,19 @@ public class ExperimentCancellationService {
                                     return Mono.just(false);
                                 }
 
-                                return Flux.fromIterable(Lists.partition(queued, ID_CHUNK_SIZE))
-                                        .concatMap(chunk -> stream().remove(chunk.toArray(StreamMessageId[]::new)))
+                                // Recorded before they are deleted. An entry deleted but not recorded reaches no
+                                // consumer and is never counted; one recorded but not deleted is still delivered,
+                                // finds its outcome and is skipped. Either step can fail and the run still drains.
+                                return itemLedger.recordSkipped(workspaceId, experimentId, queued)
+                                        .thenMany(Flux.fromIterable(Lists.partition(queued, ID_CHUNK_SIZE))
+                                                .concatMap(chunk -> stream()
+                                                        .remove(chunk.toArray(StreamMessageId[]::new))))
                                         .reduce(0L, Long::sum)
                                         .flatMap(removed -> {
                                             log.info("Removed queued messages for a cancelled experiment, removed '{}',"
                                                     + " withConsumer '{}', experimentId '{}'",
                                                     removed, ids.size() - queued.size(), experimentId);
-                                            return countPurged(workspaceId, experimentId, queued);
+                                            return isDrained(workspaceId, experimentId);
                                         });
                             })
                             // Trimmed, not deleted: a run still publishing goes on appending here,
@@ -146,8 +151,8 @@ public class ExperimentCancellationService {
                             .flatMap(drained -> list.trim(ids.size(), -1).thenReturn(drained));
                 })
                 .onErrorResume(error -> {
-                    // The mark still stops the run; failing here only means the consumer walks what is
-                    // left and counts it down itself.
+                    // The mark still stops the run; failing here only means consumers walk what is left
+                    // and record it themselves.
                     log.warn("Failed to remove queued messages for a cancelled experiment, experimentId '{}'",
                             experimentId, error);
                     return Mono.just(false);
@@ -177,14 +182,12 @@ public class ExperimentCancellationService {
     }
 
     /**
-     * Counts the purged entries as skipped. Deleted entries reach no consumer, so nothing else would count them,
-     * and an entry XDEL did not find counts the same way: one a consumer took first keeps the outcome it
-     * recorded, and one trimmed off the stream will never run. What remains is what a consumer still holds,
-     * and at zero there is none of it left.
+     * Whether the purge left nothing outstanding. What remains is what a consumer still holds, and at zero there
+     * is none of it left. An entry XDEL did not find was counted all the same: one a consumer took first keeps
+     * the outcome it recorded, and one trimmed off the stream will never run.
      */
-    private Mono<Boolean> countPurged(String workspaceId, UUID experimentId, List<StreamMessageId> purged) {
-        return itemLedger.recordSkipped(workspaceId, experimentId, purged)
-                .then(itemLedger.remaining(workspaceId, experimentId))
+    private Mono<Boolean> isDrained(String workspaceId, UUID experimentId) {
+        return itemLedger.remaining(workspaceId, experimentId)
                 .doOnNext(
                         remaining -> log.info("Counted the purge off an experiment, remaining '{}', experimentId '{}'",
                                 remaining, experimentId))

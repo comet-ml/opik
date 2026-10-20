@@ -21,6 +21,7 @@ import org.redisson.api.stream.StreamCreateGroupArgs;
 import org.redisson.api.stream.StreamMessageId;
 import org.redisson.api.stream.StreamReadGroupArgs;
 import org.redisson.config.Config;
+import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,7 +29,9 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * The cancellation purge against a real Redis.
@@ -252,6 +255,27 @@ class ExperimentCancellationServiceTest {
         assertThat(ledger.outcome(WORKSPACE_ID, experimentId, recordedByAConsumer).block())
                 .as("the outcome the consumer recorded stands")
                 .isEqualTo(ExperimentItemLedger.Outcome.OK);
+    }
+
+    // Deleting first and recording after left a run that could never drain whenever the recording failed:
+    // the deleted entries reached no consumer, and a repeat stop skips a run already marked CANCELLED.
+    @Test
+    @DisplayName("should leave the queued entries in place when recording them as skipped fails")
+    void purgeQueuedDeletesNothingWhenRecordingFails() {
+        var experimentId = UUID.randomUUID();
+        publish(messages(experimentId, 3));
+        var queued = remainingStreamIds();
+        var failingLedger = mock(ExperimentItemLedger.class);
+        when(failingLedger.recordSkipped(any(), any(), any()))
+                .thenReturn(Mono.error(new IllegalStateException("redis")));
+        var failingService = new ExperimentCancellationService(redissonClient, config, failingLedger);
+
+        var drained = failingService.purgeQueued(WORKSPACE_ID, experimentId).block();
+
+        assertThat(drained).isFalse();
+        assertThat(remainingStreamIds())
+                .as("still queued, so consumers reach them, see the stop and record them themselves")
+                .containsExactlyElementsOf(queued);
     }
 
     // A launch that failed partway discards what its run was counting against. Left behind, the
