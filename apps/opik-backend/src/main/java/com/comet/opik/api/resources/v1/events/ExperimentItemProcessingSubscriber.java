@@ -100,9 +100,9 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
      */
     private Mono<Void> decrementAndFinishIfComplete(ExperimentItemToProcess message, boolean success) {
         RAtomicLongReactive counter = redisClient.getAtomicLong(
-                ExperimentExecutionConfig.itemCounterKey(message.experimentId()));
+                ExperimentExecutionConfig.itemCounterKey(message.workspaceId(), message.experimentId()));
         RAtomicLongReactive failureCounter = redisClient.getAtomicLong(
-                ExperimentExecutionConfig.itemFailureCounterKey(message.experimentId()));
+                ExperimentExecutionConfig.itemFailureCounterKey(message.workspaceId(), message.experimentId()));
 
         Mono<Void> trackFailure = success
                 ? Mono.empty()

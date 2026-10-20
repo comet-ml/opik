@@ -120,7 +120,7 @@ public class ExperimentCancellationService {
                                             log.info("Removed '{}' queued messages for cancelled experiment '{}',"
                                                     + " leaving '{}' already with a consumer",
                                                     removed, experimentId, ids.size() - queued.size());
-                                            return releaseItemSlots(experimentId, removed);
+                                            return releaseItemSlots(workspaceId, experimentId, removed);
                                         });
                             });
                 })
@@ -158,13 +158,13 @@ public class ExperimentCancellationService {
      * Subtracts the purged messages from the experiment's own counter. What remains is what a
      * consumer still holds, and at zero there is none of it left.
      */
-    private Mono<Boolean> releaseItemSlots(UUID experimentId, long removed) {
+    private Mono<Boolean> releaseItemSlots(String workspaceId, UUID experimentId, long removed) {
         if (removed == 0) {
             return Mono.just(false);
         }
 
         return redisClient
-                .getAtomicLong(ExperimentExecutionConfig.itemCounterKey(experimentId))
+                .getAtomicLong(ExperimentExecutionConfig.itemCounterKey(workspaceId, experimentId))
                 .addAndGet(-removed)
                 .doOnNext(remaining -> log.info("Experiment '{}' has '{}' items left after the purge",
                         experimentId, remaining))
