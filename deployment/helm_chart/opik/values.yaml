@@ -212,6 +212,12 @@ component:
       LLM_MODEL_REGISTRY_REMOTE_ENABLED: "false"
       LLM_MODEL_REGISTRY_REMOTE_URL: ""
       LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS: "300"
+      # ai-labels (apps/opik-backend config.yml aiLabels): AI-generated trace labels, computed by
+      # opik-inference. Off by default; Comet-hosted deployments turn it on, set the URL, and pass the
+      # credential as AI_LABELS_INFERENCE_CREDENTIAL from a secret (secretRefs). Requires the cut-over
+      # traces table. See apps/opik-backend/docs/ai-labels-runbook.md.
+      AI_LABELS_ENABLED: "false"
+      AI_LABELS_INFERENCE_URL: ""
     envFrom:
       - configMapRef:
           name: opik-backend
