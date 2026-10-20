@@ -83,7 +83,7 @@ public class AiLabelRenderer {
     private final @NonNull LongCounter historyErrors;
     private final @NonNull DoubleCounter renderCpu;
     // Null when the JVM can't measure the current thread's CPU time.
-    private final @Nullable ThreadMXBean threads;
+    private final @Nullable ThreadMXBean threadCpuTimeBean;
 
     @Inject
     AiLabelRenderer(@NonNull AiLabelRenderDAO renderDAO, @NonNull @Config("aiLabels") AiLabelsConfig config,
@@ -100,7 +100,7 @@ public class AiLabelRenderer {
                 .setDescription("Thread CPU time spent rendering traces, excluding ClickHouse reads")
                 .build();
         var threadBean = ManagementFactory.getThreadMXBean();
-        this.threads = threadBean.isCurrentThreadCpuTimeSupported() && threadBean.isThreadCpuTimeEnabled()
+        this.threadCpuTimeBean = threadBean.isCurrentThreadCpuTimeSupported() && threadBean.isThreadCpuTimeEnabled()
                 ? threadBean
                 : null;
     }
@@ -252,7 +252,7 @@ public class AiLabelRenderer {
         var ref = refs.get(trace.id());
         long budget = config.getRenderBudgetBytes();
         return Mono.fromCallable(() -> {
-            long cpuStart = threads == null ? 0 : threads.getCurrentThreadCpuTime();
+            long cpuStart = threadCpuTimeBean == null ? 0 : threadCpuTimeBean.getCurrentThreadCpuTime();
             try {
                 var tree = AiLabelSpanTree.build(spans);
                 var outcomes = new ArrayList<RenderOutcome>(2);
@@ -264,8 +264,8 @@ public class AiLabelRenderer {
                 }
                 return outcomes;
             } finally {
-                if (threads != null) {
-                    renderCpu.add((threads.getCurrentThreadCpuTime() - cpuStart) / 1e9);
+                if (threadCpuTimeBean != null) {
+                    renderCpu.add((threadCpuTimeBean.getCurrentThreadCpuTime() - cpuStart) / 1e9);
                 }
             }
         })

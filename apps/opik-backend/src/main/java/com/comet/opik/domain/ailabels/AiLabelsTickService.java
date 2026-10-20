@@ -701,7 +701,7 @@ public class AiLabelsTickService {
         long start = System.nanoTime();
         try {
             var outcomes = renderer.render(workspaceId, refs, tasks).collectList().block();
-            renderDuration.record((System.nanoTime() - start) / 1e9, Attributes.of(stringKey("outcome"), "ok"));
+            recordRenderDuration(start, "ok");
             return outcomes;
         } catch (RuntimeException chunkError) {
             log.warn("ai-labels failed to render a chunk, workspace '{}', traces '{}'; rendering one at a time",
@@ -724,9 +724,12 @@ public class AiLabelsTickService {
                 failures.addAll(failedStatuses(workspaceId, candidate, missing, RENDER_ERROR, true, ""));
             }
         }
-        renderDuration.record((System.nanoTime() - start) / 1e9,
-                Attributes.of(stringKey("outcome"), "one_at_a_time"));
+        recordRenderDuration(start, "one_at_a_time");
         return outcomes;
+    }
+
+    private void recordRenderDuration(long startNanos, String outcome) {
+        renderDuration.record((System.nanoTime() - startNanos) / 1e9, Attributes.of(stringKey("outcome"), outcome));
     }
 
     /** One open job: its items, their traces' candidates (for the attempts), its request size and its cost. */
