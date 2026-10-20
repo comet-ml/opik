@@ -32,6 +32,8 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
 
     static final Duration EVENT_BRIDGE_CALL_ATTEMPT_TIMEOUT = Duration.ofSeconds(2);
     static final Duration EVENT_BRIDGE_CALL_TIMEOUT = Duration.ofSeconds(8);
+    // A local credentials service; fetching runs inside EVENT_BRIDGE_CALL_TIMEOUT, so this must stay well under it
+    static final Duration CUSTOMER_CREDENTIALS_TIMEOUT = Duration.ofSeconds(2);
 
     @Provides
     @Singleton
@@ -118,7 +120,8 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
         if (StringUtils.isNotBlank(config.getCustomerCredentialsEndpoint())) {
             // Argument list rather than a command string, so the endpoint never goes through a shell
             return ProcessCredentialsProvider.builder()
-                    .command(List.of("curl", "--silent", "--show-error", "--fail", "--max-time", "2",
+                    .command(List.of("curl", "--silent", "--show-error", "--fail", "--max-time",
+                            String.valueOf(CUSTOMER_CREDENTIALS_TIMEOUT.toSeconds()),
                             config.getCustomerCredentialsEndpoint()))
                     .build();
         }
