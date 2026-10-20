@@ -182,13 +182,15 @@ const OllieChartWidget: React.FunctionComponent<
     wasSavedRef.current = saved;
   }, [retryNotFound, error, refetch]);
 
-  // Once per failed load: the same error object survives re-renders, and an unsaved widget's 404 is expected.
-  const reportedErrorRef = useRef<QueryError | null>(null);
+  // Once per failed load: the same error object survives re-renders. An unsaved widget's 404 is expected and stays
+  // unreported after the save that ends it; masked data and charts turned off are states the widget explains.
+  const seenErrorRef = useRef<QueryError | null>(null);
   useEffect(() => {
-    if (preview || !error || reportedErrorRef.current === error) return;
+    if (preview || !error || seenErrorRef.current === error) return;
+    seenErrorRef.current = error;
     const status = queryErrorStatus(error);
-    if (status === 404 && retryNotFound) return;
-    reportedErrorRef.current = error;
+    if ((status === 404 && retryNotFound) || status === 403 || status === 501)
+      return;
     trackEvent(OpikEvent.DASHBOARD_OLLIE_WIDGET_LOAD_FAILED, {
       dashboard_id: dashboardId,
       dashboard_scope: dashboardScope,
