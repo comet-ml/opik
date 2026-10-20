@@ -38,7 +38,10 @@ import { parseComposedProviderType } from "@/lib/provider";
 import { useHydrateDatasetItemData } from "@/v2/pages/PlaygroundPage/useHydrateDatasetItemData";
 import { useHydratePromptMetadata } from "@/v2/pages/PlaygroundPage/useHydratePromptMetadata";
 import { collectPromptVersionRefs } from "@/api/playground/promptLinkage";
-import { getTextFromMessageContent } from "@/lib/llm";
+import {
+  getMediaUrlsFromListVariable,
+  getTextFromMessageContent,
+} from "@/lib/llm";
 
 export interface DatasetItemPromptCombination {
   datasetItem?: DatasetItem;
@@ -88,59 +91,49 @@ const transformMessageIntoProviderMessage = (
       { escape: (val: string) => val },
     );
   } else {
+    const renderMediaUrls = (template: string): string[] =>
+      getMediaUrlsFromListVariable(template, datasetItem) ?? [
+        mustache.render(
+          template,
+          serializedDatasetItem,
+          {},
+          { escape: (val: string) => val },
+        ),
+      ];
+
     // Array with images/videos/audios: render mustache in text and media URLs
-    processedContent = message.content.map((part) => {
-      if (part.type === "text") {
-        return {
-          type: "text",
-          text: mustache.render(
-            part.text,
-            serializedDatasetItem,
-            {},
-            { escape: (val: string) => val },
-          ),
-        } as TextPart;
-      } else if (part.type === "image_url") {
-        // Render mustache variables in image URLs
-        return {
-          type: "image_url",
-          image_url: {
-            url: mustache.render(
-              part.image_url.url,
-              serializedDatasetItem,
-              {},
-              { escape: (val: string) => val },
-            ),
-          },
-        } as ImagePart;
-      } else if (part.type === "video_url") {
-        // Render mustache variables in video URLs
-        return {
-          type: "video_url",
-          video_url: {
-            url: mustache.render(
-              part.video_url.url,
-              serializedDatasetItem,
-              {},
-              { escape: (val: string) => val },
-            ),
-          },
-        } as VideoPart;
-      } else {
-        // Render mustache variables in audio URLs
-        return {
-          type: "audio_url",
-          audio_url: {
-            url: mustache.render(
-              part.audio_url.url,
-              serializedDatasetItem,
-              {},
-              { escape: (val: string) => val },
-            ),
-          },
-        } as AudioPart;
-      }
-    });
+    processedContent = message.content.flatMap(
+      (part): Array<TextPart | ImagePart | VideoPart | AudioPart> => {
+        if (part.type === "text") {
+          return [
+            {
+              type: "text",
+              text: mustache.render(
+                part.text,
+                serializedDatasetItem,
+                {},
+                { escape: (val: string) => val },
+              ),
+            },
+          ];
+        } else if (part.type === "image_url") {
+          return renderMediaUrls(part.image_url.url).map((url) => ({
+            type: "image_url",
+            image_url: { url },
+          }));
+        } else if (part.type === "video_url") {
+          return renderMediaUrls(part.video_url.url).map((url) => ({
+            type: "video_url",
+            video_url: { url },
+          }));
+        } else {
+          return renderMediaUrls(part.audio_url.url).map((url) => ({
+            type: "audio_url",
+            audio_url: { url },
+          }));
+        }
+      },
+    );
   }
 
   return {
