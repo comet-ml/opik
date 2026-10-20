@@ -1,4 +1,10 @@
-import type { ChunkResult, GeminiResponse } from "./types";
+import type {
+  ChunkResult,
+  GeminiCandidate,
+  GeminiFunctionCall,
+  GeminiPart,
+  GeminiResponse,
+} from "./types";
 import { flattenObject, normalizeModelName } from "./utils";
 
 /**
@@ -257,6 +263,73 @@ export const parseChunk = (rawChunk: unknown): ChunkResult => {
   }
 
   return { isToolCall: false, data: "" };
+};
+
+const isTextPart = (
+  part: GeminiPart
+): part is GeminiPart & { text: string } =>
+  typeof part.text === "string" && !part.functionCall && !part.function_call;
+
+/**
+ * Merge the candidates of every streamed chunk into one candidate.
+ *
+ * Consecutive text parts are joined, every other part (function calls, ...) is
+ * kept in arrival order, and the rest of the candidate (finish reason, safety
+ * ratings) comes from the last chunk that has one.
+ */
+export const aggregateStreamCandidates = (
+  chunks: unknown[]
+): { candidates?: GeminiCandidate[]; functionCalls: GeminiFunctionCall[] } => {
+  const parts: GeminiPart[] = [];
+  let lastCandidate: GeminiCandidate | undefined;
+
+  for (const rawChunk of chunks) {
+    const candidate = (rawChunk as GeminiResponse | undefined)?.candidates?.[0];
+    if (!candidate) {
+      continue;
+    }
+    lastCandidate = candidate;
+
+    for (const part of candidate.content?.parts ?? []) {
+      const previous = parts[parts.length - 1];
+      if (isTextPart(part)) {
+        if (part.text === "") {
+          continue;
+        }
+        if (
+          previous &&
+          isTextPart(previous) &&
+          Boolean(previous.thought) === Boolean(part.thought)
+        ) {
+          parts[parts.length - 1] = {
+            ...previous,
+            text: previous.text + part.text,
+          };
+          continue;
+        }
+      }
+      parts.push(part);
+    }
+  }
+
+  if (!lastCandidate) {
+    return { functionCalls: [] };
+  }
+
+  const functionCalls = parts
+    .map((part) => part.functionCall || part.function_call)
+    .filter((call): call is Record<string, unknown> => Boolean(call))
+    .map((call) => call as unknown as GeminiFunctionCall);
+
+  return {
+    candidates: [
+      {
+        ...lastCandidate,
+        content: { ...lastCandidate.content, parts },
+      },
+    ],
+    functionCalls,
+  };
 };
 
 /**

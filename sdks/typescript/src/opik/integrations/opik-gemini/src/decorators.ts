@@ -8,7 +8,7 @@ import type {
   GeminiResponse,
 } from "./types";
 import {
-  parseChunk,
+  aggregateStreamCandidates,
   parseCompletionOutput,
   parseInputArgs,
   parseModelDataFromResponse,
@@ -212,8 +212,8 @@ function wrapAsyncIterable<T>(
     unknown
   > {
     const chunks: unknown[] = [];
-    const textChunks: string[] = [];
     let usage: Record<string, number> | undefined;
+    let streamedFunctionCalls: GeminiFunctionCall[] = [];
     let aggregatedOutput: Record<string, unknown> = {};
     let modelMetadata:
       | {
@@ -227,13 +227,6 @@ function wrapAsyncIterable<T>(
       for await (const rawChunk of iterable) {
         chunks.push(rawChunk);
 
-        // Parse chunk
-        const chunkData = parseChunk(rawChunk);
-
-        if (!chunkData.isToolCall) {
-          textChunks.push(chunkData.data);
-        }
-
         // Yield chunk to caller (pass-through)
         yield rawChunk;
       }
@@ -246,23 +239,13 @@ function wrapAsyncIterable<T>(
         usage = parseUsage(finalChunk);
         modelMetadata = parseModelDataFromResponse(finalChunk);
 
-        const accumulatedText = textChunks.join("");
-        const finalChunkParsed = parseCompletionOutput(finalChunk);
+        const aggregated = aggregateStreamCandidates(chunks);
+        streamedFunctionCalls = aggregated.functionCalls;
 
-        if (finalChunkParsed?.candidates) {
+        if (aggregated.candidates) {
           aggregatedOutput = {
-            candidates: structuredClone(finalChunkParsed.candidates),
+            candidates: structuredClone(aggregated.candidates),
           };
-
-          // Type assertion for nested property access after structuredClone
-          const typedOutput = aggregatedOutput as {
-            candidates?: Array<{
-              content?: { parts?: Array<{ text?: string }> };
-            }>;
-          };
-          if (typedOutput.candidates?.[0]?.content?.parts?.[0]) {
-            typedOutput.candidates[0].content.parts[0].text = accumulatedText;
-          }
         }
       }
 
@@ -281,31 +264,21 @@ function wrapAsyncIterable<T>(
         },
       });
 
-      // 3. Check for function calls in final chunk and create child spans
-      if (finalChunk && typeof finalChunk === "object") {
-        const geminiChunk = finalChunk as GeminiResponse;
-        if (
-          geminiChunk.functionCalls &&
-          Array.isArray(geminiChunk.functionCalls)
-        ) {
-          geminiChunk.functionCalls.forEach(
-            (functionCall: GeminiFunctionCall) => {
-              mainSpan.span({
-                name: `function_call: ${functionCall.name}`,
-                startTime: new Date(),
-                endTime: new Date(),
-                input: { arguments: functionCall.args },
-                output: { function_name: functionCall.name },
-                type: OpikSpanType.Tool,
-                metadata: {
-                  function_name: functionCall.name,
-                  function_arguments: functionCall.args,
-                },
-              });
-            }
-          );
-        }
-      }
+      // 3. Create child spans for the function calls of the whole stream
+      streamedFunctionCalls.forEach((functionCall: GeminiFunctionCall) => {
+        mainSpan.span({
+          name: `function_call: ${functionCall.name}`,
+          startTime: new Date(),
+          endTime: new Date(),
+          input: { arguments: functionCall.args },
+          output: { function_name: functionCall.name },
+          type: OpikSpanType.Tool,
+          metadata: {
+            function_name: functionCall.name,
+            function_arguments: functionCall.args,
+          },
+        });
+      });
 
       // 4. Update trace output (will be overwritten by next call if multiple calls)
       if (!hasUserProvidedParent) {
