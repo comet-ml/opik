@@ -84,7 +84,16 @@ class AiLabelSpanTreeTest {
                 .mapToObj(i -> span("s" + i, i == 0 ? null : "s" + (i - 1), i))
                 .toList();
 
-        assertThat(flatten(AiLabelSpanTree.build(chain))).hasSize(1_000);
+        var names = new ArrayList<String>();
+        var level = AiLabelSpanTree.build(chain);
+        while (level != null) {
+            assertThat(level).hasSize(1);
+            names.add(level.getFirst().name());
+            level = level.getFirst().spans();
+        }
+
+        // One span per level, each the child of the one before.
+        assertThat(names).containsExactlyElementsOf(chain.stream().map(SpanRow::name).toList());
     }
 
     private static Stream<AiLabelSpan> flatten(List<AiLabelSpan> spans) {
