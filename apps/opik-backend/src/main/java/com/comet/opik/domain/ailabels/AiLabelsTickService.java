@@ -849,7 +849,7 @@ public class AiLabelsTickService {
             // One invalid item rejects the whole job: a renderer or task bug, never retried.
             rejected.add(1);
             log.error("ai-labels submit rejected, workspace '{}', endpoint '{}', items '{}', code '{}'", workspaceId,
-                    jobKey.endpoint().getValue(), buffer.items.size(), exception.getCode(), exception);
+                    jobKey.endpoint().getValue(), buffer.items.size(), exception.getCode());
             jobItems("", buffer).stream()
                     .map(row -> row.failed(exception.getCode(), false))
                     .forEach(failures::add);
