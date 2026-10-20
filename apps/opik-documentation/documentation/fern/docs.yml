@@ -234,6 +234,9 @@ navigation:
               - page: Version control
                 path: ./docs-v2/prompt_engineering/version-control.mdx
                 slug: version-control
+              - page: Environments
+                path: ./docs-v2/prompt_engineering/environments.mdx
+                slug: environments
           - section: Optimization runs
             slug: /optimization-runs
             contents:

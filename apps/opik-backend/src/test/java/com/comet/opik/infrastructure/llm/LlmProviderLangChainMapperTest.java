@@ -1,5 +1,16 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.domain.llm.langchain4j.AudioUrl;
+import com.comet.opik.domain.llm.langchain4j.OpikContent;
+import com.comet.opik.domain.llm.langchain4j.OpikContentType;
+import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
+import com.comet.opik.domain.llm.langchain4j.VideoUrl;
+import dev.langchain4j.data.message.AudioContent;
+import dev.langchain4j.data.message.ImageContent;
+import dev.langchain4j.data.message.TextContent;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.data.message.VideoContent;
+import dev.langchain4j.model.openai.internal.chat.ImageUrl;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -9,6 +20,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -60,5 +72,36 @@ class LlmProviderLangChainMapperTest {
     @DisplayName("a throwable without a JSON payload yields empty (caller maps this to 500)")
     void returnsEmptyWhenNoJsonPayload() {
         assertThat(mapper.getErrorObject(new RuntimeException("connection reset"), log)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("base64 data URI image, video and audio become inline data, so Vertex AI does not guess MIME types from URLs")
+    void mapsBase64DataUriMediaToInlineData() {
+        var base64Data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        var message = OpikUserMessage.builder()
+                .content(List.of(
+                        OpikContent.builder()
+                                .type(OpikContentType.TEXT)
+                                .text("Describe these")
+                                .build(),
+                        OpikContent.builder()
+                                .type(OpikContentType.IMAGE_URL)
+                                .imageUrl(ImageUrl.builder().url("data:image/jpeg;base64," + base64Data).build())
+                                .build(),
+                        OpikContent.builder()
+                                .type(OpikContentType.VIDEO_URL)
+                                .videoUrl(VideoUrl.builder().url("data:video/mp4;base64," + base64Data).build())
+                                .build(),
+                        OpikContent.builder()
+                                .type(OpikContentType.AUDIO_URL)
+                                .audioUrl(AudioUrl.builder().url("data:audio/wav;base64," + base64Data).build())
+                                .build()))
+                .build();
+
+        assertThat(mapper.toChatMessage(message)).isEqualTo(UserMessage.from(
+                TextContent.from("Describe these"),
+                ImageContent.from(base64Data, "image/jpeg"),
+                VideoContent.from(base64Data, "video/mp4"),
+                AudioContent.from(base64Data, "audio/wav")));
     }
 }

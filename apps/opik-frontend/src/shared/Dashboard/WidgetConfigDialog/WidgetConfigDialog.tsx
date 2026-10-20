@@ -1,4 +1,6 @@
 import React, { useEffect, useRef } from "react";
+import { v4 as uuidv4 } from "uuid";
+import { ArrowRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +31,7 @@ import {
   createDefaultWidgetConfig,
   getWidgetTypesForDashboard,
 } from "@/lib/dashboard/utils";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   open,
@@ -123,9 +126,18 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
     assistantAvailable;
   // Hands the request to Ollie, which draws it and offers "Add to <this dashboard>" on the chart.
   const handleDescribeToOllie = () => {
+    const entryId = uuidv4();
+    trackEvent(OpikEvent.DASHBOARD_ASK_OLLIE_CLICKED, {
+      entry_id: entryId,
+      dashboard_id: runtimeConfig.dashboardId,
+      dashboard_type: runtimeConfig.dashboardType,
+      dashboard_scope: runtimeConfig.dashboardScope,
+      project_id: runtimeConfig.projectIds?.[0],
+    });
     onOpenChange(false);
     window.opikBridge?.startConversation(
       "I want to add a custom widget to this dashboard. Ask me what it should show.",
+      { origin: "describe_widget", entryId },
     );
   };
 
@@ -170,26 +182,30 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
           </div>
         </div>
 
-        {!isEditMode && ollieEnabled && (
-          <div className="flex items-center justify-between gap-4 border-t pt-4">
-            <span className="comet-body-s text-light-slate">
-              Need something these don&apos;t cover? Describe the widget you
-              need.
-            </span>
-            <Button variant="outline" onClick={handleDescribeToOllie}>
-              <OllieIcon className="mr-2 size-4 text-[var(--color-ollie)]" />
-              Describe it to Ollie
+        <DialogFooter className="flex flex-row flex-wrap items-center justify-end gap-2 border-t pt-4 sm:flex-row sm:justify-end">
+          {!isEditMode && ollieEnabled && (
+            <div className="comet-code mr-auto flex items-center gap-2 text-foreground">
+              Need a custom widget?
+              <Button
+                variant="link"
+                onClick={handleDescribeToOllie}
+                className="comet-code h-auto gap-1 rounded-none border-b border-current p-0 pb-0.5 text-foreground hover:text-primary-hover hover:no-underline dark:text-foreground"
+              >
+                <OllieIcon className="size-4 text-[var(--color-ollie)]" />
+                Ask Ollie
+                <ArrowRight className="size-4" />
+              </Button>
+            </div>
+          )}
+          {/* One group, so the pair wraps below the Ollie prompt together. */}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleCancel}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!previewWidget}>
+              {isEditMode ? "Save changes" : "Add widget"}
             </Button>
           </div>
-        )}
-
-        <DialogFooter className="flex flex-row justify-end gap-2 border-t pt-4 sm:flex-row sm:justify-end">
-          <Button variant="outline" onClick={handleCancel}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={!previewWidget}>
-            {isEditMode ? "Save changes" : "Add widget"}
-          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

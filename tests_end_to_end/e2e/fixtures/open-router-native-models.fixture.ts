@@ -1,4 +1,4 @@
-import { test as baseTest, expect } from './moved-trace-threads.fixture';
+import { test as baseTest, expect } from './openai-responses-stub.fixture';
 import { ensureBuiltInProviderKey } from '../core/provider-keys';
 import { registerUnbilledModel } from '../core/llm-model-policy';
 import {

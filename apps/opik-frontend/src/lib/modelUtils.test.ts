@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import omit from "lodash/omit";
 import {
   getAnthropicThinkingEffortOptions,
+  getDefaultReasoningEffort,
   getDefaultThinkingEffort,
   getDefaultThinkingLevel,
   getRoutableProviderModelValue,
   getOpenAIReasoningEffortOptions,
+  getThinkingLevelDescription,
   getThinkingLevelOptions,
   isReasoningModel,
   resolveEffort,
@@ -118,6 +120,18 @@ describe("supportsSamplingParams", () => {
     );
   });
 
+  it("returns false for Claude Sonnet 5.5", () => {
+    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5)).toBe(
+      false,
+    );
+  });
+
+  it("returns false for Claude Haiku 5.5", () => {
+    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5)).toBe(
+      false,
+    );
+  });
+
   // OpenRouter dots the version, sometimes drops the release date and sometimes appends a variant;
   // Bedrock adds a region and an inference profile. The same model must answer the same either way.
   it.each([
@@ -128,6 +142,7 @@ describe("supportsSamplingParams", () => {
     [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6_FAST, true],
     [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_5, true],
     [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5, true],
+    ["anthropic/claude-haiku-5.5", false],
     ["us.anthropic.claude-sonnet-4-5-20250929-v1:0", true],
     ["us.anthropic.claude-sonnet-5-20250101-v1:0", false],
   ])("reads %s the same as the id it decorates", (model, expected) => {
@@ -150,9 +165,9 @@ describe("supportsSamplingParams", () => {
   });
 
   // A floating alias has to read as the model it resolves to, so the families cannot share one
-  // answer — and claude-haiku-latest must agree with claude-haiku-4-5 under its own id.
+  // answer — and claude-haiku-latest must agree with claude-haiku-5-5 under its own id.
   it.each([
-    ["~anthropic/claude-haiku-latest", true],
+    ["~anthropic/claude-haiku-latest", false],
     ["~anthropic/claude-opus-latest", false],
     ["~anthropic/claude-sonnet-latest", false],
     ["~anthropic/claude-fable-latest", false],
@@ -357,7 +372,7 @@ describe("updateProviderConfig — OpenAI", () => {
     ).toBeUndefined();
   });
 
-  it("coerces invalid reasoningEffort to high when switching into a model that doesn't support it", () => {
+  it("coerces invalid reasoningEffort to the model's default when switching into a model that doesn't support it", () => {
     const config: LLMOpenAIConfigsType = {
       temperature: 1,
       maxCompletionTokens: 4000,
@@ -370,10 +385,10 @@ describe("updateProviderConfig — OpenAI", () => {
       model: PROVIDER_MODEL_TYPE.GPT_O3,
       provider: OPEN_AI,
     });
-    expect(result?.reasoningEffort).toBe("high");
+    expect(result?.reasoningEffort).toBe("medium");
   });
 
-  it("coerces xhigh to high when switching from gpt-5.1 (where xhigh isn't allowed)", () => {
+  it("coerces xhigh to gpt-5.1's default when switching to it (xhigh isn't allowed there)", () => {
     const config: LLMOpenAIConfigsType = {
       temperature: 1,
       maxCompletionTokens: 4000,
@@ -386,7 +401,7 @@ describe("updateProviderConfig — OpenAI", () => {
       model: PROVIDER_MODEL_TYPE.GPT_5_1,
       provider: OPEN_AI,
     });
-    expect(result?.reasoningEffort).toBe("high");
+    expect(result?.reasoningEffort).toBe("none");
   });
 
   it("keeps a valid reasoningEffort across reasoning-model switches", () => {
@@ -580,12 +595,12 @@ describe("sanitizeConfigForRequest", () => {
   });
 
   it("replaces an unsupported reasoningEffort value (xhigh on gpt-5.1)", () => {
-    // Dropping it left the dropdown showing "High" while the provider applied its own
-    // default. gpt-5.1 offers high, so that is what the panel shows and what the request carries.
+    // Dropping it left the dropdown showing the default while the request carried nothing, so the
+    // panel shows gpt-5.1's default and the request carries it too.
     const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_5_1, {
       reasoningEffort: "xhigh",
     });
-    expect(result.reasoningEffort).toBe("high");
+    expect(result.reasoningEffort).toBe("none");
   });
 
   it("keeps a valid reasoningEffort value for the model", () => {
@@ -774,81 +789,100 @@ describe("Gemini thinking level", () => {
     }
   });
 
-  // Per Google's support table; the sets genuinely differ per model.
-  it("offers each model only the levels it documents", () => {
-    const values = (m: PROVIDER_MODEL_TYPE) =>
-      getThinkingLevelOptions(m).map((o) => o.value);
+  const LOW_TO_HIGH = ["low", "medium", "high"];
+  const MINIMAL_TO_HIGH = ["minimal", ...LOW_TO_HIGH];
+  const AUTO_LOW_TO_HIGH = ["auto", ...LOW_TO_HIGH];
+  const AUTO_OFF_LOW_TO_HIGH = ["auto", "off", ...LOW_TO_HIGH];
+  const OFF_MINIMAL_TO_HIGH = ["off", ...MINIMAL_TO_HIGH];
 
-    // 3.8 and 3.7 Flash have no "minimal".
-    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH)).toEqual([
-      "low",
-      "medium",
-      "high",
-    ]);
-    expect(values(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH)).toEqual([
-      "low",
-      "medium",
-      "high",
-    ]);
-    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH)).toEqual([
-      "low",
-      "medium",
-      "high",
-    ]);
-    expect(values(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH)).toEqual([
-      "low",
-      "medium",
-      "high",
-    ]);
-    // 3.6/3.5 Flash have all four.
-    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH)).toEqual([
-      "minimal",
-      "low",
-      "medium",
-      "high",
-    ]);
-    // 3.1 Flash Lite has all four, plus "none" because it does not think by default. Only the
-    // separate -image model is limited to minimal and high.
-    for (const model of [
-      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+  // Row for row from Google's tables: https://ai.google.dev/gemini-api/docs/thinking and
+  // https://cloud.google.com/vertex-ai/generative-ai/docs/thinking. On 2.5, "auto" is Opik's name
+  // for the dynamic budget Google defaults to, and "off" for a zero budget. The two pages disagree on
+  // 2.5 Flash Lite (AI Studio: Off, Vertex: Auto); both rows follow AI Studio. The 3.x Flash Lite rows
+  // add Off ahead of Google's levels and preselect it: Google lists minimal, which they spend no
+  // thinking tokens on.
+  it.each([
+    [PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH, LOW_TO_HIGH, "medium"],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH, LOW_TO_HIGH, "medium"],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH, LOW_TO_HIGH, "medium"],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH, LOW_TO_HIGH, "medium"],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH, MINIMAL_TO_HIGH, "medium"],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH, MINIMAL_TO_HIGH, "medium"],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH, MINIMAL_TO_HIGH, "medium"],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH, MINIMAL_TO_HIGH, "medium"],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, OFF_MINIMAL_TO_HIGH, "off"],
+    [
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
+      OFF_MINIMAL_TO_HIGH,
+      "off",
+    ],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO, LOW_TO_HIGH, "high"],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO, LOW_TO_HIGH, "high"],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, OFF_MINIMAL_TO_HIGH, "off"],
+    [
       PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
+      OFF_MINIMAL_TO_HIGH,
+      "off",
+    ],
+    [
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+      OFF_MINIMAL_TO_HIGH,
+      "off",
+    ],
+    [
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
-    ]) {
-      expect(values(model), model).toEqual([
-        "none",
-        "minimal",
-        "low",
-        "medium",
-        "high",
-      ]);
-    }
-    // Gemini 3 Pro: low and high only.
-    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_PRO)).toEqual(["low", "high"]);
-  });
+      OFF_MINIMAL_TO_HIGH,
+      "off",
+    ],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, MINIMAL_TO_HIGH, "high"],
+    [
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW,
+      MINIMAL_TO_HIGH,
+      "high",
+    ],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_PRO, ["low", "high"], "high"],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO, ["low", "high"], "high"],
+    [PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, AUTO_LOW_TO_HIGH, "auto"],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO, AUTO_LOW_TO_HIGH, "auto"],
+    [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, AUTO_LOW_TO_HIGH, "auto"],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH, AUTO_LOW_TO_HIGH, "auto"],
+    [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, AUTO_OFF_LOW_TO_HIGH, "off"],
+    [
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+      AUTO_OFF_LOW_TO_HIGH,
+      "off",
+    ],
+  ])(
+    "offers %s the levels Google documents and preselects its default",
+    (model, levels, defaultLevel) => {
+      expect(getThinkingLevelOptions(model).map((o) => o.value)).toEqual(
+        levels,
+      );
+      expect(getDefaultThinkingLevel(model)).toBe(defaultLevel);
+    },
+  );
 
-  it("preselects each model's own documented default", () => {
-    expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH)).toBe(
-      "medium",
-    );
-    expect(
-      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH),
-    ).toBe("medium");
-    expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH)).toBe(
-      "medium",
-    );
-    expect(
-      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH),
-    ).toBe("medium");
-    // Flash Lite is the exception: measured against the live API it does not think by default, so it
-    // preselects "none" rather than the "minimal" Google's docs table claims.
-    expect(
-      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE),
-    ).toBe("none");
-    expect(
-      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE),
-    ).toBe("none");
-  });
+  it.each([
+    [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, true],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE, true],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, true],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE, true],
+    [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, false],
+    [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH, false],
+    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO, false],
+  ])(
+    "the %s thinking tooltip says Off sends nothing: %s",
+    (model, explainsOff) => {
+      const description = getThinkingLevelDescription(model);
+
+      expect(description).toMatch(/^Controls the depth of reasoning/);
+      expect(
+        description.endsWith(
+          " Off sends no thinking setting: Google lists this model's default as minimal, and it spends almost no thinking tokens on it.",
+        ),
+      ).toBe(explainsOff);
+    },
+  );
 
   it("only ever preselects a level the model actually offers", () => {
     for (const model of Object.values(PROVIDER_MODEL_TYPE)) {
@@ -1046,50 +1080,70 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     ).toEqual({ thinking: { level: "high" } });
   });
 
-  // The Flash Lite models do not think by default, so their preselected level must not switch
-  // thinking on — that regressed latency ~2x for a customer (OPIK-8102 follow-up).
-  it("defaults the Flash Lite models to none, which sends nothing", () => {
-    for (const model of [
-      PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
-      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
-      PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
-      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
-    ]) {
-      expect(getDefaultThinkingLevel(model), `default for ${model}`).toBe(
-        "none",
-      );
-      expect(
-        getThinkingLevelOptions(model).map((o) => o.value),
-        `${model} should offer none`,
-      ).toContain("none");
-      expect(
-        sanitizeConfigForRequest(model, { temperature: 0 }).custom_parameters,
-        `${model} should send no thinking block by default`,
-      ).toBeUndefined();
-    }
-  });
+  // Off on a Flash Lite model is the model's own default, so it sends no thinking setting at all.
+  const FLASH_LITE_MODELS = [
+    PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+    PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
+    PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
+  ];
 
-  // "none" must REMOVE a persisted block, not merely decline to add one, or the level saved before
-  // this change keeps being sent and the model keeps thinking.
-  it("clears a persisted thinking block when none is selected", () => {
+  it.each(FLASH_LITE_MODELS)(
+    "sends no thinking block for %s at its default Off",
+    (model) => {
+      for (const configs of [{ temperature: 0 }, { thinkingLevel: "off" }]) {
+        expect(
+          sanitizeConfigForRequest(model, configs).custom_parameters,
+        ).toBeUndefined();
+      }
+    },
+  );
+
+  it("drops a persisted level and budget under an Off left to the model, and keeps the rest", () => {
     expect(
       sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
-        thinkingLevel: "none",
+        thinkingLevel: "off",
         custom_parameters: {
-          thinking: { level: "minimal" },
+          thinking: {
+            level: "low",
+            budget_tokens: 512,
+            include_thoughts: true,
+          },
           unrelated: "keep",
         },
       }).custom_parameters,
-    ).toEqual({ unrelated: "keep" });
+    ).toEqual({ thinking: { include_thoughts: true }, unrelated: "keep" });
   });
 
-  it("drops custom_parameters entirely when none leaves it empty", () => {
+  it("treats a none saved before Flash Lite lost it as the default, which sends nothing", () => {
     expect(
-      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, {
         thinkingLevel: "none",
         custom_parameters: { thinking: { level: "minimal" } },
       }).custom_parameters,
     ).toBeUndefined();
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
+    PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+  ])("sends a picked Minimal on %s", (model) => {
+    expect(
+      sanitizeConfigForRequest(model, { thinkingLevel: "minimal" })
+        .custom_parameters,
+    ).toEqual({ thinking: { level: "minimal" } });
+  });
+
+  // Gemini 2.5 can turn thinking off, so there Off is an explicit zero budget and is sent.
+  it("sends Off on Gemini 2.5 Flash Lite", () => {
+    expect(
+      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, {
+        thinkingLevel: "off",
+      }).custom_parameters,
+    ).toEqual({ thinking: { level: "off" } });
   });
 
   // A budget set through the API outranks any level server-side, so keeping it under Auto would
@@ -1113,7 +1167,7 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
     }
   });
 
-  it("sends a low or medium level on 3.1 Flash Lite instead of resetting it to none", () => {
+  it("sends a low or medium level on 3.1 Flash Lite", () => {
     for (const thinkingLevel of ["low", "medium"] as const) {
       expect(
         sanitizeConfigForRequest(
@@ -1121,28 +1175,6 @@ describe("sanitizeConfigForRequest — Gemini thinking", () => {
           { thinkingLevel },
         ).custom_parameters,
       ).toEqual({ thinking: { level: thinkingLevel } });
-    }
-  });
-
-  it("sends no thinking block for an explicit none", () => {
-    expect(
-      sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, {
-        thinkingLevel: "none",
-      }).custom_parameters,
-    ).toBeUndefined();
-  });
-
-  // A thinking-by-default model keeps its level: none is only for the models that ship without it.
-  it("does not offer none to models that think by default", () => {
-    for (const model of [
-      PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH,
-      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
-      PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
-    ]) {
-      expect(
-        getThinkingLevelOptions(model).map((o) => o.value),
-        `${model} should not offer none`,
-      ).not.toContain("none");
     }
   });
 
@@ -1509,19 +1541,43 @@ describe("resolveEffort", () => {
     ).toEqual({ reasoningEffort: "minimal" });
   });
 
-  it("falls back to high for a reasoningEffort the model does not offer", () => {
+  it("falls back to the model's default for a reasoningEffort the model does not offer", () => {
     expect(
       resolveEffort(PROVIDER_MODEL_TYPE.GPT_5_1, { reasoningEffort: "xhigh" }),
-    ).toEqual({ reasoningEffort: "high" });
+    ).toEqual({ reasoningEffort: "none" });
   });
 
-  it("falls back to high when a supporting model has nothing stored", () => {
-    // What the dropdown has always displayed. Leaving it unresolved is how the panel came to show
-    // "High" while the request carried no reasoning_effort at all.
-    expect(resolveEffort(PROVIDER_MODEL_TYPE.GPT_5_5, {})).toEqual({
-      reasoningEffort: "high",
-    });
-  });
+  // OpenAI's own defaults: each model page's "Reasoning.effort supports" line
+  // (developers.openai.com/api/docs/models/<id>) for gpt-5.1 and later; the SDK reference's "All
+  // models before gpt-5.1 default to medium" for the rest. gpt-6-astra's page names no default.
+  it.each([
+    [PROVIDER_MODEL_TYPE.GPT_O1, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_O3, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_O3_MINI, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_O4_MINI, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_5, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_5_MINI, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_5_NANO, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_5_1, "none"],
+    [PROVIDER_MODEL_TYPE.GPT_5_2, "none"],
+    [PROVIDER_MODEL_TYPE.GPT_5_4, "none"],
+    [PROVIDER_MODEL_TYPE.GPT_5_4_MINI, "none"],
+    [PROVIDER_MODEL_TYPE.GPT_5_4_NANO, "none"],
+    [PROVIDER_MODEL_TYPE.GPT_5_5, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_5_6_LUNA, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_5_6_SOL, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_5_6_TERRA, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_6_ASTRA, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_6_LUNA, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_6_SOL, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_6_1_SOL, "medium"],
+  ])(
+    "shows and sends %s at OpenAI's default %s when nothing is stored",
+    (model, effort) => {
+      expect(resolveEffort(model, {})).toEqual({ reasoningEffort: effort });
+      expect(getDefaultReasoningEffort(model)).toBe(effort);
+    },
+  );
 
   it("omits thinkingEffort for an Anthropic model with no effort options", () => {
     expect(
@@ -1719,7 +1775,7 @@ describe("a model switch carries the thinking level the panel showed", () => {
       PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
       "minimal",
       PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
-      "none",
+      "off",
     ],
     [
       PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
@@ -1729,9 +1785,9 @@ describe("a model switch carries the thinking level the panel showed", () => {
     ],
     [
       PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
-      "none",
+      "off",
       PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
-      "none",
+      "off",
     ],
     [
       PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
@@ -2235,11 +2291,12 @@ describe("max on the OpenAI Responses API only", () => {
       ).toEqual(responsesApi);
     });
 
-    it("sends a stored max as high unless the key is on the Responses API", () => {
-      expect(storedMax(model)).toBe("high");
-      expect(storedMax(model, "chat_completions_api")).toBe("high");
+    it("sends a stored max as the model's default unless the key is on the Responses API", () => {
+      const fallback = getDefaultReasoningEffort(model);
+      expect(storedMax(model)).toBe(fallback);
+      expect(storedMax(model, "chat_completions_api")).toBe(fallback);
       expect(storedMax(model, "responses_api")).toBe(
-        offersMax ? "max" : "high",
+        offersMax ? "max" : fallback,
       );
     });
 
@@ -2261,7 +2318,9 @@ describe("max on the OpenAI Responses API only", () => {
     );
 
     it("keeps a switched-in max while the mode is unknown, if a Responses API key could send it", () => {
-      expect(switchTo(model, undefined)).toBe(offersMax ? "max" : "high");
+      expect(switchTo(model, undefined)).toBe(
+        offersMax ? "max" : getDefaultReasoningEffort(model),
+      );
     });
   });
 
@@ -2279,7 +2338,7 @@ describe("max on the OpenAI Responses API only", () => {
         provider: OPEN_AI,
         openAiPipelineMode: "chat_completions_api",
       });
-      expect(onceKnown?.reasoningEffort).toBe("high");
+      expect(onceKnown?.reasoningEffort).toBe("medium");
     });
 
     it("still drops the effort for a model that takes none", () => {
@@ -2405,6 +2464,8 @@ describe("Anthropic request contract", () => {
 
   it.each<[PROVIDER_MODEL_TYPE, AnthropicThinkingEffort[]]>([
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, LOW_TO_MAX],
@@ -2456,7 +2517,9 @@ describe("Anthropic request contract", () => {
   it.each<[PROVIDER_MODEL_TYPE, AnthropicThinkingEffort]>([
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, "medium"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5, "medium"],
   ])("defaults %s to Anthropic's own default, %s", (model, effort) => {
     expect(getDefaultThinkingEffort(model)).toBe(effort);
     expect(resolveEffort(model, {})).toEqual({ thinkingEffort: effort });
