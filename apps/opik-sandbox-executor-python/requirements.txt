@@ -37,7 +37,7 @@ packaging==26.0
 pluggy==1.6.0
 propcache==0.4.1
 pydantic==2.12.5
-pydantic-settings==2.13.1
+pydantic-settings==2.14.2
 pydantic_core==2.41.5
 Pygments==2.20.0
 pytest==9.0.2
