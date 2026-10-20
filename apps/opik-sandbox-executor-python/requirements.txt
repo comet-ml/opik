@@ -59,7 +59,7 @@ types-awscrt==0.31.3
 types-s3transfer==0.16.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
-urllib3==2.7.0
+urllib3==2.8.0
 uuid6==2025.0.1
 yarl==1.23.0
 zipp==3.23.0
