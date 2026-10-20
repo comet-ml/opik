@@ -82,6 +82,7 @@ class AiLabelSweepDAO {
                     updated_at
                 FROM ai_label_status
                 WHERE workspace_id IN :workspace_ids
+                AND task IN :task_names
                 AND trace_created_at >= now64(6) - toIntervalSecond(:horizon_seconds)
                 ORDER BY workspace_id, project_id, task, trace_id, updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, task, trace_id
@@ -110,7 +111,7 @@ class AiLabelSweepDAO {
                     arrayMap(t -> if(has(s.retry_tasks, t), toUInt32(s.retry_attempts[indexOf(s.retry_tasks, t)]), 0), missing) AS attempts
                 FROM eligible AS e
                 -- By project too: a trace id reused in another project is another trace, with its own statuses.
-                LEFT JOIN by_trace AS s ON s.workspace_id = e.workspace_id AND s.project_id = e.project_id
+                LEFT ANY JOIN by_trace AS s ON s.workspace_id = e.workspace_id AND s.project_id = e.project_id
                     AND s.trace_id = e.id
             )
             """;
