@@ -257,7 +257,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
 
   // Internal traces (e.g. an integration's title-generation call) are not conversation
   // turns, so Messages hides them by default, the same way the trace tree hides spans.
-  const visibleTraces = useVisibleTraces(traces);
+  // The selected trace stays visible even when internal, so the panel can scroll to it.
+  const visibleTraces = useVisibleTraces(traces, traceId);
   const hiddenTracesCount = traces.length - visibleTraces.length;
 
   const { media } = useThreadMedia(visibleTraces);

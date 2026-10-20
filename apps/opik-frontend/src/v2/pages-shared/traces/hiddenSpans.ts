@@ -62,16 +62,27 @@ export const useHideSpansPreference = (): [
 };
 
 // Threads render one message per trace, so a trace the SDK marked internal (same flag as
-// spans) is dropped outright: there is no tree to re-parent.
-export const excludeHiddenTraces = (traces: Trace[]): Trace[] =>
-  traces.filter((trace) => !isSpanHiddenByDefault(trace));
+// spans) is dropped outright: there is no tree to re-parent. `keepTraceId` keeps one trace
+// regardless, so a view opened on a specific (selected) trace can still show it.
+export const excludeHiddenTraces = (
+  traces: Trace[],
+  keepTraceId?: string,
+): Trace[] =>
+  traces.filter(
+    (trace) =>
+      (Boolean(keepTraceId) && trace.id === keepTraceId) ||
+      !isSpanHiddenByDefault(trace),
+  );
 
 // The traces a thread view should actually render, given the shared collapse preference.
-export const useVisibleTraces = (traces: Trace[]): Trace[] => {
+export const useVisibleTraces = (
+  traces: Trace[],
+  keepTraceId?: string,
+): Trace[] => {
   const [hidden] = useHideSpansPreference();
   return useMemo(
-    () => (hidden ? excludeHiddenTraces(traces) : traces),
-    [hidden, traces],
+    () => (hidden ? excludeHiddenTraces(traces, keepTraceId) : traces),
+    [hidden, traces, keepTraceId],
   );
 };
 
