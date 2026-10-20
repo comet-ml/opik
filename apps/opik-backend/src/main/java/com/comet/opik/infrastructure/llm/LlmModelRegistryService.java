@@ -341,9 +341,9 @@ public class LlmModelRegistryService {
 
     /**
      * The params the release's own rules give a model: the curated row and profiles (the shipped ones when the
-     * curated layer is off), without the generated, CDN or local-override layers. A rule that rejects a request
-     * reads these instead of {@link #paramsOf}, so a bad row in remote data can cost a param but never fail every
-     * request for a model.
+     * curated layer is off), without the generated, CDN or local-override layers. The effort check, which rejects
+     * a request, reads these instead of {@link #paramsOf}, and the Claude sampling rules read them next to it as a
+     * veto, so a bad row in remote data can cost a param but never fail every request for a model.
      */
     public @Nullable ModelParams curatedParamsOf(@NonNull String provider, @Nullable String modelId) {
         var rules = curatedLayerOff() ? shippedCatalog.get() : catalog;

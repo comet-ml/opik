@@ -6,6 +6,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.ParamResolver.ParamChange;
 import com.comet.opik.domain.llm.ParamResolver.ParamChange.Reason;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -275,16 +276,21 @@ class ParamResolverTest {
         assertThat(resolve(original)).isSameAs(original);
     }
 
-    private ParamResolver resolverWithOverride(Path tempDir, String curatedResource) throws IOException {
+    private LlmModelRegistryService registryWithOverride(Path tempDir, String overrideResource,
+            String curatedResource) throws IOException {
         var overridePath = tempDir.resolve("override.yaml");
-        try (var override = getClass().getClassLoader()
-                .getResourceAsStream("llm-models-override-claude-no-sampling.yaml")) {
+        try (var override = getClass().getClassLoader().getResourceAsStream(overrideResource)) {
             Files.copy(override, overridePath);
         }
         var registryConfig = new LlmModelRegistryConfig();
         registryConfig.setLocalOverridePath(overridePath.toString());
         registryConfig.setCuratedResource(curatedResource);
-        return new ParamResolver(mock(LlmProviderFactory.class), LlmModelRegistryTestUtils.registry(registryConfig));
+        return LlmModelRegistryTestUtils.registry(registryConfig);
+    }
+
+    private ParamResolver resolverWithOverride(Path tempDir, String curatedResource) throws IOException {
+        return new ParamResolver(mock(LlmProviderFactory.class),
+                registryWithOverride(tempDir, "llm-models-override-claude-no-sampling.yaml", curatedResource));
     }
 
     @Test
@@ -312,6 +318,22 @@ class ParamResolverTest {
         assertThat(resolver.resolve(request("claude-sonnet-4-6", 0.7, null)).request().temperature()).isEqualTo(0.7);
         assertThat(resolver.resolve(request("claude-sonnet-4-6", null, 0.9)).changes())
                 .containsExactly(new ParamChange("top_p", Reason.REFUSED_BY_MODEL));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void keepsDroppingWhatTheShippedCatalogRefusesWhenAnOverrideAcceptsIt(boolean curatedLayerOn,
+            @TempDir Path tempDir) throws IOException {
+        var registry = registryWithOverride(tempDir, "llm-models-override-claude-accepts-sampling.yaml",
+                curatedLayerOn ? new LlmModelRegistryConfig().getCuratedResource() : "");
+        assertThat(registry.paramsOf("anthropic", "claude-sonnet-5").temperature().accepted()).isTrue();
+
+        var resolver = new ParamResolver(mock(LlmProviderFactory.class), registry);
+
+        assertThat(resolver.resolve(request("claude-sonnet-5", 0.7, 0.9)).changes()).containsExactly(
+                new ParamChange("temperature", Reason.REFUSED_BY_MODEL),
+                new ParamChange("top_p", Reason.REFUSED_BY_MODEL));
+        assertThat(resolver.resolve(judge("claude-sonnet-5", null)).request().temperature()).isNull();
     }
 
     @Test

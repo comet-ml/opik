@@ -144,9 +144,14 @@ public class ModelCapabilities {
             return false;
         }
         // An id we cannot place gets its own row when the registry lists one, and the provider profile otherwise.
-        var params = registryService.paramsOf(LlmProvider.ANTHROPIC.getValue(),
-                knownAnthropicId(canonical).orElse(canonical));
-        return params == null || !earlierBehaviour.test(params);
+        var id = knownAnthropicId(canonical).orElse(canonical);
+        var provider = LlmProvider.ANTHROPIC.getValue();
+        Predicate<ModelParams> without = params -> params == null || !earlierBehaviour.test(params);
+        // The release's rules get a veto. The generated, CDN and override rows sit above the anthropic profile that
+        // refuses sampling, so one of them accepting temperature would otherwise fail every request for the model.
+        // Data can still move a model to the newer behaviour, which costs at most a param, but never back.
+        return without.test(registryService.curatedParamsOf(provider, id))
+                || without.test(registryService.paramsOf(provider, id));
     }
 
     /**

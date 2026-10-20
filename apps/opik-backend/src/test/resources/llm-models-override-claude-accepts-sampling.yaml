@@ -1,0 +1,7 @@
+# A local override that accepts temperature and top_p on claude-sonnet-5, which the shipped catalog says takes
+# neither.
+anthropic:
+  - id: "claude-sonnet-5"
+    params:
+      temperature: {accepted: true}
+      topP: {accepted: true}

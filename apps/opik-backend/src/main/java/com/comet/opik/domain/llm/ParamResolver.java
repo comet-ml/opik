@@ -77,6 +77,8 @@ public class ParamResolver {
                 changes.add(new ParamChange(TOP_P, reason));
             }
         }
+        // The name match rather than the catalog's samplingExclusive: it also catches gateway names the catalog can't
+        // place, like custom-llm/gw/claude-prod in front of Bedrock, and every name the catalog places matches it.
         if (temperature != null && topP != null && ModelCapabilities.requiresExclusiveSamplingParams(model)) {
             // Temperature wins, matching Anthropic's own guidance.
             builder.topP(null);
