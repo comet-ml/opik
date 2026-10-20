@@ -1,4 +1,4 @@
-export { test, expect } from './version-history-seed.fixture';
+export { test, expect } from './native-usage-shape-spans.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -428,6 +428,16 @@ export type {
   OrphanSpanTreeRef,
   OrphanSpanTreeFixtures,
 } from './orphan-span-tree.fixture';
+export type {
+  NativeUsageShapeSeed,
+  NativeUsageShapeSpansRef,
+  NativeUsageShapeSpansFixtures,
+} from './native-usage-shape-spans.fixture';
+export {
+  BEDROCK_CACHE_SURCHARGE,
+  GEMINI_THOUGHTS_COST,
+  GEMINI_CACHE_DISCOUNT,
+} from './native-usage-shape-spans.fixture';
 export type { ProjectRef } from '../core/backend';
 export type {
   ThreadSearchRowRef,
