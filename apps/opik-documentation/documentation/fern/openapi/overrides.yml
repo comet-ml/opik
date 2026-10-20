@@ -7,11 +7,11 @@ paths:
       x-fern-ignore: true
   /v1/private/retention/rules:
     get:
-      x-fern-availability: in-development
+      x-fern-ignore: true
     post:
-      x-fern-availability: in-development
+      x-fern-ignore: true
   /v1/private/retention/rules/{ruleId}:
     get:
-      x-fern-availability: in-development
+      x-fern-ignore: true
     delete:
-      x-fern-availability: in-development
+      x-fern-ignore: true

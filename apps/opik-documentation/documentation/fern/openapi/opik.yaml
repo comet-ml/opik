@@ -106,8 +106,7 @@ tags:
 - name: Reports
   description: Ollie daily report management
 - name: Retention Rules
-  description: "Data retention rule management. In development: rules are saved\
-    \ but not applied, so no data is deleted."
+  description: Data retention rule management
 - name: Service Toggles
   description: Service Toggles resources
 - name: Spans
@@ -7901,9 +7900,8 @@ paths:
       tags:
       - Retention Rules
       summary: Create retention rule
-      description: "In development: the rule is saved but not applied, so no traces\
-        \ or spans are deleted. Create a new retention rule. Auto-deactivates any\
-        \ existing active rule for the same scope."
+      description: Create a new retention rule. Auto-deactivates any existing active
+        rule for the same scope.
       operationId: createRetentionRule
       requestBody:
         content:
