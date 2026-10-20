@@ -141,8 +141,6 @@ class SpanWeeksReadBoundTest {
                                 new CustomConfig("uuidValidation.enabled", "false"),
                                 // The successor's columns are non-nullable, as the cutover flips this with it.
                                 new CustomConfig("databaseAnalyticsDataModel.spanColumnsNonNullable", "true"),
-                                // Required for the bound to apply; the disabled listener keeps it from registering.
-                                new CustomConfig("databaseAnalyticsDataModel.spanWeeksWriteEnabled", "true"),
                                 new CustomConfig("databaseAnalyticsDataModel.spanWeeksReadEnabled", "true"),
                                 // Finished experiments aggregate after this delay; its bucket lives twice as long, so
                                 // the job's 5s tick always finds it.

@@ -3,6 +3,7 @@ import {
   AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
+  LLMPromptConfigsType,
   OpenAiPipelineMode,
   OpenAIReasoningEffort,
   PROVIDER_MODEL_TYPE,
@@ -32,6 +33,7 @@ import {
   getLatestProviderModelsSnapshot,
 } from "@/lib/modelRegistryStore";
 import { PROVIDER_MODELS } from "@/constants/providerModels";
+import { snakeCaseObj } from "@/lib/utils";
 
 export const getRoutableProviderModelValue = (
   composedProviderType: COMPOSED_PROVIDER_TYPE,
@@ -63,10 +65,12 @@ export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
   return getLatestModelFlags(model)?.reasoning ?? false;
 };
 
-// Which thinking levels each Gemini model accepts, per Google's own support table
-// (https://ai.google.dev/gemini-api/docs/thinking). The sets genuinely differ per model — 3.7 Flash
-// has no "minimal", 3 Pro has only "low" and "high" — and sending a level a model does not accept
-// is rejected upstream, so this cannot be collapsed into one list per family.
+// Which thinking levels each Gemini model accepts, per Google's own support tables
+// (https://ai.google.dev/gemini-api/docs/thinking and
+// https://cloud.google.com/vertex-ai/generative-ai/docs/thinking — 3.7 Flash, 3.5 Flash and 3.1 Flash
+// Lite are only in the Vertex one). The sets genuinely differ per model — 3.7 Flash has no "minimal",
+// 3 Pro has only "low" and "high" — and sending a level a model does not accept is rejected
+// upstream, so this cannot be collapsed into one list per family.
 //
 // Keep both provider spellings of a model on the same row: the level support is a property of the
 // underlying model, not of whether it is reached through AI Studio or Vertex. New models arrive via
@@ -93,33 +97,26 @@ const THINKING_LEVELS_BY_MODEL: ReadonlyMap<
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH, MINIMAL_TO_HIGH],
   [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH, MINIMAL_TO_HIGH],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH, MINIMAL_TO_HIGH],
-  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, ["none", ...MINIMAL_TO_HIGH]],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, ["off", ...MINIMAL_TO_HIGH]],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
-    ["none", ...MINIMAL_TO_HIGH],
+    ["off", ...MINIMAL_TO_HIGH],
   ],
   [PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO, LOW_TO_HIGH],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO, LOW_TO_HIGH],
-  // The Flash Lite models do not think by default — verified live: zero thinking tokens on both a
-  // trivial and a deliberately hard prompt, on both providers. So they lead with "none", which sends
-  // no thinkingConfig and keeps their latency where it was. Asking for a level here switches thinking
-  // ON, which measurably slows them (~2.5s -> ~5s at budget 2048 on 3.1 Flash Lite).
-  //
-  // 3.1 Flash Lite takes all four levels: the AI Studio table omits it, Vertex's table lists
-  // minimal/low/medium/high, and Vertex accepted each one live with rising thinking counts. The
-  // "minimal, high" row in Google's tables is the separate gemini-3.1-flash-lite-image model.
-  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, ["none", ...MINIMAL_TO_HIGH]],
+  // The "minimal, high" row in Google's tables is the separate gemini-3.1-flash-lite-image model.
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, ["off", ...MINIMAL_TO_HIGH]],
   [
     PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
-    ["none", ...MINIMAL_TO_HIGH],
+    ["off", ...MINIMAL_TO_HIGH],
   ],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
-    ["none", ...MINIMAL_TO_HIGH],
+    ["off", ...MINIMAL_TO_HIGH],
   ],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
-    ["none", ...MINIMAL_TO_HIGH],
+    ["off", ...MINIMAL_TO_HIGH],
   ],
   [PROVIDER_MODEL_TYPE.GEMINI_3_FLASH, MINIMAL_TO_HIGH],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_FLASH_PREVIEW, MINIMAL_TO_HIGH],
@@ -145,7 +142,6 @@ const THINKING_LEVELS_BY_MODEL: ReadonlyMap<
 
 const THINKING_LEVEL_LABELS: Record<GeminiThinkingLevel, string> = {
   auto: "Auto",
-  none: "None",
   off: "Off",
   minimal: "Minimal",
   low: "Low",
@@ -217,14 +213,13 @@ export const getThinkingLevelOptions = (
     (value) => ({ label: THINKING_LEVEL_LABELS[value], value }),
   );
 
-// Each model's own default thinking level. Measured against the live API rather than taken from
-// Google's docs table, which disagrees with it: the docs list 3.5 Flash Lite as defaulting to
-// "minimal", but every Flash Lite model returns zero thinking tokens by default on both providers.
-// Preselecting the real default keeps the control from silently changing a model's behaviour just
-// by being shown: 2.5 Flash Lite ships with thinking off, 2.5 Pro/Flash default to a dynamic budget
-// ("auto"), 3.8/3.7/3.6/3.5 Flash default to medium, and the 3.x Flash Lite models to none — none
-// of which is "high". Models absent here default to "high", which is what the Gemini 3 Pro rows
-// document.
+// Each model's own default thinking level, as Google's two tables state it. Preselecting it keeps
+// the control from silently changing a model's behaviour just by being shown: 2.5 Flash Lite ships
+// with thinking off (AI Studio's table; Vertex's says Auto), 2.5 Pro/Flash default to a dynamic
+// budget ("auto"), 3.8/3.7/3.6/3.5 Flash to medium — none of which is "high". The 3.x Flash Lite
+// models show Off: Google lists their default as minimal, but they spend no thinking tokens on it, so
+// Off is what a user sees them do. Models absent here default to "high", which is what the Gemini 3
+// Pro and 3 Flash rows document.
 const DEFAULT_THINKING_LEVEL_BY_MODEL: ReadonlyMap<
   PROVIDER_MODEL_TYPE,
   GeminiThinkingLevel
@@ -262,23 +257,23 @@ const DEFAULT_THINKING_LEVEL_BY_MODEL: ReadonlyMap<
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
     "medium" as GeminiThinkingLevel,
   ],
-  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, "none" as GeminiThinkingLevel],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE, "off" as GeminiThinkingLevel],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
-    "none" as GeminiThinkingLevel,
+    "off" as GeminiThinkingLevel,
   ],
-  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, "none" as GeminiThinkingLevel],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE, "off" as GeminiThinkingLevel],
   [
     PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
-    "none" as GeminiThinkingLevel,
+    "off" as GeminiThinkingLevel,
   ],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
-    "none" as GeminiThinkingLevel,
+    "off" as GeminiThinkingLevel,
   ],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
-    "none" as GeminiThinkingLevel,
+    "off" as GeminiThinkingLevel,
   ],
 ]);
 
@@ -348,6 +343,34 @@ export const withoutThinkingAmount = (
     : { ...params, thinking: restThinking };
   return isEmpty(rest) ? undefined : rest;
 };
+
+// Gemini 3 and later cannot turn thinking off (the backend drops an "off" for them too), so their Off
+// can only mean the model's own default, and it is left off the request like "auto". Sending the
+// documented MINIMAL instead is not harmless: Vertex answers it in a multi-turn prompt without
+// thought signatures with a 400, and a hand-written assistant message has none.
+const GEMINI_MAJOR_VERSION_PATTERN = /gemini-(\d{1,3})(?=[.-])/;
+
+const cannotTurnThinkingOff = (model: PROVIDER_MODEL_TYPE | ""): boolean => {
+  const match = GEMINI_MAJOR_VERSION_PATTERN.exec(model);
+  return !!match && Number(match[1]) >= 3;
+};
+
+export const leavesThinkingToModel = (
+  model: PROVIDER_MODEL_TYPE | "",
+  level: unknown,
+): boolean =>
+  level === "auto" || (level === "off" && cannotTurnThinkingOff(model));
+
+const THINKING_LEVEL_DESCRIPTION =
+  "Controls the depth of reasoning the model performs before responding. Higher thinking level may result in more thorough but slower responses.";
+
+export const getThinkingLevelDescription = (
+  model: PROVIDER_MODEL_TYPE | "",
+): string =>
+  leavesThinkingToModel(model, "off") &&
+  getThinkingLevelOptions(model).some((o) => o.value === "off")
+    ? `${THINKING_LEVEL_DESCRIPTION} Off sends no thinking setting: Google lists this model's default as minimal, and it spends almost no thinking tokens on it.`
+    : THINKING_LEVEL_DESCRIPTION;
 
 const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
   low: "Low",
@@ -615,6 +638,12 @@ export const supportsOpenAIReasoningEffort = (
   !!OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
     ?.reasoningEffortOptions;
 
+export const getDefaultReasoningEffort = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): OpenAIReasoningEffort =>
+  OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+    ?.defaultReasoningEffort ?? "medium";
+
 // An unknown pipeline mode (keys still loading, a surface that never reaches
 // Opik's OpenAI pipeline) is treated as Chat Completions, the backend's own
 // default: offering a Responses-only value there would 400.
@@ -664,7 +693,7 @@ export const updateProviderConfig = <
     let changed = false;
 
     // reasoningEffort: drop it for models without an effort option list,
-    // coerce stale values to "high" otherwise. Mirrors the Anthropic
+    // coerce stale values to the model's default otherwise. Mirrors the Anthropic
     // thinkingEffort handling below. Unlike resolveEffort, which only masks a
     // max the key cannot take, this writes the coerced value back on purpose:
     // a model change settles on a level the new model and mode offer, so a key
@@ -672,7 +701,8 @@ export const updateProviderConfig = <
     // model never changed.
     // An unknown mode (keys still loading) is checked against the Responses
     // API list, a superset of the Chat Completions one, so a stored max is
-    // kept: assuming Chat Completions here would rewrite it to high for good.
+    // kept: assuming Chat Completions here would rewrite it to the model's
+    // default for good.
     const effortOptions = getOpenAIReasoningEffortOptions(
       params.model,
       params.openAiPipelineMode ?? "responses_api",
@@ -686,7 +716,7 @@ export const updateProviderConfig = <
       next.reasoningEffort !== undefined &&
       !effortOptions.some((o) => o.value === next.reasoningEffort)
     ) {
-      next.reasoningEffort = "high";
+      next.reasoningEffort = getDefaultReasoningEffort(params.model);
       changed = true;
     }
 
@@ -904,10 +934,10 @@ export type EffortParams = {
  * never carries — a model change into a reasoning model leaves the config's effort unset, and the
  * provider would then apply its own default rather than the one the panel showed.
  *
- * The OpenAI default is "high", which every reasoning row offers. The Anthropic one is the model's
- * own (medium on Opus 5.5). An Anthropic effort under custom_parameters counts as stored too: the
- * flat one wins when the model offers it, else the nested one does, so a reloaded request shape
- * shows the level it will send and a stale flat value cannot override a valid nested one.
+ * Both defaults are the model's own (none on gpt-5.1 to gpt-5.4, medium on Opus 5.5). An Anthropic
+ * effort under custom_parameters counts as stored too: the flat one wins when the model offers it,
+ * else the nested one does, so a reloaded request shape shows the level it will send and a stale
+ * flat value cannot override a valid nested one.
  */
 export const resolveEffort = (
   model: PROVIDER_MODEL_TYPE | "",
@@ -928,7 +958,7 @@ export const resolveEffort = (
     return {
       reasoningEffort: options.some((o) => o.value === configs.reasoningEffort)
         ? configs.reasoningEffort
-        : "high",
+        : getDefaultReasoningEffort(model),
     };
   }
 
@@ -1179,39 +1209,24 @@ export const sanitizeConfigForRequest = (
     // Both stale cases resolve the same way, to the model's default: a config with no level (persisted
     // before the control existed) and a config holding a level this model does not offer (carried over
     // from another model outside the reconciler). Either way the dropdown displays the default, so the
-    // request has to send it rather than nothing.
+    // request has to send it rather than nothing, unless that default is a level left to the model.
     // A level already nested under custom_parameters counts as stored. Callers that persist the
     // sanitized output and feed it back — the optimizer form reloads a saved run's `parameters`
     // blob wholesale — have no flat thinkingLevel to offer, and substituting the model default
     // there would silently reset the user's saved choice on every re-run.
-    // A nested level the model still offers is a real past choice and is honoured — including on the
-    // Flash Lite models, where an explicitly saved "minimal" keeps thinking on. Only the *default*
-    // changed to "none"; a level someone chose is not overridden.
+    // A nested level the model still offers is a real past choice and is honoured, except one left to
+    // the model: a saved Minimal on Flash Lite is sent as nothing, the same request by Google's tables.
     const level = resolveThinkingLevel(model, sanitized as ThinkingLevelParams);
 
     // Dropped unconditionally: the field is Opik's own, and no provider accepts it at the top
     // level, so leaving it on the payload can only be dead weight.
     delete sanitized.thinkingLevel;
 
-    // "none" is an explicit "do not think": it has to remove any persisted thinking block, not merely
-    // decline to add one, or a level saved earlier keeps being sent and the model keeps thinking.
-    if (level === "none") {
-      const rest = omit(
-        (sanitized.custom_parameters ?? {}) as Record<string, unknown>,
-        "thinking",
-      );
-
-      if (Object.keys(rest).length > 0) {
-        sanitized.custom_parameters = rest;
-      } else {
-        delete sanitized.custom_parameters;
-      }
-    }
-
-    // "auto" also sends no thinkingConfig: it drops a persisted level and budget, since either would
-    // pin how much the model thinks. Unlike "none" it keeps the rest of the block, which the form
+    // A level left to the model sends no thinkingConfig: it drops a persisted level and budget, since
+    // either would pin how much the model thinks, and keeps the rest of the block, which the form
     // cannot represent.
-    if (level === "auto" && thinkingLevelOptions.length > 0) {
+    const leftToModel = leavesThinkingToModel(model, level);
+    if (leftToModel && thinkingLevelOptions.length > 0) {
       const customParameters = withoutThinkingAmount(
         sanitized.custom_parameters,
       );
@@ -1223,11 +1238,7 @@ export const sanitizeConfigForRequest = (
     }
 
     // `level` is already known to be one this model offers.
-    if (
-      level !== "auto" &&
-      level !== "none" &&
-      thinkingLevelOptions.length > 0
-    ) {
+    if (!leftToModel && thinkingLevelOptions.length > 0) {
       const customParameters =
         (sanitized.custom_parameters as Record<string, unknown>) ?? {};
       const thinking =
@@ -1245,3 +1256,21 @@ export const sanitizeConfigForRequest = (
 
   return sanitized;
 };
+
+const RUNNER_SETTINGS = ["throttling", "maxConcurrentRequests"];
+
+export const getRequestParameters = (
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: LLMPromptConfigsType,
+  openAiPipelineMode?: OpenAiPipelineMode,
+): Record<string, unknown> =>
+  snakeCaseObj(
+    omit(
+      sanitizeConfigForRequest(
+        model,
+        configs as unknown as Record<string, unknown>,
+        openAiPipelineMode,
+      ),
+      RUNNER_SETTINGS,
+    ),
+  );
