@@ -14,6 +14,7 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.ProcessCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.WebIdentityTokenFileCredentialsProvider;
 import software.amazon.awssdk.awscore.retry.AwsRetryStrategy;
 import software.amazon.awssdk.regions.Region;
@@ -24,6 +25,7 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
 public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
@@ -90,7 +92,7 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
 
         // Retries are bounded by the publisher, which also retries throttled entries of partial failures
         var builder = EventBridgeClient.builder()
-                .credentialsProvider(eventBridgeCredentialsProvider())
+                .credentialsProvider(eventBridgeCredentialsProvider(config))
                 .overrideConfiguration(override -> override.retryStrategy(AwsRetryStrategy.doNotRetry())
                         .apiCallAttemptTimeout(EVENT_BRIDGE_CALL_ATTEMPT_TIMEOUT)
                         // Backstop: bounds the whole call, including signing and credential resolution that happen
@@ -103,11 +105,24 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
     }
 
     /**
-     * IRSA and EKS Pod Identity first, then the default chain. Not the shared S3 provider: the default chain reads
-     * AWS_ACCESS_KEY_ID before web identity, so a deployment with static S3 keys there (e.g. MinIO) would sign
-     * PutEvents with them and never assume the role it was given for EventBridge.
+     * On a SageMaker Partner AI App, only the customer-credentials endpoint, with no fallback: every other source
+     * there resolves to the partner account, which the customer's bus denies. The endpoint returns the
+     * process-credentials format, so ProcessCredentialsProvider caches the credentials and fetches new ones before
+     * they expire.
+     *
+     * <p>Otherwise IRSA and EKS Pod Identity first, then the default chain. Not the shared S3 provider: the default
+     * chain reads AWS_ACCESS_KEY_ID before web identity, so a deployment with static S3 keys there (e.g. MinIO) would
+     * sign PutEvents with them and never assume the role it was given for EventBridge.
      */
-    static AwsCredentialsProvider eventBridgeCredentialsProvider() {
+    static AwsCredentialsProvider eventBridgeCredentialsProvider(@NonNull AlertsEventBridgeConfig config) {
+        if (StringUtils.isNotBlank(config.getCustomerCredentialsEndpoint())) {
+            // Argument list rather than a command string, so the endpoint never goes through a shell
+            return ProcessCredentialsProvider.builder()
+                    .command(List.of("curl", "--silent", "--show-error", "--fail", "--max-time", "2",
+                            config.getCustomerCredentialsEndpoint()))
+                    .build();
+        }
+
         return AwsCredentialsProviderChain.builder()
                 .credentialsProviders(
                         WebIdentityTokenFileCredentialsProvider.create(),

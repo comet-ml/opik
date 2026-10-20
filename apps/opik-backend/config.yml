@@ -1703,6 +1703,10 @@ alertsEventBridge:
   # Description: AWS region of the bus. When empty, the region in an ARN bus is used, then the default
   #   AWS region provider chain
   region: ${ALERTS_EVENTBRIDGE_REGION:-}
+  # Default: empty
+  # Description: SageMaker Partner AI App endpoint that vends the customer role's credentials. When set, PutEvents
+  #   is signed only with those credentials, never IRSA, EKS Pod Identity or the default AWS chain
+  customerCredentialsEndpoint: ${SAGEMAKER_PARTNER_CUSTOMER_CREDENTIALS_ENDPOINT:-}
 
 # Configuration AWS S3
 s3Config:
