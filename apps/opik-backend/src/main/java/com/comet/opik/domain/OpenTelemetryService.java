@@ -33,10 +33,10 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -105,13 +105,9 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
         return projectService.retrieveByNamesOrCreate(spansByProjectName.keySet())
                 .map(ProjectService::groupByName)
-                .flatMapMany(projectsByName -> Flux.fromIterable(spansByProjectName.entrySet().stream()
-                        .collect(Collectors.groupingBy(
-                                entry -> projectsByName.get(entry.getKey()),
-                                LinkedHashMap::new,
-                                Collectors.flatMapping(entry -> entry.getValue().stream(), Collectors.toList())))
-                        .entrySet()))
-                .flatMap(entry -> storeProjectSpans(entry.getValue(), entry.getKey(), integrationName))
+                .flatMapMany(projectsByName -> Flux.fromIterable(spansByProjectName.entrySet())
+                        .flatMap(entry -> storeProjectSpans(entry.getValue(), projectsByName.get(entry.getKey()),
+                                integrationName)))
                 .reduce(0L, Long::sum)
                 .subscribeOn(Schedulers.boundedElastic());
     }
@@ -131,7 +127,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 })
                 .collect(Collectors.groupingBy(
                         Map.Entry::getKey,
-                        LinkedHashMap::new,
+                        () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER),
                         Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
     }
 
