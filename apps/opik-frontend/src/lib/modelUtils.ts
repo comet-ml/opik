@@ -457,8 +457,8 @@ const versionKey = (id: string): string =>
 
 /**
  * The newest known member of a family, which is what `claude-opus-latest` names. A floating alias has
- * to be read as the model it currently resolves to: `claude-haiku-latest` is Haiku 4.5, which does
- * take sampling params, and the same model under its own id already says so.
+ * to be read as the model it currently resolves to: while Haiku 4.5 was the newest Haiku,
+ * `claude-haiku-latest` took sampling params, and the same model under its own id already said so.
  */
 const newestInFamily = (familyPrefix: string): string | undefined =>
   KNOWN_ANTHROPIC_MODELS.filter((id) => id.startsWith(`${familyPrefix}-`)).sort(

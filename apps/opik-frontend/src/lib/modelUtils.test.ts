@@ -122,6 +122,18 @@ describe("supportsSamplingParams", () => {
     );
   });
 
+  it("returns false for Claude Sonnet 5.5", () => {
+    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5)).toBe(
+      false,
+    );
+  });
+
+  it("returns false for Claude Haiku 5.5", () => {
+    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5)).toBe(
+      false,
+    );
+  });
+
   // OpenRouter dots the version, sometimes drops the release date and sometimes appends a variant;
   // Bedrock adds a region and an inference profile. The same model must answer the same either way.
   it.each([
@@ -132,6 +144,7 @@ describe("supportsSamplingParams", () => {
     [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6_FAST, true],
     [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_5, true],
     [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5, true],
+    ["anthropic/claude-haiku-5.5", false],
     ["us.anthropic.claude-sonnet-4-5-20250929-v1:0", true],
     ["us.anthropic.claude-sonnet-5-20250101-v1:0", false],
   ])("reads %s the same as the id it decorates", (model, expected) => {
@@ -154,9 +167,9 @@ describe("supportsSamplingParams", () => {
   });
 
   // A floating alias has to read as the model it resolves to, so the families cannot share one
-  // answer — and claude-haiku-latest must agree with claude-haiku-4-5 under its own id.
+  // answer — and claude-haiku-latest must agree with claude-haiku-5-5 under its own id.
   it.each([
-    ["~anthropic/claude-haiku-latest", true],
+    ["~anthropic/claude-haiku-latest", false],
     ["~anthropic/claude-opus-latest", false],
     ["~anthropic/claude-sonnet-latest", false],
     ["~anthropic/claude-fable-latest", false],
@@ -2716,6 +2729,8 @@ describe("Anthropic request contract", () => {
 
   it.each<[PROVIDER_MODEL_TYPE, AnthropicThinkingEffort[]]>([
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5, LOW_TO_MAX],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5, LOW_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8, OFF_TO_MAX],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7, OFF_TO_MAX],
@@ -2767,7 +2782,9 @@ describe("Anthropic request contract", () => {
   it.each<[PROVIDER_MODEL_TYPE, AnthropicThinkingEffort]>([
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5, "high"],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, "medium"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5, "medium"],
   ])("defaults %s to Anthropic's own default, %s", (model, effort) => {
     expect(getDefaultThinkingEffort(model)).toBe(effort);
     expect(resolveEffort(model, {})).toEqual({ thinkingEffort: effort });

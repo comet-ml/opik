@@ -1,5 +1,5 @@
 aiohappyeyeballs==2.6.1
-aiohttp==3.14.3
+aiohttp==3.14.4
 aiosignal==1.4.0
 annotated-types==0.7.0
 anyio==4.14.2
@@ -12,13 +12,13 @@ click==8.1.8
 distro==1.9.0
 filelock==3.25.2
 frozenlist==1.8.0
-fsspec==2026.3.0
+fsspec==2026.6.0
 h11==0.16.0
 hf-xet==1.4.2
 httpcore==1.0.9
 httpx==0.28.1
 huggingface-hub==1.8.0
-idna==3.11
+idna==3.15
 importlib_metadata==8.5.0
 iniconfig==2.3.0
 Jinja2==3.1.6
@@ -29,7 +29,7 @@ litellm==1.84.0
 markdown-it-py==4.0.0
 MarkupSafe==3.0.3
 mdurl==0.1.2
-multidict==6.7.1
+multidict==6.9.1
 mypy-boto3-bedrock-runtime==1.42.42
 openai==2.24.0
 opik==1.11.10
@@ -37,10 +37,10 @@ packaging==26.0
 pluggy==1.6.0
 propcache==0.4.1
 pydantic==2.12.5
-pydantic-settings==2.13.1
+pydantic-settings==2.14.2
 pydantic_core==2.41.5
 Pygments==2.20.0
-pytest==9.0.2
+pytest==9.0.3
 python-dotenv==1.2.2
 PyYAML==6.0.3
 RapidFuzz==3.14.3
@@ -59,7 +59,7 @@ types-awscrt==0.31.3
 types-s3transfer==0.16.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
-urllib3==2.7.0
+urllib3==2.8.0
 uuid6==2025.0.1
 yarl==1.23.0
 zipp==3.23.0

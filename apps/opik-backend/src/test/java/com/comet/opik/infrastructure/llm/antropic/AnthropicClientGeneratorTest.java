@@ -150,7 +150,8 @@ class AnthropicClientGeneratorTest {
 
         @ParameterizedTest
         @EnumSource(value = AnthropicModelName.class, names = {"CLAUDE_SONNET_5", "CLAUDE_OPUS_5", "CLAUDE_OPUS_5_5",
-                "CLAUDE_FABLE_5", "CLAUDE_FABLE_5_1", "CLAUDE_MYTHOS_5", "CLAUDE_MYTHOS_5_1"})
+                "CLAUDE_SONNET_5_5", "CLAUDE_HAIKU_5_5", "CLAUDE_FABLE_5", "CLAUDE_FABLE_5_1", "CLAUDE_MYTHOS_5",
+                "CLAUDE_MYTHOS_5_1"})
         void modelsThatThinkWhenTheRequestOmitsThinking(AnthropicModelName model) {
             assertThat(ModelCapabilities.thinksByDefault(model.getValue())).isTrue();
         }
@@ -166,7 +167,7 @@ class AnthropicClientGeneratorTest {
 
         @ParameterizedTest
         @CsvSource({
-                "claude-sonnet-5-5, true",
+                "claude-sonnet-6, true",
                 "claude-sonnet-5-20261001, true",
                 "us.anthropic.claude-opus-5-v1:0, true",
                 "claude-3-5-sonnet-20240620, false",
