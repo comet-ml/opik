@@ -72,7 +72,7 @@ public class AlertEventBridgePublisher {
     private static final int TIME_BYTES = 14;
     static final int MAX_TRUNCATED_LIST_SIZE = 1_000;
 
-    private static final int MAX_RETRIES = 2;
+    private static final int MAX_RETRIES = 3;
     private static final Duration RETRY_BACKOFF = Duration.ofMillis(200);
     private static final Set<String> RETRYABLE_ENTRY_ERROR_CODES = Set.of("ThrottlingException", "InternalFailure");
     private static final AttributeKey<String> RESULT_KEY = AttributeKey.stringKey("result");
