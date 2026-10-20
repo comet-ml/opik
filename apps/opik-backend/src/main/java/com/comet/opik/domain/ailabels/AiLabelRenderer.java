@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.metrics.DoubleCounter;
 import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
@@ -24,6 +25,8 @@ import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -78,6 +81,9 @@ public class AiLabelRenderer {
     private final @NonNull InstantToUUIDMapper uuidMapper;
     private final @NonNull Scheduler renderScheduler;
     private final @NonNull LongCounter historyErrors;
+    private final @NonNull DoubleCounter renderCpu;
+    // Null when the JVM can't measure the current thread's CPU time.
+    private final @Nullable ThreadMXBean threads;
 
     @Inject
     AiLabelRenderer(@NonNull AiLabelRenderDAO renderDAO, @NonNull @Config("aiLabels") AiLabelsConfig config,
@@ -86,10 +92,17 @@ public class AiLabelRenderer {
         this.config = config;
         this.uuidMapper = uuidMapper;
         this.renderScheduler = Schedulers.newParallel("ai-labels-render", config.getRenderThreads(), true);
-        this.historyErrors = GlobalOpenTelemetry.get().getMeter("opik.ai_labels")
-                .counterBuilder("ai_labels.render.history_errors")
+        var meter = GlobalOpenTelemetry.get().getMeter("opik.ai_labels");
+        this.historyErrors = meter.counterBuilder("ai_labels.render.history_errors")
                 .setDescription("Failed reads of earlier thread turns; the chunk's render fails and is retried")
                 .build();
+        this.renderCpu = meter.counterBuilder("ai_labels.render.cpu_seconds").ofDoubles().setUnit("s")
+                .setDescription("Thread CPU time spent rendering traces, excluding ClickHouse reads")
+                .build();
+        var threadBean = ManagementFactory.getThreadMXBean();
+        this.threads = threadBean.isCurrentThreadCpuTimeSupported() && threadBean.isThreadCpuTimeEnabled()
+                ? threadBean
+                : null;
     }
 
     /**
@@ -239,15 +252,22 @@ public class AiLabelRenderer {
         var ref = refs.get(trace.id());
         long budget = config.getRenderBudgetBytes();
         return Mono.fromCallable(() -> {
-            var tree = AiLabelSpanTree.build(spans);
-            var outcomes = new ArrayList<RenderOutcome>(2);
-            if (alone) {
-                outcomes.add(fit(ref, trace, tree, null, budget));
+            long cpuStart = threads == null ? 0 : threads.getCurrentThreadCpuTime();
+            try {
+                var tree = AiLabelSpanTree.build(spans);
+                var outcomes = new ArrayList<RenderOutcome>(2);
+                if (alone) {
+                    outcomes.add(fit(ref, trace, tree, null, budget));
+                }
+                if (withHistory) {
+                    outcomes.add(fit(ref, trace, tree, histories.getOrDefault(trace.id(), List.of()), budget));
+                }
+                return outcomes;
+            } finally {
+                if (threads != null) {
+                    renderCpu.add((threads.getCurrentThreadCpuTime() - cpuStart) / 1e9);
+                }
             }
-            if (withHistory) {
-                outcomes.add(fit(ref, trace, tree, histories.getOrDefault(trace.id(), List.of()), budget));
-            }
-            return outcomes;
         })
                 .flatMapIterable(Function.identity())
                 .subscribeOn(renderScheduler);
