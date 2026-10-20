@@ -695,6 +695,21 @@ areas:
       # persisted prompt re-hydrates its settings on reload, and the backend hop
       # itself (the spec fulfils the request in the browser, so it never sees the
       # body Anthropic receives).
+      # New for 2.2.106, from opik#8758. This area has keys for composing/running
+      # a prompt, for the error info a failed run shows, and for the model
+      # settings — but none for whether a DISPLAYED output still matches the
+      # prompt that produced it. The nearest keys would have to be stretched:
+      # compose-run-prompt already carries a "read this as compose, run and
+      # reset" caveat, and run-error-info is about what a failure says, not about
+      # whether it is still current.
+      output-staleness:          { covered: false, note: "An output already on screen is marked stale when the run inputs change and left live when they do not, instead of being cleared to 'No runs yet'. Free mode (playground-stale-output.spec.ts): editing the message dims the failure tag and renders the full 'Prompt changed since the last run. Re-run to update results.' sentence, and a plain reload, a save-to-library, a reload with the library link set, a detach and an explicit library load all leave the output undimmed with no note — including where the library load regenerates every message id, which is the payload that used to grey a finished run for no user edit. Dataset grid (playground-stale-output-dataset-grid.spec.ts): every cell keeps its dimmed failure tag under a COMPACT note whose tooltip carries the same sentence, and no cell reverts to 'No runs yet'. Not covered: what a stale SUCCESSFUL answer looks like (needs a provider that answers), and the test-suite grid, which is gated differently on purpose and does revert to 'No runs yet'." }
+      # New for 2.2.106, from opik#8873. No key here covers what a message's ROLE
+      # does to the message's own content. load-prompt-version cannot hold it:
+      # half of the behaviour is reached without a load at all (the role
+      # dropdown), and reading that key as covering the media rule would mean a
+      # role switch nobody tested counts as tested the moment the next
+      # library-load spec lands.
+      message-role-media:        { covered: false, note: "Media lives only on user messages, and the two doors to that rule agree. Library load (playground-load-media-prompt-by-role.spec.ts): loading a version whose content is text plus an image, a video and an audio part keeps the whole content on a User row with no toast, and lands the text alone — as a plain string, with no media tag and the editor showing it — on a System and on an Assistant row, each raising exactly one 'Media not loaded' toast. Role switch (playground-media-prompt-role-switch.spec.ts): switching an already-loaded User row to System strips the media parts in place, keeps both rows, and stays silent. Both specs assert the loaded-version chip shows NO unsaved-changes dot and the save tooltip still reads 'Save to prompt library' — the dirty check is role-aware, so a drop the user did not ask for is not reported as their unsaved edit — and both prove that absence can flip by typing into the row. Both also read the version back over the API to show the drop is client-side only. Not covered: what SAVING a system row after the drop writes to the library (changed behaviour the exploration flagged for a product decision, deliberately not pinned), the media-only and text-only content variants, and the Optimizations new-run composer, which mounts the same component with `disableMedia` and keeps media invisibly on a user row (pre-existing, unchanged by this PR)." }
       configure-model-settings:  { covered: true,  tier: t2-cuj, note: "PromptModelSettings / providerConfigs — Anthropic only (playground-model-parameters.spec.ts): sampling pair is a single choice with exactly one mounted slider, and the displayed Top P and a non-default Thinking effort are asserted against the outbound chat/completions body, which must carry top_p, no temperature, the effort under custom_parameters.output_config.effort and no flat thinking_effort. Other providers' panels, the token/throttling/concurrency sliders, settings surviving a prompt reload, and the proxy-to-Anthropic hop are all still uncovered" }
 
     visual:
@@ -820,6 +835,18 @@ areas:
       # after the delete had already committed, so the column was left stale
       # forever with no error anywhere a user could see.
       experiment-recency-after-delete: { covered: false }
+      # New for 2.2.106, from opik#8837, which put a read-only sheet behind every
+      # non-latest Version history row and moved "Restore" inside it.
+      #
+      # Its own key rather than folded into version-history-view: Restore is the
+      # one control in that sheet which WRITES, and its contract is about scope —
+      # which version got restored, what the new latest holds, and what was left
+      # alone. Filing it under a key whose name says "view" would mean a
+      # destructive action nobody had tested read as tested the moment the next
+      # viewing spec landed. edit-item-versions, the nearest alternative, is about
+      # committing an edit from the Records tab — a different endpoint and a
+      # different dialog.
+      restore-version:        { covered: false, note: "Restoring a version from inside the read-only version sheet (dataset-version-restore-from-sidebar.spec.ts): the confirmation names the version that was opened, confirming closes the sheet and clears every dvs_* param, and a third version becomes the only is_latest one, holding the opened version's items by id and value with the counters that say WHICH version was restored (+0 ~2 -2 against a v1-of-3 restored over a v2-of-5). Every earlier version survives. The Version history tab and the Records tab both follow without a reload — the restored version renders as the new un-openable latest while the previous latest becomes openable, asserted behaviourally by clicking both — and a bystander dataset in the same project is asserted unchanged in its version count, its item ids and its values. NOT covered: restoring the latest version (a documented no-op), and restoring over a staged draft, whose dialog says 'Discard & Restore' and needs a draft seeded through the UI first." }
 
     visual:
       datasets-page:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 04" }
@@ -894,6 +921,17 @@ areas:
       pass-rate-display:     { covered: true,  tier: t1-smoke }
       global-assertions:     { covered: true,  tier: t1-smoke }
       delete-suite:          { covered: true,  tier: t2-cuj }
+      # New for 2.2.106, from opik#8837's read-only version sheet.
+      #
+      # Its own key rather than folded into view-suite-items. On a test suite the
+      # sheet renders the version's own suite assertions and execution policy, and
+      # a per-case assertion and policy column — none of which view-suite-items
+      # names. That key is about the live Test cases tab ("3 SDK-seeded items
+      # render"), and the failure this spec exists to catch is precisely a sheet
+      # that shows the right CASES under the wrong POLICY. Stretching
+      # view-suite-items over it would record version-scoping as covered by a spec
+      # that never looked at a version.
+      version-history-view:  { covered: false, note: "A test suite's read-only version sheet (test-suite-version-records-sidebar.spec.ts): the meta block lists the OPENED version's suite assertions and its execution policy formatted '<pass_threshold> of <runs_per_item> must pass', the table holds exactly that version's test cases by id, and each row's Execution policy cell reports the version's policy while its Custom assertions cell reports none. Opening a case shows its Data, 'Only suite assertions', and the inherited policy marked '(suite default)'. The seed makes the two versions differ on assertions AND policy as well as on their cases — the older carries two assertions and 1-of-2, the latest one different assertion and 2-of-3 — so every assertion would pass against a sheet wired to the latest if it were symmetric; the latest's assertion text and policy string are both asserted absent from the sheet. Cutting that second version needs POST /datasets/{id}/items/changes, since the SDK can only set a suite's assertions and policy at creation. NOT covered: a per-ITEM execution policy override, which no seeding route can set today, and the viewer-only variant of the row menu (OSS hardcodes canEditDatasets)." }
 
     visual:
       test-suites-page:  { covered: true,  state: default, spec: "visual-comparison.spec.ts 05" }
