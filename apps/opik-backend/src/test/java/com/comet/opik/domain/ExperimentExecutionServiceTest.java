@@ -1166,6 +1166,7 @@ class ExperimentExecutionServiceTest {
             when(cancellationService.cancel(any(), any())).thenReturn(Mono.empty());
             when(cancellationService.purgeQueued(any(), any(UUID.class))).thenReturn(Mono.just(true));
             when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+            when(experimentService.stampFinished(experimentId)).thenReturn(Mono.empty());
 
             service.cancel(Set.of(experimentId))
                     .contextWrite(ctx -> ctx
@@ -1174,10 +1175,7 @@ class ExperimentExecutionServiceTest {
                             .put(RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE))
                     .block();
 
-            var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
-            verify(experimentService, times(2)).update(eq(experimentId), captor.capture());
-            assertThat(captor.getAllValues())
-                    .anySatisfy(update -> assertThat(update.finished()).isTrue());
+            verify(experimentService).stampFinished(experimentId);
         }
 
         @Test
@@ -1390,10 +1388,8 @@ class ExperimentExecutionServiceTest {
 
             executeRequest(singlePromptRequest());
 
-            var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
-            verify(experimentService).update(any(UUID.class), captor.capture());
-            assertThat(captor.getValue().finished()).isTrue();
-            assertThat(captor.getValue().status()).isNull();
+            verify(experimentService).stampFinished(any(UUID.class));
+            verify(experimentService, never()).update(any(UUID.class), any());
         }
 
         @Test

@@ -74,10 +74,8 @@ class ExperimentItemLedgerTest {
         var experimentId = UUID.randomUUID();
         var entry = entry();
 
-        assertThat(ledger.record(WORKSPACE_ID, experimentId, entry, Outcome.FAILED).block()).isTrue();
-        assertThat(ledger.record(WORKSPACE_ID, experimentId, entry, Outcome.OK).block())
-                .as("already recorded, so nothing attached to the first record runs again")
-                .isFalse();
+        ledger.record(WORKSPACE_ID, experimentId, entry, Outcome.FAILED).block();
+        ledger.record(WORKSPACE_ID, experimentId, entry, Outcome.OK).block();
 
         assertThat(ledger.outcome(WORKSPACE_ID, experimentId, entry).block()).isEqualTo(Outcome.FAILED);
     }

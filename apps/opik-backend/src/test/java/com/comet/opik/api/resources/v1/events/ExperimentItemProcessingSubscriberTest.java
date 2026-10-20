@@ -9,7 +9,6 @@ import com.comet.opik.domain.ExperimentItemLedger;
 import com.comet.opik.domain.ExperimentItemLedger.Outcome;
 import com.comet.opik.domain.ExperimentItemProcessor;
 import com.comet.opik.domain.ExperimentService;
-import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.dropwizard.util.Duration;
@@ -59,9 +58,6 @@ class ExperimentItemProcessingSubscriberTest {
     private ExperimentService experimentService;
 
     @Mock
-    private TestSuiteAssertionCounterService testSuiteAssertionCounterService;
-
-    @Mock
     private ExperimentCancellationService cancellationService;
 
     private ExperimentItemProcessingSubscriber subscriber;
@@ -72,13 +68,13 @@ class ExperimentItemProcessingSubscriberTest {
         config.setBatchCounterTtl(Duration.hours(24));
 
         subscriber = new ExperimentItemProcessingSubscriber(config, redisClient, itemProcessor,
-                experimentService, testSuiteAssertionCounterService, cancellationService, itemLedger);
+                experimentService, cancellationService, itemLedger);
 
         // A first delivery: nothing has handled this entry yet.
         lenient().when(itemLedger.outcome(anyString(), any(UUID.class), any(StreamMessageId.class)))
                 .thenReturn(Mono.empty());
         lenient().when(itemLedger.record(anyString(), any(UUID.class), any(StreamMessageId.class), any(Outcome.class)))
-                .thenReturn(Mono.just(true));
+                .thenReturn(Mono.empty());
         // One item left of a larger batch: the batch does not drain, so the finish path stays out of
         // these tests and they describe the skip alone.
         lenient().when(itemLedger.remaining(anyString(), any(UUID.class))).thenReturn(Mono.just(5L));
@@ -88,6 +84,9 @@ class ExperimentItemProcessingSubscriberTest {
                 .thenReturn(Mono.just(true));
         lenient().when(cancellationService.discardQueued(anyString(), any(UUID.class)))
                 .thenReturn(Mono.empty());
+        lenient().when(cancellationService.isFinishClaimed(anyString(), any(UUID.class)))
+                .thenReturn(Mono.just(false));
+        lenient().when(experimentService.stampFinished(any(UUID.class))).thenReturn(Mono.empty());
     }
 
     private ExperimentItemToProcess buildMessage(UUID experimentId) {
@@ -183,18 +182,13 @@ class ExperimentItemProcessingSubscriberTest {
         // The cancelled item is skipped rather than run, and draining it is what reaches the finish.
         when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
         when(itemLedger.failures(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(1L));
-        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
 
         subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
-        var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
-        verify(experimentService).update(eq(experimentId), captor.capture());
-        assertThat(captor.getValue().status())
-                .as("the stop it was given stands, whatever its items did")
-                .isNull();
-        assertThat(captor.getValue().finished())
-                .as("it still drained, which is what stops the page waiting on it")
-                .isTrue();
+        // The stop it was given stands, whatever its items did; it still drained, which is what stops the
+        // page waiting on it.
+        verify(experimentService, never()).update(any(UUID.class), any());
+        verify(experimentService).stampFinished(experimentId);
     }
 
     @Test
@@ -227,25 +221,19 @@ class ExperimentItemProcessingSubscriberTest {
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
         when(cancellationService.claimFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
         when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
-        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
 
         subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
-        var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
-        verify(experimentService).update(eq(experimentId), captor.capture());
-        assertThat(captor.getValue().status())
-                .as("the stop it was given stands")
-                .isNull();
-        assertThat(captor.getValue().finished()).isTrue();
+        verify(experimentService).stampFinished(experimentId);
+        verify(experimentService, never()).update(any(UUID.class), any());
         verify(experimentService, never()).finishExperiments(any());
     }
 
-    // The claim is taken when the counter drains and held until a terminal state is written. If that
-    // write and its fallback both fail there is no item left to drain and try again, so holding it
-    // would only keep a stop from reaching a run that still reads as running.
+    // The holder hands the claim back when it could not write the ending, so the redelivery the error
+    // asks for can claim it again. Held, it would also keep a stop from reaching a run with no ending.
     @Test
-    @DisplayName("should hand the finish back when no terminal state could be written")
-    void releaseTheFinishWhenEveryTerminalWriteFails() {
+    @DisplayName("should hand the finish back, and fail for a retry, when the holder cannot write the ending")
+    void releaseTheFinishWhenTheHolderCannotWriteTheEnding() {
         var experimentId = UUID.randomUUID();
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
@@ -255,7 +243,8 @@ class ExperimentItemProcessingSubscriberTest {
                 .thenReturn(Mono.error(new IllegalStateException("database is down")));
         when(cancellationService.releaseFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
 
-        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
+        assertThatThrownBy(() -> subscriber.processEvent(buildMessage(experimentId), ENTRY).block())
+                .hasMessage("database is down");
 
         verify(cancellationService).releaseFinish(WORKSPACE_ID, experimentId);
     }
@@ -282,46 +271,42 @@ class ExperimentItemProcessingSubscriberTest {
         verify(cancellationService, never()).releaseFinish(any(), any());
     }
 
-    // setIfAbsent refuses the holder a second time, so a terminal status written from inside the
-    // claim lands as nothing. A failed finish hands the claim back instead.
+    // A stop holds the claim and wrote CANCELLED. A late item that lost the claim only stamps the drain;
+    // releasing the stop's claim when that stamp failed let the next caller claim it and write COMPLETED.
     @Test
-    @DisplayName("should hand the finish back rather than write a status it cannot claim")
-    void releaseRatherThanReclaimWhenTheStatusWriteFails() {
+    @DisplayName("should not hand back a finish it lost when its stamp fails")
+    void keepAFinishItLostWhenTheStampFails() {
         var experimentId = UUID.randomUUID();
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
         when(itemProcessor.process(any())).thenReturn(Mono.empty());
         when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
-        // What Redis actually answers: won once, refused every time after.
-        when(cancellationService.claimFinish(WORKSPACE_ID, experimentId))
-                .thenReturn(Mono.just(true))
-                .thenReturn(Mono.just(false));
-        when(experimentService.update(any(UUID.class), any()))
+        when(cancellationService.claimFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(experimentService.stampFinished(experimentId))
                 .thenReturn(Mono.error(new IllegalStateException("database is down")));
-        when(cancellationService.releaseFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
 
-        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
+        assertThatThrownBy(() -> subscriber.processEvent(buildMessage(experimentId), ENTRY).block())
+                .hasMessage("database is down");
 
-        verify(cancellationService).releaseFinish(WORKSPACE_ID, experimentId);
+        verify(cancellationService, never()).releaseFinish(any(), any());
     }
 
     @Test
-    @DisplayName("should hand the finish back when a test suite cannot be stamped")
-    void releaseTheFinishWhenTheTestSuiteStampFails() {
+    @DisplayName("should not hand back a finish when a test suite cannot be stamped")
+    void keepTheFinishWhenTheTestSuiteStampFails() {
         var experimentId = UUID.randomUUID();
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
         when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
-        when(experimentService.update(any(UUID.class), any()))
+        when(experimentService.stampFinished(experimentId))
                 .thenReturn(Mono.error(new IllegalStateException("database is down")));
-        when(cancellationService.releaseFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
 
         assertThatThrownBy(() -> subscriber
                 .processEvent(buildMessage(experimentId).toBuilder().testSuite(true).build(), ENTRY)
                 .block())
                 .hasMessage("database is down");
 
-        verify(cancellationService).releaseFinish(WORKSPACE_ID, experimentId);
+        verify(cancellationService, never()).releaseFinish(any(), any());
     }
 
     // Held is the correct state once something has been written: it is what stops a second actor
@@ -383,16 +368,11 @@ class ExperimentItemProcessingSubscriberTest {
 
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
         when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
-        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
 
         subscriber.processEvent(buildMessage(experimentId).toBuilder().testSuite(true).build(), ENTRY).block();
 
-        var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
-        verify(experimentService).update(eq(experimentId), captor.capture());
-        assertThat(captor.getValue().finished()).isTrue();
-        assertThat(captor.getValue().status())
-                .as("the status still waits for the assertions")
-                .isNull();
+        verify(experimentService).stampFinished(experimentId);
+        verify(experimentService, never()).update(any(UUID.class), any());
     }
 
     // Redis hands out a message again whenever its acknowledgement is lost, after the provider call
@@ -440,33 +420,41 @@ class ExperimentItemProcessingSubscriberTest {
         verify(itemLedger).record(WORKSPACE_ID, experimentId, ENTRY, Outcome.OK);
     }
 
-    // A failed item yields no assertions, so the suite's assertion counter is taken down for it once.
+    // A failed item yields no assertions. Taking it off the assertion counter let a suite whose other
+    // assertions had all landed reach zero there, and the assertion path recorded COMPLETED before the
+    // drain could record the failure.
     @Test
-    @DisplayName("should take a failed test-suite item off the assertion counter")
-    void failedTestSuiteItemReleasesItsAssertions() {
+    @DisplayName("should end a test suite with a failed item as FAILED")
+    void failedTestSuiteItemFailsTheRun() {
         var experimentId = UUID.randomUUID();
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
         when(itemProcessor.process(any())).thenReturn(Mono.error(new RuntimeException("persistence is down")));
-        when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId))
-                .thenReturn(Mono.empty());
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
+        when(itemLedger.failures(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(1L));
+        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
 
         subscriber.processEvent(buildMessage(experimentId).toBuilder().testSuite(true).build(), ENTRY).block();
 
-        verify(testSuiteAssertionCounterService).decrementAndFinishIfComplete(WORKSPACE_ID, experimentId);
+        verify(itemLedger).record(WORKSPACE_ID, experimentId, ENTRY, Outcome.FAILED);
+        verify(experimentService).update(eq(experimentId), argThat(
+                update -> update.status() == ExperimentStatus.FAILED));
     }
 
-    // Another delivery of the same entry recorded first. It already took the item off the assertion
-    // counter, and doing it again finishes the suite while assertions are still to land.
+    // Every delivery that sees the drain came here: concurrent last items, late redeliveries, items landing
+    // after a stop. Reading every outcome to count failures, only to lose the claim, was wasted work.
     @Test
-    @DisplayName("should not take a failed item off the assertion counter twice")
-    void failedItemRecordedElsewhereLeavesTheAssertionCounter() {
+    @DisplayName("should record only the drain, without reading the outcomes, once the finish is claimed")
+    void claimedFinishSkipsTheFailureCount() {
         var experimentId = UUID.randomUUID();
         when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
-        when(itemProcessor.process(any())).thenReturn(Mono.error(new RuntimeException("persistence is down")));
-        when(itemLedger.record(WORKSPACE_ID, experimentId, ENTRY, Outcome.FAILED)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(any())).thenReturn(Mono.empty());
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
+        when(cancellationService.isFinishClaimed(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
 
-        subscriber.processEvent(buildMessage(experimentId).toBuilder().testSuite(true).build(), ENTRY).block();
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
 
-        verify(testSuiteAssertionCounterService, never()).decrementAndFinishIfComplete(any(), any());
+        verify(itemLedger, never()).failures(any(), any());
+        verify(experimentService).stampFinished(experimentId);
+        verify(experimentService, never()).update(any(UUID.class), any());
     }
 }

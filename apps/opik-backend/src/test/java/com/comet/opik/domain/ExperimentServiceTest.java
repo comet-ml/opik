@@ -31,6 +31,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -132,6 +133,53 @@ class ExperimentServiceTest {
                 experimentAggregatesService,
                 experimentAggregationPublisher,
                 analyticsService);
+    }
+
+    @Nested
+    @DisplayName("Stamp Finished:")
+    class StampFinished {
+
+        @Test
+        @DisplayName("when the experiment has no finish recorded, then it is stamped")
+        void stampFinished_whenNotYetStamped_thenFinishedIsWritten() {
+            var experimentId = UUID.randomUUID();
+            var unstamped = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+                    .id(experimentId)
+                    .finishedAt(null)
+                    .build();
+            when(experimentDAO.getById(experimentId)).thenReturn(Mono.just(unstamped));
+            when(experimentDAO.update(eq(experimentId), any(ExperimentUpdate.class))).thenReturn(Mono.empty());
+
+            StepVerifier.create(experimentService.stampFinished(experimentId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
+                    .verifyComplete();
+
+            verify(experimentDAO).update(experimentId, ExperimentUpdate.builder().finished(true).build());
+        }
+
+        // Every delivery that sees the drain asks to stamp. Writing each time rewrote the row, moved
+        // finished_at to the latest delivery and re-aggregated the experiment once per message.
+        @Test
+        @DisplayName("when the finish is already recorded, then nothing is written")
+        void stampFinished_whenAlreadyStamped_thenNothingIsWritten() {
+            var experimentId = UUID.randomUUID();
+            var stamped = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+                    .id(experimentId)
+                    .finishedAt(Instant.now())
+                    .build();
+            when(experimentDAO.getById(experimentId)).thenReturn(Mono.just(stamped));
+
+            StepVerifier.create(experimentService.stampFinished(experimentId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
+                    .verifyComplete();
+
+            verify(experimentDAO, never()).update(any(UUID.class), any(ExperimentUpdate.class));
+            verify(eventBus, never()).post(any());
+        }
     }
 
     @Nested
