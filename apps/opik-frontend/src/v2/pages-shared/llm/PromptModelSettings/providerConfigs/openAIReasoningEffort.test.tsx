@@ -54,11 +54,11 @@ describe("the OpenAI reasoning effort dropdown", () => {
   });
 
   it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
-    "leaves Max out and shows a stored max as High when the mode is %s",
+    "leaves Max out and shows a stored max as the model's default, Medium, when the mode is %s",
     (mode) => {
       renderPanel(PROVIDER_MODEL_TYPE.GPT_6_SOL, mode);
 
-      expect(screen.getByRole("combobox")).toHaveTextContent("High");
+      expect(screen.getByRole("combobox")).toHaveTextContent("Medium");
       expect(openEffortDropdown()).toEqual([
         "None",
         "Low",

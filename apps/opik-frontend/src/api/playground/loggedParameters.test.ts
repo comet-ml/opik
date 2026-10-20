@@ -68,7 +68,7 @@ describe("getLoggedParameters", () => {
         model: PROVIDER_MODEL_TYPE.GPT_6_SOL,
         configs: stored,
       }).reasoning_effort,
-    ).toBe("high");
+    ).toBe("medium");
   });
 
   it("records no penalties for a Responses API key, which never sent them", () => {

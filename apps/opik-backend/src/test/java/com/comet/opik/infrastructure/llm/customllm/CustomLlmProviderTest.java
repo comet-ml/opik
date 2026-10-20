@@ -4,10 +4,12 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.MediaContentUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
 import jakarta.ws.rs.BadRequestException;
@@ -340,14 +342,41 @@ class CustomLlmProviderTest {
                 arguments("A provider of unknown type is left as sent", null, 4000, null, null, 4000));
     }
 
+    @Test
+    void judgeSendsBase64MediaAsTheDataUrisItWasGiven() {
+        var base64Data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        var imageUri = "data:image/png;base64," + base64Data;
+        var videoUri = "data:video/mp4;base64," + base64Data;
+        var audioUri = "data:audio/wav;base64," + base64Data;
+        var judge = clientGenerator.newCustomProviderChatLanguageModel(config(LlmProvider.CUSTOM_LLM),
+                LlmAsJudgeModelParameters.builder().name("custom-llm/" + PROVIDER_NAME + "/" + MODEL).build());
+
+        judge.chat(dev.langchain4j.data.message.UserMessage.from(
+                TextContent.from("Describe these"),
+                MediaContentUtils.toImageContent(imageUri),
+                MediaContentUtils.toVideoContent(videoUri),
+                MediaContentUtils.toAudioContent(audioUri)));
+
+        var parts = sentBody().get("messages").get(0).get("content");
+        assertThat(List.of(
+                parts.get(1).get("image_url").get("url").asText(),
+                parts.get(2).get("video_url").get("url").asText(),
+                parts.get(3).get("audio_url").get("url").asText()))
+                .containsExactly(imageUri, videoUri, audioUri);
+    }
+
     private CustomLlmProvider newProvider(LlmProvider provider) {
-        var config = LlmProviderClientApiConfig.builder()
+        var config = config(provider);
+        return new CustomLlmProvider(clientGenerator.newCustomLlmClient(config), config.configuration(), provider);
+    }
+
+    private LlmProviderClientApiConfig config(LlmProvider provider) {
+        return LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
                 .baseUrl(wireMock.baseUrl() + "/v1")
                 .configuration(Map.of("provider_name", PROVIDER_NAME))
                 .provider(provider)
                 .build();
-        return new CustomLlmProvider(clientGenerator.newCustomLlmClient(config), config.configuration(), provider);
     }
 
     private ChatCompletionRequest request(Integer maxCompletionTokens, Integer maxTokens) {

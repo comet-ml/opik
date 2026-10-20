@@ -338,7 +338,7 @@ class AlertEventBridgePublisherTest {
                 .thenAwait(RETRY_WINDOW)
                 .verifyComplete();
 
-        verify(client, times(3)).putEvents(any(PutEventsRequest.class));
+        verify(client, times(4)).putEvents(any(PutEventsRequest.class));
     }
 
     static Stream<Arguments> transientClientErrors() {

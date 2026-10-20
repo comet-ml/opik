@@ -8,10 +8,8 @@ import com.comet.opik.infrastructure.llm.openai.OpenAiErrorMessage;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
-import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.data.video.Video;
@@ -121,13 +119,17 @@ public interface LlmProviderLangChainMapper {
             case TEXT -> TextContent.from(opikContent.text());
             case IMAGE_URL -> {
                 if (opikContent.imageUrl() != null) {
-                    yield ImageContent.from(opikContent.imageUrl().getUrl());
+                    yield MediaContentUtils.toImageContent(opikContent.imageUrl().getUrl());
                 }
                 throw new BadRequestException("Image URL is null");
             }
             case VIDEO_URL -> {
                 if (opikContent.videoUrl() != null) {
                     String videoUrl = opikContent.videoUrl().url();
+                    var dataUri = MediaContentUtils.parseBase64DataUri(videoUrl);
+                    if (dataUri.isPresent()) {
+                        yield VideoContent.from(dataUri.get().base64Data(), dataUri.get().mimeType());
+                    }
                     var videoBuilder = Video.builder()
                             .url(URI.create(videoUrl));
 
@@ -151,7 +153,7 @@ public interface LlmProviderLangChainMapper {
             }
             case AUDIO_URL -> {
                 if (opikContent.audioUrl() != null) {
-                    yield AudioContent.from(opikContent.audioUrl().url());
+                    yield MediaContentUtils.toAudioContent(opikContent.audioUrl().url());
                 }
                 throw new BadRequestException("Audio URL is null");
             }

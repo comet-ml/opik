@@ -81,7 +81,7 @@ public class AlertEventBridgePublisher {
             "id", "event_type", "alert_type", "alert_id", "project_id", "alert_name", "workspace_id",
             "workspace_name", "user_name", "payload", "created_at", "max_retries");
 
-    private static final int MAX_RETRIES = 2;
+    private static final int MAX_RETRIES = 3;
     private static final Duration RETRY_BACKOFF = Duration.ofMillis(200);
     private static final Set<String> RETRYABLE_ENTRY_ERROR_CODES = Set.of("ThrottlingException", "InternalFailure");
     private static final AttributeKey<String> RESULT_KEY = AttributeKey.stringKey("result");
