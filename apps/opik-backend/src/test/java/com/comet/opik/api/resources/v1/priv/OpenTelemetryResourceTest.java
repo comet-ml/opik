@@ -1271,7 +1271,7 @@ class OpenTelemetryResourceTest {
 
         @Test
         @DisplayName("opik.project_name span and resource attributes route each trace to its project, invalid names use the header project")
-        void testOpikProjectNameRoutesTracesToProjects() {
+        void opikProjectNameRoutesTracesToProjects() {
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName);
 
