@@ -42,26 +42,35 @@ public class ExperimentItemPublisher {
     }
 
     /**
-     * Sets the batch counter atomically, then publishes all messages to the Redis stream.
-     * The counter is set BEFORE publishing to prevent the race where a fast consumer
-     * decrements to zero before all messages are published.
+     * Starts counting a run down, before anything of it is published or made visible. A stop reaches
+     * only what this service is counting down, and the experiments become stoppable the moment they
+     * are persisted — so a run tracked any later than this has a window where a stop finds nothing to
+     * stop, returns as though it had, and the run goes on to queue every item.
      */
-    public Mono<Void> publish(@NonNull UUID batchId, List<ExperimentItemToProcess> messages, boolean testSuite) {
+    public Mono<Void> trackRun(List<ExperimentItemToProcess> messages, boolean testSuite) {
+        if (CollectionUtils.isEmpty(messages)) {
+            return Mono.empty();
+        }
+
+        return setItemCounters(messages)
+                .then(testSuite ? setAssertionCounters(messages) : Mono.empty());
+    }
+
+    /** Publishes all messages to the Redis stream. Counters are already set by {@link #trackRun}. */
+    public Mono<Void> publish(@NonNull UUID batchId, List<ExperimentItemToProcess> messages) {
         if (CollectionUtils.isEmpty(messages)) {
             return Mono.empty();
         }
 
         var stream = redisClient.getStream(config.getStreamName(), config.getCodec());
 
-        return setItemCounters(messages)
-                .then(testSuite ? setAssertionCounters(messages) : Mono.empty())
-                .thenMany(Flux.fromIterable(messages)
-                        .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
-                                ExperimentExecutionConfig.PAYLOAD_FIELD, message, config))
-                                .doOnNext(id -> log.debug("Published experiment item message with ID: '{}'", id))
-                                .map(id -> Map.entry(message.experimentId(), id))
-                                .doOnError(throwable -> log.error("Error publishing experiment item message",
-                                        throwable))))
+        return Flux.fromIterable(messages)
+                .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
+                        ExperimentExecutionConfig.PAYLOAD_FIELD, message, config))
+                        .doOnNext(id -> log.debug("Published experiment item message with ID: '{}'", id))
+                        .map(id -> Map.entry(message.experimentId(), id))
+                        .doOnError(throwable -> log.error("Error publishing experiment item message",
+                                throwable)))
                 .collectMultimap(Map.Entry::getKey, Map.Entry::getValue)
                 .flatMap(idsByExperiment -> cancellationService.recordQueued(
                         messages.getFirst().workspaceId(), idsByExperiment))

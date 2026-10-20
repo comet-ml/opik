@@ -126,7 +126,7 @@ class ExperimentCancellationServiceTest {
 
         var batch = new ArrayList<>(messages(cancelled, 3));
         batch.addAll(messages(sibling, 2));
-        publisher.publish(batchId, batch, false).block();
+        publisher.trackRun(batch, false).then(publisher.publish(batchId, batch)).block();
 
         assertThat(itemCounter(cancelled).get().block()).isEqualTo(3L);
         assertThat(itemCounter(sibling).get().block()).isEqualTo(2L);
@@ -315,7 +315,7 @@ class ExperimentCancellationServiceTest {
     @SafeVarargs
     private void publish(List<ExperimentItemToProcess>... batches) {
         for (var batch : batches) {
-            publisher.publish(UUID.randomUUID(), batch, false).block();
+            publisher.trackRun(batch, false).then(publisher.publish(UUID.randomUUID(), batch)).block();
         }
     }
 
