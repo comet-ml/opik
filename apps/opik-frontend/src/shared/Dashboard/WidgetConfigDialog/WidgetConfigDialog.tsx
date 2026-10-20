@@ -171,7 +171,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
           </div>
         </div>
 
-        <DialogFooter className="flex flex-row items-center justify-end gap-2 border-t pt-4 sm:flex-row sm:justify-end">
+        <DialogFooter className="flex flex-row flex-wrap items-center justify-end gap-2 border-t pt-4 sm:flex-row sm:justify-end">
           {!isEditMode && ollieEnabled && (
             <div className="comet-code mr-auto flex items-center gap-2 text-foreground">
               Need a custom widget?
@@ -186,12 +186,15 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
               </Button>
             </div>
           )}
-          <Button variant="outline" onClick={handleCancel}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={!previewWidget}>
-            {isEditMode ? "Save changes" : "Add widget"}
-          </Button>
+          {/* One group, so the pair wraps below the Ollie prompt together. */}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleCancel}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!previewWidget}>
+              {isEditMode ? "Save changes" : "Add widget"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
