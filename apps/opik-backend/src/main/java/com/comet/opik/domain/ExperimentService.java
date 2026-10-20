@@ -775,6 +775,17 @@ public class ExperimentService {
         });
     }
 
+    /**
+     * Records that the experiment has stopped producing items, unless that is already recorded. Every delivery
+     * that sees its run drain asks for this, and each write rewrites the row, moves {@code finished_at} and
+     * re-aggregates the experiment, so only the first one writes.
+     */
+    public Mono<Void> stampFinished(@NonNull UUID id) {
+        return experimentDAO.getById(id)
+                .filter(experiment -> experiment.finishedAt() == null)
+                .flatMap(unstamped -> update(id, ExperimentUpdate.builder().finished(true).build()));
+    }
+
     public Mono<Void> batchUpdate(@NonNull ExperimentBatchUpdate batchUpdate) {
         log.info("Batch updating '{}' experiments", batchUpdate.ids().size());
 
