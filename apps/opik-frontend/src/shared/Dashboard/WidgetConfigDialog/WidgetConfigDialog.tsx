@@ -175,15 +175,15 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
           {!isEditMode && ollieEnabled && (
             <div className="comet-code mr-auto flex items-center gap-2 text-foreground">
               Need a custom widget?
-              <button
-                type="button"
+              <Button
+                variant="link"
                 onClick={handleDescribeToOllie}
-                className="inline-flex items-center gap-1 border-b border-current pb-0.5 hover:text-primary-hover"
+                className="comet-code h-auto gap-1 rounded-none border-b border-current p-0 pb-0.5 text-foreground hover:text-primary-hover hover:no-underline dark:text-foreground"
               >
                 <OllieIcon className="size-4 text-[var(--color-ollie)]" />
                 Ask Ollie
                 <ArrowRight className="size-4" />
-              </button>
+              </Button>
             </div>
           )}
           <Button variant="outline" onClick={handleCancel}>
