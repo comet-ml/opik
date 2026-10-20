@@ -15,6 +15,12 @@ import { manageToolFilter } from "@/v2/pages-shared/traces/spanTypeFilter";
 import TraceIdentifier from "./TraceIdentifier";
 import { Button } from "@/ui/button";
 import { formatThreadDateRange } from "@/lib/annotation-queues";
+import { RenderMessageContent } from "@/v2/pages-shared/traces/TraceMessages/TraceMessage";
+import AnnotatorFieldValue from "@/v2/pages-shared/annotation-queues/AnnotatorViewTab/AnnotatorFieldValue";
+import {
+  EMPTY_ANNOTATOR_VIEW,
+  resolveMessage,
+} from "@/v2/pages-shared/annotation-queues/AnnotatorViewTab/annotatorViewConfig";
 
 const MAX_THREAD_TRACES = 1000;
 const STALE_TIME = 5 * 60 * 1000;
@@ -181,6 +187,16 @@ const ThreadContent: React.FC = () => {
   } = useThreadData();
 
   const { annotationQueue } = useSMEFlow();
+  const annotatorView = annotationQueue?.annotator_view ?? EMPTY_ANNOTATOR_VIEW;
+
+  const renderContent = useCallback<RenderMessageContent>(
+    (trace, type) => {
+      const path = annotatorView[type];
+      if (!path) return undefined;
+      return <AnnotatorFieldValue value={resolveMessage(trace[type], path)} />;
+    },
+    [annotatorView],
+  );
 
   return (
     <>
@@ -188,6 +204,7 @@ const ThreadContent: React.FC = () => {
         traces={traces}
         traceId={last(traces)?.id}
         handleOpenTrace={handleOpenTrace}
+        renderContent={renderContent}
       />
       <TraceDetailsPanel
         projectId={thread?.project_id || ""}

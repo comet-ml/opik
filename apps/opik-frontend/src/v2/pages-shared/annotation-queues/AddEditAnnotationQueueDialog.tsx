@@ -9,7 +9,8 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 
 import { Button } from "@/ui/button";
-import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
+import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
+import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import {
   Form,
   FormControl,
@@ -38,6 +39,9 @@ import {
 import { ScoreSource } from "@/v2/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 import { Switch } from "@/ui/switch";
 import { ArrowUpRight } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/ui/tabs";
+import AnnotatorViewTab from "./AnnotatorViewTab/AnnotatorViewTab";
+import useAnnotatorViewDraft from "./AnnotatorViewTab/useAnnotatorViewDraft";
 
 import {
   AnnotationQueueAutomation,
@@ -269,6 +273,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   } = usePermissions();
 
   const [isNestedDialogOpen, setIsNestedDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("general");
 
   const isAutomationEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED,
@@ -329,6 +334,15 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   // Automation matches on the scores of whatever the queue collects, so the score options and the copy
   // follow the scope: thread scores are a different set of names from trace scores.
   const isThreadScope = form.watch("scope") === ANNOTATION_QUEUE_SCOPE.THREAD;
+  const {
+    draft: annotatorViewDraft,
+    setDraft: setAnnotatorViewDraft,
+    annotatorView,
+    isInvalid: isAnnotatorViewInvalid,
+  } = useAnnotatorViewDraft({
+    view: defaultQueue?.annotator_view,
+    isThreadScope,
+  });
   const automationGroupsError = get(
     form.formState.errors,
     ["automation_groups", "message"],
@@ -363,8 +377,9 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
         maxItems: automation_max_items,
         groups: automation_groups,
       }),
+      annotator_view: annotatorView,
     };
-  }, [defaultQueue, form, isAutomationEnabled]);
+  }, [defaultQueue, form, isAutomationEnabled, annotatorView]);
 
   const onQueueCreatedEdited = useCallback(
     (queue: Partial<AnnotationQueue>) => {
@@ -406,47 +421,87 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     );
   }, [updateMutate, defaultQueue?.id, getQueue, onQueueCreatedEdited, setOpen]);
 
-  const onSubmit = useCallback(
-    () => (isEdit ? editQueue() : createQueue()),
-    [isEdit, editQueue, createQueue],
-  );
+  const onSubmit = useCallback(() => {
+    if (isAnnotatorViewInvalid) {
+      setActiveTab("annotator-view");
+      return;
+    }
+    return isEdit ? editQueue() : createQueue();
+  }, [isAnnotatorViewInvalid, isEdit, editQueue, createQueue]);
+
+  const handleSubmit = form.handleSubmit(onSubmit, () => {
+    if (activeTab === "annotator-view" && isAnnotatorViewInvalid) return;
+    setActiveTab("general");
+  });
 
   return (
-    <Sheet
+    <ResizableSidePanel
+      panelId="annotation-queue-sidebar"
+      entity="annotation queue"
       open={
         open && (isEdit ? canEditAnnotationQueues : canCreateAnnotationQueues)
       }
-      onOpenChange={setOpen}
+      onClose={() => setOpen(false)}
+      initialWidth={0.5}
+      minWidth={640}
+      // A select or nested dialog opened from inside the form must not be treated as an outside
+      // click, or configuring a field would close the whole form.
+      // A form with edits closes only through X or Cancel, never by a stray click on the overlay.
+      blockOverlayClose={isNestedDialogOpen || form.formState.isDirty}
+      header={
+        <ResizableSidePanelTopBar
+          variant="form"
+          title={title}
+          onClose={() => setOpen(false)}
+        >
+          <Button
+            variant="outline"
+            size="2xs"
+            className="rounded-[4px]"
+            asChild
+          >
+            <a href={QUEUE_DOCS_LINK} target="_blank" rel="noreferrer">
+              Docs
+              <ArrowUpRight className="ml-1 size-3" />
+            </a>
+          </Button>
+        </ResizableSidePanelTopBar>
+      }
     >
-      <SheetContent
-        side="right"
-        className="flex w-full max-w-none flex-col gap-0 p-0 sm:max-w-[800px]"
-        // A select or nested dialog opened from inside the form must not be treated as an outside
-        // click, or configuring a field would close the whole form.
-        // A form with edits closes only through X or Cancel, never by a stray click on the overlay.
-        blockOverlayClose={isNestedDialogOpen || form.formState.isDirty}
-        header={
-          <SheetTopBar variant="form" title={title}>
-            <Button
-              variant="outline"
-              size="2xs"
-              className="rounded-[4px]"
-              asChild
-            >
-              <a href={QUEUE_DOCS_LINK} target="_blank" rel="noreferrer">
-                Docs
-                <ArrowUpRight className="ml-1 size-3" />
-              </a>
-            </Button>
-          </SheetTopBar>
-        }
-      >
-        <div className="min-h-0 flex-1 overflow-y-auto py-3 pl-[19px] pr-5">
+      <div className="flex size-full flex-col">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="shrink-0 pl-[19px] pr-5 pt-2"
+        >
+          <TabsList variant="underline">
+            <TabsTrigger variant="underline" value="general">
+              General
+            </TabsTrigger>
+            <TabsTrigger variant="underline" value="annotator-view">
+              Annotator view
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        {activeTab === "annotator-view" && (
+          <div className="min-h-0 flex-1 overflow-y-auto py-4 pl-[19px] pr-5">
+            <AnnotatorViewTab
+              projectId={form.watch("project_id")}
+              queueId={defaultQueue?.id}
+              isThreadScope={isThreadScope}
+              value={annotatorViewDraft}
+              onChange={setAnnotatorViewDraft}
+            />
+          </div>
+        )}
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto py-3 pl-[19px] pr-5",
+            activeTab !== "general" && "hidden",
+          )}
+        >
           <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(onSubmit)}
-              className="flex flex-col gap-4"
-            >
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <FormField
                 control={form.control}
                 name="name"
@@ -781,13 +836,13 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
             size="sm"
             disabled={isSubmitting}
             className="min-w-[115px]"
-            onClick={form.handleSubmit(onSubmit)}
+            onClick={handleSubmit}
           >
             {submitText}
           </Button>
         </div>
-      </SheetContent>
-    </Sheet>
+      </div>
+    </ResizableSidePanel>
   );
 };
 

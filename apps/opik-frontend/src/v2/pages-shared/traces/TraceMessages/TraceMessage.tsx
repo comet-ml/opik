@@ -14,14 +14,21 @@ import { prettifyMessage } from "@/lib/traces";
 import { toString } from "@/lib/utils";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 
+export type RenderMessageContent = (
+  trace: Trace,
+  type: "input" | "output",
+) => React.ReactNode | undefined;
+
 type TraceMessageProps = {
   trace: Trace;
   handleOpenTrace: (id: string, filterToolCalls: boolean) => void;
+  renderContent?: RenderMessageContent;
 };
 
 const TraceMessage: React.FC<TraceMessageProps> = ({
   trace,
   handleOpenTrace,
+  renderContent,
 }) => {
   const jsonViewTheme = useJsonViewTheme();
 
@@ -32,6 +39,9 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   }, [trace.feedback_scores]);
 
   const input = useMemo(() => {
+    const custom = renderContent?.(trace, "input");
+    if (custom !== undefined) return custom;
+
     const message = prettifyMessage(trace.input).message;
 
     if (isObject(message)) {
@@ -49,9 +59,12 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     } else {
       return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
     }
-  }, [trace.input, jsonViewTheme]);
+  }, [trace, renderContent, jsonViewTheme]);
 
   const output = useMemo(() => {
+    const custom = renderContent?.(trace, "output");
+    if (custom !== undefined) return custom;
+
     const message = prettifyMessage(trace.output, { type: "output" }).message;
 
     if (isObject(message)) {
@@ -69,7 +82,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     } else {
       return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
     }
-  }, [trace.output, jsonViewTheme]);
+  }, [trace, renderContent, jsonViewTheme]);
 
   return (
     <div className="flex flex-col gap-2" data-trace-message-id={trace.id}>

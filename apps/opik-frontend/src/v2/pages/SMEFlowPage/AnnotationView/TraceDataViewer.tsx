@@ -10,9 +10,9 @@ import { useSMEFlow } from "../SMEFlowContext";
 import useTraceById from "@/api/traces/useTraceById";
 import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
 import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
-import AttachmentsList from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
-import CodeBlock from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/CodeBlock/CodeBlock";
+import AnnotatorFieldsView from "@/v2/pages-shared/annotation-queues/AnnotatorViewTab/AnnotatorFieldsView";
+import { getAnnotatorFields } from "@/v2/pages-shared/annotation-queues/AnnotatorViewTab/annotatorViewConfig";
 import { manageToolFilter } from "@/v2/pages-shared/traces/spanTypeFilter";
 import TraceIdentifier from "./TraceIdentifier";
 import { Button } from "@/ui/button";
@@ -135,34 +135,23 @@ const TraceContent: React.FC = () => {
 
   const { media, transformedInput, transformedOutput } =
     useUnifiedMedia(displayTrace);
+  const { annotationQueue } = useSMEFlow();
+  const fields = getAnnotatorFields(annotationQueue?.annotator_view);
 
   return (
     <>
       <MediaProvider media={media}>
-        <div className="flex flex-col gap-3">
-          {displayTrace && <AttachmentsList media={media} />}
-          <CodeBlock
-            title="Input"
-            data={transformedInput}
-            prettifyConfig={{ fieldType: "input" }}
-            preserveKey="syntax-highlighter-annotation-input"
-            withSearch
-          />
-          <CodeBlock
-            title="Output"
-            data={transformedOutput}
-            prettifyConfig={{ fieldType: "output" }}
-            preserveKey="syntax-highlighter-annotation-output"
-            withSearch
-          />
-          <CodeBlock
-            title="Metadata"
-            data={displayTrace?.metadata || {}}
-            preserveKey="syntax-highlighter-annotation-metadata"
-            withSearch
-            defaultOpen={false}
-          />
-        </div>
+        <AnnotatorFieldsView
+          fields={fields}
+          source={{
+            input: transformedInput,
+            output: transformedOutput,
+            metadata: displayTrace?.metadata,
+          }}
+          media={displayTrace ? media : []}
+          feedbackScores={displayTrace?.feedback_scores}
+          preserveKeyPrefix="syntax-highlighter-annotation"
+        />
       </MediaProvider>
       <TraceDetailsPanel
         projectId={trace?.project_id || ""}

@@ -228,6 +228,87 @@ export const getJSONPaths = (
   return results;
 };
 
+const JSON_PATH_SEGMENT_REGEX =
+  /\[(-?\d+)\]|\[\s*"((?:[^"\\]|\\.)*)"\s*\]|\[\s*'((?:[^'\\]|\\.)*)'\s*\]|([^.[\]]+)/g;
+
+const unescapeKey = (key: string) => key.replace(/\\(.)/g, "$1");
+
+export const parseJSONPath = (path: string): JSONPathPart[] =>
+  Array.from(path.matchAll(JSON_PATH_SEGMENT_REGEX), (match) => {
+    const [, index, doubleQuoted, singleQuoted, key] = match;
+    if (index !== undefined) return { index: Number(index) };
+    const quoted = doubleQuoted ?? singleQuoted;
+    return { key: quoted !== undefined ? unescapeKey(quoted) : key };
+  });
+
+export const getJSONPathRootKey = (path: string) => {
+  const [root] = parseJSONPath(path);
+  return root && !isIndex(root) ? root.key : undefined;
+};
+
+const parseJSONString = (value: unknown): unknown => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+export const getValueByJSONPath = (data: unknown, path: string): unknown => {
+  let current: unknown = data;
+  for (const part of parseJSONPath(path)) {
+    current = parseJSONString(current);
+    if (isIndex(part)) {
+      if (!isArray(current)) return undefined;
+      current = current.at(part.index);
+    } else {
+      if (!isObject(current)) return undefined;
+      current = (current as Record<string, unknown>)[part.key];
+    }
+    if (current === undefined) return undefined;
+  }
+  return current;
+};
+
+export type JSONPathIndexPart =
+  | { kind: "text"; text: string }
+  | { kind: "index"; index: number; position: number };
+
+export const splitJSONPathByIndexes = (path: string): JSONPathIndexPart[] => {
+  const parts: JSONPathIndexPart[] = [];
+  let cursor = 0;
+  let position = 0;
+  for (const match of path.matchAll(JSON_PATH_SEGMENT_REGEX)) {
+    if (match[1] === undefined) continue;
+    if (match.index > cursor) {
+      parts.push({ kind: "text", text: path.slice(cursor, match.index) });
+    }
+    parts.push({ kind: "index", index: Number(match[1]), position });
+    position += 1;
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < path.length) {
+    parts.push({ kind: "text", text: path.slice(cursor) });
+  }
+  return parts;
+};
+
+export const setJSONPathIndex = (
+  path: string,
+  position: number,
+  index: number,
+) => {
+  let current = -1;
+  return path.replace(JSON_PATH_SEGMENT_REGEX, (segment, segmentIndex) => {
+    if (segmentIndex === undefined) return segment;
+    current += 1;
+    return current === position ? `[${index}]` : segment;
+  });
+};
+
 export const getTextWidth = (
   text: string[],
   properties: {

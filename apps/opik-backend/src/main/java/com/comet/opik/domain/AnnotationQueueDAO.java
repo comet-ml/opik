@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AnnotationQueue;
+import com.comet.opik.api.AnnotationQueueAnnotatorView;
 import com.comet.opik.api.AnnotationQueueInfo;
 import com.comet.opik.api.AnnotationQueueItem;
 import com.comet.opik.api.AnnotationQueueItemSource;
@@ -11,6 +12,7 @@ import com.comet.opik.api.sorting.AnnotationQueueSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
@@ -24,6 +26,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -106,6 +109,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 feedback_definitions,
                 annotators_per_item,
                 lock_timeout_seconds,
+                annotator_view,
                 created_by,
                 last_updated_by
             ) VALUES
@@ -122,6 +126,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         :feedback_definitions<item.index>,
                         :annotators_per_item<item.index>,
                         :lock_timeout_seconds<item.index>,
+                        :annotator_view<item.index>,
                         :user_name,
                         :user_name
                     )
@@ -143,6 +148,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 feedback_definitions,
                 annotators_per_item,
                 lock_timeout_seconds,
+                annotator_view,
                 created_at,
             	created_by,
             	last_updated_by
@@ -159,6 +165,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 <if(has_feedback_definitions)> :feedback_definitions <else> feedback_definitions <endif> as feedback_definitions,
                 <if(has_annotators_per_item)> :annotators_per_item <else> annotators_per_item <endif> as annotators_per_item,
                 <if(has_lock_timeout_seconds)> :lock_timeout_seconds <else> lock_timeout_seconds <endif> as lock_timeout_seconds,
+                <if(has_annotator_view)> :annotator_view <else> annotator_view <endif> as annotator_view,
                 created_at,
             	created_by,
                 :user_name as last_updated_by
@@ -303,6 +310,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     feedback_definitions,
                     annotators_per_item,
                     lock_timeout_seconds,
+                    annotator_view,
                     created_by,
                     created_at,
                     last_updated_by,
@@ -468,6 +476,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 q.feedback_definitions,
                 q.annotators_per_item,
                 q.lock_timeout_seconds,
+                q.annotator_view,
                 q.scope,
                 q.created_at,
                 q.created_by,
@@ -705,7 +714,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     .bind("lock_timeout_seconds" + i,
                             annotationQueue.lockTimeoutSeconds() != null
                                     ? annotationQueue.lockTimeoutSeconds()
-                                    : DEFAULT_LOCK_TIMEOUT_SECONDS);
+                                    : DEFAULT_LOCK_TIMEOUT_SECONDS)
+                    .bind("annotator_view" + i, serializeAnnotatorView(annotationQueue.annotatorView()));
             i++;
         }
 
@@ -758,6 +768,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         .orElse(DEFAULT_MIN_ANNOTATORS_PER_ITEM))
                 .lockTimeoutSeconds(Optional.ofNullable(row.get("lock_timeout_seconds", Integer.class))
                         .orElse(DEFAULT_LOCK_TIMEOUT_SECONDS))
+                .annotatorView(deserializeAnnotatorView(row.get("annotator_view", String.class)))
                 .scope(AnnotationQueue.AnnotationScope.fromString(row.get("scope", String.class)))
                 .itemsCount(row.get("items_count", Long.class))
                 .reviewers(mapReviewers(row))
@@ -873,6 +884,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .ifPresent(annotatorsPerItem -> template.add("has_annotators_per_item", true));
         Optional.ofNullable(update.lockTimeoutSeconds())
                 .ifPresent(lockTimeoutSeconds -> template.add("has_lock_timeout_seconds", true));
+        Optional.ofNullable(update.annotatorView())
+                .ifPresent(annotatorView -> template.add("has_annotator_view", true));
 
         return template;
     }
@@ -894,6 +907,18 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .ifPresent(annotatorsPerItem -> statement.bind("annotators_per_item", annotatorsPerItem));
         Optional.ofNullable(update.lockTimeoutSeconds())
                 .ifPresent(lockTimeoutSeconds -> statement.bind("lock_timeout_seconds", lockTimeoutSeconds));
+        Optional.ofNullable(update.annotatorView())
+                .ifPresent(annotatorView -> statement.bind("annotator_view", serializeAnnotatorView(annotatorView)));
+    }
+
+    private String serializeAnnotatorView(AnnotationQueueAnnotatorView annotatorView) {
+        return annotatorView != null ? JsonUtils.writeValueAsString(annotatorView) : "";
+    }
+
+    private AnnotationQueueAnnotatorView deserializeAnnotatorView(String json) {
+        return StringUtils.isNotBlank(json)
+                ? JsonUtils.readValue(json, AnnotationQueueAnnotatorView.class)
+                : null;
     }
 
     @Override
