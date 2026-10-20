@@ -45,14 +45,14 @@ import java.util.UUID;
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-@Tag(name = "Retention Rules", description = "Data retention rule management")
+@Tag(name = "Retention Rules", description = "Data retention rule management. In development: rules are saved but not applied, so no data is deleted.")
 public class RetentionRulesResource {
 
     private final @NonNull RetentionRuleService service;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
-    @Operation(operationId = "createRetentionRule", summary = "Create retention rule", description = "Create a new retention rule. Auto-deactivates any existing active rule for the same scope.", responses = {
+    @Operation(operationId = "createRetentionRule", summary = "Create retention rule", description = "In development: the rule is saved but not applied, so no traces or spans are deleted. Create a new retention rule. Auto-deactivates any existing active rule for the same scope.", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/retention/rules/{ruleId}", schema = @Schema(implementation = String.class))}, content = @Content(schema = @Schema(implementation = RetentionRule.class)))
     })

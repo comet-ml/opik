@@ -5,3 +5,13 @@ paths:
   /is-alive/ver:
     get:
       x-fern-ignore: true
+  /v1/private/retention/rules:
+    get:
+      x-fern-availability: in-development
+    post:
+      x-fern-availability: in-development
+  /v1/private/retention/rules/{ruleId}:
+    get:
+      x-fern-availability: in-development
+    delete:
+      x-fern-availability: in-development
