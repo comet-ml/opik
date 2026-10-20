@@ -176,6 +176,12 @@ anthropic:
   - id: "claude-opus-5-5"
     label: "Claude Opus 5.5"
     structuredOutput: true
+  - id: "claude-sonnet-5-5"
+    label: "Claude Sonnet 5.5"
+    structuredOutput: true
+  - id: "claude-haiku-5-5"
+    label: "Claude Haiku 5.5"
+    structuredOutput: true
   - id: "claude-opus-5"
     label: "Claude Opus 5"
     structuredOutput: true
@@ -231,6 +237,8 @@ anthropic:
   - id: "claude-sonnet-4-5"
     structuredOutput: true
 gemini:
+  - id: "gemini-4-argon"
+    label: "Gemini 4 Argon"
   - id: "gemini-3.8-flash"
     label: "Gemini 3.8 Flash"
   - id: "gemini-3.7-flash"
@@ -251,19 +259,12 @@ gemini:
   - id: "gemini-3-flash-preview"
     label: "Gemini 3 Flash Preview"
     structuredOutput: true
-  - id: "gemini-2.5-pro"
-    label: "Gemini 2.5 Pro"
-    structuredOutput: true
-  - id: "gemini-2.5-flash"
-    label: "Gemini 2.5 Flash"
-    structuredOutput: true
-  - id: "gemini-2.5-flash-lite"
-    label: "Gemini 2.5 Flash-Lite"
-    structuredOutput: true
   - id: "gemma-4-26b-a4b-it"
     label: "Gemma 4 26B A4B IT"
   - id: "gemma-4-31b-it"
     label: "Gemma 4 31B IT"
+  - id: "gemini-nano-banana-2.1"
+    label: "Nano Banana 2.1"
   - id: "aqa"
   - id: "gemini-1.0-pro"
   - id: "gemini-1.5-flash-latest"
@@ -274,7 +275,13 @@ gemini:
     structuredOutput: true
   - id: "gemini-2.0-flash-lite"
     structuredOutput: true
+  - id: "gemini-2.5-flash"
+    structuredOutput: true
   - id: "gemini-2.5-flash-image"
+    structuredOutput: true
+  - id: "gemini-2.5-flash-lite"
+    structuredOutput: true
+  - id: "gemini-2.5-pro"
     structuredOutput: true
   - id: "gemini-3-pro-image"
   - id: "gemini-3-pro-image-preview"
@@ -303,6 +310,10 @@ vertex-ai:
   - id: "gemini-3.8-flash"
     qualifiedName: "vertex_ai/gemini-3.8-flash"
     label: "Gemini 3.8 Flash"
+    structuredOutput: true
+  - id: "gemini-3.8-flash-cyber"
+    qualifiedName: "vertex_ai/gemini-3.8-flash-cyber"
+    label: "Gemini 3.8 Flash Cyber"
     structuredOutput: true
   - id: "gemini-3.7-flash"
     qualifiedName: "vertex_ai/gemini-3.7-flash"
@@ -368,6 +379,8 @@ vertex-ai:
     structuredOutput: true
   - id: "gemini-omni-1.1-flash"
     qualifiedName: "vertex_ai/gemini-omni-1.1-flash"
+  - id: "gemini-omni-1.1-flash-preview"
+    qualifiedName: "vertex_ai/gemini-omni-1.1-flash-preview"
   - id: "gemini-robotics-er-2"
     qualifiedName: "vertex_ai/gemini-robotics-er-2"
 openrouter:
@@ -390,8 +403,10 @@ openrouter:
     structuredOutput: true
   - id: "aion-labs/aion-3.5"
     label: "aion-labs/aion-3.5"
+    structuredOutput: true
   - id: "aion-labs/aion-3.5-mini"
     label: "aion-labs/aion-3.5-mini"
+    structuredOutput: true
   - id: "aion-labs/aion-rp-llama-3.1-8b"
     label: "aion-labs/aion-rp-llama-3.1-8b"
   - id: "alfredpros/codellama-7b-instruct-solidity"
@@ -458,6 +473,12 @@ openrouter:
   - id: "anthropic/claude-haiku-4.5:batch"
     label: "anthropic/claude-haiku-4.5:batch"
     structuredOutput: true
+  - id: "anthropic/claude-haiku-5.5"
+    label: "anthropic/claude-haiku-5.5"
+    structuredOutput: true
+  - id: "anthropic/claude-haiku-5.5:batch"
+    label: "anthropic/claude-haiku-5.5:batch"
+    structuredOutput: true
   - id: "anthropic/claude-opus-4"
     label: "anthropic/claude-opus-4"
   - id: "anthropic/claude-opus-4.1"
@@ -502,8 +523,10 @@ openrouter:
     label: "anthropic/claude-opus-5-fast"
   - id: "anthropic/claude-opus-5.5"
     label: "anthropic/claude-opus-5.5"
+    structuredOutput: true
   - id: "anthropic/claude-opus-5.5:batch"
     label: "anthropic/claude-opus-5.5:batch"
+    structuredOutput: true
   - id: "anthropic/claude-opus-5:batch"
     label: "anthropic/claude-opus-5:batch"
     structuredOutput: true
@@ -526,8 +549,10 @@ openrouter:
     structuredOutput: true
   - id: "anthropic/claude-sonnet-5.5"
     label: "anthropic/claude-sonnet-5.5"
+    structuredOutput: true
   - id: "anthropic/claude-sonnet-5.5:batch"
     label: "anthropic/claude-sonnet-5.5:batch"
+    structuredOutput: true
   - id: "anthropic/claude-sonnet-5:batch"
     label: "anthropic/claude-sonnet-5:batch"
     structuredOutput: true
@@ -570,8 +595,6 @@ openrouter:
     label: "baidu/ernie-4.5-300b-a47b"
   - id: "baidu/ernie-4.5-vl-28b-a3b"
     label: "baidu/ernie-4.5-vl-28b-a3b"
-  - id: "baidu/ernie-4.5-vl-424b-a47b"
-    label: "baidu/ernie-4.5-vl-424b-a47b"
   - id: "baidu/qianfan-ocr-fast"
     label: "baidu/qianfan-ocr-fast"
   - id: "baidu/qianfan-ocr-fast:free"
@@ -607,6 +630,7 @@ openrouter:
     structuredOutput: true
   - id: "cohere/command-a-plus"
     label: "cohere/command-a-plus"
+    structuredOutput: true
   - id: "cohere/command-r-08-2024"
     label: "cohere/command-r-08-2024"
     structuredOutput: true
@@ -628,9 +652,6 @@ openrouter:
     label: "deepcogito/cogito-v2-preview-llama-70b"
   - id: "deepcogito/cogito-v2.1-671b"
     label: "deepcogito/cogito-v2.1-671b"
-  - id: "deepseek/deepseek-chat"
-    label: "deepseek/deepseek-chat"
-    structuredOutput: true
   - id: "deepseek/deepseek-chat-v3-0324"
     label: "deepseek/deepseek-chat-v3-0324"
     structuredOutput: true
@@ -706,30 +727,36 @@ openrouter:
   - id: "deepseek/deepseek-v4.1-flash"
     label: "deepseek/deepseek-v4.1-flash"
     structuredOutput: true
+  - id: "deepseek/deepseek-v4.1-flash-1017"
+    label: "deepseek/deepseek-v4.1-flash-1017"
   - id: "deepseek/deepseek-v4.1-flash:batch"
     label: "deepseek/deepseek-v4.1-flash:batch"
+    structuredOutput: true
+  - id: "dots-studio/dots-3-note-preview:free"
+    label: "dots-studio/dots-3-note-preview:free"
+    structuredOutput: true
   - id: "eleutherai/llemma_7b"
     label: "eleutherai/llemma_7b"
+  - id: "elorian/glimpse"
+    label: "elorian/glimpse"
   - id: "essentialai/rnj-1-instruct"
     label: "essentialai/rnj-1-instruct"
   - id: "fireworks/ember-1"
     label: "fireworks/ember-1"
+    structuredOutput: true
+  - id: "google/gemini-2.0-flash-001"
+    label: "google/gemini-2.0-flash-001"
+    structuredOutput: true
   - id: "google/gemini-2.0-flash-exp:free"
     label: "google/gemini-2.0-flash-exp:free"
     structuredOutput: true
   - id: "google/gemini-2.0-flash-lite-001"
     label: "google/gemini-2.0-flash-lite-001"
-  - id: "google/gemini-2.5-flash"
-    label: "google/gemini-2.5-flash"
-    structuredOutput: true
   - id: "google/gemini-2.5-flash-image"
     label: "google/gemini-2.5-flash-image"
     structuredOutput: true
   - id: "google/gemini-2.5-flash-image-preview"
     label: "google/gemini-2.5-flash-image-preview"
-  - id: "google/gemini-2.5-flash-lite"
-    label: "google/gemini-2.5-flash-lite"
-    structuredOutput: true
   - id: "google/gemini-2.5-flash-lite-preview-09-2025"
     label: "google/gemini-2.5-flash-lite-preview-09-2025"
   - id: "google/gemini-2.5-flash-lite:batch"
@@ -737,20 +764,11 @@ openrouter:
     structuredOutput: true
   - id: "google/gemini-2.5-flash-preview-09-2025"
     label: "google/gemini-2.5-flash-preview-09-2025"
-  - id: "google/gemini-2.5-flash:batch"
-    label: "google/gemini-2.5-flash:batch"
-    structuredOutput: true
-  - id: "google/gemini-2.5-pro"
-    label: "google/gemini-2.5-pro"
-    structuredOutput: true
   - id: "google/gemini-2.5-pro-preview"
     label: "google/gemini-2.5-pro-preview"
     structuredOutput: true
   - id: "google/gemini-2.5-pro-preview-05-06"
     label: "google/gemini-2.5-pro-preview-05-06"
-    structuredOutput: true
-  - id: "google/gemini-2.5-pro:batch"
-    label: "google/gemini-2.5-pro:batch"
     structuredOutput: true
   - id: "google/gemini-3-flash-preview"
     label: "google/gemini-3-flash-preview"
@@ -824,6 +842,13 @@ openrouter:
   - id: "google/gemini-3.8-flash:batch"
     label: "google/gemini-3.8-flash:batch"
     structuredOutput: true
+  - id: "google/gemini-4-argon"
+    label: "google/gemini-4-argon"
+  - id: "google/gemini-4-argon:batch"
+    label: "google/gemini-4-argon:batch"
+  - id: "google/gemini-nano-banana-2.1"
+    label: "google/gemini-nano-banana-2.1"
+    structuredOutput: true
   - id: "google/gemma-2-27b-it"
     label: "google/gemma-2-27b-it"
     structuredOutput: true
@@ -889,6 +914,8 @@ openrouter:
     structuredOutput: true
   - id: "inception/mercury-2.5-preview"
     label: "inception/mercury-2.5-preview"
+  - id: "inception/mercury-3"
+    label: "inception/mercury-3"
   - id: "inception/mercury-coder"
     label: "inception/mercury-coder"
   - id: "inclusionai/ling-2.6-1t"
@@ -918,6 +945,8 @@ openrouter:
     label: "inclusionai/ling-3.0-flash:free"
   - id: "inclusionai/ling-3.0-tiny:free"
     label: "inclusionai/ling-3.0-tiny:free"
+  - id: "inclusionai/ling-3.1-flash"
+    label: "inclusionai/ling-3.1-flash"
   - id: "inclusionai/ring-2.6-1t"
     label: "inclusionai/ring-2.6-1t"
   - id: "inclusionai/ring-2.6-1t:free"
@@ -955,6 +984,8 @@ openrouter:
   - id: "liquid/lfm-2.5-2.6b:free"
     label: "liquid/lfm-2.5-2.6b:free"
     structuredOutput: true
+  - id: "liquid/lfm-2.5-24b-a2b"
+    label: "liquid/lfm-2.5-24b-a2b"
   - id: "liquid/lfm2-8b-a1b"
     label: "liquid/lfm2-8b-a1b"
   - id: "mancer/weaver"
@@ -1037,6 +1068,10 @@ openrouter:
   - id: "meta/muse-spark-1.3-contributor"
     label: "meta/muse-spark-1.3-contributor"
     structuredOutput: true
+  - id: "meta/muse-spark-open"
+    label: "meta/muse-spark-open"
+  - id: "meta/muse-wonder"
+    label: "meta/muse-wonder"
   - id: "microsoft/mai-ds-r1"
     label: "microsoft/mai-ds-r1"
   - id: "microsoft/mai-ds-r1:free"
@@ -1069,9 +1104,6 @@ openrouter:
     structuredOutput: true
   - id: "minimax/minimax-m2-her"
     label: "minimax/minimax-m2-her"
-  - id: "minimax/minimax-m2.1"
-    label: "minimax/minimax-m2.1"
-    structuredOutput: true
   - id: "minimax/minimax-m2.5"
     label: "minimax/minimax-m2.5"
     structuredOutput: true
@@ -1086,6 +1118,8 @@ openrouter:
   - id: "minimax/minimax-m3"
     label: "minimax/minimax-m3"
     structuredOutput: true
+  - id: "minimax/minimax-m3.1-flash:free"
+    label: "minimax/minimax-m3.1-flash:free"
   - id: "minimax/minimax-m3:batch"
     label: "minimax/minimax-m3:batch"
     structuredOutput: true
@@ -1160,6 +1194,9 @@ openrouter:
   - id: "mistralai/mistral-large-2512:batch"
     label: "mistralai/mistral-large-2512:batch"
     structuredOutput: true
+  - id: "mistralai/mistral-large-4-0"
+    label: "mistralai/mistral-large-4-0"
+    structuredOutput: true
   - id: "mistralai/mistral-medium-3"
     label: "mistralai/mistral-medium-3"
     structuredOutput: true
@@ -1226,6 +1263,10 @@ openrouter:
   - id: "mistralai/voxtral-small-24b-2507"
     label: "mistralai/voxtral-small-24b-2507"
     structuredOutput: true
+  - id: "moondream/moondream3-preview"
+    label: "moondream/moondream3-preview"
+  - id: "moondream/moondream3.1-9b-a2b"
+    label: "moondream/moondream3.1-9b-a2b"
   - id: "moonshotai/kimi-dev-72b"
     label: "moonshotai/kimi-dev-72b"
   - id: "moonshotai/kimi-k2"
@@ -1281,13 +1322,9 @@ openrouter:
     label: "nex-agi/nex-n2-pro:free"
   - id: "nex-agi/nex-n2.5-mini"
     label: "nex-agi/nex-n2.5-mini"
-  - id: "nex-agi/nex-n2.5-mini:free"
-    label: "nex-agi/nex-n2.5-mini:free"
     structuredOutput: true
   - id: "nex-agi/nex-n2.5-pro"
     label: "nex-agi/nex-n2.5-pro"
-  - id: "nex-agi/nex-n2.5-pro:free"
-    label: "nex-agi/nex-n2.5-pro:free"
     structuredOutput: true
   - id: "nousresearch/deephermes-3-mistral-24b-preview"
     label: "nousresearch/deephermes-3-mistral-24b-preview"
@@ -1342,6 +1379,10 @@ openrouter:
     structuredOutput: true
   - id: "nvidia/nemotron-3.5-lightning:free"
     label: "nvidia/nemotron-3.5-lightning:free"
+  - id: "nvidia/nemotron-3.5-super-vl"
+    label: "nvidia/nemotron-3.5-super-vl"
+  - id: "nvidia/nemotron-3.5-super-vl:free"
+    label: "nvidia/nemotron-3.5-super-vl:free"
   - id: "nvidia/nemotron-nano-12b-v2-vl"
     label: "nvidia/nemotron-nano-12b-v2-vl"
   - id: "nvidia/nemotron-nano-12b-v2-vl:free"
@@ -1350,6 +1391,8 @@ openrouter:
     label: "nvidia/nemotron-nano-9b-v2"
   - id: "nvidia/nemotron-nano-9b-v2:free"
     label: "nvidia/nemotron-nano-9b-v2:free"
+  - id: "nvidia/switchyard"
+    label: "nvidia/switchyard"
   - id: "openai/chatgpt-4o-latest"
     label: "openai/chatgpt-4o-latest"
   - id: "openai/codex-mini"
@@ -1604,28 +1647,40 @@ openrouter:
     structuredOutput: true
   - id: "openai/gpt-6-luna"
     label: "openai/gpt-6-luna"
+    structuredOutput: true
   - id: "openai/gpt-6-luna-pro"
     label: "openai/gpt-6-luna-pro"
+    structuredOutput: true
   - id: "openai/gpt-6-luna-pro:batch"
     label: "openai/gpt-6-luna-pro:batch"
+    structuredOutput: true
   - id: "openai/gpt-6-luna:batch"
     label: "openai/gpt-6-luna:batch"
+    structuredOutput: true
   - id: "openai/gpt-6-sol"
     label: "openai/gpt-6-sol"
+    structuredOutput: true
   - id: "openai/gpt-6-sol-pro"
     label: "openai/gpt-6-sol-pro"
+    structuredOutput: true
   - id: "openai/gpt-6-sol-pro:batch"
     label: "openai/gpt-6-sol-pro:batch"
+    structuredOutput: true
   - id: "openai/gpt-6-sol:batch"
     label: "openai/gpt-6-sol:batch"
+    structuredOutput: true
   - id: "openai/gpt-6.1-sol"
     label: "openai/gpt-6.1-sol"
+    structuredOutput: true
   - id: "openai/gpt-6.1-sol-pro"
     label: "openai/gpt-6.1-sol-pro"
+    structuredOutput: true
   - id: "openai/gpt-6.1-sol-pro:batch"
     label: "openai/gpt-6.1-sol-pro:batch"
+    structuredOutput: true
   - id: "openai/gpt-6.1-sol:batch"
     label: "openai/gpt-6.1-sol:batch"
+    structuredOutput: true
   - id: "openai/gpt-audio"
     label: "openai/gpt-audio"
     structuredOutput: true
@@ -1650,6 +1705,7 @@ openrouter:
     structuredOutput: true
   - id: "openai/gpt-oss-20b:batch"
     label: "openai/gpt-oss-20b:batch"
+    structuredOutput: true
   - id: "openai/gpt-oss-20b:free"
     label: "openai/gpt-oss-20b:free"
   - id: "openai/gpt-oss-safeguard-20b"
@@ -1741,6 +1797,7 @@ openrouter:
     structuredOutput: true
   - id: "perceptron/perceptron-mk1.5"
     label: "perceptron/perceptron-mk1.5"
+    structuredOutput: true
   - id: "perplexity/sonar"
     label: "perplexity/sonar"
   - id: "perplexity/sonar-deep-research"
@@ -1795,9 +1852,6 @@ openrouter:
   - id: "qwen/qwen-plus"
     label: "qwen/qwen-plus"
     structuredOutput: true
-  - id: "qwen/qwen-plus-2025-07-28"
-    label: "qwen/qwen-plus-2025-07-28"
-    structuredOutput: true
   - id: "qwen/qwen-plus-2025-07-28:thinking"
     label: "qwen/qwen-plus-2025-07-28:thinking"
     reasoning: true
@@ -1816,30 +1870,15 @@ openrouter:
   - id: "qwen/qwen2.5-vl-72b-instruct"
     label: "qwen/qwen2.5-vl-72b-instruct"
     structuredOutput: true
-  - id: "qwen/qwen3-14b"
-    label: "qwen/qwen3-14b"
-    structuredOutput: true
   - id: "qwen/qwen3-14b:free"
     label: "qwen/qwen3-14b:free"
-  - id: "qwen/qwen3-235b-a22b"
-    label: "qwen/qwen3-235b-a22b"
-    structuredOutput: true
   - id: "qwen/qwen3-235b-a22b-2507"
     label: "qwen/qwen3-235b-a22b-2507"
     structuredOutput: true
-  - id: "qwen/qwen3-235b-a22b-thinking-2507"
-    label: "qwen/qwen3-235b-a22b-thinking-2507"
-    structuredOutput: true
   - id: "qwen/qwen3-235b-a22b:free"
     label: "qwen/qwen3-235b-a22b:free"
-  - id: "qwen/qwen3-30b-a3b"
-    label: "qwen/qwen3-30b-a3b"
-    structuredOutput: true
   - id: "qwen/qwen3-30b-a3b-instruct-2507"
     label: "qwen/qwen3-30b-a3b-instruct-2507"
-    structuredOutput: true
-  - id: "qwen/qwen3-30b-a3b-thinking-2507"
-    label: "qwen/qwen3-30b-a3b-thinking-2507"
     structuredOutput: true
   - id: "qwen/qwen3-30b-a3b:free"
     label: "qwen/qwen3-30b-a3b:free"
@@ -1848,9 +1887,6 @@ openrouter:
     structuredOutput: true
   - id: "qwen/qwen3-4b:free"
     label: "qwen/qwen3-4b:free"
-  - id: "qwen/qwen3-8b"
-    label: "qwen/qwen3-8b"
-    structuredOutput: true
   - id: "qwen/qwen3-coder"
     label: "qwen/qwen3-coder"
     structuredOutput: true
@@ -1863,53 +1899,21 @@ openrouter:
   - id: "qwen/qwen3-coder-next"
     label: "qwen/qwen3-coder-next"
     structuredOutput: true
-  - id: "qwen/qwen3-coder-plus"
-    label: "qwen/qwen3-coder-plus"
-    structuredOutput: true
   - id: "qwen/qwen3-coder:exacto"
     label: "qwen/qwen3-coder:exacto"
   - id: "qwen/qwen3-coder:free"
     label: "qwen/qwen3-coder:free"
-  - id: "qwen/qwen3-max"
-    label: "qwen/qwen3-max"
-    structuredOutput: true
-  - id: "qwen/qwen3-max-thinking"
-    label: "qwen/qwen3-max-thinking"
-    structuredOutput: true
-    reasoning: true
   - id: "qwen/qwen3-next-80b-a3b-instruct"
     label: "qwen/qwen3-next-80b-a3b-instruct"
     structuredOutput: true
   - id: "qwen/qwen3-next-80b-a3b-instruct:free"
     label: "qwen/qwen3-next-80b-a3b-instruct:free"
-  - id: "qwen/qwen3-next-80b-a3b-thinking"
-    label: "qwen/qwen3-next-80b-a3b-thinking"
-    structuredOutput: true
-    reasoning: true
   - id: "qwen/qwen3-vl-235b-a22b-instruct"
     label: "qwen/qwen3-vl-235b-a22b-instruct"
     structuredOutput: true
-  - id: "qwen/qwen3-vl-235b-a22b-thinking"
-    label: "qwen/qwen3-vl-235b-a22b-thinking"
-    structuredOutput: true
-    reasoning: true
   - id: "qwen/qwen3-vl-30b-a3b-instruct"
     label: "qwen/qwen3-vl-30b-a3b-instruct"
     structuredOutput: true
-  - id: "qwen/qwen3-vl-30b-a3b-thinking"
-    label: "qwen/qwen3-vl-30b-a3b-thinking"
-    structuredOutput: true
-    reasoning: true
-  - id: "qwen/qwen3-vl-32b-instruct"
-    label: "qwen/qwen3-vl-32b-instruct"
-    structuredOutput: true
-  - id: "qwen/qwen3-vl-8b-instruct"
-    label: "qwen/qwen3-vl-8b-instruct"
-    structuredOutput: true
-  - id: "qwen/qwen3-vl-8b-thinking"
-    label: "qwen/qwen3-vl-8b-thinking"
-    structuredOutput: true
-    reasoning: true
   - id: "qwen/qwen3.5-122b-a10b"
     label: "qwen/qwen3.5-122b-a10b"
     structuredOutput: true
@@ -1946,9 +1950,6 @@ openrouter:
   - id: "qwen/qwen3.6-flash"
     label: "qwen/qwen3.6-flash"
     structuredOutput: true
-  - id: "qwen/qwen3.6-max-preview"
-    label: "qwen/qwen3.6-max-preview"
-    structuredOutput: true
   - id: "qwen/qwen3.6-plus"
     label: "qwen/qwen3.6-plus"
     structuredOutput: true
@@ -1965,6 +1966,8 @@ openrouter:
   - id: "qwen/qwen3.7-plus"
     label: "qwen/qwen3.7-plus"
     structuredOutput: true
+  - id: "qwen/qwen3.7-plus:batch"
+    label: "qwen/qwen3.7-plus:batch"
   - id: "qwen/qwen3.8-2.4t-a95b"
     label: "qwen/qwen3.8-2.4t-a95b"
     structuredOutput: true
@@ -1988,14 +1991,18 @@ openrouter:
     structuredOutput: true
   - id: "qwen/qwen3.8-max-prime"
     label: "qwen/qwen3.8-max-prime"
+    structuredOutput: true
   - id: "qwen/qwen3.8-omni-flash"
     label: "qwen/qwen3.8-omni-flash"
+    structuredOutput: true
   - id: "qwen/qwq-32b"
     label: "qwen/qwq-32b"
     structuredOutput: true
     reasoning: true
   - id: "raifle/sorcererlm-8x22b"
     label: "raifle/sorcererlm-8x22b"
+  - id: "reflection/beam-1.0-501b-a23b"
+    label: "reflection/beam-1.0-501b-a23b"
   - id: "reka/reka-edge"
     label: "reka/reka-edge"
   - id: "rekaai/reka-edge"
@@ -2034,10 +2041,12 @@ openrouter:
   - id: "sao10k/l3.3-euryale-70b"
     label: "sao10k/l3.3-euryale-70b"
     structuredOutput: true
+  - id: "scaledown/extract"
+    label: "scaledown/extract"
+  - id: "scaledown/summarize"
+    label: "scaledown/summarize"
   - id: "stealth/ox-alpha"
     label: "stealth/ox-alpha"
-  - id: "stealth/space-bunny-alpha"
-    label: "stealth/space-bunny-alpha"
   - id: "stealth/union-alpha"
     label: "stealth/union-alpha"
     structuredOutput: true
@@ -2050,6 +2059,8 @@ openrouter:
   - id: "stepfun/step-3.7-flash"
     label: "stepfun/step-3.7-flash"
     structuredOutput: true
+  - id: "stepfun/step-5-preview"
+    label: "stepfun/step-5-preview"
   - id: "switchpoint/router"
     label: "switchpoint/router"
   - id: "tencent/hunyuan-a13b-instruct"
@@ -2117,13 +2128,19 @@ openrouter:
     reasoning: true
   - id: "typesafe/jev-router"
     label: "typesafe/jev-router"
+    structuredOutput: true
   - id: "unbiased/pareto"
     label: "unbiased/pareto"
+  - id: "unbiased/pareto-26.10"
+    label: "unbiased/pareto-26.10"
+  - id: "unbiased/pareto-26.9"
+    label: "unbiased/pareto-26.9"
   - id: "undi95/remm-slerp-l2-13b"
     label: "undi95/remm-slerp-l2-13b"
     structuredOutput: true
   - id: "upstage/solar-mini4"
     label: "upstage/solar-mini4"
+    structuredOutput: true
   - id: "upstage/solar-pro-3"
     label: "upstage/solar-pro-3"
     structuredOutput: true
@@ -2199,6 +2216,8 @@ openrouter:
   - id: "xiaomi/mimo-v2.6-pro-ultraspeed"
     label: "xiaomi/mimo-v2.6-pro-ultraspeed"
     structuredOutput: true
+  - id: "xingchen-agi/xing4.0-29b-a4b:free"
+    label: "xingchen-agi/xing4.0-29b-a4b:free"
   - id: "z-ai/glm-4-32b"
     label: "z-ai/glm-4-32b"
   - id: "z-ai/glm-4.5"
@@ -2257,6 +2276,7 @@ openrouter:
     structuredOutput: true
   - id: "z-ai/glm-5.3-prime"
     label: "z-ai/glm-5.3-prime"
+    structuredOutput: true
   - id: "z-ai/glm-5.3:batch"
     label: "z-ai/glm-5.3:batch"
     structuredOutput: true
@@ -2310,6 +2330,8 @@ openrouter:
   - id: "~openai/gpt-terra-latest"
     label: "~openai/gpt-terra-latest"
     structuredOutput: true
+  - id: "~unbiased/pareto-latest"
+    label: "~unbiased/pareto-latest"
   - id: "~x-ai/grok-latest"
     label: "~x-ai/grok-latest"
     structuredOutput: true
@@ -2319,6 +2341,9 @@ openrouter:
   - id: "~z-ai/glm-latest"
     label: "~z-ai/glm-latest"
     structuredOutput: true
+  - id: "baidu/ernie-4.5-vl-424b-a47b"
+  - id: "deepseek/deepseek-chat"
+    structuredOutput: true
   - id: "deepseek/deepseek-r1-distill-llama-70b"
     reasoning: true
   - id: "deepseek/deepseek-v3.1-terminus"
@@ -2327,7 +2352,59 @@ openrouter:
     structuredOutput: true
   - id: "deepseek/deepseek-v3.2-exp"
     structuredOutput: true
-  - id: "dots-studio/dots-3-note-preview:free"
+  - id: "google/gemini-2.5-flash"
     structuredOutput: true
-  - id: "google/gemini-2.0-flash-001"
+  - id: "google/gemini-2.5-flash-lite"
     structuredOutput: true
+  - id: "google/gemini-2.5-flash:batch"
+    structuredOutput: true
+  - id: "google/gemini-2.5-pro"
+    structuredOutput: true
+  - id: "google/gemini-2.5-pro:batch"
+    structuredOutput: true
+  - id: "minimax/minimax-m2.1"
+    structuredOutput: true
+  - id: "nex-agi/nex-n2.5-mini:free"
+    structuredOutput: true
+  - id: "nex-agi/nex-n2.5-pro:free"
+    structuredOutput: true
+  - id: "qwen/qwen-plus-2025-07-28"
+    structuredOutput: true
+  - id: "qwen/qwen3-14b"
+    structuredOutput: true
+  - id: "qwen/qwen3-235b-a22b"
+    structuredOutput: true
+  - id: "qwen/qwen3-235b-a22b-thinking-2507"
+    structuredOutput: true
+  - id: "qwen/qwen3-30b-a3b"
+    structuredOutput: true
+  - id: "qwen/qwen3-30b-a3b-thinking-2507"
+    structuredOutput: true
+  - id: "qwen/qwen3-8b"
+    structuredOutput: true
+  - id: "qwen/qwen3-coder-plus"
+    structuredOutput: true
+  - id: "qwen/qwen3-max"
+    structuredOutput: true
+  - id: "qwen/qwen3-max-thinking"
+    structuredOutput: true
+    reasoning: true
+  - id: "qwen/qwen3-next-80b-a3b-thinking"
+    structuredOutput: true
+    reasoning: true
+  - id: "qwen/qwen3-vl-235b-a22b-thinking"
+    structuredOutput: true
+    reasoning: true
+  - id: "qwen/qwen3-vl-30b-a3b-thinking"
+    structuredOutput: true
+    reasoning: true
+  - id: "qwen/qwen3-vl-32b-instruct"
+    structuredOutput: true
+  - id: "qwen/qwen3-vl-8b-instruct"
+    structuredOutput: true
+  - id: "qwen/qwen3-vl-8b-thinking"
+    structuredOutput: true
+    reasoning: true
+  - id: "qwen/qwen3.6-max-preview"
+    structuredOutput: true
+  - id: "stealth/space-bunny-alpha"
