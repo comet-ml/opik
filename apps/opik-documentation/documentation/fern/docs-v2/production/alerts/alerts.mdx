@@ -72,7 +72,7 @@ Opik delivers each notification as an HTTP POST carrying the event data in the b
    - **Secret token**: Add a secret token to verify webhook authenticity (recommended for General destination)
    - **Custom headers**: Add HTTP headers for authentication or routing
      - Example: `X-Custom-Auth: Bearer your-token-here`
-   - **Custom fields**: Shown only when your deployment publishes alerts to AWS EventBridge. Add up to 20 key/value pairs, sent as string values at the top level of the alert's EventBridge event `detail`, for example `impact: 1` or `level: Error` for an incident workflow
+   - **Custom fields**: Shown only when your deployment publishes alerts to AWS EventBridge. Add up to 20 key/value pairs (keys up to 64 characters, values up to 255, neither blank), sent as string values at the top level of the alert's EventBridge event `detail`, for example `impact: 1` or `level: Error` for an incident workflow
      - Keys can't reuse the event's own keys, such as `alertId`, `eventType`, `opik` or `payload`. The API rejects them and names the conflicting key
 
 5. **Name the alert**

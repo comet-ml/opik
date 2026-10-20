@@ -79,7 +79,7 @@ public class AlertEventBridgePublisher {
             "schemaVersion", "eventId", "workspaceId", "workspaceName", "alertId", "alertName", "eventType", "url",
             "triggeredAt", "truncated", "opik",
             "id", "event_type", "alert_type", "alert_id", "project_id", "alert_name", "workspace_id",
-            "workspace_name", "user_name", "payload", "created_at");
+            "workspace_name", "user_name", "payload", "created_at", "max_retries");
 
     private static final int MAX_RETRIES = 2;
     private static final Duration RETRY_BACKOFF = Duration.ofMillis(200);

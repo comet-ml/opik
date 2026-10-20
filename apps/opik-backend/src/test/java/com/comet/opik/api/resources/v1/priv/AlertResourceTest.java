@@ -425,11 +425,12 @@ class AlertResourceTest {
                             ErrorMessage.class),
                     arguments(
                             generateAlert().toBuilder()
-                                    .customFields(Map.of("impact", "1", "alertId", "x", "payload", "y"))
+                                    .customFields(
+                                            Map.of("impact", "1", "alertId", "x", "payload", "y", "max_retries", "z"))
                                     .build(),
                             HttpStatus.SC_BAD_REQUEST,
                             new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_BAD_REQUEST,
-                                    "'custom_fields' keys [alertId, payload] are reserved by the alert event payload, use different keys"),
+                                    "'custom_fields' keys [alertId, max_retries, payload] are reserved by the alert event payload, use different keys"),
                             io.dropwizard.jersey.errors.ErrorMessage.class),
 
                     // Invalid UUID version
