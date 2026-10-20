@@ -61,16 +61,14 @@ public class OpenTelemetryResource {
         var userName = requestContext.get().getUserName();
         var workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Received spans batch via OpenTelemetry for fallback project '{}' in workspaceId '{}'",
-                fallbackProjectName, workspaceId);
+        log.info("Received spans batch via OpenTelemetry in workspaceId '{}'", workspaceId);
 
         Long stored = openTelemetryService
                 .parseAndStoreSpans(traceRequest, fallbackProjectName)
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                 .block();
 
-        log.info("Stored {} spans via OpenTelemetry for fallback project '{}' in workspaceId '{}'", stored,
-                fallbackProjectName, workspaceId);
+        log.info("Stored {} spans via OpenTelemetry in workspaceId '{}'", stored, workspaceId);
 
         // Return a successful HTTP response
         return Response.ok().build();

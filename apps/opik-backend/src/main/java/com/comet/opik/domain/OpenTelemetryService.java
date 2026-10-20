@@ -92,8 +92,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
                 .anyMatch(scopeSpans -> scopeSpans.getSpansCount() > 0);
         if (!carriesSpans) {
-            log.info("Received an OpenTelemetry batch with no spans; nothing to store, fallback project='{}'",
-                    fallbackProjectName);
+            log.info("Received an OpenTelemetry batch with no spans; nothing to store");
             return Mono.just(0L);
         }
 
