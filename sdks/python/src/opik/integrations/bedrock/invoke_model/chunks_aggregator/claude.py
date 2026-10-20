@@ -21,6 +21,8 @@ def _apply_delta(block: Dict[str, Any], delta: Dict[str, Any], tool_input: str) 
         block["signature"] = block.get("signature", "") + delta["signature"]
     elif "partial_json" in delta:
         tool_input += delta["partial_json"]
+    elif "citation" in delta:
+        block["citations"] = (block.get("citations") or []) + [delta["citation"]]
     else:
         LOGGER.debug("Unknown delta type in content_block_delta: %s", list(delta))
     return tool_input
@@ -36,8 +38,8 @@ class ClaudeAggregator(ChunkAggregator):
     Claude chunk structure uses snake_case:
     - message_start: Contains role and initial usage
     - content_block_start: Content block metadata (text, thinking, tool_use id/name)
-    - content_block_delta: delta.text, delta.thinking, delta.signature or
-      delta.partial_json (tool input), for the block at the same index
+    - content_block_delta: delta.text, delta.thinking, delta.signature,
+      delta.citation or delta.partial_json (tool input), for the block at the same index
     - content_block_stop: End of content block
     - message_delta: Stop reason and updated usage
     - message_stop: amazon-bedrock-invocationMetrics

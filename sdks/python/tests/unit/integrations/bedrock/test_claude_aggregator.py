@@ -365,3 +365,37 @@ class TestClaudeStreamContentBlocks:
         response = chunks_aggregator.aggregate_chunks_to_dataclass(chunks)
 
         assert response.native_response["content"][0]["input"] == '{"city": "Par'
+
+    def test_aggregate_chunks__text_with_citations__citations_logged(self):
+        citation = {
+            "type": "char_location",
+            "cited_text": "The sky is blue.",
+            "document_index": 0,
+            "start_char_index": 0,
+            "end_char_index": 16,
+        }
+        events = [
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "text", "text": ""},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": "The sky is blue."},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "citations_delta", "citation": citation},
+            },
+            {"type": "content_block_stop", "index": 0},
+        ]
+        chunks = _content_stream(events, stop_reason="end_turn")
+
+        response = chunks_aggregator.aggregate_chunks_to_dataclass(chunks)
+
+        assert response.native_response["content"] == [
+            {"type": "text", "text": "The sky is blue.", "citations": [citation]}
+        ]
