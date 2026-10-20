@@ -27,6 +27,8 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Duration;
 import java.util.Base64;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -80,8 +82,8 @@ class OpenTelemetryServiceUnitTest {
         var config = OpenTelemetryConfig.builder().ttl(io.dropwizard.util.Duration.minutes(5)).build();
         service = new OpenTelemetryServiceImpl(config, traceService, spanService, projectService, redisson);
 
-        when(projectService.getOrCreate(projectName)).thenReturn(Mono.just(podamFactory.manufacturePojo(Project.class)
-                .toBuilder().id(projectId).name(projectName).build()));
+        when(projectService.retrieveByNamesOrCreate(Set.of(projectName))).thenReturn(Mono.just(List.of(
+                podamFactory.manufacturePojo(Project.class).toBuilder().id(projectId).name(projectName).build())));
         doReturn(bucket).when(redisson).getBucket(redisKey);
         lenient().when(traceService.create(any(Trace.class)))
                 .thenAnswer(invocation -> Mono.just(invocation.<Trace>getArgument(0).id()));

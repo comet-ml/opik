@@ -31,6 +31,7 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
 import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
+import io.opentelemetry.proto.resource.v1.Resource;
 import io.opentelemetry.proto.trace.v1.ResourceSpans;
 import io.opentelemetry.proto.trace.v1.ScopeSpans;
 import io.opentelemetry.proto.trace.v1.Span;
@@ -1266,6 +1267,89 @@ class OpenTelemetryResourceTest {
             assertThat(existingTraceSpans.size()).isEqualTo(1);
             assertThat(existingTraceSpans.content().getFirst().name()).isEqualTo("override span");
             assertThat(existingTraceSpans.content().getFirst().traceId()).isEqualTo(existingTraceId);
+        }
+
+        @Test
+        @DisplayName("opik.project_name span and resource attributes route each trace to its project, invalid names use the header project")
+        void testOpikProjectNameRoutesTracesToProjects() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var headerProject = "header-project-" + UUID.randomUUID();
+            var resourceProject = "resource-project-" + UUID.randomUUID();
+            var spanProject = "span-project-" + UUID.randomUUID();
+
+            var resourceRouted = rootAndChild();
+            var spanRouted = rootAndChild(projectNameAttribute(spanProject));
+            var headerRouted = rootAndChild();
+            var tooLongNameRouted = rootAndChild();
+
+            var request = ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .setResource(Resource.newBuilder()
+                                    .addAttributes(projectNameAttribute(resourceProject)))
+                            .addScopeSpans(ScopeSpans.newBuilder()
+                                    .addAllSpans(resourceRouted)
+                                    .addAllSpans(spanRouted)))
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .addScopeSpans(ScopeSpans.newBuilder().addAllSpans(headerRouted)))
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .setResource(Resource.newBuilder()
+                                    .addAttributes(projectNameAttribute("a".repeat(151))))
+                            .addScopeSpans(ScopeSpans.newBuilder().addAllSpans(tooLongNameRouted)))
+                    .build();
+
+            sendBatch(Entity.entity(request.toByteArray(), "application/x-protobuf"), "application/x-protobuf",
+                    headerProject, workspaceName, okApikey, HttpStatus.SC_OK, null);
+
+            assertTraceStoredInProject(resourceRouted, resourceProject, workspaceName);
+            assertTraceStoredInProject(spanRouted, spanProject, workspaceName);
+            assertTraceStoredInProject(headerRouted, headerProject, workspaceName);
+            assertTraceStoredInProject(tooLongNameRouted, headerProject, workspaceName);
+        }
+
+        private KeyValue projectNameAttribute(String projectName) {
+            return KeyValue.newBuilder()
+                    .setKey("opik.project_name")
+                    .setValue(AnyValue.newBuilder().setStringValue(projectName))
+                    .build();
+        }
+
+        /** A root span and its child, with the given attributes on the root span only. */
+        private List<Span> rootAndChild(KeyValue... rootAttributes) {
+            var otelTraceId = ByteString.copyFrom(UUID.randomUUID().toString().getBytes());
+            var root = Span.newBuilder()
+                    .setName("root span")
+                    .setTraceId(otelTraceId)
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAllAttributes(List.of(rootAttributes))
+                    .build();
+            var child = Span.newBuilder()
+                    .setName("child span")
+                    .setTraceId(otelTraceId)
+                    .setParentSpanId(root.getSpanId())
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 500) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .build();
+            return List.of(root, child);
+        }
+
+        private void assertTraceStoredInProject(List<Span> otelSpans, String projectName, String workspaceName) {
+            var root = otelSpans.getFirst();
+            var opikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(root.getTraceId().toByteArray(),
+                    Duration.ofNanos(root.getStartTimeUnixNano()).toMillis());
+
+            var spans = spanResourceClient.getByTraceIdAndProject(opikTraceId, projectName, workspaceName,
+                    okApikey);
+            assertThat(spans.content()).hasSize(otelSpans.size());
+            assertThat(spans.content()).allSatisfy(span -> assertThat(
+                    span.metadata() == null || !span.metadata().has("opik.project_name")).isTrue());
+
+            var trace = traceResourceClient.getById(opikTraceId, workspaceName, okApikey);
+            assertThat(trace.projectId()).isEqualTo(spans.content().getFirst().projectId());
         }
 
         @Test

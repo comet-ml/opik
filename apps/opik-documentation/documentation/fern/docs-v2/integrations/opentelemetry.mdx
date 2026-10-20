@@ -132,6 +132,7 @@ the standard OpenTelemetry API on any span.
 
 | Attribute | Effect |
 | --- | --- |
+| `opik.project_name` | Sends the trace to this project instead of the project in the `projectName` header. You can also set it as a resource attribute. See [Routing spans to a project](#routing-spans-to-a-project). |
 | `opik.tags` | Adds tags to the span. On the root span, Opik also adds the tags to the trace, so you can filter your traces by tag. |
 | `opik.metadata.<key>` | Adds `<key>` to the metadata of the span. The metadata of the root span also becomes the metadata of the trace. |
 | `thread_id` | Groups traces into one conversational thread. See [Multi-turn conversations](/evaluation/evaluate_threads). |
@@ -158,4 +159,40 @@ with tracer.start_as_current_span("chatbot_conversation") as conversation_span:
 
 <Note>
   Set `opik.tags` on the root span if you want to filter traces by tag. Tags on a child span apply to that span only.
+</Note>
+
+### Routing spans to a project
+
+Some OpenTelemetry Collector processors, such as `tail_sampling`, do not forward the HTTP headers of the incoming
+request. In that case, set the project with the `opik.project_name` attribute instead of the `projectName` header.
+
+Opik picks one project for each trace, so the spans of a trace in the same export stay together:
+
+1. Opik reads `opik.project_name` from each span. If the span does not have it, Opik reads it from the resource of
+   that span. Opik ignores a value longer than 150 characters.
+2. The trace uses the value of its root span. If the root span has no value, the trace uses the value of another
+   span in the export.
+3. If no span of the trace has a value, the trace uses the `projectName` header, then the `Default Project`.
+
+We recommend the resource attribute, because the SDK adds it to every span:
+
+```bash
+export OTEL_RESOURCE_ATTRIBUTES="opik.project_name=<your-project-name>"
+```
+
+To route by `service.name`, copy it to `opik.project_name` in the collector:
+
+```yaml
+processors:
+  transform/opik_project:
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["opik.project_name"], attributes["service.name"])
+```
+
+<Note>
+  Child spans end before the root span, so the SDK often sends them in an earlier export. If you set the attribute
+  only on the root span, these child spans go to the project in the header. Set the attribute on the resource, so
+  that every span carries it.
 </Note>

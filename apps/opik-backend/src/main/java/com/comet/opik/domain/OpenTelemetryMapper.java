@@ -43,6 +43,8 @@ import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.storageKey
 @Slf4j
 public class OpenTelemetryMapper {
 
+    private static final int MAX_PROJECT_NAME_LENGTH = 150;
+
     /**
      * Converts an OpenTelemetry Span into an Opik Span. Despite similar conceptually, but require some translation
      * of concepts, especially around ids.
@@ -545,8 +547,26 @@ public class OpenTelemetryMapper {
                 .flatMap(value -> parseUUIDv7(value, GeneralMappingRules.OPIK_SPAN_ID_ATTR));
     }
 
+    public static Optional<String> extractOpikProjectName(List<KeyValue> attributes) {
+        return extractStringAttribute(attributes, GeneralMappingRules.OPIK_PROJECT_NAME_ATTR)
+                .filter(OpenTelemetryMapper::isValidProjectName);
+    }
+
+    private static boolean isValidProjectName(String projectName) {
+        if (projectName.strip().length() > MAX_PROJECT_NAME_LENGTH) {
+            log.warn("Attribute '{}' exceeds {} characters, ignoring", GeneralMappingRules.OPIK_PROJECT_NAME_ATTR,
+                    MAX_PROJECT_NAME_LENGTH);
+            return false;
+        }
+        return true;
+    }
+
     private static Optional<String> extractStringAttribute(Span otelSpan, String key) {
-        return otelSpan.getAttributesList().stream()
+        return extractStringAttribute(otelSpan.getAttributesList(), key);
+    }
+
+    private static Optional<String> extractStringAttribute(List<KeyValue> attributes, String key) {
+        return attributes.stream()
                 .filter(attr -> key.equals(attr.getKey()))
                 .map(attr -> attr.getValue().getStringValue())
                 .filter(StringUtils::isNotBlank)
