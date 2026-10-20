@@ -416,8 +416,8 @@ class DockerExecutor(CodeExecutorBase):
         })
 
     @staticmethod
-    def _is_rejected_response(parsed_result: object) -> bool:
-        """Whether the HTTP layer would reject this metric response instead of serving it.
+    def _rejection_reason(parsed_result: object) -> Optional[str]:
+        """Why the HTTP layer would reject this metric response, or ``None`` when it is servable.
 
         ``evaluator.run_scoring`` aborts on three conditions after the executor returns, and a
         response that trips any of them must not be counted as a successful execution:
@@ -430,16 +430,21 @@ class DockerExecutor(CodeExecutorBase):
 
         The last two used to be recorded as successes: ``parse_execution_result`` returns the parsed
         object verbatim when the metric exits 0, so a well-formed ``{"scores": []}`` has no ``code``
-        to key on and looked like a clean run to the counter while the caller received a 400.
+        to key on and looked like a clean run to the counter while the caller received a 400. The
+        returned reason goes on the span so a rejected run says why, not just that it failed.
         """
         if not isinstance(parsed_result, dict):
-            return True
+            return "unparsable_result"
 
         if "error" in parsed_result:
-            return True
+            return "error_payload"
 
         scores = parsed_result.get("scores", [])
-        return len(scores) == 0 or not has_usable_score(scores)
+        if len(scores) == 0:
+            return "no_scores"
+        if not has_usable_score(scores):
+            return "no_usable_score"
+        return None
 
     def run_scoring(self, code: str, data: dict, payload_type: Optional[str] = None) -> dict:
         if self.stop_event.is_set():
@@ -506,13 +511,19 @@ class DockerExecutor(CodeExecutorBase):
                 # parse_execution_result reports as a 4xx. Keying telemetry on the exit code
                 # counted those as successes while the caller was handed an error.
                 result_code = parsed_result.get("code") if isinstance(parsed_result, dict) else None
-                if exec_result.exit_code == 0 and not self._is_rejected_response(parsed_result):
+                rejection_reason = self._rejection_reason(parsed_result)
+                if exec_result.exit_code == 0 and rejection_reason is None:
                     outcome_status = "success"
                 else:
                     outcome_status = "invalid_code"
-                    span.set_status(Status(StatusCode.ERROR,
-                            f"Execution failed with exit_code={exec_result.exit_code}, result_code={result_code}"))
+                    reason = rejection_reason or "nonzero_exit"
+                    status_message = (
+                        f"Execution failed with exit_code={exec_result.exit_code}, "
+                        f"result_code={result_code}, reason={reason}"
+                    )
+                    span.set_status(Status(StatusCode.ERROR, status_message))
                     span.set_attribute("error.type", "invalid_code")
+                    span.set_attribute("error.reason", reason)
                     span.set_attribute("error.exit_code", exec_result.exit_code)
                     if result_code is not None:
                         span.set_attribute("error.result_code", result_code)

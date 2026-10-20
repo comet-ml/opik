@@ -89,16 +89,24 @@ def test_exit_zero_with_no_scores_is_not_recorded_as_success(executor):
     assert outcomes == ["invalid_code"]
 
 
-def test_exit_zero_with_no_storable_score_is_not_recorded_as_success(executor):
+@pytest.mark.parametrize(
+    "score",
+    [
+        pytest.param({"name": "m"}, id="missing-value"),
+        pytest.param({"name": "m", "value": None}, id="null-value"),
+        pytest.param({"name": "m", "value": 0.0, "scoring_failed": True}, id="scoring-failed"),
+    ],
+)
+def test_exit_zero_with_no_storable_score_is_not_recorded_as_success(executor, score):
     # Same gap one step further on: there is a score, but the backend cannot store it —
     # no value, or the metric itself flagged it as failed. evaluator.run_scoring rejects
     # both with a 400, so neither may be counted as a success.
-    for score in ({"name": "m"}, {"name": "m", "value": None}, {"name": "m", "value": 0.0, "scoring_failed": True}):
-        body = {"scores": [score]}
+    body = {"scores": [score]}
 
-        _, outcomes = run_with_result(executor, 0, json.dumps(body).encode("utf-8"))
+    response, outcomes = run_with_result(executor, 0, json.dumps(body).encode("utf-8"))
 
-        assert outcomes == ["invalid_code"], score
+    assert response == body
+    assert outcomes == ["invalid_code"]
 
 
 def test_exit_zero_with_one_storable_score_is_still_a_success(executor):
@@ -117,6 +125,27 @@ def test_a_genuine_zero_value_is_a_usable_score(executor):
     # confused with the missing value above.
     body = {"scores": [{"name": "m", "value": 0.0}]}
 
-    _, outcomes = run_with_result(executor, 0, json.dumps(body).encode("utf-8"))
+    response, outcomes = run_with_result(executor, 0, json.dumps(body).encode("utf-8"))
 
+    assert response == body
     assert outcomes == ["success"]
+
+
+def test_rejected_response_pins_the_reason_on_the_span(executor):
+    # A rejected run used to say only "result_code=None"; the span now carries why the
+    # response was rejected so "no usable score" is distinguishable from a real failure.
+    span = MagicMock()
+    span_context = MagicMock()
+    span_context.__enter__.return_value = span
+    span_context.__exit__.return_value = False
+    executor.tracer = MagicMock()
+    executor.tracer.start_as_current_span.return_value = span_context
+
+    body = {"scores": [{"name": "m"}]}
+    response, outcomes = run_with_result(executor, 0, json.dumps(body).encode("utf-8"))
+
+    assert response == body
+    assert outcomes == ["invalid_code"]
+    attributes = {call.args[0]: call.args[1] for call in span.set_attribute.call_args_list}
+    assert attributes["error.reason"] == "no_usable_score"
+    assert "reason=no_usable_score" in span.set_status.call_args.args[0].description
