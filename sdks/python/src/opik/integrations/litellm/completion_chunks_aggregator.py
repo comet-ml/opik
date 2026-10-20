@@ -32,6 +32,28 @@ def _extract_content_from_delta(delta: Any) -> Optional[str]:
     return None
 
 
+def _merge_tool_call_deltas(
+    delta: Any, tool_calls_by_index: Dict[int, Dict[str, Any]]
+) -> None:
+    for position, tool_call in enumerate(getattr(delta, "tool_calls", None) or []):
+        index = getattr(tool_call, "index", None)
+        if index is None:
+            index = position
+
+        merged = tool_calls_by_index.setdefault(
+            index,
+            {"id": None, "type": "function", "function": {"name": "", "arguments": ""}},
+        )
+        if getattr(tool_call, "id", None) and not merged["id"]:
+            merged["id"] = tool_call.id
+        function = getattr(tool_call, "function", None)
+        if function is not None:
+            if getattr(function, "name", None) and not merged["function"]["name"]:
+                merged["function"]["name"] = function.name
+            if getattr(function, "arguments", None):
+                merged["function"]["arguments"] += function.arguments
+
+
 def _extract_finish_reason_from_choice(choice: Any) -> Optional[str]:
     if hasattr(choice, "finish_reason") and choice.finish_reason:
         return choice.finish_reason
@@ -76,6 +98,7 @@ def aggregate(
 
         aggregated_response = _initialize_aggregated_response(items[0])
         text_chunks: List[str] = []
+        tool_calls_by_index: Dict[int, Dict[str, Any]] = {}
 
         for chunk in items:
             if not hasattr(chunk, "choices") or not chunk.choices:
@@ -95,6 +118,8 @@ def aggregate(
                 if content:
                     text_chunks.append(content)
 
+                _merge_tool_call_deltas(delta, tool_calls_by_index)
+
             finish_reason = _extract_finish_reason_from_choice(choice)
             if finish_reason:
                 aggregated_response["choices"][0]["finish_reason"] = finish_reason
@@ -104,6 +129,10 @@ def aggregate(
                 aggregated_response["usage"] = chunk_usage
 
         aggregated_response["choices"][0]["message"]["content"] = "".join(text_chunks)
+        if tool_calls_by_index:
+            aggregated_response["choices"][0]["message"]["tool_calls"] = [
+                tool_calls_by_index[index] for index in sorted(tool_calls_by_index)
+            ]
         return litellm.types.utils.ModelResponse(**aggregated_response)
 
     except Exception as exception:
