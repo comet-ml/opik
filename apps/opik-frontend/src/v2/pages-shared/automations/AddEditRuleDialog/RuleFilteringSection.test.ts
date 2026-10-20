@@ -49,10 +49,10 @@ describe("TRACE_FILTER_COLUMNS", () => {
 
 describe("THREAD_FILTER_COLUMNS", () => {
   it("should expose the message count so a thread rule can filter on it", () => {
-    // The backend accepts number_of_messages as a NUMBER filter field
-    // (TraceThreadField.NUMBER_OF_MESSAGES) and evaluates it in
-    // TraceThreadFilterEvaluationService; the dialog is the only place it
-    // was missing.
+    // The threads list endpoint accepts number_of_messages as a NUMBER filter
+    // field (TraceThreadField.NUMBER_OF_MESSAGES, pushed down to ClickHouse),
+    // and the dashboards filter section exposes the same column; the rule
+    // dialog was the only thread filter surface missing it.
     const messageCount = THREAD_FILTER_COLUMNS.find(
       (c) => c.id === "number_of_messages",
     );
@@ -69,6 +69,28 @@ describe("THREAD_FILTER_COLUMNS", () => {
     expect(ids).toContain("duration");
     expect(ids).toContain("tags");
     expect(ids).toContain("feedback_scores");
+  });
+
+  it("should resolve a saved message-count filter to the number type on re-open", () => {
+    // Filters persisted by the API carry no type, so the edit path falls back
+    // to the column list: without the column entry a saved number_of_messages
+    // filter would re-open as a string row (contains) instead of a number row.
+    const result = normalizeFilters(
+      [
+        {
+          id: "1",
+          field: "number_of_messages",
+          type: "",
+          operator: ">=",
+          value: "5",
+          key: "",
+        },
+      ],
+      THREAD_FILTER_COLUMNS as Parameters<typeof normalizeFilters>[1],
+    );
+
+    expect(result[0].type).toBe(COLUMN_TYPE.number);
+    expect(result[0].value).toBe("5");
   });
 
   it("should round-trip a message-count filter through the rule payload", () => {
