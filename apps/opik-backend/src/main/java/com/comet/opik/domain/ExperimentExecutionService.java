@@ -30,7 +30,9 @@ import com.fasterxml.jackson.databind.node.TextNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -169,7 +171,7 @@ public class ExperimentExecutionService {
                                                 }
 
                                                 return refuseIfQueueIsFull(messages.size())
-                                                        .then(itemPublisher.trackRun(messages, testSuite)
+                                                        .then(itemPublisher.startTrackingRun(messages, testSuite)
                                                                 .then(persistExperiments(plannedExperiments))
                                                                 .then(itemPublisher.publish(batchId, messages))
                                                                 .then(purgeIfCancelledWhilePublishing(
@@ -562,11 +564,12 @@ public class ExperimentExecutionService {
                         : Mono.<Void>empty());
     }
 
-    private InternalServerErrorException queueTooBusy(long queued, int runSize) {
+    private ClientErrorException queueTooBusy(long queued, int runSize) {
         log.warn("Refusing a run of '{}' items: '{}' already queued against a bound of '{}'",
                 runSize, queued, experimentExecutionConfig.getStreamMaxLen());
-        return new InternalServerErrorException(
-                "The processing queue is too busy to accept this run right now. Try again in a few minutes.");
+        return new ClientErrorException(
+                "The processing queue is too busy to accept this run right now. Try again in a few minutes.",
+                Response.Status.TOO_MANY_REQUESTS);
     }
 
     /**

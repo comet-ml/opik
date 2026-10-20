@@ -26,7 +26,9 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
+import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -49,6 +51,7 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyCollection;
@@ -108,7 +111,7 @@ class ExperimentExecutionServiceTest {
 
         lenient().when(featureFlags.isDatasetVersioningEnabled()).thenReturn(true);
         lenient().when(itemPublisher.publish(any(), any())).thenReturn(Mono.empty());
-        lenient().when(itemPublisher.trackRun(any(), anyBoolean())).thenReturn(Mono.empty());
+        lenient().when(itemPublisher.startTrackingRun(any(), anyBoolean())).thenReturn(Mono.empty());
         // An empty queue, so only the tests that fill it see the run refused.
         lenient().when(itemPublisher.queuedMessageCount()).thenReturn(Mono.just(0L));
         // Every publish asks whether a stop landed while it was running; almost no test is about that.
@@ -782,8 +785,13 @@ class ExperimentExecutionServiceTest {
                     .datasetId(UUID.randomUUID())
                     .prompts(List.of(buildPrompt("gpt-4", "Hello")))
                     .build()))
-                    .isInstanceOf(InternalServerErrorException.class)
-                    .hasMessageContaining("too busy");
+                    // Capacity, not fault: the same run succeeds once the queue drains, so it is
+                    // refused with 429 and a client can back off on it
+                    .isInstanceOf(ClientErrorException.class)
+                    .hasMessageContaining("too busy")
+                    .asInstanceOf(throwable(ClientErrorException.class))
+                    .extracting(error -> error.getResponse().getStatus())
+                    .isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
 
             // Nothing written and nothing queued. publish() is not asserted on: the chain is built
             // before the guard decides, so the call is recorded whether or not it is ever subscribed.
@@ -1214,7 +1222,7 @@ class ExperimentExecutionServiceTest {
             // Recorded as each step runs, not as each is called: the whole chain is assembled before
             // any of it is subscribed, so the order the mocks are invoked in says nothing
             var order = new ArrayList<String>();
-            when(itemPublisher.trackRun(any(), anyBoolean()))
+            when(itemPublisher.startTrackingRun(any(), anyBoolean()))
                     .thenReturn(Mono.fromRunnable(() -> order.add("tracked")));
             when(experimentService.create(any(Experiment.class)))
                     .thenReturn(Mono.fromCallable(() -> {
@@ -1580,7 +1588,7 @@ class ExperimentExecutionServiceTest {
         void createAndExecuteSkipsAssertionCountersForARegularDataset() {
             runAndCaptureMessages(DatasetType.DATASET);
 
-            verify(itemPublisher).trackRun(any(), eq(false));
+            verify(itemPublisher).startTrackingRun(any(), eq(false));
         }
     }
 
