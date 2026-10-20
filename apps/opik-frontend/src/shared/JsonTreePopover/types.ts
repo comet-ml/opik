@@ -26,5 +26,4 @@ export interface JsonTreePopoverProps {
   selectedPath?: string;
   contentClassName?: string;
   sideOffset?: number;
-  expandWithArrowKeys?: boolean;
 }
