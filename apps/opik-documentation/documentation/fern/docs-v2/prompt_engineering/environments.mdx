@@ -169,7 +169,9 @@ prompts live in one Prompt Library, and you can compare stages with a filter.
   <Step title="Set the stage once per deployment">
     Set `OPIK_ENVIRONMENT` where the agent runs: for example
     `development` on your machine, `staging` in the staging container, and `production` in the
-    production container. Every trace and span the SDK logs gets that environment. See
+    production container. Set `OPIK_PROJECT_NAME` to the agent's project too (`travel-assistant` in
+    the example below), so its traces land next to its prompts. Every trace and span the SDK logs
+    gets that environment, unless your code passes its own `environment`. See
     [Logging to a specific environment](/tracing/advanced/log_traces#logging-to-a-specific-environment).
   </Step>
   <Step title="Fetch the prompt for the same stage">
