@@ -149,8 +149,7 @@ test.describe('Test suite version records sidebar', { tag: ['@area:test-suites']
         await sidebar.close();
         expect(sidebar.dvsParams()).toEqual({});
 
-        await page.getByRole('tab', { name: 'Test cases' }).click();
-        await suite.waitForReady();
+        await suite.openTestCases();
         await expect(suite.itemRows()).toHaveCount(latestItems.length);
       });
     },

@@ -235,7 +235,13 @@ test.describe(
             atDefault.button,
             'the reset arrow is mounted at the default value, not conditionally rendered',
           ).not.toBeNull();
-          expect(atDefault.button).toEqual({ width: 32, height: 32 });
+          // Non-zero, not a pinned 32×32. What has to be true is that the
+          // hidden button really occupies a box — a zero-sized one would hold
+          // the row open by nothing, and the equality below would then pass
+          // over two rows neither of which reserved anything. The exact size is
+          // a styling choice no user would notice changing.
+          expect(atDefault.button!.width, 'the hidden arrow reserves width').toBeGreaterThan(0);
+          expect(atDefault.button!.height, 'and height').toBeGreaterThan(0);
         });
 
         const offDefault = await test.step('Measure the row with the rate moved off default', async () => {

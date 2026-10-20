@@ -122,6 +122,19 @@ export class TestSuiteItemsPage {
   }
 
   /**
+   * Back to the first tab: the suite's live test cases, always the latest
+   * version. Mirrors `DatasetItemsPage.openRecords` — `waitForReady` already
+   * waits on this tab being the selected one, so returning to it is the same
+   * click plus the same wait.
+   */
+  async openTestCases(): Promise<void> {
+    return test.step('Open the Test cases tab', async () => {
+      await this.page.getByRole('tab', { name: 'Test cases' }).click();
+      await this.waitForReady();
+    });
+  }
+
+  /**
    * Second tab of the suite page: one row per committed version. Mirrors
    * `DatasetItemsPage.openVersionHistory` — the tab is the same shared
    * component, and a suite's rows differ only in what the sheet they open
