@@ -37,6 +37,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.ValueEntry;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
@@ -5929,6 +5930,55 @@ class ExperimentsResourceTest {
                     .projectName(RandomStringUtils.secure().nextAlphanumeric(20))
                     .build();
             streamAndAssert(request, List.of(), List.of(), apiKey, workspaceName);
+        }
+
+        @Test
+        void streamWithEvaluatorRevision() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment().build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+
+            var withRevision = FeedbackScoreBatchItem.builder()
+                    .id(trace.id())
+                    .projectName(trace.projectName())
+                    .name("with_revision")
+                    .value(BigDecimal.ONE)
+                    .source(ScoreSource.SDK)
+                    .evaluatorRevision("judge@3f9c2a1")
+                    .build();
+            var withoutRevision = withRevision.toBuilder()
+                    .name("without_revision")
+                    .evaluatorRevision(null)
+                    .build();
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(List.of(withRevision, withoutRevision)).build(),
+                    apiKey, workspaceName);
+
+            var streamedItems = getExperimentItems(experiment.name(), apiKey, workspaceName);
+            assertThat(streamedItems).hasSize(1);
+
+            var scores = streamedItems.getFirst().feedbackScores().stream()
+                    .collect(Collectors.toMap(FeedbackScore::name, score -> score));
+            assertThat(scores.get("with_revision").evaluatorRevision()).isEqualTo("judge@3f9c2a1");
+            assertThat(scores.get("with_revision").valueByAuthor().values())
+                    .extracting(ValueEntry::evaluatorRevision)
+                    .containsOnly("judge@3f9c2a1");
+            assertThat(scores.get("without_revision").evaluatorRevision()).isNull();
+            assertThat(scores.get("without_revision").valueByAuthor().values())
+                    .extracting(ValueEntry::evaluatorRevision)
+                    .containsOnlyNulls();
         }
 
     }
