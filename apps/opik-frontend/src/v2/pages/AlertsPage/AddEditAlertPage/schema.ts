@@ -7,6 +7,8 @@ export const HeaderSchema = z.object({
   value: z.string().min(1, { message: "Header value is required" }),
 });
 
+export const MAX_CUSTOM_FIELDS = 20;
+
 export const CustomFieldSchema = z.object({
   key: z
     .string()
@@ -150,7 +152,9 @@ export const AlertFormSchema = z
     headers: z.array(HeaderSchema).default([]),
     customFields: z
       .array(CustomFieldSchema)
-      .max(20, { message: "At most 20 custom fields are allowed" })
+      .max(MAX_CUSTOM_FIELDS, {
+        message: `At most ${MAX_CUSTOM_FIELDS} custom fields are allowed`,
+      })
       .default([]),
     triggers: z.array(TriggerSchema).default([]),
   })

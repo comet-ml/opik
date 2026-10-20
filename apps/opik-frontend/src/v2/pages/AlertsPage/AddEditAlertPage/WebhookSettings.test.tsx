@@ -3,10 +3,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useForm } from "react-hook-form";
 import { Form } from "@/ui/form";
+import { TooltipProvider } from "@/ui/tooltip";
 import { ALERT_TYPE } from "@/types/alerts";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import WebhookSettings from "./WebhookSettings";
-import { AlertFormType } from "./schema";
+import { AlertFormType, MAX_CUSTOM_FIELDS } from "./schema";
 
 const mockIsFeatureEnabled = vi.fn();
 
@@ -15,7 +16,9 @@ vi.mock("@/contexts/feature-toggles-provider", () => ({
     mockIsFeatureEnabled(feature),
 }));
 
-const Harness: React.FC = () => {
+const Harness: React.FC<{ customFields?: AlertFormType["customFields"] }> = ({
+  customFields = [],
+}) => {
   const form = useForm<AlertFormType>({
     defaultValues: {
       name: "",
@@ -25,20 +28,22 @@ const Harness: React.FC = () => {
       url: "",
       secretToken: "",
       headers: [],
-      customFields: [],
+      customFields,
       triggers: [],
     },
   });
 
   return (
-    <Form {...form}>
-      <WebhookSettings
-        form={form}
-        onTestConnection={() => undefined}
-        isTestPending={false}
-        isPending={false}
-      />
-    </Form>
+    <TooltipProvider>
+      <Form {...form}>
+        <WebhookSettings
+          form={form}
+          onTestConnection={() => undefined}
+          isTestPending={false}
+          isPending={false}
+        />
+      </Form>
+    </TooltipProvider>
   );
 };
 
@@ -93,5 +98,28 @@ describe("WebhookSettings", () => {
     expect(
       screen.queryByText("Custom fields (optional)"),
     ).not.toBeInTheDocument();
+  });
+
+  it("disables adding custom fields once the maximum is reached", () => {
+    mockIsFeatureEnabled.mockImplementation(
+      (feature: FeatureToggleKeys) =>
+        feature === FeatureToggleKeys.EVENT_BRIDGE_ALERTS_ENABLED,
+    );
+    const fields = (count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        key: `key-${i}`,
+        value: "value",
+      }));
+
+    const { unmount } = render(
+      <Harness customFields={fields(MAX_CUSTOM_FIELDS - 1)} />,
+    );
+    fireEvent.click(screen.getByText("Advanced webhook settings"));
+    const addField = screen.getByRole("button", { name: "Add field" });
+    expect(addField).toBeEnabled();
+
+    fireEvent.click(addField);
+    expect(screen.getByRole("button", { name: "Add field" })).toBeDisabled();
+    unmount();
   });
 });
