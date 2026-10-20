@@ -53,7 +53,6 @@ export interface LogQueueParams extends RunStreamingReturn {
   configs: LLMPromptConfigsType;
   openAiPipelineMode?: OpenAiPipelineMode;
   selectedRuleIds: string[] | null;
-  datasetItemData?: object;
 }
 
 export interface TraceMapping {
@@ -147,14 +146,6 @@ const getTraceFromRun = (
     trace.metadata = {
       ...trace.metadata,
       selected_rule_ids: run.selectedRuleIds,
-    };
-  }
-
-  // Add dataset_item_data to trace metadata if provided
-  if (run.datasetItemData) {
-    trace.metadata = {
-      ...trace.metadata,
-      dataset_item_data: run.datasetItemData,
     };
   }
 
