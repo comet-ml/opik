@@ -47,7 +47,7 @@ public class ExperimentItemPublisher {
      * are persisted — so a run tracked any later than this has a window where a stop finds nothing to
      * stop, returns as though it had, and the run goes on to queue every item.
      */
-    public Mono<Void> trackRun(List<ExperimentItemToProcess> messages, boolean testSuite) {
+    public Mono<Void> startTrackingRun(List<ExperimentItemToProcess> messages, boolean testSuite) {
         if (CollectionUtils.isEmpty(messages)) {
             return Mono.empty();
         }
@@ -56,7 +56,7 @@ public class ExperimentItemPublisher {
                 .then(testSuite ? setAssertionCounters(messages) : Mono.empty());
     }
 
-    /** Publishes all messages to the Redis stream. Counters are already set by {@link #trackRun}. */
+    /** Publishes all messages to the Redis stream. Counters are already set by {@link #startTrackingRun}. */
     public Mono<Void> publish(@NonNull UUID batchId, List<ExperimentItemToProcess> messages) {
         if (CollectionUtils.isEmpty(messages)) {
             return Mono.empty();
@@ -68,9 +68,7 @@ public class ExperimentItemPublisher {
                 .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
                         ExperimentExecutionConfig.PAYLOAD_FIELD, message, config))
                         .doOnNext(id -> log.debug("Published experiment item message with ID: '{}'", id))
-                        .map(id -> Map.entry(message.experimentId(), id))
-                        .doOnError(throwable -> log.error("Error publishing experiment item message",
-                                throwable)))
+                        .map(id -> Map.entry(message.experimentId(), id)))
                 .collectMultimap(Map.Entry::getKey, Map.Entry::getValue)
                 .flatMap(idsByExperiment -> cancellationService.recordQueued(
                         messages.getFirst().workspaceId(), idsByExperiment))
