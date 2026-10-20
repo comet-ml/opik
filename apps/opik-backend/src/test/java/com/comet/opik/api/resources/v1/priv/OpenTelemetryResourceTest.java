@@ -1344,7 +1344,8 @@ class OpenTelemetryResourceTest {
 
             var spans = spanResourceClient.getByTraceIdAndProject(opikTraceId, projectName, workspaceName,
                     okApikey);
-            assertThat(spans.content()).hasSize(otelSpans.size());
+            assertThat(spans.content()).extracting(span -> span.name())
+                    .containsExactlyInAnyOrderElementsOf(otelSpans.stream().map(Span::getName).toList());
             assertThat(spans.content()).allSatisfy(span -> assertThat(
                     span.metadata() == null || !span.metadata().has("opik.project_name")).isTrue());
 
