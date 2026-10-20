@@ -16,6 +16,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.regions.Region;
 
 import java.time.Duration;
@@ -195,8 +196,22 @@ class AwsModuleTest {
             withSystemProperties(Map.of("aws.accessKeyId", "PARTNER", "aws.secretAccessKey", "partner-secret"), () -> {
                 var provider = AwsModule.eventBridgeCredentialsProvider(config());
 
-                assertThatThrownBy(provider::resolveCredentials).isInstanceOf(RuntimeException.class);
+                assertThatThrownBy(provider::resolveCredentials)
+                        .isInstanceOf(SdkClientException.class)
+                        .hasMessageContaining("HTTP '500'");
             });
+        }
+
+        @Test
+        void acceptsContainerCredentialsFormat() {
+            endpoint.stubFor(get(PATH).willReturn(okJson("""
+                    {"AccessKeyId": "CUSTOMER1", "SecretAccessKey": "secret-CUSTOMER1",
+                     "Token": "token-CUSTOMER1", "Expiration": "%s"}
+                    """.formatted(Instant.now().plus(1, ChronoUnit.HOURS)))));
+
+            assertThat(AwsModule.eventBridgeCredentialsProvider(config()).resolveCredentials())
+                    .isInstanceOfSatisfying(AwsSessionCredentials.class,
+                            session -> assertThat(session.sessionToken()).isEqualTo("token-CUSTOMER1"));
         }
 
         @Test
