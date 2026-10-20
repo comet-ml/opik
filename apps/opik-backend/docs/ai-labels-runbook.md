@@ -21,7 +21,7 @@ runs only where `AI_LABELS_ENABLED=true` (Comet-hosted deployments); it is off e
 
 Opt-in is the `ai_label_workspaces` table in the state database (MySQL). There is no API.
 
-Before enabling a workspace, check how much it will backfill: its traces in the horizon (24 hours by default). Traces
+Before enabling a workspace, check how much it will backfill: its traces in the horizon (7 days by default). Traces
 created before a task's `applies_from` are never labeled.
 
 ```sql
@@ -29,7 +29,7 @@ created before a task's `applies_from` are never labeled.
 SELECT count()
 FROM traces
 WHERE workspace_id = '<workspace_id>'
-  AND created_at >= now64(6) - INTERVAL 1 DAY;
+  AND created_at >= now64(6) - INTERVAL 7 DAY;
 ```
 
 The pool's throughput binds first: one L40S on the 4B model labels about 3 traces a second at 7K tokens each (22K
