@@ -421,7 +421,7 @@ describe("updateProviderConfig — OpenAI", () => {
     ],
     [
       "moves a picked none to low on o4-mini",
-      PROVIDER_MODEL_TYPE.GPT_5_1,
+      PROVIDER_MODEL_TYPE.GPT_5_5,
       "none",
       PROVIDER_MODEL_TYPE.GPT_O4_MINI,
       "chat_completions_api",
@@ -429,7 +429,7 @@ describe("updateProviderConfig — OpenAI", () => {
     ],
     [
       "moves a picked none to minimal on GPT 5 Nano",
-      PROVIDER_MODEL_TYPE.GPT_5_1,
+      PROVIDER_MODEL_TYPE.GPT_5_5,
       "none",
       PROVIDER_MODEL_TYPE.GPT_5_NANO,
       "chat_completions_api",
@@ -460,7 +460,7 @@ describe("updateProviderConfig — OpenAI", () => {
       "low",
     ],
     [
-      "keeps the default high",
+      "keeps a picked high that is not the previous model's default",
       PROVIDER_MODEL_TYPE.GPT_5_NANO,
       "high",
       PROVIDER_MODEL_TYPE.GPT_5_1,
@@ -468,12 +468,28 @@ describe("updateProviderConfig — OpenAI", () => {
       "high",
     ],
     [
-      "uses high for a max a Chat Completions key showed as high",
+      "replaces GPT 5.1's default none with GPT 5.5's own medium",
+      PROVIDER_MODEL_TYPE.GPT_5_1,
+      "none",
+      PROVIDER_MODEL_TYPE.GPT_5_5,
+      "chat_completions_api",
+      "medium",
+    ],
+    [
+      "replaces GPT 5.5's default medium with GPT 5.1's own none",
+      PROVIDER_MODEL_TYPE.GPT_5_5,
+      "medium",
+      PROVIDER_MODEL_TYPE.GPT_5_1,
+      "chat_completions_api",
+      "none",
+    ],
+    [
+      "uses the next model's default for a max a Chat Completions key showed as the default",
       PROVIDER_MODEL_TYPE.GPT_6_SOL,
       "max",
       PROVIDER_MODEL_TYPE.GPT_6_LUNA,
       "chat_completions_api",
-      "high",
+      "medium",
     ],
   ])(
     "on a switch %s",
@@ -933,8 +949,12 @@ describe("Gemini thinking level", () => {
     [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO, ["low", "high"], "high"],
     [PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, AUTO_LOW_TO_HIGH, "auto"],
     [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO, AUTO_LOW_TO_HIGH, "auto"],
-    [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, AUTO_LOW_TO_HIGH, "auto"],
-    [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH, AUTO_LOW_TO_HIGH, "auto"],
+    [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, AUTO_OFF_LOW_TO_HIGH, "auto"],
+    [
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      AUTO_OFF_LOW_TO_HIGH,
+      "auto",
+    ],
     [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, AUTO_OFF_LOW_TO_HIGH, "off"],
     [
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
