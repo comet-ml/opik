@@ -4,9 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDashboardStore } from "@/store/DashboardStore";
 import useDashboardWidgetQuery from "@/api/dashboards/useDashboardWidgetQuery";
 import { DashboardWidget as DashboardWidgetType } from "@/types/dashboard";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import OllieChartWidget from "./OllieChartWidget";
 
 vi.mock("@/api/dashboards/useDashboardWidgetQuery");
+vi.mock("@/lib/analytics/tracking", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  trackEvent: vi.fn(),
+}));
 vi.mock("@/contexts/feature-toggles-provider", () => ({
   useIsFeatureEnabled: () => false,
 }));
@@ -104,6 +109,38 @@ describe("OllieChartWidget saved widget", () => {
   };
 
   const notFound = () => Object.assign(new Error("not found"), { status: 404 });
+  const loadFailures = () =>
+    vi
+      .mocked(trackEvent)
+      .mock.calls.filter(
+        ([event]) => event === OpikEvent.DASHBOARD_OLLIE_WIDGET_LOAD_FAILED,
+      );
+
+  beforeEach(() => vi.mocked(trackEvent).mockClear());
+
+  it("does not report an unsaved widget's 404 once its save lands", () => {
+    renderSaved(["w-2"], notFound());
+
+    act(() => {
+      useDashboardStore.setState({ savedWidgetIds: ["w-1", "w-2"] });
+    });
+
+    expect(loadFailures()).toHaveLength(0);
+  });
+
+  it.each([
+    [403, 0],
+    [501, 0],
+    [500, 1],
+  ])("reports a %s once, however often it re-renders", (status, reports) => {
+    renderSaved(["w-1"], Object.assign(new Error("failed"), { status }));
+
+    act(() => {
+      useDashboardStore.setState({ savedWidgetIds: ["w-1", "w-3"] });
+    });
+
+    expect(loadFailures()).toHaveLength(reports);
+  });
 
   it("runs the query again once a widget whose retries ran out gets saved", () => {
     const refetch = renderSaved(["w-2"], notFound());

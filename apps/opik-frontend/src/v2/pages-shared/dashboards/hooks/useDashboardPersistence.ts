@@ -10,7 +10,13 @@ import {
 } from "@/api/dashboards/dashboardKeepaliveSave";
 import useInsightsViewById from "@/api/insights-views/useInsightsViewById";
 import useInsightsViewUpdateMutation from "@/api/insights-views/useInsightsViewUpdateMutation";
-import { Dashboard, DASHBOARD_SCOPE, DashboardState } from "@/types/dashboard";
+import {
+  Dashboard,
+  DASHBOARD_SCOPE,
+  DashboardState,
+  WIDGET_TYPE,
+} from "@/types/dashboard";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import {
   DASHBOARD_EXTERNAL_UPDATE_EVENT,
   isDashboardChanged,
@@ -55,6 +61,26 @@ const publishSavedWidgets = (config: DashboardState | null) =>
           )
         : null,
     );
+
+// Once per open: whether dashboards holding Ollie charts keep being looked at.
+const reportOllieWidgets = (dashboard: Dashboard, config: DashboardState) => {
+  const count = config.sections.reduce(
+    (total, section) =>
+      total +
+      section.widgets.filter(
+        (widget) => widget.type === WIDGET_TYPE.OLLIE_CHART,
+      ).length,
+    0,
+  );
+  if (!count) return;
+  trackEvent(OpikEvent.DASHBOARD_WITH_OLLIE_WIDGETS_OPENED, {
+    dashboard_id: dashboard.id,
+    dashboard_type: dashboard.type,
+    dashboard_scope: dashboard.scope,
+    project_id: dashboard.project_id,
+    ollie_widget_count: count,
+  });
+};
 
 const getApiConfig = (scope?: DASHBOARD_SCOPE): ApiConfig => {
   if (scope === DASHBOARD_SCOPE.INSIGHTS) {
@@ -119,6 +145,7 @@ export const useDashboardPersistence = ({
         isDashboardChanged(localEntry.config, currentDashboard.config)
       ) {
         setResolvedConfig(localEntry.config);
+        reportOllieWidgets(currentDashboard, localEntry.config);
         syncToServer(
           {
             dashboard: {
@@ -137,6 +164,7 @@ export const useDashboardPersistence = ({
         );
       } else {
         setResolvedConfig(currentDashboard.config);
+        reportOllieWidgets(currentDashboard, currentDashboard.config);
         if (localEntry) {
           clearLocal(currentDashboard.id);
         }

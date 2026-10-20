@@ -6,6 +6,7 @@ import com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter
 import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper;
 import com.comet.opik.infrastructure.AlertsEventBridgeConfig;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -71,6 +72,14 @@ public class AlertEventBridgePublisher {
     static final int MAX_ENTRY_BYTES = 256 * 1024;
     private static final int TIME_BYTES = 14;
     static final int MAX_TRUNCATED_LIST_SIZE = 1_000;
+
+    // Custom fields become top-level detail keys, so they can't reuse the envelope's keys. The general webhook body's
+    // keys are reserved too, so custom fields can later be added there without invalidating saved alerts.
+    public static final Set<String> RESERVED_CUSTOM_FIELD_KEYS = Set.of(
+            "schemaVersion", "eventId", "workspaceId", "workspaceName", "alertId", "alertName", "eventType", "url",
+            "triggeredAt", "truncated", "opik",
+            "id", "event_type", "alert_type", "alert_id", "project_id", "alert_name", "workspace_id",
+            "workspace_name", "user_name", "payload", "created_at", "max_retries");
 
     private static final int MAX_RETRIES = 3;
     private static final Duration RETRY_BACKOFF = Duration.ofMillis(200);
@@ -178,6 +187,7 @@ public class AlertEventBridgePublisher {
                 .url(buildAlertUrl(alert, workspaceName))
                 .triggeredAt(triggeredAt)
                 .opik(product)
+                .customFields(Optional.ofNullable(alert.customFields()).orElse(Map.of()))
                 .build();
 
         return PutEventsRequestEntry.builder()
@@ -290,7 +300,8 @@ public class AlertEventBridgePublisher {
             @JsonInclude(JsonInclude.Include.ALWAYS) String url,
             @NonNull Instant triggeredAt,
             boolean truncated,
-            @NonNull Map<String, Object> opik) {
+            @NonNull Map<String, Object> opik,
+            @JsonAnyGetter @NonNull Map<String, String> customFields) {
     }
 
     @Getter

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { ArrowRight } from "lucide-react";
 import {
   Dialog,
@@ -30,6 +31,7 @@ import {
   createDefaultWidgetConfig,
   getWidgetTypesForDashboard,
 } from "@/lib/dashboard/utils";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   open,
@@ -124,9 +126,18 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
     assistantAvailable;
   // Hands the request to Ollie, which draws it and offers "Add to <this dashboard>" on the chart.
   const handleDescribeToOllie = () => {
+    const entryId = uuidv4();
+    trackEvent(OpikEvent.DASHBOARD_ASK_OLLIE_CLICKED, {
+      entry_id: entryId,
+      dashboard_id: runtimeConfig.dashboardId,
+      dashboard_type: runtimeConfig.dashboardType,
+      dashboard_scope: runtimeConfig.dashboardScope,
+      project_id: runtimeConfig.projectIds?.[0],
+    });
     onOpenChange(false);
     window.opikBridge?.startConversation(
       "I want to add a custom widget to this dashboard. Ask me what it should show.",
+      { origin: "describe_widget", entryId },
     );
   };
 

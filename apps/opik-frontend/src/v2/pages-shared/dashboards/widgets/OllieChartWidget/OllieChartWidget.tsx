@@ -1,4 +1,5 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { useShallow } from "zustand/react/shallow";
 import { RefreshCw } from "lucide-react";
 import OllieOwl from "@/icons/ollie-owl.svg?react";
@@ -26,6 +27,7 @@ import { DEFAULT_DATE_PRESET } from "@/v2/pages-shared/traces/MetricDateRangeSel
 import useDashboardWidgetQuery from "@/api/dashboards/useDashboardWidgetQuery";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 const MINUTE = 60_000;
 
@@ -180,6 +182,32 @@ const OllieChartWidget: React.FunctionComponent<
     wasSavedRef.current = saved;
   }, [retryNotFound, error, refetch]);
 
+  // Once per failed load: the same error object survives re-renders. An unsaved widget's 404 is expected and stays
+  // unreported after the save that ends it; masked data and charts turned off are states the widget explains.
+  const seenErrorRef = useRef<QueryError | null>(null);
+  useEffect(() => {
+    if (preview || !error || seenErrorRef.current === error) return;
+    seenErrorRef.current = error;
+    const status = queryErrorStatus(error);
+    if ((status === 404 && retryNotFound) || status === 403 || status === 501)
+      return;
+    trackEvent(OpikEvent.DASHBOARD_OLLIE_WIDGET_LOAD_FAILED, {
+      dashboard_id: dashboardId,
+      dashboard_scope: dashboardScope,
+      widget_id: widgetId,
+      query_id: query?.id,
+      status: status ?? null,
+    });
+  }, [
+    preview,
+    error,
+    retryNotFound,
+    dashboardId,
+    dashboardScope,
+    widgetId,
+    query?.id,
+  ]);
+
   if (!widget) {
     return null;
   }
@@ -190,7 +218,15 @@ const OllieChartWidget: React.FunctionComponent<
   // at click time: the sidebar attaches it after this widget first renders.
   const editInOllie =
     ollieEnabled && spec && query?.id
-      ? () =>
+      ? () => {
+          const entryId = uuidv4();
+          trackEvent(OpikEvent.DASHBOARD_EDIT_IN_OLLIE_CLICKED, {
+            entry_id: entryId,
+            dashboard_id: dashboardId,
+            dashboard_scope: dashboardScope,
+            widget_id: widget.id,
+            query_id: query.id,
+          });
           window.opikBridge?.editChart?.({
             widgetId: widget.id,
             title,
@@ -198,7 +234,9 @@ const OllieChartWidget: React.FunctionComponent<
             spec,
             query: { id: query.id },
             rows: live ? rows : snapshotRows,
-          })
+            entryId,
+          });
+        }
       : undefined;
 
   const renderContent = () => {

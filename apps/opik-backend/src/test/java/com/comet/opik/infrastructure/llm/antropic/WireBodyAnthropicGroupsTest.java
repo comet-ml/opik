@@ -78,6 +78,15 @@ class WireBodyAnthropicGroupsTest {
     }
 
     @Test
+    void thinksOnlyWhenAskedListsEveryModelAnEffortTurnsThinkingOnFor() {
+        var expected = AnthropicModelName.allModelIds().stream()
+                .filter(AnthropicModelName::thinksOnlyWhenAsked)
+                .toList();
+
+        assertThat(group("thinks-only-when-asked")).containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    @Test
     void registryOnlyModelsAreNotInTheEnum() {
         assertThat(group("registry-only")).isNotEmpty().doesNotContainAnyElementsOf(AnthropicModelName.allModelIds());
     }

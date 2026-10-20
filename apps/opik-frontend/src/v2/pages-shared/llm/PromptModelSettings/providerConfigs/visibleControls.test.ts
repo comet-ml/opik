@@ -2,10 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   createSupports,
+  getAnthropicVisibleControls,
   getOpenAIVisibleControls,
   getOpenRouterVisibleControls,
   hasVisibleControls,
 } from "./visibleControls";
+import {
+  EffortParams,
+  isAnthropicThinkingRequested,
+  resolveSamplingParams,
+  sanitizeConfigForRequest,
+} from "@/lib/modelUtils";
 import {
   OPTIMIZATION_UNSUPPORTED_PARAMS,
   RULE_UNSUPPORTED_PARAMS,
@@ -294,4 +301,143 @@ describe("the OpenAI penalty sliders", () => {
     expect(anyVisible(onlyPenalties, "responses_api")).toBe(false);
     expect(anyVisible(onlyPenalties, "chat_completions_api")).toBe(true);
   });
+});
+
+describe("Anthropic sampling params while Claude thinks", () => {
+  const SONNET_4_6 = PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6;
+  const NOT_A_LEVEL = "adaptive" as EffortParams["thinkingEffort"];
+
+  const expectAllAgree = (
+    model: PROVIDER_MODEL_TYPE,
+    configs: EffortParams,
+    thinking: boolean,
+  ) => {
+    const config = { ...ANTHROPIC_CONFIG, ...configs };
+
+    expect(isAnthropicThinkingRequested(model, config)).toBe(thinking);
+    expect(resolveSamplingParams(model, config)).toEqual(
+      thinking ? {} : { temperature: 0.4 },
+    );
+    expect(
+      getAnthropicVisibleControls({
+        model,
+        configs: config,
+        supports: createSupports(),
+      }).samplingParams,
+    ).toBe(!thinking);
+    expect(sanitizeConfigForRequest(model, config).temperature).toBe(
+      thinking ? undefined : 0.4,
+    );
+  };
+
+  it.each<[string, boolean, EffortParams]>([
+    ["no effort anywhere", false, {}],
+    [
+      "a flat effort that is not a level",
+      false,
+      { thinkingEffort: NOT_A_LEVEL },
+    ],
+    ["a flat xhigh, above what it offers", false, { thinkingEffort: "xhigh" }],
+    [
+      "a null output_config",
+      false,
+      { custom_parameters: { output_config: null } },
+    ],
+    [
+      "a scalar output_config",
+      false,
+      { custom_parameters: { output_config: "low" } },
+    ],
+    [
+      "an output_config effort that is not a level",
+      false,
+      { custom_parameters: { output_config: { effort: "adaptive" } } },
+    ],
+    [
+      "a flat level beside a null output_config",
+      true,
+      { thinkingEffort: "low", custom_parameters: { output_config: null } },
+    ],
+    [
+      "a flat level beside a scalar output_config",
+      true,
+      { thinkingEffort: "low", custom_parameters: { output_config: "max" } },
+    ],
+    [
+      "an invalid flat effort beside a nested level",
+      true,
+      {
+        thinkingEffort: NOT_A_LEVEL,
+        custom_parameters: { output_config: { effort: "low" } },
+      },
+    ],
+  ])("agree on Sonnet 4.6 with %s, thinking: %s", (_, thinking, configs) => {
+    expectAllAgree(SONNET_4_6, configs, thinking);
+  });
+
+  it.each<[string, boolean, PROVIDER_MODEL_TYPE, EffortParams]>([
+    [
+      "a disabled block beside a level",
+      false,
+      SONNET_4_6,
+      {
+        thinkingEffort: "high",
+        custom_parameters: { thinking: { type: "disabled" } },
+      },
+    ],
+    [
+      "an upper-case DISABLED block beside a level",
+      false,
+      SONNET_4_6,
+      {
+        thinkingEffort: "high",
+        custom_parameters: { thinking: { type: "DISABLED" } },
+      },
+    ],
+    [
+      "a block without a type beside a level",
+      false,
+      SONNET_4_6,
+      { thinkingEffort: "high", custom_parameters: { thinking: {} } },
+    ],
+    [
+      "a block with a blank type beside a level",
+      false,
+      SONNET_4_6,
+      {
+        thinkingEffort: "high",
+        custom_parameters: { thinking: { type: " " } },
+      },
+    ],
+    [
+      "an adaptive block at Off",
+      true,
+      SONNET_4_6,
+      {
+        thinkingEffort: "off",
+        custom_parameters: { thinking: { type: "adaptive" } },
+      },
+    ],
+    [
+      "a null block beside a level, which counts as no block",
+      true,
+      SONNET_4_6,
+      { thinkingEffort: "high", custom_parameters: { thinking: null } },
+    ],
+    [
+      "an enabled block on Haiku 4.5, which has no effort",
+      true,
+      PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
+      {
+        custom_parameters: {
+          thinking: { type: "enabled", budget_tokens: 2000 },
+        },
+      },
+    ],
+  ])(
+    "let a thinking block in custom_parameters decide: %s, thinking: %s",
+    (_, thinking, model, configs) => {
+      expectAllAgree(model, configs, thinking);
+    },
+  );
 });

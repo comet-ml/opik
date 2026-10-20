@@ -12,7 +12,7 @@ import {
 } from "@/types/automations";
 import {
   ANTHROPIC_THINKING_EFFORT_VALUES,
-  AnthropicThinkingEffort,
+  AnthropicEffortLevel,
   PROVIDER_MODEL_TYPE,
   ReasoningEffort,
   ResponsesApiOnlyReasoningEffort,
@@ -175,9 +175,16 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
       supportsSamplingParams?: boolean;
       // Must be a subset of the model's levels in EFFORT_LEVELS_BY_MODEL_ID in the backend's
       // AnthropicModelName, which answers any other level with a 400.
-      thinkingEffortOptions?: readonly AnthropicThinkingEffort[];
+      thinkingEffortOptions?: readonly AnthropicEffortLevel[];
       // Anthropic's own default, "high" unless stated.
-      defaultThinkingEffort?: AnthropicThinkingEffort;
+      defaultThinkingEffort?: AnthropicEffortLevel;
+      // The model runs without thinking unless the request asks for it, so the effort control gets
+      // an Off choice, which is its default, and the backend turns on adaptive thinking for any
+      // level. Must match THINKS_ONLY_WHEN_ASKED_MODEL_IDS in the backend's AnthropicModelName.
+      thinksOnlyWhenAsked?: boolean;
+      // The model has effort but no adaptive thinking, so the effort only changes answer length and
+      // tool use.
+      effortWithoutThinking?: boolean;
     }
   >
 > = {
@@ -197,12 +204,15 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8]: {
     thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7]: {
     thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7_20260416]: {
     thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5]: {
     thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
@@ -225,14 +235,17 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6]: {
     supportsSamplingParams: true,
     thinkingEffortOptions: ["low", "medium", "high", "max"],
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6_20260205]: {
     supportsSamplingParams: true,
     thinkingEffortOptions: ["low", "medium", "high", "max"],
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6]: {
     supportsSamplingParams: true,
     thinkingEffortOptions: ["low", "medium", "high", "max"],
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_3_7]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5]: { supportsSamplingParams: true },
@@ -241,6 +254,7 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5]: {
     supportsSamplingParams: true,
     thinkingEffortOptions: ["low", "medium", "high"],
+    effortWithoutThinking: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4]: { supportsSamplingParams: true },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5]: { supportsSamplingParams: true },
@@ -378,6 +392,7 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.GPT_6_1_SOL]: {
     reasoning: true,
     reasoningEffortOptions: ["low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
   },
 };
 
