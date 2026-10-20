@@ -2,10 +2,6 @@
 
 Opik now has a native integration for the [Together AI](https://www.together.ai/) Python SDK. Wrap your client with `track_together` and every chat completion, from both `together.Together` and `together.AsyncTogether`, is logged with its messages, response, model and token usage. Streaming is supported, and calls nest correctly under `@track`-decorated functions, so Together models show up alongside the rest of your traces.
 
-<Frame>
-  <img src="/img/changelog/2026-10-19/together_ai_trace.png" alt="A Together AI chat completion logged as an LLM span with its messages, model and token usage" />
-</Frame>
-
 [Learn more in the Together AI integration docs](/integrations/together-ai).
 
 ## Open Spans from the Agent Graph
