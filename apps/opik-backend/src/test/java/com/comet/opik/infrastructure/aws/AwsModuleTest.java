@@ -13,6 +13,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
@@ -202,16 +203,20 @@ class AwsModuleTest {
             });
         }
 
-        @Test
-        void acceptsContainerCredentialsFormat() {
+        @ParameterizedTest
+        @ValueSource(strings = {
+                "\"Token\": \"token-CUSTOMER1\"",
+                "\"SessionToken\": \" \", \"Token\": \"token-CUSTOMER1\""})
+        void readsTokenWhenSessionTokenIsMissingOrBlank(String tokenFields) {
             endpoint.stubFor(get(PATH).willReturn(okJson("""
-                    {"AccessKeyId": "CUSTOMER1", "SecretAccessKey": "secret-CUSTOMER1",
-                     "Token": "token-CUSTOMER1", "Expiration": "%s"}
-                    """.formatted(Instant.now().plus(1, ChronoUnit.HOURS)))));
+                    {"AccessKeyId": "CUSTOMER1", "SecretAccessKey": "secret-CUSTOMER1", %s, "Expiration": "%s"}
+                    """.formatted(tokenFields, Instant.now().plus(1, ChronoUnit.HOURS)))));
 
             assertThat(AwsModule.eventBridgeCredentialsProvider(config()).resolveCredentials())
-                    .isInstanceOfSatisfying(AwsSessionCredentials.class,
-                            session -> assertThat(session.sessionToken()).isEqualTo("token-CUSTOMER1"));
+                    .isInstanceOfSatisfying(AwsSessionCredentials.class, session -> assertThat(session)
+                            .extracting(AwsSessionCredentials::accessKeyId, AwsSessionCredentials::secretAccessKey,
+                                    AwsSessionCredentials::sessionToken)
+                            .containsExactly("CUSTOMER1", "secret-CUSTOMER1", "token-CUSTOMER1"));
         }
 
         @Test

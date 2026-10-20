@@ -74,7 +74,7 @@ class CustomerCredentialsProvider implements AwsCredentialsProvider, SdkAutoClos
             Instant expiration = Instant.parse(required(json, "Expiration"));
             // SessionToken is the credential_process format; Token is the container format. Accept both until AWS
             // confirms which one this endpoint returns.
-            String sessionToken = json.hasNonNull("SessionToken")
+            String sessionToken = present(json, "SessionToken")
                     ? json.get("SessionToken").asText()
                     : required(json, "Token");
             AwsCredentials credentials = AwsSessionCredentials.builder()
@@ -93,8 +93,12 @@ class CustomerCredentialsProvider implements AwsCredentialsProvider, SdkAutoClos
         }
     }
 
+    private static boolean present(JsonNode json, String field) {
+        return json.hasNonNull(field) && !json.get(field).asText().isBlank();
+    }
+
     private static String required(JsonNode json, String field) {
-        if (!json.hasNonNull(field) || json.get(field).asText().isBlank()) {
+        if (!present(json, field)) {
             throw SdkClientException.create("Customer credentials endpoint response has no '%s'".formatted(field));
         }
         return json.get(field).asText();
