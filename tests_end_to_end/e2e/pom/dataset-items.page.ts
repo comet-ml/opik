@@ -1,6 +1,7 @@
 import { test } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { ItemReturnNav } from './item-return-nav.page';
 
 export class DatasetItemsPage {
   constructor(
@@ -15,6 +16,31 @@ export class DatasetItemsPage {
       await this.page.goto(
         `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/datasets/${this.datasetId}/items`,
       );
+    });
+  }
+
+  /**
+   * Open the items page the way a link from an experiment does: with the
+   * originating compare view in `from`, and optionally a `row` to expand.
+   *
+   * `from` is passed through `URLSearchParams`, which encodes the whole href —
+   * query and all — into the one param, exactly as the product's own `Link`
+   * does. Writing it by hand is what lets a spec drive the reject cases (an
+   * off-site URL, a protocol-relative one), which no in-app link would ever
+   * produce.
+   *
+   * `row` is left off entirely when not asked for, rather than sent empty: the
+   * page treats an absent `row` as "no panel", and `row=` is a different thing.
+   */
+  async gotoWithReturn(opts: { from?: string | null; row?: string } = {}): Promise<void> {
+    return test.step('Open dataset items page with a return href', async () => {
+      const env = loadEnvConfig();
+      const url = new URL(
+        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/datasets/${this.datasetId}/items`,
+      );
+      if (opts.row) url.searchParams.set('row', opts.row);
+      if (opts.from) url.searchParams.set('from', opts.from);
+      await this.page.goto(url.toString());
     });
   }
 
@@ -315,6 +341,26 @@ export class DatasetItemsPage {
 
   get editItemPanel(): Locator {
     return this.page.getByTestId('dataset-item-editor');
+  }
+
+  /**
+   * Wait for the item detail panel to be mounted and return the return-nav
+   * controls scoped to it.
+   *
+   * The wait belongs here rather than in the caller: `ViewInExperimentButton`
+   * renders inside this panel, so asking whether the button is absent before
+   * the panel exists would answer "absent" for every build.
+   */
+  async itemPanelReturnNav(): Promise<ItemReturnNav> {
+    return test.step('Wait for the item detail panel', async () => {
+      await this.editItemPanel.waitFor({ state: 'visible' });
+      return new ItemReturnNav(this.page, this.editItemPanel);
+    });
+  }
+
+  /** The return-nav controls for the header alone, with no panel open. */
+  headerReturnNav(): ItemReturnNav {
+    return new ItemReturnNav(this.page, this.editItemPanel);
   }
 
   private get itemsTableBody(): Locator {
