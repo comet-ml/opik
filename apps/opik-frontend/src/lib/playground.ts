@@ -1,4 +1,5 @@
 import first from "lodash/first";
+import { isMiniMaxTextModel } from "@/constants/minimax";
 import isNil from "lodash/isNil";
 import escapeRegExp from "lodash/escapeRegExp";
 import last from "lodash/last";
@@ -252,10 +253,13 @@ export const generateDefaultPrompt = ({
 }: GenerateDefaultPromptParams): PlaygroundPromptType => {
   // The model resolver keeps any model it can resolve, so a stored prompt on a
   // model later taken out of the picker keeps it. A new prompt only starts on
-  // a remembered pick the picker still offers.
+  // a remembered pick the picker still offers, or an explicitly selected
+  // MiniMax text model that remains available in the full OpenRouter registry.
   const rememberedModel =
     lastPickedModel &&
-    isDropdownModel(lastPickedModel, providerResolver(lastPickedModel))
+    (isDropdownModel(lastPickedModel, providerResolver(lastPickedModel)) ||
+      (isMiniMaxTextModel(lastPickedModel) &&
+        providerResolver(lastPickedModel) === PROVIDER_TYPE.OPEN_ROUTER))
       ? lastPickedModel
       : "";
   const modelByDefault = modelResolver(rememberedModel, setupProviders);

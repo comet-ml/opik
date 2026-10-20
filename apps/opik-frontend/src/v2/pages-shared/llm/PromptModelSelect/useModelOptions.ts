@@ -1,4 +1,5 @@
 import { useMemo, useRef } from "react";
+import { MINIMAX_TEXT_MODEL_IDS } from "@/constants/minimax";
 import pick from "lodash/pick";
 import isNull from "lodash/isNull";
 
@@ -57,7 +58,15 @@ export const sortProviderModels = (
     return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
   });
 
-  return sorted;
+  // Keep the provider's alphabetical slots, but retain Flash-first order
+  // within the current MiniMax text choices after the generic sort.
+  const minimax = MINIMAX_TEXT_MODEL_IDS.flatMap((id) =>
+    sorted.filter((model) => model.value === id),
+  );
+  let index = 0;
+  return sorted.map((model) =>
+    MINIMAX_TEXT_MODEL_IDS.includes(model.value) ? minimax[index++] : model,
+  );
 };
 
 export function useModelOptions(

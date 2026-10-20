@@ -21,6 +21,10 @@ import {
 } from "@/lib/modelRegistryStore";
 import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 import { DECISION_MODELS } from "@/constants/decisionModels";
+import {
+  MINIMAX_TEXT_MODEL_IDS,
+  isMiniMaxTextModel,
+} from "@/constants/minimax";
 
 export type ProviderResolver = (
   modelName?: PROVIDER_MODEL_TYPE | "",
@@ -74,11 +78,6 @@ const MINIMAL_FALLBACK: ProviderModelsMap = {
 const isDropdownVisible = (m: LlmModelsByProvider[string][number]): boolean =>
   Boolean(m.label);
 
-const MINIMAX_TEXT_MODELS = [
-  "minimax/minimax-m3.1-flash:free",
-  "minimax/minimax-m3",
-];
-
 const getDropdownModels = (
   provider: string,
   models: LlmModelsByProvider[string],
@@ -89,17 +88,15 @@ const getDropdownModels = (
   // Keep the full registry for saved selections. Curate only ordinary text
   // choices; custom providers and MiniMax media models are untouched.
   const filtered = visible.filter(
-    (m) =>
-      !/^minimax\/minimax-(?:m\d|01(?:$|:))/i.test(m.id) ||
-      MINIMAX_TEXT_MODELS.includes(m.id),
+    (m) => !isMiniMaxTextModel(m.id) || MINIMAX_TEXT_MODEL_IDS.includes(m.id),
   );
-  const preferred = MINIMAX_TEXT_MODELS.flatMap((id) =>
+  const preferred = MINIMAX_TEXT_MODEL_IDS.flatMap((id) =>
     filtered.filter((m) => m.id === id),
   );
   let index = 0;
   // Replace only MiniMax text slots so other models keep their ordering.
   return filtered.map((m) =>
-    MINIMAX_TEXT_MODELS.includes(m.id) ? preferred[index++] : m,
+    MINIMAX_TEXT_MODEL_IDS.includes(m.id) ? preferred[index++] : m,
   );
 };
 

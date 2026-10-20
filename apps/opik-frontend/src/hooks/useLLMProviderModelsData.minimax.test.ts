@@ -14,10 +14,24 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 import useLLMProviderModelsData from "./useLLMProviderModelsData";
+import useModelSelection from "./useModelSelection";
+import { generateDefaultPrompt } from "@/lib/playground";
+import { sortProviderModels } from "@/v2/pages-shared/llm/PromptModelSelect/useModelOptions";
 
 dayjs.extend(utc);
 
-const registry = vi.hoisted(() => ({ data: {} as LlmModelsByProvider }));
+const registry = vi.hoisted(() => ({
+  data: {} as LlmModelsByProvider,
+  remembered: "" as PROVIDER_MODEL_TYPE | "",
+}));
+vi.mock("@/hooks/useLastPickedModel", () => ({
+  default: () => [registry.remembered, vi.fn()],
+}));
+vi.mock("@/api/provider-keys/useProviderKeys", () => ({
+  default: () => ({
+    data: { content: [{ ui_composed_provider: "openrouter" }] },
+  }),
+}));
 vi.mock("@/api/llm/useLlmModels", () => ({
   default: () => ({ data: registry.data, isPending: false, isError: false }),
 }));
@@ -65,6 +79,48 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("MiniMax ordinary text choices", () => {
+  it("retains Flash-first order through the rendered picker's sorting path", () => {
+    const { result } = renderHook(() => useLLMProviderModelsData());
+    const sorted = sortProviderModels(
+      PROVIDER_TYPE.OPEN_ROUTER,
+      result.current.providerModels[PROVIDER_TYPE.OPEN_ROUTER],
+    );
+    expect(
+      sorted.filter((m) => [FLASH, M3].includes(m.value)).map((m) => m.value),
+    ).toEqual([FLASH, M3]);
+    expect(
+      sorted.filter((m) => ![FLASH, M3].includes(m.value)).map((m) => m.value),
+    ).toEqual([
+      "anthropic/claude-sonnet-4",
+      "minimax/hailuo-02",
+      "minimax/image-01",
+      "minimax/speech-02-hd",
+      "openai/gpt-4o",
+    ]);
+  });
+
+  it.each(LEGACY)(
+    "retains remembered %s in both selection entry points",
+    (id) => {
+      registry.remembered = id as PROVIDER_MODEL_TYPE;
+      const { result: selected } = renderHook(() =>
+        useModelSelection({ persistenceKey: "minimax-regression" }),
+      );
+      expect(selected.current.model).toBe(id);
+      expect(selected.current.provider).toBe(PROVIDER_TYPE.OPEN_ROUTER);
+
+      const { result: catalog } = renderHook(() => useLLMProviderModelsData());
+      const prompt = generateDefaultPrompt({
+        setupProviders: [PROVIDER_TYPE.OPEN_ROUTER],
+        lastPickedModel: id as PROVIDER_MODEL_TYPE,
+        providerResolver: catalog.current.calculateModelProvider,
+        modelResolver: catalog.current.calculateDefaultModel,
+        isDropdownModel: catalog.current.isDropdownModel,
+      });
+      expect(prompt.model).toBe(id);
+      expect(prompt.provider).toBe(PROVIDER_TYPE.OPEN_ROUTER);
+    },
+  );
   it("offers both current models from the bundled registry and retains legacy routing", () => {
     registry.data = YAML.parse(
       readFileSync(
