@@ -183,11 +183,10 @@ databaseAnalyticsDataModel:
   #   instance: the backfill covers the spans written until its first run, live registration the rest.
   spanWeeksBackfillEnabled: false
   #  Default: false
-  #  Description: Bound span reads by trace id to the weeks the span_weeks index holds for those traces. Effective only
-  #   while spanWeeksWriteEnabled and spanColumnsNonNullable are also true (without registration new spans never
-  #   reach the index; the legacy spans id_at wraps far-future ids). Turn true once the span
-  #   weeks backfill logs that it is complete; before that, spans it has not indexed yet would be skipped. Registration
-  #   is asynchronous, so a read right after a write can miss the new spans until their week is indexed.
+  #  Description: Bound the spans reads keyed by traces (by trace id, a trace range or a project's traces) to the weeks
+  #   the span_weeks index holds for them. Effective only while spanColumnsNonNullable is also true (the legacy spans
+  #   id_at wraps far-future ids). New spans are indexed by span_weeks_mv in their insert, older ones by the span weeks
+  #   backfill: turn true once the backfill logs that it is complete, as spans it has not indexed yet would be skipped.
   spanWeeksReadEnabled: false
 
 # Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
