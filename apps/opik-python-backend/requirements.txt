@@ -7,7 +7,7 @@ Flask==3.1.0
 gunicorn==23.0.0
 uuid6==2025.0.1
 opik==1.10.56
-idna==3.11
+idna==3.15
 itsdangerous==2.2.0
 Jinja2==3.1.6
 MarkupSafe==3.0.3
