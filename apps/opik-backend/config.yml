@@ -2378,9 +2378,10 @@ aiLabels:
   #  Description: Under tickInterval, so every tick sweeps; a tick only submits what its own sweep found
   sweepInterval: ${AI_LABELS_SWEEP_INTERVAL:-55s}
   healthInterval: ${AI_LABELS_HEALTH_INTERVAL:-5m}
-  #  Default: 24h
-  #  Description: H, how far back (by trace created_at) traces are labeled; under overload the oldest age out of it
-  horizon: ${AI_LABELS_HORIZON:-24h}
+  #  Default: 7d
+  #  Description: H, how far back (by trace created_at) traces are labeled; under overload the oldest age out of it.
+  #  The sweep scans every trace in H each tick, so its cost grows with H
+  horizon: ${AI_LABELS_HORIZON:-7d}
   #  Default: 1h
   #  Description: Q, how long a trace must go without updates before it is labeled
   quietPeriod: ${AI_LABELS_QUIET_PERIOD:-1h}

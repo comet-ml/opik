@@ -76,12 +76,13 @@ public class AiLabelsConfig {
 
     /**
      * H: how far back, by trace created_at, traces are labeled. The sweep takes the newest first, so under overload the
-     * oldest age out of H unlabeled; it also bounds the opt-in backfill and the inference outage recovered from.
+     * oldest age out of H unlabeled; it also bounds the opt-in backfill and the inference outage recovered from. The
+     * sweep scans every trace in H each tick, so its cost grows with H.
      */
     @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.HOURS)
     @MaxDuration(value = 30, unit = TimeUnit.DAYS)
-    private Duration horizon = Duration.hours(24);
+    private Duration horizon = Duration.days(7);
 
     /** Q: how long a trace must go without updates before it is labeled. */
     @NotNull @JsonProperty
