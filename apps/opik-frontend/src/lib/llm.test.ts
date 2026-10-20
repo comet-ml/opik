@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   generateDefaultLLMPromptMessage,
+  getMediaUrlsFromListVariable,
   getNextMessageType,
   resolveTraceEvaluatorVariableDefault,
   toContentForRole,
@@ -223,5 +224,57 @@ describe("toContentForRole", () => {
       content: "Be concise",
       mediaDropped: false,
     });
+  });
+});
+
+describe("getMediaUrlsFromListVariable", () => {
+  const images = ["https://a.png", "data:image/png;base64,AAAA"];
+
+  it.each([
+    ["{{images}}", { images }],
+    ["{{ images }}", { images }],
+    ["{{{images}}}", { images }],
+    ["{{& images}}", { images }],
+    [" {{images}}\n", { images }],
+    ["{{input.images}}", { input: { images } }],
+  ])("expands %j when the value is a list", (template, data) => {
+    expect(getMediaUrlsFromListVariable(template, data)).toEqual(images);
+  });
+
+  it("expands a list stored as JSON text, as CSV uploads store it", () => {
+    expect(
+      getMediaUrlsFromListVariable("{{images}}", {
+        images: ' ["https://a.png", "https://b.png"] ',
+      }),
+    ).toEqual(["https://a.png", "https://b.png"]);
+  });
+
+  it("turns non-string items into JSON", () => {
+    expect(
+      getMediaUrlsFromListVariable("{{images}}", {
+        images: [{ url: "https://a.png" }, 7],
+      }),
+    ).toEqual(['{"url":"https://a.png"}', "7"]);
+  });
+
+  it("returns an empty list for an empty list", () => {
+    expect(getMediaUrlsFromListVariable("{{images}}", { images: [] })).toEqual(
+      [],
+    );
+  });
+
+  it.each([
+    ["a single URL", "{{image}}", { image: "https://a.png" }],
+    ["a missing variable", "{{images}}", {}],
+    ["an object", "{{images}}", { images: { url: "https://a.png" } }],
+    ["text that only looks like a list", "{{images}}", { images: "[oops" }],
+    ["JSON text that is not a list", "{{images}}", { images: '{"a":1}' }],
+    ["a URL around the variable", "https://cdn/{{images}}", { images }],
+    ["two variables", "{{images}}{{more}}", { images, more: images }],
+    ["a section", "{{#images}}{{.}}{{/images}}", { images }],
+    ["a broken template", "{{images", { images }],
+    ["a plain URL", "https://a.png", {}],
+  ])("returns null for %s", (_, template, data) => {
+    expect(getMediaUrlsFromListVariable(template, data)).toBeNull();
   });
 });

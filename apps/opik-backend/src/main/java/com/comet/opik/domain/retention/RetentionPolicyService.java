@@ -6,6 +6,8 @@ import com.comet.opik.api.retention.RetentionPeriod;
 import com.comet.opik.api.retention.RetentionRule;
 import com.comet.opik.domain.SpanDAO;
 import com.comet.opik.domain.TraceDAO;
+import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
+import com.comet.opik.domain.ailabels.AiLabelsDAO;
 import com.comet.opik.infrastructure.RetentionConfig;
 import com.google.common.collect.Lists;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -43,6 +45,8 @@ public class RetentionPolicyService {
     private final TransactionTemplate template;
     private final TraceDAO traceDAO;
     private final SpanDAO spanDAO;
+    private final AiLabelsDAO aiLabelsDAO;
+    private final AiLabelStatusDAO aiLabelStatusDAO;
     private final InstantToUUIDMapper uuidMapper;
     private final RetentionConfig config;
 
@@ -54,11 +58,15 @@ public class RetentionPolicyService {
             @NonNull TransactionTemplate template,
             @NonNull TraceDAO traceDAO,
             @NonNull SpanDAO spanDAO,
+            @NonNull AiLabelsDAO aiLabelsDAO,
+            @NonNull AiLabelStatusDAO aiLabelStatusDAO,
             @NonNull InstantToUUIDMapper uuidMapper,
             @NonNull @Config("retention") RetentionConfig config) {
         this.template = template;
         this.traceDAO = traceDAO;
         this.spanDAO = spanDAO;
+        this.aiLabelsDAO = aiLabelsDAO;
+        this.aiLabelStatusDAO = aiLabelStatusDAO;
         this.uuidMapper = uuidMapper;
         this.config = config;
 
@@ -184,6 +192,10 @@ public class RetentionPolicyService {
                             rowsToDelete.add(count, Attributes.of(stringKey("table"), "spans"));
                         })
                         .then(Mono.empty()),
+                aiLabelsDAO.deleteForRetention(batch, cutoffId, lowerBound)
+                        .onErrorResume(e -> logAndSkip("ai_labels", batch.size(), e)),
+                aiLabelStatusDAO.deleteForRetention(batch, cutoffId, lowerBound)
+                        .onErrorResume(e -> logAndSkip("ai_label_status", batch.size(), e)),
                 spanDAO.deleteForRetention(batch, cutoffId, lowerBound)
                         .onErrorResume(e -> logAndSkip("spans", batch.size(), e)),
                 traceDAO.deleteForRetention(batch, cutoffId, lowerBound)
@@ -227,6 +239,10 @@ public class RetentionPolicyService {
                                         rowsToDelete.add(count, Attributes.of(stringKey("table"), "spans"));
                                     })
                                     .then(Mono.empty()),
+                            aiLabelsDAO.deleteForRetentionBounded(batch, cutoffId, lowerBound)
+                                    .onErrorResume(e -> logAndSkip("ai_labels", batch.size(), e)),
+                            aiLabelStatusDAO.deleteForRetentionBounded(batch, cutoffId, lowerBound)
+                                    .onErrorResume(e -> logAndSkip("ai_label_status", batch.size(), e)),
                             spanDAO.deleteForRetentionBounded(batch, cutoffId, lowerBound)
                                     .onErrorResume(e -> logAndSkip("spans", batch.size(), e)),
                             traceDAO.deleteForRetentionBounded(batch, cutoffId, lowerBound)
