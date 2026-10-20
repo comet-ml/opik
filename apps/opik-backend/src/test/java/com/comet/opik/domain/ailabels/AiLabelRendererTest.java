@@ -282,19 +282,27 @@ class AiLabelRendererTest {
                 .containsExactly(1);
     }
 
+    static Stream<Arguments> capMiddleCases() {
+        return Stream.of(
+                Arguments.of("ascii and two-byte", "a".repeat(100) + "é".repeat(500) + "z".repeat(100), 200,
+                        "a".repeat(100) + "é".repeat(10) + "…[538 chars truncated]…" + "z".repeat(52)),
+                Arguments.of("four-byte", "😀".repeat(100), 64,
+                        "😀".repeat(6) + "…[91 chars truncated]…" + "😀".repeat(3)));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("capMiddleCases")
+    void capMiddleKeepsTheStartAndEndOfAFieldOverTheCap(String name, String text, int maxBytes, String expected) {
+        var capped = AiLabelRenderer.capMiddle(text, maxBytes);
+
+        assertThat(capped).isEqualTo(expected);
+        assertThat(capped.getBytes(StandardCharsets.UTF_8)).hasSizeLessThanOrEqualTo(maxBytes);
+    }
+
     @Test
-    void capMiddleKeepsTheStartAndEndOfAFieldOverTheCap() {
+    void capMiddleLeavesAFieldWithinTheCapAsIs() {
         var text = "a".repeat(100) + "é".repeat(500) + "z".repeat(100);
 
-        var capped = AiLabelRenderer.capMiddle(text, 200);
-        var cappedEmoji = AiLabelRenderer.capMiddle("😀".repeat(100), 64);
-
-        assertThat(capped)
-                .isEqualTo("a".repeat(100) + "é".repeat(10) + "…[538 chars truncated]…" + "z".repeat(52));
-        assertThat(capped.getBytes(StandardCharsets.UTF_8)).hasSizeLessThanOrEqualTo(200);
-        assertThat(cappedEmoji)
-                .isEqualTo("😀".repeat(6) + "…[91 chars truncated]…" + "😀".repeat(3));
-        assertThat(cappedEmoji.getBytes(StandardCharsets.UTF_8)).hasSizeLessThanOrEqualTo(64);
         assertThat(AiLabelRenderer.capMiddle(text, 1_300)).isSameAs(text);
     }
 
