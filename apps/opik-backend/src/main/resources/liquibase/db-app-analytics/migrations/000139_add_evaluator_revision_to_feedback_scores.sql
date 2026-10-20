@@ -1,6 +1,6 @@
 --liquibase formatted sql
---changeset trakshan:000138_add_evaluator_revision_to_feedback_scores
---comment: Add evaluator_revision to feedback_scores and authored_feedback_scores (OPIK-7980)
+--changeset trakshan:000139_add_evaluator_revision_to_feedback_scores
+--comment: Add evaluator_revision to feedback_scores and authored_feedback_scores (OPIK-8085)
 
 -- Caller-supplied revision of the evaluator that produced a score, so stored scores can be traced back to
 -- the evaluator version. Empty string means none was set, which is also what rows written before this
