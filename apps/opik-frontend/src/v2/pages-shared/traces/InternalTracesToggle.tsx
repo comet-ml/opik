@@ -12,17 +12,24 @@ const TOOLTIP =
 
 type InternalTracesToggleProps = {
   traces: Trace[];
+  // The trace the view keeps listed regardless (the selected one); it is not counted, since
+  // toggling never hides it.
+  keepTraceId?: string;
 };
 
 // Labeled show/hide control for a thread's internal traces. Renders nothing when the thread
 // has none. Shares the persisted hide preference with the trace-tree hidden-spans toggle.
 const InternalTracesToggle: React.FC<InternalTracesToggleProps> = ({
   traces,
+  keepTraceId,
 }) => {
   const [hidden, setHidden] = useHideSpansPreference();
   const count = useMemo(
-    () => traces.filter(isSpanHiddenByDefault).length,
-    [traces],
+    () =>
+      traces.filter(
+        (trace) => trace.id !== keepTraceId && isSpanHiddenByDefault(trace),
+      ).length,
+    [traces, keepTraceId],
   );
 
   if (!count) return null;

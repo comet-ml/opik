@@ -164,5 +164,23 @@ describe("ThreadDataViewer (annotation queue thread view)", () => {
     renderViewer();
 
     expect(renderedMessages()).toEqual([turn("trace-1"), internal("trace-2")]);
+    expect(
+      screen.getByRole("button", { name: "Show internal calls (1)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers no control when the only internal trace is the one open in the trace panel", () => {
+    mocks.traces = [
+      makeTrace("trace-1"),
+      makeTrace("trace-2", INTERNAL_METADATA),
+    ];
+    window.history.replaceState(null, "", "/?trace=trace-2");
+
+    renderViewer();
+
+    expect(renderedMessages()).toEqual([turn("trace-1"), internal("trace-2")]);
+    expect(
+      screen.queryByRole("button", { name: /internal calls/ }),
+    ).not.toBeInTheDocument();
   });
 });

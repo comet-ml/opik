@@ -513,7 +513,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             </TabsTrigger>
           </TabsList>
           {currentActiveTab === "messages" && (
-            <InternalTracesToggle traces={traces} />
+            <InternalTracesToggle traces={traces} keepTraceId={traceId} />
           )}
         </div>
         <TabsContent value="messages">

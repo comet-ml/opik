@@ -147,7 +147,8 @@ const useThreadData = () => {
 };
 
 const ThreadHeader: React.FC = () => {
-  const { thread, traces, isFetching, handleOpenThread } = useThreadData();
+  const { thread, traces, traceId, isFetching, handleOpenThread } =
+    useThreadData();
 
   const dateRange = formatThreadDateRange(thread?.start_time, thread?.end_time);
 
@@ -164,7 +165,10 @@ const ThreadHeader: React.FC = () => {
         <TraceIdentifier name={dateRange} id={thread?.id || ""} />
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <InternalTracesToggle traces={traces} />
+        <InternalTracesToggle
+          traces={traces}
+          keepTraceId={traceId || undefined}
+        />
         <Button variant="ghost" size="2xs" onClick={handleOpenThread}>
           Thread
           <ArrowUpRight className="ml-1 size-3" />
