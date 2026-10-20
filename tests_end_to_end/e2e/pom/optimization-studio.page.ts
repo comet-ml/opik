@@ -41,7 +41,8 @@ export interface StudioRunConfig {
  * addressed by role/label/text because this POM must run against the deployed
  * image as it renders, without adding product testids. Selectors are kept
  * tolerant of version drift where the UI has renamed things (e.g. the dataset
- * picker is "Select item source" on newer builds, "Select a dataset" on 2.1.x).
+ * picker is "Select (an) item source" on newer builds, "Select a dataset" on
+ * 2.1.x).
  */
 export class OptimizationStudioPage {
   constructor(
@@ -414,12 +415,13 @@ export class OptimizationStudioPage {
   }
 
   /**
-   * The dataset/source picker button. Newer builds label it "Select item
-   * source"; 2.1.x labels it "Select a dataset". Match either, or the button
-   * that has become the selected dataset name.
+   * The dataset/source picker button. Newer builds label it "Select an item
+   * source" (briefly "Select item source"); 2.1.x labels it "Select a
+   * dataset". Match any, or the button that has become the selected dataset
+   * name.
    */
   private datasetPickerButton(): Locator {
-    return this.page.getByRole('button', { name: /Select item source|Select a dataset/ });
+    return this.page.getByRole('button', { name: /Select (an )?item source|Select a dataset/ });
   }
 
   private modelCombobox(): Locator {

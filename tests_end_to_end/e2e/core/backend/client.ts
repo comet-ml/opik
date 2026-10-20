@@ -317,6 +317,60 @@ export interface SpanRef {
 }
 
 /**
+ * One span with every field an SDK tracker writes onto it.
+ *
+ * Distinct from the three narrower span shapes above, and deliberately so: a
+ * spec about an `opik.integrations.*` tracker is asserting that ONE call
+ * produced ONE span carrying a consistent set of facts — its type and tags, the
+ * provider and model it recorded, the usage it mapped, the output it folded a
+ * stream into, and the parent it attached itself to. `SpanRef` has the parent
+ * but no payload, `SpanCostRef` has the model and usage but no parent or type,
+ * and `getSpanPayload` has the type and output but needs an id the caller does
+ * not have yet. Reading three shapes per span would also triple the requests
+ * against a shared cloud workspace's rate limit.
+ *
+ * Every field is `| null` rather than optional for the reason the shapes above
+ * give: an absent `usage` map and an empty one are different answers, and a
+ * tracker that stopped recording a provider must not read as one that recorded
+ * an empty string.
+ */
+export interface TrackedSpanRef {
+  id: string;
+  name: string;
+  traceId: string;
+  parentSpanId: string | null;
+  type: string | null;
+  tags: string[] | null;
+  model: string | null;
+  provider: string | null;
+  usage: Record<string, number> | null;
+  /**
+   * The price the server resolved from `usage`, `model` and `provider`.
+   *
+   * Null, not 0, when nothing was resolved — a model the price table has no row
+   * for and a model billed at zero are different answers, and a tracker that
+   * mapped the provider's token counters onto the WRONG keys produces a span
+   * that still prices, just at the wrong rate. A spec about a usage mapping
+   * therefore wants the cost beside the counters: the counters say what was
+   * recorded, the cost says what the recording was worth.
+   */
+  totalEstimatedCost: number | null;
+  input: Record<string, unknown> | null;
+  output: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+  /**
+   * The error the SDK stamped on this span, or null for a clean lifecycle.
+   *
+   * Carried here because a spec asserting a tracked call ended as a PARTIAL
+   * SUCCESS needs the span's own answer, not just its trace's: the two are
+   * written separately, so a decorator that blamed a consumer's exception on
+   * the span it was reading would leave the trace clean and pass a
+   * trace-only check.
+   */
+  errorInfo: { exceptionType: string; message: string | null } | null;
+}
+
+/**
  * One span of an OTLP export, in the vocabulary the caller thinks in: a name and
  * a flat attribute map.
  *
@@ -362,12 +416,32 @@ export interface SpanBatchSeed {
    * never seed the row whose read mapping is under test.
    */
   parentSpanId?: string;
+  /**
+   * The span's JSON `input` / `output` sections.
+   *
+   * Sent only when supplied, like `TraceBatchSeed`'s: a span with no `input`
+   * key and one with an empty object are different rows, and `SpanDAO`'s
+   * free-text search clause matches on both columns — so a seed that needs a
+   * term to be findable in a span's payload (rather than only in its name) has
+   * to put it here.
+   */
+  input?: TraceJsonSection;
+  output?: TraceJsonSection;
   startTime?: Date;
   endTime?: Date;
   model?: string;
   provider?: string;
   /** Written through verbatim; deliberately no `total_cost` (see `createSpan`). */
   usage?: Record<string, number>;
+  /**
+   * The span's `metadata` payload, sent only when supplied.
+   *
+   * Not decoration: the trace panel decides whether to COLLAPSE a span by
+   * reading `metadata._opik.is_internal` (`spanVisibility.ts`), so the
+   * hidden-by-default half of the tree is unreachable without writing it here.
+   * Absent and `{}` are left distinct for the same reason `TraceBatchSeed` does.
+   */
+  metadata?: Record<string, unknown>;
   /** Set to make the span count toward the error rate. */
   errorInfo?: { exceptionType: string; message: string; traceback: string };
 }
@@ -456,6 +530,44 @@ export interface SpanIdPage {
   page: number;
   size: number;
   total: number;
+}
+
+/**
+ * One page of a traces OR spans listing read under a free-text `search`.
+ *
+ * The same four fields as `SpanIdPage`, under its own name because the two
+ * reads it serves are different endpoints and a caller walking the traces
+ * listing should not be holding something called a span page. `total` is the
+ * load-bearing one here: free-text search's failure mode is rows silently
+ * dropped from a result set that still looks like an ordinary list, and a
+ * reader that only collected ids could not tell a short page from a short
+ * population.
+ */
+export interface EntityIdPage {
+  ids: string[];
+  page: number;
+  size: number;
+  total: number;
+}
+
+/**
+ * One entry of a `/traces/stats` or `/spans/stats` answer, as the server spells
+ * it.
+ *
+ * Kept as the raw `{ name, type, value }` list rather than reduced to a lookup
+ * of the numbers a caller wants, because ABSENCE is a real answer from this
+ * endpoint: a stats read that matches no row comes back `{"stats": []}` — not
+ * with the counts zeroed — so a helper that answered `0` for a missing
+ * `trace_count` would turn "the server reported nothing" into a passing number.
+ * The caller asserts the stat is present and then reads it.
+ *
+ * `value` is `unknown` because the union really is one: a COUNT carries a
+ * number, a PERCENTAGE carries a `{ p50, p90, p99 }` object.
+ */
+export interface ProjectStatRef {
+  name: string;
+  type: string;
+  value: unknown;
 }
 
 /** One KPI card as `POST /v1/private/projects/{id}/kpi-cards` answers it. */
@@ -3506,6 +3618,59 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * Every span in a project, with the whole set of fields a tracker writes.
+     *
+     * Project-wide and unfiltered on purpose. A spec about an integration
+     * tracker is asserting the span population a sequence of calls produced —
+     * most sharply, that a STREAMED call produced one span and not one per
+     * chunk — and a read narrowed to the spans it expected could not see an
+     * extra one. `projectId` is mandatory for the reason `listSpanRefs` gives:
+     * without it the backend answers over the Default Project, which reads
+     * identically to "the tracker wrote nothing".
+     */
+    async listTrackedSpans(args: { projectId: string }): Promise<TrackedSpanRef[]> {
+      // `withRateLimitRetry`, for the reason `listSpanIdsPage` takes it: paging
+      // a whole project is a burst of reads against a per-workspace limit
+      // (`getSpans:{workspaceId}`), and this is the method a spec polls while
+      // waiting for a seed to become queryable — so on a shared cloud workspace
+      // it is the likeliest caller to meet a 429. Unretried, that 429 surfaces
+      // from inside the caller's `expect.poll` and fails the test outright,
+      // which reads exactly like the spans never arriving.
+      const content = await withRateLimitRetry(() =>
+        fetchAllPages(
+          (page) =>
+            opik.api.spans.getSpansByProject({
+              projectId: args.projectId,
+              page,
+              size: 100,
+            }),
+          100,
+        ),
+      );
+      return content.map((s) => ({
+        id: String(s.id ?? ''),
+        name: s.name ?? '',
+        traceId: String(s.traceId ?? ''),
+        parentSpanId: s.parentSpanId ? String(s.parentSpanId) : null,
+        type: s.type ?? null,
+        tags: s.tags ?? null,
+        model: s.model ?? null,
+        provider: s.provider ?? null,
+        usage: s.usage ?? null,
+        totalEstimatedCost: s.totalEstimatedCost ?? null,
+        input: (s.input ?? null) as Record<string, unknown> | null,
+        output: (s.output ?? null) as Record<string, unknown> | null,
+        metadata: (s.metadata ?? null) as Record<string, unknown> | null,
+        errorInfo: s.errorInfo
+          ? {
+              exceptionType: s.errorInfo.exceptionType,
+              message: s.errorInfo.message ?? null,
+            }
+          : null,
+      }));
+    },
+
+    /**
      * One page of `GET /v1/private/spans` for a trace, envelope and all.
      *
      * Distinct from `listSpanRefs`, which pages the whole project through
@@ -3709,11 +3874,14 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             source: span.source ?? 'sdk',
             type: span.type ?? 'general',
             ...(span.parentSpanId === undefined ? {} : { parent_span_id: span.parentSpanId }),
+            ...(span.input === undefined ? {} : { input: span.input }),
+            ...(span.output === undefined ? {} : { output: span.output }),
             start_time: (span.startTime ?? now).toISOString(),
             end_time: (span.endTime ?? now).toISOString(),
             ...(span.model === undefined ? {} : { model: span.model }),
             ...(span.provider === undefined ? {} : { provider: span.provider }),
             ...(span.usage === undefined ? {} : { usage: span.usage }),
+            ...(span.metadata === undefined ? {} : { metadata: span.metadata }),
             ...(span.errorInfo === undefined
               ? {}
               : {
@@ -3760,6 +3928,142 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         size: answer.size ?? 0,
         total: answer.total ?? 0,
       };
+    },
+
+    /**
+     * One page of `GET /v1/private/traces` under a free-text `search`, as the
+     * Logs page's "Search by anything" box asks for it.
+     *
+     * Separate from `listTraceIds`, which takes structured `filters` only and
+     * throws the envelope away. `search` reaches an entirely different branch of
+     * `TraceDAO` — `ilike('%term%')` across id, name, input, output, metadata,
+     * error_info, tags and thread_id, plus (opik#8767) a week pre-pass that
+     * bounds the scan to the weeks the project actually has rows in. Its failure
+     * mode is rows silently missing from results, counts and stats with no
+     * error, so `total` has to come back with the ids rather than be inferred
+     * from them.
+     *
+     * `search` and `filters` are both optional and compose: the page sends them
+     * together when a chip is applied beside a search term, and the server is
+     * expected to intersect them.
+     *
+     * Deliberately NOT `fetchAllPages` — a caller of this is usually walking the
+     * page boundary on purpose, which is where a cursor that loses a row shows
+     * up. Both retries for the same reasons `listSpanIdsPage` takes them.
+     */
+    async searchTraceIdsPage(args: {
+      projectId: string;
+      search?: string;
+      filters?: BackendFilter[];
+      page?: number;
+      size?: number;
+    }): Promise<EntityIdPage> {
+      const answer = await withRateLimitRetry(() =>
+        withReadRetry(() =>
+          opik.api.traces.getTracesByProject({
+            projectId: args.projectId,
+            page: args.page ?? 1,
+            size: args.size ?? 200,
+            truncate: true,
+            ...(args.search === undefined ? {} : { search: args.search }),
+            ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+          }),
+        ),
+      );
+      return {
+        ids: (answer.content ?? []).map((t) => String(t.id ?? '')),
+        page: answer.page ?? args.page ?? 1,
+        size: answer.size ?? 0,
+        total: answer.total ?? 0,
+      };
+    },
+
+    /**
+     * The span counterpart of `searchTraceIdsPage`.
+     *
+     * Its own method rather than a flag, because the two reads are different
+     * endpoints with different search clauses: `SpanDAO` additionally matches
+     * `trace_id`, `type`, `model` and `provider`, so a term that is exact over
+     * traces is not automatically exact over spans. A spec asserting exactness
+     * on both has to drive both.
+     */
+    async searchSpanIdsPage(args: {
+      projectId: string;
+      search?: string;
+      filters?: BackendFilter[];
+      page?: number;
+      size?: number;
+    }): Promise<EntityIdPage> {
+      const answer = await withRateLimitRetry(() =>
+        withReadRetry(() =>
+          opik.api.spans.getSpansByProject({
+            projectId: args.projectId,
+            page: args.page ?? 1,
+            size: args.size ?? 200,
+            truncate: true,
+            ...(args.search === undefined ? {} : { search: args.search }),
+            ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+          }),
+        ),
+      );
+      return {
+        ids: (answer.content ?? []).map((s) => String(s.id ?? '')),
+        page: answer.page ?? args.page ?? 1,
+        size: answer.size ?? 0,
+        total: answer.total ?? 0,
+      };
+    },
+
+    /**
+     * `GET /v1/private/traces/stats` or `/v1/private/spans/stats` — the numbers
+     * the Logs page renders beside its table, under the same `search` and
+     * `filters` the listing was read with.
+     *
+     * One method over both entities because a caller asserting that the stats
+     * agree with the listing has to ask the same question of both, and two
+     * near-identical methods is how the two drift apart.
+     *
+     * Returns the list verbatim (see `ProjectStatRef`): an empty `stats` array
+     * is this endpoint's real answer for a search that matches nothing, so the
+     * caller must assert the stat it wants is PRESENT before reading it. A
+     * stat arriving with no name is treated as a malformed response and thrown
+     * rather than skipped — dropping it would turn it into a missing stat,
+     * which is the very thing a caller is trying to tell apart.
+     */
+    async entityStats(args: {
+      entity: 'traces' | 'spans';
+      projectId: string;
+      search?: string;
+      filters?: BackendFilter[];
+    }): Promise<ProjectStatRef[]> {
+      const request = {
+        projectId: args.projectId,
+        ...(args.search === undefined ? {} : { search: args.search }),
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+      };
+      const answer = await withRateLimitRetry(() =>
+        withReadRetry(() =>
+          args.entity === 'traces'
+            ? opik.api.traces.getTraceStats(request)
+            : opik.api.spans.getSpanStats(request),
+        ),
+      );
+      return (answer.stats ?? []).map((stat) => {
+        if (typeof stat.name !== 'string' || stat.name === '') {
+          throw new Error(
+            `entityStats(${args.entity}): a stat arrived with no name: ${JSON.stringify(stat)}`,
+          );
+        }
+        return {
+          name: stat.name,
+          type: String(stat.type),
+          // `value` only exists on the COUNT/AVG arms of the union; a
+          // PERCENTAGE carries `p50/p90/p99` instead. Kept as whatever the
+          // server sent so a caller reading a count asserts on a number and one
+          // reading duration asserts on the object.
+          value: (stat as { value?: unknown }).value,
+        };
+      });
     },
 
     /**
@@ -4749,15 +5053,32 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * point of the thread-prefilter tests is to drive a *specific* field and
      * operator (an EQUAL on `id` takes a different backend branch than a
      * CONTAINS), so the caller must own that choice.
+     *
+     * `search` is the free-text term the Threads tab's "Search by anything" box
+     * commits as `threads_search`, and it is a THIRD branch again — `ThreadDAO`
+     * has its own clause, matching a thread's id and the input/output of the
+     * traces it aggregates, which is neither `TraceDAO`'s nor `SpanDAO`'s. It
+     * also fronts the week pre-pass opik#8778 put in (`traces_partitioned &&
+     * search_text`), reachable on no other parameter combination.
+     *
+     * `page` so a caller can walk the searched listing: a thread lost at a page
+     * boundary is the same silent shortfall the trace-side walk exists to catch.
      */
     async listThreads(
-      args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
+      args: {
+        projectId: string;
+        filters?: BackendFilter[];
+        search?: string;
+        page?: number;
+        size?: number;
+      } & ReadWindow,
     ): Promise<{ total: number; threads: ThreadRowRef[] }> {
       const page = await opik.api.traces.getTraceThreads({
         projectId: args.projectId,
         size: args.size ?? 100,
-        page: 1,
+        page: args.page ?? 1,
         ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+        ...(args.search === undefined ? {} : { search: args.search }),
         ...(args.fromTime ? { fromTime: args.fromTime } : {}),
         ...(args.toTime ? { toTime: args.toTime } : {}),
       });
@@ -4864,11 +5185,23 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * must assert it is present rather than testing it into an `if`.
      */
     async getThreadsStats(
-      args: { projectId: string; filters?: BackendFilter[] } & ReadWindow,
+      args: {
+        projectId: string;
+        filters?: BackendFilter[];
+        /**
+         * The same free-text term `listThreads` takes. The count card above the
+         * Threads table comes from here while the rows come from there, so a
+         * spec that only read one of the two could not catch the pair
+         * disagreeing — which is how a user sees "3 threads" above a table
+         * holding one.
+         */
+        search?: string;
+      } & ReadWindow,
     ): Promise<Partial<Record<string, ThreadStatValue>>> {
       const stats = await opik.api.traces.getTraceThreadStats({
         projectId: args.projectId,
         ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+        ...(args.search === undefined ? {} : { search: args.search }),
         ...(args.fromTime ? { fromTime: args.fromTime } : {}),
         ...(args.toTime ? { toTime: args.toTime } : {}),
       });

@@ -185,6 +185,13 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
     thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
     defaultThinkingEffort: "medium",
   },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+    defaultThinkingEffort: "medium",
+  },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5]: {
     thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
@@ -254,6 +261,11 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
 // The rows pinned `reasoning: false` must equal OPENAI_NON_REASONING_MODELS in
 // scripts/sync_provider_models.py, or the registry flag the sync seeds would
 // contradict the panel (llm.test.ts enforces it; one source of truth is OPIK-8637).
+// defaultReasoningEffort is OpenAI's own default, "medium" unless stated. Each
+// model's page (developers.openai.com/api/docs/models/<id>) names it in its
+// "Reasoning.effort supports" line; the pages before gpt-5.1 name none, and the
+// SDK reference says "All models before gpt-5.1 default to medium". gpt-6-astra
+// states no default either, so it gets the fallback.
 export const OPENAI_MODEL_CAPABILITIES: Partial<
   Record<
     PROVIDER_MODEL_TYPE,
@@ -261,6 +273,7 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
       reasoning?: boolean;
       reasoningEffortOptions?: ReasoningEffort[];
       responsesApiOnlyEffortOptions?: ResponsesApiOnlyReasoningEffort[];
+      defaultReasoningEffort?: ReasoningEffort;
     }
   >
 > = {
@@ -304,24 +317,29 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.GPT_5_1]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high"],
+    defaultReasoningEffort: "none",
   },
   [PROVIDER_MODEL_TYPE.GPT_5_2]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "none",
   },
   [PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST]: { reasoning: false },
   [PROVIDER_MODEL_TYPE.GPT_5_3_CHAT_LATEST]: { reasoning: false },
   [PROVIDER_MODEL_TYPE.GPT_5_4]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "none",
   },
   [PROVIDER_MODEL_TYPE.GPT_5_4_MINI]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "none",
   },
   [PROVIDER_MODEL_TYPE.GPT_5_4_NANO]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "none",
   },
   [PROVIDER_MODEL_TYPE.GPT_5_5]: {
     reasoning: true,

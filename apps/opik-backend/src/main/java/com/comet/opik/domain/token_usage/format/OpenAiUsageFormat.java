@@ -38,11 +38,13 @@ final class OpenAiUsageFormat implements UsageFormat {
     private static NativeUsage fromChatCompletions(VariantInput input) {
         // Bare cache_read_input_tokens comes from flat OTel spans, cache_read.input_tokens from OTel GenAI spans (whose
         // input_tokens OTel ingestion stores as prompt_tokens), bare cached_tokens from flattened detail leaves.
-        // OpenRouter reports writes for the providers that bill them (Anthropic) in the prompt details.
+        // OpenRouter reports writes for the providers that bill them (Anthropic) in the prompt details. Gemini's
+        // cached_content_token_count comes from Gemini usage the SDK logged under another provider.
         var keys = input.keys();
         return chatCompletions(input,
                 keys.first("prompt_tokens_details.cached_tokens", "input_tokens_details.cached_tokens",
-                        "cache_read_input_tokens", "cache_read.input_tokens", "cached_tokens", "cache_read_tokens"),
+                        "cache_read_input_tokens", "cache_read.input_tokens", "cached_tokens", "cache_read_tokens",
+                        "cached_content_token_count"),
                 keys.first("prompt_tokens_details.cache_write_tokens", "prompt_tokens_details.cache_creation_tokens",
                         "cache_creation_input_tokens", "cache_creation.input_tokens", "cache_write_tokens",
                         "cache_creation_tokens"));

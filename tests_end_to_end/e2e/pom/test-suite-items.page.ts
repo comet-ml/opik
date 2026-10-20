@@ -1,6 +1,7 @@
-import { test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { ItemReturnNav } from './item-return-nav.page';
 import { PlaygroundPage } from './playground.page';
 
 /**
@@ -23,6 +24,27 @@ export class TestSuiteItemsPage {
       await this.page.goto(
         `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/test-suites/${this.suiteId}/items`,
       );
+    });
+  }
+
+  /**
+   * Open the suite items page the way the evaluation-suite item sidebar's
+   * "View evaluation item" link does: with the originating compare view in
+   * `from`, and optionally a `row` to expand.
+   *
+   * Mirror of `DatasetItemsPage.gotoWithReturn` — same header component, same
+   * `from` contract, different route prefix. See that method for why `from` is
+   * written by hand and why an unwanted `row` is omitted rather than blanked.
+   */
+  async gotoWithReturn(opts: { from?: string | null; row?: string } = {}): Promise<void> {
+    return test.step('Open test-suite items page with a return href', async () => {
+      const env = loadEnvConfig();
+      const url = new URL(
+        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/test-suites/${this.suiteId}/items`,
+      );
+      if (opts.row) url.searchParams.set('row', opts.row);
+      if (opts.from) url.searchParams.set('from', opts.from);
+      await this.page.goto(url.toString());
     });
   }
 
@@ -191,6 +213,41 @@ export class TestSuiteItemsPage {
     return this.page.getByTestId('test-suite-item-panel').filter({
       has: this.page.getByRole('button', { name: 'Save changes' }),
     });
+  }
+
+  /**
+   * The DETAIL panel, told apart from the Add panel that shares its testid.
+   *
+   * Discriminated on the "Actions menu" button: the detail panel acts on an
+   * existing item and offers it, the Add panel has nothing to act on and does
+   * not. Chosen over the open/closed CSS transform `addItemPanel` approximates
+   * with, because a transform is mid-animation state and this is identity —
+   * and over position, which would silently swap the two if the mount order
+   * changed.
+   */
+  get detailItemPanel(): Locator {
+    return this.page.getByTestId('test-suite-item-panel').filter({
+      has: this.page.getByRole('button', { name: 'Actions menu' }),
+    });
+  }
+
+  /**
+   * Wait for the item detail panel and return the return-nav controls scoped to
+   * it. Same reason for waiting here as `DatasetItemsPage.itemPanelReturnNav`:
+   * "the Experiment button is absent" is true of every build before the panel
+   * mounts.
+   */
+  async itemPanelReturnNav(): Promise<ItemReturnNav> {
+    return test.step('Wait for the suite item detail panel', async () => {
+      await expect(this.detailItemPanel, 'exactly one open suite item detail panel').toHaveCount(1);
+      await this.detailItemPanel.waitFor({ state: 'visible' });
+      return new ItemReturnNav(this.page, this.detailItemPanel);
+    });
+  }
+
+  /** The return-nav controls for the header alone, with no panel open. */
+  headerReturnNav(): ItemReturnNav {
+    return new ItemReturnNav(this.page, this.detailItemPanel);
   }
 
   private get itemsTableBody(): Locator {

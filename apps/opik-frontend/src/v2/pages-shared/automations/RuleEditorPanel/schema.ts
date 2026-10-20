@@ -23,6 +23,7 @@ import {
   getNestedThinkingEffort,
   getThinkingLevelOptions,
   knowsAnthropicEffortLevels,
+  leavesThinkingToModel,
   resolveSamplingParams,
   updateProviderConfig,
   withoutThinkingAmount,
@@ -252,7 +253,7 @@ const LLMJudgeBaseSchema = z.object({
       .nullable(),
     custom_parameters: z.record(z.string(), z.unknown()).optional().nullable(),
     thinkingLevel: z
-      .enum(["auto", "none", "off", "minimal", "low", "medium", "high"])
+      .enum(["auto", "off", "minimal", "low", "medium", "high"])
       .optional(),
     thinkingEffort: z.enum(ANTHROPIC_THINKING_EFFORT_VALUES).optional(),
   }),
@@ -747,10 +748,13 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     (custom_parameters ?? {}) as Record<string, unknown>
   ).thinking as Record<string, unknown> | undefined;
 
+  const levelLeftToModel = leavesThinkingToModel(
+    data.model as PROVIDER_MODEL_TYPE,
+    thinkingLevel,
+  );
   const thinkingCustomParameters =
     thinkingLevel != null &&
-    thinkingLevel !== "auto" &&
-    thinkingLevel !== "none" &&
+    !levelLeftToModel &&
     getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).some(
       (o) => o.value === thinkingLevel,
     )
@@ -766,19 +770,15 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     string,
     unknown
   >;
-  const formClearsThinking = thinkingLevel === "none";
   const formRejectedItsLevel =
-    thinkingLevel != null &&
-    thinkingLevel !== "auto" &&
-    thinkingLevel !== "none" &&
-    !thinkingCustomParameters;
-  const formSetsAuto =
-    thinkingLevel === "auto" &&
+    thinkingLevel != null && !levelLeftToModel && !thinkingCustomParameters;
+  const formLeavesLevelToModel =
+    levelLeftToModel &&
     getThinkingLevelOptions(data.model as PROVIDER_MODEL_TYPE).length > 0;
   let otherCustomParameters = persistedCustomParameters;
-  if (thinkingCustomParameters || formRejectedItsLevel || formClearsThinking) {
+  if (thinkingCustomParameters || formRejectedItsLevel) {
     otherCustomParameters = omit(persistedCustomParameters, "thinking");
-  } else if (formSetsAuto) {
+  } else if (formLeavesLevelToModel) {
     otherCustomParameters =
       withoutThinkingAmount(persistedCustomParameters) ?? {};
   }

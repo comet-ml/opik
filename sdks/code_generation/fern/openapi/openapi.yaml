@@ -3674,6 +3674,86 @@ paths:
       responses:
         "204":
           description: Tag deleted successfully
+  /v1/private/datasets/{id}/versions/hash/{versionHash}:
+    get:
+      tags:
+      - Datasets
+      summary: Get dataset version by hash
+      description: Get a specific version by its version hash
+      operationId: getDatasetVersionByHash
+      parameters:
+      - name: versionHash
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Dataset version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersion_Public"
+        "404":
+          description: Version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+    patch:
+      tags:
+      - Datasets
+      summary: Update dataset version
+      description: Update a dataset version's change_description and/or add new tags
+      operationId: updateDatasetVersion
+      parameters:
+      - name: versionHash
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetVersionUpdate_Public"
+      responses:
+        "200":
+          description: Version updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersion_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "404":
+          description: Not Found - Version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "409":
+          description: Conflict - Tag already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/datasets/{id}/versions:
     get:
       tags:
@@ -3792,55 +3872,6 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage_Public"
         "404":
           description: Version not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
-  /v1/private/datasets/{id}/versions/hash/{versionHash}:
-    patch:
-      tags:
-      - Datasets
-      summary: Update dataset version
-      description: Update a dataset version's change_description and/or add new tags
-      operationId: updateDatasetVersion
-      parameters:
-      - name: versionHash
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DatasetVersionUpdate_Public"
-      responses:
-        "200":
-          description: Version updated successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DatasetVersion_Public"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
-        "404":
-          description: Not Found - Version not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
-        "409":
-          description: Conflict - Tag already exists
           content:
             application/json:
               schema:
@@ -10144,6 +10175,16 @@ components:
             type: string
             description: "Ids whose automatic run already happened, so enrolling has\
               \ no effect"
+            format: uuid
+        reset_project_ids:
+          uniqueItems: true
+          type: array
+          description: "Ids whose automatic run never finished, so clearing forgot\
+            \ it and enrolling them again gives it one more free run"
+          items:
+            type: string
+            description: "Ids whose automatic run never finished, so clearing forgot\
+              \ it and enrolling them again gives it one more free run"
             format: uuid
     Request:
       required:
