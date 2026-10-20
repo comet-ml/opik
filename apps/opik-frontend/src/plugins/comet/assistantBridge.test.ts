@@ -124,6 +124,23 @@ describe("assistantBridge — requests made before the console subscribes", () =
     expect(listener).toHaveBeenCalledWith({ message: "hello" });
   });
 
+  it("hands the console the click's origin and entry id, so BI can match the click to its session", () => {
+    const { bridge } = setup("dash-a");
+
+    bridge.startConversation("hello", {
+      origin: "describe_widget",
+      entryId: "e-1",
+    });
+
+    const listener = vi.fn();
+    bridge.subscribe("conversation:start", listener);
+    expect(listener).toHaveBeenCalledWith({
+      message: "hello",
+      origin: "describe_widget",
+      entryId: "e-1",
+    });
+  });
+
   it("drops a request that waited longer than the expiry", () => {
     vi.useFakeTimers();
     const { bridge } = setup("dash-a");
