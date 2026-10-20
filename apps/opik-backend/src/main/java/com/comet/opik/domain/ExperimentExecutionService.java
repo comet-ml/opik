@@ -169,9 +169,9 @@ public class ExperimentExecutionService {
                                                 }
 
                                                 return refuseIfQueueIsFull(messages.size())
-                                                        .then(persistExperiments(plannedExperiments)
-                                                                .then(itemPublisher.publish(batchId, messages,
-                                                                        testSuite))
+                                                        .then(itemPublisher.trackRun(messages, testSuite)
+                                                                .then(persistExperiments(plannedExperiments))
+                                                                .then(itemPublisher.publish(batchId, messages))
                                                                 .then(purgeIfCancelledWhilePublishing(
                                                                         workspaceId, experimentIds))
                                                                 .then(Mono.fromCallable(() -> {
@@ -454,7 +454,17 @@ public class ExperimentExecutionService {
                                 experimentId);
                         return Mono.<Void>empty();
                     }
-                    return experimentService.update(experimentId, statusUpdate);
+                    return experimentService.update(experimentId, statusUpdate)
+                            // Given back when nothing could be written: held by a write that failed, it
+                            // answers "already finished" to the retry this error asks for, and the run
+                            // keeps a status no one will ever correct.
+                            .onErrorResume(error -> cancellationService.releaseFinish(workspaceId, experimentId)
+                                    .onErrorResume(releaseError -> {
+                                        log.error("Failed to release the finish of experiment '{}'",
+                                                experimentId, releaseError);
+                                        return Mono.just(false);
+                                    })
+                                    .then(Mono.error(error)));
                 });
     }
 
