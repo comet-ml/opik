@@ -714,7 +714,7 @@ class ExperimentExecutionServiceTest {
         @Test
         void refuseARunThatWouldNotFitTheQueue() {
             var config = new ExperimentExecutionConfig();
-            config.setStreamMaxLen(1000);
+            config.setStreamMaxLen(1250);
             service = new ExperimentExecutionService(
                     experimentService, cancellationService, datasetService, datasetItemService,
                     datasetVersionService, itemPublisher, idGenerator,
@@ -768,7 +768,7 @@ class ExperimentExecutionServiceTest {
         @Test
         void refuseARunThatWouldNotFitBesideTheBacklog() {
             var config = new ExperimentExecutionConfig();
-            config.setStreamMaxLen(1000);
+            config.setStreamMaxLen(1250);
             service = new ExperimentExecutionService(
                     experimentService, cancellationService, datasetService, datasetItemService,
                     datasetVersionService, itemPublisher, idGenerator,
@@ -804,7 +804,7 @@ class ExperimentExecutionServiceTest {
         @Test
         void publishARunThatFitsBesideTheBacklog() {
             var config = new ExperimentExecutionConfig();
-            config.setStreamMaxLen(1000);
+            config.setStreamMaxLen(1250);
             service = new ExperimentExecutionService(
                     experimentService, cancellationService, datasetService, datasetItemService,
                     datasetVersionService, itemPublisher, idGenerator,
@@ -827,6 +827,48 @@ class ExperimentExecutionServiceTest {
 
             verify(itemPublisher).publish(any(), any());
         }
+
+        // Admitting right up to the length the stream is trimmed to is what lets a race destroy
+        // another run's work: two launches pass the check together, the publish takes the stream
+        // past the trim length, and the oldest entries go — whoever queued them, taken or not.
+        // The gap between the two bounds is what such an overshoot spends instead.
+        @Test
+        void refuseARunThatWouldFitTheTrimLengthButNotTheAdmissionBound() {
+            var config = new ExperimentExecutionConfig();
+            config.setStreamMaxLen(1250);
+            service = new ExperimentExecutionService(
+                    experimentService, cancellationService, datasetService, datasetItemService,
+                    datasetVersionService, itemPublisher, idGenerator,
+                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags);
+
+            stubDatasetItems(IntStream.range(0, 200)
+                    .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
+                    .toList());
+            when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
+            when(itemPublisher.queuedMessageCount()).thenReturn(Mono.just(900L));
+
+            // 1,100 queued in all: under the 1,250 the stream is trimmed to, over the 1,000 a run
+            // is admitted against.
+            assertThatThrownBy(() -> executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build()))
+                    .isInstanceOf(ClientErrorException.class)
+                    .hasMessageContaining("too busy");
+
+            verify(experimentService, never()).create(any(Experiment.class));
+        }
+
+        // Admitting up to the length the stream is trimmed to is the defect itself, so what a run
+        // is admitted against is derived from that length rather than set beside it, where the two
+        // could be configured to meet.
+        @Test
+        void admitBelowTheLengthTheStreamIsTrimmedTo() {
+            var config = new ExperimentExecutionConfig();
+
+            assertThat(config.getStreamAdmissionLen()).isLessThan(config.getStreamMaxLen());
+        }
     }
 
     @Nested
@@ -845,7 +887,7 @@ class ExperimentExecutionServiceTest {
             // The finish goes to one caller; these tests are always it, and nothing has taken it yet.
             lenient().when(cancellationService.claimFinish(any(), any(UUID.class))).thenReturn(Mono.just(true));
             // Runs this service queued; the one test about SDK-logged experiments overrides it.
-            lenient().when(itemPublisher.isTracked(any(UUID.class))).thenReturn(Mono.just(true));
+            lenient().when(itemPublisher.isTracked(any(), any(UUID.class))).thenReturn(Mono.just(true));
             lenient().when(cancellationService.releaseFinish(any(), any(UUID.class))).thenReturn(Mono.just(true));
 
         }
@@ -919,7 +961,7 @@ class ExperimentExecutionServiceTest {
         void cancelLeavesAloneAnExperimentThisServiceNeverQueued() {
             var sdkLogged = UUID.randomUUID();
 
-            when(itemPublisher.isTracked(sdkLogged)).thenReturn(Mono.just(false));
+            when(itemPublisher.isTracked(WORKSPACE_ID, sdkLogged)).thenReturn(Mono.just(false));
             lenient().when(cancellationService.cancel(any(), any())).thenReturn(Mono.empty());
             lenient().when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
 
@@ -1092,7 +1134,7 @@ class ExperimentExecutionServiceTest {
             stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
             lenient().when(cancellationService.cancel(any(), any())).thenReturn(Mono.empty());
             lenient().when(cancellationService.claimFinish(any(), any(UUID.class))).thenReturn(Mono.just(true));
-            lenient().when(itemPublisher.discardCounters(any())).thenReturn(Mono.empty());
+            lenient().when(itemPublisher.discardCounters(any(), any())).thenReturn(Mono.empty());
             lenient().when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
         }
 
@@ -1147,7 +1189,20 @@ class ExperimentExecutionServiceTest {
                     .hasMessage("redis is down");
 
             verify(cancellationService, never()).releaseFinish(any(), any(UUID.class));
-            verify(itemPublisher).discardCounters(anyCollection());
+            verify(itemPublisher).discardCounters(eq(WORKSPACE_ID), anyCollection());
+        }
+
+        // The counters are set before the experiments exist, so that a stop can reach a run the
+        // moment it becomes visible. A persist that fails then leaves them counting down a run with
+        // nothing to settle, which is what abortRun discards: the TTL alone would hold them a day.
+        @Test
+        void discardTheCountersWhenTheExperimentsCannotBePersisted() {
+            when(experimentService.create(any(Experiment.class)))
+                    .thenReturn(Mono.error(new IllegalStateException("the database is down")));
+
+            assertThatThrownBy(() -> executeRequest(request())).isInstanceOf(IllegalStateException.class);
+
+            verify(itemPublisher).discardCounters(eq(WORKSPACE_ID), anyCollection());
         }
 
         @Test
@@ -1157,7 +1212,7 @@ class ExperimentExecutionServiceTest {
 
             assertThatThrownBy(() -> executeRequest(request())).isInstanceOf(IllegalStateException.class);
 
-            verify(itemPublisher).discardCounters(anyCollection());
+            verify(itemPublisher).discardCounters(eq(WORKSPACE_ID), anyCollection());
         }
 
         // The claim is taken before the status is written, so an item that drains a counter late
@@ -1185,7 +1240,7 @@ class ExperimentExecutionServiceTest {
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessage("redis is down");
 
-            verify(itemPublisher).discardCounters(anyCollection());
+            verify(itemPublisher).discardCounters(eq(WORKSPACE_ID), anyCollection());
         }
     }
 

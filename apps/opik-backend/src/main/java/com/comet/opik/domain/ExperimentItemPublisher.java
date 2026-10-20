@@ -89,8 +89,9 @@ public class ExperimentItemPublisher {
      * counter, and one whose counter has expired has no consumer left to tell either — stopping
      * those writes a status nothing will ever stamp finished, which reads as a run still going.
      */
-    public Mono<Boolean> isTracked(@NonNull UUID experimentId) {
-        return redisClient.getAtomicLong(ExperimentExecutionConfig.itemCounterKey(experimentId)).isExists();
+    public Mono<Boolean> isTracked(@NonNull String workspaceId, @NonNull UUID experimentId) {
+        return redisClient.getAtomicLong(ExperimentExecutionConfig.itemCounterKey(workspaceId, experimentId))
+                .isExists();
     }
 
     /**
@@ -98,11 +99,11 @@ public class ExperimentItemPublisher {
      * counters holding a total no one will ever reach, and an item that arrives late then decrements
      * one that should not exist.
      */
-    public Mono<Void> discardCounters(@NonNull Collection<UUID> experimentIds) {
+    public Mono<Void> discardCounters(@NonNull String workspaceId, @NonNull Collection<UUID> experimentIds) {
         return Flux.fromIterable(experimentIds)
                 .flatMap(experimentId -> Flux.just(
-                        ExperimentExecutionConfig.itemCounterKey(experimentId),
-                        ExperimentExecutionConfig.itemFailureCounterKey(experimentId))
+                        ExperimentExecutionConfig.itemCounterKey(workspaceId, experimentId),
+                        ExperimentExecutionConfig.itemFailureCounterKey(workspaceId, experimentId))
                         .flatMap(key -> redisClient.getAtomicLong(key).delete()))
                 .then()
                 .onErrorResume(error -> {
@@ -117,13 +118,14 @@ public class ExperimentItemPublisher {
      * consumer cannot drain a variant before its own counter exists.
      */
     private Mono<Void> setItemCounters(List<ExperimentItemToProcess> messages) {
+        var workspaceId = messages.getFirst().workspaceId();
         var itemsByExperiment = messages.stream()
                 .collect(Collectors.groupingBy(ExperimentItemToProcess::experimentId, Collectors.counting()));
 
         return Flux.fromIterable(itemsByExperiment.entrySet())
                 .flatMap(entry -> {
                     RAtomicLongReactive counter = redisClient
-                            .getAtomicLong(ExperimentExecutionConfig.itemCounterKey(entry.getKey()));
+                            .getAtomicLong(ExperimentExecutionConfig.itemCounterKey(workspaceId, entry.getKey()));
 
                     return counter.set(entry.getValue())
                             .then(counter.expire(config.getBatchCounterTtl().toJavaDuration()));
