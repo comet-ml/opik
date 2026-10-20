@@ -148,7 +148,7 @@ public class InferenceClient {
                 .readTimeout(readTimeout)
                 .deadline(deadline)
                 .type(BatchSubmitResponse.class)
-                .submit(true)
+                .failFastOnQuotaExceeded(true)
                 .build());
     }
 
@@ -162,7 +162,8 @@ public class InferenceClient {
             // Under 1 ms is out of time: Jersey's timeouts are whole milliseconds, so the attempt would outlast it.
             return left.toMillis() >= 1 ? send(call, left) : Mono.<T>error(InferenceException.outOfTime());
         }).onErrorResume(InferenceException.class, exception -> {
-            if (attempt >= MAX_RETRIES || !exception.isRetryable() || (call.submit() && exception.isQuotaExceeded())) {
+            if (attempt >= MAX_RETRIES || !exception.isRetryable()
+                    || (call.failFastOnQuotaExceeded() && exception.isQuotaExceeded())) {
                 return Mono.error(exception);
             }
             var backoff = exception.getRetryAfter() != null
@@ -259,6 +260,6 @@ public class InferenceClient {
             @NonNull Duration readTimeout,
             @NonNull Instant deadline,
             @NonNull Class<T> type,
-            boolean submit) {
+            boolean failFastOnQuotaExceeded) {
     }
 }
