@@ -2361,7 +2361,12 @@ aiLabels:
     url: ${AI_LABELS_INFERENCE_URL:-}
     #  Description: opik-inference deployment credential, from a secret. Required when enabled. Never logged.
     credential: ${AI_LABELS_INFERENCE_CREDENTIAL:-}
+    #  Default: 5s
+    #  Description: Per call to opik-inference, cut to the time left before the tick's deadline
     connectTimeout: ${AI_LABELS_INFERENCE_CONNECT_TIMEOUT:-5s}
+    #  Default: 30s
+    #  Description: Per call to opik-inference, cut to the time left before the tick's deadline. Also the time a tick's
+    #  sends get past tickBudget, so it lengthens the leader lease
     readTimeout: ${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}
   #  Default: 16777216 (16 MiB, about 3 minutes of one L40S on the 4B model at 22K tokens/s)
   #  Description: Global in-flight work: the cost of submitted items not yet loaded. Set as throughput x the queue time accepted
@@ -2372,11 +2377,17 @@ aiLabels:
   #  Default: 16384 (16 KiB)
   #  Description: The least an item costs. At most budgetBytes / (2 x the dispatchers' batch slots)
   minItemBytes: ${AI_LABELS_MIN_ITEM_BYTES:-16384}
+  #  Default: 60s
+  #  Description: How often the leader ticks: polls, loads, sweeps and submits
   tickInterval: ${AI_LABELS_TICK_INTERVAL:-60s}
+  #  Default: 25s
+  #  Description: Each tick stops starting work after this long. Must be under tickInterval
   tickBudget: ${AI_LABELS_TICK_BUDGET:-25s}
   #  Default: 55s
   #  Description: Under tickInterval, so every tick sweeps; a tick only submits what its own sweep found
   sweepInterval: ${AI_LABELS_SWEEP_INTERVAL:-55s}
+  #  Default: 5m
+  #  Description: How often the backlog and latency gauges are recomputed, one sweep-sized query per bucket
   healthInterval: ${AI_LABELS_HEALTH_INTERVAL:-5m}
   #  Default: 7d
   #  Description: H, how far back (by trace created_at) traces are labeled; under overload the oldest age out of it.
@@ -2385,6 +2396,8 @@ aiLabels:
   #  Default: 1h
   #  Description: Q, how long a trace must go without updates before it is labeled
   quietPeriod: ${AI_LABELS_QUIET_PERIOD:-1h}
+  #  Default: 15m
+  #  Description: The labeling SLO is quietPeriod + sloSlack; only the headline gauges use it
   sloSlack: ${AI_LABELS_SLO_SLACK:-15m}
   retry:
     #  Default: 2
@@ -2407,11 +2420,16 @@ aiLabels:
   #  traces one tick admits; scale it with the budget
   perWorkspaceCandidates: ${AI_LABELS_PER_WORKSPACE_CANDIDATES:-2000}
   #  Default: 2097152 (2 MiB; the opik-inference gateway rejects bodies over 8 MiB)
+  #  Description: A submitted job's request body is kept under this size
   maxJobBytes: ${AI_LABELS_MAX_JOB_BYTES:-2097152}
   #  Default: 49152 (48 KiB, about 12k tokens at UTF-8 bytes / 4)
   #  Description: The rendered trace's share of the model input
   renderBudgetBytes: ${AI_LABELS_RENDER_BUDGET_BYTES:-49152}
+  #  Default: 100000
+  #  Description: The whole model input: a task's prompt plus the rendered trace. Must be over renderBudgetBytes
   modelInputBudgetBytes: ${AI_LABELS_MODEL_INPUT_BUDGET_BYTES:-100000}
+  #  Default: 4
+  #  Description: Traces rendered in parallel by a submit turn
   renderThreads: ${AI_LABELS_RENDER_THREADS:-4}
   #  Default: 200
   #  Description: A trace's spans are read in start order up to this many; 200 keeps every span of 99.8% of traces
@@ -2439,8 +2457,13 @@ aiLabels:
     #  Default: 8
     #  Description: N, enabled workspaces are split into this many buckets, one sweep query each
     buckets: ${AI_LABELS_SWEEP_BUCKETS:-8}
+    #  Default: 30000000
+    #  Description: Per sweep query on the shared ClickHouse; a trip skips that bucket for the tick
     maxRowsToRead: ${AI_LABELS_SWEEP_MAX_ROWS_TO_READ:-30000000}
     #  Default: 1073741824 (1 GiB)
     #  Description: Per sweep query on the shared ClickHouse; a trip skips that bucket for the tick
     maxMemoryUsage: ${AI_LABELS_SWEEP_MAX_MEMORY_USAGE:-1073741824}
+    #  Default: 50s
+    #  Description: Per sweep query on the shared ClickHouse; a trip skips that bucket for the tick. Lengthens the leader
+    #  lease when over readTimeout
     maxExecutionTime: ${AI_LABELS_SWEEP_MAX_EXECUTION_TIME:-50s}

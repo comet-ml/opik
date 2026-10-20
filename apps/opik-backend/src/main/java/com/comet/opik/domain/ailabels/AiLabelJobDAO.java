@@ -19,7 +19,8 @@ import java.util.List;
 
 /**
  * The opik-inference jobs ai-labels has submitted, and the (trace, task) items of those still in flight. A job and its
- * items are written in one transaction, and its items are deleted in the one that marks it loaded.
+ * items are written in one transaction, and its items are deleted in the one that marks it loaded. An empty id list
+ * matches nothing.
  */
 @RegisterArgumentFactory(AiLabelJobDAO.EndpointMapper.class)
 @RegisterArgumentFactory(AiLabelJobDAO.StatusMapper.class)
@@ -49,17 +50,21 @@ public interface AiLabelJobDAO {
     List<AiLabelJob> submitted();
 
     @SqlQuery("SELECT * FROM ai_label_job_items WHERE job_id IN (<jobIds>)")
-    List<AiLabelJobItem> findItems(@BindList("jobIds") Collection<String> jobIds);
+    List<AiLabelJobItem> findItems(
+            @BindList(value = "jobIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<String> jobIds);
 
     /** The traces with a task in flight in any of the workspaces: the sweep leaves them out. */
     @SqlQuery("SELECT DISTINCT trace_id FROM ai_label_job_items WHERE workspace_id IN (<workspaceIds>)")
-    List<String> inFlightTraceIds(@BindList("workspaceIds") Collection<String> workspaceIds);
+    List<String> inFlightTraceIds(
+            @BindList(value = "workspaceIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<String> workspaceIds);
 
     @SqlUpdate("UPDATE ai_label_jobs SET status = 'loaded', terminal_at = :terminalAt WHERE job_id IN (<jobIds>)")
-    int markLoaded(@BindList("jobIds") Collection<String> jobIds, @Bind("terminalAt") Instant terminalAt);
+    int markLoaded(@BindList(value = "jobIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<String> jobIds,
+            @Bind("terminalAt") Instant terminalAt);
 
     @SqlUpdate("DELETE FROM ai_label_job_items WHERE job_id IN (<jobIds>)")
-    int deleteItems(@BindList("jobIds") Collection<String> jobIds);
+    int deleteItems(
+            @BindList(value = "jobIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<String> jobIds);
 
     @SqlQuery("SELECT COALESCE(SUM(bytes), 0) FROM ai_label_jobs WHERE status = 'submitted'")
     long inFlightBytes();

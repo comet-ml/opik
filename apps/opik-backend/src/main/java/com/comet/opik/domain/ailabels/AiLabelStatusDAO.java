@@ -16,8 +16,11 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -32,6 +35,9 @@ import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 public class AiLabelStatusDAO {
 
     static final String TABLE = "ai_label_status";
+
+    private static final Map<String, AiLabelStatus.Status> STATUSES = Arrays.stream(AiLabelStatus.Status.values())
+            .collect(Collectors.toUnmodifiableMap(AiLabelStatus.Status::getValue, Function.identity()));
 
     /**
      * The latest row of every (trace, task) of the given traces. Filters on mutable columns go after the dedup, so an
@@ -107,7 +113,6 @@ public class AiLabelStatusDAO {
     }
 
     private static AiLabelStatus toStatus(Row row) {
-        var status = row.get("status", String.class);
         return AiLabelStatus.builder()
                 .workspaceId(row.get("workspace_id", String.class))
                 .projectId(UUID.fromString(row.get("project_id", String.class)))
@@ -116,10 +121,7 @@ public class AiLabelStatusDAO {
                 .traceCreatedAt(row.get("trace_created_at", Instant.class))
                 .taskVersion(row.get("task_version", Long.class).intValue())
                 .rendererVersion(row.get("renderer_version", Long.class).intValue())
-                .status(Arrays.stream(AiLabelStatus.Status.values())
-                        .filter(value -> value.getValue().equals(status))
-                        .findFirst()
-                        .orElseThrow())
+                .status(Objects.requireNonNull(STATUSES.get(row.get("status", String.class))))
                 .retryable(row.get("retryable", Boolean.class))
                 .attempt(row.get("attempt", Integer.class))
                 .errorCode(row.get("error_code", String.class))

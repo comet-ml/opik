@@ -22,6 +22,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
+import org.apache.commons.lang3.RandomUtils;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,6 +41,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -63,6 +65,7 @@ class AiLabelsStorageTest {
 
     private static final String USER = "user-" + UUID.randomUUID();
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+    private static final PodamFactory PODAM_FACTORY = PodamFactoryUtils.newPodamFactory();
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     // Not reused: the job and opt-in reads span the whole table, so rows from other runs would leak into them.
@@ -257,7 +260,7 @@ class AiLabelsStorageTest {
             insertJob(loaded);
             withJobs(dao -> dao.markLoaded(List.of(loaded.jobId()), now()));
 
-            List<AiLabelJob> submitted = withJobs(AiLabelJobDAO::submitted);
+            List<AiLabelJob> submitted = readJobs(AiLabelJobDAO::submitted);
             assertThat(submitted).containsExactly(older, newer);
         }
 
@@ -289,15 +292,49 @@ class AiLabelsStorageTest {
                 return null;
             });
 
-            List<AiLabelJobItem> found = withJobs(dao -> dao.findItems(List.of(item.jobId())));
+            List<AiLabelJobItem> found = readJobs(dao -> dao.findItems(List.of(item.jobId())));
             assertThat(found).containsExactlyInAnyOrder(item, sameTraceOtherTask);
-            List<String> inFlight = withJobs(dao -> dao.inFlightTraceIds(List.of(workspaceId)));
+            List<String> inFlight = readJobs(dao -> dao.inFlightTraceIds(List.of(workspaceId)));
             assertThat(inFlight).containsExactlyInAnyOrder(traceId.toString(), otherTraceId.toString());
 
             int deleted = withJobs(dao -> dao.deleteItems(List.of(item.jobId())));
             assertThat(deleted).isEqualTo(2);
-            List<String> stillInFlight = withJobs(dao -> dao.inFlightTraceIds(List.of(workspaceId)));
+            List<String> stillInFlight = readJobs(dao -> dao.inFlightTraceIds(List.of(workspaceId)));
             assertThat(stillInFlight).containsExactly(otherTraceId.toString());
+        }
+
+        @Test
+        @DisplayName("empty id lists match nothing and change nothing")
+        void emptyIdListsMatchNothing() {
+            var job = job(AiLabelEndpoint.DECIDE, 5);
+            insertJob(job);
+            withJobs(dao -> {
+                dao.insertItems(List.of(AiLabelJobItem.builder()
+                        .jobId(job.jobId())
+                        .workspaceId(job.workspaceId())
+                        .projectId(UUID.randomUUID())
+                        .traceId(ID_GENERATOR.generateId())
+                        .traceCreatedAt(now())
+                        .task("summary")
+                        .taskVersion(1)
+                        .rendererVersion(1)
+                        .compactionLevel("none")
+                        .attempt(1)
+                        .build()));
+                return null;
+            });
+
+            List<AiLabelJobItem> noItems = readJobs(dao -> dao.findItems(List.of()));
+            List<String> noTraces = readJobs(dao -> dao.inFlightTraceIds(List.of()));
+            int loaded = withJobs(dao -> dao.markLoaded(List.of(), now()));
+            int deleted = withJobs(dao -> dao.deleteItems(List.of()));
+            List<AiLabelJobItem> items = readJobs(dao -> dao.findItems(List.of(job.jobId())));
+
+            assertThat(noItems).isEmpty();
+            assertThat(noTraces).isEmpty();
+            assertThat(loaded).isZero();
+            assertThat(deleted).isZero();
+            assertThat(items).hasSize(1);
         }
 
         @Test
@@ -341,7 +378,7 @@ class AiLabelsStorageTest {
         }
 
         private long inFlightBytes() {
-            return withJobs(AiLabelJobDAO::inFlightBytes);
+            return readJobs(AiLabelJobDAO::inFlightBytes);
         }
 
         private List<String> jobIds() {
@@ -353,6 +390,10 @@ class AiLabelsStorageTest {
 
         private <T> T withJobs(java.util.function.Function<AiLabelJobDAO, T> action) {
             return template.inTransaction(WRITE, handle -> action.apply(handle.attach(AiLabelJobDAO.class)));
+        }
+
+        private <T> T readJobs(java.util.function.Function<AiLabelJobDAO, T> query) {
+            return template.inTransaction(READ_ONLY, handle -> query.apply(handle.attach(AiLabelJobDAO.class)));
         }
 
         private Instant now() {
@@ -380,7 +421,7 @@ class AiLabelsStorageTest {
                 return null;
             });
 
-            var actual = withWorkspaces(AiLabelWorkspaceDAO::enabledWorkspaceIds);
+            var actual = enabledWorkspaceIds();
             assertThat(actual).contains(enabled).doesNotContain(disabledLater, neverEnabled);
 
             withWorkspaces(dao -> {
@@ -388,13 +429,18 @@ class AiLabelsStorageTest {
                 return null;
             });
 
-            assertThat(withWorkspaces(AiLabelWorkspaceDAO::enabledWorkspaceIds))
+            assertThat(enabledWorkspaceIds())
                     .contains(enabled, disabledLater)
                     .doesNotContain(neverEnabled);
         }
 
         private <T> T withWorkspaces(java.util.function.Function<AiLabelWorkspaceDAO, T> action) {
             return template.inTransaction(WRITE, handle -> action.apply(handle.attach(AiLabelWorkspaceDAO.class)));
+        }
+
+        private List<String> enabledWorkspaceIds() {
+            return template.inTransaction(READ_ONLY,
+                    handle -> handle.attach(AiLabelWorkspaceDAO.class).enabledWorkspaceIds());
         }
     }
 
@@ -480,20 +526,18 @@ class AiLabelsStorageTest {
 
     private static AiLabelStatus status(String workspaceId, UUID projectId, UUID traceId, String task,
             AiLabelStatus.Status status, String jobId) {
-        return AiLabelStatus.builder()
+        // Versions from disjoint ranges, so swapped columns never read back equal.
+        return PODAM_FACTORY.manufacturePojo(AiLabelStatus.class).toBuilder()
                 .workspaceId(workspaceId)
                 .projectId(projectId)
                 .task(task)
                 .traceId(traceId)
                 .traceCreatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                .taskVersion(1)
-                .rendererVersion(1)
+                .taskVersion(RandomUtils.secure().randomInt(1, 1_000))
+                .rendererVersion(RandomUtils.secure().randomInt(1_000, 2_000))
                 .status(status)
-                .retryable(false)
-                .attempt(1)
-                .errorCode("")
+                .attempt(RandomUtils.secure().randomInt(1, 256))
                 .jobId(jobId)
-                .compactionLevel("none")
                 .build();
     }
 

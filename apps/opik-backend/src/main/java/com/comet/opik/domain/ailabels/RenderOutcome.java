@@ -1,6 +1,7 @@
 package com.comet.opik.domain.ailabels;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.annotation.Nullable;
 import lombok.NonNull;
 
 /**
@@ -15,7 +16,7 @@ public sealed interface RenderOutcome {
     boolean withHistory();
 
     /** {@code history} is the fitted earlier turns, oldest first, and null for the tasks without them. */
-    record Rendered(@NonNull TraceRef trace, @NonNull JsonNode state, JsonNode history, int bytes,
+    record Rendered(@NonNull TraceRef trace, @NonNull JsonNode state, @Nullable JsonNode history, int bytes,
             @NonNull String compactionLevel) implements RenderOutcome {
 
         @Override

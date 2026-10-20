@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset collinc:000110_create_ai_label_jobs
+--changeset collinc:000111_create_ai_label_jobs
 --comment: The ai-labels jobs submitted to opik-inference and their in-flight items: what the tick loads and what the in-flight budget sums
 
 -- One row per opik-inference batch job. A job is 'submitted' until its results are written, then 'loaded'; loaded
@@ -50,3 +50,4 @@ CREATE TABLE ai_label_job_items
 
 --rollback DROP TABLE IF EXISTS ai_label_job_items;
 --rollback DROP TABLE IF EXISTS ai_label_jobs;
+

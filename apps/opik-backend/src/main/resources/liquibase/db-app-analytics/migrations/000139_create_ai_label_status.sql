@@ -40,3 +40,4 @@ ORDER BY (workspace_id, project_id, task, trace_id)
 SETTINGS index_granularity = 8192;
 
 --rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.ai_label_status ON CLUSTER '{cluster}' SYNC;
+
