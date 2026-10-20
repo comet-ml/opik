@@ -248,7 +248,7 @@ public class InferenceClient {
         return UUID.randomUUID().toString();
     }
 
-    @Builder
+    @Builder(toBuilder = true)
     private record Call<T>(
             @NonNull String method,
             @NonNull String path,
