@@ -151,6 +151,21 @@ class AiLabelSweepDAOTest {
         }
 
         @Test
+        @DisplayName("a trace id reused in another project is settled separately")
+        void traceIdReusedInAnotherProjectIsSettledSeparately() {
+            var workspaceId = workspace();
+            var labeled = trace(workspaceId).build().insert();
+            var sameIdElsewhere = labeled.toBuilder().projectId(ID_GENERATOR.generateId()).build().insert();
+            status(labeled, "summary", "done", false, 1, 1, 60);
+
+            assertThat(sweep(workspaceId)).singleElement()
+                    .satisfies(candidate -> {
+                        assertThat(candidate.projectId()).isEqualTo(sameIdElsewhere.projectId());
+                        assertThat(candidate.missing()).isEqualTo(Map.of("summary", 0));
+                    });
+        }
+
+        @Test
         @DisplayName("of two tasks only the unsettled one is missing; a task newer than the trace is absent")
         void missingListsOnlyUnsettledTasksThatApply() {
             var workspaceId = workspace();

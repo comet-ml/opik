@@ -78,7 +78,8 @@ class AiLabelSweepDAO {
                 AND last_updated_at \\< now64(6) - toIntervalSecond(:quiet_seconds)
             ),
             latest_status AS (
-                SELECT workspace_id, trace_id, task, trace_created_at, task_version, status, retryable, attempt, updated_at
+                SELECT workspace_id, project_id, trace_id, task, trace_created_at, task_version, status, retryable, attempt,
+                    updated_at
                 FROM ai_label_status
                 WHERE workspace_id IN :workspace_ids
                 AND trace_created_at >= now64(6) - toIntervalSecond(:horizon_seconds)
@@ -86,7 +87,7 @@ class AiLabelSweepDAO {
                 LIMIT 1 BY workspace_id, project_id, task, trace_id
             ),
             judged AS (
-                SELECT workspace_id, trace_id, task, attempt,
+                SELECT workspace_id, project_id, trace_id, task, attempt,
                     task_version >= <required_status> AS is_current,
                     is_current AND (
                         status = 'done'
@@ -96,19 +97,21 @@ class AiLabelSweepDAO {
                 FROM latest_status
             ),
             by_trace AS (
-                SELECT workspace_id, trace_id,
+                SELECT workspace_id, project_id, trace_id,
                     groupArrayIf(task, settled) AS settled_tasks,
                     groupArrayIf(task, is_current AND NOT settled) AS retry_tasks,
                     groupArrayIf(attempt, is_current AND NOT settled) AS retry_attempts
                 FROM judged
-                GROUP BY workspace_id, trace_id
+                GROUP BY workspace_id, project_id, trace_id
             ),
             candidates AS (
                 SELECT e.workspace_id AS workspace_id, e.project_id AS project_id, e.id AS id, e.created_at AS created_at,
                     arrayFilter(t -> <required_trace> > 0 AND NOT has(s.settled_tasks, t), :task_names) AS missing,
                     arrayMap(t -> if(has(s.retry_tasks, t), toUInt32(s.retry_attempts[indexOf(s.retry_tasks, t)]), 0), missing) AS attempts
                 FROM eligible AS e
-                LEFT JOIN by_trace AS s ON s.workspace_id = e.workspace_id AND s.trace_id = e.id
+                -- By project too: a trace id reused in another project is another trace, with its own statuses.
+                LEFT JOIN by_trace AS s ON s.workspace_id = e.workspace_id AND s.project_id = e.project_id
+                    AND s.trace_id = e.id
             )
             """;
 

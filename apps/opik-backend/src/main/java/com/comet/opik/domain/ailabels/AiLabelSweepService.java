@@ -126,7 +126,8 @@ public class AiLabelSweepService {
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
                 handle -> handle.attach(AiLabelJobDAO.class).inFlightTraceIds(bucket)))
                 .flatMapMany(inFlight -> sweepDAO.sweep(bucket, tasks, index, inFlight))
-                .doOnComplete(() -> duration.record((System.nanoTime() - start) / 1e9,
+                // On error too, so the slowest queries (those a guard stopped) stay in the distribution.
+                .doOnTerminate(() -> duration.record((System.nanoTime() - start) / 1e9,
                         Attributes.of(longKey("bucket"), (long) index)))
                 .onErrorResume(error -> skipBucket("sweep", index, error));
     }

@@ -4,8 +4,6 @@ import com.comet.opik.domain.ailabels.AiLabelSweepDAO.SweepTask;
 import com.comet.opik.domain.ailabels.AiLabelSweepDAO.WorkspaceHealth;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -34,14 +32,19 @@ class AiLabelSweepServiceTest {
     private final TransactionTemplate template = mock(TransactionTemplate.class);
     private final AiLabelSweepService service = new AiLabelSweepService(sweepDAO, template, new AiLabelsConfig());
 
-    enum FailingQuery {
-        HEALTH,
-        NEVER_ENDED
+    @Test
+    void healthKeepsTheLastCompleteSnapshotWhenABucketsHealthQueryFails() {
+        assertKeepsTheLastCompleteSnapshot(() -> when(sweepDAO.health(eq(BUCKETS.get(1)), anyList(), eq(1)))
+                .thenReturn(Flux.error(new IllegalStateException("bucket down"))));
     }
 
-    @ParameterizedTest
-    @EnumSource(FailingQuery.class)
-    void healthKeepsTheLastCompleteSnapshotWhenABucketFails(FailingQuery failing) {
+    @Test
+    void healthKeepsTheLastCompleteSnapshotWhenABucketsNeverEndedQueryFails() {
+        assertKeepsTheLastCompleteSnapshot(() -> when(sweepDAO.neverEnded(eq(BUCKETS.get(1)), eq(1)))
+                .thenReturn(Mono.error(new IllegalStateException("bucket down"))));
+    }
+
+    private void assertKeepsTheLastCompleteSnapshot(Runnable failBucket) {
         var a = new WorkspaceHealth("workspace-a", 10, 2);
         var b = new WorkspaceHealth("workspace-b", 5, 1);
         when(sweepDAO.health(eq(BUCKETS.get(0)), anyList(), eq(0))).thenReturn(Flux.just(a));
@@ -50,11 +53,7 @@ class AiLabelSweepServiceTest {
 
         var complete = service.refreshHealth(BUCKETS, TASKS).block();
 
-        var down = new IllegalStateException("bucket down");
-        switch (failing) {
-            case HEALTH -> when(sweepDAO.health(eq(BUCKETS.get(1)), anyList(), eq(1))).thenReturn(Flux.error(down));
-            case NEVER_ENDED -> when(sweepDAO.neverEnded(eq(BUCKETS.get(1)), eq(1))).thenReturn(Mono.error(down));
-        }
+        failBucket.run();
         var afterFailure = service.refreshHealth(BUCKETS, TASKS).block();
 
         assertThat(complete.workspaces()).containsExactly(a, b);
