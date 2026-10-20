@@ -61,5 +61,5 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 urllib3==2.8.0
 uuid6==2025.0.1
-yarl==1.23.0
+yarl==1.25.1
 zipp==3.23.0
