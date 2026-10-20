@@ -40,7 +40,7 @@ pydantic==2.12.5
 pydantic-settings==2.13.1
 pydantic_core==2.41.5
 Pygments==2.20.0
-pytest==9.0.2
+pytest==9.0.3
 python-dotenv==1.2.2
 PyYAML==6.0.3
 RapidFuzz==3.14.3
