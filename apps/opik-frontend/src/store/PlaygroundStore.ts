@@ -843,7 +843,7 @@ export const useResetDatasetFilters = () =>
 export const useProgressTotal = () =>
   usePlaygroundStore((state) => state.progressTotal);
 
-export const useShowsRunProgress = () =>
+export const useHasRunProgress = () =>
   usePlaygroundStore((state) => state.progressTotal > 0);
 
 export const useProgressCompleted = () =>

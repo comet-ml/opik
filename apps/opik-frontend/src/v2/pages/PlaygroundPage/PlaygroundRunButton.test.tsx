@@ -22,7 +22,7 @@ let isResumingRun = false;
 let isPromptRunning = false;
 let isStopPending = false;
 let isWatchLapsed = false;
-let showsRunProgress = false;
+let hasRunProgress = false;
 
 vi.mock("@/store/PlaygroundStore", () => ({
   usePromptById: () => prompt,
@@ -30,7 +30,7 @@ vi.mock("@/store/PlaygroundStore", () => ({
   useIsResumingRun: () => isResumingRun,
   useIsStopPending: () => isStopPending,
   useIsWatchLapsed: () => isWatchLapsed,
-  useShowsRunProgress: () => showsRunProgress,
+  useHasRunProgress: () => hasRunProgress,
   useDatasetType: () => datasetType,
   useDatasetItemsTotal: () => datasetItemsTotal,
 }));
@@ -93,7 +93,7 @@ beforeEach(() => {
   isPromptRunning = false;
   isStopPending = false;
   isWatchLapsed = false;
-  showsRunProgress = false;
+  hasRunProgress = false;
 });
 
 describe("PlaygroundRunButton", () => {
@@ -351,7 +351,7 @@ describe("a run this tab stopped following", () => {
   // A run followed as a whole has a progress bar, and it already carries this message and its own
   // Refresh. Repeating both on every prompt's row would be the same offer N+1 times.
   it("should leave the message to the progress bar when there is one", () => {
-    showsRunProgress = true;
+    hasRunProgress = true;
     renderLapsed();
 
     expect(
