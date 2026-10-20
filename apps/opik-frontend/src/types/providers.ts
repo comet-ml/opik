@@ -1119,6 +1119,7 @@ export interface LLMOpenRouterConfigsType {
   repetitionPenalty: number;
   minP: number;
   topA: number;
+  reasoningEffort?: OpenAIReasoningEffort;
   seed?: number | null;
   throttling?: number;
   maxConcurrentRequests?: number;
