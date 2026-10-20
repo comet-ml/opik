@@ -98,10 +98,11 @@ class ClaudeAggregator(ChunkAggregator):
 
                 elif chunk_type == "content_block_delta":
                     index = chunk_data.get("index", 0)
+                    delta = chunk_data.get("delta", {})
                     block = blocks.setdefault(index, {"type": "text", "text": ""})
-                    tool_inputs[index] = _apply_delta(
-                        block, chunk_data.get("delta", {}), tool_inputs.get(index, "")
-                    )
+                    tool_input = _apply_delta(block, delta, tool_inputs.get(index, ""))
+                    if "partial_json" in delta:
+                        tool_inputs[index] = tool_input
 
                 elif chunk_type == "message_delta":
                     delta = chunk_data.get("delta", {})

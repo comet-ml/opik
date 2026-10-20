@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 import opik
 from opik import llm_usage
 from opik.integrations.bedrock.invoke_model import chunks_aggregator
+from tests.conftest import random_chars
 
 
 def _chunk(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -252,15 +253,27 @@ def _content_stream(
     ]
 
 
-def _tool_use_events(index: int, partial_jsons: List[str]) -> List[Dict[str, Any]]:
+# Usage of every stream built by _content_stream, in Bedrock format.
+_CONTENT_STREAM_USAGE = {
+    "inputTokens": 12,
+    "outputTokens": 7,
+    "cacheWriteInputTokens": 0,
+    "cacheReadInputTokens": 0,
+    "totalTokens": 19,
+}
+
+
+def _tool_use_events(
+    index: int, tool_id: str, tool_name: str, partial_jsons: List[str]
+) -> List[Dict[str, Any]]:
     return [
         {
             "type": "content_block_start",
             "index": index,
             "content_block": {
                 "type": "tool_use",
-                "id": "toolu_1",
-                "name": "get_weather",
+                "id": tool_id,
+                "name": tool_name,
                 "input": {},
             },
         },
@@ -276,27 +289,57 @@ def _tool_use_events(index: int, partial_jsons: List[str]) -> List[Dict[str, Any
     ]
 
 
+def _text_events(index: int, texts: List[str]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "type": "content_block_start",
+            "index": index,
+            "content_block": {"type": "text", "text": ""},
+        },
+        *[
+            {
+                "type": "content_block_delta",
+                "index": index,
+                "delta": {"type": "text_delta", "text": text},
+            }
+            for text in texts
+        ],
+        {"type": "content_block_stop", "index": index},
+    ]
+
+
 class TestClaudeStreamContentBlocks:
     def test_aggregate_chunks__tool_only_turn__tool_use_block_logged(self):
+        tool_id, tool_name = f"toolu_{random_chars()}", f"tool_{random_chars()}"
+        city = random_chars()
         chunks = _content_stream(
-            _tool_use_events(0, ['{"city": ', '"Paris"}']), stop_reason="tool_use"
+            _tool_use_events(0, tool_id, tool_name, ['{"city": ', f'"{city}"}}']),
+            stop_reason="tool_use",
         )
 
         response = chunks_aggregator.aggregate_chunks_to_dataclass(chunks)
 
-        assert response.native_response["content"] == [
-            {
-                "type": "tool_use",
-                "id": "toolu_1",
-                "name": "get_weather",
-                "input": {"city": "Paris"},
-            }
-        ]
-        assert response.native_response["stop_reason"] == "tool_use"
+        assert response.native_response == {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": tool_id,
+                    "name": tool_name,
+                    "input": {"city": city},
+                }
+            ],
+            "stop_reason": "tool_use",
+        }
+        assert response.usage == _CONTENT_STREAM_USAGE
 
     def test_aggregate_chunks__thinking_text_and_tool_use__all_blocks_logged_in_order(
         self,
     ):
+        tool_id, tool_name = f"toolu_{random_chars()}", f"tool_{random_chars()}"
+        thinking_start, thinking_end = random_chars(), random_chars()
+        signature, text = random_chars(), random_chars()
+        city = random_chars()
         events = [
             {
                 "type": "content_block_start",
@@ -306,85 +349,239 @@ class TestClaudeStreamContentBlocks:
             {
                 "type": "content_block_delta",
                 "index": 0,
-                "delta": {"type": "thinking_delta", "thinking": "Need the "},
+                "delta": {"type": "thinking_delta", "thinking": thinking_start},
             },
             {
                 "type": "content_block_delta",
                 "index": 0,
-                "delta": {"type": "thinking_delta", "thinking": "weather."},
+                "delta": {"type": "thinking_delta", "thinking": thinking_end},
             },
             {
                 "type": "content_block_delta",
                 "index": 0,
-                "delta": {"type": "signature_delta", "signature": "sig"},
+                "delta": {"type": "signature_delta", "signature": signature},
             },
             {"type": "content_block_stop", "index": 0},
-            {
-                "type": "content_block_start",
-                "index": 1,
-                "content_block": {"type": "text", "text": ""},
-            },
-            {
-                "type": "content_block_delta",
-                "index": 1,
-                "delta": {"type": "text_delta", "text": "Checking."},
-            },
-            {"type": "content_block_stop", "index": 1},
-            *_tool_use_events(2, ['{"city": "Paris"}']),
+            *_text_events(1, [text]),
+            *_tool_use_events(2, tool_id, tool_name, [f'{{"city": "{city}"}}']),
         ]
 
         response = chunks_aggregator.aggregate_chunks_to_dataclass(
             _content_stream(events, stop_reason="tool_use")
         )
 
-        assert response.native_response["content"] == [
-            {"type": "thinking", "thinking": "Need the weather.", "signature": "sig"},
-            {"type": "text", "text": "Checking."},
-            {
-                "type": "tool_use",
-                "id": "toolu_1",
-                "name": "get_weather",
-                "input": {"city": "Paris"},
-            },
-        ]
+        assert response.native_response == {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "thinking",
+                    "thinking": thinking_start + thinking_end,
+                    "signature": signature,
+                },
+                {"type": "text", "text": text},
+                {
+                    "type": "tool_use",
+                    "id": tool_id,
+                    "name": tool_name,
+                    "input": {"city": city},
+                },
+            ],
+            "stop_reason": "tool_use",
+        }
+        assert response.usage == _CONTENT_STREAM_USAGE
 
     def test_aggregate_chunks__tool_call_without_arguments__input_is_empty_object(
         self,
     ):
-        chunks = _content_stream(_tool_use_events(0, [""]), stop_reason="tool_use")
-
-        response = chunks_aggregator.aggregate_chunks_to_dataclass(chunks)
-
-        assert response.native_response["content"][0]["input"] == {}
-
-    def test_aggregate_chunks__tool_input_cut_off__raw_input_kept(self):
+        tool_id, tool_name = f"toolu_{random_chars()}", f"tool_{random_chars()}"
         chunks = _content_stream(
-            _tool_use_events(0, ['{"city": "Par']), stop_reason="max_tokens"
+            _tool_use_events(0, tool_id, tool_name, [""]), stop_reason="tool_use"
         )
 
         response = chunks_aggregator.aggregate_chunks_to_dataclass(chunks)
 
-        assert response.native_response["content"][0]["input"] == '{"city": "Par'
-
-    def test_aggregate_chunks__text_with_citations__citations_logged(self):
-        citation = {
-            "type": "char_location",
-            "cited_text": "The sky is blue.",
-            "document_index": 0,
-            "start_char_index": 0,
-            "end_char_index": 16,
+        assert response.native_response == {
+            "role": "assistant",
+            "content": [
+                {"type": "tool_use", "id": tool_id, "name": tool_name, "input": {}}
+            ],
+            "stop_reason": "tool_use",
         }
+        assert response.usage == _CONTENT_STREAM_USAGE
+
+    def test_aggregate_chunks__tool_input_cut_off__raw_input_kept(self):
+        tool_id, tool_name = f"toolu_{random_chars()}", f"tool_{random_chars()}"
+        cut_off_input = f'{{"city": "{random_chars()}'
+        chunks = _content_stream(
+            _tool_use_events(0, tool_id, tool_name, [cut_off_input]),
+            stop_reason="max_tokens",
+        )
+
+        response = chunks_aggregator.aggregate_chunks_to_dataclass(chunks)
+
+        assert response.native_response == {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": tool_id,
+                    "name": tool_name,
+                    "input": cut_off_input,
+                }
+            ],
+            "stop_reason": "max_tokens",
+        }
+        assert response.usage == _CONTENT_STREAM_USAGE
+
+    def test_aggregate_chunks__two_tool_use_blocks_in_one_turn__each_keeps_its_own_input(
+        self,
+    ):
+        first_id, first_name = f"toolu_{random_chars()}", f"tool_{random_chars()}"
+        second_id, second_name = f"toolu_{random_chars()}", f"tool_{random_chars()}"
+        first_city, second_city = random_chars(), random_chars()
         events = [
+            # Interleaved deltas, as the stream can deliver them.
+            *_tool_use_events(0, first_id, first_name, [])[:1],
+            *_tool_use_events(1, second_id, second_name, [])[:1],
             {
-                "type": "content_block_start",
-                "index": 0,
-                "content_block": {"type": "text", "text": ""},
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {
+                    "type": "input_json_delta",
+                    "partial_json": f'{{"city": "{second_city}"}}',
+                },
             },
             {
                 "type": "content_block_delta",
                 "index": 0,
-                "delta": {"type": "text_delta", "text": "The sky is blue."},
+                "delta": {
+                    "type": "input_json_delta",
+                    "partial_json": f'{{"city": "{first_city}"}}',
+                },
             },
+            {"type": "content_block_stop", "index": 0},
+            {"type": "content_block_stop", "index": 1},
+        ]
+
+        response = chunks_aggregator.aggregate_chunks_to_dataclass(
+            _content_stream(events, stop_reason="tool_use")
+        )
+
+        assert response.native_response == {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": first_id,
+                    "name": first_name,
+                    "input": {"city": first_city},
+                },
+                {
+                    "type": "tool_use",
+                    "id": second_id,
+                    "name": second_name,
+                    "input": {"city": second_city},
+                },
+            ],
+            "stop_reason": "tool_use",
+        }
+        assert response.usage == _CONTENT_STREAM_USAGE
+
+    def test_aggregate_chunks__redacted_thinking_block__passed_through_as_is(self):
+        data = random_chars(24)
+        text = random_chars()
+        # A redacted_thinking block only has a start event, no deltas.
+        events = [
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "redacted_thinking", "data": data},
+            },
+            {"type": "content_block_stop", "index": 0},
+            *_text_events(1, [text]),
+        ]
+
+        response = chunks_aggregator.aggregate_chunks_to_dataclass(
+            _content_stream(events, stop_reason="end_turn")
+        )
+
+        assert response.native_response == {
+            "role": "assistant",
+            "content": [
+                {"type": "redacted_thinking", "data": data},
+                {"type": "text", "text": text},
+            ],
+            "stop_reason": "end_turn",
+        }
+        assert response.usage == _CONTENT_STREAM_USAGE
+
+    def test_aggregate_chunks__delta_without_content_block_start__logged_as_text(
+        self,
+    ):
+        first, second = random_chars(), random_chars()
+        events = [
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": first},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": second},
+            },
+        ]
+
+        response = chunks_aggregator.aggregate_chunks_to_dataclass(
+            _content_stream(events, stop_reason="end_turn")
+        )
+
+        assert response.native_response == {
+            "role": "assistant",
+            "content": [{"type": "text", "text": first + second}],
+            "stop_reason": "end_turn",
+        }
+        assert response.usage == _CONTENT_STREAM_USAGE
+
+    def test_aggregate_chunks__empty_text_block_before_tool_use__empty_block_dropped(
+        self,
+    ):
+        tool_id, tool_name = f"toolu_{random_chars()}", f"tool_{random_chars()}"
+        city = random_chars()
+        events = [
+            *_text_events(0, []),
+            *_tool_use_events(1, tool_id, tool_name, [f'{{"city": "{city}"}}']),
+        ]
+
+        response = chunks_aggregator.aggregate_chunks_to_dataclass(
+            _content_stream(events, stop_reason="tool_use")
+        )
+
+        assert response.native_response == {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": tool_id,
+                    "name": tool_name,
+                    "input": {"city": city},
+                }
+            ],
+            "stop_reason": "tool_use",
+        }
+        assert response.usage == _CONTENT_STREAM_USAGE
+
+    def test_aggregate_chunks__text_with_citations__citations_logged(self):
+        text = random_chars()
+        citation = {
+            "type": "char_location",
+            "cited_text": text,
+            "document_index": 0,
+            "start_char_index": 0,
+            "end_char_index": len(text),
+        }
+        events = [
+            *_text_events(0, [text])[:-1],
             {
                 "type": "content_block_delta",
                 "index": 0,
@@ -392,10 +589,14 @@ class TestClaudeStreamContentBlocks:
             },
             {"type": "content_block_stop", "index": 0},
         ]
-        chunks = _content_stream(events, stop_reason="end_turn")
 
-        response = chunks_aggregator.aggregate_chunks_to_dataclass(chunks)
+        response = chunks_aggregator.aggregate_chunks_to_dataclass(
+            _content_stream(events, stop_reason="end_turn")
+        )
 
-        assert response.native_response["content"] == [
-            {"type": "text", "text": "The sky is blue.", "citations": [citation]}
-        ]
+        assert response.native_response == {
+            "role": "assistant",
+            "content": [{"type": "text", "text": text, "citations": [citation]}],
+            "stop_reason": "end_turn",
+        }
+        assert response.usage == _CONTENT_STREAM_USAGE
