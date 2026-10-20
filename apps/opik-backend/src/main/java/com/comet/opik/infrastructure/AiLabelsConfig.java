@@ -152,6 +152,14 @@ public class AiLabelsConfig {
     @JsonProperty
     @Min(1) private long renderReadBytes = 64L * 1024 * 1024;
 
+    /**
+     * Each render query's {@code max_execution_time} on the shared ClickHouse. Under the tick budget, so a slow read
+     * can't hold a tick for long; a chunk whose read times out is retried trace by trace until the tick's deadline.
+     */
+    @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration renderMaxExecutionTime = Duration.seconds(20);
+
     /** A trace or span field larger than this is replaced whole in SQL, before it reaches the JVM. */
     @JsonProperty
     @Min(1) private long maxFieldBytes = 1024L * 1024;

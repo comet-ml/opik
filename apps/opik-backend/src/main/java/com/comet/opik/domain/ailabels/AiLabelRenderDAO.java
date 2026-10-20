@@ -27,8 +27,8 @@ import static com.comet.opik.utils.SentinelTranslation.emptyUuidToNull;
 
 /**
  * The renderer's reads: a fixed projection of traces, of their spans and of their threads' earlier turns, latest
- * version per id. Each one scopes to a single workspace and runs with a small thread cap, a background priority and a
- * memory cap.
+ * version per id. Each one scopes to a single workspace and runs with a small thread cap, a background priority, a
+ * memory cap and a time cap ({@code renderMaxExecutionTime}).
  *
  * <p>An input or output value over {@code maxFieldBytes} is swapped in SQL for a JSON string naming its size, so it
  * never reaches the JVM. Cutting it instead would leave invalid JSON.
@@ -65,7 +65,8 @@ class AiLabelRenderDAO {
                 LIMIT 1 BY id
             )
             WHERE is_deleted = 0
-            SETTINGS log_comment = '<log_comment>', max_threads = 2, priority = 100, max_memory_usage = 2147483648
+            SETTINGS log_comment = '<log_comment>', max_threads = 2, priority = 100, max_memory_usage = 2147483648,
+                max_execution_time = <max_execution_time>
             """;
 
     private static final String SPAN_FILTER = """
@@ -121,7 +122,8 @@ class AiLabelRenderDAO {
             SELECT trace_id, concat(id, ':', toString(toUnixTimestamp64Micro(last_updated_at))) AS span_key, bytes
             FROM (""" + SELECTED_SPANS + """
             )
-            SETTINGS log_comment = '<log_comment>', max_threads = 2, priority = 100, max_memory_usage = 2147483648
+            SETTINGS log_comment = '<log_comment>', max_threads = 2, priority = 100, max_memory_usage = 2147483648,
+                max_execution_time = <max_execution_time>
             """;
 
     /**
@@ -146,6 +148,7 @@ class AiLabelRenderDAO {
             AND concat(id, ':', toString(toUnixTimestamp64Micro(last_updated_at))) IN :span_keys
             ORDER BY workspace_id, project_id, trace_id
             SETTINGS log_comment = '<log_comment>', max_threads = 2, priority = 100, max_memory_usage = 2147483648,
+                max_execution_time = <max_execution_time>,
                 max_block_size = 64
             """;
 
@@ -175,7 +178,8 @@ class AiLabelRenderDAO {
                 LIMIT 1 BY id
             )
             WHERE is_deleted = 0
-            SETTINGS log_comment = '<log_comment>', max_threads = 2, priority = 100, max_memory_usage = 2147483648
+            SETTINGS log_comment = '<log_comment>', max_threads = 2, priority = 100, max_memory_usage = 2147483648,
+                max_execution_time = <max_execution_time>
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -222,7 +226,8 @@ class AiLabelRenderDAO {
     Flux<TraceRow> findTraces(@NonNull String workspaceId, @NonNull List<TraceRef> traces) {
         return asyncTemplate.stream(connection -> {
             ST template = getSTWithLogComment(FIND_TRACES, LOG_COMMENT, workspaceId, null,
-                    "traces:%d".formatted(traces.size()));
+                    "traces:%d".formatted(traces.size()))
+                    .add("max_execution_time", config.getRenderMaxExecutionTime().toSeconds());
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
                     .bind("project_ids", projectIds(traces))
@@ -273,7 +278,8 @@ class AiLabelRenderDAO {
 
     private Statement spanStatement(Connection connection, String query, String workspaceId,
             List<TraceRef> traces) {
-        ST template = getSTWithLogComment(query, LOG_COMMENT, workspaceId, null, "traces:%d".formatted(traces.size()));
+        ST template = getSTWithLogComment(query, LOG_COMMENT, workspaceId, null, "traces:%d".formatted(traces.size()))
+                .add("max_execution_time", config.getRenderMaxExecutionTime().toSeconds());
         // The successor has is_deleted; the legacy table hard-deletes. The flag flips with the EXCHANGE that puts the
         // successor behind the name, as SpanDAO and TraceDAO read it.
         if (dataModelConfig.spanColumnsNonNullable()) {
@@ -297,7 +303,8 @@ class AiLabelRenderDAO {
             @NonNull Set<String> threadIds, @NonNull UUID minId, @NonNull UUID maxId) {
         return asyncTemplate.stream(connection -> {
             ST template = getSTWithLogComment(FIND_THREAD_TURNS, LOG_COMMENT, workspaceId, null,
-                    "threads:%d".formatted(threadIds.size()));
+                    "threads:%d".formatted(threadIds.size()))
+                    .add("max_execution_time", config.getRenderMaxExecutionTime().toSeconds());
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
                     .bind("project_ids", projectIds.stream().map(UUID::toString).toArray(String[]::new))

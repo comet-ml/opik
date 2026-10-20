@@ -2439,6 +2439,9 @@ aiLabels:
   #  Default: 67108864 (64 MiB)
   #  Description: A chunk's spans are read in batches of traces up to this much span input and output
   renderReadBytes: ${AI_LABELS_RENDER_READ_BYTES:-67108864}
+  #  Default: 20s
+  #  Description: Each render query's max_execution_time on ClickHouse; under tickBudget, so a slow read can't hold a tick
+  renderMaxExecutionTime: ${AI_LABELS_RENDER_MAX_EXECUTION_TIME:-20s}
   #  Default: 1048576 (1 MiB)
   #  Description: A larger trace or span field is replaced whole in SQL, before it reaches the JVM
   maxFieldBytes: ${AI_LABELS_MAX_FIELD_BYTES:-1048576}

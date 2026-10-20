@@ -391,16 +391,18 @@ class AiLabelRendererClickHouseTest {
         });
         var settings = template.nonTransaction(connection -> Flux.from(connection.createStatement("""
                 SELECT DISTINCT Settings['max_threads'] AS max_threads, Settings['priority'] AS priority,
-                    Settings['max_memory_usage'] AS max_memory_usage
+                    Settings['max_memory_usage'] AS max_memory_usage,
+                    Settings['max_execution_time'] AS max_execution_time
                 FROM system.query_log
                 WHERE type = 'QueryFinish' AND log_comment LIKE :log_comment
                 """).bind("log_comment", "ai-labels:render:" + WORKSPACE_ID + "%").execute())
                 .flatMap(result -> result.map((row, metadata) -> List.of(row.get("max_threads", String.class),
-                        row.get("priority", String.class), row.get("max_memory_usage", String.class))))
+                        row.get("priority", String.class), row.get("max_memory_usage", String.class),
+                        row.get("max_execution_time", String.class))))
                 .collectList())
                 .block();
 
-        assertThat(settings).containsExactly(List.of("2", "100", "2147483648"));
+        assertThat(settings).containsExactly(List.of("2", "100", "2147483648", "20"));
     }
 
     /** Into the successor before the traces cutover ({@code traces_local_v2}), into its shard after. */
