@@ -188,8 +188,8 @@ public class AiLabelRenderer {
         var oldest = threaded.stream().map(trace -> idTime(trace.id())).min(Comparator.naturalOrder()).orElseThrow();
         var newest = threaded.stream().map(TraceRow::id).max(Comparator.comparing(UUID::toString)).orElseThrow();
         return renderDAO.findThreadTurns(workspaceId,
-                threaded.stream().map(TraceRow::projectId).collect(Collectors.toSet()),
-                threaded.stream().map(TraceRow::threadId).collect(Collectors.toSet()),
+                threaded.stream().collect(Collectors.groupingBy(TraceRow::projectId,
+                        Collectors.mapping(TraceRow::threadId, Collectors.toSet()))),
                 uuidMapper.toLowerBound(oldest.minus(lookback)), newest)
                 .map(turn -> turn.toBuilder()
                         .input(capMiddle(turn.input(), history.getMaxFieldBytes()))

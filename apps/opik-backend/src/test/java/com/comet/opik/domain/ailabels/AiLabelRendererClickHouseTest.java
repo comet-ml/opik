@@ -4,6 +4,7 @@ import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.domain.ailabels.AiLabelRenderDAO.SpanRow;
+import com.comet.opik.domain.ailabels.AiLabelRenderDAO.ThreadTurnRow;
 import com.comet.opik.domain.ailabels.AiLabelRenderDAO.TraceRow;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
@@ -34,6 +35,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -197,6 +199,28 @@ class AiLabelRendererClickHouseTest {
 
         assertThat(AiLabelRenderer.canonicalJson(((RenderOutcome.Rendered) outcome).history()))
                 .isEqualTo("[{\"input\":\"\\\"kept\\\"\",\"output\":\"\\\"kept\\\"\"}]");
+    }
+
+    /** Earlier turns are read by (project, thread) pair: a thread id the chunk has only in another project isn't. */
+    @Test
+    @Order(5)
+    void threadTurnsAreReadByProjectAndThread() {
+        var projectA = UUID.randomUUID();
+        var projectB = UUID.randomUUID();
+        var base = AiLabelRenderFixtures.BASE_TIME.plus(1, ChronoUnit.HOURS);
+        var aOne = threadTurn(projectA, base, "a one");
+        var bTwo = threadTurn(projectB, base.plusSeconds(1), "b two").toBuilder().threadId("thread-2").build();
+        var aTwo = threadTurn(projectA, base.plusSeconds(2), "a two").toBuilder().threadId("thread-2").build();
+        var bOne = threadTurn(projectB, base.plusSeconds(3), "b one");
+        insertTraces("traces_local", List.of(aOne, bTwo, aTwo, bOne), Instant.now(), 0);
+
+        var turns = new AiLabelRenderDAO(template, CUT_OVER_SPANS, config)
+                .findThreadTurns(WORKSPACE_ID, Map.of(projectA, Set.of("thread-1"), projectB, Set.of("thread-2")),
+                        uuidV7(base.minusSeconds(1)), uuidV7(base.plusSeconds(10)))
+                .collectList()
+                .block();
+
+        assertThat(turns).extracting(ThreadTurnRow::id).containsExactlyInAnyOrder(aOne.id(), bTwo.id());
     }
 
     /** A trace's spans are read in start order until their input and output reach the per-trace cap. */

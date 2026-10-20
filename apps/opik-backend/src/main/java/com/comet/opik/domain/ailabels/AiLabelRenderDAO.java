@@ -20,8 +20,10 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.SentinelTranslation.emptyUuidToNull;
@@ -176,6 +178,7 @@ class AiLabelRenderDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND thread_id IN :thread_ids
+                AND concat(toString(project_id), '/', thread_id) IN :thread_keys
                 AND id >= :min_id
                 AND id \\< :max_id
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
@@ -306,11 +309,17 @@ class AiLabelRenderDAO {
     }
 
     /**
-     * The traces of {@code threadIds} in {@code projectIds} with ids from {@code minId} up to, not including,
-     * {@code maxId}. UUIDv7 ids sort by time, so the range is a time range on the primary key.
+     * The traces of the given threads, each in its own project, with ids from {@code minId} up to, not including,
+     * {@code maxId}. UUIDv7 ids sort by time, so the range is a time range on the primary key. Project and thread are
+     * also filtered apart, so the primary key narrows the read before the pairs are matched.
      */
-    Flux<ThreadTurnRow> findThreadTurns(@NonNull String workspaceId, @NonNull Set<UUID> projectIds,
-            @NonNull Set<String> threadIds, @NonNull UUID minId, @NonNull UUID maxId) {
+    Flux<ThreadTurnRow> findThreadTurns(@NonNull String workspaceId, @NonNull Map<UUID, Set<String>> threadsByProject,
+            @NonNull UUID minId, @NonNull UUID maxId) {
+        var projectIds = threadsByProject.keySet();
+        var threadIds = threadsByProject.values().stream().flatMap(Set::stream).collect(Collectors.toSet());
+        var threadKeys = threadsByProject.entrySet().stream()
+                .flatMap(entry -> entry.getValue().stream().map(threadId -> entry.getKey() + "/" + threadId))
+                .toArray(String[]::new);
         return asyncTemplate.stream(connection -> {
             ST template = getSTWithLogComment(FIND_THREAD_TURNS, LOG_COMMENT, workspaceId, null,
                     "threads:%d".formatted(threadIds.size()))
@@ -319,6 +328,7 @@ class AiLabelRenderDAO {
                     .bind("workspace_id", workspaceId)
                     .bind("project_ids", projectIds.stream().map(UUID::toString).toArray(String[]::new))
                     .bind("thread_ids", threadIds.toArray(String[]::new))
+                    .bind("thread_keys", threadKeys)
                     .bind("min_id", minId.toString())
                     .bind("max_id", maxId.toString())
                     // The renderer cuts each turn's fields to history.maxFieldBytes, so SQL must not drop less.

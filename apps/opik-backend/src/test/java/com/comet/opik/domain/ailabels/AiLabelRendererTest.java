@@ -271,7 +271,7 @@ class AiLabelRendererTest {
 
         var alone = renderer.render(WORKSPACE_ID, refs(chunk), List.of(decide("a", false, 1)))
                 .collectList().block();
-        verify(renderDAO, never()).findThreadTurns(anyString(), any(), any(), any(), any());
+        verify(renderDAO, never()).findThreadTurns(anyString(), any(), any(), any());
         var both = renderer.render(WORKSPACE_ID, refs(chunk),
                 List.of(decide("a", false, 1), generateWithHistory("summary"))).collectList().block();
 
@@ -344,7 +344,7 @@ class AiLabelRendererTest {
                     .flatMapIterable(ref -> spansByTrace.getOrDefault(ref.traceId(), List.of()))
                     .filter(span -> keys.contains(span.id()));
         });
-        when(renderDAO.findThreadTurns(anyString(), any(), any(), any(), any()))
+        when(renderDAO.findThreadTurns(anyString(), any(), any(), any()))
                 .thenReturn(Flux.fromIterable(chunk.turns()));
         return renderDAO;
     }
