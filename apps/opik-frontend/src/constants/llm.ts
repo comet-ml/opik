@@ -187,6 +187,13 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
     thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
     defaultThinkingEffort: "medium",
   },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+    defaultThinkingEffort: "medium",
+  },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5]: {
     thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
