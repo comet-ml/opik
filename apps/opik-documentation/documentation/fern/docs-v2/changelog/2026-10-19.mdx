@@ -2,11 +2,17 @@
 
 Opik now has a native integration for the [Together AI](https://www.together.ai/) Python SDK. Wrap your client with `track_together` and every chat completion, from both `together.Together` and `together.AsyncTogether`, is logged with its messages, response, model and token usage. Streaming is supported, and calls nest correctly under `@track`-decorated functions, so Together models show up alongside the rest of your traces.
 
+<Frame>
+  <img src="/img/changelog/2026-10-19/together_ai_trace.png" alt="A Together AI chat completion logged as an LLM span with its messages, model and token usage" />
+</Frame>
+
 [Learn more in the Together AI integration docs](/integrations/together-ai).
 
 ## Open Spans from the Agent Graph
 
 Nodes in the agent graph are now clickable. Selecting a node opens the matching span in the trace tree, and a node that ran several times opens the next run on each click, with the run number in its tooltip. The node of the selected span gets a highlighted border, and this works in both the side panel and the fullscreen graph view. Graphs from LangGraph map nodes to spans automatically, and the DSPy and Google ADK integrations now record a `graph_node_id` in span metadata so their nodes map correctly too, including modules that share a name.
+
+<video src="/img/changelog/2026-10-19/agent_graph_clickable_nodes.mp4" width="854" height="712" autoPlay muted loop playsInline preload="auto" />
 
 ## Bug Fixes & Improvements
 
