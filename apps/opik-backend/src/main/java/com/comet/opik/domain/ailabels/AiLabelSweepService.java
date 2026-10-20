@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 
@@ -121,29 +122,47 @@ public class AiLabelSweepService {
             return Flux.empty();
         }
         long start = System.nanoTime();
-        var inFlight = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(AiLabelJobDAO.class).inFlightTraceIds(bucket));
-        return sweepDAO.sweep(bucket, tasks, index, inFlight)
+        return Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
+                handle -> handle.attach(AiLabelJobDAO.class).inFlightTraceIds(bucket)))
+                .flatMapMany(inFlight -> sweepDAO.sweep(bucket, tasks, index, inFlight))
                 .doOnComplete(() -> duration.record((System.nanoTime() - start) / 1e9,
                         Attributes.of(longKey("bucket"), (long) index)))
                 .onErrorResume(error -> skipBucket("sweep", index, error));
     }
 
-    /** Runs the headline query and the never-ended count over every bucket and publishes them as gauges. */
+    /**
+     * Runs the headline query and the never-ended count over every bucket and publishes them as gauges, then returns
+     * what the gauges show. If any bucket's query fails, the gauges keep the last complete snapshot: a partial one
+     * would read as a smaller backlog during an outage.
+     */
     public Mono<HealthSnapshot> refreshHealth(@NonNull List<List<String>> buckets, @NonNull List<SweepTask> tasks) {
-        return Flux.range(0, buckets.size())
-                .concatMap(index -> Mono.zip(
-                        sweepDAO.health(buckets.get(index), tasks, index)
-                                .onErrorResume(error -> skipBucket("health", index, error))
-                                .collectList(),
-                        sweepDAO.neverEnded(buckets.get(index), index)
-                                .onErrorResume(error -> skipBucket("never_ended", index, error).then(Mono.just(0L)))))
-                .reduce(HealthSnapshot.EMPTY, (snapshot, bucket) -> {
-                    var workspaces = new ArrayList<>(snapshot.workspaces());
-                    workspaces.addAll(bucket.getT1());
-                    return new HealthSnapshot(List.copyOf(workspaces), snapshot.neverEnded() + bucket.getT2());
-                })
-                .doOnNext(health::set);
+        return Mono.defer(() -> {
+            var complete = new AtomicBoolean(true);
+            return Flux.range(0, buckets.size())
+                    .concatMap(index -> Mono.zip(
+                            sweepDAO.health(buckets.get(index), tasks, index)
+                                    .onErrorResume(error -> {
+                                        complete.set(false);
+                                        return skipBucket("health", index, error);
+                                    })
+                                    .collectList(),
+                            sweepDAO.neverEnded(buckets.get(index), index)
+                                    .onErrorResume(error -> {
+                                        complete.set(false);
+                                        return skipBucket("never_ended", index, error).then(Mono.just(0L));
+                                    })))
+                    .reduce(HealthSnapshot.EMPTY, (snapshot, bucket) -> {
+                        var workspaces = new ArrayList<>(snapshot.workspaces());
+                        workspaces.addAll(bucket.getT1());
+                        return new HealthSnapshot(List.copyOf(workspaces), snapshot.neverEnded() + bucket.getT2());
+                    })
+                    .map(snapshot -> {
+                        if (complete.get()) {
+                            health.set(snapshot);
+                        }
+                        return health.get();
+                    });
+        });
     }
 
     private <T> Flux<T> skipBucket(String query, int bucket, Throwable error) {

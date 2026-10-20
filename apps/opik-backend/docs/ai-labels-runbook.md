@@ -1,7 +1,9 @@
 # ai-labels runbook
 
 ai-labels labels every ended trace in opted-in workspaces with AI-generated labels, computed by opik-inference. It
-runs only where `AI_LABELS_ENABLED=true` (Comet-hosted deployments); it is off everywhere else, including OSS.
+runs only where `AI_LABELS_ENABLED=true`, and is off by default everywhere, OSS included. Nothing stops an OSS install
+from turning it on, but it needs an opik-inference deployment and its credential, which only Comet-hosted deployments
+have.
 
 ## Turning it on for a deployment
 
@@ -77,7 +79,7 @@ LIMIT 1 BY workspace_id, project_id, task, trace_id, key;
 | `ai_labels.unsettled` | Unsettled (trace, task) pairs in the horizon: the backlog. |
 | `ai_labels.tick.phase_seconds` by `phase` | Time in load, sweep and submit. Loading stops starting jobs at 40% of the tick budget. |
 | `ai_labels.render.traces` / `ai_labels.submit.traces` | Traces rendered vs admitted. Far apart means renders are wasted: raise `AI_LABELS_MIN_ITEM_BYTES` toward a typical item. |
-| `ai_labels.items.failed` by `error_code` | `render_over_budget`, `render_error`, `job_lost`, `missing_result`, `missing_answer`, or the service's code. |
+| `ai_labels.items.failed` by `error_code` | `render_over_budget`, `render_error`, `item_too_large`, `job_lost`, `missing_result`, `missing_answer`, or the service's code. |
 | `ai_labels.submit.rejected` | A submit rejected with 400: a renderer or task bug. |
 | `ai_labels.sweep.guard_trips` | A sweep query hit a ClickHouse guard: raise `AI_LABELS_SWEEP_BUCKETS`. |
 | `ai_labels.render.compaction_level`, `.bytes` | How far traces had to be compacted to fit. |

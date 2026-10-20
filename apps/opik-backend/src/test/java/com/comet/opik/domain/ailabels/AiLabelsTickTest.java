@@ -146,7 +146,8 @@ class AiLabelsTickTest {
             """ + IntStream.range(0, WIDE_QUESTIONS)
             .mapToObj(i -> "  q%02d: {type: noul, instructions: \"Check %d?\"}\n".formatted(i, i))
             .collect(Collectors.joining());
-    // The sweep cadence is 1 s; the extra half second covers clock drift between the lock and the test.
+    // The sweep cadence is 1 s, counted from the previous tick's end, by which its sweep lock was taken. The extra half
+    // second covers clock drift between the lock and the test.
     private static final Duration TICK_GAP = Duration.ofMillis(1_500);
     // Wide enough that the tick asserting "not yet retried" lands inside D even on a slow runner.
     private static final Duration RETRY_DELAY = Duration.ofSeconds(8);
@@ -215,11 +216,13 @@ class AiLabelsTickTest {
     private Connection clickHouseConnection;
 
     private Instant lastTick = Instant.EPOCH;
+    private Instant lastTickEnd = Instant.EPOCH;
     private long defaultBudget;
     private int defaultChunkTraces;
     private long defaultRenderBudgetBytes;
     private long defaultMinItemBytes;
     private long defaultPerCallBytes;
+    private long defaultMaxJobBytes;
     private io.dropwizard.util.Duration defaultTickBudget;
     private io.dropwizard.util.Duration defaultReadTimeout;
     // What the status call reports for each job: absent is running, and a lost job is left out.
@@ -248,6 +251,7 @@ class AiLabelsTickTest {
         this.clickHouseConnection = clickHouse.createConnection("");
         this.defaultBudget = config().getBudgetBytes();
         this.defaultChunkTraces = config().getChunkTraces();
+        this.defaultMaxJobBytes = config().getMaxJobBytes();
         this.defaultRenderBudgetBytes = config().getRenderBudgetBytes();
         this.defaultMinItemBytes = config().getMinItemBytes();
         this.defaultPerCallBytes = config().getPerCallBytes();
@@ -258,6 +262,7 @@ class AiLabelsTickTest {
         lockService.bestEffortLock(new LockService.Lock("ai_labels:leader"), Mono.just(true), Mono.empty(),
                 Duration.ofSeconds(5), Duration.ofSeconds(60)).block();
         lastTick = Instant.now();
+        lastTickEnd = lastTick;
     }
 
     @AfterAll
@@ -288,6 +293,7 @@ class AiLabelsTickTest {
         config().setRenderBudgetBytes(defaultRenderBudgetBytes);
         config().setMinItemBytes(defaultMinItemBytes);
         config().setPerCallBytes(defaultPerCallBytes);
+        config().setMaxJobBytes(defaultMaxJobBytes);
         config().setTickBudget(defaultTickBudget);
         config().getInference().setReadTimeout(defaultReadTimeout);
         config().getSweep().setBuckets(1);
@@ -755,6 +761,29 @@ class AiLabelsTickTest {
         }
 
         @Test
+        @DisplayName("items too large for any job are terminal item_too_large, and never submitted")
+        void itemTooLargeForAnyJob() {
+            config().setMaxJobBytes(4_096 + 100);
+            var workspaceId = enabledWorkspace();
+            var traceId = trace(workspaceId, UUID.randomUUID(), 1);
+
+            tick();
+            tick();
+
+            assertThat(statuses(workspaceId, List.of(traceId)))
+                    .extracting(AiLabelStatus::task, AiLabelStatus::status, AiLabelStatus::retryable,
+                            AiLabelStatus::attempt, AiLabelStatus::errorCode)
+                    .containsExactlyInAnyOrder(
+                            tuple(DECIDE_TASK, AiLabelStatus.Status.FAILED, false, 1,
+                                    AiLabelsTickService.ITEM_TOO_LARGE),
+                            tuple(GENERATE_TASK, AiLabelStatus.Status.FAILED, false, 1,
+                                    AiLabelsTickService.ITEM_TOO_LARGE));
+            assertThat(submits(DECIDE_PATH, workspaceId)).isEmpty();
+            assertThat(submits(GENERATE_PATH, workspaceId)).isEmpty();
+            assertThat(jobs(workspaceId)).isEmpty();
+        }
+
+        @Test
         @DisplayName("a submit failing with the service down drops the tick's other jobs; the next tick resubmits")
         void submitFailed() {
             var workspaceId = enabledWorkspace();
@@ -1095,10 +1124,14 @@ class AiLabelsTickTest {
     }
 
     private void tick(AiLabelsTickService service) {
-        pauseUntil(lastTick.plus(TICK_GAP));
+        pauseUntil(lastTickEnd.plus(TICK_GAP));
         stubStatus();
         lastTick = Instant.now();
-        service.tick(lastTick);
+        try {
+            service.tick(lastTick);
+        } finally {
+            lastTickEnd = Instant.now();
+        }
     }
 
     private static void pauseUntil(Instant instant) {

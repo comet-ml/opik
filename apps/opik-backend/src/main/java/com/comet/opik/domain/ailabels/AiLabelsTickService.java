@@ -18,6 +18,7 @@ import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -73,6 +74,7 @@ public class AiLabelsTickService {
     static final String RENDER_OVER_BUDGET = "render_over_budget";
     static final String RENDER_ERROR = "render_error";
     static final String MISSING_RESULT = "missing_result";
+    static final String ITEM_TOO_LARGE = "item_too_large";
     static final String OVER_BUDGET_LEVEL = "over_budget";
 
     // Shares of the tick budget at which each phase stops starting work: loading, then the sweep. Submit takes the rest.
@@ -102,7 +104,7 @@ public class AiLabelsTickService {
     private final AiLabelsDAO labelsDAO;
 
     private final Map<String, Instant> throttledUntil = new ConcurrentHashMap<>();
-    private final AtomicLong inFlight = new AtomicLong();
+    private final AtomicLong inFlightBytes = new AtomicLong();
     private long sweeps;
 
     private final LongCounter itemsSubmitted;
@@ -143,7 +145,7 @@ public class AiLabelsTickService {
         var meter = GlobalOpenTelemetry.get().getMeter("opik.ai_labels");
         meter.gaugeBuilder("ai_labels.budget.in_flight").ofLongs().setUnit("By")
                 .setDescription("Cost of submitted, not yet loaded, jobs")
-                .buildWithCallback(measurement -> measurement.record(inFlight.get()));
+                .buildWithCallback(measurement -> measurement.record(inFlightBytes.get()));
         meter.gaugeBuilder("ai_labels.budget.limit").ofLongs().setUnit("By")
                 .setDescription("The global in-flight budget")
                 .buildWithCallback(measurement -> measurement.record(config.getBudgetBytes()));
@@ -258,7 +260,8 @@ public class AiLabelsTickService {
                 client.getJobs(group, deadline).block().forEach(view -> views.put(view.jobId(), view));
             }
         } catch (InferenceException exception) {
-            log.warn("ai-labels status call failed, code '{}'; loading nothing this tick", exception.getCode());
+            log.warn("ai-labels status call failed, code '{}'; loading nothing this tick", exception.getCode(),
+                    exception);
             return;
         }
         var lost = jobs.stream().filter(job -> !views.containsKey(job.jobId())).toList();
@@ -277,7 +280,8 @@ public class AiLabelsTickService {
                         .onErrorResume(exception -> {
                             if (exception instanceof InferenceException inferenceException) {
                                 log.warn("ai-labels failed to load job '{}', workspace '{}', code '{}'; loading it "
-                                        + "again later", job.jobId(), job.workspaceId(), inferenceException.getCode());
+                                        + "again later", job.jobId(), job.workspaceId(), inferenceException.getCode(),
+                                        inferenceException);
                             } else {
                                 log.error("ai-labels failed to load job '{}', workspace '{}'; loading it again later",
                                         job.jobId(), job.workspaceId(), exception);
@@ -315,7 +319,7 @@ public class AiLabelsTickService {
         });
         for (var result : loaded) {
             countOutcomes(result.job().endpoint(), result.statuses());
-            inFlight.addAndGet(-result.job().bytes());
+            inFlightBytes.addAndGet(-result.job().bytes());
             jobAge.record(Duration.between(result.job().submittedAt(), now).toMillis() / 1_000.0,
                     Attributes.of(stringKey("endpoint"), result.job().endpoint().getValue()));
         }
@@ -443,7 +447,7 @@ public class AiLabelsTickService {
     private long freeBudget() {
         long inFlightNow = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(AiLabelJobDAO.class).inFlightBytes());
-        inFlight.set(inFlightNow);
+        inFlightBytes.set(inFlightNow);
         return config.getBudgetBytes() - inFlightNow;
     }
 
@@ -635,14 +639,14 @@ public class AiLabelsTickService {
                         workspaceId, refs.size() - refs.indexOf(ref));
                 break;
             }
+            var candidate = byTrace.get(ref.traceId());
+            var missing = missingTasks(candidate, tasksByName);
             try {
-                outcomes.addAll(renderer.render(workspaceId, List.of(ref), tasks).collectList().block());
+                outcomes.addAll(renderer.render(workspaceId, List.of(ref), missing).collectList().block());
             } catch (RuntimeException exception) {
                 log.warn("ai-labels failed to render trace '{}', workspace '{}'", ref.traceId(), workspaceId,
                         exception);
-                var candidate = byTrace.get(ref.traceId());
-                failures.addAll(failedStatuses(workspaceId, candidate, missingTasks(candidate, tasksByName),
-                        RENDER_ERROR, true, ""));
+                failures.addAll(failedStatuses(workspaceId, candidate, missing, RENDER_ERROR, true, ""));
             }
         }
         return outcomes;
@@ -682,10 +686,15 @@ public class AiLabelsTickService {
                     .collect(Collectors.groupingBy(item -> item.plan().jobKey(), LinkedHashMap::new,
                             Collectors.toList()));
             for (var entry : byKey.entrySet()) {
-                var buffers = open.computeIfAbsent(workspaceId, key -> new LinkedHashMap<>());
-                var buffer = buffers.computeIfAbsent(entry.getKey(), key -> new JobBuffer());
                 // Plus one comma per item in the request's items array.
                 long bytes = entry.getValue().stream().mapToLong(item -> item.bytes() + 1L).sum();
+                if (JOB_ENVELOPE_BYTES + bytes > config.getMaxJobBytes()) {
+                    // No job can carry them, so they'd be swept and refused forever: terminal, never retried.
+                    failTooLarge(workspaceId, trace, entry.getValue(), bytes);
+                    continue;
+                }
+                var buffers = open.computeIfAbsent(workspaceId, key -> new LinkedHashMap<>());
+                var buffer = buffers.computeIfAbsent(entry.getKey(), key -> new JobBuffer());
                 if (!buffer.items.isEmpty()
                         && (buffer.items.size() + entry.getValue().size() > InferenceClient.MAX_BATCH_ITEMS
                                 || buffer.requestBytes + bytes > config.getMaxJobBytes())) {
@@ -701,6 +710,17 @@ public class AiLabelsTickService {
                 buffer.cost += entry.getValue().stream().mapToLong(AiLabelsTickService.this::cost).sum();
             }
             return true;
+        }
+
+        private void failTooLarge(String workspaceId, Admissible trace, List<AiLabelItem> items, long bytes) {
+            log.warn("ai-labels items too large for any job, trace '{}', workspace '{}', bytes '{}', max '{}'",
+                    trace.candidate().traceId(), workspaceId, bytes, config.getMaxJobBytes());
+            var tooLarge = new JobBuffer();
+            tooLarge.items.addAll(items);
+            tooLarge.candidates.put(trace.candidate().traceId(), trace.candidate());
+            jobItems("", tooLarge).stream()
+                    .map(row -> row.failed(ITEM_TOO_LARGE, false))
+                    .forEach(failures::add);
         }
 
         void sendAll() {
@@ -794,7 +814,7 @@ public class AiLabelsTickService {
             return null;
         });
         itemsSubmitted.add(items.size(), Attributes.of(stringKey("endpoint"), jobKey.endpoint().getValue()));
-        inFlight.addAndGet(buffer.cost);
+        inFlightBytes.addAndGet(buffer.cost);
         return SubmitOutcome.ACCEPTED;
     }
 
@@ -821,21 +841,22 @@ public class AiLabelsTickService {
         }
         if (exception.isRetryable()) {
             log.warn("ai-labels submit failed with opik-inference down, workspace '{}', code '{}', status '{}'; "
-                    + "submitting nothing more this tick", workspaceId, exception.getCode(), exception.getHttpStatus());
+                    + "submitting nothing more this tick", workspaceId, exception.getCode(), exception.getHttpStatus(),
+                    exception);
             return SubmitOutcome.SERVICE_DOWN;
         }
-        if (exception.getHttpStatus() == 400) {
+        if (exception.getHttpStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
             // One invalid item rejects the whole job: a renderer or task bug, never retried.
             rejected.add(1);
             log.error("ai-labels submit rejected, workspace '{}', endpoint '{}', items '{}', code '{}'", workspaceId,
-                    jobKey.endpoint().getValue(), buffer.items.size(), exception.getCode());
+                    jobKey.endpoint().getValue(), buffer.items.size(), exception.getCode(), exception);
             jobItems("", buffer).stream()
                     .map(row -> row.failed(exception.getCode(), false))
                     .forEach(failures::add);
             return SubmitOutcome.DROPPED;
         }
         log.warn("ai-labels submit failed, workspace '{}', items '{}', code '{}'; the next sweep finds them again",
-                workspaceId, buffer.items.size(), exception.getCode());
+                workspaceId, buffer.items.size(), exception.getCode(), exception);
         return SubmitOutcome.DROPPED;
     }
 
