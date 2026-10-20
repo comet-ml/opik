@@ -105,6 +105,11 @@ export const THREAD_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
     type: COLUMN_TYPE.string,
   },
   {
+    id: "number_of_messages",
+    label: "Message count",
+    type: COLUMN_TYPE.number,
+  },
+  {
     id: "created_at",
     label: "Created at",
     type: COLUMN_TYPE.time,

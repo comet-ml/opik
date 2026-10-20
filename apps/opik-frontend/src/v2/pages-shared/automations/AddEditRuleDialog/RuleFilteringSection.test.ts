@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { COLUMN_TYPE } from "@/types/shared";
-import { TRACE_FILTER_COLUMNS } from "./RuleFilteringSection";
+import {
+  THREAD_FILTER_COLUMNS,
+  TRACE_FILTER_COLUMNS,
+} from "./RuleFilteringSection";
 import { buildRuleFilters, normalizeFilters } from "./helpers";
 import { isFilterValid } from "@/lib/filters";
 import { Filter } from "@/types/filters";
@@ -41,6 +44,49 @@ describe("TRACE_FILTER_COLUMNS", () => {
     const output = TRACE_FILTER_COLUMNS.find((c) => c.id === "output");
     expect(input?.type).toBe(COLUMN_TYPE.dictionary);
     expect(output?.type).toBe(COLUMN_TYPE.dictionary);
+  });
+});
+
+describe("THREAD_FILTER_COLUMNS", () => {
+  it("should expose the message count so a thread rule can filter on it", () => {
+    // The backend accepts number_of_messages as a NUMBER filter field
+    // (TraceThreadField.NUMBER_OF_MESSAGES) and evaluates it in
+    // TraceThreadFilterEvaluationService; the dialog is the only place it
+    // was missing.
+    const messageCount = THREAD_FILTER_COLUMNS.find(
+      (c) => c.id === "number_of_messages",
+    );
+    expect(messageCount).toBeDefined();
+    expect(messageCount?.type).toBe(COLUMN_TYPE.number);
+    expect(messageCount?.label).toBe("Message count");
+  });
+
+  it("should keep the columns the dialog already exposed", () => {
+    const ids = THREAD_FILTER_COLUMNS.map((c) => c.id);
+    expect(ids).toContain("status");
+    expect(ids).toContain("created_at");
+    expect(ids).toContain("last_updated_at");
+    expect(ids).toContain("duration");
+    expect(ids).toContain("tags");
+    expect(ids).toContain("feedback_scores");
+  });
+
+  it("should round-trip a message-count filter through the rule payload", () => {
+    const result = buildRuleFilters([
+      {
+        id: "1",
+        field: "number_of_messages",
+        type: COLUMN_TYPE.number,
+        operator: ">=",
+        value: "5",
+        key: "",
+      },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].field).toBe("number_of_messages");
+    expect(result[0].operator).toBe(">=");
+    expect(result[0].value).toBe("5");
   });
 });
 
