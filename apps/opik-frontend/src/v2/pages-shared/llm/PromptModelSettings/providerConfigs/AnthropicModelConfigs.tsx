@@ -18,14 +18,42 @@ import {
 import {
   getAnthropicThinkingEffortOptions,
   getMaxCompletionTokensRange,
+  hasEffortWithoutThinking,
+  hasThinkingInCustomParameters,
+  isAnthropicThinkingRequested,
   resolveEffort,
   resolveMaxCompletionTokens,
   resolveSamplingParams,
+  supportsSamplingParams,
+  thinksOnlyWhenAsked,
 } from "@/lib/modelUtils";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+
+const getEffortDescription = (model?: PROVIDER_MODEL_TYPE | "") => {
+  if (hasEffortWithoutThinking(model)) {
+    return "Changes how long Claude's answers are and how readily it calls tools. It doesn't turn on thinking.";
+  }
+  if (thinksOnlyWhenAsked(model)) {
+    return "Off answers without thinking. At any other level, Claude can think before it answers and decides how much; at lower levels it often answers straight away. Effort also controls how many tokens Claude spends on the whole response. Lower effort is faster and cheaper; higher effort is more thorough.";
+  }
+  return "Controls how many tokens Claude spends on the whole response, thinking included. Lower effort is faster and cheaper; higher effort is more thorough.";
+};
+
+const getSamplingOffNote = (
+  withTopP: boolean,
+  thinkingFromCustomParameters: boolean,
+) => {
+  const params = withTopP ? "Temperature and Top P are" : "Temperature is";
+  if (thinkingFromCustomParameters) {
+    return `${params} off because the custom parameters turn thinking on.`;
+  }
+  return `${params} off while Claude can think. Set Thinking effort to Off to use ${
+    withTopP ? "them" : "it"
+  }.`;
+};
 
 interface AnthropicModelConfigsProps {
   configs: LLMAnthropicConfigsType;
@@ -51,6 +79,9 @@ const AnthropicModelConfigs = ({
     PROVIDER_TYPE.ANTHROPIC,
     model ?? "",
   );
+  const samplingOffWhileThinking =
+    supportsSamplingParams(model) &&
+    isAnthropicThinkingRequested(model ?? "", configs);
 
   if (!isAnyControlVisible(visible)) return null;
 
@@ -65,6 +96,15 @@ const AnthropicModelConfigs = ({
           offerChoice={supports("topP")}
           onChange={onChange}
         />
+      )}
+
+      {samplingOffWhileThinking && (
+        <p className="comet-body-xs text-muted-slate">
+          {getSamplingOffNote(
+            supports("topP"),
+            hasThinkingInCustomParameters(configs),
+          )}
+        </p>
       )}
 
       {visible.maxCompletionTokens && (
@@ -129,9 +169,9 @@ const AnthropicModelConfigs = ({
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="thinkingEffort" className="text-sm font-medium">
-              Thinking effort
+              {hasEffortWithoutThinking(model) ? "Effort" : "Thinking effort"}
             </Label>
-            <ExplainerIcon description="Controls how many tokens Claude spends on the whole response, thinking included. Lower effort is faster and cheaper; higher effort is more thorough." />
+            <ExplainerIcon description={getEffortDescription(model)} />
           </div>
           <SelectBox
             id="thinkingEffort"
