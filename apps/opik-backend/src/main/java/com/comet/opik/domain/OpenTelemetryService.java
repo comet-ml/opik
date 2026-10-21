@@ -54,8 +54,8 @@ public interface OpenTelemetryService {
 @Slf4j
 class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
-    private static final int MAX_LOGGED_SKIPPED_PROJECT_NAMES = 5;
-    private static final int MAX_LOGGED_SKIPPED_PROJECT_NAME_LENGTH = 50;
+    private static final int MAX_LOGGED_SKIPPED_PROJECT_NAMES = 10;
+    private static final int MAX_LOGGED_SKIPPED_PROJECT_NAME_LENGTH = 300;
     private static final String OTEL_METRICS_SCOPE = "opik.otel";
     private static final Meter METER = GlobalOpenTelemetry.get().getMeter(OTEL_METRICS_SCOPE);
     private static final AttributeKey<String> OPERATION_KEY = AttributeKey.stringKey("operation");
@@ -111,15 +111,16 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            log.info("Routing OpenTelemetry spans to projects '{}', fallback project '{}' in workspaceId '{}'",
-                    spansByProjectName.entrySet().stream()
-                            .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().size())),
-                    fallbackProjectName, workspaceId);
+            log.info(
+                    "Storing OpenTelemetry spans in workspaceId '{}': {}. Spans without a valid '{}' go to project '{}'",
+                    workspaceId, describeProjects(spansByProjectName), GeneralMappingRules.OPIK_PROJECT_NAME_ATTR,
+                    fallbackProjectName);
 
             if (skippedProjectNames.spanCount() > 0) {
-                log.warn("Ignored '{}' longer than '{}' characters on '{}' spans in workspaceId '{}', values '{}'",
-                        GeneralMappingRules.OPIK_PROJECT_NAME_ATTR, OpenTelemetryMapper.MAX_PROJECT_NAME_LENGTH,
-                        skippedProjectNames.spanCount(), workspaceId, skippedProjectNames.loggableNames());
+                log.warn("Ignored '{}' on {} in workspaceId '{}' because the value is longer than {} characters: {}",
+                        GeneralMappingRules.OPIK_PROJECT_NAME_ATTR, spans(skippedProjectNames.spanCount()),
+                        workspaceId, OpenTelemetryMapper.MAX_PROJECT_NAME_LENGTH,
+                        skippedProjectNames.loggableNames());
             }
 
             return Flux.fromIterable(spansByProjectName.entrySet())
@@ -134,10 +135,21 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         String loggableNames() {
             var loggable = names.stream()
                     .limit(MAX_LOGGED_SKIPPED_PROJECT_NAMES)
-                    .map(name -> StringUtils.abbreviate(name, MAX_LOGGED_SKIPPED_PROJECT_NAME_LENGTH))
+                    .map(name -> "'" + StringUtils.abbreviate(name, MAX_LOGGED_SKIPPED_PROJECT_NAME_LENGTH) + "'")
                     .collect(Collectors.joining(", "));
-            return names.size() > MAX_LOGGED_SKIPPED_PROJECT_NAMES ? loggable + ", ..." : loggable;
+            var hidden = names.size() - MAX_LOGGED_SKIPPED_PROJECT_NAMES;
+            return hidden > 0 ? loggable + " and " + hidden + " more" : loggable;
         }
+    }
+
+    private static String describeProjects(Map<String, List<Span>> spansByProjectName) {
+        return spansByProjectName.entrySet().stream()
+                .map(entry -> spans(entry.getValue().size()) + " to project '" + entry.getKey() + "'")
+                .collect(Collectors.joining(", "));
+    }
+
+    private static String spans(long count) {
+        return count + (count == 1 ? " span" : " spans");
     }
 
     private SkippedProjectNames findSkippedProjectNames(ExportTraceServiceRequest traceRequest) {
