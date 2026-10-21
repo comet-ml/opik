@@ -106,7 +106,7 @@ class HealthCheckIntegrationTest {
             var clickhouseFreeformSqlResponse = HealthCheckResponse.builder()
                     .name("clickhouse-readonly-freeform-sql").healthy(true).critical(false).type(READY).build();
             // Same shape as the probe above, and healthy here for the same reason: config-test leaves
-            // customCharts.enabledWorkspaces empty, so it reports healthy without touching ClickHouse.
+            // customCharts.enabled off, so it reports healthy without touching ClickHouse.
             var clickhouseFreeformExtendedSqlResponse = HealthCheckResponse.builder()
                     .name("clickhouse-readonly-freeform-extended-sql").healthy(true).critical(false).type(READY)
                     .build();

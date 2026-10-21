@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'apps/opik-backend/src/main/resources/llm-models-default.yaml'
+      - 'apps/opik-backend/src/main/resources/llm-models-curated.yaml'
       - 'scripts/check_new_models.py'
       - '.github/workflows/live_model_check.yml'
 
@@ -34,7 +35,7 @@ jobs:
     needs: build-opik
     name: Call new models through the backend
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: read

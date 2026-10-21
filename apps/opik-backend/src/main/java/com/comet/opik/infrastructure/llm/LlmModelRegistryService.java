@@ -10,6 +10,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.google.common.base.Suppliers;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -59,6 +62,14 @@ public class LlmModelRegistryService {
     private volatile Map<String, List<ModelEntry>> lastGoodRemote;
     private final Set<String> reportedAwaitingSyncRows = ConcurrentHashMap.newKeySet();
     private final Set<String> reportedUnknownProfiles = ConcurrentHashMap.newKeySet();
+    // Kept across reloads because the curated files ship with the release; the reasoning flag, which a reload can
+    // change, is part of the key. Bounded because the effort check asks with whatever model name a request carries.
+    private final LoadingCache<CuratedParamsKey, Optional<ModelParams>> curatedParams = CacheBuilder.newBuilder()
+            .maximumSize(1_000)
+            .build(CacheLoader.from(this::resolveCuratedParams));
+
+    private record CuratedParamsKey(String provider, String modelId, boolean reasoning) {
+    }
 
     @Inject
     public LlmModelRegistryService(@NonNull @Config OpikConfiguration configuration,
@@ -90,7 +101,8 @@ public class LlmModelRegistryService {
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     record ModelEntry(String id, String qualifiedName, String label, Boolean structuredOutput, Boolean reasoning,
-            String profile, ModelParams params, Boolean awaitingSync) {
+            List<String> supportedParameters, List<String> reasoningEfforts, String profile, ModelParams params,
+            Boolean awaitingSync) {
 
         LlmModelDefinition toDefinition(ModelParams resolvedParams) {
             return LlmModelDefinition.builder()
@@ -99,6 +111,8 @@ public class LlmModelRegistryService {
                     .label(label)
                     .structuredOutput(BooleanUtils.isTrue(structuredOutput))
                     .reasoning(BooleanUtils.isTrue(reasoning))
+                    .supportedParameters(supportedParameters)
+                    .reasoningEfforts(reasoningEfforts)
                     .params(resolvedParams)
                     .build();
         }
@@ -346,12 +360,16 @@ public class LlmModelRegistryService {
      * veto, so a bad row in remote data can cost a param but never fail every request for a model.
      */
     public @Nullable ModelParams curatedParamsOf(@NonNull String provider, @Nullable String modelId) {
-        var rules = curatedLayerOff() ? shippedCatalog.get() : catalog;
         var reasoning = listed(provider, modelId).map(LlmModelDefinition::reasoning).orElse(false);
-        var row = rules.row(provider, modelId)
-                .map(curated -> curated.toBuilder().reasoning(reasoning).build())
-                .orElseGet(() -> ModelEntry.builder().id(modelId).reasoning(reasoning).build());
-        return rules.resolve(provider, rules.foldProfile(row));
+        return curatedParams.getUnchecked(new CuratedParamsKey(provider, modelId, reasoning)).orElse(null);
+    }
+
+    private Optional<ModelParams> resolveCuratedParams(CuratedParamsKey key) {
+        var rules = curatedLayerOff() ? shippedCatalog.get() : catalog;
+        var row = rules.row(key.provider(), key.modelId())
+                .map(curated -> curated.toBuilder().reasoning(key.reasoning()).build())
+                .orElseGet(() -> ModelEntry.builder().id(key.modelId()).reasoning(key.reasoning()).build());
+        return Optional.ofNullable(rules.resolve(key.provider(), rules.foldProfile(row)));
     }
 
     private boolean curatedLayerOff() {
@@ -535,13 +553,16 @@ public class LlmModelRegistryService {
 
     // An upper layer can lag the classpath file a release ships (the remote copy) or set only a few fields
     // (a local override). A field it leaves out keeps the lower layer's value, so only an entry that sets a
-    // field may change it.
+    // field may change it. An empty list is set: it says the model takes none of the panel's parameters.
     private static ModelEntry inheritUnsetFields(ModelEntry existing, ModelEntry override) {
         return override.toBuilder()
                 .qualifiedName(ObjectUtils.getIfNull(override.qualifiedName(), existing.qualifiedName()))
                 .label(ObjectUtils.getIfNull(override.label(), existing.label()))
                 .structuredOutput(ObjectUtils.getIfNull(override.structuredOutput(), existing.structuredOutput()))
                 .reasoning(ObjectUtils.getIfNull(override.reasoning(), existing.reasoning()))
+                .supportedParameters(
+                        ObjectUtils.getIfNull(override.supportedParameters(), existing.supportedParameters()))
+                .reasoningEfforts(ObjectUtils.getIfNull(override.reasoningEfforts(), existing.reasoningEfforts()))
                 .profile(ObjectUtils.getIfNull(override.profile(), existing.profile()))
                 .params(ModelParams.overlay(existing.params(), override.params()))
                 .build();

@@ -5,12 +5,16 @@ import com.comet.opik.api.ModelParams.NumberParam;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.ParamResolver.ParamChange;
 import com.comet.opik.domain.llm.ParamResolver.ParamChange.Reason;
+import com.comet.opik.domain.llm.ParamResolver.Resolution;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.UserMessage;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -39,6 +43,14 @@ class ParamResolverTest {
     private static final ParamResolver RESOLVER = new ParamResolver(mock(LlmProviderFactory.class), bundledRegistry());
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
+    private static final String MESSAGE = RandomStringUtils.secure().nextAlphanumeric(20);
+    private static final int SEED = RandomUtils.secure().randomInt();
+
+    private static final ParamChange TEMPERATURE_REFUSED = new ParamChange("temperature", Reason.REFUSED_BY_MODEL);
+    private static final ParamChange TOP_P_REFUSED = new ParamChange("top_p", Reason.REFUSED_BY_MODEL);
+    private static final ParamChange TEMPERATURE_THINKING = new ParamChange("temperature", Reason.THINKING_ENABLED);
+    private static final ParamChange TOP_P_THINKING = new ParamChange("top_p", Reason.THINKING_ENABLED);
+    private static final ParamChange TOP_P_EXCLUSIVE = new ParamChange("top_p", Reason.EXCLUSIVE_SAMPLING);
 
     private static ParamResolver resolverWithOpenAiParams(ModelParams params) {
         var factory = mock(LlmProviderFactory.class);
@@ -46,16 +58,33 @@ class ParamResolverTest {
         return new ParamResolver(factory, bundledRegistry());
     }
 
-    private static ChatCompletionRequest resolve(ChatCompletionRequest request) {
-        return RESOLVER.resolve(request, null).request();
+    private static <T> Resolution<T> resolution(T request, ParamChange... changes) {
+        return new Resolution<>(request, List.of(changes));
     }
 
     private static ChatCompletionRequest request(String model, Double temperature, Double topP) {
+        return request(model, temperature, topP, null);
+    }
+
+    private static ChatCompletionRequest request(String model, Double temperature, Double topP,
+            Map<String, Object> customParameters) {
         return ChatCompletionRequest.builder()
                 .model(model)
+                .messages(List.of(UserMessage.from(MESSAGE)))
                 .temperature(temperature)
                 .topP(topP)
+                .seed(SEED)
+                .customParameters(customParameters)
                 .build();
+    }
+
+    private static ChatCompletionRequest thinkingRequest(String model, Double temperature, Double topP,
+            String thinkingType) {
+        return request(model, temperature, topP, Map.of("thinking", Map.of("type", thinkingType)));
+    }
+
+    private static Map<String, Object> customParameters(String json) {
+        return JsonUtils.readValue(json, MAP_TYPE);
     }
 
     /**
@@ -74,10 +103,8 @@ class ParamResolverTest {
             "CLAUDE-HAIKU-4-5-20251001"
     })
     void dropsTopPForClaudeWhateverServesIt(String model) {
-        var normalized = resolve(request(model, 0.7, 0.9));
-
-        assertThat(normalized.temperature()).isEqualTo(0.7);
-        assertThat(normalized.topP()).isNull();
+        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9), null))
+                .isEqualTo(resolution(request(model, 0.7, null), TOP_P_EXCLUSIVE));
     }
 
     /**
@@ -91,9 +118,9 @@ class ParamResolverTest {
             "claude-router/gpt-4o"
     })
     void doesNotTreatAGatewayNamedAfterClaudeAsClaude(String model) {
-        var normalized = resolve(request(model, 0.7, 0.9));
+        var request = request(model, 0.7, 0.9);
 
-        assertThat(normalized.topP()).isEqualTo(0.9);
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     /**
@@ -103,16 +130,17 @@ class ParamResolverTest {
      */
     @Test
     void doesNotClassifyAnIdWithNoModelSegment() {
-        var normalized = resolve(request("custom-llm/claude-gw/", 0.7, 0.9));
+        var request = request("custom-llm/claude-gw/", 0.7, 0.9);
 
-        assertThat(normalized.topP()).isEqualTo(0.9);
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     @Test
     void stillMatchesClaudeBehindSuchAGateway() {
-        var normalized = resolve(request("custom-llm/claude-gw/claude-opus-4-6", 0.7, 0.9));
+        var model = "custom-llm/claude-gw/claude-opus-4-6";
 
-        assertThat(normalized.topP()).isNull();
+        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9), null))
+                .isEqualTo(resolution(request(model, 0.7, null), TOP_P_EXCLUSIVE));
     }
 
     /**
@@ -133,10 +161,8 @@ class ParamResolverTest {
             "anthropic/claude-opus-4.8"
     })
     void dropsBothForModelsThatTakeNeither(String model) {
-        var normalized = resolve(request(model, 0.7, 0.9));
-
-        assertThat(normalized.temperature()).isNull();
-        assertThat(normalized.topP()).isNull();
+        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9), null))
+                .isEqualTo(resolution(request(model, null, null), TEMPERATURE_REFUSED, TOP_P_REFUSED));
     }
 
     /**
@@ -154,10 +180,8 @@ class ParamResolverTest {
             "anthropic/claude-fable-5.1:batch"
     })
     void dropsBothForARecognisedClaudeNotMarkedCapable(String model) {
-        var normalized = resolve(request(model, 0.7, 0.9));
-
-        assertThat(normalized.temperature()).isNull();
-        assertThat(normalized.topP()).isNull();
+        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9), null))
+                .isEqualTo(resolution(request(model, null, null), TEMPERATURE_REFUSED, TOP_P_REFUSED));
     }
 
     /**
@@ -167,16 +191,17 @@ class ParamResolverTest {
      */
     @Test
     void leavesAnUnrecognisedClaudeItsTemperature() {
-        var normalized = resolve(request("custom-llm/gw/my-claude-deployment", 0.7, null));
+        var request = request("custom-llm/gw/my-claude-deployment", 0.7, null);
 
-        assertThat(normalized.temperature()).isEqualTo(0.7);
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     @Test
     void dropsALoneTemperatureForAModelThatTakesNeither() {
-        var normalized = resolve(request("custom-llm/gw/claude-sonnet-5", 0.7, null));
+        var model = "custom-llm/gw/claude-sonnet-5";
 
-        assertThat(normalized.temperature()).isNull();
+        assertThat(RESOLVER.resolve(request(model, 0.7, null), null))
+                .isEqualTo(resolution(request(model, null, null), TEMPERATURE_REFUSED));
     }
 
     /**
@@ -193,9 +218,9 @@ class ParamResolverTest {
             "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
     })
     void keepsTemperatureForACapableClaudeHoweverItIsSpelled(String model) {
-        var normalized = resolve(request(model, 0.7, null));
+        var request = request(model, 0.7, null);
 
-        assertThat(normalized.temperature()).isEqualTo(0.7);
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     /**
@@ -207,32 +232,27 @@ class ParamResolverTest {
     @ParameterizedTest
     @ValueSource(strings = {"enabled", "adaptive", "ENABLED"})
     void dropsBothWhenExtendedThinkingIsEnabled(String type) {
-        var normalized = resolve(
-                thinkingRequest("custom-llm/gw/claude-sonnet-4-6", 0.7, 0.9, type));
+        var model = "custom-llm/gw/claude-sonnet-4-6";
 
-        assertThat(normalized.temperature()).isNull();
-        assertThat(normalized.topP()).isNull();
+        assertThat(RESOLVER.resolve(thinkingRequest(model, 0.7, 0.9, type), null)).isEqualTo(
+                resolution(thinkingRequest(model, null, null, type), TEMPERATURE_THINKING, TOP_P_THINKING));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"disabled", "DISABLED", "  "})
     void leavesTemperatureWhenThinkingIsNotEnabled(String type) {
-        var normalized = resolve(
-                thinkingRequest("custom-llm/gw/claude-sonnet-4-6", 0.7, null, type));
+        var request = thinkingRequest("custom-llm/gw/claude-sonnet-4-6", 0.7, null, type);
 
-        assertThat(normalized.temperature()).isEqualTo(0.7);
-        assertThat(normalized.topP()).isNull();
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     /** Asserted from the Top P side too, since the thinking gate drops both and only one is live. */
     @ParameterizedTest
     @ValueSource(strings = {"disabled", "DISABLED", "  "})
     void leavesTopPWhenThinkingIsNotEnabled(String type) {
-        var normalized = resolve(
-                thinkingRequest("custom-llm/gw/claude-sonnet-4-6", null, 0.9, type));
+        var request = thinkingRequest("custom-llm/gw/claude-sonnet-4-6", null, 0.9, type);
 
-        assertThat(normalized.topP()).isEqualTo(0.9);
-        assertThat(normalized.temperature()).isNull();
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     /**
@@ -242,18 +262,10 @@ class ParamResolverTest {
     @ParameterizedTest
     @ValueSource(strings = {"claude-sonnet-4-6", "claude-opus-4-6-20260205"})
     void dropsBothWhenAnEffortTurnsThinkingOn(String model) {
-        var resolution = RESOLVER.resolve(ChatCompletionRequest.builder()
-                .model(model)
-                .temperature(0.7)
-                .topP(0.9)
-                .customParameters(Map.of("output_config", Map.of("effort", "low")))
-                .build(), null);
+        var effort = Map.<String, Object>of("output_config", Map.of("effort", "low"));
 
-        assertThat(resolution.request().temperature()).isNull();
-        assertThat(resolution.request().topP()).isNull();
-        assertThat(resolution.changes()).containsExactly(
-                new ParamChange("temperature", Reason.THINKING_ENABLED),
-                new ParamChange("top_p", Reason.THINKING_ENABLED));
+        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9, effort), null))
+                .isEqualTo(resolution(request(model, null, null, effort), TEMPERATURE_THINKING, TOP_P_THINKING));
     }
 
     @ParameterizedTest
@@ -263,59 +275,50 @@ class ParamResolverTest {
             "claude-opus-4-5-20251101 | {\"output_config\": {\"effort\": \"high\"}}",
             "anthropic/claude-sonnet-4.6 | {\"output_config\": {\"effort\": \"low\"}}"})
     void keepsTemperatureWhenTheEffortLeavesThinkingOff(String model, String customParameters) {
-        var request = ChatCompletionRequest.builder()
-                .model(model)
-                .temperature(0.7)
-                .customParameters(JsonUtils.readValue(customParameters, MAP_TYPE))
-                .build();
+        var request = request(model, 0.7, null, customParameters(customParameters));
 
-        assertThat(RESOLVER.resolve(request, null).request()).isSameAs(request);
-    }
-
-    private static ChatCompletionRequest thinkingRequest(String model, Double temperature, Double topP,
-            String thinkingType) {
-        return ChatCompletionRequest.builder()
-                .model(model)
-                .temperature(temperature)
-                .topP(topP)
-                .customParameters(Map.of("thinking", Map.of("type", thinkingType)))
-                .build();
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     @Test
     void leavesASamplingCapableClaudeAlone() {
-        var normalized = resolve(request("custom-llm/gw/claude-sonnet-4-6", 0.7, null));
+        var request = request("custom-llm/gw/claude-sonnet-4-6", 0.7, null);
 
-        assertThat(normalized.temperature()).isEqualTo(0.7);
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     @Test
     void keepsTopPForClaudeWhenTemperatureIsAbsent() {
-        var normalized = resolve(request("claude-opus-4-6", null, 0.9));
+        var request = request("claude-opus-4-6", null, 0.9);
 
-        assertThat(normalized.topP()).isEqualTo(0.9);
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     @Test
     void leavesModelsWithoutTheConstraintAlone() {
-        var normalized = resolve(request("gpt-4o", 0.7, 0.9));
+        var request = request("gpt-4o", 0.7, 0.9);
 
-        assertThat(normalized.temperature()).isEqualTo(0.7);
-        assertThat(normalized.topP()).isEqualTo(0.9);
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     @Test
     void returnsTheSameRequestWhenNothingNeedsDropping() {
         var original = request("claude-opus-4-6", 0.7, null);
 
-        assertThat(resolve(original)).isSameAs(original);
+        var resolution = RESOLVER.resolve(original, null);
+
+        assertThat(resolution.request()).isSameAs(original);
+        assertThat(resolution.changes()).isEmpty();
     }
 
     @Test
     void toleratesARequestWithNoModel() {
         var original = request(null, 0.7, 0.9);
 
-        assertThat(resolve(original)).isSameAs(original);
+        var resolution = RESOLVER.resolve(original, null);
+
+        assertThat(resolution).isEqualTo(resolution(original));
+        assertThat(resolution.request()).isSameAs(original);
     }
 
     private LlmModelRegistryService registryWithOverride(Path tempDir, String overrideResource,
@@ -337,31 +340,26 @@ class ParamResolverTest {
 
     @Test
     void followsALocalOverrideOfTheShippedCatalog(@TempDir Path tempDir) throws IOException {
-        var request = request("claude-opus-4-6", 0.7, null);
-        assertThat(resolve(request).temperature()).isEqualTo(0.7);
+        var opusTemperature = request("claude-opus-4-6", 0.7, null);
+        assertThat(RESOLVER.resolve(opusTemperature, null)).isEqualTo(resolution(opusTemperature));
 
         var resolver = resolverWithOverride(tempDir, new LlmModelRegistryConfig().getCuratedResource());
 
-        var resolution = resolver.resolve(request, null);
-
-        assertThat(resolution.request().temperature()).isNull();
-        assertThat(resolution.changes()).containsExactly(new ParamChange("temperature", Reason.REFUSED_BY_MODEL));
-        assertThat(resolver.resolve(request("claude-sonnet-4-6", 0.7, null), null).request().temperature())
-                .isEqualTo(0.7);
-        assertThat(resolver.resolve(request("claude-sonnet-4-6", null, 0.9), null).changes())
-                .containsExactly(new ParamChange("top_p", Reason.REFUSED_BY_MODEL));
+        assertOverrideRefusesOpusTemperatureAndSonnetTopP(resolver);
     }
 
     @Test
     void followsALocalOverrideWithTheCuratedLayerTurnedOff(@TempDir Path tempDir) throws IOException {
-        var resolver = resolverWithOverride(tempDir, "");
+        assertOverrideRefusesOpusTemperatureAndSonnetTopP(resolverWithOverride(tempDir, ""));
+    }
 
-        assertThat(resolver.resolve(request("claude-opus-4-6", 0.7, null), null).changes())
-                .containsExactly(new ParamChange("temperature", Reason.REFUSED_BY_MODEL));
-        assertThat(resolver.resolve(request("claude-sonnet-4-6", 0.7, null), null).request().temperature())
-                .isEqualTo(0.7);
-        assertThat(resolver.resolve(request("claude-sonnet-4-6", null, 0.9), null).changes())
-                .containsExactly(new ParamChange("top_p", Reason.REFUSED_BY_MODEL));
+    private static void assertOverrideRefusesOpusTemperatureAndSonnetTopP(ParamResolver resolver) {
+        assertThat(resolver.resolve(request("claude-opus-4-6", 0.7, null), null))
+                .isEqualTo(resolution(request("claude-opus-4-6", null, null), TEMPERATURE_REFUSED));
+        var sonnetTemperature = request("claude-sonnet-4-6", 0.7, null);
+        assertThat(resolver.resolve(sonnetTemperature, null)).isEqualTo(resolution(sonnetTemperature));
+        assertThat(resolver.resolve(request("claude-sonnet-4-6", null, 0.9), null))
+                .isEqualTo(resolution(request("claude-sonnet-4-6", null, null), TOP_P_REFUSED));
     }
 
     @ParameterizedTest
@@ -374,56 +372,40 @@ class ParamResolverTest {
 
         var resolver = new ParamResolver(mock(LlmProviderFactory.class), registry);
 
-        assertThat(resolver.resolve(request("claude-sonnet-5", 0.7, 0.9), null).changes()).containsExactly(
-                new ParamChange("temperature", Reason.REFUSED_BY_MODEL),
-                new ParamChange("top_p", Reason.REFUSED_BY_MODEL));
-        assertThat(resolver.resolve(judge("claude-sonnet-5", null)).request().temperature()).isNull();
-    }
-
-    @Test
-    void reportsEachSettingItDropsAndWhy() {
-        var resolution = RESOLVER.resolve(request("claude-sonnet-5", 0.7, 0.9), null);
-
-        assertThat(resolution.changes()).containsExactly(
-                new ParamChange("temperature", Reason.REFUSED_BY_MODEL),
-                new ParamChange("top_p", Reason.REFUSED_BY_MODEL));
-    }
-
-    @Test
-    void reportsTheTopPItDropsForAModelThatTakesOnlyOneOfThem() {
-        var resolution = RESOLVER.resolve(request("claude-sonnet-4-6", 0.7, 0.9), null);
-
-        assertThat(resolution.changes())
-                .containsExactly(new ParamChange("top_p", Reason.EXCLUSIVE_SAMPLING));
+        assertThat(resolver.resolve(request("claude-sonnet-5", 0.7, 0.9), null)).isEqualTo(
+                resolution(request("claude-sonnet-5", null, null), TEMPERATURE_REFUSED, TOP_P_REFUSED));
+        assertThat(resolver.resolve(judge("claude-sonnet-5", 0.7, null)))
+                .isEqualTo(resolution(judge("claude-sonnet-5", null, null), TEMPERATURE_REFUSED));
     }
 
     @Test
     void dropsTheSettingsTheOpenAiCatalogParamsRefuseAndKeepsTheRest() {
         var request = ChatCompletionRequest.builder()
                 .model("gpt-5-mini")
+                .messages(List.of(UserMessage.from(MESSAGE)))
                 .temperature(0.7)
                 .topP(0.9)
                 .frequencyPenalty(0.5)
                 .presencePenalty(0.4)
                 .maxCompletionTokens(100)
-                .seed(7)
+                .seed(SEED)
+                .customParameters(Map.of("verbosity", "low"))
                 .build();
 
         var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(request, null);
 
-        var normalized = resolution.request();
-        assertThat(normalized.temperature()).isNull();
-        assertThat(normalized.topP()).isNull();
-        assertThat(normalized.frequencyPenalty()).isNull();
-        assertThat(normalized.presencePenalty()).isNull();
-        assertThat(normalized.model()).isEqualTo("gpt-5-mini");
-        assertThat(normalized.maxCompletionTokens()).isEqualTo(100);
-        assertThat(normalized.seed()).isEqualTo(7);
-        assertThat(resolution.changes()).containsExactly(
-                new ParamChange("temperature", Reason.REFUSED_BY_MODEL),
-                new ParamChange("top_p", Reason.REFUSED_BY_MODEL),
+        assertThat(resolution).isEqualTo(resolution(
+                ChatCompletionRequest.builder()
+                        .model("gpt-5-mini")
+                        .messages(List.of(UserMessage.from(MESSAGE)))
+                        .maxCompletionTokens(100)
+                        .seed(SEED)
+                        .customParameters(Map.of("verbosity", "low"))
+                        .build(),
+                TEMPERATURE_REFUSED,
+                TOP_P_REFUSED,
                 new ParamChange("frequency_penalty", Reason.REFUSED_BY_MODEL),
-                new ParamChange("presence_penalty", Reason.REFUSED_BY_MODEL));
+                new ParamChange("presence_penalty", Reason.REFUSED_BY_MODEL)));
     }
 
     @Test
@@ -436,16 +418,21 @@ class ParamResolverTest {
         assertThat(resolution.changes()).isEmpty();
     }
 
-    private static ChatCompletionRequest everyOpenAiSetting(String model) {
+    private static ChatCompletionRequest.Builder openAiRequest(String model) {
         return ChatCompletionRequest.builder()
                 .model(model)
+                .messages(List.of(UserMessage.from(MESSAGE)))
                 .temperature(0.7)
                 .topP(0.9)
+                .maxCompletionTokens(100);
+    }
+
+    private static ChatCompletionRequest everyOpenAiSetting(String model) {
+        return openAiRequest(model)
                 .frequencyPenalty(0.5)
                 .presencePenalty(0.4)
                 .stop(List.of("END"))
-                .seed(7)
-                .maxCompletionTokens(100)
+                .seed(SEED)
                 .build();
     }
 
@@ -453,20 +440,12 @@ class ParamResolverTest {
     @ParameterizedTest
     @ValueSource(strings = {"gpt-4.1", "my-finetune"})
     void dropsWhatTheResponsesRouteRefusesFromTheShippedCatalog(String model) {
-        var resolution = RESOLVER.resolve(everyOpenAiSetting(model), ParamResolver.RESPONSES_API_ROUTE);
-
-        var expected = ChatCompletionRequest.builder()
-                .from(everyOpenAiSetting(model))
-                .frequencyPenalty(null)
-                .presencePenalty(null)
-                .stop(List.of())
-                .seed(null)
-                .build();
-        assertThat(resolution).isEqualTo(new ParamResolver.Resolution<>(expected, List.of(
+        assertThat(RESOLVER.resolve(everyOpenAiSetting(model), ParamResolver.RESPONSES_API_ROUTE)).isEqualTo(resolution(
+                openAiRequest(model).stop(List.of()).build(),
                 new ParamChange("frequency_penalty", Reason.REFUSED_BY_ROUTE),
                 new ParamChange("presence_penalty", Reason.REFUSED_BY_ROUTE),
                 new ParamChange("stop", Reason.REFUSED_BY_ROUTE),
-                new ParamChange("seed", Reason.REFUSED_BY_ROUTE))));
+                new ParamChange("seed", Reason.REFUSED_BY_ROUTE)));
     }
 
     @Test
@@ -474,38 +453,37 @@ class ParamResolverTest {
         var request = everyOpenAiSetting("gpt-4.1");
         var resolver = resolverWithOpenAiParams(bundledRegistry().paramsOf("openai", "gpt-4.1"));
 
-        var resolution = resolver.resolve(request, null);
-
-        assertThat(resolution).isEqualTo(new ParamResolver.Resolution<>(request, List.of()));
+        assertThat(resolver.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     @Test
     void reportsTheModelNotTheRouteWhenTheModelItselfRefusesASetting() {
-        var request = ChatCompletionRequest.builder().model("o3").temperature(0.7).build();
+        var request = ChatCompletionRequest.builder()
+                .model("o3")
+                .messages(List.of(UserMessage.from(MESSAGE)))
+                .temperature(0.7)
+                .build();
 
-        var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(request,
-                ParamResolver.RESPONSES_API_ROUTE);
-
-        assertThat(resolution).isEqualTo(new ParamResolver.Resolution<>(
-                ChatCompletionRequest.builder().model("o3").build(),
-                List.of(new ParamChange("temperature", Reason.REFUSED_BY_MODEL))));
+        assertThat(resolverWithOpenAiParams(OPENAI_REASONING).resolve(request, ParamResolver.RESPONSES_API_ROUTE))
+                .isEqualTo(resolution(
+                        ChatCompletionRequest.builder().model("o3").messages(List.of(UserMessage.from(MESSAGE)))
+                                .build(),
+                        TEMPERATURE_REFUSED));
     }
 
     @Test
     void dropsAJudgeTemperatureTheOpenAiCatalogParamsRefuse() {
-        var parameters = LlmAsJudgeModelParameters.builder().name("o3").temperature(0.0).seed(3).build();
+        var parameters = LlmAsJudgeModelParameters.builder().name("o3").temperature(0.0).seed(SEED).build();
 
-        var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(parameters);
-
-        assertThat(resolution.request().temperature()).isNull();
-        assertThat(resolution.request().seed()).isEqualTo(3);
-        assertThat(resolution.changes()).containsExactly(new ParamChange("temperature", Reason.REFUSED_BY_MODEL));
+        assertThat(resolverWithOpenAiParams(OPENAI_REASONING).resolve(parameters)).isEqualTo(resolution(
+                LlmAsJudgeModelParameters.builder().name("o3").seed(SEED).build(), TEMPERATURE_REFUSED));
     }
 
-    private static LlmAsJudgeModelParameters judge(String model, String customParameters) {
+    private static LlmAsJudgeModelParameters judge(String model, Double temperature, String customParameters) {
         return LlmAsJudgeModelParameters.builder()
                 .name(model)
-                .temperature(0.7)
+                .temperature(temperature)
+                .seed(SEED)
                 .customParameters(customParameters == null ? null : JsonUtils.getJsonNodeFromString(customParameters))
                 .build();
     }
@@ -513,30 +491,28 @@ class ParamResolverTest {
     @ParameterizedTest
     @ValueSource(strings = {"claude-sonnet-5", "anthropic/claude-opus-4.7", "custom-llm/gw/claude-fable-5-1"})
     void dropsAJudgeTemperatureAClaudeRefuses(String model) {
-        var resolution = RESOLVER.resolve(judge(model, null));
-
-        assertThat(resolution.request().temperature()).isNull();
-        assertThat(resolution.changes()).containsExactly(new ParamChange("temperature", Reason.REFUSED_BY_MODEL));
+        assertThat(RESOLVER.resolve(judge(model, 0.7, null)))
+                .isEqualTo(resolution(judge(model, null, null), TEMPERATURE_REFUSED));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"claude-sonnet-4-6", "custom-llm/gw/claude-sonnet-4-6",
             "us.anthropic.claude-sonnet-4-5-20250929-v1:0"})
     void dropsAJudgeTemperatureWhenAClaudeThinks(String model) {
-        var resolution = RESOLVER.resolve(judge(model, """
-                {"thinking": {"type": "enabled", "budget_tokens": 1024}}"""));
+        var thinking = """
+                {"thinking": {"type": "enabled", "budget_tokens": 1024}}""";
 
-        assertThat(resolution.request().temperature()).isNull();
-        assertThat(resolution.changes()).containsExactly(new ParamChange("temperature", Reason.THINKING_ENABLED));
+        assertThat(RESOLVER.resolve(judge(model, 0.7, thinking)))
+                .isEqualTo(resolution(judge(model, null, thinking), TEMPERATURE_THINKING));
     }
 
     @Test
     void dropsAJudgeTemperatureWhenAnEffortTurnsThinkingOn() {
-        var resolution = RESOLVER.resolve(judge("claude-sonnet-4-6", """
-                {"output_config": {"effort": "low"}}"""));
+        var effort = """
+                {"output_config": {"effort": "low"}}""";
 
-        assertThat(resolution.request().temperature()).isNull();
-        assertThat(resolution.changes()).containsExactly(new ParamChange("temperature", Reason.THINKING_ENABLED));
+        assertThat(RESOLVER.resolve(judge("claude-sonnet-4-6", 0.7, effort)))
+                .isEqualTo(resolution(judge("claude-sonnet-4-6", null, effort), TEMPERATURE_THINKING));
     }
 
     @ParameterizedTest
@@ -544,28 +520,25 @@ class ParamResolverTest {
             "claude-sonnet-4-6 | {\"output_config\": {\"effort\": \"low\"}, \"thinking\": {\"type\": \"disabled\"}}",
             "claude-opus-4-5-20251101 | {\"output_config\": {\"effort\": \"high\"}}"})
     void keepsAJudgeTemperatureWhenTheEffortLeavesThinkingOff(String model, String customParameters) {
-        var parameters = judge(model, customParameters);
+        var parameters = judge(model, 0.7, customParameters);
 
-        assertThat(RESOLVER.resolve(parameters).request()).isSameAs(parameters);
+        assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
     }
 
     @Test
     void keepsAJudgeTemperatureWhenAnotherModelThinks() {
-        var parameters = judge("custom-llm/gw/glm-4.6", """
+        var parameters = judge("custom-llm/gw/glm-4.6", 0.7, """
                 {"thinking": {"type": "enabled"}}""");
 
-        assertThat(RESOLVER.resolve(parameters).request()).isSameAs(parameters);
+        assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"{\"thinking\": {\"type\": \"disabled\"}}", "{\"thinking\": {\"type\": \"\"}}",
             "{\"thinking\": {\"budget_tokens\": 1024}}", "{\"thinking\": {\"type\": 1}}"})
     void keepsAJudgeTemperatureWhenThinkingIsNotOn(String customParameters) {
-        var parameters = judge("claude-sonnet-4-6", customParameters);
+        var parameters = judge("claude-sonnet-4-6", 0.7, customParameters);
 
-        var resolution = RESOLVER.resolve(parameters);
-
-        assertThat(resolution.request()).isSameAs(parameters);
-        assertThat(resolution.changes()).isEmpty();
+        assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
     }
 }
