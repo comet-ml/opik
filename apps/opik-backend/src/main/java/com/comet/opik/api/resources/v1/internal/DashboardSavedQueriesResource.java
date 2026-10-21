@@ -40,7 +40,7 @@ import java.util.UUID;
 /**
  * Queries Ollie pinned to a chart, which {@code ollie_chart} dashboard widgets reference by id. Internal so that only
  * Ollie can create one: the browser can place, move and remove a widget, but not set the SQL it runs. Gated like
- * Custom Charts free-form SQL, on {@code ollieEnabled} and {@code customCharts.enabledWorkspaces}.
+ * Custom Charts free-form SQL, on {@code ollieEnabled} and {@code customCharts.enabled}.
  */
 @Path("/v1/internal/dashboard-saved-queries")
 @Produces(MediaType.APPLICATION_JSON)
@@ -99,7 +99,7 @@ public class DashboardSavedQueriesResource {
     }
 
     private void requireEnabled() {
-        if (!customCharts.isEnabledFor(serviceToggles, requestContext.get().getWorkspaceId())) {
+        if (!customCharts.isEnabled(serviceToggles)) {
             throw new ServerErrorException(Response.Status.NOT_IMPLEMENTED);
         }
     }
