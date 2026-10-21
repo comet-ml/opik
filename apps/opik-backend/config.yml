@@ -1202,6 +1202,9 @@ experimentExecution:
   # Default: 24h
   # Description: TTL for the batch completion counter in Redis
   batchCounterTtl: ${EXPERIMENT_EXECUTION_BATCH_COUNTER_TTL:-24h}
+  # Default: 60s
+  # Description: Lease on the lock that serialises launching a run, held from the queue-capacity check through publishing so the check cannot be overtaken. Must exceed the time to publish the largest run; a pod that dies holding it stalls launches until it expires
+  publishLockLease: ${EXPERIMENT_EXECUTION_PUBLISH_LOCK_LEASE:-60s}
 
 # Configuration for Dataset Export
 datasetExport:

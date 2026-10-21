@@ -23,6 +23,7 @@ import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import jakarta.ws.rs.BadRequestException;
@@ -97,6 +98,9 @@ class ExperimentExecutionServiceTest {
     @Mock
     private PromptService promptService;
 
+    @Mock
+    private LockService lockService;
+
     private ExperimentExecutionService service;
 
     @BeforeEach
@@ -107,8 +111,10 @@ class ExperimentExecutionServiceTest {
                 experimentService, cancellationService, datasetService, datasetItemService,
                 datasetVersionService,
                 itemPublisher, idGenerator, evaluatorMapper, new ExperimentExecutionConfig(), promptService,
-                featureFlags);
+                featureFlags, lockService);
 
+        lenient().when(lockService.bestEffortLock(any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(1));
         lenient().when(featureFlags.isDatasetVersioningEnabled()).thenReturn(true);
         lenient().when(itemPublisher.publish(any(), any())).thenReturn(Mono.empty());
         lenient().when(itemPublisher.startTrackingRun(any(), anyBoolean())).thenReturn(Mono.empty());
@@ -717,7 +723,8 @@ class ExperimentExecutionServiceTest {
             service = new ExperimentExecutionService(
                     experimentService, cancellationService, datasetService, datasetItemService,
                     datasetVersionService, itemPublisher, idGenerator,
-                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags);
+                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags,
+                    lockService);
 
             stubDatasetItems(IntStream.range(0, 501)
                     .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
@@ -771,7 +778,8 @@ class ExperimentExecutionServiceTest {
             service = new ExperimentExecutionService(
                     experimentService, cancellationService, datasetService, datasetItemService,
                     datasetVersionService, itemPublisher, idGenerator,
-                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags);
+                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags,
+                    lockService);
 
             stubDatasetItems(IntStream.range(0, 400)
                     .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
@@ -807,7 +815,8 @@ class ExperimentExecutionServiceTest {
             service = new ExperimentExecutionService(
                     experimentService, cancellationService, datasetService, datasetItemService,
                     datasetVersionService, itemPublisher, idGenerator,
-                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags);
+                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags,
+                    lockService);
 
             stubDatasetItems(IntStream.range(0, 300)
                     .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
@@ -838,7 +847,8 @@ class ExperimentExecutionServiceTest {
             service = new ExperimentExecutionService(
                     experimentService, cancellationService, datasetService, datasetItemService,
                     datasetVersionService, itemPublisher, idGenerator,
-                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags);
+                    new TestSuiteEvaluatorMapper(new TestSuiteConfig()), config, promptService, featureFlags,
+                    lockService);
 
             stubDatasetItems(IntStream.range(0, 200)
                     .mapToObj(i -> buildDatasetItem(UUID.randomUUID(), null))
@@ -857,6 +867,34 @@ class ExperimentExecutionServiceTest {
                     .hasMessageContaining("too busy");
 
             verify(experimentService, never()).create(any(Experiment.class));
+        }
+
+        // The check is a read and the publish that follows is not atomic with it, so both happen
+        // under one lock. A launch that cannot take it is told to come back rather than queueing:
+        // the endpoint holds a request thread while it waits.
+        @Test
+        void refuseARunThatCannotTakeThePublishLock() {
+            // The wait elapsed: bestEffortLock runs the fallback instead of the action
+            when(lockService.bestEffortLock(any(), any(), any(), any(), any()))
+                    .thenAnswer(invocation -> invocation.getArgument(2));
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
+
+            assertThatThrownBy(() -> executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build()))
+                    .isInstanceOf(ClientErrorException.class)
+                    .hasMessageContaining("Another run is being queued")
+                    .asInstanceOf(throwable(ClientErrorException.class))
+                    .extracting(error -> error.getResponse().getStatus())
+                    .isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
+
+            // Nothing was written. The guard and the publish are not asserted on: both are called
+            // while the chain is assembled, whether or not the lock ever subscribes to it.
+            verify(experimentService, never()).create(any(Experiment.class));
+            verify(cancellationService, never()).recordQueued(any(), any());
         }
 
         // Admitting up to the length the stream is trimmed to is the defect itself, so what a run
