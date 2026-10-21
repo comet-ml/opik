@@ -95,6 +95,9 @@ public class OpikConfiguration extends JobConfiguration {
     private LlmProviderTokenAuthConfig llmProviderTokenAuth = new LlmProviderTokenAuthConfig();
 
     @Valid @NotNull @JsonProperty
+    private MediaUrlCheckConfig mediaUrlCheck = new MediaUrlCheckConfig();
+
+    @Valid @NotNull @JsonProperty
     private CacheConfiguration cacheManager = new CacheConfiguration();
 
     @Valid @NotNull @JsonProperty

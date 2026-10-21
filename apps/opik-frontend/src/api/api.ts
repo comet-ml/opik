@@ -51,6 +51,7 @@ export const SPANS_REST_ENDPOINT = "/v1/private/spans/";
 export const PROMPTS_REST_ENDPOINT = "/v1/private/prompts/";
 export const PROVIDER_KEYS_REST_ENDPOINT = "/v1/private/llm-provider-key/";
 export const OLLAMA_REST_ENDPOINT = "/v1/private/ollama/";
+export const MEDIA_URLS_REST_ENDPOINT = "/v1/private/media-urls/";
 export const ALERTS_REST_ENDPOINT = "/v1/private/alerts/";
 export const AUTOMATIONS_REST_ENDPOINT = "/v1/private/automations/";
 export const ATTACHMENTS_REST_ENDPOINT = "/v1/private/attachment/";
