@@ -59,6 +59,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -70,6 +71,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -572,13 +574,18 @@ class AiLabelsTickTest {
         var other = enabledWorkspace();
         var throttledTrace = trace(throttled, UUID.randomUUID(), 0);
         var otherTrace = trace(other, UUID.randomUUID(), 0);
-        // The second tick follows within a second; wide enough that it can't cross this on a slow runner.
-        var retryAfter = Duration.ofSeconds(4);
+        var retryAfter = Duration.ofSeconds(8);
         var stubs = List.of(stubQuotaExceeded(DECIDE_PATH, throttled, retryAfter),
                 stubQuotaExceeded(GENERATE_PATH, throttled, retryAfter));
+        // The backoff is measured on the service's clock, held still here so the ticks can't drift past it.
+        var now = new AtomicReference<>(Instant.now());
+        var clock = mock(Clock.class);
+        when(clock.instant()).thenAnswer(invocation -> now.get());
+        var service = new AiLabelsTickService(config(), template, client, lockService, sweepService, registry,
+                renderer, itemBuilder, resultMapper, statusDAO, labelsDAO, clock);
 
-        tick();
-        var throttledAt = Instant.now();
+        tick(service);
+        var throttledAt = now.get();
 
         // The submit isn't retried, and the workspace's other job isn't tried.
         assertThat(submits(DECIDE_PATH, throttled)).hasSize(1);
@@ -586,14 +593,15 @@ class AiLabelsTickTest {
         assertThat(inFlight(throttled)).isEmpty();
         assertThat(inFlight(other)).extracting(AiLabelJobItem::traceId).containsOnly(otherTrace).hasSize(2);
 
-        tick();
+        now.set(throttledAt.plus(retryAfter).minusMillis(1));
+        tick(service);
 
         assertThat(submits(DECIDE_PATH, throttled)).hasSize(1);
         assertThat(inFlight(throttled)).isEmpty();
 
         stubs.forEach(wireMock.server()::removeStub);
-        pauseUntil(throttledAt.plus(retryAfter));
-        tick();
+        now.set(throttledAt.plus(retryAfter));
+        tick(service);
 
         assertThat(submits(DECIDE_PATH, throttled)).hasSize(2);
         assertThat(submits(GENERATE_PATH, throttled)).hasSize(1);
@@ -863,7 +871,7 @@ class AiLabelsTickTest {
                 }));
             }).when(slowRenderer).render(anyString(), anyList(), anyCollection());
             var service = new AiLabelsTickService(config(), template, client, lockService, sweepService, registry,
-                    slowRenderer, itemBuilder, resultMapper, statusDAO, labelsDAO);
+                    slowRenderer, itemBuilder, resultMapper, statusDAO, labelsDAO, Clock.systemUTC());
 
             tick(service);
             var took = Duration.between(lastTick, Instant.now());
@@ -1114,7 +1122,7 @@ class AiLabelsTickTest {
     private AiLabelsTickService tickService(TransactionTemplate template, AiLabelStatusDAO statusDAO,
             AiLabelTaskRegistry registry, AiLabelSweepService sweepService) {
         return new AiLabelsTickService(config(), template, client, lockService, sweepService, registry, renderer,
-                itemBuilder, resultMapper, statusDAO, labelsDAO);
+                itemBuilder, resultMapper, statusDAO, labelsDAO, Clock.systemUTC());
     }
 
     private static AiLabelSweepDAO countingSweeps(AiLabelSweepDAO sweepDAO, AtomicInteger sweeps) {
