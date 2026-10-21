@@ -225,7 +225,9 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     !hasContent ||
     (promptId ? !canEditPrompts && !canCreatePrompts : !canCreatePrompts);
   // Compare against the actually-loaded version when available; fall back to
-  // `latest_version` only when no specific version is referenced.
+  // `latest_version` only when no specific version is referenced. Matching the
+  // latest version also counts as saved: a duplicated variant still points at
+  // the version it was copied from after the other one saves a new version.
   const baselineVersion =
     promptVersionId && loadedVersionData?.id === promptVersionId
       ? loadedVersionData
@@ -238,6 +240,13 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         message.content,
         toContentForRole(parsePromptVersionContent(baselineVersion), role)
           .content,
+      ) &&
+      !isEqual(
+        message.content,
+        toContentForRole(
+          parsePromptVersionContent(promptData.latest_version),
+          role,
+        ).content,
       ),
   );
   const saveTooltip = saveWarning
