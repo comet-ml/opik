@@ -57,7 +57,7 @@ def aggregate(
                 if reasoning:
                     reasoning_chunks.append(reasoning)
 
-                for tool_call in delta.tool_calls or []:
+                for tool_call in getattr(delta, "tool_calls", None) or []:
                     tool_calls.add(tool_call)
 
             if chunk.choices and chunk.choices[0].finish_reason:

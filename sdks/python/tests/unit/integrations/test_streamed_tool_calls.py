@@ -1,21 +1,32 @@
-from typing import Optional
-
-import pydantic
 from openai.types.chat.chat_completion_chunk import (
     ChoiceDeltaToolCall,
     ChoiceDeltaToolCallFunction,
 )
+from together.types import tool_choice as together_tool_choice
 
 from opik.integrations import _streamed_tool_calls
 
 
-class _FloatIndexToolCall(pydantic.BaseModel):
-    """Shape of Together's streamed tool call, whose index is typed as a float."""
+def _together_fragment(index, call_id=None, name=None, arguments=None):
+    """A streamed Together tool call, whose ``index`` is typed as a float.
 
-    index: float
-    id: Optional[str] = None
-    type: Optional[str] = None
-    function: dict
+    Built with ``model_construct`` because the real model requires every field,
+    while a continuation fragment carries only the index and the new arguments.
+    """
+    fields = {
+        "index": index,
+        "function": together_tool_choice.Function.model_construct(
+            **{
+                key: value
+                for key, value in (("name", name), ("arguments", arguments))
+                if value is not None
+            }
+        ),
+    }
+    if call_id is not None:
+        fields["id"] = call_id
+        fields["type"] = "function"
+    return together_tool_choice.ToolChoice.model_construct(**fields)
 
 
 def _fragment(index=None, call_id=None, name=None, arguments=None):
@@ -56,22 +67,10 @@ def test_add__float_indices__keep_calls_apart_and_continue_by_index():
     tool_calls = _streamed_tool_calls.StreamedToolCalls()
 
     tool_calls.add(
-        _FloatIndexToolCall(
-            index=0.0,
-            id="call_1",
-            type="function",
-            function={"name": "get_weather", "arguments": '{"city": "Paris"}'},
-        )
+        _together_fragment(0.0, "call_1", "get_weather", '{"city": "Paris"}')
     )
-    tool_calls.add(
-        _FloatIndexToolCall(
-            index=1.0,
-            id="call_2",
-            type="function",
-            function={"name": "get_time", "arguments": '{"tz": '},
-        )
-    )
-    tool_calls.add(_FloatIndexToolCall(index=1.0, function={"arguments": '"CET"}'}))
+    tool_calls.add(_together_fragment(1.0, "call_2", "get_time", '{"tz": '))
+    tool_calls.add(_together_fragment(1.0, arguments='"CET"}'))
 
     assert tool_calls.to_list() == [
         {

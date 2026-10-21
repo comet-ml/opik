@@ -1,4 +1,5 @@
 import asyncio
+from types import SimpleNamespace
 
 import cerebras.cloud.sdk as cerebras
 import pytest
@@ -210,15 +211,50 @@ def test_aggregate__streamed_tool_call__kept_in_message():
         ]
     )
 
-    choice = aggregated.choices[0]
-    assert choice["finish_reason"] == "tool_calls"
-    assert choice["message"]["tool_calls"] == [
-        {
-            "id": "call_1",
-            "type": "function",
-            "function": {"name": "get_weather", "arguments": '{"city": "Paris"}'},
-        }
-    ]
+    assert aggregated.choices[0] == {
+        "index": 0,
+        "finish_reason": "tool_calls",
+        "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "arguments": '{"city": "Paris"}',
+                    },
+                }
+            ],
+        },
+    }
+
+
+def test_aggregate__delta_without_tool_calls_attribute__content_kept():
+    """Older SDK versions give the delta no `tool_calls` field at all."""
+    chunk = SimpleNamespace(
+        id="c1",
+        created=0,
+        model=MODEL,
+        system_fingerprint="fp_test",
+        usage=None,
+        choices=[
+            SimpleNamespace(
+                delta=SimpleNamespace(role="assistant", content="Blue."),
+                finish_reason="stop",
+            )
+        ],
+    )
+
+    aggregated = chat_completion_chunks_aggregator.aggregate([chunk])
+
+    assert aggregated is not None
+    assert aggregated.choices[0] == {
+        "index": 0,
+        "finish_reason": "stop",
+        "message": {"role": "assistant", "content": "Blue."},
+    }
 
 
 def test_aggregate__reasoning_deltas__kept_alongside_content():
