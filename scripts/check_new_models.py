@@ -70,6 +70,8 @@ PROVIDER_LABELS = {
     "openrouter": "OpenRouter",
 }
 
+REASON_PRIORITY = {"new": 0, "changed": 1, "params": 2}
+
 SMOKE_MODELS = {
     "openai": "gpt-4.1-nano",
     "anthropic": "claude-haiku-4-5-20251001",
@@ -790,19 +792,17 @@ def run(args: argparse.Namespace) -> int:
         catalog = backend.models()
 
     results = []
-    planned = []
-    calls = 0
-    for model in to_check:
+    queues = {}
+    for model in sorted(to_check, key=lambda m: REASON_PRIORITY.get(m.reason, len(REASON_PRIORITY))):
         params = (catalog.get(model.provider, {}).get(model.model_id) or {}).get("params")
         probes = plan_probes(model, params)
         if not keys.get(model.provider):
             results += [CheckResult(p, "not checked", None, "no CI key") for p in probes]
-        elif calls + len(probes) > args.max_calls:
-            results += [CheckResult(p, "not checked", None, "over the call cap") for p in probes]
         else:
-            calls += len(probes)
-            planned += probes
-    cut = len({r.probe.model for r in results if r.note == "over the call cap"})
+            queues.setdefault(model.provider, []).append(probes)
+    planned, over_cap = share_call_cap(queues, args.max_calls)
+    results += [CheckResult(p, "not checked", None, "over the call cap") for p in over_cap]
+    cut = len({p.model for p in over_cap})
 
     if args.dry_run:
         results += [CheckResult(p, "would call", None, "") for p in planned]
@@ -817,6 +817,24 @@ def run(args: argparse.Namespace) -> int:
     else:
         print(report)
     return 0
+
+
+def share_call_cap(queues: dict[str, list[list[Probe]]], max_calls: int) -> tuple[list[Probe], list[Probe]]:
+    # One model per provider per round: an OpenAI model plans two routes and every effort level, so filling the
+    # cap in file order spends it all on OpenAI and leaves the other providers unchecked.
+    planned = []
+    over_cap = []
+    rounds = max((len(q) for q in queues.values()), default=0)
+    for i in range(rounds):
+        for queue in queues.values():
+            if i >= len(queue):
+                continue
+            probes = queue[i]
+            if len(planned) + len(probes) > max_calls:
+                over_cap += probes
+            else:
+                planned += probes
+    return planned, over_cap
 
 
 def run_probes(backend: Backend, probes: list[Probe]) -> list[CheckResult]:
