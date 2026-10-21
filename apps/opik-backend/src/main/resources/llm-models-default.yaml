@@ -1089,6 +1089,8 @@ openrouter:
   - id: "minimax/minimax-m2.7:free"
     label: "minimax/minimax-m2.7:free"
     structuredOutput: true
+  - id: "minimax/minimax-m3.1-flash:free"
+    label: "minimax/minimax-m3.1-flash:free"
   - id: "minimax/minimax-m3"
     label: "minimax/minimax-m3"
     structuredOutput: true

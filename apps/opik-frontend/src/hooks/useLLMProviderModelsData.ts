@@ -21,6 +21,10 @@ import {
 } from "@/lib/modelRegistryStore";
 import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 import { DECISION_MODELS } from "@/constants/decisionModels";
+import {
+  MINIMAX_TEXT_MODEL_IDS,
+  isMiniMaxTextModel,
+} from "@/constants/minimax";
 
 export type ProviderResolver = (
   modelName?: PROVIDER_MODEL_TYPE | "",
@@ -74,13 +78,35 @@ const MINIMAL_FALLBACK: ProviderModelsMap = {
 const isDropdownVisible = (m: LlmModelsByProvider[string][number]): boolean =>
   Boolean(m.label);
 
+const getDropdownModels = (
+  provider: string,
+  models: LlmModelsByProvider[string],
+) => {
+  const visible = models.filter(isDropdownVisible);
+  if (provider !== PROVIDER_TYPE.OPEN_ROUTER) return visible;
+
+  // Keep the full registry for saved selections. Curate only ordinary text
+  // choices; custom providers and MiniMax media models are untouched.
+  const filtered = visible.filter(
+    (m) => !isMiniMaxTextModel(m.id) || MINIMAX_TEXT_MODEL_IDS.includes(m.id),
+  );
+  const preferred = MINIMAX_TEXT_MODEL_IDS.flatMap((id) =>
+    filtered.filter((m) => m.id === id),
+  );
+  let index = 0;
+  // Replace only MiniMax text slots so other models keep their ordering.
+  return filtered.map((m) =>
+    MINIMAX_TEXT_MODEL_IDS.includes(m.id) ? preferred[index++] : m,
+  );
+};
+
 const transformFetched = (
   fetched: LlmModelsByProvider,
   { onlyVisible }: { onlyVisible: boolean },
 ): ProviderModelsMap => {
   const out: ProviderModelsMap = {};
   for (const [provider, models] of Object.entries(fetched)) {
-    const filtered = onlyVisible ? models.filter(isDropdownVisible) : models;
+    const filtered = onlyVisible ? getDropdownModels(provider, models) : models;
     out[provider] = filtered.map((m) => ({
       value: getRoutableProviderModelValue(
         provider as COMPOSED_PROVIDER_TYPE,
