@@ -103,11 +103,11 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                         ? recordSkipped(message, entryId)
                         // Failed items stay on the assertion counter: the drain fails the run, and a zeroed
                         // counter would let the assertion path record COMPLETED first.
-                        : run(message).flatMap(outcome -> itemLedger.record(
+                        : processItem(message).flatMap(outcome -> itemLedger.record(
                                 message.workspaceId(), message.experimentId(), entryId, outcome)));
     }
 
-    private Mono<Outcome> run(ExperimentItemToProcess message) {
+    private Mono<Outcome> processItem(ExperimentItemToProcess message) {
         return itemProcessor.process(message)
                 .thenReturn(Outcome.OK)
                 .onErrorResume(e -> {
