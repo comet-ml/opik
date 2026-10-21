@@ -533,6 +533,7 @@ const PlaygroundPrompt = ({
           hidePromptActions={false}
           improvePromptConfig={improvePromptConfig}
           autoFocusFirstMessage={index === 0}
+          size="xs"
         />
       </div>
 
