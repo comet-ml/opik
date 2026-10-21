@@ -322,6 +322,7 @@ const useActionButtonActions = ({
   const pollAssertionEvaluation = useCallback(
     async (
       experimentIds: string[],
+      totalItems: number,
       curDatasetId: string,
       scope?: PollScope,
     ) => {
@@ -383,27 +384,25 @@ const useActionButtonActions = ({
           const rows: ExperimentsCompare[] = data?.content ?? [];
 
           let scoredItems = 0;
-          let totalExperimentItems = 0;
 
           for (const row of rows) {
             const experimentItems = row.experiment_items ?? [];
             const noEvaluators = (row.evaluators?.length ?? 0) === 0;
 
             for (const ei of experimentItems) {
-              totalExperimentItems++;
               if (noEvaluators || isItemScored(ei)) {
                 scoredItems++;
               }
             }
           }
 
-          if (!isScoped && totalExperimentItems > 0) {
-            setProgress(scoredItems, totalExperimentItems);
+          if (!isScoped) {
+            setProgress(Math.min(scoredItems, totalItems), totalItems);
           }
 
           if (experimentsFinished) {
             if (!isScoped) {
-              setProgress(totalExperimentItems, totalExperimentItems);
+              setProgress(totalItems, totalItems);
               setTimeout(() => resetProgress(), 3000);
             }
             finishPollScope(scope);
@@ -528,12 +527,16 @@ const useActionButtonActions = ({
           const allTracesCollected = totalTraces >= totalItems;
           if (allTracesCollected) {
             if (!isScoped) {
-              setProgress(totalItems, totalItems);
               setProgressPhase("evaluating");
               setProgress(0, totalItems);
             }
             queryClient.invalidateQueries({ queryKey: ["experiments"] });
-            pollAssertionEvaluation(experimentIds, curDatasetId, scope);
+            pollAssertionEvaluation(
+              experimentIds,
+              totalItems,
+              curDatasetId,
+              scope,
+            );
             return;
           }
 

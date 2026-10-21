@@ -38,7 +38,10 @@ const PlaygroundProgressIndicator: React.FC = () => {
       </div>
       <div className="flex flex-1 items-center">
         <div className="h-2 w-full rounded-full bg-secondary">
+          {/* A new key per step makes the bar start empty instead of animating
+              back from the last step's width, which reads as going backwards. */}
           <div
+            key={progressPhase ?? "progress"}
             className="h-2 rounded-full bg-primary transition-all duration-300"
             style={{ width: `${progressPercentage}%` }}
           />

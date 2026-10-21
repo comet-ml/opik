@@ -186,3 +186,70 @@ describe("PlaygroundStore staleChanges", () => {
     });
   });
 });
+
+describe("PlaygroundStore progress", () => {
+  const getProgress = () => {
+    const { progressPhase, progressCompleted, progressTotal } =
+      usePlaygroundStore.getState();
+    return { progressPhase, progressCompleted, progressTotal };
+  };
+
+  beforeEach(() => {
+    usePlaygroundStore.getState().resetProgress();
+  });
+
+  it("should keep the highest count when a later poll reports fewer", () => {
+    const { setProgressPhase, setProgress } = usePlaygroundStore.getState();
+    setProgressPhase("running");
+    setProgress(3, 4);
+
+    setProgress(1, 4);
+
+    expect(getProgress()).toEqual({
+      progressPhase: "running",
+      progressCompleted: 3,
+      progressTotal: 4,
+    });
+  });
+
+  it("should not shrink the total inside a step", () => {
+    const { setProgressPhase, setProgress } = usePlaygroundStore.getState();
+    setProgressPhase("evaluating");
+    setProgress(0, 4);
+
+    setProgress(1, 2);
+
+    expect(getProgress()).toMatchObject({
+      progressCompleted: 1,
+      progressTotal: 4,
+    });
+  });
+
+  it("should start the next step from zero", () => {
+    const { setProgressPhase, setProgress } = usePlaygroundStore.getState();
+    setProgressPhase("running");
+    setProgress(4, 4);
+
+    setProgressPhase("evaluating");
+
+    expect(getProgress()).toEqual({
+      progressPhase: "evaluating",
+      progressCompleted: 0,
+      progressTotal: 0,
+    });
+  });
+
+  it("should keep the count when the same step is set again", () => {
+    const { setProgressPhase, setProgress } = usePlaygroundStore.getState();
+    setProgressPhase("running");
+    setProgress(3, 4);
+
+    setProgressPhase("running");
+    setProgress(2, 4);
+
+    expect(getProgress()).toMatchObject({
+      progressCompleted: 3,
+      progressTotal: 4,
+    });
+  });
+});
