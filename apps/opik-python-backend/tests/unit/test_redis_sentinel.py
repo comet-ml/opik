@@ -104,8 +104,10 @@ def test_builds_sentinel_master_client_from_environment(sentinel_env):
 
 def test_applies_java_backend_defaults(sentinel_env):
     monkeypatch, master_name = sentinel_env
-    # Empty optional strings are allowed, as on the Java side
+    # Empty optional strings are allowed, as on the Java side: sentinels without ACLs need no credentials
     monkeypatch.setenv("OPIK_REDIS_SENTINEL_NODES", "")
+    monkeypatch.setenv("OPIK_REDIS_SENTINEL_USERNAME", "")
+    monkeypatch.setenv("OPIK_REDIS_SENTINEL_PASSWORD", "")
 
     client = redis_utils._create_redis_client_from_env(decode_responses=True)
 
@@ -173,6 +175,8 @@ def test_keeps_direct_client_when_sentinel_is_disabled(sentinel_env, enabled):
         ("OPIK_REDIS_SENTINEL_NODES", "redis://sentinel-2:65536", "must include a host and a port"),
         ("OPIK_REDIS_SENTINEL_NODES", "redis://:26379", "must include a host and a port"),
         ("REDIS_URL", "", "REDIS_URL must point at a sentinel"),
+        ("REDIS_URL", "redis://sentinel-1:26379/-1", "REDIS_URL must select a non-negative database"),
+        ("REDIS_URL", "redis://sentinel-1:26379/abc", "REDIS_URL must select a non-negative database"),
         ("OPIK_REDIS_SENTINEL_ENABLED", "enabled", "OPIK_REDIS_SENTINEL_ENABLED must be true or false"),
     ],
 )

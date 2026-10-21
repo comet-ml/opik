@@ -68,6 +68,10 @@ class RedisSentinelSettings:
 
     @classmethod
     def from_env(cls) -> "RedisSentinelSettings":
+        """Reads and validates REDIS_URL and the OPIK_REDIS_SENTINEL_* variables.
+
+        Raises RedisSentinelConfigError when a setting is missing or invalid, so callers can fail startup on it.
+        """
         redis_url = os.getenv("REDIS_URL")
         if not redis_url:
             raise RedisSentinelConfigError("REDIS_URL must point at a sentinel when OPIK_REDIS_SENTINEL_ENABLED is true")
@@ -90,7 +94,7 @@ class RedisSentinelSettings:
             master_name=master_name,
             sentinels=_sentinels(seed),
             ssl=seed.scheme == "rediss",
-            db=int(seed.path.lstrip("/") or 0),
+            db=_database(seed),
             username=unquote(seed.username) if seed.username else None,
             password=unquote(seed.password) if seed.password else None,
             sentinel_username=os.getenv("OPIK_REDIS_SENTINEL_USERNAME") or None,
@@ -115,6 +119,13 @@ def _sentinels(seed) -> list[tuple[str, int]]:
             if address not in sentinels:
                 sentinels.append(address)
     return sentinels
+
+
+def _database(seed) -> int:
+    value = seed.path.lstrip("/") or "0"
+    if not value.isdigit():
+        raise RedisSentinelConfigError("REDIS_URL must select a non-negative database when Sentinel is enabled")
+    return int(value)
 
 
 def _sentinel_address(node: str, scheme: str) -> tuple[str, int]:

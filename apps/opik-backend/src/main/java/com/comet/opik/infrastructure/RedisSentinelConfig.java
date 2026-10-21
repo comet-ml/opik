@@ -119,6 +119,8 @@ public record RedisSentinelConfig(
                 "redis.singleNodeUrl must use the redis or rediss scheme when sentinel is enabled");
         Preconditions.checkArgument(seed.port() > 0 && seed.port() <= MAX_PORT,
                 "redis.singleNodeUrl must include a sentinel port between 1 and 65535 when sentinel is enabled");
+        Preconditions.checkArgument(seed.database() >= 0,
+                "redis.singleNodeUrl must select a non-negative database when sentinel is enabled");
         var addresses = new LinkedHashSet<String>();
         addresses.add(seed.address());
         Arrays.stream(StringUtils.defaultString(nodes).split(","))

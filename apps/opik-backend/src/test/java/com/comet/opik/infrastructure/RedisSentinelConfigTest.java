@@ -149,6 +149,15 @@ class RedisSentinelConfigTest {
     }
 
     @Test
+    void rejectsNegativeDatabase() {
+        var redisConfig = redisConfig("redis://%s:%d/-1".formatted(seedHost, seedPort), sentinel().build());
+
+        assertThatThrownBy(redisConfig::build)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("redis.singleNodeUrl must select a non-negative database");
+    }
+
+    @Test
     void rejectsSentinelWithAwsIamAuth() {
         var redisConfig = redisConfig(seedUrl("redis"), sentinel().build());
         redisConfig.getAwsIamAuth().setEnabled(true);
