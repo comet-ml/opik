@@ -166,7 +166,7 @@ public class OpenTelemetryMapper {
         // batch can mix scopes from more than one integration, so gating this on the batch-wide
         // value could misroute a non-Claude span or skip routing for a real Claude Code span.
         boolean isClaudeCode = OpenTelemetryMappingRuleFactory.isClaudeCodeSpan(spanName);
-        ObjectNode defaultBucket = isClaudeCode || openInference != null ? metadata : input;
+        ObjectNode defaultBucket = isClaudeCode ? metadata : input;
 
         // Hold model and provider until the attribute loop completes so we can apply
         // post-processing (e.g. Elastic Inference Service routing) that needs both values.
@@ -336,23 +336,6 @@ public class OpenTelemetryMapper {
         var resolved = ProviderResolvers.resolve(model, provider, metadata);
         model = resolved.model();
         provider = resolved.provider();
-
-        if (openInference != null && openInference.usage().containsKey("prompt_tokens")) {
-            // OpenInference prompt totals include cache reads/writes. Preserve those totals for
-            // display, but provide the exclusive input count expected by these providers' pricing.
-            // Only OpenInference-sourced totals carry this contract; do not reinterpret generic usage.
-            String exclusiveInputKey = switch (provider) {
-                case "anthropic", "anthropic_vertexai" -> "original_usage.input_tokens";
-                case "bedrock" -> "original_usage.inputTokens";
-                case null, default -> null;
-            };
-            if (exclusiveInputKey != null) {
-                long uncachedTokens = Math.max(0L, openInference.usage().get("prompt_tokens"))
-                        - Math.max(0L, openInference.usage().getOrDefault("cache_read_input_tokens", 0))
-                        - Math.max(0L, openInference.usage().getOrDefault("cache_creation_input_tokens", 0));
-                usage.put(exclusiveInputKey, Math.clamp(uncachedTokens, 0, Integer.MAX_VALUE));
-            }
-        }
 
         // Agent-run spans (gen_ai.operation.name=invoke_agent) are not LLM calls. Other attributes
         // on them (e.g. gen_ai.system_instructions) would otherwise type them as llm; force general.

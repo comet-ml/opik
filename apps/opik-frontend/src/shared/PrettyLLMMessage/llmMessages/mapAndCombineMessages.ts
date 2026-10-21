@@ -1,28 +1,19 @@
-import {
-  hasLegacyOpenInferenceOutputAttributes,
-  isOpenInferenceField,
-  resolveOpenInferenceHint,
-} from "@/lib/openinference";
-import { prettifyMessage } from "@/lib/traces";
-import { detectLLMMessages } from "./detectLLMMessages";
-import { getFormat } from "./providers/registry";
+import { detectLLMMessagePair } from "./detectLLMMessages";
+import { getFormat, getAllFormats } from "./providers/registry";
 import {
   LLMMessageDescriptor,
   LLMMapperResult,
   LLMMessageFormatDetectionResult,
   LLMMessageFormat,
+  LLMMessagePairDetections,
 } from "./types";
-import { MessageUsage, numericUsage } from "../usage";
-import { mapOpenInferencePair } from "./providers/openinference/mapper";
+import { MessageUsage, numericUsage, getDisplayUsage } from "../usage";
 
 type MapAndCombineMessagesConfig = {
   formatHint?: LLMMessageFormat;
   formatHintIsAuthoritative?: boolean;
   spanUsage?: MessageUsage;
-  detections?: {
-    input: LLMMessageFormatDetectionResult;
-    output: LLMMessageFormatDetectionResult;
-  };
+  detections?: LLMMessagePairDetections;
 };
 
 export function mapAndCombineMessages(
@@ -30,82 +21,31 @@ export function mapAndCombineMessages(
   output: unknown,
   config: MapAndCombineMessagesConfig = {},
 ): LLMMapperResult {
-  const pairHint = resolveOpenInferenceHint(undefined, input, output);
-  const {
-    formatHint = pairHint.detected ? "openinference" : undefined,
-    spanUsage,
-  } = config;
-  const formatHintIsAuthoritative =
-    config.formatHintIsAuthoritative ?? pairHint.authoritative;
+  const { spanUsage } = config;
+  const { prettifyConfig, inputDetection, outputDetection } =
+    detectLLMMessagePair(input, output, config, config.detections);
+  const { formatHint, formatHintIsAuthoritative } = prettifyConfig;
   const withSpanUsage = (result: LLMMapperResult): LLMMapperResult => {
-    const usage = numericUsage({ ...result.usage, ...numericUsage(spanUsage) });
+    const spanDisplayUsage = Object.fromEntries(
+      getDisplayUsage(spanUsage).map(({ key, value }) => [key, value]),
+    );
+    const usage = numericUsage({
+      ...result.usage,
+      ...numericUsage(spanUsage),
+      ...spanDisplayUsage,
+    });
     return {
       ...result,
       usage: Object.keys(usage).length > 0 ? usage : undefined,
     };
   };
-  const inputDetection =
-    config.detections?.input ??
-    detectLLMMessages(input, {
-      fieldType: "input",
-      formatHintIsAuthoritative,
-      formatHint,
-    });
-  const outputDetection =
-    config.detections?.output ??
-    detectLLMMessages(output, {
-      fieldType: "output",
-      formatHintIsAuthoritative,
-      formatHint,
-    });
-
-  // Historical OpenInference spans can have every flattened output attribute in input,
-  // while output contains only a raw {value, mime_type} fallback. Once either side proves
-  // the format, let its pair-aware combiner inspect both raw fields.
-  const hasNonOpenInferenceFormat = [inputDetection, outputDetection].some(
-    (detection) =>
-      detection.supported &&
-      detection.format !== undefined &&
-      detection.format !== "openinference",
-  );
-  if (
-    !hasNonOpenInferenceFormat &&
-    (inputDetection.format === "openinference" ||
-      outputDetection.format === "openinference")
-  ) {
-    let currentOutput = output;
-    // Use the same current-answer precedence as previews before recovering output
-    // from historical input. Old {value, mime_type} envelopes remain fallbacks.
-    if (
-      formatHintIsAuthoritative !== false &&
-      hasLegacyOpenInferenceOutputAttributes(input) &&
-      output != null &&
-      (typeof output === "object" ||
-        typeof output === "string" ||
-        typeof output === "number" ||
-        typeof output === "boolean") &&
-      !(typeof output === "object" && "value" in output) &&
-      !isOpenInferenceField(output, "output", true, false)
-    ) {
-      const pretty = prettifyMessage(output, { type: "output" });
-      if (
-        pretty.prettified &&
-        typeof pretty.message === "string" &&
-        pretty.message.trim()
-      ) {
-        currentOutput = {
-          messages: [{ role: "assistant", content: pretty.message }],
-        };
-      }
-    }
-    return withSpanUsage(
-      mapOpenInferencePair(
-        input,
-        currentOutput,
-        inputDetection.supported,
-        outputDetection.supported,
-      ),
+  for (const format of getAllFormats()) {
+    const result = format.pairMapper?.(
+      { raw: input, detection: inputDetection },
+      { raw: output, detection: outputDetection },
+      prettifyConfig,
     );
+    if (result) return withSpanUsage(result);
   }
 
   const inputResult = mapForDetection(

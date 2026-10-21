@@ -33,7 +33,11 @@ const PrettyCell = <TData,>(context: CellContext<TData, JsonNode>) => {
     getPrettifyConfig,
   } = (custom ?? {}) as CustomMeta<TData>;
   const value = context.getValue();
-  const prettifyConfig = getPrettifyConfig?.(context.row.original, fieldType);
+  const row = context.row.original;
+  const prettifyConfig = useMemo(
+    () => getPrettifyConfig?.(row, fieldType),
+    [getPrettifyConfig, row, fieldType],
+  );
   const rowInput = prettifyConfig?.openInferenceInput;
   const openInferenceHint = prettifyConfig?.openInferenceHint;
 

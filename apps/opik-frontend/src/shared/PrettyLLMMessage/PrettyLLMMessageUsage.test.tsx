@@ -4,6 +4,31 @@ import { renderToStaticMarkup } from "react-dom/server";
 import PrettyLLMMessageUsage from "./PrettyLLMMessageUsage";
 
 describe("PrettyLLMMessageUsage", () => {
+  it("renders native OpenInference usage with the established token labels", () => {
+    const html = renderToStaticMarkup(
+      <PrettyLLMMessageUsage
+        usage={{
+          prompt: 1000,
+          completion: 20,
+          total: 1020,
+          "prompt_details.cache_read": 800,
+          "prompt_details.cache_write": 100,
+          "completion_details.reasoning": 3,
+        }}
+      />,
+    );
+    for (const [label, value] of [
+      ["Input tokens", 1000],
+      ["Output tokens", 20],
+      ["Total tokens", 1020],
+      ["Cache read tokens", 800],
+      ["Cache write tokens", 100],
+      ["Reasoning tokens", 3],
+    ]) {
+      expect(html).toContain(`${label}</span><span>${value}</span>`);
+    }
+    expect(html).not.toContain("Prompt details");
+  });
   it.each([
     undefined,
     {},

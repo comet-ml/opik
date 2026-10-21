@@ -855,6 +855,18 @@ const messageText = (
   if (typeof message.content === "string" && message.content.length > 0) {
     return message.content;
   }
+  if (Array.isArray(message.content)) {
+    for (const part of [...message.content].reverse()) {
+      if (
+        isRecord(part) &&
+        part.type === "text" &&
+        typeof part.text === "string" &&
+        part.text.length > 0
+      ) {
+        return part.text;
+      }
+    }
+  }
   if (message.contents) {
     const visible = message.contents
       .map((content) => content.text ?? content.audio?.transcript)
@@ -882,7 +894,11 @@ const extractParsedPrettyText = (
           message.role && preferredRoles.has(message.role.toLowerCase()),
       )
       .map(messageText)
-      .find(Boolean) ?? reversed.map(messageText).find(Boolean);
+      .find(Boolean) ??
+    reversed
+      .filter((message) => !message.role)
+      .map(messageText)
+      .find(Boolean);
   if (text) return text;
 
   const completions = fieldType === "input" ? parsed.prompts : parsed.choices;

@@ -155,21 +155,9 @@ const prettifyOpenAIMessageLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    // A conversation logged as output (e.g. by the Open WebUI Opik filter):
-    // show the last assistant reply, mirroring the input branch above
-    const lastAssistantMessage = findLast(
-      message.messages,
-      (m) => isObject(m) && "role" in m && m.role === "assistant",
-    );
-    if (
-      lastAssistantMessage &&
-      isObject(lastAssistantMessage) &&
-      "content" in lastAssistantMessage &&
-      isString(lastAssistantMessage.content) &&
-      lastAssistantMessage.content.length > 0
-    ) {
-      return lastAssistantMessage.content;
-    }
+    // Skip textless tool calls and support OpenAI array content using the same
+    // role-aware text selection as canonical messages.
+    return extractOpenInferencePrettyText(message, "output");
   }
 };
 
@@ -643,8 +631,19 @@ export const prettifyMessage = (
     type: "input",
   },
 ): PrettifyMessageResponse => {
-  if (typeof message === "number" || typeof message === "boolean") {
-    return { message: String(message), prettified: true };
+  const rawValue =
+    isObject(message) &&
+    "value" in message &&
+    Object.keys(message).every((key) => key === "value" || key === "mime_type")
+      ? message.value
+      : undefined;
+  if (
+    typeof message === "number" ||
+    typeof message === "boolean" ||
+    typeof rawValue === "number" ||
+    typeof rawValue === "boolean"
+  ) {
+    return { message: String(rawValue ?? message), prettified: true };
   }
 
   if (isString(message) && message.trim().length > 0) {
@@ -772,17 +771,28 @@ type ThreadPrettifySource = Partial<
 export const getThreadPrettifyConfig = (
   source: ThreadPrettifySource,
   type: "input" | "output",
-): PrettifyMessageConfig => ({
-  type,
-  // Thread aggregates omit the source trace's metadata. Recognize structured
-  // messages from the field itself without enabling synthetic raw fallbacks.
-  openInferenceHint: isOpenInferenceField(
-    type === "input" ? source.first_message : source.last_message,
+): PrettifyMessageConfig => {
+  const field = type === "input" ? source.first_message : source.last_message;
+  // Ordinary role/content messages also belong to OpenAI. Only distinctive
+  // OpenInference content, role aliases, or legacy attributes establish the hint.
+  const hasDistinctMessages =
+    isObject(field) &&
+    "messages" in field &&
+    isArray(field.messages) &&
+    field.messages.some(
+      (message) =>
+        isObject(message) &&
+        ("contents" in message ||
+          (!("role" in message) && !("type" in message)) ||
+          ("role" in message &&
+            ["human", "ai", "model"].includes(String(message.role)))),
+    );
+  return {
     type,
-    true,
-    false,
-  ),
-});
+    openInferenceHint:
+      hasLegacyOpenInferenceAttributes(field) || hasDistinctMessages,
+  };
+};
 
 export const prettifyThreadField = (
   source: ThreadPrettifySource,

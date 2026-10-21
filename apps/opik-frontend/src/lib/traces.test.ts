@@ -757,8 +757,8 @@ describe("prettifyMessage", () => {
         openInferenceHint: true,
       }),
     ).toEqual({
-      message: "Keep the existing shape",
-      prettified: true,
+      message,
+      prettified: false,
     });
   });
 });

@@ -3,7 +3,56 @@ import {
   isSafeOpenInferenceMediaUrl,
   isOpenInferenceField,
   parseOpenInferenceFields,
+  extractOpenInferencePrettyText,
 } from "./openinference";
+
+describe("OpenInference preview message selection", () => {
+  it.each(["input", "output"] as const)(
+    "reads the last OpenAI text part for %s",
+    (field) => {
+      const role = field === "input" ? "user" : "assistant";
+      expect(
+        extractOpenInferencePrettyText(
+          {
+            messages: [
+              { role, content: "Stale text" },
+              {
+                role,
+                content: [
+                  { type: "text", text: "First part" },
+                  { type: "text", text: "Latest text" },
+                ],
+              },
+              { role: "tool", content: "Tool result" },
+            ],
+          },
+          field,
+        ),
+      ).toBe("Latest text");
+    },
+  );
+
+  it.each(["system", "tool", "user"])(
+    "does not use a %s message as an assistant fallback",
+    (role) => {
+      expect(
+        extractOpenInferencePrettyText(
+          { messages: [{ role, content: "Unrelated text" }] },
+          "output",
+        ),
+      ).toBeUndefined();
+    },
+  );
+
+  it("still allows a role-less response fallback", () => {
+    expect(
+      extractOpenInferencePrettyText(
+        { messages: [{ content: "Answer" }] },
+        "output",
+      ),
+    ).toBe("Answer");
+  });
+});
 
 describe("parseOpenInferenceFields", () => {
   it.each([0, 2147483647])("accepts backend-compatible index %s", (index) => {
