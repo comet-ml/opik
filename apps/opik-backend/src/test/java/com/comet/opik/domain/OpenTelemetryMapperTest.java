@@ -21,6 +21,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -283,6 +284,41 @@ class OpenTelemetryMapperTest {
                         AnyValue.newBuilder().setDoubleValue(Double.POSITIVE_INFINITY).build(), null),
                 Arguments.of("negative infinity",
                         AnyValue.newBuilder().setDoubleValue(Double.NEGATIVE_INFINITY).build(), null));
+    }
+
+    @ParameterizedTest(name = "opik.project_name as {0}")
+    @MethodSource("opikProjectNameCases")
+    void extractOpikProjectName(String label, List<KeyValue> attributes, String expected) {
+        assertThat(OpenTelemetryMapper.extractOpikProjectName(attributes)).isEqualTo(Optional.ofNullable(expected));
+    }
+
+    static Stream<Arguments> opikProjectNameCases() {
+        return Stream.of(
+                Arguments.of("absent", List.of(), null),
+                Arguments.of("blank", List.of(projectNameAttribute("  ")), null),
+                Arguments.of("present", List.of(projectNameAttribute("my-project")), "my-project"));
+    }
+
+    @ParameterizedTest(name = "opik.project_name of {0} is valid: {2}")
+    @MethodSource("projectNameLengthCases")
+    void isValidProjectName(String label, String projectName, boolean expected) {
+        assertThat(OpenTelemetryMapper.isValidProjectName(projectName)).isEqualTo(expected);
+    }
+
+    static Stream<Arguments> projectNameLengthCases() {
+        return Stream.of(
+                Arguments.of("150 characters", "a".repeat(150), true),
+                Arguments.of("151 characters", "a".repeat(151), false),
+                Arguments.of("150 characters with surrounding spaces", " " + "a".repeat(150) + " ", true),
+                Arguments.of("150 surrogate pair characters", "🙂".repeat(150), true),
+                Arguments.of("151 surrogate pair characters", "🙂".repeat(151), false));
+    }
+
+    private static KeyValue projectNameAttribute(String value) {
+        return KeyValue.newBuilder()
+                .setKey("opik.project_name")
+                .setValue(AnyValue.newBuilder().setStringValue(value))
+                .build();
     }
 
     private Span.SpanBuilder newSpanBuilder() {
