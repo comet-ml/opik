@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LoggingChunkedResponseHandler;
 import com.comet.opik.infrastructure.llm.StreamingResponseLogger;
 import dev.langchain4j.exception.AuthenticationException;
@@ -30,11 +31,12 @@ import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAG
 class LlmProviderAnthropic implements LlmProviderService {
 
     private final @NonNull AnthropicClient anthropicClient;
+    private final @NonNull LlmModelRegistryService registryService;
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
         var response = anthropicClient
-                .createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request));
+                .createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request, registryService));
 
         return LlmProviderAnthropicMapper.INSTANCE.toResponse(response);
     }
@@ -57,7 +59,8 @@ class LlmProviderAnthropic implements LlmProviderService {
         var delegate = new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model());
         var logger = new StreamingResponseLogger(requestSummary, request.model());
 
-        anthropicClient.createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request),
+        anthropicClient.createMessage(
+                LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request, registryService),
                 new LoggingChunkedResponseHandler(delegate, logger));
     }
 
@@ -68,7 +71,7 @@ class LlmProviderAnthropic implements LlmProviderService {
             throw new BadRequestException(ERROR_EMPTY_MESSAGES);
         }
         // Called for its 400s only. The mapper runs the same check again while sending, but a throw there is a 500.
-        AnthropicEffort.toCustomParameters(request.model(), request.customParameters());
+        AnthropicEffort.toCustomParameters(request.model(), request.customParameters(), registryService);
         // maxCompletionTokens is required by Anthropic but defaulted (with a log line) inside
         // LlmProviderAnthropicMapper.resolveMaxTokens, so callers without an explicit cap still
         // succeed — same UX as OpenAI in the same flows.

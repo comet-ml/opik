@@ -1,5 +1,6 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
@@ -52,6 +53,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -97,7 +99,8 @@ class ChatCompletionServiceTest {
         when(llmProviderClientConfig.getJitterScale()).thenReturn(null);
         when(llmProviderClientConfig.getBackoffExp()).thenReturn(null);
 
-        chatCompletionService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+        chatCompletionService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
+                new ParamResolver(llmProviderFactory, bundledRegistry()));
     }
 
     @Nested
@@ -429,7 +432,8 @@ class ChatCompletionServiceTest {
             var workspaceId = "test-workspace-id";
 
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
-            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
+                    new ParamResolver(llmProviderFactory, bundledRegistry()));
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
             when(llmProviderService.generate(any(), anyString()))
@@ -452,7 +456,8 @@ class ChatCompletionServiceTest {
             var workspaceId = "test-workspace-id";
 
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
-            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
+                    new ParamResolver(llmProviderFactory, bundledRegistry()));
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
             when(llmProviderService.generate(any(), anyString())).thenThrow(new RuntimeException("transient"));
@@ -986,7 +991,8 @@ class ChatCompletionServiceTest {
          */
         private Throwable scoreTraceWithBudget(int maxRetries, RuntimeException providerFailure) {
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(maxRetries);
-            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
+                    new ParamResolver(llmProviderFactory, bundledRegistry()));
             var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
             var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
 
@@ -1405,8 +1411,17 @@ class ChatCompletionServiceTest {
                     .build();
         }
 
+        private static Optional<ModelParams> openAiParams(boolean reasoning) {
+            if (!reasoning) {
+                return Optional.of(ModelParams.builder().build());
+            }
+            var refused = new ModelParams.NumberParam(false, null, null, null);
+            return Optional.of(ModelParams.builder()
+                    .temperature(refused).topP(refused).frequencyPenalty(refused).presencePenalty(refused).build());
+        }
+
         private ChatCompletionRequest requestSentByCreate(String model, boolean reasoning) {
-            when(llmProviderFactory.isOpenAiReasoningModel(model)).thenReturn(reasoning);
+            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(reasoning));
             when(llmProviderFactory.getService(WORKSPACE_ID, model)).thenReturn(llmProviderService);
             var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
             when(llmProviderService.generate(captor.capture(), anyString()))
@@ -1445,7 +1460,7 @@ class ChatCompletionServiceTest {
         @DisplayName("createAndStreamResponse: a reasoning model reaches the provider without sampling params or penalties")
         void stream__whenReasoningModel__thenDropSamplingParamsAndPenalties() {
             var model = "o3";
-            when(llmProviderFactory.isOpenAiReasoningModel(model)).thenReturn(true);
+            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(true));
             when(llmProviderFactory.getService(WORKSPACE_ID, model)).thenReturn(llmProviderService);
             var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
 
@@ -1461,7 +1476,7 @@ class ChatCompletionServiceTest {
         }
 
         private LlmAsJudgeModelParameters judgeParametersSentByScoreTrace(String model, boolean reasoning) {
-            when(llmProviderFactory.isOpenAiReasoningModel(model)).thenReturn(reasoning);
+            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(reasoning));
             var captor = ArgumentCaptor.forClass(LlmAsJudgeModelParameters.class);
             when(llmProviderFactory.getLanguageModel(anyString(), captor.capture())).thenReturn(chatModel);
             when(chatModel.chat(any(ChatRequest.class))).thenReturn(mock(ChatResponse.class));
