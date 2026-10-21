@@ -11,9 +11,11 @@ import {
   PythonCodeDetailsSpanForm,
 } from "@/types/automations";
 import {
-  AnthropicThinkingEffort,
+  ANTHROPIC_THINKING_EFFORT_VALUES,
+  AnthropicEffortLevel,
   PROVIDER_MODEL_TYPE,
   ReasoningEffort,
+  ResponsesApiOnlyReasoningEffort,
 } from "@/types/providers";
 
 export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
@@ -128,8 +130,8 @@ export const DEFAULT_GEMINI_CONFIGS = {
 };
 
 export const DEFAULT_OPEN_ROUTER_CONFIGS = {
-  MAX_TOKENS: 0,
-  TEMPERATURE: 1,
+  MAX_TOKENS: 4000,
+  TEMPERATURE: 0,
   TOP_P: 1,
   TOP_K: 0,
   FREQUENCY_PENALTY: 0,
@@ -143,7 +145,7 @@ export const DEFAULT_OPEN_ROUTER_CONFIGS = {
 
 export const DEFAULT_VERTEX_AI_CONFIGS = {
   TEMPERATURE: 0,
-  MAX_COMPLETION_TOKENS: 1024,
+  MAX_COMPLETION_TOKENS: 4000,
   TOP_P: 1,
   THROTTLING: 0,
   MAX_CONCURRENT_REQUESTS: 5,
@@ -160,42 +162,106 @@ export const DEFAULT_CUSTOM_CONFIGS = {
   MAX_CONCURRENT_REQUESTS: 5,
 };
 
-// Per-model Anthropic quirks. Add a row when a model deviates from defaults
-// (sampling params allowed, no thinking-effort UI).
+// Per-model Anthropic capabilities.
+//
+// `supportsSamplingParams` names the models that DO take temperature/top_p, so a Claude we recognise
+// without a row is assumed to take none. It was the inverse and that rotted twice: opus-5 and
+// fable-5 were classified here but never on the backend, and fable-5-1 was missed on both sides.
+// Newer Claude models increasingly take none, so this way a newly added model omits a parameter
+// rather than having the provider reject the request outright. A model id we cannot place at all
+// stays permissive — see supportsSamplingParams in lib/modelUtils.
 export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   Record<
     PROVIDER_MODEL_TYPE,
     {
       supportsSamplingParams?: boolean;
-      thinkingEffortOptions?: AnthropicThinkingEffort[];
+      // Must be a subset of the model's levels in EFFORT_LEVELS_BY_MODEL_ID in the backend's
+      // AnthropicModelName, which answers any other level with a 400.
+      thinkingEffortOptions?: readonly AnthropicEffortLevel[];
+      // Anthropic's own default, "high" unless stated.
+      defaultThinkingEffort?: AnthropicEffortLevel;
+      // The model runs without thinking unless the request asks for it, so the effort control gets
+      // an Off choice, which is its default, and the backend turns on adaptive thinking for any
+      // level. Must match THINKS_ONLY_WHEN_ASKED_MODEL_IDS in the backend's AnthropicModelName.
+      thinksOnlyWhenAsked?: boolean;
+      // The model has effort but no adaptive thinking, so the effort only changes answer length and
+      // tool use.
+      effortWithoutThinking?: boolean;
     }
   >
 > = {
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+    defaultThinkingEffort: "medium",
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+    defaultThinkingEffort: "medium",
+  },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5]: {
-    supportsSamplingParams: false,
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8]: {
-    supportsSamplingParams: false,
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7]: {
-    supportsSamplingParams: false,
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+    thinksOnlyWhenAsked: true,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7_20260416]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5]: {
-    supportsSamplingParams: false,
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5]: {
-    supportsSamplingParams: false,
-    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1]: {
+    thinkingEffortOptions: ANTHROPIC_THINKING_EFFORT_VALUES,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_PREVIEW]: {
+    thinkingEffortOptions: ["low", "medium", "high", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6]: {
-    thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
+    supportsSamplingParams: true,
+    thinkingEffortOptions: ["low", "medium", "high", "max"],
+    thinksOnlyWhenAsked: true,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6_20260205]: {
+    supportsSamplingParams: true,
+    thinkingEffortOptions: ["low", "medium", "high", "max"],
+    thinksOnlyWhenAsked: true,
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6]: {
-    thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
+    supportsSamplingParams: true,
+    thinkingEffortOptions: ["low", "medium", "high", "max"],
+    thinksOnlyWhenAsked: true,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_3_7]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5]: {
+    supportsSamplingParams: true,
+    thinkingEffortOptions: ["low", "medium", "high"],
+    effortWithoutThinking: true,
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5]: { supportsSamplingParams: true },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5_20250929]: {
+    supportsSamplingParams: true,
   },
 };
 
@@ -203,13 +269,27 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
 // (sampling params allowed, no reasoning-effort UI). Reasoning models must
 // specify the exact set of effort values they accept — OpenAI families
 // differ: o-series → low/medium/high; gpt-5 → minimal/low/medium/high;
-// gpt-5.1+ → none/low/medium/high. Sending an unsupported value 400s.
+// gpt-5.1 → none/low/medium/high; gpt-5.2 and later add xhigh (gpt-6-astra
+// and gpt-6.1-sol have no none). Sending an unsupported value 400s.
+// responsesApiOnlyEffortOptions lists the extra values a model accepts only on
+// the Responses API: max is rejected on Chat Completions, so it is offered only
+// when the selected OpenAI key is set to the Responses API.
+// The rows pinned `reasoning: false` must equal OPENAI_NON_REASONING_MODELS in
+// scripts/sync_provider_models.py, or the registry flag the sync seeds would
+// contradict the panel (llm.test.ts enforces it; one source of truth is OPIK-8637).
+// defaultReasoningEffort is OpenAI's own default, "medium" unless stated. Each
+// model's page (developers.openai.com/api/docs/models/<id>) names it in its
+// "Reasoning.effort supports" line; the pages before gpt-5.1 name none, and the
+// SDK reference says "All models before gpt-5.1 default to medium". gpt-6-astra
+// states no default either, so it gets the fallback.
 export const OPENAI_MODEL_CAPABILITIES: Partial<
   Record<
     PROVIDER_MODEL_TYPE,
     {
       reasoning?: boolean;
       reasoningEffortOptions?: ReasoningEffort[];
+      responsesApiOnlyEffortOptions?: ResponsesApiOnlyReasoningEffort[];
+      defaultReasoningEffort?: ReasoningEffort;
     }
   >
 > = {
@@ -246,39 +326,36 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
     reasoning: true,
     reasoningEffortOptions: ["minimal", "low", "medium", "high"],
   },
-  [PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST]: {
-    reasoning: true,
-    reasoningEffortOptions: ["minimal", "low", "medium", "high"],
-  },
+  [PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST]: { reasoning: false },
+  [PROVIDER_MODEL_TYPE.GPT_5_1_CHAT_LATEST]: { reasoning: false },
 
   // gpt-5.1+ — none replaces minimal
   [PROVIDER_MODEL_TYPE.GPT_5_1]: {
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high"],
+    defaultReasoningEffort: "none",
   },
   [PROVIDER_MODEL_TYPE.GPT_5_2]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "none",
   },
-  [PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST]: {
-    reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high"],
-  },
-  [PROVIDER_MODEL_TYPE.GPT_5_3_CHAT_LATEST]: {
-    reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high"],
-  },
+  [PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST]: { reasoning: false },
+  [PROVIDER_MODEL_TYPE.GPT_5_3_CHAT_LATEST]: { reasoning: false },
   [PROVIDER_MODEL_TYPE.GPT_5_4]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "none",
   },
   [PROVIDER_MODEL_TYPE.GPT_5_4_MINI]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "none",
   },
   [PROVIDER_MODEL_TYPE.GPT_5_4_NANO]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "none",
   },
   [PROVIDER_MODEL_TYPE.GPT_5_5]: {
     reasoning: true,
@@ -286,39 +363,40 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
   },
   [PROVIDER_MODEL_TYPE.GPT_5_6_LUNA]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh", "max"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
   },
   [PROVIDER_MODEL_TYPE.GPT_5_6_SOL]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh", "max"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
   },
   [PROVIDER_MODEL_TYPE.GPT_5_6_TERRA]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh", "max"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_6_ASTRA]: {
+    reasoning: true,
+    reasoningEffortOptions: ["low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_6_LUNA]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_6_SOL]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_6_1_SOL]: {
+    reasoning: true,
+    reasoningEffortOptions: ["low", "medium", "high", "xhigh"],
+    responsesApiOnlyEffortOptions: ["max"],
   },
 };
-
-// Reasoning models that require temperature = 1.0
-// These models do not support temperature = 0 and will fail if used
-// Note: GPT-5.2 Pro uses Responses API (/v1/responses) not Chat Completions, so it's excluded
-export const REASONING_MODELS = [
-  // GPT-5.2 family (chat models only - GPT-5.2 Pro uses Responses API)
-  PROVIDER_MODEL_TYPE.GPT_5_2,
-  PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST,
-  // GPT-5.1 family
-  PROVIDER_MODEL_TYPE.GPT_5_1,
-  // GPT-5 family
-  PROVIDER_MODEL_TYPE.GPT_5,
-  PROVIDER_MODEL_TYPE.GPT_5_MINI,
-  PROVIDER_MODEL_TYPE.GPT_5_NANO,
-  PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
-  // O* reasoning models
-  PROVIDER_MODEL_TYPE.GPT_O1,
-  PROVIDER_MODEL_TYPE.GPT_O1_MINI,
-  PROVIDER_MODEL_TYPE.GPT_O3,
-  PROVIDER_MODEL_TYPE.GPT_O3_MINI,
-  PROVIDER_MODEL_TYPE.GPT_O4_MINI,
-] as const;
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",
@@ -948,28 +1026,35 @@ export const LLM_PROMPT_TEMPLATES: Record<
   [EVALUATORS_RULE_SCOPE.span]: LLM_PROMPT_SPAN_TEMPLATES,
 };
 
+// Trace-scope and span-scope code rules are seeded with the same starting point;
+// the constants below differ only in their form type. Shared so an edit to the
+// template cannot land in one scope and not the other.
+const DEFAULT_PYTHON_CODE_METRIC =
+  "from typing import Any, Optional\n" +
+  "from opik.evaluation.metrics import base_metric, score_result\n" +
+  "\n" +
+  "class MyCustomMetric(base_metric.BaseMetric):\n" +
+  '    def __init__(self, name: str = "my_custom_metric"):\n' +
+  "        self.name = name\n" +
+  "\n" +
+  "    def score(self, input: str, output: str, metadata: Optional[str] = None, **ignored_kwargs: Any):\n" +
+  "        # Add your logic here\n" +
+  "\n" +
+  "        return score_result.ScoreResult(\n" +
+  "            value=0,\n" +
+  "            name=self.name,\n" +
+  '            reason="Optional reason for the score"\n' +
+  "        )";
+
+const DEFAULT_PYTHON_CODE_ARGUMENTS = {
+  input: "input",
+  output: "output",
+  metadata: "metadata",
+};
+
 export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceForm = {
-  metric:
-    "from typing import Any\n" +
-    "from opik.evaluation.metrics import base_metric, score_result\n" +
-    "\n" +
-    "class MyCustomMetric(base_metric.BaseMetric):\n" +
-    '    def __init__(self, name: str = "my_custom_metric"):\n' +
-    "        self.name = name\n" +
-    "\n" +
-    "    def score(self, input: str, output: str, metadata: dict, **ignored_kwargs: Any):\n" +
-    "        # Add you logic here\n" +
-    "\n" +
-    "        return score_result.ScoreResult(\n" +
-    "            value=0,\n" +
-    "            name=self.name,\n" +
-    '            reason="Optional reason for the score"\n' +
-    "        )",
-  arguments: {
-    input: "input",
-    output: "output",
-    metadata: "metadata",
-  },
+  metric: DEFAULT_PYTHON_CODE_METRIC,
+  arguments: DEFAULT_PYTHON_CODE_ARGUMENTS,
 };
 
 export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
@@ -993,7 +1078,7 @@ export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
     "    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:\n" +
     "        # conversation is a List[Dict] where each dict has:\n" +
     '        # {"role": "user" | "assistant", "content": "message text"}\n' +
-    "        # Add you logic here\n" +
+    "        # Add your logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +
     "            value=0,\n" +
@@ -1003,25 +1088,6 @@ export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
 };
 
 export const DEFAULT_PYTHON_CODE_SPAN_DATA: PythonCodeDetailsSpanForm = {
-  metric:
-    "from typing import Any\n" +
-    "from opik.evaluation.metrics import base_metric, score_result\n" +
-    "\n" +
-    "class MyCustomMetric(base_metric.BaseMetric):\n" +
-    '    def __init__(self, name: str = "my_custom_metric"):\n' +
-    "        self.name = name\n" +
-    "\n" +
-    "    def score(self, input: str, output: str, metadata: dict, **ignored_kwargs: Any):\n" +
-    "        # Add you logic here\n" +
-    "\n" +
-    "        return score_result.ScoreResult(\n" +
-    "            value=0,\n" +
-    "            name=self.name,\n" +
-    '            reason="Optional reason for the score"\n' +
-    "        )",
-  arguments: {
-    input: "input",
-    output: "output",
-    metadata: "metadata",
-  },
+  metric: DEFAULT_PYTHON_CODE_METRIC,
+  arguments: DEFAULT_PYTHON_CODE_ARGUMENTS,
 };

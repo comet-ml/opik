@@ -3,12 +3,14 @@ import { Clock, Coins } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import PlaygroundOutputLoader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
+import PlaygroundOutputError from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputError";
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
 import { useOutputByPromptDatasetItemId } from "@/store/PlaygroundStore";
 import { getAlphabetLetter } from "@/lib/utils";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import usePromptModelDisplay from "@/v2/pages/PlaygroundPage/usePromptModelDisplay";
 import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
+import PlaygroundStaleOutputNote from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundStaleOutputNote";
 import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
 
 interface PlaygroundPromptOutputProps {
@@ -29,6 +31,8 @@ const PlaygroundPromptOutput = ({
   // are right there on it. Defaults below are the ones those hooks applied.
   const output = useOutputByPromptDatasetItemId(promptId);
   const value = output?.value ?? null;
+  const error = output?.error;
+  const errorHint = output?.errorHint;
   const isLoading = output?.isLoading ?? false;
   const stale = output?.stale ?? false;
   const usage = output?.usage;
@@ -38,11 +42,17 @@ const PlaygroundPromptOutput = ({
     usage?.model,
   );
 
-  const hasOutput = value !== null || isLoading;
+  const hasOutput = value !== null || Boolean(error) || isLoading;
 
   const renderContent = () => {
     if (isLoading && !value) {
       return <PlaygroundOutputLoader />;
+    }
+
+    if (error) {
+      return (
+        <PlaygroundOutputError message={error} hint={errorHint} stale={stale} />
+      );
     }
 
     return (
@@ -77,7 +87,13 @@ const PlaygroundPromptOutput = ({
                 className="inline-block size-3 rounded-sm"
                 style={{ backgroundColor: promptColor.bg }}
               />
-              <span className="comet-body-s-accented">Output {letter}</span>
+              <span
+                className={cn("comet-body-s-accented", {
+                  "text-muted-gray": stale,
+                })}
+              >
+                Output {letter}
+              </span>
             </span>
             {modelLabel && ProviderIcon && (
               <span className="flex items-center gap-1 text-muted-gray">
@@ -102,6 +118,12 @@ const PlaygroundPromptOutput = ({
               </span>
             )}
           </div>
+          {stale && (
+            <PlaygroundStaleOutputNote
+              changes={output?.staleChanges}
+              className="mb-3"
+            />
+          )}
           <div className="comet-body-s">{renderContent()}</div>
         </div>
       ) : (

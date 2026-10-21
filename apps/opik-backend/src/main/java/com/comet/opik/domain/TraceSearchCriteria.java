@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingField;
 import lombok.Builder;
@@ -21,6 +22,7 @@ public record TraceSearchCriteria(
         boolean truncate,
         boolean stripAttachments,
         Set<Trace.TraceField> exclude,
+        Set<TraceThread.TraceThreadField> excludeThreadFields,
         UUID uuidFromTime,
         UUID uuidToTime,
         String searchText,

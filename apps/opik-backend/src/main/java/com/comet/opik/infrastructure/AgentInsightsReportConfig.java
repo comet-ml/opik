@@ -30,6 +30,32 @@ public class AgentInsightsReportConfig implements StreamConfiguration {
     @Valid @NotBlank @JsonProperty
     private String schedule = "0 5 0 * * ?";
 
+    // Quartz cron (UTC) for the auto-first-run sweep. Far more frequent than the daily report sweep so a
+    // project crossing the trace threshold gets its first diagnostic promptly.
+    @Valid @NotBlank @JsonProperty
+    private String autoFirstRunSchedule = "0 */10 * * * ?";
+
+    // Projects onboarded per auto-first-run sweep. Every hop below this hands off and returns — the Redis
+    // consumer, the platform's report executor, the Ollie pod — so nothing bounds how many diagnostics run
+    // concurrently except this. Runs arrive at this rate and take several minutes, so concurrent runs scale
+    // with it.
+    @Valid @JsonProperty
+    @Min(1) @Max(1_000) private int autoFirstRunMaxPerRun = 10;
+
+    // How long after its claim an automatic run with neither a scan nor a failure still counts as live.
+    // Matches the frontend's AUTO_RUN_MAX_DURATION_MS. It is only a guess that the run died: nothing stops the
+    // original, and its result is accepted whenever it lands, so a run still going past this is run a second time
+    // on the free pool. Must comfortably exceed Ollie's longest run, including its 402 retry backoff.
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    @MaxDuration(value = 24, unit = TimeUnit.HOURS)
+    private Duration autoFirstRunTimeout = Duration.minutes(40);
+
+    // Times an automatic run that timed out is run again before giving up. 0 records the timeout but never
+    // retries.
+    @Valid @JsonProperty
+    @Min(0) @Max(10) private int autoFirstRunMaxRetries = 3;
+
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
     @MaxDuration(value = 1, unit = TimeUnit.HOURS)

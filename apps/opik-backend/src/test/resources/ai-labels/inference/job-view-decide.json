@@ -1,0 +1,44 @@
+{
+  "job_id": "job-7d3f",
+  "endpoint": "decide",
+  "status": "partially_failed",
+  "counts": {"pending": 0, "ok": 1, "failed": 1, "cancelled": 1},
+  "cancel_requested": false,
+  "results": [
+    {
+      "item_id": "0192f0c4-4d1e-7a6b-9c3d-2e1f0a9b8c7d",
+      "response": {
+        "request_id": "6f1c2c9e-8d0b-4a8e-9a43-3f8f5c6f1a10",
+        "usage": {"input_tokens": 812, "output_tokens": 3},
+        "cache_hit": false,
+        "latency_ms": 41,
+        "result": {
+          "answers": {
+            "agent_outcome.succeeded": {"type": "noul", "noul": 0.875},
+            "agent_outcome.topic": {
+              "type": "choice",
+              "choice": "billing",
+              "probabilities": {"billing": 0.75, "other": 0.125, "technical": 0.125},
+              "confidence": 0.75
+            },
+            "agent_outcome.quality": {
+              "type": "score",
+              "score": 2.5,
+              "legend": {"1": "poor", "2": "fair", "3": {"label": "good"}},
+              "probabilities": {"1": 0.125, "2": 0.25, "3": 0.625},
+              "confidence": 0.625
+            }
+          }
+        }
+      }
+    },
+    {
+      "item_id": "0192f0c4-4d1e-7a6b-9c3d-2e1f0a9b8c7e",
+      "error": {"code": "input_too_long", "message": "state is too long", "retryable": false}
+    },
+    {
+      "item_id": "0192f0c4-4d1e-7a6b-9c3d-2e1f0a9b8c7f"
+    }
+  ],
+  "next_cursor": 3
+}

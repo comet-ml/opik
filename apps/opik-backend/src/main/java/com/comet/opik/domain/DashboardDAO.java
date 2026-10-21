@@ -89,10 +89,19 @@ public interface DashboardDAO {
     int delete(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
             @Define("scope") @Bind("scope") String scope);
 
+    /**
+     * An insights request also matches rows with no project, because project dashboards created before
+     * project scoping have none and hiding them would lose access to them. A workspace dashboard is
+     * project-less by design, so a workspace request stays strict.
+     */
     @SqlQuery("SELECT COUNT(id) FROM dashboards " +
             "WHERE workspace_id = :workspaceId " +
             "<if(search)> AND name like concat('%', :search, '%') <endif>" +
-            "<if(project_id)> AND project_id = :projectId <endif>" +
+            "<if(project_id)>" +
+            "<if(insights_scope)> AND (project_id = :projectId OR project_id IS NULL) " +
+            "<else> AND project_id = :projectId " +
+            "<endif>" +
+            "<endif>" +
             "<if(scope)> AND scope = :scope <endif>" +
             "<if(filters)> AND <filters> <endif>")
     @UseStringTemplateEngine
@@ -100,6 +109,7 @@ public interface DashboardDAO {
     long findCount(@Bind("workspaceId") String workspaceId,
             @Define("search") @Bind("search") String search,
             @Define("project_id") @Bind("projectId") UUID projectId,
+            @Define("insights_scope") boolean insightsScope,
             @Define("scope") @Bind("scope") String scope,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
@@ -120,7 +130,11 @@ public interface DashboardDAO {
     @SqlQuery("SELECT id FROM dashboards " +
             "WHERE workspace_id = :workspaceId " +
             "<if(search)> AND name like concat('%', :search, '%') <endif> " +
-            "<if(project_id)> AND project_id = :projectId <endif>" +
+            "<if(project_id)>" +
+            "<if(insights_scope)> AND (project_id = :projectId OR project_id IS NULL) " +
+            "<else> AND project_id = :projectId " +
+            "<endif>" +
+            "<endif>" +
             "<if(scope)> AND scope = :scope <endif>" +
             "<if(filters)> AND <filters> <endif> " +
             "ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
@@ -130,6 +144,7 @@ public interface DashboardDAO {
     List<UUID> findPageIdsSorted(@Bind("workspaceId") String workspaceId,
             @Define("search") @Bind("search") String search,
             @Define("project_id") @Bind("projectId") UUID projectId,
+            @Define("insights_scope") boolean insightsScope,
             @Define("scope") @Bind("scope") String scope,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping,

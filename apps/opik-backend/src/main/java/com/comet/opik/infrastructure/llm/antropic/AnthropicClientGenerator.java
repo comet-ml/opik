@@ -1,8 +1,11 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.ModelCapabilities;
+import com.comet.opik.domain.llm.SamplingParamsNormalizer;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.AnthropicClientConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
@@ -19,7 +22,14 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class AnthropicClientGenerator implements LlmProviderClientGenerator<AnthropicClient> {
 
+    // max_tokens caps thinking plus the answer. The judge call is not streamed, so it has to finish inside the
+    // judge's HTTP timeout (LLM_PROVIDER_CLIENT_CONNECT_TIMEOUT, 60s by default), and a timed-out call is retried
+    // and billed again. Claude judges measured 90-160 tokens/s, so 5,000 tokens ends within that minute; a larger
+    // default would turn a judge that runs out of tokens into one that times out several times.
+    static final int THINKING_JUDGE_MAX_TOKENS = 5_000;
+
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull LlmModelRegistryService registryService;
 
     private AnthropicClient newAnthropicClient(@NonNull LlmProviderClientApiConfig config) {
         var anthropicClientBuilder = AnthropicClient.builder();
@@ -50,6 +60,19 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
 
     private ChatModel newChatLanguageModel(LlmProviderClientApiConfig config,
             LlmAsJudgeModelParameters modelParameters) {
+        var outputConfig = AnthropicEffort.toOutputConfig(modelParameters.name(), modelParameters.customParameters(),
+                registryService);
+        if (outputConfig.isEmpty()) {
+            return newChatModelBuilder(config, modelParameters).build();
+        }
+        return new AnthropicOutputConfigChatModel(outputConfig.get(),
+                customParameters -> newChatModelBuilder(config, modelParameters)
+                        .customParameters(customParameters)
+                        .build());
+    }
+
+    private AnthropicChatModel.AnthropicChatModelBuilder newChatModelBuilder(LlmProviderClientApiConfig config,
+            LlmAsJudgeModelParameters modelParameters) {
         var builder = AnthropicChatModel.builder()
                 .apiKey(config.apiKey())
                 .modelName(modelParameters.name())
@@ -69,19 +92,16 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
         }
 
         var customParameters = modelParameters.customParameters();
-        var thinking = parseThinking(customParameters);
+        var thinking = SamplingParamsNormalizer.effortTurnsOnThinking(modelParameters.name(), customParameters)
+                ? ThinkingParams.ADAPTIVE
+                : parseThinking(customParameters);
 
-        // Anthropic rejects temperature with a 400 in two cases: (1) adaptive-thinking models
-        // (claude-sonnet-5, claude-opus-4-7/4-8) that report no sampling-param support, and (2) any model
-        // once extended thinking is enabled per-rule via custom_parameters. Gate on both server-side so
-        // API-created rules (which bypass the FE sanitizer) don't fail.
-        if (AnthropicModelName.supportsSamplingParams(modelParameters.name()) && !thinking.enabled()) {
-            Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
-        }
+        // ParamResolver has already dropped a temperature the model or the rule's thinking refuses.
+        Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
 
-        applyCustomParameters(builder, customParameters, thinking);
+        applyCustomParameters(builder, customParameters, thinking, willThink(thinking, modelParameters.name()));
 
-        return builder.build();
+        return builder;
     }
 
     /**
@@ -120,7 +140,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
      * cap adaptive thinking can consume the whole budget, yielding an empty response (finishReason=LENGTH).
      */
     private void applyCustomParameters(AnthropicChatModel.AnthropicChatModelBuilder builder,
-            JsonNode customParameters, ThinkingParams thinking) {
+            JsonNode customParameters, ThinkingParams thinking, boolean willThink) {
         Optional.ofNullable(thinking.type()).ifPresent(builder::thinkingType);
 
         // budget_tokens is only valid alongside enabled thinking; forwarding it with an absent or "disabled"
@@ -128,7 +148,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
         Integer thinkingBudgetTokens = thinking.enabled() ? thinking.budgetTokens() : null;
         Optional.ofNullable(thinkingBudgetTokens).ifPresent(builder::thinkingBudgetTokens);
 
-        builder.maxTokens(resolveMaxTokens(parseMaxTokens(customParameters), thinkingBudgetTokens));
+        builder.maxTokens(resolveMaxTokens(parseMaxTokens(customParameters), thinkingBudgetTokens, willThink));
     }
 
     private Integer parseMaxTokens(JsonNode customParameters) {
@@ -145,20 +165,36 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     /**
      * Resolves the {@code max_tokens} sent to Anthropic, guaranteeing {@code max_tokens > thinking.budget_tokens}
      * (Anthropic rejects otherwise, since max_tokens covers thinking + output). An explicit rule value is honored
-     * when it already clears the budget; otherwise it is raised to leave output headroom above the budget.
+     * when it already clears the budget; otherwise it is raised to leave output headroom above the budget. Without
+     * an explicit value, the answer always gets that headroom on top of the budget, even when the thinking default
+     * alone would clear it: a 5,000 default against a 4,096 budget would leave the answer only 904 tokens.
      */
-    private int resolveMaxTokens(Integer maxTokens, Integer thinkingBudgetTokens) {
-        int resolved = maxTokens != null ? maxTokens : LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS;
-        if (thinkingBudgetTokens != null && resolved <= thinkingBudgetTokens) {
-            // Widen to long before adding headroom so an extreme budget can't overflow to a negative int.
-            return (int) Math.min(Integer.MAX_VALUE,
-                    (long) thinkingBudgetTokens + LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS);
+    private int resolveMaxTokens(Integer maxTokens, Integer thinkingBudgetTokens, boolean willThink) {
+        if (thinkingBudgetTokens == null) {
+            return maxTokens != null ? maxTokens : defaultMaxTokens(willThink);
         }
-        return resolved;
+        // Widen to long before adding headroom so an extreme budget can't overflow to a negative int.
+        int budgetWithAnswerRoom = (int) Math.min(Integer.MAX_VALUE,
+                (long) thinkingBudgetTokens + LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS);
+        if (maxTokens == null) {
+            return Math.max(defaultMaxTokens(willThink), budgetWithAnswerRoom);
+        }
+        return maxTokens > thinkingBudgetTokens ? maxTokens : budgetWithAnswerRoom;
+    }
+
+    private int defaultMaxTokens(boolean willThink) {
+        return willThink ? THINKING_JUDGE_MAX_TOKENS : LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS;
+    }
+
+    private boolean willThink(ThinkingParams thinking, String modelName) {
+        return thinking.type() != null
+                ? thinking.enabled()
+                : ModelCapabilities.thinksByDefault(modelName, registryService);
     }
 
     private record ThinkingParams(boolean enabled, String type, Integer budgetTokens) {
         private static final ThinkingParams ABSENT = new ThinkingParams(false, null, null);
+        private static final ThinkingParams ADAPTIVE = new ThinkingParams(true, AnthropicEffort.ADAPTIVE, null);
     }
 
     @Override

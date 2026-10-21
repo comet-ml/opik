@@ -16,7 +16,7 @@ import {
 } from "./ProjectDashboardViewItems";
 import useInsightsViewsList from "@/api/insights-views/useInsightsViewsList";
 import useInsightsViewBatchDeleteMutation from "@/api/insights-views/useInsightsViewBatchDeleteMutation";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import {
   Dashboard,
   DASHBOARD_TYPE,
@@ -107,6 +107,7 @@ const ProjectDashboardViewSelector: React.FC<
   });
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const projectId = useActiveProjectId();
   const { mutate: deleteMutate } = useInsightsViewBatchDeleteMutation();
 
   const {
@@ -124,12 +125,13 @@ const ProjectDashboardViewSelector: React.FC<
   const { data: dashboardsData } = useInsightsViewsList(
     {
       workspaceName,
+      projectId,
       filters: processedFilters,
       page: 1,
       size: 1000,
     },
     {
-      enabled: Boolean(workspaceName),
+      enabled: Boolean(workspaceName) && Boolean(projectId),
     },
   );
 

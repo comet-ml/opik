@@ -1,4 +1,6 @@
 import React, { useEffect, useRef } from "react";
+import { v4 as uuidv4 } from "uuid";
+import { ArrowRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +17,10 @@ import {
   selectRuntimeConfig,
 } from "@/store/DashboardStore";
 import WidgetTypeSelector from "./WidgetTypeSelector";
+import OllieIcon from "@/icons/ollie-owl.svg?react";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import usePluginsStore from "@/store/PluginsStore";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import WidgetConfigPreview from "./WidgetConfigPreview";
 import {
   DashboardWidget,
@@ -25,6 +31,7 @@ import {
   createDefaultWidgetConfig,
   getWidgetTypesForDashboard,
 } from "@/lib/dashboard/utils";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   open,
@@ -105,6 +112,35 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
     onOpenChange(false);
   };
 
+  // The sidebar plugin is what answers the bridge; without it the request would go nowhere.
+  const assistantAvailable = usePluginsStore((state) =>
+    Boolean(state.AssistantSidebar),
+  );
+  // Ollie can only build a widget when Custom Charts is enabled.
+  const customChartsEnabledForWorkspace = useIsFeatureEnabled(
+    FeatureToggleKeys.CUSTOM_CHARTS_ENABLED_FOR_WORKSPACE,
+  );
+  const ollieEnabled =
+    useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED) &&
+    customChartsEnabledForWorkspace &&
+    assistantAvailable;
+  // Hands the request to Ollie, which draws it and offers "Add to <this dashboard>" on the chart.
+  const handleDescribeToOllie = () => {
+    const entryId = uuidv4();
+    trackEvent(OpikEvent.DASHBOARD_ASK_OLLIE_CLICKED, {
+      entry_id: entryId,
+      dashboard_id: runtimeConfig.dashboardId,
+      dashboard_type: runtimeConfig.dashboardType,
+      dashboard_scope: runtimeConfig.dashboardScope,
+      project_id: runtimeConfig.projectIds?.[0],
+    });
+    onOpenChange(false);
+    window.opikBridge?.startConversation(
+      "I want to add a custom widget to this dashboard. Ask me what it should show.",
+      { origin: "describe_widget", entryId },
+    );
+  };
+
   const dialogTitle = isEditMode ? "Edit widget" : "Add widget";
 
   return (
@@ -146,13 +182,30 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
           </div>
         </div>
 
-        <DialogFooter className="flex flex-row justify-end gap-2 border-t pt-4 sm:flex-row sm:justify-end">
-          <Button variant="outline" onClick={handleCancel}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={!previewWidget}>
-            {isEditMode ? "Save changes" : "Add widget"}
-          </Button>
+        <DialogFooter className="flex flex-row flex-wrap items-center justify-end gap-2 border-t pt-4 sm:flex-row sm:justify-end">
+          {!isEditMode && ollieEnabled && (
+            <div className="comet-code mr-auto flex items-center gap-2 text-foreground">
+              Need a custom widget?
+              <Button
+                variant="link"
+                onClick={handleDescribeToOllie}
+                className="comet-code h-auto gap-1 rounded-none border-b border-current p-0 pb-0.5 text-foreground hover:text-primary-hover hover:no-underline dark:text-foreground"
+              >
+                <OllieIcon className="size-4 text-[var(--color-ollie)]" />
+                Ask Ollie
+                <ArrowRight className="size-4" />
+              </Button>
+            </div>
+          )}
+          {/* One group, so the pair wraps below the Ollie prompt together. */}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleCancel}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!previewWidget}>
+              {isEditMode ? "Save changes" : "Add widget"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

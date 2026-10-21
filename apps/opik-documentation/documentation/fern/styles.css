@@ -22,3 +22,96 @@
   height: 24px !important;
   width: 24px !important;
 }
+
+/* MCP server page: client chips (Cursor, VS Code, Claude Code, Codex) */
+.mcp-clients {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0 8px;
+}
+.mcp-clients a.mcp-client {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px;
+  line-height: 1;
+  background: transparent;
+}
+.mcp-clients a.mcp-client:hover {
+  border-color: rgba(128, 128, 128, 0.7);
+  text-decoration: none;
+}
+.mcp-clients a.mcp-client p {
+  display: contents;
+}
+.mcp-clients a.mcp-client img {
+  display: inline-block !important;
+  width: 18px !important;
+  height: 18px !important;
+  margin: 0 !important;
+}
+.mcp-clients a.mcp-client svg.fern-mdx-icon {
+  width: 14px !important;
+  height: 14px !important;
+  opacity: 0.75;
+}
+.mcp-prompt-fallback {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 12px 14px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 8px;
+  margin: 8px 0 0;
+}
+
+/* Copy chip feedback: swap the icon, never the label */
+.mcp-clients a.mcp-client svg[icon="check"],
+.mcp-clients a.mcp-client svg[icon="xmark"] {
+  display: none;
+}
+.mcp-clients a.mcp-client.is-copied svg[icon="copy"],
+.mcp-clients a.mcp-client.is-failed svg[icon="copy"] {
+  display: none;
+}
+.mcp-clients a.mcp-client.is-copied svg[icon="check"],
+.mcp-clients a.mcp-client.is-failed svg[icon="xmark"] {
+  display: inline-block;
+}
+
+/* MCP server page: "Install uv" under the setup command. A compact row rather
+   than a full card; `npx opik` links to it by this id, so it is targeted by the
+   id alone. */
+.fern-accordion:has(> #install-uv-if-you-dont-have-it) {
+  padding: 0 !important;
+  margin: 10px 0 18px !important;
+}
+
+#install-uv-if-you-dont-have-it > summary {
+  padding: 9px 14px !important;
+  gap: 8px;
+}
+
+#install-uv-if-you-dont-have-it .fern-accordion-trigger-title {
+  font-size: 15px !important;
+  font-weight: 500 !important;
+}
+
+#install-uv-if-you-dont-have-it > summary svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* The title is flex, which drops the space before `uv`; a margin restores it. */
+#install-uv-if-you-dont-have-it .fern-accordion-trigger-title code {
+  margin-left: 0.3em;
+  padding-top: 0;
+  padding-bottom: 0;
+}

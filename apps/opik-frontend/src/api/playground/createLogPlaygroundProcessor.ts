@@ -1,11 +1,14 @@
 import asyncLib from "async";
 import { v7 } from "uuid";
 import pick from "lodash/pick";
+import omit from "lodash/omit";
+import isPlainObject from "lodash/isPlainObject";
 
 import {
   LogExperiment,
   LogExperimentItem,
   LogExperimentPromptVersion,
+  LogErrorInfo,
   LogSpan,
   LogTrace,
   PromptLibraryMetadata,
@@ -20,15 +23,24 @@ import api, {
 import { snakeCaseObj } from "@/lib/utils";
 import { createBatchProcessor } from "@/lib/batches";
 import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
+import { getRequestParameters } from "@/lib/modelUtils";
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
+  OpenAiPipelineMode,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
-import { parseCompletionOutput } from "@/lib/playground";
+import { parseCompletionError, parseCompletionOutput } from "@/lib/playground";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
+import { parseComposedProviderType } from "@/lib/provider";
+import {
+  isSentToProvider,
+  PENALTY_KEYS,
+  TOKEN_LIMIT_KEY_SENT,
+  TOKEN_LIMIT_KEYS,
+} from "@/lib/extraBodyParameters";
 
 export interface LogQueueParams extends RunStreamingReturn {
   promptId: string;
@@ -38,9 +50,15 @@ export interface LogQueueParams extends RunStreamingReturn {
   model: PROVIDER_MODEL_TYPE | "";
   provider: COMPOSED_PROVIDER_TYPE | "";
   providerMessages: ProviderMessageType[];
+  // The prompt as authored, with {{variables}} intact. providerMessages is this
+  // template rendered against one dataset item, so it describes a single run
+  // rather than the experiment (OPIK-7965).
+  templateMessages?: ProviderMessageType[];
   promptLibraryVersions?: LogExperimentPromptVersion[];
   promptLibraryMetadata?: PromptLibraryMetadata;
+  experimentName?: string;
   configs: LLMPromptConfigsType;
+  openAiPipelineMode?: OpenAiPipelineMode;
   selectedRuleIds: string[] | null;
   datasetItemData?: object;
 }
@@ -130,11 +148,23 @@ const USAGE_FIELDS_TO_SEND = [
   "total_tokens",
 ];
 
+const getRunErrorInfo = (run: LogQueueParams): LogErrorInfo | undefined => {
+  const error = parseCompletionError(run);
+  if (!error) return undefined;
+
+  return {
+    exception_type: error.exceptionType,
+    message: error.message,
+  };
+};
+
 const getTraceFromRun = (
   run: LogQueueParams,
   projectName: string,
   source: LOGS_SOURCE,
 ): LogTrace => {
+  const errorInfo = getRunErrorInfo(run);
+
   const trace: LogTrace = {
     id: v7(),
     projectName,
@@ -145,6 +175,7 @@ const getTraceFromRun = (
       messages: run.providerMessages,
     },
     output: { output: parseCompletionOutput(run) },
+    ...(errorInfo && { errorInfo }),
     metadata: {
       created_from: "playground",
     },
@@ -189,6 +220,8 @@ const getSpanFromRun = (
   projectName: string,
   source: LOGS_SOURCE,
 ): LogSpan => {
+  const errorInfo = getRunErrorInfo(run);
+
   const spanOutput =
     run.choices && hasChoicesContent(run)
       ? { choices: run.choices }
@@ -211,6 +244,7 @@ const getSpanFromRun = (
       messages: run.providerMessages,
     },
     output: spanOutput,
+    ...(errorInfo && { errorInfo }),
     usage: !run.usage ? undefined : pick(run.usage, USAGE_FIELDS_TO_SEND),
     model: spanModel,
     provider: spanProvider,
@@ -219,11 +253,72 @@ const getSpanFromRun = (
       created_from: spanProvider,
       usage: run.usage,
       model: spanModel,
-      parameters: run.configs,
+      parameters: getLoggedParameters(run),
       ...(run.provider === PROVIDER_TYPE.OPIK_FREE && {
         opik_free_model: true,
       }),
     },
+  };
+};
+
+// Mirrors the backend (CustomLlmProvider.normalizeForProvider), which runs before the extra body is
+// applied: Ollama reads only max_tokens and Bedrock only max_completion_tokens, so each gets the limit
+// under its own name.
+const normalizeForProvider = (
+  provider: PROVIDER_TYPE,
+  parameters: Record<string, unknown>,
+  extraBody?: Record<string, unknown>,
+) => {
+  const limitKey = TOKEN_LIMIT_KEY_SENT[provider];
+  if (!limitKey) return { parameters, extraBody };
+
+  const sliderLimit = [
+    parameters.max_completion_tokens,
+    parameters.max_tokens,
+  ].find((value) => isSentToProvider(provider, limitKey, value));
+  const unsentPenalties = PENALTY_KEYS.filter(
+    (key) => !isSentToProvider(provider, key, parameters[key]),
+  );
+  const otherLimitKey = TOKEN_LIMIT_KEYS.find((key) => key !== limitKey)!;
+
+  return {
+    parameters: {
+      ...omit(parameters, [...TOKEN_LIMIT_KEYS, ...unsentPenalties]),
+      ...(sliderLimit !== undefined && { [limitKey]: sliderLimit }),
+    },
+    // The backend moves the limit with putIfAbsent, which also replaces a null, so a null under the
+    // provider's own name does not hide the value under the other name.
+    extraBody:
+      extraBody && otherLimitKey in extraBody
+        ? {
+            ...omit(extraBody, otherLimitKey),
+            [limitKey]: extraBody[limitKey] ?? extraBody[otherLimitKey],
+          }
+        : extraBody,
+  };
+};
+
+export const getLoggedParameters = (
+  run: Pick<LogQueueParams, "model" | "configs" | "openAiPipelineMode"> &
+    Partial<Pick<LogQueueParams, "provider">>,
+): Record<string, unknown> => {
+  const { custom_parameters: customParameters, ...requestParameters } =
+    getRequestParameters(run.model, run.configs, run.openAiPipelineMode);
+  const { parameters, extraBody } = normalizeForProvider(
+    parseComposedProviderType(run.provider ?? ""),
+    requestParameters,
+    isPlainObject(customParameters)
+      ? (customParameters as Record<string, unknown>)
+      : undefined,
+  );
+  if (!extraBody) return parameters;
+
+  // Mirrors the backend (CustomParametersOverrides): it sends each extra body key at the top level
+  // in place of the field of the same name, and treats the two token limit names as one limit.
+  const replacesTokenLimit = TOKEN_LIMIT_KEYS.some((key) => key in extraBody);
+  return {
+    ...(replacesTokenLimit ? omit(parameters, TOKEN_LIMIT_KEYS) : parameters),
+    ...extraBody,
   };
 };
 
@@ -233,8 +328,8 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
 
   const experimentMetadata: Record<string, unknown> = {
     model: experimentModel,
-    messages: JSON.stringify(run.providerMessages),
-    model_config: run.configs,
+    messages: JSON.stringify(run.templateMessages ?? run.providerMessages),
+    model_config: getLoggedParameters(run),
   };
 
   // Add selected_rule_ids to experiment metadata if provided
@@ -248,6 +343,7 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
     ...(run.datasetVersionId && {
       datasetVersionId: run.datasetVersionId,
     }),
+    ...(run.experimentName && { name: run.experimentName }),
     metadata: experimentMetadata,
     ...(run.promptLibraryVersions?.length && {
       prompt_versions: run.promptLibraryVersions,

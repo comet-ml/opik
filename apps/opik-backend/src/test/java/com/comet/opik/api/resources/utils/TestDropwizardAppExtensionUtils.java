@@ -27,6 +27,7 @@ import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 @UtilityClass
 public class TestDropwizardAppExtensionUtils {
 
+    @Builder(toBuilder = true)
     public record CustomConfig(String key, String value) {
     }
 
@@ -166,6 +167,13 @@ public class TestDropwizardAppExtensionUtils {
 
                 @Override
                 public void run(GuiceyEnvironment environment) {
+
+                    // DropwizardTestSupport parses the config with the app's own mapper, where a deployed app uses a
+                    // copy, so the serializers it caches for config classes would skip the snake_case naming
+                    // OpikApplication.run() sets. Dropping them makes responses match the deployed app.
+                    // ConfigParsingMapperTest checks the deployed app still parses with a copy.
+                    environment.environment().getObjectMapper().getSerializerProvider()
+                            .flushCachedSerializers();
 
                     if (CollectionUtils.isNotEmpty(appContextConfig.customBeans())) {
                         appContextConfig.customBeans()

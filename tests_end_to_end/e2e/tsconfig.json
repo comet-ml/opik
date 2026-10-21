@@ -10,10 +10,10 @@
     "allowSyntheticDefaultImports": true,
     "isolatedModules": true,
     "noEmit": true,
-    "baseUrl": ".",
     "paths": {
       "@e2e/*": ["./*"]
-    }
+    },
+    "types": ["node"]
   },
   "include": [
     "**/*.ts"

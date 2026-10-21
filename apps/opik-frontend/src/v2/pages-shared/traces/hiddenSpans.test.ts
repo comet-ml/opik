@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { Span, SPAN_TYPE } from "@/types/traces";
-import { hasHiddenSpans, excludeHiddenSpans } from "./hiddenSpans";
+import { Span, SPAN_TYPE, Trace } from "@/types/traces";
+import {
+  hasHiddenSpans,
+  excludeHiddenSpans,
+  excludeHiddenTraces,
+} from "./hiddenSpans";
 import { isSpanHiddenByDefault } from "./spanVisibility";
 
 // Matches the SDK-written metadata for a hidden-by-default span (is_internal flag).
@@ -21,6 +25,23 @@ const makeSpan = (overrides: Partial<Span> & { id: string }): Span => ({
   type: SPAN_TYPE.general,
   parent_span_id: "",
   trace_id: "trace-1",
+  project_id: "project-1",
+  ...overrides,
+});
+
+const makeTrace = (overrides: Partial<Trace> & { id: string }): Trace => ({
+  name: overrides.id,
+  input: {},
+  output: {},
+  start_time: "2024-01-01T00:00:00Z",
+  end_time: "2024-01-01T00:00:01Z",
+  duration: 1000,
+  created_at: "2024-01-01T00:00:00Z",
+  last_updated_at: "2024-01-01T00:00:00Z",
+  metadata: {},
+  comments: [],
+  tags: [],
+  thread_id: "thread-1",
   project_id: "project-1",
   ...overrides,
 });
@@ -104,6 +125,54 @@ describe("hiddenSpans", () => {
       excludeHiddenSpans(spans);
 
       expect(spans[1].parent_span_id).toBe("hidden");
+    });
+
+    it("should keep the parent id when the parent is not loaded", () => {
+      const spans = [
+        makeSpan({ id: "orphan", parent_span_id: "missing" }),
+        makeSpan({
+          id: "hiddenOrphan",
+          parent_span_id: "missing",
+          metadata: hiddenMeta,
+        }),
+        makeSpan({ id: "child", parent_span_id: "hiddenOrphan" }),
+      ];
+
+      const result = excludeHiddenSpans(spans);
+
+      expect(result.map((s) => [s.id, s.parent_span_id])).toEqual([
+        ["orphan", "missing"],
+        ["child", "missing"],
+      ]);
+    });
+  });
+
+  describe("excludeHiddenTraces", () => {
+    it("should drop traces the SDK marked internal and keep the rest in order", () => {
+      const first = makeTrace({ id: "turn-1" });
+      const internal = makeTrace({ id: "generate_name", metadata: hiddenMeta });
+      const second = makeTrace({ id: "turn-2" });
+
+      expect(excludeHiddenTraces([first, internal, second])).toEqual([
+        first,
+        second,
+      ]);
+    });
+
+    it("should keep the selected trace even when it is internal", () => {
+      const first = makeTrace({ id: "turn-1" });
+      const selected = makeTrace({ id: "selected", metadata: hiddenMeta });
+      const other = makeTrace({ id: "other", metadata: hiddenMeta });
+
+      expect(excludeHiddenTraces([first, selected, other], "selected")).toEqual(
+        [first, selected],
+      );
+    });
+
+    it("should return every trace unchanged when none is internal", () => {
+      const traces = [makeTrace({ id: "turn-1" }), makeTrace({ id: "turn-2" })];
+
+      expect(excludeHiddenTraces(traces)).toEqual(traces);
     });
   });
 });

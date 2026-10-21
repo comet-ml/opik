@@ -5,6 +5,8 @@ import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
+import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
+import com.comet.opik.domain.ailabels.AiLabelsDAO;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.eventbus.Subscribe;
@@ -29,10 +31,12 @@ public class TraceDeletedListener {
     private final @NonNull CommentService commentService;
     private final @NonNull AttachmentService attachmentService;
     private final @NonNull SpanService spanService;
+    private final @NonNull AiLabelsDAO aiLabelsDAO;
+    private final @NonNull AiLabelStatusDAO aiLabelStatusDAO;
 
     /**
      * Handles the TracesDeleted event by asynchronously deleting related entities.
-     * This includes feedback scores, comments, attachments, and spans associated with the deleted traces.
+     * This includes feedback scores, comments, attachments, ai-labels and spans associated with the deleted traces.
      *
      * @param event the TracesDeleted event containing the trace IDs that were deleted
      */
@@ -67,15 +71,25 @@ public class TraceDeletedListener {
      * This method handles the deletion in the correct order to maintain referential integrity.
      *
      * @param traceIds the set of trace IDs whose related entities should be deleted
+     * @param projectId the owning project the event resolved; required, so the span cascade is never workspace-wide
      * @return a Mono that completes when all related entities have been deleted
      */
-    private Mono<Void> processTraceDeletion(Set<UUID> traceIds, UUID projectId) {
+    private Mono<Void> processTraceDeletion(Set<UUID> traceIds, @NonNull UUID projectId) {
         log.info("Starting deletion of related entities for traces, count '{}'", traceIds.size());
 
         return feedbackScoreService.deleteByTraceIds(traceIds, projectId)
                 .then(Mono.defer(() -> commentService.deleteByEntityIds(CommentDAO.EntityType.TRACE, traceIds,
                         projectId)))
                 .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, traceIds, projectId)))
+                // Unconditional, even with ai-labels off: labels hold trace-derived text and must not outlive the trace.
+                // A failure there must not skip the span cascade; retention removes any rows left behind.
+                .then(Mono.defer(() -> aiLabelsDAO.deleteByTraceIds(traceIds, projectId)
+                        .then(aiLabelStatusDAO.deleteByTraceIds(traceIds, projectId))
+                        .onErrorResume(error -> {
+                            log.error("Failed to delete ai-labels for deleted traces, count '{}'", traceIds.size(),
+                                    error);
+                            return Mono.empty();
+                        })))
                 .then(Mono.defer(() -> spanService.deleteByTraceIds(traceIds, projectId)));
     }
 }

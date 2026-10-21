@@ -2,9 +2,11 @@ package com.comet.opik.infrastructure.llm.openrouter;
 
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import com.comet.opik.utils.JsonUtils;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
@@ -25,6 +27,13 @@ public class OpenRouterModule extends AbstractModule {
                 JsonUtils.writeValueAsBytes(config), LlmProviderClientConfig.class);
         customConfig.setOpenAiClient(new OpenAiClientConfig(config.getOpenRouterUrl()));
         return new OpenAIClientGenerator(customConfig);
+    }
+
+    @Provides
+    @Singleton
+    public OpenRouterDecisionsClient decisionsClient(@NonNull RetriableHttpClient client,
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
+        return new OpenRouterDecisionsClient(client, config);
     }
 
     @Provides

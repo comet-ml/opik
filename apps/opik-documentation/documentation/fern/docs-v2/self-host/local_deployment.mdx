@@ -8,7 +8,7 @@ subtitle: Describes how to run Opik locally using Docker Compose
 title: Local deployment
 ---
 
-> **Important:** If you're using or looking to use Opik or Comet enterprise version please reach out to Sales@comet.com to gain access to the correct deployment documentation.
+> **Important:** If you're using or considering the enterprise version of Opik or Comet, reach out to Sales@comet.com to access the enterprise deployment documentation.
 
 To run Opik locally we recommend using [Docker Compose](https://docs.docker.com/compose/). It's easy to setup and allows you to get started in a couple of minutes **but** is not meant for production deployments. If you would like to run Opik in a production environment, we recommend using our [Kubernetes Helm chart](/self-host/kubernetes).
 
@@ -28,7 +28,7 @@ To install Opik, you will need to clone the Opik repository and run the followin
 
 <Tabs>
  <Tab value="Linux / Mac" title="Linux / Mac">
-```bash
+```bash wordWrap
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
@@ -46,7 +46,7 @@ Opik will now be available at [http://localhost:5173](http://localhost:5173)
 </Tab>
 <Tab value="Windows" title="Windows">
 
-```powershell
+```powershell wordWrap
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
@@ -65,7 +65,7 @@ Opik will now be available at [http://localhost:5173](http://localhost:5173)
 <Tip>
 In order to use the Opik Python SDK with your local Opik instance, you will need to run:
 
-```bash
+```bash wordWrap
 pip install opik
 
 opik configure --use_local
@@ -73,7 +73,7 @@ opik configure --use_local
 
 or in python:
 
-```python
+```python wordWrap
 import opik
 
 opik.configure(use_local=True)
@@ -114,7 +114,7 @@ You can stop the Opik server by running the following commands:
 <Tabs>
  <Tab value="Linux / Mac" title="Linux / Mac">
 
-```bash
+```bash wordWrap
 # Ensure you are running this command for the root of the Opik repository you cloned
 ./opik.sh --stop
 ```
@@ -122,7 +122,7 @@ You can stop the Opik server by running the following commands:
 </Tab>
  <Tab value="Windows" title="Windows">
 
-```powershell
+```powershell wordWrap
 # Ensure you are running this command for the root of the Opik repository you cloned
 powershell -ExecutionPolicy ByPass -c ".\opik.ps1 --stop"
 ```
@@ -139,7 +139,7 @@ To upgrade or restart the Opik platform, you can simply run the `opik` script ag
 <Tabs>
  <Tab value="Linux / Mac" title="Linux / Mac">
 
-```bash
+```bash wordWrap
 # Ensure you are running this command for the root of the Opik repository you cloned
 ./opik.sh
 ```
@@ -147,7 +147,7 @@ To upgrade or restart the Opik platform, you can simply run the `opik` script ag
 </Tab>
  <Tab value="Windows" title="Windows">
 
-```powershell
+```powershell wordWrap
 # Ensure you are running this command for the root of the Opik repository you cloned
 powershell -ExecutionPolicy ByPass -c ".\opik.ps1"
 ```
@@ -170,7 +170,7 @@ scripts provides you with some additional options.
 Instead of using the `opik.sh` or `opik.ps1` scripts, you can also run the
 `docker compose` command directly with service profiles:
 
-```bash
+```bash wordWrap
 # Navigate to the opik/deployment/docker-compose directory
 cd opik/deployment/docker-compose
 
@@ -188,7 +188,7 @@ docker compose --profile backend up --detach
 
 To remove Opik, you can use the script or remove containers and volumes manually:
 
-```bash
+```bash wordWrap
 # Using the script (recommended)
 ./opik.sh --stop
 
@@ -207,8 +207,14 @@ docker compose --profile opik down --volumes
 You can run a specific version of Opik by setting the `OPIK_VERSION` environment
 variable:
 
-```bash
-OPIK_VERSION=latest
+```bash wordWrap
+OPIK_VERSION=latest ./opik.sh
+```
+
+To keep the version for several commands in the same shell, export it first:
+
+```bash wordWrap
+export OPIK_VERSION=latest
 
 ./opik.sh
 ```
@@ -217,7 +223,7 @@ OPIK_VERSION=latest
 
 You can also build the Opik platform from source using the provided script:
 
-```bash
+```bash wordWrap
 # Clone the Opik repository
 git clone https://github.com/comet-ml/opik.git
 
@@ -234,7 +240,7 @@ This will build the Frontend and Backend Docker images and start the Opik platfo
 
 If you get this error when running `docker compose`
 
-```bash
+```bash wordWrap
 java.lang.Throwable: Code: 139. DB::Exception: No macro 'shard' in config while processing substitutions in '/clickhouse/tables/{shard}/opik/automation_rule_evaluator_logs' at '20' or macro is not supported here. (NO_ELEMENTS_IN_CONFIG) (version 24.3.6.48 (official build))
 ```
 

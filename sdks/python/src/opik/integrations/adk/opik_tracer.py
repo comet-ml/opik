@@ -26,7 +26,7 @@ from .patchers import (
     llm_response_wrapper,
 )
 from .patchers.adk_otel_tracer import llm_span_helpers
-from .graph import mermaid_graph_builder
+from .graph import mermaid_graph_builder, nodes as graph_nodes
 from ... import analytics
 
 LOGGER = logging.getLogger(__name__)
@@ -159,6 +159,11 @@ class OpikTracer:
             agent_metadata.update(session_metadata)
 
             _try_add_agent_graph_to_metadata(agent_metadata, callback_context)
+            agent_metadata["_opik"] = {
+                "graph_node_id": graph_nodes.get_agent_graph_node_id(
+                    callback_context.agent_name
+                )
+            }
 
             if callback_context.user_content is not None:
                 user_input = adk_helpers.convert_adk_base_model_to_dict(
@@ -328,6 +333,7 @@ class OpikTracer:
             model = None
             usage = None
             output = None
+            total_cost = None
 
             # Resolve the LLM span created in before_model_callback up front, so
             # the ``finally`` can clean up its TTFT and pending-registry entries
@@ -346,8 +352,13 @@ class OpikTracer:
             if (
                 current_span is None
                 and stack_top is not None
-                and llm_span_helpers.is_externally_created_llm_span_that_just_started(
-                    stack_top
+                and (
+                    llm_span_helpers.is_externally_created_llm_span_that_just_started(
+                        stack_top
+                    )
+                    or llm_span_helpers.is_externally_created_llm_span_awaiting_after_model_callback(
+                        stack_top
+                    )
                 )
             ):
                 current_span = stack_top
@@ -383,9 +394,16 @@ class OpikTracer:
                 self._last_model_output.discard(callback_context.invocation_id)
                 if not is_partial:
                     try:
+                        recovered_output = adk_helpers.convert_adk_base_model_to_dict(
+                            llm_response
+                        )
+                        # There is no span to charge here, but the cost must still be
+                        # taken out of the output: after_agent_callback stamps this
+                        # dict as the trace output, so leaving it in would surface an
+                        # internal marker as ordinary agent output.
+                        llm_response_wrapper.pop_response_cost(recovered_output)
                         self._last_model_output.set(
-                            callback_context.invocation_id,
-                            adk_helpers.convert_adk_base_model_to_dict(llm_response),
+                            callback_context.invocation_id, recovered_output
                         )
                     except Exception:
                         LOGGER.debug(
@@ -438,6 +456,9 @@ class OpikTracer:
 
             try:
                 output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
+                # Before the usage parsing below, which can raise - the cost must not
+                # be lost to a usage problem it has nothing to do with.
+                total_cost = llm_response_wrapper.pop_response_cost(output)
                 usage_data = llm_response_wrapper.pop_llm_usage_data(
                     output, current_span.provider
                 )
@@ -476,6 +497,7 @@ class OpikTracer:
                 type="llm",
                 model=model,
                 usage=usage,
+                total_cost=total_cost,
                 metadata=current_span.metadata,
                 project_name=self.project_name,
             )
@@ -521,6 +543,7 @@ class OpikTracer:
             tool_metadata = {
                 "function_call_id": tool_context.function_call_id,
                 **self.metadata,
+                "_opik": {"graph_node_id": graph_nodes.get_tool_graph_node_id(tool)},
             }
 
             # Update existing span with tool information

@@ -80,6 +80,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
             "app_name": APP_NAME,
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_DICT,
+            **helpers.expected_graph_node_metadata("weather_time_agent"),
         },
         tags=["adk-test"],
         output=ANY_DICT,
@@ -180,6 +181,7 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
             "app_name": APP_NAME,
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_DICT,
+            **helpers.expected_graph_node_metadata("TextProcessingAssistant"),
         },
         output=ANY_DICT,
         input={
@@ -389,6 +391,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
             "app_name": APP_NAME,
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_DICT,
+            **helpers.expected_graph_node_metadata("main_agent"),
         },
         output=ANY_DICT,
         input={

@@ -11,6 +11,14 @@ export const ALERT_EVENT_TYPE = {
   traceCost: 'trace:cost',
   traceLatency: 'trace:latency',
   traceErrors: 'trace:errors',
+  /**
+   * The two triggers that render `FeedbackScoreConditions` — the only ones that
+   * do. Their config is not a threshold and a window but OR-ed groups of AND-ed
+   * conditions, so they are not interchangeable with the `trace:*` threshold
+   * triggers above in `configureThresholdTrigger`.
+   */
+  traceFeedbackScore: 'trace:feedback_score',
+  traceThreadFeedbackScore: 'trace_thread:feedback_score',
 } as const;
 
 export type AlertEventType = (typeof ALERT_EVENT_TYPE)[keyof typeof ALERT_EVENT_TYPE];
@@ -24,6 +32,8 @@ export const ALERT_EVENT_TITLE: Record<AlertEventType, string> = {
   [ALERT_EVENT_TYPE.traceCost]: 'Cost threshold',
   [ALERT_EVENT_TYPE.traceLatency]: 'Latency threshold',
   [ALERT_EVENT_TYPE.traceErrors]: 'Trace errors threshold',
+  [ALERT_EVENT_TYPE.traceFeedbackScore]: 'Trace feedback score threshold',
+  [ALERT_EVENT_TYPE.traceThreadFeedbackScore]: 'Thread feedback score threshold',
 };
 
 export interface AlertSeed {
@@ -57,14 +67,18 @@ export interface AlertFixtures {
   seedAlerts: (seeds: AlertSeed[]) => Promise<AlertRef[]>;
 
   /**
-   * Cleans up alerts a test creates through the UI, which have no id until the
-   * form submits and the row renders.
+   * Cleans up alerts a test creates for itself rather than through
+   * `seedAlerts` — a UI-created one, which has no id until the form submits and
+   * the row renders, or an API-level write whose payload `seedAlerts` cannot
+   * express.
    *
    * Discovers them at teardown by the names the test says it will use, so
    * there is no registration call for a mid-test failure to skip. Names are
-   * matched exactly rather than by prefix: `testNamespace` truncates the test
-   * title to 40 characters, so two similarly-named tests can share a prefix,
-   * and a prefix delete would reach across them.
+   * matched exactly, within the test's own `project` — not by prefix.
+   * `testNamespace` truncates the test title to 40 characters, so two
+   * similarly-named tests can share a prefix and a prefix delete would reach
+   * across them; and a name the form generates from the selected triggers
+   * ("Trace errors > 5 in 5 mins") carries no namespace to match on at all.
    */
   uiAlertCleanup: (names: string[]) => void;
 }
@@ -142,16 +156,18 @@ export const test = baseTest.extend<AlertFixtures>({
   },
 
   uiAlertCleanup: [
-    async ({ backendClient, testNamespace }, use, testInfo) => {
+    async ({ backendClient, project }, use, testInfo) => {
       const expected = new Set<string>();
       await use((names) => names.forEach((n) => expected.add(n)));
 
       if (expected.size === 0 || shouldLeaveArtifacts(testInfo)) return;
 
       try {
-        // Prefix narrows the workspace-wide read; the exact-name filter is
-        // what decides deletion, so a shared prefix cannot widen it.
-        const found = await backendClient.listAlertsWithPrefix(testNamespace);
+        // Scoped to this test's project, then filtered on the exact names the
+        // test declared. The project bound is what keeps a generated name —
+        // which no namespace makes unique — from reaching a parallel test
+        // that happens to have produced the same one.
+        const found = await backendClient.listAlertsInProject(project.id);
         const doomed = found.filter((a) => expected.has(a.name)).map((a) => a.id);
         await backendClient.deleteAlertsBatch(doomed);
       } catch (err) {

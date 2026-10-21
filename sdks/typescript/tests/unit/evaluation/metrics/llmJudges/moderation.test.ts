@@ -212,6 +212,19 @@ describe("Moderation Metric", () => {
         MetricComputationError
       );
     });
+
+    it("should throw MetricComputationError for null score", async () => {
+      // Number(null) is 0, so without an explicit null guard a judge that
+      // declines to score is recorded as a real 0.0 ("completely safe").
+      const mockModel = new MockModel(
+        '{"score": null, "reason": "Unable to determine"}'
+      );
+      const metric = new Moderation({ model: mockModel });
+
+      await expect(metric.score({ output: "Some content" })).rejects.toThrow(
+        MetricComputationError
+      );
+    });
   });
 
   describe("reason extraction", () => {

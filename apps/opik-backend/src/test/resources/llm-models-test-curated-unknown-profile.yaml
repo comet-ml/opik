@@ -1,0 +1,9 @@
+defaults:
+  openai: {profile: openai, reasoningProfile: missing-reasoning}
+profiles:
+  openai:
+    temperature: {min: 0, max: 2, default: 0}
+models:
+  anthropic:
+    - id: claude-sonnet-4-6
+      profile: missing-row-profile

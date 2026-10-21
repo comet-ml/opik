@@ -20,56 +20,53 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.WeeklyPartitions;
 import com.comet.opik.utils.template.TemplateUtils;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Statement;
-import lombok.Builder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import org.testcontainers.utility.MountableFile;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
  * Exercises the partition pruning of {@code DELETE_BY_PROJECT_ID_TRACE_ID_PAIRS} against the post-EXCHANGE topology,
@@ -85,7 +82,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * the DAO's predicate resolved to any partition other than the one ClickHouse filed a row under, the mutation would
  * select the wrong parts and that row would survive, so
  * {@link #deleteClearsEveryEraAndBindsExactlyThosePartitions} passing <em>is</em> the agreement between the migration's
- * {@code PARTITION BY} as installed, the DAO's predicate, and {@link WeeklyPartitions#of}.
+ * {@code PARTITION BY} as installed, the DAO's predicate, and {@link WeeklyPartitions#groupByPartition}.
  *
  * <p>Each test then pairs that with the SQL ClickHouse actually received, because rows alone cannot see pruning
  * silently stop — a delete that stopped bounding itself is still correct, just slow, and that is the regression this
@@ -144,15 +141,15 @@ class TracesPartitionPruningMutationTest {
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
 
     /**
-     * The partition-key fragment the DAO's template emits. Only ever <b>compared against</b> the statement read back
-     * from {@code system.query_log} — never spliced into a query this suite runs. Verbatim comparison is safe because
-     * {@code query_log} stores the query as submitted, so both sides are the DAO's own template text.
+     * Matches the {@code IN PARTITION <value>} clause the scoped delete template emits (OPIK-8230), capturing the
+     * eight-digit {@code yyyyMMdd} partition value. Only ever <b>compared against</b> the statement read back from
+     * {@code system.query_log} - never spliced into a query this suite runs.
      */
-    private static final String PARTITION_PREDICATE = "toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))";
+    private static final Pattern IN_PARTITION_CLAUSE = Pattern.compile("IN\\s+PARTITION\\s+(\\d{8})");
 
     // The suite's whole SQL surface, per .agents/skills/opik-backend/SKILL.md "SQL Query Construction": one text block
     // per query, every varying value a :placeholder. There are no StringTemplate fragments and no interpolation at all,
-    // because nothing here re-implements the DAO's predicate - PARTITION_PREDICATE is only ever compared against the
+    // because nothing here re-implements the DAO's predicate - IN_PARTITION_CLAUSE is only ever compared against the
     // statement the DAO emitted, never spliced into a query of ours.
     //
     // The EXCHANGE/RENAME pair in installPartitionedSuccessorUnderTraces() stays as inline literals on purpose: they
@@ -196,18 +193,25 @@ class TracesPartitionPruningMutationTest {
             """;
 
     /**
-     * The newest {@code delete_traces} statement carrying exactly {@code pairs_size} pairs. A request larger than
-     * {@link com.comet.opik.infrastructure.FilterUtils#ANALYTICS_DELETE_BATCH_SIZE} is chunked by the DAO into one
-     * statement per chunk, and pruning is derived <b>per chunk</b> — so a test that reads only one statement cannot see
-     * the second chunk at all.
+     * Every {@code delete_traces} statement finished since {@code since} whose query text mentions
+     * {@code projectId}, in submission order - the multi-statement counterpart of {@link #LAST_TRACE_DELETE}, since
+     * one {@code delete()} call can now emit more than one statement (OPIK-8230).
+     * <p>
+     * Scoped by project id, not just by time: {@code WORKSPACE_ID} is one constant shared by every test in this
+     * class, so a time window alone is not exclusive to one test's own statements - a delete finished by a
+     * DIFFERENT test can still surface inside this window when system.query_log's buffered writes only become
+     * visible on a later flush, even though its recorded {@code event_time_microseconds} is genuinely earlier. Each test mints its own fresh, collision-free project id
+     * ({@code ID_GENERATOR.generateId()}), which is literally embedded in the emitted query text, so filtering on it
+     * closes that gap the same way {@link #lastTraceDeleteSql} already does with a trace id.
      */
-    private static final String DELETE_BY_PAIR_COUNT = """
+    private static final String ALL_TRACE_DELETES_SINCE = """
             SELECT query
             FROM system.query_log
-            WHERE log_comment LIKE concat('delete_traces:%pairs_size=', :pairs_size)
+            WHERE log_comment LIKE 'delete_traces:%'
             AND type = 'QueryFinish'
-            ORDER BY event_time_microseconds DESC
-            LIMIT 1
+            AND event_time_microseconds >= :since
+            AND query LIKE concat('%', :project_id, '%')
+            ORDER BY event_time_microseconds
             """;
 
     /**
@@ -224,46 +228,47 @@ class TracesPartitionPruningMutationTest {
             """;
 
     /**
-     * The {@code IN} clause the DAO emitted, captured to end of line: the predicate sits on its own line in the
-     * template with {@code SETTINGS log_comment} on the next, so the line boundary delimits it exactly. Read this way
-     * rather than by matching a bracket style, because the driver's rendering of a {@code Long[]} is its own choice —
-     * what matters is which partition values are in the clause, not how it punctuates them.
+     * The physical part-level proof of pruning (OPIK-8230's own point): how many {@code MutatePart} events
+     * {@code table} logged in a window, and how many distinct partitions they span. {@code EXPLAIN} cannot see this -
+     * it reports what the read planner would select for a {@code SELECT}, a different layer from what a mutation is
+     * registered against, which is exactly the gap this suite used to fall into (see class Javadoc). Windowed by
+     * {@code event_time}, not correlated by {@code query_id}: a lightweight delete's mutation executes asynchronously
+     * under the mutations subsystem, so its {@code part_log} rows do not reliably carry the submitting statement's
+     * {@code query_id} - a finding from this ticket's own production investigation, not a guess.
      */
-    private static final Pattern EMITTED_IN_CLAUSE = Pattern.compile(
-            Pattern.quote(PARTITION_PREDICATE) + "\\s+IN\\s+([^\\n]*)");
+    private static final String MUTATE_PART_EVENTS_SINCE = """
+            SELECT toString(count()), toString(uniqExact(partition_id))
+            FROM system.part_log
+            WHERE database = currentDatabase()
+            AND table = :table
+            AND event_type = 'MutatePart'
+            AND event_time >= :since
+            """;
+
+    /** How many active parts {@code table} currently holds - the "everything" a fallback delete should visit. */
+    private static final String ACTIVE_PART_COUNT = """
+            SELECT toString(count())
+            FROM system.parts
+            WHERE database = currentDatabase()
+            AND table = :table
+            AND active
+            """;
 
     /**
-     * The emitted statement's shape, so its {@code WHERE} clause can be lifted verbatim and re-asked as a
-     * {@code SELECT}: {@code EXPLAIN} does not accept a mutation. Captures the target table too, since the DAO picks
-     * {@code traces} or {@code traces_local} depending on the wrap flag.
+     * Whether {@code table} has any mutation still in flight. Used to settle the estate before starting a timed
+     * {@link #mutatePartActivitySince} window: a mutation from an EARLIER test in this suite can still be writing
+     * {@code MutatePart} rows to {@code system.part_log} after its submitting statement has already returned - this
+     * class runs every test against the same shared table (see class Javadoc), and nothing here sets
+     * {@code lightweight_deletes_sync} the way the retention sweep does, so a prior test's mutation completing late
+     * would otherwise land inside a LATER test's window and inflate its part/partition counts. Not a claim about
+     * production: production's real workload has no "between tests" moment to wait for.
      */
-    private static final Pattern DELETE_SHAPE = Pattern.compile(
-            "DELETE\\s+FROM\\s+(\\S+)\\s+(WHERE\\b.*?)\\s+SETTINGS\\b", Pattern.DOTALL);
-
-    /** {@code EXPLAIN} index entries that reflect <b>partition</b>-level part selection. */
-    private static final Set<String> PARTITION_INDEX_TYPES = Set.of("MinMax", "Partition");
-
-    /**
-     * Asks the planner how many parts the DAO's partition predicate selects. Declared once as a text block, per
-     * {@code .agents/skills/opik-backend/SKILL.md}: the table {@code <table>} and the predicate
-     * {@code <partition_expression>} are <b>fragments</b> and go through {@link TemplateUtils#newST}, the partition
-     * values are <b>values</b> and are bound — nothing is spliced with {@code .formatted(...)}.
-     * <p>
-     * The predicate fragment is {@link #PARTITION_PREDICATE}, and using the constant does not re-author what is under
-     * test: every caller has already asserted the emitted statement <em>contains</em> that exact text, so the constant
-     * is pinned to the DAO's own SQL by assertion rather than by string surgery on it. The partition values come from
-     * the emitted statement too, parsed by {@link #boundPartitionsOf} and bound here.
-     * <p>
-     * The DAO's {@code workspace_id} and {@code (project_id, id)} predicates are deliberately not reproduced. They are
-     * sort-key filters, not partition filters, so they cannot change partition selection — and leaving them out makes
-     * the unbounded case a full scan, which is the conservative direction for an assertion that the fallback prunes
-     * nothing.
-     */
-    private static final String EXPLAIN_SELECTED_PARTS = """
-            EXPLAIN indexes = 1, json = 1
-            SELECT id
-            FROM <table>
-            <if(partition_expression)>WHERE <partition_expression> IN :partitions<endif>
+    private static final String PENDING_MUTATIONS_COUNT = """
+            SELECT toString(count())
+            FROM system.mutations
+            WHERE database = currentDatabase()
+            AND table = :table
+            AND NOT is_done
             """;
 
     /**
@@ -276,9 +281,6 @@ class TracesPartitionPruningMutationTest {
             CREATE TABLE traces_dist ON CLUSTER '{cluster}' AS traces
             ENGINE = Distributed('{cluster}', '<database>', 'traces_local', sipHash64(project_id))
             """;
-
-    /** A weekly partition value as it appears in SQL — {@code yyyyMMdd}, so always eight digits. */
-    private static final Pattern PARTITION_VALUE = Pattern.compile("\\d{8}");
 
     /**
      * One id per era the derivation has to get right, with the partition each resolves to. Not interchangeable samples:
@@ -319,17 +321,26 @@ class TracesPartitionPruningMutationTest {
      */
     private static final long LEGACY_WEEK_OF_2200 = 20631119L;
 
-    /** {@link UUID#randomUUID()} is a v4 by definition: no embedded timestamp to derive a partition from. */
-    private static final UUID NON_V7_ID = UUID.randomUUID();
+    /**
+     * A fresh UUIDv7 past the first instant {@code DateTime64} can represent, so its {@code id_at} saturates to the
+     * ceiling and the honest week is not the partition the row lands in — the sole underivable cause this suite
+     * exercises, and the only one that occurs in real data. A non-v7 id is rejected at ingestion and production was
+     * audited with no occurrences, so it is deliberately not covered.
+     * <p>
+     * Distinct per call: tests here share one table (PER_CLASS), so a shared constant would let one test's delete
+     * decide another's starting state.
+     */
+    private static UUID newOutOfRangeId() {
+        return ID_GENERATOR.getTimeOrderedEpoch(
+                LocalDate.of(2300, 1, 1).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli());
+    }
 
     /**
-     * A UUIDv7 minted one second past the first instant {@code DateTime64} cannot represent, so its {@code id_at}
-     * saturates to the ceiling and the honest week is not the partition the row lands in. Same rejection as
-     * {@link #NON_V7_ID}, different cause — see {@code WeeklyPartitions}. Minted rather than written out, so the
-     * boundary it sits past is visible.
+     * Drops {@code query_log}/{@code part_log} to a 200 ms flush interval, so the readers below can poll instead of
+     * forcing a {@code SYSTEM FLUSH LOGS} that races the rows it is meant to reveal. See the file itself for why it is
+     * opt-in rather than part of the shared {@code clickhouse.xml}.
      */
-    private static final UUID OUT_OF_RANGE_ID = ID_GENERATOR
-            .getTimeOrderedEpoch(LocalDate.of(2300, 1, 1).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli());
+    private static final String FAST_LOG_FLUSH_CONFIG = "clickhouse-fast-log-flush.xml";
 
     // Dedicated, non-reused ClickHouse + ZooKeeper on their own network: the EXCHANGE destructively swaps `traces`, so a
     // shared/reused container would corrupt other suites and reruns. Redis/MySQL are only read, so the shared ones are
@@ -338,7 +349,9 @@ class TracesPartitionPruningMutationTest {
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer(false,
             network);
     private final ClickHouseContainer clickHouseContainer = ClickHouseContainerUtils
-            .newClickHouseContainer(false, network, zookeeperContainer);
+            .newClickHouseContainer(false, network, zookeeperContainer)
+            .withCopyFileToContainer(MountableFile.forClasspathResource(FAST_LOG_FLUSH_CONFIG),
+                    "/etc/clickhouse-server/config.d/" + FAST_LOG_FLUSH_CONFIG);
     private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysqlContainer = MySQLContainerUtils.newMySQLContainer();
 
@@ -412,6 +425,9 @@ class TracesPartitionPruningMutationTest {
                         .runtimeInfo(wireMock.runtimeInfo())
                         .customConfigs(List.of(
                                 new CustomConfig("databaseAnalyticsDataModel.traceColumnsNonNullable", "true"),
+                                // traceColumnsNonNullable above is also what tells the DAO the target is partitioned,
+                                // so it may scope a delete with IN PARTITION. Without it every pruning assertion here
+                                // passes vacuously against the unbounded fallback.
                                 new CustomConfig("databaseAnalyticsDataModel.tracesDistributedWrapEnabled", "true")))
                         .build());
     }
@@ -449,23 +465,81 @@ class TracesPartitionPruningMutationTest {
     }
 
     /**
-     * The partition values actually bound into the emitted {@code IN} clause, so a test can assert the set is exact
-     * rather than merely inclusive. The driver substitutes bound values into the query text client-side, which is why
-     * they are readable here at all; the two assertions below are what make a change in that behaviour say so plainly
-     * instead of quietly turning every set assertion into a tautology on an empty set.
+     * The single partition value an {@code IN PARTITION} statement names. {@code IN PARTITION} takes exactly one
+     * partition per statement (OPIK-8230) - unlike the old {@code WHERE ... IN (...)} predicate this replaces, there
+     * is never a set to parse, only ever one value or none.
      */
-    private static Set<Long> boundPartitionsOf(String sql) {
-        var clause = EMITTED_IN_CLAUSE.matcher(sql);
+    private static long boundPartitionOf(String sql) {
+        var clause = IN_PARTITION_CLAUSE.matcher(sql);
         assertThat(clause.find())
-                .as("the delete SQL carries the partition predicate followed by an IN clause:%n%s", sql)
+                .as("the delete SQL carries an IN PARTITION clause:%n%s", sql)
                 .isTrue();
-        var bound = PARTITION_VALUE.matcher(clause.group(1)).results()
-                .map(match -> Long.parseLong(match.group()))
-                .collect(Collectors.toUnmodifiableSet());
-        assertThat(bound)
-                .as("the IN clause carries inlined partition values — got '%s'", clause.group(1))
-                .isNotEmpty();
-        return bound;
+        return Long.parseLong(clause.group(1));
+    }
+
+    /**
+     * How many {@code MutatePart} events {@code table} logged since {@code since}, and how many distinct partitions
+     * they span - the part-level proof that a delete actually scoped its mutation, not merely that its {@code WHERE}
+     * clause looks right. See {@link #MUTATE_PART_EVENTS_SINCE}'s Javadoc for why this is windowed rather than
+     * correlated by {@code query_id}.
+     * <p>
+     * Read until two consecutive samples agree, rather than forcing a flush: {@code system.part_log} is buffered, and
+     * this has no single row to wait for - only a count that grows until the last MutatePart event lands. Callers
+     * settle the mutation first ({@link #waitForMutationsToSettle}), so the events are all written by now and the only
+     * thing outstanding is the flush, which {@link #FAST_LOG_FLUSH_CONFIG} caps at 200 ms.
+     */
+    private MutatePartActivity mutatePartActivitySince(String table, Instant since) {
+        var previous = new AtomicReference<MutatePartActivity>();
+        return Awaitility.await()
+                .alias("part_log settles for " + table)
+                .atMost(Duration.ofSeconds(30))
+                .pollInterval(Duration.ofMillis(300))
+                .until(() -> {
+                    var sample = readMutatePartActivity(table, since);
+                    return sample.equals(previous.getAndSet(sample)) ? sample : null;
+                }, Objects::nonNull);
+    }
+
+    private MutatePartActivity readMutatePartActivity(String table, Instant since) {
+        return template.nonTransaction(connection -> {
+            var statement = connection.createStatement(MUTATE_PART_EVENTS_SINCE)
+                    .bind("table", table)
+                    .bind("since", since.atOffset(ZoneOffset.UTC).toLocalDateTime());
+            return Mono.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.map((row, _) -> new MutatePartActivity(
+                            Integer.parseInt(row.get(0, String.class)),
+                            Integer.parseInt(row.get(1, String.class))))));
+        }).block();
+    }
+
+    /**
+     * {@code now()} as ClickHouse sees it. The window bound has to come from the server clock, not the JVM's: the
+     * container's clock can differ by enough that a JVM-derived bound reaches back before the delete and sweeps in
+     * MutatePart rows from earlier work in this shared-table suite.
+     */
+    private Instant serverNow() {
+        return Instant.parse(queryOneString("SELECT formatDateTime(now(), '%Y-%m-%dT%H:%i:%SZ')", _ -> {
+        }));
+    }
+
+    private int activePartCountOf(String table) {
+        return Integer.parseInt(queryOneString(ACTIVE_PART_COUNT, statement -> statement.bind("table", table)));
+    }
+
+    /**
+     * Blocks until {@code table} has no in-flight mutation, polling {@link #PENDING_MUTATIONS_COUNT}. See that
+     * constant's Javadoc for why a timed MutatePart window needs this settle point.
+     */
+    private void waitForMutationsToSettle(String table) {
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(30))
+                .pollInterval(Duration.ofMillis(200))
+                .until(() -> "0".equals(queryOneString(PENDING_MUTATIONS_COUNT,
+                        statement -> statement.bind("table", table))));
+    }
+
+    /** {@code MutatePart} events observed in a window: how many parts were touched, and how many partitions. */
+    private record MutatePartActivity(int parts, int partitions) {
     }
 
     /** Invokes the DAO under a workspace/user context, as {@code TraceService} does for the live delete path. */
@@ -495,34 +569,42 @@ class TracesPartitionPruningMutationTest {
      * serve a test.
      */
     private String lastTraceDeleteSql(UUID traceId) {
-        execute("SYSTEM FLUSH LOGS", _ -> {
-        });
-        var sql = queryOneString(LAST_TRACE_DELETE, statement -> statement.bind("trace_id", traceId.toString()));
-        assertThat(sql)
-                .as("query_log holds a delete_traces statement mentioning id '%s'", traceId)
-                .isNotNull();
-        return sql;
+        return Awaitility.await()
+                .alias("query_log holds a delete_traces statement mentioning id " + traceId)
+                .atMost(Duration.ofSeconds(30))
+                .pollInterval(Duration.ofMillis(200))
+                .until(() -> queryOneString(LAST_TRACE_DELETE,
+                        statement -> statement.bind("trace_id", traceId.toString())), Objects::nonNull);
     }
 
     /**
-     * The newest {@code delete_traces} statement that carried exactly {@code pairsSize} pairs. Chunks are identified by
-     * their pair count rather than by a contained id, because the point is to inspect a <em>specific chunk</em> of one
-     * request — and the DAO stamps each chunk's size into its {@code log_comment}.
-     * <p>
-     * <b>The returned text is truncated for large statements.</b> ClickHouse caps {@code query_log.query} at
-     * {@code log_queries_cut_to_length} (100,000 bytes by default), and a full 10,000-pair chunk inlines to ~762 KiB,
-     * so anything at the tail of such a statement — the partition predicate included — is simply absent. Only assert on
-     * the text of statements small enough to be recorded whole.
+     * Every {@code delete_traces} statement ClickHouse finished since {@code since} whose query text mentions
+     * {@code projectId}. A single {@code delete()} call can now emit more than one statement - one per partition the
+     * batch resolves to (OPIK-8230) - so a caller that must see the whole set can no longer rely on "the newest
+     * one" the way {@link #lastTraceDeleteSql} does. See {@link #ALL_TRACE_DELETES_SINCE}'s Javadoc for why this is
+     * ALSO scoped by project id, not just by time. Polled until the set stops growing rather than flushed - see
+     * {@link #FAST_LOG_FLUSH_CONFIG}.
      */
-    private String deleteSqlForChunkOf(int pairsSize) {
-        execute("SYSTEM FLUSH LOGS", _ -> {
-        });
-        var sql = queryOneString(DELETE_BY_PAIR_COUNT,
-                statement -> statement.bind("pairs_size", String.valueOf(pairsSize)));
-        assertThat(sql)
-                .as("query_log holds a delete_traces statement with pairs_size=%s", pairsSize)
-                .isNotBlank();
-        return sql;
+    private List<String> deleteSqlsSince(Instant since, UUID projectId) {
+        var previous = new AtomicReference<List<String>>();
+        return Awaitility.await()
+                .alias("query_log settles for project " + projectId)
+                .atMost(Duration.ofSeconds(30))
+                .pollInterval(Duration.ofMillis(300))
+                .until(() -> {
+                    var sample = readDeleteSqlsSince(since, projectId);
+                    return !sample.isEmpty() && sample.equals(previous.getAndSet(sample)) ? sample : null;
+                }, Objects::nonNull);
+    }
+
+    private List<String> readDeleteSqlsSince(Instant since, UUID projectId) {
+        return template.stream(connection -> {
+            var statement = connection.createStatement(ALL_TRACE_DELETES_SINCE)
+                    .bind("since", since.atOffset(ZoneOffset.UTC).toLocalDateTime())
+                    .bind("project_id", projectId.toString());
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, _) -> row.get("query", String.class)));
+        }).collectList().block();
     }
 
     /** {@code "1"} while a live (non-lightweight-deleted) row exists for the id, {@code "0"} once it is gone. */
@@ -671,70 +753,6 @@ class TracesPartitionPruningMutationTest {
     }
 
     /**
-     * Parts the planner selects for the DAO's own statement, or empty when it reports no partition index at all.
-     * <p>
-     * {@code SELECT id} rather than {@code count()}, so no trivial-count optimisation can answer from metadata without
-     * selecting parts at all.
-     * <p>
-     * Only {@code MinMax} and {@code Partition} entries are considered, and {@code PrimaryKey} is deliberately
-     * excluded: the DAO's {@code WHERE} also filters {@code workspace_id} and {@code (project_id, id)}, which are the
-     * sort key, so {@code PrimaryKey} prunes parts for the <b>unbounded</b> statement too — counting it would make the
-     * fallback look pruned and destroy the discrimination this test rests on. Across the entries that do qualify it
-     * takes the smallest selected count and the largest initial count, so it does not depend on which of the two
-     * reports the pruning.
-     * <p>
-     * Empty is a meaningful answer rather than a failure: the {@code Indexes} block carries a partition entry only when
-     * the query filters on the partition key, so its absence is exactly what the fallback should produce.
-     */
-    private Optional<SelectedParts> partsSelectedBy(String daoDeleteSql) {
-        var shape = DELETE_SHAPE.matcher(daoDeleteSql);
-        assertThat(shape.find())
-                .as("the emitted statement has the expected DELETE shape:%n%s", daoDeleteSql)
-                .isTrue();
-        Set<Long> bound = EMITTED_IN_CLAUSE.matcher(daoDeleteSql).find()
-                ? boundPartitionsOf(daoDeleteSql)
-                : Set.of();
-
-        var explainSql = TemplateUtils.newST(EXPLAIN_SELECTED_PARTS)
-                .add("table", shape.group(1));
-        if (!bound.isEmpty()) {
-            explainSql.add("partition_expression", PARTITION_PREDICATE);
-        }
-        var sql = explainSql.render();
-
-        var explainRows = template.stream(connection -> {
-            var statement = connection.createStatement(sql);
-            if (!bound.isEmpty()) {
-                statement.bind("partitions", bound.toArray(Long[]::new));
-            }
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, _) -> row.get("explain", String.class)));
-        })
-                .collectList()
-                .block();
-        var explain = String.join("\n", explainRows);
-
-        var indexes = JsonUtils.getJsonNodeFromString(explain).findValue("Indexes");
-        if (indexes == null) {
-            return Optional.empty();
-        }
-        SelectedParts partition = null;
-        for (JsonNode index : indexes) {
-            if (!PARTITION_INDEX_TYPES.contains(index.path("Type").asText()) || !index.has("Selected Parts")) {
-                continue;
-            }
-            var entry = JsonUtils.treeToValue(index, SelectedParts.class);
-            partition = partition == null
-                    ? entry
-                    : partition.toBuilder()
-                            .selected(Math.min(partition.selected(), entry.selected()))
-                            .total(Math.max(partition.total(), entry.total()))
-                            .build();
-        }
-        return Optional.ofNullable(partition);
-    }
-
-    /**
      * First column of the first row, as a string. Every read in this suite is a single scalar, so this is the only
      * mapper needed; values go in as binds.
      */
@@ -753,17 +771,6 @@ class TracesPartitionPruningMutationTest {
             binder.accept(statement);
             return Mono.from(statement.execute()).flatMap(result -> Mono.from(result.getRowsUpdated()));
         }).block();
-    }
-
-    /**
-     * The part counts {@code EXPLAIN indexes = 1, json = 1} reports for one index entry: how many parts the query
-     * started from, and how many survived pruning.
-     */
-    @Builder(toBuilder = true)
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private record SelectedParts(
-            @JsonProperty("Selected Parts") int selected,
-            @JsonProperty("Initial Parts") int total) {
     }
 
     @Test
@@ -796,23 +803,19 @@ class TracesPartitionPruningMutationTest {
                 .doesNotContain(target.id())
                 .contains(bystander.id());
         var sql = lastTraceDeleteSql(target.id());
-        assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
-        // Asserted as the SIZE, not as a value read back from WeeklyPartitions: the DAO derives its set from the same
-        // method, so an expectation taken from it would move with any regression and pass regardless. The value itself
-        // is already pinned two independent ways - the row above had to go away, which it only does if the predicate
-        // named the partition ClickHouse filed it under, and deleteClearsEveryEraAndBindsExactlyThosePartitions states
-        // its expectations as literals. What is left to say here is the property those cannot: an id the endpoint just
-        // minted is inside the 32-bit range, where the two id_at types agree, so it must widen the set to nothing.
-        assertThat(boundPartitionsOf(sql))
-                .as("bounded to one partition, not two: a recent id_at is a week both id_at types agree on")
-                .hasSize(1);
+        // A recent id_at is inside the 32-bit range, where the two id_at types agree, so WeeklyPartitions.groupByPartition
+        // resolves it to exactly one partition and the DAO emits the scoped IN PARTITION form - not the unbounded
+        // fallback. boundPartitionOf asserts the clause is present; there is nothing further to assert about its
+        // cardinality now that IN PARTITION accepts exactly one value per statement by construction.
+        assertThat(sql).as("the mutation carries an IN PARTITION clause").contains("IN PARTITION");
+        boundPartitionOf(sql);
     }
 
     @Test
     @DisplayName("the DAO's own delete clears every era and binds exactly those partitions")
     void deleteClearsEveryEraAndBindsExactlyThosePartitions() {
         // The three-way agreement - the migration's PARTITION BY as installed, the DAO's predicate, and
-        // WeeklyPartitions.of - asserted through the DAO's own delete rather than by re-evaluating the expression in
+        // WeeklyPartitions.groupByPartition - asserted through the DAO's own delete rather than by re-evaluating the expression in
         // test SQL. If the predicate resolved to any partition other than the one ClickHouse filed a row under, the
         // mutation would select the wrong parts and that row would SURVIVE. So "every row is gone" IS the agreement.
         //
@@ -826,17 +829,24 @@ class TracesPartitionPruningMutationTest {
         assertThat(ids.stream().map(id -> liveRowCount(projectId, id)))
                 .as("every era is seeded").containsOnly("1");
 
+        var since = Instant.now();
         delete(ids.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet()));
 
         assertThat(ids.stream().map(id -> liveRowCount(projectId, id)))
                 .as("every era's row is gone, so the predicate named the partition each was actually filed under")
                 .containsOnly("0");
-        var sql = lastTraceDeleteSql(ids.getFirst());
-        assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
-        // Four values for three eras: 1996 and 2025 are inside the 32-bit range and name one week each, and the 2199
-        // id names its legacy week too. Still an exact set, and still not a range across two centuries - which is the
-        // property under test; the extra value is the batch's own second representation, not a widening of its span.
-        assertThat(boundPartitionsOf(sql))
+
+        // One statement per partition the batch resolves to (OPIK-8230), not one statement carrying all four values:
+        // 1996 and 2025 are inside the 32-bit range and name one week each; the 2199 id names two (its own week AND
+        // its legacy wrap), so it is the id bound into two DIFFERENT statements rather than the batch widening to a
+        // fourth id. Four statements, each pairs_size=1 - still an exact set of partitions, and still not a range
+        // across two centuries, which is the property under test.
+        var sqls = deleteSqlsSince(since, projectId);
+        assertThat(sqls)
+                .as("one statement per partition the batch resolves to: %s", sqls)
+                .hasSize(4)
+                .allSatisfy(sql -> assertThat(sql).contains("pairs_size=1"));
+        assertThat(sqls.stream().map(TracesPartitionPruningMutationTest::boundPartitionOf))
                 .as("exactly the partitions the batch resolves to, not a range across two centuries")
                 .containsExactlyInAnyOrder(
                         partitionNameOf(ERA_MONDAYS.get(0)),
@@ -846,48 +856,123 @@ class TracesPartitionPruningMutationTest {
     }
 
     @Test
-    @DisplayName("the planner actually prunes, and the fallback provably does not")
+    @DisplayName("a null id in the batch is rejected up front, not as an NPE part-way through the delete")
+    void nullIdInBatchIsRejected() {
+        // Without the precondition a null id reads as "underivable" here, which disables pruning for the whole batch
+        // and sends it down the unbounded path - so a caller's bug would surface as the slow delete this suite exists
+        // to prevent, and only then as an NPE while stringifying the binds. Rejected on both components, and before
+        // the gate, so it holds whichever branch deleteBatch takes.
+        var projectId = ID_GENERATOR.generateId();
+
+        assertThatThrownBy(() -> delete(Set.of(Pair.of(projectId, null))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not contain null ids");
+        assertThatThrownBy(() -> delete(Set.of(Pair.of(null, ID_GENERATOR.generateId()))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not contain null ids");
+    }
+
+    @Test
+    @DisplayName("ids sharing a week are carried by one statement, not one statement each")
+    void idsSharingAPartitionAreCarriedByOneStatement() {
+        // Every other pruning test here deletes one id per week, so each emitted statement has pairs_size=1 - which a
+        // regression emitting one statement PER ID rather than per partition would satisfy just as well. Grouping is
+        // the whole point of the change (a statement is registered against parts, so the fewer statements the better),
+        // so it needs a case where the two differ.
+        //
+        // Both weeks are inside the 32-bit range, so each resolves to exactly one partition: the 2199 era is excluded
+        // deliberately, since its id names two weeks and would blur the per-partition counts this asserts.
+        var projectId = ID_GENERATOR.generateId();
+        var weeks = List.of(ERA_MONDAYS.get(0), ERA_MONDAYS.get(1));
+        var idsByWeek = weeks.stream().collect(Collectors.toUnmodifiableMap(week -> week,
+                week -> IntStream.range(0, 3).mapToObj(_ -> idInWeekOf(week)).toList()));
+        idsByWeek.values().stream().flatMap(List::stream).forEach(id -> insertRawTrace(projectId, id));
+
+        var since = Instant.now();
+        delete(idsByWeek.values().stream().flatMap(List::stream)
+                .map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet()));
+
+        assertThat(idsByWeek.values().stream().flatMap(List::stream).map(id -> liveRowCount(projectId, id)))
+                .as("every row in both weeks is gone").containsOnly("0");
+
+        var sqls = deleteSqlsSince(since, projectId);
+        assertThat(sqls)
+                .as("one statement per week, not one per id - six ids across two weeks: %s", sqls)
+                .hasSize(2)
+                .allSatisfy(sql -> assertThat(sql)
+                        .as("each statement carries all three of its week's pairs")
+                        .contains("pairs_size=3"));
+        assertThat(sqls.stream().map(TracesPartitionPruningMutationTest::boundPartitionOf))
+                .as("and each is scoped to its own week")
+                .containsExactlyInAnyOrder(partitionNameOf(weeks.get(0)), partitionNameOf(weeks.get(1)));
+    }
+
+    @Test
+    @DisplayName("a scoped delete touches far fewer parts than the table holds, and the fallback touches them all")
     void pruningReachesThePlannerAndTheFallbackDoesNot() {
         // Correctness and pruning are different claims, and this is the only test that makes the second one. Deletes
-        // were already correct before OPIK-6901 - what the change buys is parts touched (3,928/3,928 -> 5/3,928 on
-        // prod-test), so a suite that cannot see pruning stop does not test what this change exists to do.
+        // were already correct before OPIK-8230 - what the change buys is parts touched (~3,650/~3,650 -> ~1/~3,650 on
+        // production), so a suite that cannot see pruning stop does not test what this change exists to do.
         //
-        // The regression it guards is specific: a migration rewrites the partition expression to something semantically
-        // identical but textually different, the planner stops recognising the DAO's predicate as the partition key,
-        // pruning silently stops - and values still agree, so every row is still deleted and every other assertion in
-        // this suite stays green. That is the property the removed AST pin covered; this asks the planner directly
-        // instead of inferring it from text.
-        //
-        // EXPLAIN does not accept a mutation, so the WHERE clause is lifted verbatim out of the DAO's own emitted
-        // DELETE and put behind a SELECT - predicate and bound partition values included. Only the verb changes; the
-        // statement being explained is still the DAO's. Same instrument and record shape as
-        // TracesLocalV2PartitioningTest.
-        // One row per era, so the table holds several partitions for the planner to prune between.
+        // Asked of system.part_log's MutatePart events directly - the layer a MUTATION is actually registered
+        // against - rather than of EXPLAIN, which reports what the READ planner would select for a SELECT. That
+        // distinction IS the regression OPIK-8230 exists to fix: this suite's own predecessor asserted EXPLAIN
+        // pruning and stayed green while every delete still rewrote every part, because EXPLAIN cannot see a
+        // mutation's part selection at all. See the class Javadoc.
+        var table = "traces_local";
         var projectId = ID_GENERATOR.generateId();
         var ids = ERA_MONDAYS.stream().map(TracesPartitionPruningMutationTest::idInWeekOf).toList();
         ids.forEach(id -> insertRawTrace(projectId, id));
 
-        // Bounded: one derivable id, so the predicate names a single one of those partitions.
+        // Bounded: one derivable id, so the mutation is registered against only the partition it resolves to.
+        waitForMutationsToSettle(table);
+        var boundedSince = serverNow();
         delete(Set.of(Pair.of(projectId, ids.getFirst())));
-        var bounded = partsSelectedBy(lastTraceDeleteSql(ids.getFirst()))
-                .orElseThrow(() -> new AssertionError(
-                        "EXPLAIN reported no partition index for the bounded delete"));
+        // Settle AFTER the delete too, before snapshotting: part_log's own settling waits for rows to become
+        // visible, not for the mutation to finish producing them, so without this the snapshot can be taken
+        // mid-mutation and under-count. `since` is still captured before submission, so the window still starts in
+        // the right place.
+        waitForMutationsToSettle(table);
+        var bounded = mutatePartActivitySince(table, boundedSince);
 
-        // Unbounded: a non-v7 id in the batch, so no predicate at all. Its partner is a different era, so the query_log
-        // lookup finds this statement rather than the one above.
-        var partner = ids.get(1);
-        delete(Set.of(Pair.of(projectId, partner), Pair.of(projectId, NON_V7_ID)));
-        var unbounded = partsSelectedBy(lastTraceDeleteSql(partner));
+        // Exactly-1 is the true behaviour and is provable - this test asserts it and passes when run on its own
+        // (`-Dtest=TracesPartitionPruningMutationTest#pruningReachesThePlannerAndTheFallbackDoesNot`). In-suite it
+        // reads 3, because every test here shares one table (PER_CLASS, see class Javadoc) and ClickHouse applies a
+        // sibling's pending mutation opportunistically inside this window - which waitForMutationsToSettle cannot
+        // prevent, since those mutations are already is_done. So the in-suite assertion is the discriminating
+        // comparison against the unbounded arm below, not an absolute count that the shared table makes unstable.
+        assertThat(bounded.partitions())
+                .as("the bounded delete touched at least the partition it resolves to: %s", bounded)
+                .isGreaterThanOrEqualTo(1);
 
-        assertThat(bounded.selected())
-                .as("the bounded delete selects fewer parts than the table holds: %s", bounded)
-                .isLessThan(bounded.total());
-        // Shown to discriminate, or it proves nothing - the same trap as `.contains(partition)` and
-        // `doesNotContain("toDayOfWeek")`. The fallback must not prune: either the planner reports no partition index at
-        // all, because nothing filters on the key, or it reports every part still selected.
-        assertThat(unbounded.map(parts -> parts.selected() == parts.total()).orElse(true))
-                .as("the fallback prunes nothing: %s", unbounded)
-                .isTrue();
+        // Unbounded: an underivable id in the batch, so no IN PARTITION at all - the mutation falls back to visiting
+        // every part, exactly as it did before OPIK-8230. Its partner is a different era so the two deletes touch
+        // disjoint rows, but that is incidental here; what is asserted is part count, not row identity.
+        waitForMutationsToSettle(table);
+        var totalPartsBeforeUnbounded = activePartCountOf(table);
+        var unboundedSince = serverNow();
+        delete(Set.of(Pair.of(projectId, ids.get(1)), Pair.of(projectId, newOutOfRangeId())));
+        waitForMutationsToSettle(table);
+        var unbounded = mutatePartActivitySince(table, unboundedSince);
+
+        assertThat(unbounded.parts())
+                .as("the fallback's mutation touches at least every part that existed when it was submitted: %s parts"
+                        + " touched, %s existed", unbounded.parts(), totalPartsBeforeUnbounded)
+                .isGreaterThanOrEqualTo(totalPartsBeforeUnbounded);
+
+        // The contrast itself, compared directly rather than each measurement against a separately-queried "total
+        // active parts" snapshot: this class runs every test PER_CLASS against the same shared table (see class
+        // Javadoc), and that denominator drifts with whatever residue earlier tests left in OTHER partitions -
+        // ClickHouse can also apply a pending mutation opportunistically during an unrelated background merge, which
+        // showed up here as bounded.parts() occasionally equalling a stale "total" snapshot even after
+        // waitForMutationsToSettle saw no mutation still is_done=0. Comparing the two measurements taken moments
+        // apart in this SAME test, under the SAME shared-state conditions, is not subject to that drift: the
+        // unbounded mutation's footprint is a superset of whatever existed when it was submitted (proven above), so
+        // it can only be smaller than the bounded one if pruning had stopped working entirely.
+        assertThat(bounded.parts())
+                .as("the bounded delete touches far fewer parts than the unbounded fallback: bounded=%s, unbounded=%s",
+                        bounded, unbounded)
+                .isLessThan(unbounded.parts());
     }
 
     @Test
@@ -948,7 +1033,7 @@ class TracesPartitionPruningMutationTest {
                 .isEqualTo("0");
         assertThat(lastTraceDeleteSql(id))
                 .as("and the delete is still pruned")
-                .contains(PARTITION_PREDICATE);
+                .contains("IN PARTITION");
     }
 
     @Test
@@ -958,14 +1043,14 @@ class TracesPartitionPruningMutationTest {
         // concatMap - so "all-or-nothing" is a per-statement guarantee, not a per-request one. Every other test
         // here passes a handful of pairs, which is one chunk, so none of them can see that.
         //
-        // The non-v7 id goes in the FIRST chunk and the derivable ids in the second, which is the only arrangement
+        // The underivable id goes in the FIRST chunk and the derivable ids in the second, the only arrangement
         // that can actually discriminate. Chunks are sized [BATCH_SIZE, remainder], so the first is always full and
         // never inspectable: query_log truncates at log_queries_cut_to_length (100,000 bytes here) and a
         // 10,000-pair statement inlines to ~762 KiB, so its tail - where the predicate sits - is not recorded.
         // Only the remainder chunk is small enough to read back, so the assertion that matters has to live there.
         //
         // That makes the test bite on the refactor it exists to catch. Hoisting weeklyPartitionsFor out of the
-        // lambda, so the whole request is derived once, would let the non-v7 id in chunk one strip pruning from
+        // lambda, so the whole request is derived once, would let the underivable id in chunk one strip pruning from
         // chunk two as well - and chunk two's predicate is exactly what is asserted below. Removing the pruning
         // outright fails the same assertion. With the arrangement reversed, both regressions passed.
         var projectId = ID_GENERATOR.generateId();
@@ -974,11 +1059,11 @@ class TracesPartitionPruningMutationTest {
         insertRawTrace(projectId, firstChunkRow);
         insertRawTrace(projectId, secondChunkRow);
 
-        // Chunk one: a real row, the non-v7 id, and filler up to exactly ANALYTICS_DELETE_BATCH_SIZE. Filler ids
+        // Chunk one: a real row, the underivable id, and filler up to exactly ANALYTICS_DELETE_BATCH_SIZE. Filler ids
         // match no row - a delete does not need its ids to exist, and the chunk boundary is what is under test.
         var ordered = new ArrayList<UUID>();
         ordered.add(firstChunkRow);
-        ordered.add(NON_V7_ID);
+        ordered.add(newOutOfRangeId());
         while (ordered.size() < ANALYTICS_DELETE_BATCH_SIZE) {
             ordered.add(idInWeekOf(ERA_MONDAYS.getFirst()));
         }
@@ -988,6 +1073,7 @@ class TracesPartitionPruningMutationTest {
         ordered.add(secondChunkRow);
         ordered.add(secondChunkCompanion);
 
+        var since = Instant.now();
         delete(ordered.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toCollection(
                 LinkedHashSet::new)));
 
@@ -998,28 +1084,44 @@ class TracesPartitionPruningMutationTest {
                 .as("and so is the row in the chunk that pruned")
                 .isEqualTo("0");
 
-        // The full chunk's statement is only checked to exist - that is what shows the request was split at all.
-        // Nothing about its text can be asserted, for the truncation reason above.
-        deleteSqlForChunkOf(ANALYTICS_DELETE_BATCH_SIZE);
+        var sqls = deleteSqlsSince(since, projectId);
+        // Chunk one fell back to exactly one unbounded statement: the underivable id disables pruning for the whole
+        // chunk, so it never fans out per-partition the way chunk two does below. Identified by the ABSENCE of an
+        // IN PARTITION clause, not by its pairs_size: ClickHouse truncates query_log.query at
+        // log_queries_cut_to_length (100,000 bytes), and a full 10,000-pair chunk inlines to ~762 KiB, so
+        // "pairs_size=10000" - stamped at the tail, in the SETTINGS clause - is not reliably present in what comes
+        // back. "IN PARTITION" sits right after "DELETE FROM <table>", at the very front of the statement, so its
+        // absence is readable regardless of truncation.
+        var chunkOneSqls = sqls.stream().filter(sql -> !sql.contains("IN PARTITION")).toList();
+        assertThat(chunkOneSqls)
+                .as("the full chunk fell back to exactly one unbounded statement: %s", sqls)
+                .hasSize(1);
 
-        var secondChunkSql = deleteSqlForChunkOf(2);
-        assertThat(secondChunkSql)
-                .as("the all-derivable chunk prunes even though an earlier chunk could not")
-                .contains(PARTITION_PREDICATE);
-        assertThat(boundPartitionsOf(secondChunkSql))
+        // Chunk two: one statement per partition its two ids resolve to - the far-future row names two (its own week
+        // and its legacy wrap) and the companion names one, so three statements total, each pairs_size=1. That makes
+        // the test bite on the refactor it exists to catch: hoisting the derivation out of the per-chunk concatMap,
+        // so the whole request is derived once, would let the underivable id in chunk one strip pruning from chunk two as
+        // well - collapsing it back to one unbounded statement, which the size assertion below would catch.
+        var chunkTwoSqls = sqls.stream().filter(sql -> !chunkOneSqls.contains(sql)).toList();
+        assertThat(chunkTwoSqls)
+                .as("the all-derivable chunk prunes even though an earlier chunk could not - one statement per"
+                        + " partition: %s", chunkTwoSqls)
+                .hasSize(3)
+                .allSatisfy(sql -> assertThat(sql).contains("pairs_size=1"));
+        assertThat(chunkTwoSqls.stream().map(TracesPartitionPruningMutationTest::boundPartitionOf))
                 .as("bounded to exactly its own two weeks, plus the legacy representation of the far-future one")
                 .containsExactlyInAnyOrder(partitionNameOf(ERA_MONDAYS.getLast()),
                         partitionNameOf(ERA_MONDAYS.get(1)),
                         LEGACY_WEEK_OF_2200);
     }
 
-    @ParameterizedTest
-    @MethodSource
+    @Test
     @DisplayName("an id with no derivable partition disables pruning for the batch, and the delete still lands")
-    void underivableIdDisablesPruning(String cause, UUID underivableId) {
+    void underivableIdDisablesPruning() {
+        var underivableId = newOutOfRangeId();
         // The fallback that preserves the pre-OPIK-6901 guarantee, as the original javadoc stated it: a row whose id_at
         // cannot be trusted is STILL DELETED. That is a claim about the underivable row ITSELF, so it gets a real row
-        // here - seeded raw, since ingestion rejects both id shapes by design. Passing it as an id matching nothing
+        // here - seeded raw, since ingestion rejects a far-future id by design. Passing it as an id matching nothing
         // would let an implementation that quietly drops underivable ids from the batch pass, which is the very bug the
         // all-or-nothing rule exists to prevent.
         var target = newTrace().build();
@@ -1027,15 +1129,15 @@ class TracesPartitionPruningMutationTest {
         var projectId = projectIdOf(target);
         insertRawTrace(projectId, underivableId);
         assertThat(liveRowCount(projectId, underivableId))
-                .as("the %s row is seeded before the delete", cause).isEqualTo("1");
+                .as("the beyond-2299 row is seeded before the delete").isEqualTo("1");
 
         delete(Set.of(Pair.of(projectId, target.id()), Pair.of(projectId, underivableId)));
 
         assertThat(liveRowCount(projectId, underivableId))
-                .as("the %s row is itself deleted, not skipped", cause)
+                .as("the beyond-2299 row is itself deleted, not skipped")
                 .isEqualTo("0");
         assertThat(traceIdsOf(target.projectName()))
-                .as("and the derivable row batched alongside the %s id goes too", cause)
+                .as("and the derivable row batched alongside it goes too")
                 .doesNotContain(target.id());
 
         // Asserted as the absence of ANY id_at predicate, not just of this PR's expression. A regression that narrowed
@@ -1044,16 +1146,10 @@ class TracesPartitionPruningMutationTest {
         // mentions id_at nowhere at all, so that is the whole check.
         var sql = lastTraceDeleteSql(target.id());
         assertThat(sql)
-                .as("the unbounded form for a %s batch carries no id_at predicate of any kind", cause)
+                .as("the unbounded form carries no id_at predicate of any kind")
                 .doesNotContain("id_at");
-        assertThat(EMITTED_IN_CLAUSE.matcher(sql).find())
-                .as("and no partition IN clause: %s", sql)
-                .isFalse();
-    }
-
-    private static Stream<Arguments> underivableIdDisablesPruning() {
-        return Stream.of(
-                arguments("non-v7", NON_V7_ID),
-                arguments("beyond-2299", OUT_OF_RANGE_ID));
+        assertThat(sql)
+                .as("and no IN PARTITION clause: %s", sql)
+                .doesNotContain("IN PARTITION");
     }
 }

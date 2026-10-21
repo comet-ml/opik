@@ -2,6 +2,7 @@ import dataclasses
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -21,6 +22,10 @@ class InstallResult:
     # "Updated"). Falls back to `detail`, which spells the path out in full and is
     # what a log line or a failure needs.
     summary: Optional[str] = None
+    # Added, but the client's sign-in failed: no tools until the user signs in.
+    sign_in_failed: bool = False
+    # Separates "signed in" from "nothing to sign in to".
+    sign_in_attempted: bool = False
 
 
 @dataclasses.dataclass
@@ -35,6 +40,10 @@ class HostTarget:
     # ``top_level_key`` (Codex uses TOML) supply their own reader; see
     # ``read_registered_block``.
     read_block: Optional[Callable[[], Optional[Dict[str, Any]]]] = None
+    # For the hosts with a CLI, its sign-in to the hosted server and its list of
+    # servers with their status, named where a run leaves them to the user.
+    sign_in_command: Optional[str] = None
+    status_command: Optional[str] = None
 
 
 def _home() -> pathlib.Path:
@@ -156,6 +165,10 @@ class _CliUnavailable(Exception):
     """A client's CLI could not be run to completion."""
 
 
+class _CliTimedOut(_CliUnavailable):
+    """A client's CLI ran past the timeout, possibly waiting on the user."""
+
+
 def _run_client_cli(command: List[str], label: str) -> "subprocess.CompletedProcess":
     """Run a client's own CLI, or raise :class:`_CliUnavailable`.
 
@@ -183,7 +196,7 @@ def _run_client_cli(command: List[str], label: str) -> "subprocess.CompletedProc
             timeout=CLIENT_CLI_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
-        raise _CliUnavailable(
+        raise _CliTimedOut(
             f"`{label}` did not finish within {CLIENT_CLI_TIMEOUT_SECONDS}s and was "
             "stopped. It may be waiting for input, or asking you to log in — try "
             f"running `{label}` yourself to see."
@@ -260,6 +273,56 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
     )
 
 
+def _claude_supports_mcp_login(claude_executable: str) -> bool:
+    """Whether this Claude Code build has `claude mcp login`.
+
+    The command is recent, so it cannot be assumed. Asking `claude mcp login
+    --help` and reading the exit status looks like the probe and is quietly
+    wrong: on a build without the subcommand, Claude Code prints the *group's*
+    help and exits 0, which would report every version as supported. The group's
+    own listing is what distinguishes them.
+    """
+    try:
+        listing = _run_client_cli(
+            [claude_executable, "mcp", "--help"], label="claude mcp --help"
+        )
+    except _CliUnavailable:
+        return False
+
+    if listing.returncode != 0:
+        return False
+
+    # Anchored to the start of a line so the name has to be a listed command
+    # rather than a word in another command's description.
+    return (
+        re.search(
+            r"^[ \t]*login\b", f"{listing.stdout}\n{listing.stderr}", re.MULTILINE
+        )
+        is not None
+    )
+
+
+def sign_in_command(
+    target_key: str, server_spec: mcp_spec.McpServerSpec
+) -> Optional[List[str]]:
+    """The client's own browser sign-in, when this run should start one.
+
+    Only Claude Code: Codex signs in inside `codex mcp add`, and the GUI clients
+    prompt on first use. Only for the hosted server — a local one carries the API
+    key — with a terminal or without, since a coding agent's machine has a browser.
+    Run separately from the install so the caller can show progress for the
+    install and hand the terminal over for the sign-in.
+    """
+    if target_key != "claude-code":
+        return None
+    if not isinstance(server_spec, mcp_spec.RemoteServerSpec):
+        return None
+    claude_executable = shutil.which("claude")
+    if claude_executable is None or not _claude_supports_mcp_login(claude_executable):
+        return None
+    return [claude_executable, "mcp", "login", SERVER_NAME]
+
+
 def _install_cursor(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
     return _install_via_json_file(
         config_path=_cursor_config_path(),
@@ -328,6 +391,22 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         )
         result = _run_client_cli(command, label="codex mcp add")
     except _CliUnavailable as error:
+        # For the hosted server `codex mcp add` writes the entry, then waits for the
+        # browser sign-in. If nobody finishes it in time, the server is still
+        # registered and `codex mcp login` completes it: not a failed install.
+        if (
+            isinstance(error, _CliTimedOut)
+            and isinstance(server_spec, mcp_spec.RemoteServerSpec)
+            and (_read_codex_block() or {}).get("url") == server_spec.url
+        ):
+            return InstallResult(
+                target_display_name="Codex",
+                succeeded=True,
+                sign_in_attempted=True,
+                sign_in_failed=True,
+                detail=f"Added '{SERVER_NAME}' via `codex mcp add`; not signed in",
+                summary="Updated" if was_registered else "Added",
+            )
         return InstallResult(
             target_display_name="Codex", succeeded=False, detail=str(error)
         )
@@ -335,6 +414,8 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         return InstallResult(
             target_display_name="Codex",
             succeeded=True,
+            # The sign-in is part of `codex mcp add`, for the hosted server only.
+            sign_in_attempted=isinstance(server_spec, mcp_spec.RemoteServerSpec),
             detail=(
                 f"{'Updated' if was_registered else 'Added'} '{SERVER_NAME}' via "
                 f"`codex mcp add`"
@@ -437,6 +518,10 @@ def _read_block_from_json_file(
     return block if isinstance(block, dict) else None
 
 
+#: Ordered by priority, and that order is what the user sees: the consent prompt
+#: lists these, the picker offers them in this sequence, and the `--ai-client`
+#: help prints them. Claude Code and Codex lead because they are the highest-
+#: volume clients in the telemetry.
 HOST_TARGETS: List[HostTarget] = [
     HostTarget(
         key="claude-code",
@@ -446,6 +531,22 @@ HOST_TARGETS: List[HostTarget] = [
         is_detected=lambda: shutil.which("claude") is not None
         or _claude_config_path().exists(),
         install=_install_claude_code,
+        sign_in_command=f"claude mcp login {SERVER_NAME}",
+        status_command="claude mcp list",
+    ),
+    HostTarget(
+        key="codex",
+        display_name="Codex",
+        config_path=_codex_config_path,
+        # Unused: Codex config is TOML, so reads go through `read_block` instead.
+        top_level_key="mcp_servers",
+        is_detected=lambda: shutil.which("codex") is not None
+        or _codex_config_path().exists(),
+        install=_install_codex,
+        read_block=_read_codex_block,
+        sign_in_command=f"codex mcp login {SERVER_NAME}",
+        # Masks env values, unlike `codex mcp get`.
+        status_command="codex mcp list",
     ),
     HostTarget(
         key="cursor",
@@ -464,17 +565,6 @@ HOST_TARGETS: List[HostTarget] = [
         install=_install_vscode,
     ),
     HostTarget(
-        key="codex",
-        display_name="Codex",
-        config_path=_codex_config_path,
-        # Unused: Codex config is TOML, so reads go through `read_block` instead.
-        top_level_key="mcp_servers",
-        is_detected=lambda: shutil.which("codex") is not None
-        or _codex_config_path().exists(),
-        install=_install_codex,
-        read_block=_read_codex_block,
-    ),
-    HostTarget(
         key="opencode",
         display_name="opencode",
         config_path=_opencode_config_path,
@@ -482,6 +572,8 @@ HOST_TARGETS: List[HostTarget] = [
         is_detected=lambda: shutil.which("opencode") is not None
         or _opencode_config_dir().exists(),
         install=_install_opencode,
+        sign_in_command=f"opencode mcp auth {SERVER_NAME}",
+        status_command="opencode mcp list",
     ),
 ]
 

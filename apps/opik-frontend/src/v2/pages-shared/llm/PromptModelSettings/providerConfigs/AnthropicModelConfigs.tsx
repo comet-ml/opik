@@ -1,211 +1,181 @@
-import React, { useCallback } from "react";
+import React from "react";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import {
   LLMAnthropicConfigsType,
   PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
   AnthropicThinkingEffort,
 } from "@/types/providers";
 import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import { Button } from "@/ui/button";
-import { X } from "lucide-react";
+import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
+import {
+  createSupports,
+  getAnthropicVisibleControls,
+  isAnyControlVisible,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import {
   getAnthropicThinkingEffortOptions,
-  supportsAnthropicThinkingEffort,
+  getMaxCompletionTokensRange,
+  hasEffortWithoutThinking,
+  hasThinkingInCustomParameters,
+  isAnthropicThinkingRequested,
+  resolveEffort,
+  resolveMaxCompletionTokens,
+  resolveSamplingParams,
   supportsSamplingParams,
+  thinksOnlyWhenAsked,
 } from "@/lib/modelUtils";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import isNil from "lodash/isNil";
+import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+
+const getEffortDescription = (model?: PROVIDER_MODEL_TYPE | "") => {
+  if (hasEffortWithoutThinking(model)) {
+    return "Changes how long Claude's answers are and how readily it calls tools. It doesn't turn on thinking.";
+  }
+  if (thinksOnlyWhenAsked(model)) {
+    return "Off answers without thinking. At any other level, Claude can think before it answers and decides how much; at lower levels it often answers straight away. Effort also controls how many tokens Claude spends on the whole response. Lower effort is faster and cheaper; higher effort is more thorough.";
+  }
+  return "Controls how many tokens Claude spends on the whole response, thinking included. Lower effort is faster and cheaper; higher effort is more thorough.";
+};
+
+const getSamplingOffNote = (
+  withTopP: boolean,
+  thinkingFromCustomParameters: boolean,
+) => {
+  const params = withTopP ? "Temperature and Top P are" : "Temperature is";
+  if (thinkingFromCustomParameters) {
+    return `${params} off because the custom parameters turn thinking on.`;
+  }
+  return `${params} off while Claude can think. Set Thinking effort to Off to use ${
+    withTopP ? "them" : "it"
+  }.`;
+};
 
 interface AnthropicModelConfigsProps {
   configs: LLMAnthropicConfigsType;
   onChange: (configs: Partial<LLMAnthropicConfigsType>) => void;
   model?: PROVIDER_MODEL_TYPE | "";
+  unsupportedParams?: ReadonlySet<ModelConfigParam>;
 }
 
 const AnthropicModelConfigs = ({
   configs,
   onChange,
   model,
+  unsupportedParams,
 }: AnthropicModelConfigsProps) => {
-  const showThinkingEffort = supportsAnthropicThinkingEffort(model);
-  const showSamplingParams = supportsSamplingParams(model);
+  const supports = createSupports(unsupportedParams);
   const thinkingEffortOptions = getAnthropicThinkingEffortOptions(model);
-  const hasTemperatureValue = !isNil(configs.temperature);
-  const hasTopPValue = !isNil(configs.topP);
-  const temperatureDisabled = hasTopPValue && !hasTemperatureValue;
-  const topPDisabled = hasTemperatureValue && !hasTopPValue;
-
-  const handleTemperatureChange = useCallback(
-    (v: number) => {
-      onChange({ temperature: v, topP: undefined });
-    },
-    [onChange],
+  // Read the pair through the resolver rather than off the config: it is what the request will
+  // carry, and it guarantees exactly one half is live, which is what the choice below reflects.
+  const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
+  const { thinkingEffort } = resolveEffort(model ?? "", configs);
+  const visible = getAnthropicVisibleControls({ model, configs, supports });
+  const maxCompletionTokensRange = getMaxCompletionTokensRange(
+    PROVIDER_TYPE.ANTHROPIC,
+    model ?? "",
   );
+  const samplingOffWhileThinking =
+    supportsSamplingParams(model) &&
+    isAnthropicThinkingRequested(model ?? "", configs);
 
-  const handleTopPChange = useCallback(
-    (v: number) => {
-      onChange({ topP: v, temperature: undefined });
-    },
-    [onChange],
-  );
-
-  const handleClearTemperature = useCallback(() => {
-    onChange({
-      temperature: undefined,
-      topP: DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
-    });
-  }, [onChange]);
-
-  const handleClearTopP = useCallback(() => {
-    onChange({
-      topP: undefined,
-      temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
-    });
-  }, [onChange]);
+  if (!isAnyControlVisible(visible)) return null;
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {showSamplingParams && (
-        <div className="space-y-2">
-          <div
-            className={
-              temperatureDisabled ? "pointer-events-none opacity-50" : ""
-            }
-          >
-            <SliderInputControl
-              value={
-                configs.temperature ??
-                (temperatureDisabled
-                  ? undefined
-                  : DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE)
-              }
-              onChange={handleTemperatureChange}
-              id="temperature"
-              min={0}
-              max={1}
-              step={0.01}
-              defaultValue={DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE}
-              label="Temperature"
-              tooltip={
-                <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive. Note: Anthropic models require using either Temperature OR Top P, not both." />
-              }
-            />
-          </div>
-          {hasTemperatureValue && (
-            <div className="flex justify-end">
-              <Button
-                variant="ghost"
-                size="2xs"
-                onClick={handleClearTemperature}
-                aria-label="Clear temperature to use Top P"
-              >
-                <X className="mr-1 size-3" />
-                Clear to use Top P
-              </Button>
-            </div>
-          )}
-        </div>
+      {visible.samplingParams && (
+        <ExclusiveSamplingParams
+          temperature={temperature}
+          topP={topP}
+          temperatureDefault={DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE}
+          topPDefault={DEFAULT_ANTHROPIC_CONFIGS.TOP_P}
+          offerChoice={supports("topP")}
+          onChange={onChange}
+        />
       )}
 
-      <SliderInputControl
-        value={
-          configs.maxCompletionTokens ??
-          DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS
-        }
-        onChange={(v) => onChange({ maxCompletionTokens: v })}
-        id="maxCompletionTokens"
-        min={0}
-        max={64000}
-        step={1}
-        defaultValue={DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS}
-        label="Max output tokens"
-        tooltip={
-          <PromptModelConfigsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
-        }
-      />
-
-      {showSamplingParams && (
-        <div className="space-y-2">
-          <div className={topPDisabled ? "pointer-events-none opacity-50" : ""}>
-            <SliderInputControl
-              value={
-                configs.topP ??
-                (topPDisabled ? undefined : DEFAULT_ANTHROPIC_CONFIGS.TOP_P)
-              }
-              onChange={handleTopPChange}
-              id="topP"
-              min={0}
-              max={1}
-              step={0.01}
-              defaultValue={DEFAULT_ANTHROPIC_CONFIGS.TOP_P}
-              label="Top P"
-              tooltip={
-                <PromptModelConfigsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered. Note: Anthropic models require using either Temperature OR Top P, not both." />
-              }
-            />
-          </div>
-          {hasTopPValue && (
-            <div className="flex justify-end">
-              <Button
-                variant="ghost"
-                size="2xs"
-                onClick={handleClearTopP}
-                aria-label="Clear Top P to use temperature"
-              >
-                <X className="mr-1 size-3" />
-                Clear to use Temperature
-              </Button>
-            </div>
+      {samplingOffWhileThinking && (
+        <p className="comet-body-xs text-muted-slate">
+          {getSamplingOffNote(
+            supports("topP"),
+            hasThinkingInCustomParameters(configs),
           )}
-        </div>
+        </p>
       )}
 
-      <SliderInputControl
-        value={configs.throttling ?? DEFAULT_ANTHROPIC_CONFIGS.THROTTLING}
-        onChange={(v) => onChange({ throttling: v })}
-        id="throttling"
-        min={0}
-        max={10}
-        step={0.1}
-        defaultValue={DEFAULT_ANTHROPIC_CONFIGS.THROTTLING}
-        label="Throttling (seconds)"
-        tooltip={
-          <PromptModelConfigsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
-        }
-      />
+      {visible.maxCompletionTokens && (
+        <SliderInputControl
+          value={resolveMaxCompletionTokens(
+            PROVIDER_TYPE.ANTHROPIC,
+            model ?? "",
+            configs.maxCompletionTokens,
+          )}
+          onChange={(v) => onChange({ maxCompletionTokens: v })}
+          id="maxCompletionTokens"
+          min={maxCompletionTokensRange.min}
+          max={maxCompletionTokensRange.max}
+          step={1}
+          integer
+          defaultValue={DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS}
+          label="Max output tokens"
+          tooltip={
+            <PromptModelConfigsTooltipContent
+              text={`The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On thinking models, thinking tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. The minimum is ${maxCompletionTokensRange.min}. (One token is roughly 4 characters for standard English text).`}
+            />
+          }
+        />
+      )}
 
-      <SliderInputControl
-        value={
-          configs.maxConcurrentRequests ??
-          DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS
-        }
-        onChange={(v) => onChange({ maxConcurrentRequests: v })}
-        id="maxConcurrentRequests"
-        min={1}
-        max={20}
-        step={1}
-        defaultValue={DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS}
-        label="Max concurrent requests"
-        tooltip={
-          <PromptModelConfigsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
-        }
-      />
+      {visible.throttling && (
+        <SliderInputControl
+          value={configs.throttling ?? DEFAULT_ANTHROPIC_CONFIGS.THROTTLING}
+          onChange={(v) => onChange({ throttling: v })}
+          id="throttling"
+          min={0}
+          max={10}
+          step={0.1}
+          defaultValue={DEFAULT_ANTHROPIC_CONFIGS.THROTTLING}
+          label="Throttling (seconds)"
+          tooltip={
+            <PromptModelConfigsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
+          }
+        />
+      )}
 
-      {showThinkingEffort && (
+      {visible.maxConcurrentRequests && (
+        <SliderInputControl
+          value={
+            configs.maxConcurrentRequests ??
+            DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS
+          }
+          onChange={(v) => onChange({ maxConcurrentRequests: v })}
+          id="maxConcurrentRequests"
+          min={1}
+          max={20}
+          step={1}
+          defaultValue={DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS}
+          label="Max concurrent requests"
+          tooltip={
+            <PromptModelConfigsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
+          }
+        />
+      )}
+
+      {visible.thinkingEffort && thinkingEffort !== undefined && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="thinkingEffort" className="text-sm font-medium">
-              Thinking effort
+              {hasEffortWithoutThinking(model) ? "Effort" : "Thinking effort"}
             </Label>
-            <ExplainerIcon description="Controls how much effort Claude puts into thinking before responding. Higher effort produces more thorough analysis but takes longer. Uses adaptive thinking mode." />
+            <ExplainerIcon description={getEffortDescription(model)} />
           </div>
           <SelectBox
             id="thinkingEffort"
-            value={configs.thinkingEffort || "high"}
+            value={thinkingEffort}
             onChange={(value: AnthropicThinkingEffort) =>
               onChange({ thinkingEffort: value })
             }

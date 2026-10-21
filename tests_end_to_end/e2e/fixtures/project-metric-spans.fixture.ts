@@ -1,12 +1,13 @@
 import { test as baseTest } from './bystander.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
+import { uuid7Moment } from '../core/backend';
 
-/** One seeded day of the window: how far back it sits and what it should total. */
-export interface ProjectMetricDaySeed {
-  /** Whole days before "now". Never 0 — see the note on the seed below. */
-  ageDays: number;
-  /** `YYYY-MM-DD` (UTC) of the DAILY bucket this day's spans fall in. */
-  bucketDate: string;
+/** One seeded hour of the window: how far back it sits and what it should total. */
+export interface ProjectMetricHourSeed {
+  /** Whole hours before "now". Never 0 — see the note on the seed below. */
+  ageHours: number;
+  /** `YYYY-MM-DDTHH` (UTC) of the HOURLY bucket this hour's spans fall in. */
+  bucketHour: string;
   traceId: string;
   spanCount: number;
   promptTokens: number;
@@ -15,9 +16,9 @@ export interface ProjectMetricDaySeed {
 }
 
 export interface ProjectMetricSpansRef {
-  /** One backdated trace per seeded day, oldest last. */
-  days: ProjectMetricDaySeed[];
-  /** Seeded totals across every day. */
+  /** One backdated trace per seeded hour, oldest last. */
+  hours: ProjectMetricHourSeed[];
+  /** Seeded totals across every hour. */
   totals: {
     spanCount: number;
     promptTokens: number;
@@ -26,8 +27,10 @@ export interface ProjectMetricSpansRef {
   };
   /** Seeded `total_tokens` per provider — an uneven split of the grand total. */
   totalTokensByProvider: Record<string, number>;
-  /** A window that contains every seeded day and two empty days before them. */
+  /** A window that contains every seeded hour and six empty hours before them. */
   windowStart: Date;
+  /** Closes before the oldest seed, so a read over it must aggregate to nothing. */
+  emptyWindowEnd: Date;
 }
 
 export interface ProjectMetricSpansFixtures {
@@ -45,37 +48,46 @@ interface SpanSeed {
 }
 
 /**
- * Seven LLM spans spread unevenly over four past days.
+ * Seven LLM spans spread unevenly over four past hours.
  *
- * Uneven twice over, and both matter. Across days, the per-day `total_tokens`
+ * Uneven twice over, and both matter. Across hours, the per-hour `total_tokens`
  * come out 70 / 35 / 94 / 75: a query that bucketed wrongly — or dropped the
  * bucket entirely and summed the window — cannot land on those four numbers by
- * accident, whereas four equal days would forgive it. Across providers, the
+ * accident, whereas four equal hours would forgive it. Across providers, the
  * split is 195 / 79, so a breakdown that ignored its group expression would
  * report the grand total instead of either.
  *
- * `ageDays` is never 0. A span stamped "now" is a coin flip against the
+ * HOURS, not days, because ingestion validates the instant embedded in an id:
+ * `UuidV7TimestampValidator` refuses anything outside `uuidValidation.window`
+ * (24h on comet.com), and a backdated seed needs a backdated id — the backend
+ * buckets on `UUIDv7ToDateTime(id)`, so a fresh id lands "now" whatever
+ * `start_time` says. Days put every seed outside that window; the deepest here
+ * is 12h, which leaves half the window as headroom. The subject of these specs
+ * is that each bucket carries its own spans, and an hour proves that as well as
+ * a day does.
+ *
+ * `ageHours` is never 0. A span stamped "now" is a coin flip against the
  * backend's own clock, and one stamped even slightly ahead of it is silently
  * excluded from any window ending at now — the failure looks like a wrong
- * aggregate rather than a bad seed. Whole days back also keeps every seed on a
- * distinct UTC date whatever time the run starts.
+ * aggregate rather than a bad seed. Whole hours back also keep every seed in a
+ * distinct UTC hour whatever minute the run starts.
  */
-const DAY_SEEDS: Array<{ ageDays: number; spans: SpanSeed[] }> = [
+const HOUR_SEEDS: Array<{ ageHours: number; spans: SpanSeed[] }> = [
   {
-    ageDays: 1,
+    ageHours: 1,
     spans: [
       { model: OPENAI_MODEL, provider: 'openai', promptTokens: 30, completionTokens: 20 },
       { model: ANTHROPIC_MODEL, provider: 'anthropic', promptTokens: 12, completionTokens: 8 },
     ],
   },
   {
-    ageDays: 2,
+    ageHours: 3,
     spans: [
       { model: ANTHROPIC_MODEL, provider: 'anthropic', promptTokens: 20, completionTokens: 15 },
     ],
   },
   {
-    ageDays: 3,
+    ageHours: 6,
     spans: [
       { model: OPENAI_MODEL, provider: 'openai', promptTokens: 18, completionTokens: 12 },
       { model: OPENAI_MODEL, provider: 'openai', promptTokens: 25, completionTokens: 15 },
@@ -83,25 +95,28 @@ const DAY_SEEDS: Array<{ ageDays: number; spans: SpanSeed[] }> = [
     ],
   },
   {
-    ageDays: 4,
+    ageHours: 12,
     spans: [
       { model: OPENAI_MODEL, provider: 'openai', promptTokens: 45, completionTokens: 30 },
     ],
   },
 ];
 
-/** Two empty days sit between the window's start and the oldest seeded day. */
-const WINDOW_DAYS = 6;
-const DAY_MS = 24 * 60 * 60 * 1000;
+/** Six empty hours sit between the window's start and the oldest seeded hour. */
+const WINDOW_HOURS = 18;
+/** Between the window start and the oldest seed, so it spans only empty buckets. */
+const EMPTY_WINDOW_END_HOURS = 15;
+const HOUR_MS = 60 * 60 * 1000;
 
-const utcDate = (at: Date): string => at.toISOString().slice(0, 10);
+/** The `YYYY-MM-DDTHH` (UTC) hour an instant falls in. */
+const utcHour = (at: Date): string => at.toISOString().slice(0, 13);
 
 /**
  * A single project carrying seven LLM spans with known usage, spread over four
- * past days.
+ * past hours.
  *
  * Everything the per-project metrics read is asserted on comes from here, so
- * the fixture owns the whole shape: which days carry spans, how many, and the
+ * the fixture owns the whole shape: which hours carry spans, how many, and the
  * usage on each. The project is fresh per test, which is what makes an
  * *unfiltered* per-project aggregation deterministic in a workspace holding
  * thousands of other projects — and therefore what makes `SPAN_COUNT == 7`
@@ -114,18 +129,18 @@ const utcDate = (at: Date): string => at.toISOString().slice(0, 10);
 export const test = baseTest.extend<ProjectMetricSpansFixtures>({
   projectMetricSpans: async ({ sdkClient, backendClient, project, testNamespace }, use, testInfo) => {
     const now = Date.now();
-    const days: ProjectMetricDaySeed[] = [];
+    const hours: ProjectMetricHourSeed[] = [];
     const totalTokensByProvider: Record<string, number> = {};
 
-    for (const day of DAY_SEEDS) {
+    for (const hour of HOUR_SEEDS) {
       const created = await sdkClient.python.createNestedTrace({
         project_name: project.name,
-        name: `${testNamespace}-d${day.ageDays}`,
-        input: { question: `seeded metrics day -${day.ageDays}` },
-        output: { answer: `seeded metrics day -${day.ageDays}` },
-        age_days: day.ageDays,
-        spans: day.spans.map((span, i) => ({
-          name: `${testNamespace}-d${day.ageDays}-span-${i + 1}`,
+        name: `${testNamespace}-h${hour.ageHours}`,
+        input: { question: `seeded metrics hour -${hour.ageHours}` },
+        output: { answer: `seeded metrics hour -${hour.ageHours}` },
+        age_days: hour.ageHours / 24,
+        spans: hour.spans.map((span, i) => ({
+          name: `${testNamespace}-h${hour.ageHours}-span-${i + 1}`,
           type: 'llm' as const,
           model: span.model,
           provider: span.provider,
@@ -137,55 +152,61 @@ export const test = baseTest.extend<ProjectMetricSpansFixtures>({
         })),
       });
 
-      if (created.span_count !== day.spans.length) {
+      if (created.span_count !== hour.spans.length) {
         throw new Error(
-          `[projectMetricSpans fixture] day -${day.ageDays}: expected ${day.spans.length} spans, ` +
+          `[projectMetricSpans fixture] hour -${hour.ageHours}: expected ${hour.spans.length} spans, ` +
             `bridge reported ${created.span_count}`,
         );
       }
 
-      for (const span of day.spans) {
+      for (const span of hour.spans) {
         totalTokensByProvider[span.provider] =
           (totalTokensByProvider[span.provider] ?? 0) +
           span.promptTokens +
           span.completionTokens;
       }
 
-      days.push({
-        ageDays: day.ageDays,
-        bucketDate: utcDate(new Date(now - day.ageDays * DAY_MS)),
+      hours.push({
+        ageHours: hour.ageHours,
+        // Read back off the id the bridge minted, not computed from `now`: the
+        // bridge anchors on its own clock at request time, and at hour
+        // granularity the gap between the two straddles a bucket boundary often
+        // enough to matter. This is the instant the backend itself buckets on.
+        bucketHour: utcHour(uuid7Moment(created.id)),
         traceId: created.id,
-        spanCount: day.spans.length,
-        promptTokens: day.spans.reduce((acc, s) => acc + s.promptTokens, 0),
-        completionTokens: day.spans.reduce((acc, s) => acc + s.completionTokens, 0),
-        totalTokens: day.spans.reduce((acc, s) => acc + s.promptTokens + s.completionTokens, 0),
+        spanCount: hour.spans.length,
+        promptTokens: hour.spans.reduce((acc, s) => acc + s.promptTokens, 0),
+        completionTokens: hour.spans.reduce((acc, s) => acc + s.completionTokens, 0),
+        totalTokens: hour.spans.reduce((acc, s) => acc + s.promptTokens + s.completionTokens, 0),
       });
     }
 
-    // Distinct dates are what the per-bucket assertions key on. They can only
-    // collide if `age_days` repeated, but the seed is data — say so here rather
-    // than letting a duplicated entry silently collapse two days into one
-    // expectation that then "passes".
-    const dates = new Set(days.map((d) => d.bucketDate));
-    if (dates.size !== days.length) {
+    // Distinct hours are what the per-bucket assertions key on. Unlike the
+    // day-aged seed this replaced, these are read back off the minted ids, so a
+    // collision no longer needs a duplicated entry in the table — a stalled run
+    // between two seeds would do it. Checking it here keeps that from silently
+    // collapsing two hours into one expectation that then "passes".
+    const bucketHours = new Set(hours.map((h) => h.bucketHour));
+    if (bucketHours.size !== hours.length) {
       throw new Error(
-        `[projectMetricSpans fixture] seeded days share a UTC bucket: ${days.map((d) => d.bucketDate).join(', ')}`,
+        `[projectMetricSpans fixture] seeded hours share a UTC bucket: ${hours.map((h) => h.bucketHour).join(', ')}`,
       );
     }
 
     const ref: ProjectMetricSpansRef = {
-      days,
+      hours,
       totals: {
-        spanCount: days.reduce((acc, d) => acc + d.spanCount, 0),
-        promptTokens: days.reduce((acc, d) => acc + d.promptTokens, 0),
-        completionTokens: days.reduce((acc, d) => acc + d.completionTokens, 0),
-        totalTokens: days.reduce((acc, d) => acc + d.totalTokens, 0),
+        spanCount: hours.reduce((acc, h) => acc + h.spanCount, 0),
+        promptTokens: hours.reduce((acc, h) => acc + h.promptTokens, 0),
+        completionTokens: hours.reduce((acc, h) => acc + h.completionTokens, 0),
+        totalTokens: hours.reduce((acc, h) => acc + h.totalTokens, 0),
       },
       totalTokensByProvider,
-      // Start of the UTC day WINDOW_DAYS back, so the window opens on a bucket
-      // boundary and the two days before the oldest seed are whole empty
+      // Start of the UTC hour WINDOW_HOURS back, so the window opens on a bucket
+      // boundary and the six hours before the oldest seed are whole empty
       // buckets rather than a partial one.
-      windowStart: new Date(`${utcDate(new Date(now - WINDOW_DAYS * DAY_MS))}T00:00:00.000Z`),
+      windowStart: new Date(`${utcHour(new Date(now - WINDOW_HOURS * HOUR_MS))}:00:00.000Z`),
+      emptyWindowEnd: new Date(`${utcHour(new Date(now - EMPTY_WINDOW_END_HOURS * HOUR_MS))}:00:00.000Z`),
     };
 
     await testInfo.attach('opik.projectMetricSpans', {
@@ -197,7 +218,7 @@ export const test = baseTest.extend<ProjectMetricSpansFixtures>({
 
     if (!shouldLeaveArtifacts(testInfo)) {
       try {
-        await backendClient.deleteTraces(days.map((d) => d.traceId));
+        await backendClient.deleteTraces(hours.map((h) => h.traceId));
       } catch (err) {
         console.warn('[projectMetricSpans fixture] trace delete warning:', err);
       }

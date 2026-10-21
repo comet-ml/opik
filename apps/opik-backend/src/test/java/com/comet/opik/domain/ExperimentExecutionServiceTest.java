@@ -18,6 +18,7 @@ import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,9 +38,11 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -134,7 +137,7 @@ class ExperimentExecutionServiceTest {
     class EmptyDataset {
 
         @Test
-        void createAndExecuteWhenNoDatasetItemsReturnsZeroTotalItems() {
+        void createAndExecuteWhenNoDatasetItemsRejectsWithoutCreatingExperiments() {
             var request = ExperimentExecutionRequest.builder()
                     .datasetName("test-dataset")
                     .datasetId(UUID.randomUUID())
@@ -142,15 +145,14 @@ class ExperimentExecutionServiceTest {
                     .build();
 
             stubDatasetItems(List.of());
-            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
-            stubExperimentCreate();
-            stubFinishExperiments();
-            lenient().when(experimentService.update(any(UUID.class), any()))
-                    .thenReturn(Mono.empty());
 
-            var response = executeRequest(request);
+            assertThatThrownBy(() -> executeRequest(request))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessage(
+                            "Dataset 'test-dataset' has no items in the selected version. Add items to it before running an experiment");
 
-            assertThat(response.totalItems()).isZero();
+            verify(experimentService, never()).create(any(Experiment.class));
+            verify(itemPublisher, never()).publish(any(), any());
         }
     }
 
@@ -248,6 +250,104 @@ class ExperimentExecutionServiceTest {
             var captor = ArgumentCaptor.forClass(Experiment.class);
             verify(experimentService).create(captor.capture());
             assertThat(captor.getValue().projectName()).isEqualTo("playground");
+        }
+    }
+
+    @Nested
+    @DisplayName("Experiment naming")
+    class ExperimentNaming {
+
+        @Test
+        void createAndExecuteLeavesNameNullWhenNotProvided() {
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build();
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(request);
+
+            var captor = ArgumentCaptor.forClass(Experiment.class);
+            verify(experimentService).create(captor.capture());
+            assertThat(captor.getValue().name()).isNull();
+        }
+
+        @Test
+        void createAndExecuteLeavesNameBlankWhenOnlyWhitespaceProvided() {
+            var prompt = buildPrompt("gpt-4", "Hello").toBuilder()
+                    .experimentName("   ")
+                    .build();
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(prompt))
+                    .build();
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(request);
+
+            var captor = ArgumentCaptor.forClass(Experiment.class);
+            verify(experimentService).create(captor.capture());
+            assertThat(captor.getValue().name()).isBlank();
+        }
+
+        @Test
+        void createAndExecuteUsesExperimentNameProvidedOnPromptVariant() {
+            var prompt = buildPrompt("gpt-4", "Hello").toBuilder()
+                    .experimentName("my-experiment")
+                    .build();
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(prompt))
+                    .build();
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(request);
+
+            var captor = ArgumentCaptor.forClass(Experiment.class);
+            verify(experimentService).create(captor.capture());
+            assertThat(captor.getValue().name()).isEqualTo("my-experiment");
+        }
+
+        @Test
+        void createAndExecuteUsesEachPromptVariantOwnExperimentName() {
+            var prompt1 = buildPrompt("gpt-4", "Hello {{input}}").toBuilder()
+                    .experimentName("first-experiment")
+                    .build();
+            var prompt2 = buildPrompt("claude-3", "Hi {{input}}").toBuilder()
+                    .experimentName("second-experiment")
+                    .build();
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(prompt1, prompt2))
+                    .build();
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID(), UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(request);
+
+            var captor = ArgumentCaptor.forClass(Experiment.class);
+            verify(experimentService, times(2)).create(captor.capture());
+            var names = captor.getAllValues().stream().map(Experiment::name).toList();
+            assertThat(names).containsExactly("first-experiment", "second-experiment");
         }
     }
 

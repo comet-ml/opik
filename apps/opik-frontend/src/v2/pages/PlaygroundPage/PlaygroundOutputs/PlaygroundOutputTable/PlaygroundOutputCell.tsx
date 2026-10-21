@@ -11,13 +11,16 @@ import {
 import { DATASET_TYPE } from "@/types/datasets";
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
 import PlaygroundOutputLoader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
+import PlaygroundOutputError from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputError";
 import PlaygroundOutputScoresContainer from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputScoresContainer";
 import PlaygroundOutputAssertionStatus from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputAssertionStatus";
 import PlaygroundTestSuiteLastRunOutput from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundTestSuiteLastRunOutput";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
+import { cn } from "@/lib/utils";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
+import PlaygroundStaleOutputNote from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundStaleOutputNote";
 import { generateTracesURL } from "@/lib/annotation-queues";
 import { EXPERIMENT_TAB } from "@/lib/experiments";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -58,6 +61,8 @@ const PlaygroundOutputCell: React.FunctionComponent<
   const isLoading = output?.isLoading ?? false;
   const stale = output?.stale ?? false;
   const traceId = output?.traceId ?? null;
+  const error = output?.error;
+  const errorHint = output?.errorHint;
   const selectedRuleIds = output?.selectedRuleIds;
 
   const datasetType = useDatasetType();
@@ -106,7 +111,12 @@ const PlaygroundOutputCell: React.FunctionComponent<
   };
 
   const hasOutput =
-    !stale && (value !== null || isLoading || (isTestSuite && !!experimentId));
+    value !== null ||
+    Boolean(error) ||
+    isLoading ||
+    // Suite results have no stale styling, so a stale suite still shows No runs
+    // yet rather than old pass/fail tags that look current.
+    (isTestSuite && !!experimentId && !stale);
   const promptColor =
     PLAYGROUND_PROMPT_COLORS[
       (promptIndex ?? 0) % PLAYGROUND_PROMPT_COLORS.length
@@ -118,7 +128,19 @@ const PlaygroundOutputCell: React.FunctionComponent<
       return <PlaygroundOutputLoader />;
     }
 
-    return <MarkdownPreview>{value}</MarkdownPreview>;
+    if (error) {
+      return null;
+    }
+
+    return (
+      <MarkdownPreview
+        className={cn({
+          "text-muted-gray dark:text-foreground": stale,
+        })}
+      >
+        {value}
+      </MarkdownPreview>
+    );
   };
 
   return (
@@ -141,8 +163,21 @@ const PlaygroundOutputCell: React.FunctionComponent<
               </Button>
             </TooltipWrapper>
           )}
+          {stale && (
+            <PlaygroundStaleOutputNote
+              changes={output?.staleChanges}
+              compact
+              className="mb-1"
+            />
+          )}
           <div className="mb-2 min-h-[var(--cell-top-height)]">
-            {isTestSuite ? (
+            {error ? (
+              <PlaygroundOutputError
+                message={error}
+                hint={errorHint}
+                stale={stale}
+              />
+            ) : isTestSuite ? (
               <PlaygroundOutputAssertionStatus
                 experimentId={experimentId}
                 datasetItemId={originalRow.dataItemId}

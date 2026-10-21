@@ -19,7 +19,9 @@ import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.infrastructure.http.CorsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -28,6 +30,7 @@ import io.dropwizard.jobs.GuiceJobManager;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -62,6 +65,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class DailyUsageReportJobTest {
@@ -109,6 +113,44 @@ class DailyUsageReportJobTest {
                                 .and(matchingJsonPath("$.event_properties.daily_experiments",
                                         equalTo(dailyExperiments)))
                                 .and(matchingJsonPath("$.event_properties.daily_datasets", equalTo(dailyDatasets)))));
+    }
+
+    /**
+     * Verifies the trace count alone, for the tests whose subject is trace counting. Their dataset and experiment
+     * counts depend on what earlier tests in the class left backdated, which is incidental to what they assert.
+     */
+    private void verifyDailyTraces(WireMockServer server, String dailyTraces) {
+        server.verify(
+                postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type",
+                                equalTo(DailyUsageReportJob.STATISTICS_BE))
+                                .and(matchingJsonPath("$.event_properties.daily_traces", equalTo(dailyTraces)))));
+    }
+
+    /**
+     * The run at application startup always sends and marks the day as sent. Waiting for it keeps it from landing
+     * after a test's own reset, which would make the test's run skip.
+     */
+    private static void awaitStartupReport(TransactionTemplate transactionTemplate) {
+        Awaitility.await().atMost(30, TimeUnit.SECONDS).until(() -> transactionTemplate.inTransaction(
+                TransactionTemplateAsync.READ_ONLY,
+                handle -> handle.createQuery("SELECT COUNT(*) FROM metadata WHERE `key` = 'daily_usage_report'")
+                        .mapTo(Integer.class).one()) > 0);
+    }
+
+    /**
+     * Clears the day's "sent" marker, then schedules the report, so every test's run reports on its own data. Waits for
+     * any run still in progress first, as it would otherwise write the marker back after it was cleared.
+     */
+    private static void resetAndScheduleReport(TransactionTemplate transactionTemplate, GuiceJobManager guiceJobManager)
+            throws SchedulerException {
+        var scheduler = guiceJobManager.getScheduler();
+        Awaitility.await().atMost(30, TimeUnit.SECONDS).until(() -> scheduler.getCurrentlyExecutingJobs().stream()
+                .noneMatch(job -> job.getJobInstance() instanceof DailyUsageReportJob));
+        transactionTemplate.inTransaction(TransactionTemplateAsync.WRITE,
+                handle -> handle.createUpdate("DELETE FROM metadata WHERE `key` = 'daily_usage_report'").execute());
+        var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
+        scheduler.scheduleJob(TriggerBuilder.newTrigger().startNow().forJob(key).build());
     }
 
     private void updateDatasets(String workspaceId, TransactionTemplate transactionTemplate, boolean updateUser) {
@@ -273,6 +315,7 @@ class DailyUsageReportJobTest {
             this.guiceJobManager = guiceJobManager;
 
             ClientSupportUtils.config(client);
+            awaitStartupReport(transactionTemplate);
 
             experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, factory);
             traceResourceClient = new TraceResourceClient(this.client, baseURI);
@@ -305,11 +348,7 @@ class DailyUsageReportJobTest {
 
             setUpData(apiKey, workspaceName, workspaceId);
 
-            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
-
-            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
-
-            guiceJobManager.getScheduler().scheduleJob(trigger);
+            resetAndScheduleReport(transactionTemplate, guiceJobManager);
 
             Awaitility
                     .await()
@@ -416,6 +455,7 @@ class DailyUsageReportJobTest {
             this.guiceJobManager = guiceJobManager;
 
             ClientSupportUtils.config(client);
+            awaitStartupReport(transactionTemplate);
 
             experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, factory);
             traceResourceClient = new TraceResourceClient(this.client, baseURI);
@@ -432,6 +472,34 @@ class DailyUsageReportJobTest {
             NETWORK.close();
         }
 
+        /**
+         * Each test has to run the report itself, on its own data, and verify its own event. All three were
+         * shared before:
+         *
+         * <ul>
+         * <li>the job only reports once a day — {@code shouldSendDailyReport} compares
+         * {@code metadata.daily_usage_report} against {@code CURDATE()} — so after the first test every later job
+         * run returned early and sent nothing;</li>
+         * <li>traces accumulate, because {@code updateTraces} copies the workspace's traces into the previous-day
+         * window rather than moving them, and the daily count spans every workspace;</li>
+         * <li>WireMock's journal is cumulative, so {@code verify} was satisfied by the first test's event.</li>
+         * </ul>
+         *
+         * <p>Together those let a test assert a count it never produced:
+         * {@link #dailyUsageReportMixedDataExcludesOnlyDemo()} created seven regular traces, asserted five, and
+         * passed without its job ever emitting anything. It failed as soon as it was run on its own.
+         */
+        @BeforeEach
+        void resetReportState() {
+            templateAsync.nonTransaction(
+                    connection -> Mono.from(connection.createStatement("TRUNCATE TABLE traces").execute()))
+                    .block();
+            transactionTemplate.inTransaction(TransactionTemplateAsync.WRITE,
+                    handle -> handle.createUpdate("DELETE FROM metadata WHERE `key` = 'daily_usage_report'")
+                            .execute());
+            wireMock.server().resetRequests();
+        }
+
         @Test
         void test() throws SchedulerException {
 
@@ -442,17 +510,14 @@ class DailyUsageReportJobTest {
 
             setUpData(apiKey, workspaceName, ProjectService.DEFAULT_WORKSPACE_ID);
 
-            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
-
-            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
-
-            guiceJobManager.getScheduler().scheduleJob(trigger);
+            resetAndScheduleReport(transactionTemplate, guiceJobManager);
 
             Awaitility
                     .await()
                     .atMost(5, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
-                        verifyResponse(wireMock.server(), "1", "1", "5", "0", "0");
+                        // setUpData backdates datasets and experiments as well as traces, so all three are counted
+                        verifyResponse(wireMock.server(), "1", "1");
                     });
 
         }
@@ -587,21 +652,18 @@ class DailyUsageReportJobTest {
             // Create demo data (which should be excluded)
             createDemoData(apiKey, workspaceName);
 
+            var expectedDailyTraces = String.valueOf(regularTraces.size());
+
             // Update created_at to yesterday to be captured in daily report
             updateTraces(ProjectService.DEFAULT_WORKSPACE_ID, templateAsync, false);
 
             // Run the daily usage report job
-            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
-            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
-            guiceJobManager.getScheduler().scheduleJob(trigger);
+            resetAndScheduleReport(transactionTemplate, guiceJobManager);
 
             // Wait for job completion and verify
             Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-                // Verify that demo data tracking was properly excluded from BI events
-                // The verification here would depend on how the job reports data
-                // Since this test focuses on exclusion, we verify no demo data is included
-                // in the usage statistics by checking that only regular traces are counted
-                verifyResponse(wireMock.server(), "1", "1", "5", "0", "0"); // Only regular traces counted
+                // Only the regular traces are counted; everything in a demo project is excluded
+                verifyDailyTraces(wireMock.server(), expectedDailyTraces);
             });
         }
 
@@ -638,21 +700,49 @@ class DailyUsageReportJobTest {
             // Create demo data (should be excluded from counts)
             createDemoData(apiKey, workspaceName);
 
+            var expectedDailyTraces = String.valueOf(regularTraces1.size() + regularTraces2.size());
+
             // Update created_at to yesterday to be captured in daily report
             updateTraces(ProjectService.DEFAULT_WORKSPACE_ID, templateAsync, false);
 
             // Run the daily usage report job
-            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
-            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
-            guiceJobManager.getScheduler().scheduleJob(trigger);
+            resetAndScheduleReport(transactionTemplate, guiceJobManager);
 
             // Wait for job completion and verify
             Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-                // Verify that demo data exclusion works properly with mixed data
-                // The job should process both regular and demo data, but only regular data
-                // should be included in the final usage statistics sent to the BI events
-                // Expected: Regular traces only, demo traces excluded
-                verifyResponse(wireMock.server(), "1", "1", "5", "0", "0"); // Only regular traces counted
+                // Both regular projects are summed and the demo projects dropped, so the count is the
+                // traces created here rather than either project's share of them
+                verifyDailyTraces(wireMock.server(), expectedDailyTraces);
+            });
+        }
+
+        @Test
+        @DisplayName("Daily usage report counts distinct clients")
+        void dailyUsageReportCountsActiveClients() {
+            // Fixed IDs, so a Redis reused across runs re-adds the same members and the totals stay the same
+            var browser = "0a8c3bde-6f1e-4b9a-9d2c-5e7f1a2b3c4d";
+
+            // Three distinct SDK clients and one browser: repeats count once and a malformed ID is ignored
+            for (var clientId : List.of("a".repeat(64), "a".repeat(64), "b".repeat(64), "c".repeat(64),
+                    "not-a-client-id")) {
+                try (var response = client.target("%s/v1/private/projects".formatted(baseURI))
+                        .request()
+                        .header(RequestContext.WORKSPACE_HEADER, "default")
+                        .header(CorsFactory.OPIK_CLIENT_ID_HEADER, clientId)
+                        .header(CorsFactory.OPIK_BROWSER_ID_HEADER, browser)
+                        .get()) {
+                    assertThat(response.getStatus()).isEqualTo(200);
+                }
+            }
+
+            // Clients are recorded asynchronously, so report again until the totals have caught up. The report is
+            // sent every day, with or without activity, so no traces are needed here.
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).untilAsserted(() -> {
+                resetAndScheduleReport(transactionTemplate, guiceJobManager);
+                wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(DailyUsageReportJob.STATISTICS_BE))
+                                .and(matchingJsonPath("$.event_properties.total_sdk_clients", equalTo("3")))
+                                .and(matchingJsonPath("$.event_properties.total_ui_clients", equalTo("1")))));
             });
         }
 

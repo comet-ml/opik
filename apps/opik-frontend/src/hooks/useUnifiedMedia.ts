@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { Span, Trace } from "@/types/traces";
 import { ATTACHMENT_TYPE, ParsedMediaData } from "@/types/attachments";
-import { MINE_TYPE_TO_ATTACHMENT_TYPE_MAP } from "@/constants/attachments";
+import { getAttachmentTypeByMimeType } from "@/constants/attachments";
 import { processInputDataInternal } from "@/lib/images";
 import { isObjectSpan } from "@/lib/traces";
 import useAttachmentsList from "@/api/attachments/useAttachmentsList";
@@ -314,9 +314,7 @@ export const useUnifiedMedia = (
         placeholder: `[${att.file_name}]`,
         url: att.link,
         name: att.file_name,
-        type:
-          MINE_TYPE_TO_ATTACHMENT_TYPE_MAP[att.mime_type] ??
-          ATTACHMENT_TYPE.OTHER,
+        type: getAttachmentTypeByMimeType(att.mime_type),
         source: "attachment" as const,
       }),
     );

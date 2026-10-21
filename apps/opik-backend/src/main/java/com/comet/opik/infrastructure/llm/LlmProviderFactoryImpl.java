@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.LlmProviderApiKeyService;
@@ -14,6 +15,7 @@ import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import dev.langchain4j.model.chat.ChatModel;
@@ -23,6 +25,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
@@ -62,6 +65,11 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                         "LLM provider not supported: %s".formatted(llmProvider)));
     }
 
+    public LlmProviderClientApiConfig getClientApiConfig(@NonNull String workspaceId, @NonNull String model) {
+        var llmProvider = getLlmProvider(model);
+        return buildConfig(getProviderApiKey(workspaceId, llmProvider, model), workspaceId);
+    }
+
     private static final Set<LlmProvider> NAMED_PROVIDERS = Arrays.stream(LlmProvider.values())
             .filter(LlmProvider::supportsProviderName)
             .collect(Collectors.toUnmodifiableSet());
@@ -84,6 +92,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                 .providerId(providerConfig.id())
                 .workspaceId(workspaceId)
                 .authConfig(providerConfig.authConfig())
+                .provider(providerConfig.provider())
                 .build();
     }
 
@@ -125,6 +134,14 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         return StructuredOutputStrategy.getStrategy(provider, model);
     }
 
+    @Override
+    public Optional<ModelParams> openAiParams(@NonNull String model) {
+        return registryService.findModel(model)
+                .filter(result -> result.provider() == LlmProvider.OPEN_AI)
+                .map(result -> ObjectUtils.getIfNull(result.model().params(),
+                        () -> registryService.paramsOf(LlmProvider.OPEN_AI.getValue(), result.model().id())));
+    }
+
     private LlmProvider getLlmProviderFromEnums(@NonNull String model) {
         var freeModelConfig = configuration.getFreeModel();
         if (freeModelConfig.isEnabled() && model.equals(freeModelConfig.getModel())) {
@@ -141,7 +158,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             return LlmProvider.GEMINI;
         }
         if (model.startsWith("openrouter/")
-                || isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)) {
+                || isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)
+                || OpenRouterDecisionModel.isDecisionModel(model)) {
             return LlmProvider.OPEN_ROUTER;
         }
 

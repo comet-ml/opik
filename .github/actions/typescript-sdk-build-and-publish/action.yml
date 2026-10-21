@@ -66,7 +66,9 @@ runs:
     - name: Install dependencies
       shell: bash
       working-directory: ${{ inputs.working_directory }}
-      run: npm ci
+      # The audit call can hang for npm's 300s fetch-timeout when the registry
+      # misbehaves (run 33867982882). Nothing here reads the report.
+      run: npm ci --no-audit
 
     - name: Generate version
       id: version

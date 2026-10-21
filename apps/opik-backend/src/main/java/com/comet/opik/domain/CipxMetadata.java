@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.MissingNode;
 import lombok.experimental.UtilityClass;
 
 /**
@@ -18,5 +19,13 @@ public class CipxMetadata {
 
     public boolean hasIdentity(JsonNode metadata) {
         return metadata != null && metadata.path("cipx").path("session").path("identity").isObject();
+    }
+
+    /** Per-call usage units reported by the provider; a missing node when the span carries none. */
+    public JsonNode copilotUsage(JsonNode metadata) {
+        if (metadata == null) {
+            return MissingNode.getInstance();
+        }
+        return metadata.path("github").path("usage").path("copilot_usage");
     }
 }

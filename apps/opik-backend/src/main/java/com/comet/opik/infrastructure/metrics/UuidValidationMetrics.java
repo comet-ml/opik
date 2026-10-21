@@ -24,10 +24,10 @@ import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPA
  * in audit mode, out-of-window ids are counted here per workspace but not rejected, so offending clients
  * (e.g. the buggy LiteLLM native Opik integration) surface in real time without breaking ingestion.
  * <p>
- * Both paths carry the {@code mode} label ({@link #MODE_AUDIT} vs {@link #MODE_REJECT}), so a query can
- * always split audit from reject. Only the audit path carries {@code workspace_id}: the reject path runs
- * in the exception mapper where the request-scoped workspace is not threaded (tagging it there is a
- * follow-up), and instead carries {@code http_route}.
+ * Every path carries the {@code mode} label ({@link #MODE_AUDIT}, {@link #MODE_REJECT} or
+ * {@link #MODE_BYPASS}), so a query can always tell them apart. Only the audit and bypass paths carry
+ * {@code workspace_id}: the reject path runs in the exception mapper where the request-scoped workspace
+ * is not threaded (tagging it there is a follow-up), and instead carries {@code http_route}.
  * <p>
  * The {@code workspace_id} label is bounded by the set of clients actually emitting out-of-window ids
  * (a small cohort), so it does not inflate metric cardinality the way an unconditional per-workspace
@@ -41,6 +41,10 @@ public class UuidValidationMetrics {
 
     public static final String MODE_AUDIT = "audit";
     public static final String MODE_REJECT = "reject";
+    /**
+     * Out of window, but let through because the workspace is allow-listed for the wider bypass window.
+     */
+    public static final String MODE_BYPASS = "bypass";
 
     public static final AttributeKey<String> MODE_KEY = AttributeKey.stringKey("mode");
     public static final AttributeKey<String> REASON_KEY = AttributeKey.stringKey("reason");
@@ -64,9 +68,17 @@ public class UuidValidationMetrics {
      * (trace/span), {@code workspaceId} the emitting workspace. All fall back to {@code unknown}.
      */
     public void recordAudit(String reason, String resource, String workspaceId) {
-        record(MODE_AUDIT, reason, Attributes.builder()
-                .put(RESOURCE_KEY, StringUtils.defaultIfBlank(resource, UNKNOWN))
-                .put(WORKSPACE_ID_KEY, StringUtils.defaultIfBlank(workspaceId, UNKNOWN)));
+        record(MODE_AUDIT, reason, resource, workspaceId);
+    }
+
+    /**
+     * Records one workspace-scoped bypass: an out-of-window id an allow-listed workspace was allowed to
+     * ingest because it still fit the wider bypass window. Tagged like {@link #recordAudit} — it is the
+     * same "would have been rejected, let through" event with a different cause — so a query can tell
+     * deliberate demo ingestion apart from a misbehaving client.
+     */
+    public void recordBypass(String reason, String resource, String workspaceId) {
+        record(MODE_BYPASS, reason, resource, workspaceId);
     }
 
     /**
@@ -78,6 +90,16 @@ public class UuidValidationMetrics {
     public void recordReject(String reason, String httpRoute) {
         record(MODE_REJECT, reason, Attributes.builder()
                 .put(HTTP_ROUTE_KEY, StringUtils.defaultIfBlank(httpRoute, UNKNOWN)));
+    }
+
+    /**
+     * Shared assembly for the workspace-attributed paths ({@link #recordAudit} and {@link #recordBypass}),
+     * which differ only in {@code mode}.
+     */
+    private void record(String mode, String reason, String resource, String workspaceId) {
+        record(mode, reason, Attributes.builder()
+                .put(RESOURCE_KEY, StringUtils.defaultIfBlank(resource, UNKNOWN))
+                .put(WORKSPACE_ID_KEY, StringUtils.defaultIfBlank(workspaceId, UNKNOWN)));
     }
 
     /**

@@ -16,6 +16,7 @@ export const PromptVariant: core.serialization.ObjectSchema<serializers.PromptVa
             "prompt_versions",
             core.serialization.list(PromptVersionLink).optional(),
         ),
+        experimentName: core.serialization.property("experiment_name", core.serialization.string().optional()),
     });
 
 export declare namespace PromptVariant {
@@ -24,5 +25,6 @@ export declare namespace PromptVariant {
         messages: Message.Raw[];
         configs?: Record<string, JsonNode.Raw> | null;
         prompt_versions?: PromptVersionLink.Raw[] | null;
+        experiment_name?: string | null;
     }
 }

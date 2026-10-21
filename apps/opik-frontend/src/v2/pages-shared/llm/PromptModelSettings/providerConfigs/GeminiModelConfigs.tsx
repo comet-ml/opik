@@ -5,36 +5,54 @@ import { LLMGeminiConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { DEFAULT_GEMINI_CONFIGS } from "@/constants/llm";
 import { GeminiThinkingLevel } from "@/types/providers";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import isUndefined from "lodash/isUndefined";
+import {
+  NO_OUTPUT_LIMIT_TOOLTIP,
+  getNoOutputLimitHint,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/noOutputLimit";
+import {
+  createSupports,
+  getGeminiVisibleControls,
+  isAnyControlVisible,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import {
-  getDefaultThinkingLevel,
+  getThinkingLevelDescription,
   getThinkingLevelOptions,
-  supportsGeminiThinkingLevel,
+  resolveSamplingParams,
+  resolveThinkingLevel,
 } from "@/lib/modelUtils";
+import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 
 interface geminiModelConfigsProps {
   configs: LLMGeminiConfigsType;
   model?: PROVIDER_MODEL_TYPE | "";
   onChange: (configs: Partial<LLMGeminiConfigsType>) => void;
+  unsupportedParams?: ReadonlySet<ModelConfigParam>;
 }
 
 const GeminiModelConfigs = ({
   configs,
   model,
   onChange,
+  unsupportedParams,
 }: geminiModelConfigsProps) => {
-  const hasThinkingLevel = supportsGeminiThinkingLevel(model);
   const thinkingLevelOptions = getThinkingLevelOptions(model);
-  const defaultThinkingLevel = getDefaultThinkingLevel(model);
+  const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
+  const visible = getGeminiVisibleControls({
+    model,
+    configs,
+    supports: createSupports(unsupportedParams),
+  });
+
+  if (!isAnyControlVisible(visible)) return null;
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {!isUndefined(configs.temperature) && (
+      {visible.temperature && (
         <SliderInputControl
-          value={configs.temperature}
+          value={temperature}
           onChange={(v) => onChange({ temperature: v })}
           id="temperature"
           min={0}
@@ -48,7 +66,7 @@ const GeminiModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.maxCompletionTokens) && (
+      {visible.maxCompletionTokens && (
         <SliderInputControl
           value={configs.maxCompletionTokens}
           onChange={(v) => onChange({ maxCompletionTokens: v })}
@@ -56,17 +74,21 @@ const GeminiModelConfigs = ({
           min={0}
           max={65535}
           step={1}
+          integer
+          hint={getNoOutputLimitHint(configs.maxCompletionTokens)}
           defaultValue={DEFAULT_GEMINI_CONFIGS.MAX_COMPLETION_TOKENS}
           label="Max output tokens"
           tooltip={
-            <PromptModelConfigsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
+            <PromptModelConfigsTooltipContent
+              text={`The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On thinking models, thinking tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. ${NO_OUTPUT_LIMIT_TOOLTIP} (One token is roughly 4 characters for standard English text).`}
+            />
           }
         />
       )}
 
-      {!isUndefined(configs.topP) && (
+      {visible.topP && (
         <SliderInputControl
-          value={configs.topP}
+          value={topP}
           onChange={(v) => onChange({ topP: v })}
           id="topP"
           min={0}
@@ -80,17 +102,19 @@ const GeminiModelConfigs = ({
         />
       )}
 
-      {hasThinkingLevel && (
+      {visible.thinkingLevel && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="thinkingLevel" className="text-sm font-medium">
               Thinking level
             </Label>
-            <ExplainerIcon description="Controls the depth of reasoning the model performs before responding. Higher thinking level may result in more thorough but slower responses." />
+            <ExplainerIcon
+              description={getThinkingLevelDescription(model ?? "")}
+            />
           </div>
           <SelectBox
             id="thinkingLevel"
-            value={configs.thinkingLevel || defaultThinkingLevel}
+            value={resolveThinkingLevel(model ?? "", configs)}
             onChange={(value: GeminiThinkingLevel) =>
               onChange({ thinkingLevel: value })
             }
@@ -100,36 +124,40 @@ const GeminiModelConfigs = ({
         </div>
       )}
 
-      <SliderInputControl
-        value={configs.throttling ?? DEFAULT_GEMINI_CONFIGS.THROTTLING}
-        onChange={(v) => onChange({ throttling: v })}
-        id="throttling"
-        min={0}
-        max={10}
-        step={0.1}
-        defaultValue={DEFAULT_GEMINI_CONFIGS.THROTTLING}
-        label="Throttling (seconds)"
-        tooltip={
-          <PromptModelConfigsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
-        }
-      />
+      {visible.throttling && (
+        <SliderInputControl
+          value={configs.throttling ?? DEFAULT_GEMINI_CONFIGS.THROTTLING}
+          onChange={(v) => onChange({ throttling: v })}
+          id="throttling"
+          min={0}
+          max={10}
+          step={0.1}
+          defaultValue={DEFAULT_GEMINI_CONFIGS.THROTTLING}
+          label="Throttling (seconds)"
+          tooltip={
+            <PromptModelConfigsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
+          }
+        />
+      )}
 
-      <SliderInputControl
-        value={
-          configs.maxConcurrentRequests ??
-          DEFAULT_GEMINI_CONFIGS.MAX_CONCURRENT_REQUESTS
-        }
-        onChange={(v) => onChange({ maxConcurrentRequests: v })}
-        id="maxConcurrentRequests"
-        min={1}
-        max={20}
-        step={1}
-        defaultValue={DEFAULT_GEMINI_CONFIGS.MAX_CONCURRENT_REQUESTS}
-        label="Max concurrent requests"
-        tooltip={
-          <PromptModelConfigsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
-        }
-      />
+      {visible.maxConcurrentRequests && (
+        <SliderInputControl
+          value={
+            configs.maxConcurrentRequests ??
+            DEFAULT_GEMINI_CONFIGS.MAX_CONCURRENT_REQUESTS
+          }
+          onChange={(v) => onChange({ maxConcurrentRequests: v })}
+          id="maxConcurrentRequests"
+          min={1}
+          max={20}
+          step={1}
+          defaultValue={DEFAULT_GEMINI_CONFIGS.MAX_CONCURRENT_REQUESTS}
+          label="Max concurrent requests"
+          tooltip={
+            <PromptModelConfigsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
+          }
+        />
+      )}
     </div>
   );
 };

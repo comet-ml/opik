@@ -90,7 +90,7 @@ def export_single_dataset(
 
     except Exception as e:
         console.print(f"[red]Error exporting dataset {dataset.name}: {e}[/red]")
-        return 0
+        raise
 
 
 def export_dataset_by_name(
@@ -198,6 +198,7 @@ def export_experiment_datasets(
                 description=None,  # Description not available from experiment
                 project_name=project_name,
                 rest_client=client.rest_client,
+                client=client,
             )
             # File is keyed by dataset ID (the name lives inside the file).
             dataset_id = dataset_obj.id

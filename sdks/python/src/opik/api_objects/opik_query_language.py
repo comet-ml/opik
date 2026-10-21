@@ -568,6 +568,16 @@ class OpikQueryLanguage:
             # Skip the "."
             self._cursor += 1
 
+            # A "." at the very end leaves the cursor past the last character, and
+            # everything below indexes the query string directly. Truncated input is
+            # reported the same way as a missing operator or value, rather than as an
+            # IndexError from inside the parser.
+            if self._cursor >= len(self.query_string):
+                raise ValueError(
+                    "Incomplete filter string: expected a key after "
+                    f'"{field}." in "{self.query_string}"'
+                )
+
             # Check if the key is quoted
             is_quoted_key, quote_type = self._check_escaped_key()
 

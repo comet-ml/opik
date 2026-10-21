@@ -16,7 +16,11 @@ import { OptimizationStudioPage } from '@e2e/pom/optimization-studio.page';
  * experiment — so a leak fails loudly instead of passing on a lucky count.
  */
 
-test.describe('Optimization trial logs — CUJ', { tag: ['@t2-cuj', '@area:optimization-studio'] }, () => {
+// Disabled (Sept 2026 cost spike): the Studio drives GEPA / Hierarchical
+// Reflective optimizers, whose trial count is bounded only by the run's
+// timeout — so one test's LLM spend is whatever the optimizer chooses to do.
+// Re-enable behind an explicit trial ceiling and a per-project spend cap.
+test.describe.skip('Optimization trial logs — CUJ', { tag: ['@t2-cuj', '@area:optimization-studio'] }, () => {
   test('each trial\'s Logs overlay lists exactly that trial\'s traces', { tag: ['@cap:optimization-studio.trial-detail'] }, async ({
     backendClient,
     project,

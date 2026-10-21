@@ -836,6 +836,48 @@ class FindSpansResourceTest {
                     List.of());
         }
 
+        private Stream<Arguments> traceScopedReads() {
+            return Stream.of(
+                    Arguments.of("/spans", spansTestAssertion),
+                    Arguments.of("/spans/search", spanStreamTestAssertion));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("traceScopedReads")
+        void findByTraceIdReturnsOnlyThatTracesSpans(String endpoint, SpanPageTestAssertion testAssertion) {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var traceId = generator.generate();
+            var spans = newSpansOnTrace(projectName, traceId);
+            var otherTraceSpans = newSpansOnTrace(projectName, generator.generate());
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            spanResourceClient.batchCreateSpans(otherTraceSpans, apiKey, workspaceName);
+
+            // Both endpoints return the trace's spans newest id first
+            var values = testAssertion.transformTestParams(spans, spans.reversed(), otherTraceSpans);
+
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(), values.all(), List.of(), Map.of("trace_id", traceId.toString()));
+        }
+
+        private List<Span> newSpansOnTrace(String projectName, UUID traceId) {
+            return PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .traceId(traceId)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+        }
+
         @ParameterizedTest
         @EnumSource(SpanType.class)
         void createAndGetByProjectIdAndTraceIdAndType(SpanType expectedType) {
@@ -1122,6 +1164,54 @@ class FindSpansResourceTest {
             var actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
 
             assertSpan(actualSpans, expectedSpans, USER);
+        }
+
+        /**
+         * The cursor is whatever id the previous page ended on, so it can carry a far-future timestamp: a UUIDv7
+         * minted by a broken clock (litellm BerriAI/litellm#31294) sorts above every real id, so it comes back first
+         * under {@code ORDER BY id DESC} and becomes the cursor for page two.
+         *
+         * <p>Each id-range bound in the read path carries a parallel week-start bound on {@code id_at}, a pruning hint
+         * that must never exclude a row the id-range admits. When that bound was {@code toMonday} it broke exactly
+         * here (OPIK-8241): a far-future cursor folded into a past week and every ordinary span — whose week is later
+         * — failed {@code <=}, so the page came back empty and pagination stopped dead.
+         *
+         * <p>This reaches the <b>legacy</b> {@code spans} table, the default topology of this suite and of any install
+         * that has not cut over, because the wrap is on the <b>bound</b> side, which reads the id directly and is
+         * honest whatever width {@code spans.id_at} has. No far-future span is needed — {@code lastRetrievedId} is an
+         * unvalidated cursor on the request, so ingestion, which would reject such an id, is not involved.
+         */
+        @Test
+        void searchSpansStream__whenCursorCarriesAFarFutureTimestamp__thenSpansAreStillReturned() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(32);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    span.startTime(), span.endTime()))
+                            .build())
+                    .sorted(Comparator.comparing(Span::id).reversed())
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            // Sorts above every seeded id, so `id < :cursor` admits all of them and only the week bound can drop them.
+            var farFutureCursor = idGenerator.generateId(Instant.parse("2201-06-01T00:00:00Z"));
+
+            var streamRequest = SpanSearchStreamRequest.builder()
+                    .projectName(projectName)
+                    .lastRetrievedId(farFutureCursor)
+                    .limit(spans.size())
+                    .build();
+            var actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
+
+            assertSpan(actualSpans, spans, USER);
         }
 
         @ParameterizedTest

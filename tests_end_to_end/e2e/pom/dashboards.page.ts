@@ -143,11 +143,27 @@ export class DashboardsPage {
       if (await loadMore.isVisible()) {
         await loadMore.click();
       }
-      // Exactly one: a project whose name merely contains this one would
-      // otherwise be a candidate, and `.first()` would pick between them
-      // silently.
+      // Exactly one option in the list — not merely one *matching* option.
+      //
+      // Both halves earn their place. It rules out a project whose name merely
+      // contains this one, which `.first()` would otherwise pick between
+      // silently. And counting the whole list rather than the match is what
+      // waits for the dropdown's client-side filter to settle: the search is
+      // debounced, so for a beat after the text lands the list is still the
+      // full unfiltered set. A click dispatched across that re-render toggles
+      // nothing while still counting as a successful click, and the only
+      // symptom is the trigger below still reading "Select projects" — which
+      // is how this failed, reproducibly, under parallel workers.
+      await expect(projectPopover.getByRole('option')).toHaveCount(1);
       await expect(option).toHaveCount(1);
       await option.click();
+      // The option's own record of the toggle, and the earliest thing that can
+      // be read back: the trigger only re-renders once the editor's state has
+      // flowed back down, so asserting there first would blame the wrong step.
+      await expect(option, 'the project option registered as selected').toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
       // Multiselect keeps the popover open; dismiss it before reaching the
       // metric control underneath.
       await this.page.keyboard.press('Escape');

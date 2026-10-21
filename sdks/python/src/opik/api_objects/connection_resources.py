@@ -146,6 +146,7 @@ def create_connection_resources(
         api_key=config.api_key,
         check_tls_certificate=config.check_tls_certificate,
         compress_json_requests=config.enable_json_request_compression,
+        compression_level=config.request_compression_level,
     )
     rest_client = rest_api_client.OpikApi(
         base_url=config.url_override,

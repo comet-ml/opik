@@ -1,11 +1,22 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import pick from "lodash/pick";
+import mapValues from "lodash/mapValues";
+import union from "lodash/union";
+import isEqual from "fast-deep-equal";
 
-import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
+import {
+  LogExperiment,
+  PlaygroundPromptType,
+  PlaygroundRunInputChange,
+} from "@/types/playground";
+import { LLMMessage } from "@/types/llm";
+import { restoreMissingConfigKeys, RunFailureHint } from "@/lib/playground";
+import { buildExperimentName } from "@/lib/experiments";
 import { JsonObject } from "@/types/shared";
 import { Filters } from "@/types/filters";
 import { DATASET_TYPE } from "@/types/datasets";
+import isEmpty from "lodash/isEmpty";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import lodashSet from "lodash/set";
@@ -13,7 +24,10 @@ import lodashSet from "lodash/set";
 interface PlaygroundOutput {
   isLoading: boolean;
   value: string | null;
+  error?: string;
+  errorHint?: RunFailureHint;
   stale: boolean;
+  staleChanges?: PlaygroundRunInputChange[];
   traceId?: string;
   selectedRuleIds?: string[] | null;
   usage?: {
@@ -40,57 +54,102 @@ const isPlaygroundOutputWithDatasetItem = (
   return "datasetItemMap" in output;
 };
 
-const updateAllStaleStatusesForPromptOutput = (
+// Returns the same object when nothing new changed, so cells subscribed to an
+// already stale output don't re-render on every keystroke in the prompt.
+const markOutputStale = (
+  output: PlaygroundOutput,
+  changes: PlaygroundRunInputChange[],
+): PlaygroundOutput => {
+  const previousChanges = output.stale ? output.staleChanges ?? [] : [];
+  const staleChanges = union(previousChanges, changes);
+
+  if (output.stale && staleChanges.length === previousChanges.length) {
+    return output;
+  }
+
+  return { ...output, stale: true, staleChanges };
+};
+
+const markPromptOutputStale = (
   promptId: string,
   outputMap: PlaygroundOutputMap,
-  value: boolean,
+  changes: PlaygroundRunInputChange[],
 ) => {
-  if (!outputMap[promptId]) {
-    return outputMap;
-  }
-
   const promptOutput = outputMap[promptId];
 
-  if (!isPlaygroundOutputWithDatasetItem(promptOutput)) {
-    const currentStaleStatus = promptOutput.stale;
-    if (currentStaleStatus !== value) {
-      return {
-        ...outputMap,
-        [promptId]: {
-          ...promptOutput,
-          stale: value,
-        },
-      };
-    }
+  if (!promptOutput) {
     return outputMap;
   }
-
-  const datasetItemMap = promptOutput.datasetItemMap;
-  const datasetItemIds = Object.keys(datasetItemMap);
-
-  const updatedDatasetItemMap = datasetItemIds.reduce<
-    PlaygroundOutputWithDatasetItem["datasetItemMap"]
-  >((updatedMap, datasetItemId) => {
-    const datasetItem = datasetItemMap[datasetItemId];
-    const currentStaleStatus = datasetItem.stale;
-
-    if (currentStaleStatus !== value) {
-      updatedMap[datasetItemId] = {
-        ...datasetItem,
-        stale: value,
-      };
-    } else {
-      updatedMap[datasetItemId] = datasetItem;
-    }
-
-    return updatedMap;
-  }, {});
 
   return {
     ...outputMap,
-    [promptId]: {
-      datasetItemMap: updatedDatasetItemMap,
-    },
+    [promptId]: isPlaygroundOutputWithDatasetItem(promptOutput)
+      ? {
+          datasetItemMap: mapValues(promptOutput.datasetItemMap, (output) =>
+            markOutputStale(output, changes),
+          ),
+        }
+      : markOutputStale(promptOutput, changes),
+  };
+};
+
+// Only what a run sends. Library links, message ids and one-off flags also go
+// through updatePrompt, often with no user edit (a reload re-applies the loaded
+// prompt), and must not hide the output.
+const toRunMessages = (messages: LLMMessage[]) =>
+  messages.map(({ role, content }) => ({ role, content }));
+
+const getRunInputChanges = (
+  prompt: PlaygroundPromptType,
+  updatedPrompt: PlaygroundPromptType,
+): PlaygroundRunInputChange[] => {
+  const changes: PlaygroundRunInputChange[] = [];
+
+  if (
+    !isEqual(
+      toRunMessages(prompt.messages),
+      toRunMessages(updatedPrompt.messages),
+    )
+  ) {
+    changes.push("prompt");
+  }
+
+  if (
+    prompt.model !== updatedPrompt.model ||
+    prompt.provider !== updatedPrompt.provider
+  ) {
+    changes.push("model");
+  } else if (!isEqual(prompt.configs, updatedPrompt.configs)) {
+    // Not counted on a model switch: it swaps in the new model's default
+    // parameters, which the user didn't change themselves.
+    changes.push("parameters");
+  }
+
+  return changes;
+};
+
+// Prompts stored before appliedChatPromptVersionId existed show their pinned
+// version's messages, maybe edited, and without the marker the loader would
+// apply the template over them once. A prompt that follows the latest version
+// is left alone, since which version it applied is unknown.
+const markStoredPinnedChatPromptApplied = (
+  prompt: PlaygroundPromptType,
+): PlaygroundPromptType => {
+  if (
+    !prompt ||
+    typeof prompt !== "object" ||
+    !prompt.loadedChatPromptId ||
+    !prompt.loadedChatPromptVersionId ||
+    prompt.appliedChatPromptVersionId ||
+    !Array.isArray(prompt.messages) ||
+    !prompt.messages.some((message) => !isEmpty(message?.content))
+  ) {
+    return prompt;
+  }
+
+  return {
+    ...prompt,
+    appliedChatPromptVersionId: prompt.loadedChatPromptVersionId,
   };
 };
 
@@ -112,10 +171,12 @@ export type PlaygroundStore = {
   progressTotal: number;
   progressCompleted: number;
   progressPhase: "running" | "evaluating" | null;
-  experimentNamePrefix: string | null;
+  experimentName: string | null;
+  lastSuggestedExperimentName: string | null;
   datasetType: DATASET_TYPE | null;
   experimentByPromptId: Record<string, string>;
   scoresByDatasetId: Record<string, string[] | null>;
+  appliedChatPromptVersionsBackfilled: boolean;
 
   setPromptMap: (
     promptIds: string[],
@@ -148,7 +209,8 @@ export type PlaygroundStore = {
   setPromptRunning: (promptId: string, running: boolean) => void;
   setAllRunning: (running: boolean) => void;
   clearRunningMap: () => void;
-  setExperimentNamePrefix: (prefix: string | null) => void;
+  setExperimentName: (name: string | null) => void;
+  setSuggestedExperimentName: (name: string) => void;
   setDatasetFilters: (filters: Filters) => void;
   setDatasetPage: (page: number) => void;
   setDatasetSize: (size: number) => void;
@@ -182,29 +244,32 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       progressTotal: 0,
       progressCompleted: 0,
       progressPhase: null,
-      experimentNamePrefix: null,
+      experimentName: null,
+      lastSuggestedExperimentName: null,
       datasetType: null,
       experimentByPromptId: {},
       scoresByDatasetId: {},
+      appliedChatPromptVersionsBackfilled: true,
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
-          const newPromptMap = {
-            ...state.promptMap,
-            [promptId]: {
-              ...state.promptMap[promptId],
-              ...changes,
-            },
-          };
+          const prompt = state.promptMap[promptId];
+          const updatedPrompt = { ...prompt, ...changes };
+          const runInputChanges = getRunInputChanges(prompt, updatedPrompt);
 
           return {
             ...state,
-            promptMap: newPromptMap,
-            outputMap: updateAllStaleStatusesForPromptOutput(
-              promptId,
-              state.outputMap,
-              true,
-            ),
+            promptMap: {
+              ...state.promptMap,
+              [promptId]: updatedPrompt,
+            },
+            outputMap: runInputChanges.length
+              ? markPromptOutputStale(
+                  promptId,
+                  state.outputMap,
+                  runInputChanges,
+                )
+              : state.outputMap,
           };
         });
       },
@@ -269,7 +334,12 @@ const usePlaygroundStore = create<PlaygroundStore>()(
             : [promptId];
 
           const output = get(state.outputMap, key);
-          const newOutput = { ...output, stale: false, ...changes };
+          const newOutput = {
+            ...output,
+            stale: false,
+            staleChanges: undefined,
+            ...changes,
+          };
           const newOutputMap = { ...state.outputMap };
 
           lodashSet(newOutputMap, key, newOutput);
@@ -370,8 +440,19 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       clearRunningMap: () => {
         set((state) => ({ ...state, isRunningMap: {} }));
       },
-      setExperimentNamePrefix: (prefix) => {
-        set((state) => ({ ...state, experimentNamePrefix: prefix }));
+      setExperimentName: (name) => {
+        set((state) => ({
+          ...state,
+          experimentName: name,
+          lastSuggestedExperimentName: null,
+        }));
+      },
+      setSuggestedExperimentName: (name) => {
+        set((state) => ({
+          ...state,
+          experimentName: name,
+          lastSuggestedExperimentName: name,
+        }));
       },
       setDatasetFilters: (filters) => {
         set((state) => {
@@ -467,6 +548,40 @@ const usePlaygroundStore = create<PlaygroundStore>()(
     }),
     {
       name: "PLAYGROUND_STATE",
+      // Normalizes on every load rather than through `migrate`: persisted blobs carry no version
+      // (this store never set one), and zustand only migrates a blob whose stored version is a
+      // number — so a migrate hook would skip exactly the states that need repairing. Cheap and
+      // idempotent, since restoreMissingConfigKeys returns the prompt untouched when it is complete.
+      merge: (persisted, current) => {
+        const stored = persisted as Partial<PlaygroundStore> | undefined;
+        const state = {
+          ...current,
+          ...stored,
+        };
+
+        if (!state.promptMap) {
+          return state;
+        }
+
+        // Only state written before appliedChatPromptVersionId existed is backfilled: current
+        // state can hold a version picked a moment ago whose messages have not loaded yet, and
+        // marking it would keep the old messages under the new version. A stored flag rather
+        // than persist `version`, because an older build that finds a newer version drops the
+        // whole stored state.
+        const backfillAppliedVersions =
+          !stored?.appliedChatPromptVersionsBackfilled;
+
+        return {
+          ...state,
+          appliedChatPromptVersionsBackfilled: true,
+          promptMap: mapValues(state.promptMap, (prompt) => {
+            const restored = restoreMissingConfigKeys(prompt);
+            return backfillAppliedVersions
+              ? markStoredPinnedChatPromptApplied(restored)
+              : restored;
+          }),
+        };
+      },
       partialize: (state) => {
         /* eslint-disable @typescript-eslint/no-unused-vars */
         const {
@@ -626,11 +741,17 @@ export const useSetAllRunning = () =>
 export const useClearRunningMap = () =>
   usePlaygroundStore((state) => state.clearRunningMap);
 
-export const useExperimentNamePrefix = () =>
-  usePlaygroundStore((state) => state.experimentNamePrefix);
+export const useExperimentName = () =>
+  usePlaygroundStore((state) => state.experimentName);
 
-export const useSetExperimentNamePrefix = () =>
-  usePlaygroundStore((state) => state.setExperimentNamePrefix);
+export const useSetExperimentName = () =>
+  usePlaygroundStore((state) => state.setExperimentName);
+
+export const useLastSuggestedExperimentName = () =>
+  usePlaygroundStore((state) => state.lastSuggestedExperimentName);
+
+export const useSetSuggestedExperimentName = () =>
+  usePlaygroundStore((state) => state.setSuggestedExperimentName);
 
 export const useDatasetFilters = () =>
   usePlaygroundStore((state) => state.datasetFilters);
@@ -697,5 +818,17 @@ export const useScoresByDatasetId = () =>
 
 export const useSetScoresForDataset = () =>
   usePlaygroundStore((state) => state.setScoresForDataset);
+
+export const getExperimentNameForPrompt = (promptId: string) => {
+  const { experimentName, promptIds } = usePlaygroundStore.getState();
+  if (!experimentName) return undefined;
+
+  return buildExperimentName(experimentName, promptIds.indexOf(promptId));
+};
+
+export const getExperimentNamesForPrompts = (
+  ids: string[],
+): Record<string, string | undefined> =>
+  Object.fromEntries(ids.map((id) => [id, getExperimentNameForPrompt(id)]));
 
 export default usePlaygroundStore;

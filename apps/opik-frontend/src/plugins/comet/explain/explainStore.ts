@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
 import {
-  BRIDGE_PROTOCOL_VERSION,
   ExplainKind,
   ExplainTarget,
   HostEventMap,
@@ -59,6 +58,7 @@ const ERROR_COPY = {
   timeout: "Ollie took too long to respond. Try again.",
   unavailable: "Ollie is unavailable right now. Try again shortly.",
   rate_limited: "Too many requests right now. Try again in a moment.",
+  out_of_credits: "You're out of LLM credits. Add credits and try again.",
 } as const;
 type ErrorCode = keyof typeof ERROR_COPY;
 
@@ -502,11 +502,16 @@ export const handleConsoleEvent = (
 export const useExplainEntry = (target: ExplainTarget) =>
   useExplainStore((s) => s.entries[cellKey(target)]);
 
+// The bridge version that introduced the Explain events. Explain gates on this, not on
+// BRIDGE_PROTOCOL_VERSION, so a later bump for unrelated events doesn't hide it on a console
+// that understands everything Explain sends.
+const EXPLAIN_BRIDGE_VERSION = 2;
+
 // Single gate read by the (per-row) button — no per-row backend hooks. Show
 // Explain only when the whole Ollie integration is usable: a live bridge + pod,
 // the console advertised the "explain" capability (its remote on/off), and its
-// bridge is at least as new as ours so the events we emit are understood (newer
-// consoles stay compatible, hence `>=`).
+// bridge is new enough for the events we emit (newer consoles stay compatible,
+// hence `>=`).
 export const useCanExplain = () =>
   useExplainStore(
     (s) =>
@@ -514,7 +519,7 @@ export const useCanExplain = () =>
       s.ready &&
       s.capabilities.includes("explain") &&
       s.consoleBridgeVersion !== null &&
-      s.consoleBridgeVersion >= BRIDGE_PROTOCOL_VERSION,
+      s.consoleBridgeVersion >= EXPLAIN_BRIDGE_VERSION,
   );
 
 export default useExplainStore;

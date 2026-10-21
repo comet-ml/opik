@@ -161,6 +161,34 @@ async def test_litellm_acompletion_create__happyflow(fake_backend):
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@pytest.mark.parametrize(
+    "model,expected_provider",
+    [
+        ("novita/deepseek/deepseek-r1-distill-llama-70b", "novita"),
+        ("openrouter/anthropic/claude-3.5-sonnet", "openrouter"),
+        ("deepinfra/meta-llama/Llama-3.3-70B-Instruct", "deepinfra"),
+        ("groq/llama-3.1-8b-instant", "groq"),
+        ("gpt-4o-mini", "openai"),
+    ],
+)
+def test_litellm_completion__provider_prefix_in_model__provider_of_the_request_logged(
+    fake_backend, model, expected_provider
+):
+    # The response's model name drops the provider prefix, so it can't tell the provider.
+    tracked_completion = track_completion()(litellm.completion)
+
+    tracked_completion(
+        model=model,
+        messages=[{"role": "user", "content": "Tell a fact"}],
+        mock_response="A fact",
+    )
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    assert fake_backend.trace_trees[0].spans[0].provider == expected_provider
+
+
 def test_litellm_completion_error_handling__exception_logged(fake_backend):
     """Test error handling in LiteLLM completion tracking."""
     tracked_completion = track_completion()(litellm.completion)

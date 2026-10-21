@@ -1,6 +1,7 @@
 import { test } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { ItemReturnNav } from './item-return-nav.page';
 
 export class DatasetItemsPage {
   constructor(
@@ -15,6 +16,31 @@ export class DatasetItemsPage {
       await this.page.goto(
         `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/datasets/${this.datasetId}/items`,
       );
+    });
+  }
+
+  /**
+   * Open the items page the way a link from an experiment does: with the
+   * originating compare view in `from`, and optionally a `row` to expand.
+   *
+   * `from` is passed through `URLSearchParams`, which encodes the whole href —
+   * query and all — into the one param, exactly as the product's own `Link`
+   * does. Writing it by hand is what lets a spec drive the reject cases (an
+   * off-site URL, a protocol-relative one), which no in-app link would ever
+   * produce.
+   *
+   * `row` is left off entirely when not asked for, rather than sent empty: the
+   * page treats an absent `row` as "no panel", and `row=` is a different thing.
+   */
+  async gotoWithReturn(opts: { from?: string | null; row?: string } = {}): Promise<void> {
+    return test.step('Open dataset items page with a return href', async () => {
+      const env = loadEnvConfig();
+      const url = new URL(
+        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/datasets/${this.datasetId}/items`,
+      );
+      if (opts.row) url.searchParams.set('row', opts.row);
+      if (opts.from) url.searchParams.set('from', opts.from);
+      await this.page.goto(url.toString());
     });
   }
 
@@ -45,12 +71,58 @@ export class DatasetItemsPage {
     return this.page.getByText(`v${version}`, { exact: true });
   }
 
+  /**
+   * Every rendered item row. Exposed so callers can use a retrying
+   * `toHaveCount(...)` instead of the one-shot `countItems()`, which reads
+   * whatever happens to be in the DOM at that instant.
+   */
+  itemRows(): Locator {
+    return this.itemsTableBody.locator('tr[data-row-id]');
+  }
+
   itemRow(index: number): Locator {
     return this.itemsTableBody.locator('tr[data-row-id]').nth(index);
   }
 
   itemRowById(id: string): Locator {
     return this.itemsTableBody.locator(`tr[data-row-id="${id}"]`);
+  }
+
+  /**
+   * One item's cell for one of its data fields.
+   *
+   * Addressed by the table's own `data-cell-id` (`<rowId>_<columnId>`) rather
+   * than by position: dataset item columns are derived from the item's own
+   * keys, and their order is user-configurable and persisted, so an
+   * `nth-child` would read a different field the moment someone reorders the
+   * grid.
+   *
+   * The id is `<itemId>_data_<field>`, not `<itemId>_data.<field>`: the FE
+   * builds the column id as `data.<field>` (`COLUMN_DATA_ID`) and hands it to
+   * TanStack as an `accessorKey` with no explicit `id` (`convertColumnDataToColumn`
+   * in `lib/table.ts`), so TanStack derives the column id by replacing EVERY dot
+   * with an underscore. So neither half of this is the field name the SDK sent.
+   *
+   * That replacement is applied here to the whole `data.<field>` string rather
+   * than only to the separator, because a dataset field name may itself contain
+   * a dot — item content is arbitrary JSON. Addressing `a.b` as `_data_a.b`
+   * would match nothing, since the table stamps `_data_a_b`.
+   *
+   * Note that the FE's normalisation is lossy: fields `a.b` and `a_b` both
+   * become `data_a_b`, so an item carrying both cannot be addressed cell by
+   * cell through this helper at all. Disambiguating that is a front-end
+   * decision about the cell-id scheme, not something a page object can fix.
+   *
+   * The whole id is escaped before it goes into the CSS attribute selector.
+   * Unlike `itemRowById`, whose argument is always a server-issued uuid, a
+   * dataset field name is user data — any JSON key is legal, and a `"` or a
+   * `\` in one would otherwise end the quoted string early and silently match
+   * a different cell, or none.
+   */
+  itemCell(itemId: string, field: string): Locator {
+    const columnId = `data.${field}`.replace(/\./g, '_');
+    const cellId = `${itemId}_${columnId}`.replace(/["\\]/g, '\\$&');
+    return this.itemRowById(itemId).locator(`[data-cell-id="${cellId}"]`);
   }
 
   /**
@@ -157,6 +229,20 @@ export class DatasetItemsPage {
     return this.versionHistoryRow(versionName).locator('[data-cell-id$="_items_total"]');
   }
 
+  /**
+   * The "Changes" cell of a version row: the added / modified / deleted tags
+   * the column renders, e.g. `+ 1` for a version that added one item and
+   * changed nothing else, or `-` for a version with no counted change.
+   *
+   * Addressed by `data-cell-id` for the same reason as `versionItemCount`.
+   * This is the only place the per-version added/modified split is visible to
+   * a user — "Item count" alone cannot tell a version that added one item
+   * apart from one that added two and deleted one.
+   */
+  versionChangeSummary(versionName: string): Locator {
+    return this.versionHistoryRow(versionName).locator('[data-cell-id$="_change_summary"]');
+  }
+
   async search(term: string): Promise<void> {
     return test.step(`Search items for "${term}"`, async () => {
       await this.page.getByTestId('search-input').fill(term);
@@ -255,6 +341,26 @@ export class DatasetItemsPage {
 
   get editItemPanel(): Locator {
     return this.page.getByTestId('dataset-item-editor');
+  }
+
+  /**
+   * Wait for the item detail panel to be mounted and return the return-nav
+   * controls scoped to it.
+   *
+   * The wait belongs here rather than in the caller: `ViewInExperimentButton`
+   * renders inside this panel, so asking whether the button is absent before
+   * the panel exists would answer "absent" for every build.
+   */
+  async itemPanelReturnNav(): Promise<ItemReturnNav> {
+    return test.step('Wait for the item detail panel', async () => {
+      await this.editItemPanel.waitFor({ state: 'visible' });
+      return new ItemReturnNav(this.page, this.editItemPanel);
+    });
+  }
+
+  /** The return-nav controls for the header alone, with no panel open. */
+  headerReturnNav(): ItemReturnNav {
+    return new ItemReturnNav(this.page, this.editItemPanel);
   }
 
   private get itemsTableBody(): Locator {

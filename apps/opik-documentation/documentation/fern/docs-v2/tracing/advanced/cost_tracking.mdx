@@ -50,7 +50,7 @@ You can retrieve the estimated cost programmatically for both spans and traces. 
 
 ### Retrieving Span Costs
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -62,7 +62,7 @@ print(span.total_estimated_cost)
 
 ### Retrieving Trace Costs
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -87,7 +87,7 @@ You can then update your code to log traces and spans:
 <Tab title="Function decorator" value="Function decorator">
 If you are using function decorators, you will need to use the `update_current_span` method:
 
-```python
+```python wordWrap
 from opik import track, opik_context
 
 @track(type="llm") # Note - Specifying the type is this is important
@@ -111,7 +111,7 @@ llm_call("Hello world!")
 
 When using the low level Python SDK, you will need to update the `client.span` or `trace.span` methods:
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -148,7 +148,7 @@ When you need to set a custom cost or use an unsupported model, you can manually
 
 If you're manually creating spans, you can set the cost directly when creating the span:
 
-```python
+```python wordWrap
 from opik import track, opik_context
 
 @track
@@ -165,7 +165,7 @@ llm_call("Hello world!")
 
 With Opik integrations, spans are automatically created and closed, preventing updates while they're open. However, you can update the cost afterward using the `update_span` method. This works well for implementing periodic cost estimation jobs:
 
-```python
+```python wordWrap
 from opik import Opik
 from opik.rest_api.types.span_public import SpanPublic
 
@@ -251,7 +251,7 @@ Opik currently calculates costs automatically for all LLM calls in the following
 
 ### Supported Providers
 
-Cost tracking is supported for the following LLM providers (as defined in `opik.LLMProvider` enum):
+Cost tracking is supported for the following LLM providers (pass the name in parentheses as the span `provider`; the most common ones are also available in the `opik.LLMProvider` enum):
 
 - **OpenAI** (`openai`) - Models hosted by OpenAI (https://platform.openai.com)
 - **Anthropic** (`anthropic`) - Models hosted by Anthropic (https://www.anthropic.com)
@@ -260,6 +260,7 @@ Cost tracking is supported for the following LLM providers (as defined in `opik.
 - **Google Vertex AI** (`google_vertexai`) - Gemini models hosted in Google Vertex AI (https://cloud.google.com/vertex-ai)
 - **AWS Bedrock** (`bedrock`) - Models hosted by AWS Bedrock (https://aws.amazon.com/bedrock)
 - **Groq** (`groq`) - Models hosted by Groq (https://groq.com)
+- **TypeSafe AI** (`typesafe`) - Jev System One models hosted by TypeSafe AI (https://typesafe.ai)
 
 You can find a complete list of supported models for these providers in the
 [model_prices_and_context_window.json file](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/src/main/resources/model_prices_and_context_window.json).

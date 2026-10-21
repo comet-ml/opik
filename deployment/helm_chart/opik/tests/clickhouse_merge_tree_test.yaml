@@ -1,0 +1,133 @@
+suite: clickhouse force-merge (LWD reclaim) settings
+
+# Opt-in: enabling force-merge on an install with a large backlog of old parts queues every
+# one of them for a multi-hour merge at once, starving mutations (deletes).
+
+templates:
+  - templates/clickhouseinstallation.yaml
+
+tests:
+  - it: renders no merge_tree.xml by default
+    asserts:
+      - notExists:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+
+  - it: renders the defaults when enabled
+    set:
+      clickhouse.forceMerge.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+          pattern: "<max_bytes_to_merge_at_max_space_in_pool>429496729600</max_bytes_to_merge_at_max_space_in_pool>"
+      - matchRegex:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+          pattern: "<min_age_to_force_merge_seconds>604800</min_age_to_force_merge_seconds>"
+      - matchRegex:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+          pattern: "<min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>"
+      - matchRegex:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+          pattern: "<number_of_free_entries_in_pool_to_lower_max_size_of_merge>8</number_of_free_entries_in_pool_to_lower_max_size_of_merge>"
+
+  - it: renders overridden values
+    set:
+      clickhouse.forceMerge:
+        enabled: true
+        minAgeSeconds: 2592000
+        onPartitionOnly: true
+        maxBytesToMergeAtMaxSpaceInPool: 161061273600
+    asserts:
+      - matchRegex:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+          pattern: "<min_age_to_force_merge_seconds>2592000</min_age_to_force_merge_seconds>"
+      - matchRegex:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+          pattern: "<min_age_to_force_merge_on_partition_only>1</min_age_to_force_merge_on_partition_only>"
+      - matchRegex:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+          pattern: "<max_bytes_to_merge_at_max_space_in_pool>161061273600</max_bytes_to_merge_at_max_space_in_pool>"
+
+  - it: keeps a hand-written merge_tree.xml when the flag is off
+    set:
+      clickhouse:
+        configuration:
+          files:
+            conf.d/merge_tree.xml: "<clickhouse><merge_tree><min_age_to_force_merge_seconds>0</min_age_to_force_merge_seconds></merge_tree></clickhouse>"
+    asserts:
+      - matchRegex:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+          pattern: "<min_age_to_force_merge_seconds>0</min_age_to_force_merge_seconds>"
+
+  - it: fails when the flag and a hand-written merge_tree.xml are both set
+    set:
+      clickhouse:
+        forceMerge:
+          enabled: true
+        configuration:
+          files:
+            conf.d/merge_tree.xml: "<clickhouse/>"
+    asserts:
+      - failedTemplate:
+          errorMessage: "clickhouse.forceMerge.enabled renders conf.d/merge_tree.xml; remove it from clickhouse.configuration.files"
+
+  - it: fails on a non-numeric value
+    set:
+      clickhouse.forceMerge:
+        enabled: true
+        minAgeSeconds: seven-days
+    asserts:
+      - failedTemplate:
+          errorPattern: "clickhouse.forceMerge.minAgeSeconds must be a number"
+
+  - it: fails on a zero age
+    set:
+      clickhouse.forceMerge:
+        enabled: true
+        minAgeSeconds: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "clickhouse.forceMerge.minAgeSeconds must be an integer >= 1"
+
+  - it: fails on a negative age
+    set:
+      clickhouse.forceMerge:
+        enabled: true
+        minAgeSeconds: -604800
+    asserts:
+      - failedTemplate:
+          errorPattern: "clickhouse.forceMerge.minAgeSeconds must be an integer >= 1"
+
+  - it: fails on a negative pool threshold
+    set:
+      clickhouse.forceMerge:
+        enabled: true
+        numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge: -1
+    asserts:
+      - failedTemplate:
+          errorPattern: "numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge must be an integer >= 0"
+
+  - it: fails on a fractional value
+    set:
+      clickhouse.forceMerge:
+        enabled: true
+        maxBytesToMergeAtMaxSpaceInPool: 1.5
+    asserts:
+      - failedTemplate:
+          errorPattern: "maxBytesToMergeAtMaxSpaceInPool must be an integer >= 1"
+
+  - it: fails on a non-boolean onPartitionOnly
+    set:
+      clickhouse.forceMerge:
+        enabled: true
+        onPartitionOnly: "yes"
+    asserts:
+      - failedTemplate:
+          errorPattern: "clickhouse.forceMerge.onPartitionOnly must be true or false"
+
+  - it: does not validate while disabled
+    set:
+      clickhouse.forceMerge:
+        minAgeSeconds: seven-days
+    asserts:
+      - notExists:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]

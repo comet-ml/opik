@@ -85,7 +85,7 @@ environment variables or the `~/.opik.config` file.
 
 Set these before starting your application:
 
-```bash
+```bash wordWrap
 # How often (seconds) to ping the server to check connectivity (default: 10)
 export OPIK_CONNECTION_MONITOR_PING_INTERVAL=10
 
@@ -106,7 +106,7 @@ export OPIK_REPLAY_TICK_INTERVAL=0.3
 
 Add the parameters to your `~/.opik.config` file under the `[opik]` section:
 
-```toml
+```toml wordWrap
 [opik]
 url_override = https://www.comet.com/opik/api
 api_key = <your-api-key>
@@ -136,7 +136,7 @@ replay_tick_interval = 0.3
 If your application logs many traces per second, a large backlog may accumulate during an outage.
 To replay it quickly after recovery, increase the batch size and reduce the inter-batch delay:
 
-```bash
+```bash wordWrap
 export OPIK_REPLAY_BATCH_SIZE=200
 export OPIK_REPLAY_BATCH_REPLAY_DELAY=0.1
 ```
@@ -145,7 +145,7 @@ export OPIK_REPLAY_BATCH_REPLAY_DELAY=0.1
 
 To limit the amount of memory used when reading messages from the database during replay:
 
-```bash
+```bash wordWrap
 export OPIK_REPLAY_BATCH_SIZE=10
 export OPIK_REPLAY_BATCH_REPLAY_DELAY=1.0
 ```
@@ -155,7 +155,7 @@ export OPIK_REPLAY_BATCH_REPLAY_DELAY=1.0
 If connectivity is intermittent, reduce the ping interval so the SDK stops trying to send
 messages sooner after an outage begins:
 
-```bash
+```bash wordWrap
 export OPIK_CONNECTION_MONITOR_PING_INTERVAL=5
 export OPIK_CONNECTION_MONITOR_CHECK_TIMEOUT=3
 ```
@@ -164,7 +164,7 @@ export OPIK_CONNECTION_MONITOR_CHECK_TIMEOUT=3
 
 To minimise the delay between the server becoming available again and replay starting:
 
-```bash
+```bash wordWrap
 export OPIK_CONNECTION_MONITOR_PING_INTERVAL=5
 export OPIK_REPLAY_TICK_INTERVAL=0.1
 ```
@@ -220,7 +220,7 @@ sufficient disk space.
 
 To see detailed replay activity, enable debug logging before importing `opik`:
 
-```bash
+```bash wordWrap
 export OPIK_FILE_LOGGING_LEVEL=DEBUG
 export OPIK_LOGGING_FILE=/tmp/opik-debug.log
 ```

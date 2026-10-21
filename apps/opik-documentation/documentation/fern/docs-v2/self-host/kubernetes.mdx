@@ -8,7 +8,7 @@ subtitle: Describes how to run Opik on a Kubernetes cluster
 title: Kubernetes deployment
 ---
 
-> **Important:** If you're using or looking to use Opik or Comet enterprise version please reach out to Sales@comet.com to gain access to the correct deployment documentation.
+> **Important:** If you're using or considering the enterprise version of Opik or Comet, reach out to Sales@comet.com to access the enterprise deployment documentation.
 
 For production deployments, we recommend using our Kubernetes Helm chart. This chart is designed to be highly configurable and has been battle-tested in Comet's managed cloud offering.
 
@@ -26,14 +26,14 @@ You can install Opik using the helm chart maintained by the Opik team by running
 
 Add Opik Helm repo
 
-```bash
+```bash wordWrap
 helm repo add opik https://comet-ml.github.io/opik/
 helm repo update
 ```
 
 You can set VERSION to the specific Opik version or leave it as 'latest'
 
-```bash
+```bash wordWrap
 VERSION=latest
 helm upgrade --install opik -n opik --create-namespace opik/opik \
     --set component.backend.image.tag=$VERSION \
@@ -46,14 +46,14 @@ helm upgrade --install opik -n opik --create-namespace opik/opik \
   We recommend that you always install the latest version of the Opik helm chart. You can list the available chart
   versions by running:
 
-  ```bash
+  ```bash wordWrap
   helm search repo opik/opik --versions
   ```
 </Tip>
 
 You can port-forward any service you need to your local machine:
 
-```bash
+```bash wordWrap
 kubectl port-forward -n opik svc/opik-frontend 5173
 ```
 
@@ -69,7 +69,7 @@ You can find a full list of the configuration options in the [helm chart documen
 
 ### Configure ingress for opik-frontend
 
-```yaml
+```yaml wordWrap
 component:
     frontend:
       ingress:
@@ -93,7 +93,7 @@ component:
 
 ### Configure LoadBalancer service for clickhouse
 
-```yaml
+```yaml wordWrap
 clickhouse:
   service:
     serviceTemplate: clickhouse-cluster-svc-lb-template
@@ -114,20 +114,37 @@ Attempting to set up replication before Opik is running may result in errors or 
 
 </Warning>
 
-```yaml
+```yaml wordWrap
 clickhouse:
   replicasCount: 2
 ```
 
 ## Configure additional ClickHouse users and profiles
 
+<Warning>
+`clickhouse.additionalProfiles` is a list, and Helm replaces lists wholesale instead of merging
+them. Declaring your own list therefore drops the chart's `default` profile entry unless you repeat
+it, which would silently remove the Distributed insert-queue settings. The examples below keep it.
+
+`prefer_localhost_replica` is in that same `default` entry, so it is dropped by list replacement
+too. Keep the whole entry, not just the batching settings.
+</Warning>
+
 You can create read-only ClickHouse users with custom settings profiles.
 
 ### Using inline passwords
 
-```yaml
+```yaml wordWrap
 clickhouse:
   additionalProfiles:
+    # Keep this `default` entry. Helm replaces lists rather than merging them, so a values file
+    # that declares its own `additionalProfiles` drops the chart's default one — taking the
+    # Distributed insert-queue settings with it, silently.
+    - name: default
+      settings:
+        distributed_background_insert_batch: 1
+        distributed_background_insert_split_batch_on_failure: 1
+        prefer_localhost_replica: 0
     - name: readonly_profile
       settings:
         readonly: 1
@@ -145,13 +162,21 @@ clickhouse:
 
 When `adminUser.useSecret.enabled: true`, user passwords are read from a Kubernetes secret. By default, it uses the admin secret (`adminUser.secretname`) with the key `<username>_pass`:
 
-```yaml
+```yaml wordWrap
 clickhouse:
   adminUser:
     useSecret:
       enabled: true
     secretname: clickhouse-admin-pass
   additionalProfiles:
+    # Keep this `default` entry. Helm replaces lists rather than merging them, so a values file
+    # that declares its own `additionalProfiles` drops the chart's default one — taking the
+    # Distributed insert-queue settings with it, silently.
+    - name: default
+      settings:
+        distributed_background_insert_batch: 1
+        distributed_background_insert_split_batch_on_failure: 1
+        prefer_localhost_replica: 0
     - name: readonly_profile
       settings:
         readonly: 1
@@ -171,9 +196,14 @@ clickhouse:
 
 ## Use S3 bucket for Opik
 
+The chart deploys MinIO by default and configures the backend for it (`S3_URL` points to the in-cluster MinIO and `IS_MINIO` stays `true`). To use S3 you must also set `minio.enabled: false`, otherwise the backend is not configured for S3 even when `S3_BUCKET` is set.
+
 ### Using AWS key and secret keys
 
-```yaml
+```yaml wordWrap
+minio:
+  enabled: false
+
 component:
   backend:
     env:
@@ -187,7 +217,10 @@ component:
 
 If your IAM role is configured for the k8s nodes, the only things you will need is to set for opik-backend:
 
-```yaml
+```yaml wordWrap
+minio:
+  enabled: false
+
 component:
   backend:
     env:
@@ -197,7 +230,7 @@ component:
 
 If your role should be used by opik-backend serviceAccount, in addition you need to set:
 
-```yaml
+```yaml wordWrap
 component:
   backend:
     serviceAccount:
@@ -206,13 +239,51 @@ component:
         eks.amazonaws.com/role-arn: <your IAM Role arn>
 ```
 
+## Configure ClickHouse force-merge (LWD reclaim)
+
+Deleted traces and spans are masked by lightweight deletes and only physically removed when ClickHouse merges the
+part. ClickHouse can force that merge for parts that have stopped receiving writes. The chart does not enable it
+by default.
+
+<Warning>
+  Chart versions 2.2.78 through the release before `clickhouse.forceMerge` was added enabled force-merge by default. Upgrading from one of
+  those versions removes the settings and restarts ClickHouse once; set `clickhouse.forceMerge.enabled: true` to keep
+  them. If ClickHouse is running a large merge backlog, let it finish before upgrading: a restart starts in-progress
+  merges over.
+</Warning>
+
+To enable it:
+
+```yaml wordWrap
+clickhouse:
+  forceMerge:
+    enabled: true
+```
+
+The chart then renders `conf.d/merge_tree.xml` from the `clickhouse.forceMerge` values (minimum part age, merge size
+cap and pool throttle); see the chart README for each one. Don't also set `conf.d/merge_tree.xml` under
+`clickhouse.configuration.files`: the chart refuses to render with both.
+
+On the first rollout, every part older than `minAgeSeconds` becomes eligible at once. On a large installation that
+can fill the background merge pool for hours, and mutations (deletes) cannot start while the pool is full. Before
+enabling it, check how much data sits in old parts. Run this on each replica, since every replica merges its own
+copy; replace `opik` if you changed the database name:
+
+```sql wordWrap
+SELECT database, table, count() AS parts, formatReadableSize(sum(bytes_on_disk)) AS size
+FROM system.parts
+WHERE active AND database = 'opik' AND modification_time < now() - INTERVAL 7 DAY
+GROUP BY database, table
+ORDER BY sum(bytes_on_disk) DESC;
+```
+
 ## Use external Clickhouse installation
 
 Supported from Opik chart version 1.4.2
 
 Configuration snippet for using external Clickhouse:
 
-```yaml
+```yaml wordWrap
 component:
     backend:
       ...
@@ -236,7 +307,7 @@ clickhouse:
 
 The passwords can be handled in the secret, and then you should configure it as following
 
-```yaml
+```yaml wordWrap
 component:
     backend:
       ...
@@ -260,13 +331,13 @@ clickhouse:
 
 Before deleting opik installation with helm, make sure to remove finalizer on the clickhouse resource:
 
-```bash
+```bash wordWrap
 kubectl patch -n opik chi opik-clickhouse --type json --patch='[ { "op": "remove", "path": "/metadata/finalizers" } ]'
 ```
 
 Then, uninstall the opik:
 
-```bash
+```bash wordWrap
 helm uninstall opik -n opik
 ```
 
@@ -282,7 +353,7 @@ You can check your current Opik deployment version in the UI by clicking on the 
 ### Check Python SDK version
 You can check your installed Python SDK version by running:
 
-```bash
+```bash wordWrap
 pip show opik
 ```
 
@@ -297,7 +368,7 @@ Make sure both versions match. If they don't match:
 
 If you get an error similar to the following when running helm (the ClickHouse version in the message depends on your installation):
 
-```bash
+```bash wordWrap
 ERROR: Exception Primary Reason:  Code: 225. DB::Exception: Can't create replicated table without ZooKeeper. (NO_ZOOKEEPER) (version 24.3.5.47.altinitystable (altinity build))
 ```
 

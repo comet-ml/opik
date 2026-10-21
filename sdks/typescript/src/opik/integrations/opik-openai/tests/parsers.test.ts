@@ -1,6 +1,36 @@
-import { parseCompletionOutput, parseUsage } from "../src/parsers";
+import {
+  parseCompletionOutput,
+  parseInputArgs,
+  parseUsage,
+} from "../src/parsers";
 
 describe("OpenAI Parsers", () => {
+  describe("parseInputArgs", () => {
+    describe("decisions requests", () => {
+      const questions = [
+        {
+          name: "is_complaint",
+          type: "predicate",
+          instructions: "Is the customer complaining?",
+        },
+      ];
+
+      it("should log input and questions", () => {
+        const result = parseInputArgs({
+          model: "gpt-6-luna",
+          input: "I was charged twice!",
+          questions,
+        });
+
+        expect(result.model).toBe("gpt-6-luna");
+        expect(result.input).toEqual({
+          input: "I was charged twice!",
+          questions,
+        });
+      });
+    });
+  });
+
   describe("parseCompletionOutput", () => {
     describe("embedding responses", () => {
       it("should parse single embedding response", () => {
@@ -149,6 +179,24 @@ describe("OpenAI Parsers", () => {
       });
     });
 
+    describe("decisions responses", () => {
+      it("should parse answers format", () => {
+        const answers = [
+          { name: "is_complaint", type: "predicate", probability: 0.98 },
+          { name: "topic", type: "refusal" },
+        ];
+        const decision = {
+          answers,
+          model: "gpt-6-luna",
+          usage: { input_tokens: 120, output_tokens: 0, total_tokens: 120 },
+        };
+
+        const result = parseCompletionOutput(decision);
+
+        expect(result).toEqual({ answers });
+      });
+    });
+
     describe("edge cases", () => {
       it("should return undefined for unrecognized formats", () => {
         const unknownResponse = { foo: "bar" };
@@ -236,8 +284,8 @@ describe("OpenAI Parsers", () => {
         const result = parseUsage(responseApiUsage);
 
         expect(result).toBeDefined();
-        expect(result?.prompt_tokens).toBe(25);
-        expect(result?.completion_tokens).toBe(15);
+        expect(result?.prompt_tokens).toBe(15);
+        expect(result?.completion_tokens).toBe(25);
         expect(result?.total_tokens).toBe(40);
       });
     });

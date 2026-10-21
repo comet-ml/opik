@@ -14,8 +14,8 @@
 -- flag produced it: a client can send one, and rows that predate the flag entirely do. Repairing every match would set
 -- those to NULL and they could not be recovered — the parked successor encodes an absent end_time as the same epoch, so
 -- there is no reference copy to restore from, and the counts would still report success because no sentinel would
--- remain. Measured on an internal environment: the unbounded predicate matched 34 keys across 12 workspaces where only
--- 5 came from the flag window; the other 29 carried genuine client-sent values.
+-- remain. Measured on an internal environment: the unbounded predicate matched roughly seven times as many keys as the
+-- flag window had produced; every extra one carried a genuine client-sent value.
 --
 -- So the operator supplies the window the flag was live in, and only rows written inside it are touched. Both arms are
 -- needed, for the same reason the delta insert needs both: a row CREATED in the window is caught by created_at, and a

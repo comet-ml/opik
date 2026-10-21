@@ -28,7 +28,10 @@ class OpenAICompatibleServiceProvider implements LlmServiceProvider {
 
     @Override
     public LlmProviderService getService(@NonNull LlmProviderClientApiConfig config) {
-        return new CustomLlmProvider(clientGenerator.newCustomLlmClient(config), config.configuration());
+        // Ollama keys land here as well, not in OllamaServiceProvider: all three store their models under the
+        // custom-llm/ prefix, so the factory routes them as CUSTOM_LLM and only the key's own type tells them apart.
+        return new CustomLlmProvider(
+                clientGenerator.newCustomLlmClient(config), config.configuration(), config.provider());
     }
 
     @Override

@@ -56,6 +56,17 @@ def test_get_user_identifier__padded_workspace__matches_the_unpadded_one(monkeyp
     assert environment.get_user_identifier() == "acme-corp"
 
 
+def test_get_client_identifier__ignores_workspace(monkeypatch):
+    """A team shares one workspace; counting it would make the whole team one client."""
+    _with_workspace(monkeypatch, "acme-corp")
+
+    client_id = environment.get_client_identifier()
+
+    assert "acme-corp" not in client_id
+    assert environment.get_hostname() not in client_id
+    assert environment.get_user_identifier() == "acme-corp"
+
+
 def test_get_user_identifier__fallback__stable_across_calls(monkeypatch):
     """Unique-user counts depend on the same machine resolving the same way."""
     _with_workspace(monkeypatch, config.OPIK_WORKSPACE_DEFAULT_NAME)

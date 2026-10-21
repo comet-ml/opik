@@ -8,11 +8,11 @@ export const CompletionTokensDetails: core.serialization.ObjectSchema<
     serializers.CompletionTokensDetails.Raw,
     OpikApi.CompletionTokensDetails
 > = core.serialization.object({
-    reasoningTokens: core.serialization.property("reasoning_tokens", core.serialization.number().optional()),
+    reasoningTokens: core.serialization.number().optional(),
 });
 
 export declare namespace CompletionTokensDetails {
     export interface Raw {
-        reasoning_tokens?: number | null;
+        reasoningTokens?: number | null;
     }
 }

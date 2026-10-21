@@ -3,17 +3,23 @@
 import typing
 
 import pydantic
+import typing_extensions
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from ..core.serialization import FieldMetadata
 from .completion_tokens_details import CompletionTokensDetails
 from .prompt_tokens_details import PromptTokensDetails
 
 
 class Usage(UniversalBaseModel):
-    total_tokens: typing.Optional[int] = None
-    prompt_tokens: typing.Optional[int] = None
-    prompt_tokens_details: typing.Optional[PromptTokensDetails] = None
-    completion_tokens: typing.Optional[int] = None
-    completion_tokens_details: typing.Optional[CompletionTokensDetails] = None
+    total_tokens: typing_extensions.Annotated[typing.Optional[int], FieldMetadata(alias="totalTokens")] = None
+    prompt_tokens: typing_extensions.Annotated[typing.Optional[int], FieldMetadata(alias="promptTokens")] = None
+    prompt_tokens_details: typing_extensions.Annotated[
+        typing.Optional[PromptTokensDetails], FieldMetadata(alias="promptTokensDetails")
+    ] = None
+    completion_tokens: typing_extensions.Annotated[typing.Optional[int], FieldMetadata(alias="completionTokens")] = None
+    completion_tokens_details: typing_extensions.Annotated[
+        typing.Optional[CompletionTokensDetails], FieldMetadata(alias="completionTokensDetails")
+    ] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

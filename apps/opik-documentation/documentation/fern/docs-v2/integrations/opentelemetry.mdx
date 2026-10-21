@@ -124,3 +124,118 @@ OpenAIInstrumentor().instrument()
   Make sure to import the `http` trace exporter (`opentelemetry.exporter.otlp.proto.http.trace_exporter`), if you use
   the GRPC exporter you will face errors.
 </Warning>
+
+## Opik-specific span attributes
+
+Opik reads a small set of span attributes and maps them to Opik fields. Set them with
+the standard OpenTelemetry API on any span.
+
+| Attribute | Effect |
+| --- | --- |
+| `opik.project_name` | Sends the span to this project instead of the project in the `projectName` header. Set it as a resource attribute, so that every span has it. See [Routing spans to a project](#routing-spans-to-a-project). |
+| `opik.tags` | Adds tags to the span. On the root span, Opik also adds the tags to the trace, so you can filter your traces by tag. |
+| `opik.metadata.<key>` | Adds `<key>` to the metadata of the span. The metadata of the root span also becomes the metadata of the trace. |
+| `thread_id` | Groups traces into one conversational thread. See [Multi-turn conversations](/evaluation/evaluate_threads). |
+| `opik.trace_id`, `opik.parent_span_id`, `opik.span_id` | Attaches the span to an Opik trace and parent span that already exist. See [Distributed traces](/tracing/advanced/log_distributed_traces). |
+
+### Tagging traces and spans
+
+Opik accepts three formats for the `opik.tags` attribute:
+
+- A list of strings: `["production", "chatbot"]`
+- A JSON array in a string: `'["production", "chatbot"]'`
+- A comma-separated string: `"production,chatbot"`
+
+```python wordWrap
+with tracer.start_as_current_span("chatbot_conversation") as conversation_span:
+    # The root span carries the tags, so the trace carries them too
+    conversation_span.set_attribute("opik.tags", ["production", "chatbot"])
+    conversation_span.set_attribute("opik.metadata.environment", "staging")
+
+    with tracer.start_as_current_span("llm_completion") as llm_span:
+        # A child span carries the tags on the span only
+        llm_span.set_attribute("opik.tags", ["llm-call"])
+```
+
+<Note>
+  Set `opik.tags` on the root span if you want to filter traces by tag. Tags on a child span apply to that span only.
+</Note>
+
+### Routing spans to a project
+
+Some OpenTelemetry Collector processors, such as `tail_sampling`, do not forward the HTTP headers of the incoming
+request. In that case, set the project with the `opik.project_name` attribute instead of the `projectName` header.
+
+Opik picks the project of each span on its own, in this order:
+
+1. The `opik.project_name` attribute of the span
+2. The `opik.project_name` attribute of the resource of the span
+3. The `projectName` header
+4. The `Default Project`
+
+Opik ignores a value longer than 150 characters.
+
+<Warning>
+  Every span must have the `opik.project_name` attribute. Opik does not copy the project from the root span to the
+  other spans: OpenTelemetry exports the spans of a long trace in more than one batch, and the root span usually comes
+  last. If you set the attribute on the root span only, the other spans go to the project in the header, and they do
+  not show under any trace. Set the project as a resource attribute, so that every span has it.
+</Warning>
+
+#### Set the project on every span
+
+A resource attribute applies to every span that the process sends. Use one of these methods:
+
+<Tabs>
+<Tab title="Environment variable">
+
+The OpenTelemetry SDK reads the resource attributes from `OTEL_RESOURCE_ATTRIBUTES`:
+
+```bash
+export OTEL_RESOURCE_ATTRIBUTES="opik.project_name=<your-project-name>"
+```
+
+</Tab>
+<Tab title="Python SDK" language="python">
+
+Add the attribute to the resource of the tracer provider:
+
+```python
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+
+provider = TracerProvider(
+    resource=Resource.create({"opik.project_name": "<your-project-name>"})
+)
+```
+
+</Tab>
+<Tab title="OpenTelemetry Collector">
+
+Set the attribute with the `transform` processor. This example copies `service.name`, so that each service sends to
+its own project:
+
+```yaml
+processors:
+  transform/opik_project:
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["opik.project_name"], attributes["service.name"])
+
+service:
+  pipelines:
+    traces:
+      processors: [transform/opik_project, tail_sampling]
+```
+
+To send all the spans to one project, use a fixed value such as `"<your-project-name>"` instead of
+`attributes["service.name"]`.
+
+</Tab>
+</Tabs>
+
+<Note>
+  All the spans of a trace must have the same project. If one trace goes through services that send to different
+  projects, the spans that are not in the project of the root span do not show under any trace.
+</Note>

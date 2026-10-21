@@ -13,6 +13,7 @@ from ..types.chat_completion_response import ChatCompletionResponse
 from ..types.function import Function
 from ..types.function_call import FunctionCall
 from ..types.message import Message
+from ..types.prompt_cache_options import PromptCacheOptions
 from ..types.response_format import ResponseFormat
 from ..types.stream_options import StreamOptions
 from ..types.tool import Tool
@@ -51,6 +52,8 @@ class RawChatCompletionsClient:
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         reasoning_effort: typing.Optional[str] = OMIT,
         service_tier: typing.Optional[str] = OMIT,
+        prompt_cache_key: typing.Optional[str] = OMIT,
+        prompt_cache_options: typing.Optional[PromptCacheOptions] = OMIT,
         logprobs: typing.Optional[bool] = OMIT,
         top_logprobs: typing.Optional[int] = OMIT,
         functions: typing.Optional[typing.Sequence[Function]] = OMIT,
@@ -108,6 +111,10 @@ class RawChatCompletionsClient:
 
         service_tier : typing.Optional[str]
 
+        prompt_cache_key : typing.Optional[str]
+
+        prompt_cache_options : typing.Optional[PromptCacheOptions]
+
         logprobs : typing.Optional[bool]
 
         top_logprobs : typing.Optional[int]
@@ -133,38 +140,42 @@ class RawChatCompletionsClient:
                     object_=messages, annotation=typing.Sequence[Message], direction="write"
                 ),
                 "temperature": temperature,
-                "top_p": top_p,
+                "topP": top_p,
                 "n": n,
                 "stream": stream,
-                "stream_options": convert_and_respect_annotation_metadata(
+                "streamOptions": convert_and_respect_annotation_metadata(
                     object_=stream_options, annotation=StreamOptions, direction="write"
                 ),
                 "stop": stop,
-                "max_tokens": max_tokens,
-                "max_completion_tokens": max_completion_tokens,
-                "presence_penalty": presence_penalty,
-                "frequency_penalty": frequency_penalty,
-                "logit_bias": logit_bias,
+                "maxTokens": max_tokens,
+                "maxCompletionTokens": max_completion_tokens,
+                "presencePenalty": presence_penalty,
+                "frequencyPenalty": frequency_penalty,
+                "logitBias": logit_bias,
                 "user": user,
-                "response_format": convert_and_respect_annotation_metadata(
+                "responseFormat": convert_and_respect_annotation_metadata(
                     object_=response_format, annotation=ResponseFormat, direction="write"
                 ),
                 "seed": seed,
                 "tools": convert_and_respect_annotation_metadata(
                     object_=tools, annotation=typing.Sequence[Tool], direction="write"
                 ),
-                "tool_choice": tool_choice,
-                "parallel_tool_calls": parallel_tool_calls,
+                "toolChoice": tool_choice,
+                "parallelToolCalls": parallel_tool_calls,
                 "store": store,
                 "metadata": metadata,
-                "reasoning_effort": reasoning_effort,
-                "service_tier": service_tier,
+                "reasoningEffort": reasoning_effort,
+                "serviceTier": service_tier,
+                "promptCacheKey": prompt_cache_key,
+                "promptCacheOptions": convert_and_respect_annotation_metadata(
+                    object_=prompt_cache_options, annotation=PromptCacheOptions, direction="write"
+                ),
                 "logprobs": logprobs,
-                "top_logprobs": top_logprobs,
+                "topLogprobs": top_logprobs,
                 "functions": convert_and_respect_annotation_metadata(
                     object_=functions, annotation=typing.Sequence[Function], direction="write"
                 ),
-                "function_call": convert_and_respect_annotation_metadata(
+                "functionCall": convert_and_respect_annotation_metadata(
                     object_=function_call, annotation=FunctionCall, direction="write"
                 ),
             },
@@ -220,6 +231,8 @@ class AsyncRawChatCompletionsClient:
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         reasoning_effort: typing.Optional[str] = OMIT,
         service_tier: typing.Optional[str] = OMIT,
+        prompt_cache_key: typing.Optional[str] = OMIT,
+        prompt_cache_options: typing.Optional[PromptCacheOptions] = OMIT,
         logprobs: typing.Optional[bool] = OMIT,
         top_logprobs: typing.Optional[int] = OMIT,
         functions: typing.Optional[typing.Sequence[Function]] = OMIT,
@@ -277,6 +290,10 @@ class AsyncRawChatCompletionsClient:
 
         service_tier : typing.Optional[str]
 
+        prompt_cache_key : typing.Optional[str]
+
+        prompt_cache_options : typing.Optional[PromptCacheOptions]
+
         logprobs : typing.Optional[bool]
 
         top_logprobs : typing.Optional[int]
@@ -302,38 +319,42 @@ class AsyncRawChatCompletionsClient:
                     object_=messages, annotation=typing.Sequence[Message], direction="write"
                 ),
                 "temperature": temperature,
-                "top_p": top_p,
+                "topP": top_p,
                 "n": n,
                 "stream": stream,
-                "stream_options": convert_and_respect_annotation_metadata(
+                "streamOptions": convert_and_respect_annotation_metadata(
                     object_=stream_options, annotation=StreamOptions, direction="write"
                 ),
                 "stop": stop,
-                "max_tokens": max_tokens,
-                "max_completion_tokens": max_completion_tokens,
-                "presence_penalty": presence_penalty,
-                "frequency_penalty": frequency_penalty,
-                "logit_bias": logit_bias,
+                "maxTokens": max_tokens,
+                "maxCompletionTokens": max_completion_tokens,
+                "presencePenalty": presence_penalty,
+                "frequencyPenalty": frequency_penalty,
+                "logitBias": logit_bias,
                 "user": user,
-                "response_format": convert_and_respect_annotation_metadata(
+                "responseFormat": convert_and_respect_annotation_metadata(
                     object_=response_format, annotation=ResponseFormat, direction="write"
                 ),
                 "seed": seed,
                 "tools": convert_and_respect_annotation_metadata(
                     object_=tools, annotation=typing.Sequence[Tool], direction="write"
                 ),
-                "tool_choice": tool_choice,
-                "parallel_tool_calls": parallel_tool_calls,
+                "toolChoice": tool_choice,
+                "parallelToolCalls": parallel_tool_calls,
                 "store": store,
                 "metadata": metadata,
-                "reasoning_effort": reasoning_effort,
-                "service_tier": service_tier,
+                "reasoningEffort": reasoning_effort,
+                "serviceTier": service_tier,
+                "promptCacheKey": prompt_cache_key,
+                "promptCacheOptions": convert_and_respect_annotation_metadata(
+                    object_=prompt_cache_options, annotation=PromptCacheOptions, direction="write"
+                ),
                 "logprobs": logprobs,
-                "top_logprobs": top_logprobs,
+                "topLogprobs": top_logprobs,
                 "functions": convert_and_respect_annotation_metadata(
                     object_=functions, annotation=typing.Sequence[Function], direction="write"
                 ),
-                "function_call": convert_and_respect_annotation_metadata(
+                "functionCall": convert_and_respect_annotation_metadata(
                     object_=function_call, annotation=FunctionCall, direction="write"
                 ),
             },

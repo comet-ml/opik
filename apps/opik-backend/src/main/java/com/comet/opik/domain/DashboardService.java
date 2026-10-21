@@ -15,11 +15,14 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +31,7 @@ import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -74,6 +78,7 @@ class DashboardServiceImpl implements DashboardService {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull ProjectService projectService;
+    private final @NonNull DashboardSavedQueryService dashboardSavedQueryService;
 
     @Override
     public Dashboard create(@NonNull Dashboard dashboard, @NonNull DashboardScope scope) {
@@ -83,6 +88,7 @@ class DashboardServiceImpl implements DashboardService {
         // Generate ID if not provided
         var dashboardId = dashboard.id() != null ? dashboard.id() : idGenerator.generateId();
         IdGenerator.validateVersion(dashboardId, "dashboard");
+        validateOllieCharts(dashboard.config());
 
         final UUID resolvedProjectId;
         if (StringUtils.isNotBlank(dashboard.projectName()) && dashboard.projectId() == null) {
@@ -187,19 +193,22 @@ class DashboardServiceImpl implements DashboardService {
                 .map(filterQueryBuilder::toStateSQLMapping)
                 .orElse(Map.of());
 
+        boolean insightsScope = scope == DashboardScope.INSIGHTS;
+
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DashboardDAO.class);
 
             String nameTerm = StringUtils.isNotBlank(name) ? name.trim() : null;
             int offset = (page - 1) * size;
 
-            long total = dao.findCount(workspaceId, nameTerm, projectId, scope.getValue(), filtersSql, filterMapping);
+            long total = dao.findCount(workspaceId, nameTerm, projectId, insightsScope, scope.getValue(), filtersSql,
+                    filterMapping);
 
             // Two-step fetch (OPIK-6482): order and paginate on id only, then load the page bodies and
             // re-order them in memory. This keeps the large JSON `config` column out of every sort
             // buffer, which otherwise triggers ER_OUT_OF_SORTMEMORY on the filesort.
-            List<UUID> pageIds = dao.findPageIdsSorted(workspaceId, nameTerm, projectId, scope.getValue(),
-                    filtersSql, filterMapping, sortingFieldsSql, size, offset);
+            List<UUID> pageIds = dao.findPageIdsSorted(workspaceId, nameTerm, projectId, insightsScope,
+                    scope.getValue(), filtersSql, filterMapping, sortingFieldsSql, size, offset);
 
             List<Dashboard> dashboards;
             if (pageIds.isEmpty()) {
@@ -228,6 +237,10 @@ class DashboardServiceImpl implements DashboardService {
         String userName = requestContext.get().getUserName();
 
         log.info("Updating dashboard with id '{}' and scope '{}' in workspace '{}'", id, scope, workspaceId);
+
+        if (dashboardUpdate.config() != null) {
+            validateOllieCharts(dashboardUpdate.config());
+        }
 
         return template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DashboardDAO.class);
@@ -306,4 +319,15 @@ class DashboardServiceImpl implements DashboardService {
                 ids.size(), scope, workspaceId);
     }
 
+    private void validateOllieCharts(JsonNode config) {
+        var errors = new ArrayList<>(OllieChartWidgets.validate(config));
+        var queryIds = OllieChartWidgets.queryIds(config);
+        var existing = dashboardSavedQueryService.findExistingIds(queryIds);
+        queryIds.stream()
+                .filter(queryId -> !existing.contains(queryId))
+                .forEach(queryId -> errors.add("Dashboard saved query '%s' not found".formatted(queryId)));
+        if (!errors.isEmpty()) {
+            throw new ClientErrorException(Response.status(422).entity(new ErrorMessage(errors)).build());
+        }
+    }
 }

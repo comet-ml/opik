@@ -19,6 +19,8 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,13 +32,16 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
  * create/update events (identity can arrive or change on a trace update); never reads the traces or
  * cipx_trace_identities tables. Identity fields are parsed from metadata in Java
  * ({@link TraceIdentityRow#from}). Plain INSERT relying on ReplacingMergeTree to merge by sorting
- * key; last_updated_at is left to the column DEFAULT now64(6). project_id must be non-empty, so
- * blank rows are dropped.
+ * key. project_id must be non-empty, so blank rows are dropped.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class CipxTraceIdentityDAO {
+
+    private static final int MAX_LIST_ENTRIES = 256;
+    private static final String STATUS_LISTED = "listed";
+    private static final String STATUS_TRUNCATED = "truncated";
 
     /** A cipx_trace_identities row constructed from a trace's metadata. */
     @Builder(toBuilder = true)
@@ -62,14 +67,58 @@ public class CipxTraceIdentityDAO {
             @NonNull String headShaStart,
             @NonNull String headShaEnd,
             boolean dirty,
-            int commitsInTrace,
-            int filesAdded,
-            int filesDeleted,
-            int linesAdded,
-            int linesDeleted) {
+            long commitsInTrace,
+            long filesAdded,
+            long filesDeleted,
+            long linesAdded,
+            long linesDeleted,
+            long agentsDispatched,
+            long agentsLinked,
+            long agentsAmbiguous,
+            @NonNull String cipxVersion,
+            @NonNull Instant lastUpdatedAt,
+            List<String> skillsScope,
+            List<String> skillsRoot,
+            List<String> skillsName,
+            List<String> skillsVersionId,
+            String skillsStatus,
+            List<String> instructionFilesScope,
+            List<String> instructionFilesPath,
+            List<String> instructionFilesVersionId,
+            String instructionFilesStatus) {
+
+        // Lists and statuses default to empty so rows built without them stay valid; lists are copied.
+        public TraceIdentityRow {
+            skillsScope = copyWithNullsAsEmpty(skillsScope);
+            skillsRoot = copyWithNullsAsEmpty(skillsRoot);
+            skillsName = copyWithNullsAsEmpty(skillsName);
+            skillsVersionId = copyWithNullsAsEmpty(skillsVersionId);
+            skillsStatus = skillsStatus == null ? "" : skillsStatus;
+            instructionFilesScope = copyWithNullsAsEmpty(instructionFilesScope);
+            instructionFilesPath = copyWithNullsAsEmpty(instructionFilesPath);
+            instructionFilesVersionId = copyWithNullsAsEmpty(instructionFilesVersionId);
+            instructionFilesStatus = instructionFilesStatus == null ? "" : instructionFilesStatus;
+            // ClickHouse treats each dotted group as one Nested column and rejects unequal lengths.
+            if (skillsScope.size() != skillsRoot.size() || skillsRoot.size() != skillsName.size()
+                    || skillsName.size() != skillsVersionId.size()) {
+                throw new IllegalArgumentException("skills.* lists must have equal sizes");
+            }
+            if (instructionFilesScope.size() != instructionFilesPath.size()
+                    || instructionFilesPath.size() != instructionFilesVersionId.size()) {
+                throw new IllegalArgumentException("instruction_files.* lists must have equal sizes");
+            }
+        }
+
+        // Null list becomes empty; null elements become "" since List.copyOf rejects them.
+        private static List<String> copyWithNullsAsEmpty(List<String> values) {
+            if (values == null) {
+                return List.of();
+            }
+            return values.stream().map(value -> value == null ? "" : value).toList();
+        }
 
         public static TraceIdentityRow from(UUID traceId, UUID projectId, JsonNode metadata, Instant startTime,
-                String deviceId) {
+                String deviceId, Instant lastUpdatedAt) {
             JsonNode session = metadata.path("cipx").path("session");
             JsonNode identity = session.path("identity");
             JsonNode repository = session.path("repository");
@@ -77,7 +126,16 @@ public class CipxTraceIdentityDAO {
             if (userUuid.isEmpty()) {
                 userUuid = identity.path("user_id").asText("");
             }
-            return TraceIdentityRow.builder()
+            List<String> rejected = new ArrayList<>();
+            JsonNode skills = repository.path("skills");
+            JsonNode instructionFiles = repository.path("instruction_files");
+            // cipx drops an oversized skills list but still sends instruction_files, so status is per list.
+            // A trace update without the lists re-writes '' and empty; readers take the latest listed trace.
+            String skillsStatus = listStatus(skills);
+            String filesStatus = listStatus(instructionFiles);
+            List<String> skillsRoot = textField(skills, skillsStatus, "root");
+            List<String> filesPath = textField(instructionFiles, filesStatus, "path");
+            var row = TraceIdentityRow.builder()
                     .traceId(traceId.toString())
                     .projectId(projectId != null ? projectId.toString() : "")
                     .startTime(startTime)
@@ -99,16 +157,75 @@ public class CipxTraceIdentityDAO {
                     .headShaStart(repository.path("head_sha").asText(""))
                     .headShaEnd(repository.path("head_sha_end").asText(""))
                     .dirty(repository.path("dirty").asBoolean(false))
-                    .commitsInTrace(repository.path("commits_in_trace").asInt(0))
-                    .filesAdded(repository.path("files_added").asInt(0))
-                    .filesDeleted(repository.path("files_deleted").asInt(0))
-                    .linesAdded(repository.path("lines_added").asInt(0))
-                    .linesDeleted(repository.path("lines_deleted").asInt(0))
+                    .commitsInTrace(asUInt32(repository.path("commits_in_trace"), "commits_in_trace", rejected))
+                    .filesAdded(asUInt32(repository.path("files_added"), "files_added", rejected))
+                    .filesDeleted(asUInt32(repository.path("files_deleted"), "files_deleted", rejected))
+                    .linesAdded(asUInt32(repository.path("lines_added"), "lines_added", rejected))
+                    .linesDeleted(asUInt32(repository.path("lines_deleted"), "lines_deleted", rejected))
+                    .agentsDispatched(asUInt32(session.path("agents_dispatched"), "agents_dispatched", rejected))
+                    .agentsLinked(asUInt32(session.path("agents_linked"), "agents_linked", rejected))
+                    .agentsAmbiguous(asUInt32(session.path("agents_ambiguous"), "agents_ambiguous", rejected))
+                    .cipxVersion(session.path("cipx_version").asText(""))
+                    .lastUpdatedAt(lastUpdatedAt)
+                    .skillsScope(Collections.nCopies(skillsRoot.size(), "repo"))
+                    .skillsRoot(skillsRoot)
+                    .skillsName(textField(skills, skillsStatus, "name"))
+                    .skillsVersionId(textField(skills, skillsStatus, "tree_id"))
+                    .skillsStatus(skillsStatus)
+                    .instructionFilesScope(Collections.nCopies(filesPath.size(), "repo"))
+                    .instructionFilesPath(filesPath)
+                    .instructionFilesVersionId(textField(instructionFiles, filesStatus, "blob_id"))
+                    .instructionFilesStatus(filesStatus)
                     .build();
+            if (!rejected.isEmpty()) {
+                log.warn("cipx metrics unusable, recorded 0: trace_id='{}' rejected={}", traceId, rejected);
+            }
+            return row;
+        }
+
+        // 'listed' only for an array within the entry cap; over it 'truncated' (stored empty); else ''.
+        private static String listStatus(JsonNode array) {
+            if (!array.isArray()) {
+                return "";
+            }
+            if (array.size() > MAX_LIST_ENTRIES) {
+                return STATUS_TRUNCATED;
+            }
+            return STATUS_LISTED;
+        }
+
+        // One value per object element (non-objects skipped), "" when the field is missing.
+        private static List<String> textField(JsonNode array, String status, String field) {
+            List<String> values = new ArrayList<>();
+            if (!STATUS_LISTED.equals(status)) {
+                return values;
+            }
+            for (JsonNode element : array) {
+                if (element.isObject()) {
+                    values.add(element.path(field).asText(""));
+                }
+            }
+            return values;
+        }
+
+        private static long asUInt32(JsonNode value, String field, List<String> rejected) {
+            if (value.isMissingNode() || value.isNull()) {
+                return 0L;
+            }
+            if (!value.isIntegralNumber() || !value.canConvertToLong()) {
+                rejected.add(field + ": not a whole number (" + value.getNodeType() + ")");
+                return 0L;
+            }
+            long raw = value.asLong();
+            if (raw < 0L || raw > 0xFFFF_FFFFL) {
+                rejected.add(field + ": outside UInt32 (" + raw + ")");
+                return 0L;
+            }
+            return raw;
         }
     }
 
-    // One tuple per row (mirrors SpanDAO.BULK_INSERT). start_time is bound from Java (the source
+    // One tuple per row. start_time is bound from Java (the source
     // trace's stored start).
     private static final String INSERT = """
             INSERT INTO cipx_trace_identities
@@ -116,7 +233,11 @@ public class CipxTraceIdentityDAO {
                  user_email, user_display_name, repository, session_id, harness, device_id, schema_version,
                  billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                  branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
-                 files_added, files_deleted, lines_added, lines_deleted)
+                 files_added, files_deleted, lines_added, lines_deleted,
+                 agents_dispatched, agents_linked, agents_ambiguous, cipx_version, last_updated_at,
+                 `skills.scope`, `skills.root`, `skills.name`, `skills.version_id`, skills_status,
+                 `instruction_files.scope`, `instruction_files.path`, `instruction_files.version_id`,
+                 instruction_files_status)
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
                 <items:{item |
@@ -147,7 +268,21 @@ public class CipxTraceIdentityDAO {
                         :files_added<item.index>,
                         :files_deleted<item.index>,
                         :lines_added<item.index>,
-                        :lines_deleted<item.index>
+                        :lines_deleted<item.index>,
+                        :agents_dispatched<item.index>,
+                        :agents_linked<item.index>,
+                        :agents_ambiguous<item.index>,
+                        :cipx_version<item.index>,
+                        :last_updated_at<item.index>,
+                        :skills_scope<item.index>,
+                        :skills_root<item.index>,
+                        :skills_name<item.index>,
+                        :skills_version_id<item.index>,
+                        :skills_status<item.index>,
+                        :instruction_files_scope<item.index>,
+                        :instruction_files_path<item.index>,
+                        :instruction_files_version_id<item.index>,
+                        :instruction_files_status<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -177,7 +312,7 @@ public class CipxTraceIdentityDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 26 parameters per row tuple in template order.
+        // (repeats dedup), then 40 parameters per row tuple in template order.
         statement.bind(0, workspaceId);
         int index = 1;
         for (TraceIdentityRow row : rows) {
@@ -206,7 +341,21 @@ public class CipxTraceIdentityDAO {
                     .bind(index++, row.filesAdded())
                     .bind(index++, row.filesDeleted())
                     .bind(index++, row.linesAdded())
-                    .bind(index++, row.linesDeleted());
+                    .bind(index++, row.linesDeleted())
+                    .bind(index++, row.agentsDispatched())
+                    .bind(index++, row.agentsLinked())
+                    .bind(index++, row.agentsAmbiguous())
+                    .bind(index++, row.cipxVersion())
+                    .bind(index++, ClickHouseDateTimeFormat.formatMicros(row.lastUpdatedAt()))
+                    .bind(index++, row.skillsScope().toArray(String[]::new))
+                    .bind(index++, row.skillsRoot().toArray(String[]::new))
+                    .bind(index++, row.skillsName().toArray(String[]::new))
+                    .bind(index++, row.skillsVersionId().toArray(String[]::new))
+                    .bind(index++, row.skillsStatus())
+                    .bind(index++, row.instructionFilesScope().toArray(String[]::new))
+                    .bind(index++, row.instructionFilesPath().toArray(String[]::new))
+                    .bind(index++, row.instructionFilesVersionId().toArray(String[]::new))
+                    .bind(index++, row.instructionFilesStatus());
         }
 
         return statement.execute();

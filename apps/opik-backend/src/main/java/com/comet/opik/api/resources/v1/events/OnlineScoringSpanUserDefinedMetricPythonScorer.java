@@ -82,17 +82,32 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
                 UserLog.RULE_ID, message.ruleId().toString());
 
         return Mono.fromCallable(() -> prepareData(message, mdc))
-                .flatMap(data -> pythonEvaluatorService.evaluate(message.code().metric(), data))
+                .flatMap(data -> data.isEmpty()
+                        ? reportUnresolvedArguments(message, mdc)
+                        : pythonEvaluatorService.evaluate(message.code().metric(), data))
                 .doOnNext(withMdc(mdc, scoreResults -> userFacingLogger
                         .info("Received response for spanId '{}':\n\n{}", span.id(), scoreResults)))
-                .flatMap(scoreResults -> storeSpanScores(toFeedbackScores(scoreResults, span), span,
-                        message.userName(), message.workspaceId()))
+                .flatMap(scoreResults -> {
+                    var pythonScores = OnlineScoringEngine.splitPythonScores(scoreResults);
+                    OnlineScoringEngine.logDroppedPythonScores(userFacingLogger, mdc, pythonScores,
+                            "spanId", span.id());
+                    return storeSpanScores(toFeedbackScores(pythonScores.storable(), span), span,
+                            message.userName(), message.workspaceId());
+                })
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for spanId '{}' stored successfully:\n\n{}", span.id(), loggedScores)))
                 .doOnError(withMdc(mdc, error -> userFacingLogger
                         .error("Unexpected error while scoring spanId '{}' with rule '{}': \n\n{}",
                                 span.id(), message.ruleName(), error.getMessage())))
                 .then();
+    }
+
+    // Completes empty so the message is acked and removed rather than retried: the mismatch is deterministic.
+    private Mono<List<PythonScoreResult>> reportUnresolvedArguments(
+            SpanToScoreUserDefinedMetricPython message, Map<String, String> mdc) {
+        OnlineScoringEngine.logUnresolvedEvaluatorArguments(userFacingLogger, log, mdc, "spanId",
+                message.span().id(), message.ruleName(), message.code().arguments());
+        return Mono.empty();
     }
 
     private Map<String, Object> prepareData(SpanToScoreUserDefinedMetricPython message, Map<String, String> mdc) {

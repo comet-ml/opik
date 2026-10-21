@@ -34,7 +34,7 @@
     },
     "azure/multilingual-e5-large": {
         "input_cost_per_token": 1e-07,
-        "litellm_provider": "microsoft",
+        "litellm_provider": "azure",
         "max_input_tokens": 512,
         "max_tokens": 512,
         "mode": "embedding",

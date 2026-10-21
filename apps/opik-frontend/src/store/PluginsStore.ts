@@ -8,6 +8,7 @@ import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
 import { BillingLinkProps } from "@/plugins/comet/BillingLink";
 import { BridgeSurface, ExplainButtonProps } from "@/types/assistant-sidebar";
+import type { McpInstallRoutesProps } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/types";
 import {
   type PluginManifest,
   type PluginRouteParents,
@@ -36,11 +37,16 @@ type PluginStore = {
     onWidthChange: (width: number) => void;
   }> | null;
   ExplainButton: React.ComponentType<ExplainButtonProps> | null;
+  /** Hosted MCP install routes. Absent means this deployment has no hosted server. */
+  McpInstallRoutes: React.ComponentType<McpInstallRoutesProps> | null;
   AssistantPrewarmer: React.ComponentType | null;
   AssistantDebugInfo: React.ComponentType | null;
   UpgradeButton: React.ComponentType | null;
   BillingLink: React.ComponentType<BillingLinkProps> | null;
   sendOnboardingEmail: ((email: string) => Promise<void>) | null;
+  getOllieCredits:
+    | ((workspaceName: string, signal?: AbortSignal) => Promise<boolean>)
+    | null;
   init: unknown;
   collectRoutes: (parents: PluginRouteParents) => AnyRoute[];
   sidebarSections: PluginSidebarSection[];
@@ -63,11 +69,13 @@ const PLUGIN_NAMES = [
   "SidebarWorkspaceSelector",
   "AssistantSidebar",
   "ExplainButton",
+  "McpInstallRoutes",
   "AssistantPrewarmer",
   "AssistantDebugInfo",
   "UpgradeButton",
   "BillingLink",
   "sendOnboardingEmail",
+  "getOllieCredits",
   "init",
 ];
 
@@ -108,11 +116,13 @@ const usePluginsStore = create<PluginStore>((set) => ({
   SidebarWorkspaceSelector: null,
   AssistantSidebar: null,
   ExplainButton: null,
+  McpInstallRoutes: null,
   AssistantPrewarmer: null,
   AssistantDebugInfo: null,
   UpgradeButton: null,
   BillingLink: null,
   sendOnboardingEmail: null,
+  getOllieCredits: null,
   init: null,
   collectRoutes: (parents) =>
     ACTIVE_MANIFESTS.flatMap((manifest) => manifest.routes?.(parents) ?? []),

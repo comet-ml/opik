@@ -2,7 +2,7 @@
 #######################################################################
 # Multi-stage build: Build stage
 #######################################################################
-FROM docker:29.5.1 AS builder
+FROM docker:29.8.1 AS builder
 
 # Alpine base ships /bin/ash, not bash; ash honors -o pipefail for the RUN
 # below whose pipe into xargs would otherwise mask a failing find.
@@ -44,7 +44,7 @@ RUN set -eux; \
 #######################################################################
 # Multi-stage build: Runtime stage
 #######################################################################
-FROM docker:29.5.1
+FROM docker:29.8.1
 
 # libexpat --upgrade mitigates CVEs; tini (PID 1 reaper) + python3 are the
 # runtime-only OS deps.
@@ -59,7 +59,7 @@ COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # LITELLM_MODE: avoid load_dotenv() frame inspection that breaks .pyc-only deps.
-# PYTHONNODEBUGRANGES: cut 3.12 memory overhead (matches the build compile flag).
+# PYTHONNODEBUGRANGES: cut 3.14 memory overhead (matches the build compile flag).
 # PYTHONDONTWRITEBYTECODE: ship bytecode-only, never write .pyc at runtime.
 ENV LITELLM_MODE=PRODUCTION \
     PYTHONNODEBUGRANGES=1 \

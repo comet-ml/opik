@@ -8,6 +8,8 @@ export interface AlertWrite {
     enabled?: boolean;
     alertType?: OpikApi.AlertWriteAlertType;
     metadata?: Record<string, string>;
+    /** Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys. */
+    customFields?: Record<string, string>;
     webhook: OpikApi.WebhookWrite;
     triggers?: OpikApi.AlertTriggerWrite[];
     /** Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error. */

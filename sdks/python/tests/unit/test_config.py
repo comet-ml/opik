@@ -1,10 +1,11 @@
 import configparser
+import io
 from pathlib import Path
 from unittest.mock import mock_open, patch
 
 import pytest
 
-from opik.config import OpikConfig
+from opik.config import CONFIG_FILE_PATH_DEFAULT, OpikConfig
 
 
 @pytest.fixture(autouse=True)
@@ -131,3 +132,70 @@ def test_save_to_file_does_not_persist_environment(mock_expanduser, mock_open_fi
     parsed_config.read_string(written_content)
 
     assert "environment" not in parsed_config["opik"]
+
+
+@pytest.mark.parametrize("blank_path", ["", "   ", "\t"])
+def test_blank_opik_config_path_falls_back_to_default(monkeypatch, blank_path):
+    """
+    ``os.getenv(..., default)`` only applies when the variable is missing.
+    A blank assignment (Windows ``set OPIK_CONFIG_PATH=``, a `.env` line
+    with no value) would otherwise resolve to the current directory and
+    ignore ``~/.opik.config``.
+    """
+    monkeypatch.setenv("OPIK_CONFIG_PATH", blank_path)
+
+    config = OpikConfig()
+
+    assert config.config_file_fullpath == Path(CONFIG_FILE_PATH_DEFAULT).expanduser()
+
+
+def test_unset_opik_config_path_uses_default(monkeypatch):
+    monkeypatch.delenv("OPIK_CONFIG_PATH", raising=False)
+
+    config = OpikConfig()
+
+    assert config.config_file_fullpath == Path(CONFIG_FILE_PATH_DEFAULT).expanduser()
+
+
+def test_custom_opik_config_path_is_honored(monkeypatch, tmp_path):
+    custom = tmp_path / "custom.opik.config"
+    monkeypatch.setenv("OPIK_CONFIG_PATH", str(custom))
+
+    config = OpikConfig()
+
+    assert config.config_file_fullpath == custom
+
+
+def test_padded_opik_config_path_is_honored(monkeypatch, tmp_path):
+    custom = tmp_path / "custom.opik.config"
+    monkeypatch.setenv("OPIK_CONFIG_PATH", f"  {custom}  ")
+
+    config = OpikConfig()
+
+    assert config.config_file_fullpath == custom
+
+
+@patch("builtins.open", new_callable=mock_open)
+@patch("pathlib.Path.expanduser", return_value=Path("/fake/path/config.ini"))
+def test_save_to_file_value_with_percent_sign(mock_expanduser, mock_open_file):
+    # configparser interpolation treated "%" as syntax, so saving raised ValueError.
+    OpikConfig(project_name="100% coverage").save_to_file()
+
+    handle = mock_open_file()
+    written_content = "".join(call.args[0] for call in handle.write.call_args_list)
+    parsed_config = configparser.ConfigParser(interpolation=None)
+    parsed_config.read_string(written_content)
+
+    assert parsed_config["opik"]["project_name"] == "100% coverage"
+
+
+def test_read_config_file_value_with_percent_sign(tmp_path, monkeypatch):
+    # Reading such a value raised InterpolationSyntaxError, so every OpikConfig()
+    # failed while the file contained it.
+    config_path = tmp_path / "opik.config"
+    config_path.write_text("[opik]\nproject_name = 100% coverage\n", encoding="utf-8")
+    monkeypatch.setenv("OPIK_CONFIG_PATH", str(config_path))
+    monkeypatch.delenv("OPIK_PROJECT_NAME", raising=False)
+
+    with patch("builtins.open", wraps=io.open):
+        assert OpikConfig().project_name == "100% coverage"

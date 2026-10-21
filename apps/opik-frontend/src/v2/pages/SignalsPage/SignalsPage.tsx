@@ -1,19 +1,24 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookOpenCheck, Radar, Settings2 } from "lucide-react";
+import { CircleCheck, Play, ThumbsDown } from "lucide-react";
+import { StringParam, useQueryParam } from "use-query-params";
 import { useActiveProjectId } from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { AGENT_INSIGHTS_ISSUES_KEY, AGENT_INSIGHTS_JOB_KEY } from "@/api/api";
+import {
+  AGENT_INSIGHTS_ISSUES_KEY,
+  AGENT_INSIGHTS_JOB_KEY,
+  OLLIE_CREDITS_KEY,
+  TRACES_KEY,
+} from "@/api/api";
 import { formatDate } from "@/lib/date";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import BackButton from "@/shared/BackButton/BackButton";
 import { Button } from "@/ui/button";
-import { Separator } from "@/ui/separator";
+import { Tabs, TabsList, TabsTrigger } from "@/ui/tabs";
 import {
   AGENT_INSIGHTS_ISSUE_STATUS,
   AGENT_INSIGHTS_JOB_STATUS,
@@ -23,8 +28,9 @@ import useAgentInsightsIssuesList from "@/api/signals/useAgentInsightsIssuesList
 import useTracesList from "@/api/traces/useTracesList";
 import { COLUMN_TYPE } from "@/types/shared";
 import useAgentInsightsJob from "@/api/signals/useAgentInsightsJob";
+import useOllieCredits from "@/api/ollie/useOllieCredits";
+import { OUT_OF_CREDITS_FAILURE_REASON } from "@/types/ollie-reports";
 import useTriggerAgentInsightsJobMutation from "@/api/signals/useTriggerAgentInsightsJobMutation";
-import useUpdateAgentInsightsJobMutation from "@/api/signals/useUpdateAgentInsightsJobMutation";
 import useDiagnosticsRunState from "@/hooks/useDiagnosticsRunState";
 import useDiagnosticsSeen from "@/hooks/useDiagnosticsSeen";
 import { getRunFailureCopy } from "@/v2/pages/SignalsPage/runFailureCopy";
@@ -33,13 +39,41 @@ import { useToast } from "@/ui/use-toast";
 import SignalsStatsCards from "@/v2/pages/SignalsPage/SignalsStatsCards";
 import IssuesTab from "@/v2/pages/SignalsPage/IssuesTab/IssuesTab";
 import DiagnosticsEmptyState from "@/v2/pages/SignalsPage/DiagnosticsEmptyState";
-import DiagnosticsSettingsDialog from "@/v2/pages/SignalsPage/DiagnosticsSettingsDialog";
+import AutoRunToggle from "@/v2/pages/SignalsPage/AutoRunToggle";
+import OutOfCreditsButton from "@/v2/pages/SignalsPage/OutOfCreditsButton";
+import DiagnosticsSettingsMenu from "@/v2/pages/SignalsPage/DiagnosticsSettingsMenu";
+import GuidanceSheet from "@/v2/pages/SignalsPage/GuidanceSheet";
+import GuidanceChangedCallout from "@/v2/pages/SignalsPage/GuidanceChangedCallout";
 import SignalsPageSkeleton from "@/v2/pages/SignalsPage/SignalsPageSkeleton";
+import useColumnsOverflow from "@/v2/pages/SignalsPage/useColumnsOverflow";
+import {
+  countAffectedTraces,
+  getGuidanceCalloutAction,
+  getHeaderControls,
+  isGuidanceOutdated,
+} from "@/v2/pages/SignalsPage/helpers";
+import {
+  AUTO_FIRST_RUN_WINDOW_MS,
+  AUTO_RUN_MAX_DURATION_MS,
+} from "@/constants/diagnostics";
 
 const RUN_POLL_INTERVAL_MS = 8000;
+const ELIGIBILITY_POLL_INTERVAL_MS = 30_000;
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const STALE_AFTER_MS = 3 * DAY_MS;
+
+const LAYOUT = {
+  scrolling: {
+    body: "flex flex-col gap-4 px-6 pb-2",
+    columns:
+      "sticky top-2 flex flex-col h-[calc(100vh-var(--header-height)-var(--banner-height)-16px)]",
+  },
+  fitted: {
+    body: "flex min-h-0 flex-1 flex-col gap-4 px-6 pb-2",
+    columns: "flex min-h-0 flex-1 flex-col",
+  },
+};
 
 const maxUpdatedAt = (issues: AgentInsightsIssue[]): number =>
   issues.reduce((max, issue) => {
@@ -47,8 +81,13 @@ const maxUpdatedAt = (issues: AgentInsightsIssue[]): number =>
     return Number.isFinite(t) && t > max ? t : max;
   }, 0);
 
-const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
-  showResolved = false,
+const CLOSED_TABS = {
+  resolved: "resolved",
+  notUseful: "not_useful",
+} as const;
+
+const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
+  showClosed = false,
 }) => {
   const projectId = useActiveProjectId()!;
   const navigate = useNavigate();
@@ -60,7 +99,7 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
       to: "/$workspaceName/projects/$projectId/diagnostics",
       params: { workspaceName, projectId },
     });
-  const goToResolved = () =>
+  const goToClosed = () =>
     navigate({
       to: "/$workspaceName/projects/$projectId/diagnostics/resolved",
       params: { workspaceName, projectId },
@@ -69,9 +108,15 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
 
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
   const ollieEnabled = useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED);
+  const agentInsightsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.AGENT_INSIGHTS_ENABLED,
+  );
+  const guidanceEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.AGENT_INSIGHTS_GUIDANCE_ENABLED,
+  );
 
-  // Running / enabling / configuring diagnostics are write actions gated on
-  // workspace-settings permission; viewing issues stays open to all.
+  // Running and enabling diagnostics are gated on workspace-settings permission;
+  // viewing issues, changing their status and editing guidance stay open to all.
   const {
     permissions: { canConfigureWorkspaceSettings: canConfigure },
   } = usePermissions();
@@ -87,7 +132,7 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   const stats = useMemo(() => {
     const issues = issuesData?.content ?? [];
     return {
-      tracesAffected: issues.reduce((sum, i) => sum + i.total_occurrences, 0),
+      tracesAffected: countAffectedTraces(issues),
       openIssues: issues.filter(
         (i) => i.status === AGENT_INSIGHTS_ISSUE_STATUS.open,
       ).length,
@@ -96,6 +141,33 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
       ).length,
     };
   }, [issuesData]);
+
+  // Closed issues counts (size 1: only the totals are needed).
+  const { data: resolvedPage } = useAgentInsightsIssuesList({
+    projectId,
+    status: AGENT_INSIGHTS_ISSUE_STATUS.resolved,
+    page: 1,
+    size: 1,
+  });
+  const { data: notUsefulPage } = useAgentInsightsIssuesList(
+    {
+      projectId,
+      status: AGENT_INSIGHTS_ISSUE_STATUS.closed,
+      page: 1,
+      size: 1,
+    },
+    { enabled: guidanceEnabled },
+  );
+  const resolvedCount = resolvedPage?.total ?? 0;
+  const notUsefulCount = guidanceEnabled ? notUsefulPage?.total ?? 0 : 0;
+
+  const [closedTabParam, setClosedTab] = useQueryParam("tab", StringParam, {
+    updateType: "replaceIn",
+  });
+  const closedTab =
+    guidanceEnabled && closedTabParam === CLOSED_TABS.notUseful
+      ? CLOSED_TABS.notUseful
+      : CLOSED_TABS.resolved;
 
   const latestIssueUpdate = useMemo(
     () => maxUpdatedAt(issuesData?.content ?? []),
@@ -109,17 +181,32 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
 
   const { toast } = useToast();
   const triggerMutation = useTriggerAgentInsightsJobMutation();
-  const updateJobMutation = useUpdateAgentInsightsJobMutation();
   const { isRunning, startedAt, baseline, failBaseline, startRun, endRun } =
     useDiagnosticsRunState(projectId);
   const { markSeen } = useDiagnosticsSeen(projectId);
 
+  // The automatic run is server-side, so no browser holds its state: it is in flight while
+  // its start is newer than both the last result and the last failure. Manual runs keep
+  // using the local flag.
+  const autoRunAt = job?.auto_first_run_at
+    ? Date.parse(job.auto_first_run_at)
+    : 0;
+  const isAutoRunInFlight =
+    autoRunAt > 0 &&
+    (job?.last_scan_at ? Date.parse(job.last_scan_at) : 0) < autoRunAt &&
+    (job?.last_failed_at ? Date.parse(job.last_failed_at) : 0) < autoRunAt &&
+    Date.now() - autoRunAt < AUTO_RUN_MAX_DURATION_MS;
+  const showRunning = isRunning || isAutoRunInFlight;
+
   // Derive failure from the job (BE sets it, clears on next success) so the banner
   // is correct across reloads/tabs; the spinner takes precedence while running.
   const failedReason =
-    !isRunning && job?.last_failed_at ? job.last_failure_reason : undefined;
+    !showRunning && job?.last_failed_at ? job.last_failure_reason : undefined;
   const failedDetail =
-    !isRunning && job?.last_failed_at ? job.last_failure_detail : undefined;
+    !showRunning && job?.last_failed_at ? job.last_failure_detail : undefined;
+
+  const { data: hasCredits } = useOllieCredits();
+  const isOutOfCredits = hasCredits === false;
 
   // Stale nudge: scan older than the threshold + traces in the last 24h. Uses the
   // displayed `lastScan` fallback, and an hour-bucketed cutoff rounded up (window
@@ -144,26 +231,71 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
         },
       ],
     },
-    { enabled: scanIsOld && !isRunning },
+    { enabled: scanIsOld && !showRunning },
   );
   const recentTraceCount = recentTracesData?.total ?? 0;
-  const isStale = scanIsOld && !isRunning && recentTraceCount > 0;
+  const isStale = scanIsOld && !showRunning && recentTraceCount > 0;
   const staleDays = scanAt ? Math.floor((Date.now() - scanAt) / DAY_MS) : 0;
 
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Eligibility gate: traces in the eligibility window, hour-bucketed like the
+  // stale cutoff so the query key doesn't churn each render. Filters on created_at
+  // to match the window the backend counts over.
+  const eligibilityCutoff = new Date(
+    Math.ceil(Date.now() / HOUR_MS) * HOUR_MS - AUTO_FIRST_RUN_WINDOW_MS,
+  ).toISOString();
+  const awaitsAutoFirstRun = Boolean(
+    job?.auto_first_run_enrolled && !job?.auto_first_run_at,
+  );
+  // Hoisted so the poll below can invalidate this query alone: the key is [TRACES_KEY, params], and a
+  // bare TRACES_KEY would refetch every traces query on the page.
+  const eligibilityTracesParams = useMemo(
+    () => ({
+      projectId,
+      page: 1,
+      size: 1,
+      filters: [
+        {
+          id: "diagnostics-eligibility-traces",
+          field: "created_at",
+          type: COLUMN_TYPE.time,
+          operator: ">" as const,
+          value: eligibilityCutoff,
+        },
+      ],
+    }),
+    [projectId, eligibilityCutoff],
+  );
+  const { data: windowTracesData, isLoading: isTraceCountPending } =
+    useTracesList(eligibilityTracesParams, { enabled: awaitsAutoFirstRun });
+  const windowTraceCount = windowTracesData?.total ?? 0;
+
+  const [guidanceOpen, setGuidanceOpen] = useState(false);
+  const columnsRef = useRef<HTMLDivElement>(null);
+  const columnsOverflow = useColumnsOverflow(columnsRef, issuesData);
 
   useEffect(() => {
     if (job?.last_scan_at) markSeen(job.last_scan_at);
   }, [job?.last_scan_at, markSeen]);
 
   useEffect(() => {
-    if (!isRunning) return;
+    if (!showRunning) return;
     const id = window.setInterval(() => {
       queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_ISSUES_KEY] });
       queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_JOB_KEY] });
     }, RUN_POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, [isRunning, queryClient]);
+  }, [showRunning, queryClient]);
+
+  useEffect(() => {
+    if (!awaitsAutoFirstRun) return;
+    const id = window.setInterval(() => {
+      queryClient.invalidateQueries({
+        queryKey: [TRACES_KEY, eligibilityTracesParams],
+      });
+      queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_JOB_KEY] });
+    }, ELIGIBILITY_POLL_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [awaitsAutoFirstRun, eligibilityTracesParams, queryClient]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -186,17 +318,23 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
         reason: job?.last_failure_reason,
       });
       endRun();
+      if (job?.last_failure_reason === OUT_OF_CREDITS_FAILURE_REASON) {
+        queryClient.invalidateQueries({ queryKey: [OLLIE_CREDITS_KEY] });
+      }
       const { title, description } = getRunFailureCopy(
         job?.last_failure_reason,
       );
       toast({ title, description, variant: "destructive" });
     }
-  }, [job, isRunning, failBaseline, projectId, endRun, toast]);
+  }, [job, isRunning, failBaseline, projectId, endRun, toast, queryClient]);
 
   const hasData = (issuesData?.content?.length ?? 0) > 0;
-  const isActive = isJobEnabled || isRunning;
+  const isActive = isJobEnabled || showRunning;
 
-  if (!AssistantSidebar || !ollieEnabled) {
+  const showJobControls =
+    isActive || hasData || Boolean(job?.last_scan_at) || Boolean(failedReason);
+
+  if (!AssistantSidebar || !ollieEnabled || !agentInsightsEnabled) {
     return (
       <Navigate
         to="/$workspaceName/projects/$projectId/home"
@@ -222,35 +360,86 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
     );
   };
 
-  const handleTurnOnAuto = () => {
-    trackEvent(OpikEvent.DIAGNOSTICS_AUTO_ENABLED, {
-      project_id: projectId,
-      source: "header",
-    });
-    updateJobMutation.mutate({
-      projectId,
-      status: AGENT_INSIGHTS_JOB_STATUS.enabled,
-    });
-  };
+  const layout = columnsOverflow ? LAYOUT.scrolling : LAYOUT.fitted;
+  const headerControls = getHeaderControls({
+    showClosed,
+    canConfigure,
+    guidanceEnabled,
+    showJobControls,
+  });
+
+  const canRun = !showRunning && !isOutOfCredits && !triggerMutation.isPending;
+  const calloutAction = getGuidanceCalloutAction({
+    canConfigure,
+    canRun,
+    isOutOfCredits,
+  });
+
+  // Closing an issue as not useful doesn't change the guidance version.
+  const showGuidanceChanged =
+    guidanceEnabled && !showRunning && isGuidanceOutdated(job);
+
+  const closedTabs = (
+    <Tabs value={closedTab} onValueChange={setClosedTab}>
+      <TabsList variant="segmented-primary" className="shrink-0">
+        <TabsTrigger
+          value={CLOSED_TABS.resolved}
+          variant="segmented-primary"
+          size="sm"
+          className="h-6 flex-1 gap-1"
+        >
+          <CircleCheck className="size-3" />
+          <span>Resolved ({resolvedCount})</span>
+        </TabsTrigger>
+        {guidanceEnabled && (
+          <TabsTrigger
+            value={CLOSED_TABS.notUseful}
+            variant="segmented-primary"
+            size="sm"
+            className="h-6 flex-1 gap-1"
+          >
+            <ThumbsDown className="size-3" />
+            <span>Not useful ({notUsefulCount})</span>
+          </TabsTrigger>
+        )}
+      </TabsList>
+    </Tabs>
+  );
 
   const renderBody = () => {
-    if (!isRunning && (isJobPending || (!isJobEnabled && isStatsPending))) {
+    if (
+      !isRunning &&
+      (isJobPending ||
+        (!isJobEnabled && (isStatsPending || isTraceCountPending)))
+    ) {
       return <SignalsPageSkeleton />;
     }
 
-    if (!isRunning && !failedReason && !isJobEnabled && !hasData) {
+    // Nothing to show yet. Enrolled projects get progress towards the run that is coming to them;
+    // everyone else gets something to click. A failure doesn't hide the progress while the automatic
+    // run is still coming (a timed-out run being retried, or a run reset by hand).
+    if (
+      !showRunning &&
+      (!failedReason || awaitsAutoFirstRun) &&
+      !hasData &&
+      !job?.last_scan_at &&
+      (awaitsAutoFirstRun || !isJobEnabled)
+    ) {
       return (
         <DiagnosticsEmptyState
-          onRun={handleRunDiagnostic}
-          isPending={triggerMutation.isPending}
+          awaitsAutoFirstRun={awaitsAutoFirstRun}
+          traceCount={windowTraceCount}
+          isOutOfCredits={isOutOfCredits}
           canConfigure={canConfigure}
+          onRun={handleRunDiagnostic}
+          isRunPending={triggerMutation.isPending}
         />
       );
     }
 
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-4 px-6 pb-3">
-        {!showResolved && (
+      <div className={layout.body}>
+        {!showClosed && (
           <div className="hidden lg:block">
             <SignalsStatsCards
               tracesAffected={stats.tracesAffected}
@@ -262,7 +451,14 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
           </div>
         )}
 
-        {!showResolved && (
+        {!showClosed && showGuidanceChanged && (
+          <GuidanceChangedCallout
+            onRun={calloutAction === "run" ? handleRunDiagnostic : undefined}
+            outOfCredits={calloutAction === "outOfCredits"}
+          />
+        )}
+
+        {!showClosed && (
           <div className="flex items-center gap-2">
             {lastScan ? (
               <span className="comet-body-xs text-muted-slate">
@@ -275,114 +471,103 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
                 </span>
               )
             )}
-            <div className="ml-auto flex items-center gap-2">
-              {canConfigure && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    disabled={isRunning || triggerMutation.isPending}
-                    onClick={handleRunDiagnostic}
-                  >
-                    <Radar className="mr-1.5 size-3.5" />
-                    Run diagnostic
-                  </Button>
-                  <Separator orientation="vertical" className="h-5" />
-                </>
-              )}
-              <TooltipWrapper content="Resolved issues">
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={goToResolved}
-                  aria-label="Resolved issues"
-                >
-                  <BookOpenCheck className="size-3.5 lg:mr-1.5" />
-                  <span className="hidden lg:inline">Resolved issues</span>
-                </Button>
-              </TooltipWrapper>
-            </div>
           </div>
         )}
 
-        <IssuesTab
-          projectId={projectId}
-          showResolved={showResolved}
-          isRunning={isRunning}
-          failedReason={failedReason}
-          failedDetail={failedDetail}
-          isStale={isStale}
-          staleTraceCount={recentTraceCount}
-          staleDays={staleDays}
-          canConfigure={canConfigure}
-          onRunDiagnostic={canConfigure ? handleRunDiagnostic : undefined}
-          onShowOpenIssues={goToOpenIssues}
-        />
+        <div ref={columnsRef} className={layout.columns}>
+          <IssuesTab
+            projectId={projectId}
+            status={
+              !showClosed
+                ? AGENT_INSIGHTS_ISSUE_STATUS.open
+                : closedTab === CLOSED_TABS.notUseful
+                  ? AGENT_INSIGHTS_ISSUE_STATUS.closed
+                  : AGENT_INSIGHTS_ISSUE_STATUS.resolved
+            }
+            tabs={showClosed ? closedTabs : undefined}
+            isRunning={showRunning}
+            failedReason={failedReason}
+            failedDetail={failedDetail}
+            isStale={isStale}
+            staleTraceCount={recentTraceCount}
+            staleDays={staleDays}
+            canCloseAsNotUseful={guidanceEnabled}
+            closedCount={resolvedCount + notUsefulCount}
+            onRunDiagnostic={canConfigure ? handleRunDiagnostic : undefined}
+            onShowOpenIssues={goToOpenIssues}
+            onShowClosedIssues={goToClosed}
+          />
+        </div>
       </div>
     );
   };
 
   return (
-    <PageBodyScrollContainer className="flex flex-col overflow-hidden">
+    <PageBodyScrollContainer className="flex flex-col">
       <div className="mb-4 mt-6 flex shrink-0 items-center justify-between px-6">
-        {showResolved ? (
+        {showClosed ? (
           <div className="flex min-w-0 items-center gap-2">
             <BackButton
               to="/$workspaceName/projects/$projectId/diagnostics"
               tooltip="Back to diagnostics"
             />
             <h1 className="truncate break-words text-base font-medium tracking-normal text-foreground-secondary">
-              Resolved issues
+              Closed issues
             </h1>
           </div>
         ) : (
-          <h1 className="truncate break-words text-base font-medium tracking-normal text-foreground-secondary">
-            Diagnostics
-          </h1>
-        )}
-        {!showResolved && (isActive || hasData) && (
-          <div className="flex items-center gap-1.5">
-            <span className="comet-body-xs flex items-center gap-1.5 text-foreground-secondary">
-              <span
-                className={`size-2 rounded-full ${
-                  isJobEnabled ? "bg-[var(--color-emerald)]" : "bg-chart-red"
-                }`}
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 className="truncate break-words text-base font-medium tracking-normal text-foreground-secondary">
+              Diagnostics
+            </h1>
+            {showJobControls && (
+              <AutoRunToggle
+                projectId={projectId}
+                enabled={isJobEnabled}
+                canConfigure={canConfigure}
               />
-              {isJobEnabled ? "Auto • Daily" : "Manual"}
-            </span>
-            {canConfigure &&
-              (isJobEnabled ? (
-                <TooltipWrapper content="Settings">
-                  <Button
-                    variant="ghost"
-                    size="icon-2xs"
-                    onClick={() => setSettingsOpen(true)}
-                    aria-label="Diagnostics settings"
-                    className="text-foreground"
-                  >
-                    <Settings2 className="size-3" />
-                  </Button>
-                </TooltipWrapper>
+            )}
+          </div>
+        )}
+        {headerControls.settings && (
+          <div className="flex items-center gap-2">
+            <DiagnosticsSettingsMenu
+              projectId={projectId}
+              enabled={isJobEnabled}
+              canConfigure={canConfigure}
+              onEditGuidance={
+                guidanceEnabled ? () => setGuidanceOpen(true) : undefined
+              }
+            />
+            {headerControls.run &&
+              (isOutOfCredits && !showRunning ? (
+                <OutOfCreditsButton
+                  label="Out of Ollie credits"
+                  description="Diagnostics run on your organization's Ollie credits, and there aren't enough left for another run. Issues already found stay available."
+                />
               ) : (
                 <Button
-                  size="xs"
-                  onClick={handleTurnOnAuto}
-                  disabled={updateJobMutation.isPending}
-                  className="ml-1.5"
+                  size="2xs"
+                  disabled={showRunning || triggerMutation.isPending}
+                  onClick={handleRunDiagnostic}
                 >
-                  Turn on auto-diagnostic
+                  <Play className="mr-1.5 size-3" />
+                  Run diagnostic
                 </Button>
               ))}
           </div>
         )}
       </div>
       {renderBody()}
-      <DiagnosticsSettingsDialog
-        open={settingsOpen}
-        setOpen={setSettingsOpen}
-        projectId={projectId}
-        enabled={isJobEnabled}
-      />
+      {guidanceEnabled && (
+        <GuidanceSheet
+          open={guidanceOpen}
+          setOpen={setGuidanceOpen}
+          projectId={projectId}
+          job={job}
+          onRun={canConfigure && canRun ? handleRunDiagnostic : undefined}
+        />
+      )}
     </PageBodyScrollContainer>
   );
 };

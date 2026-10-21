@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils;
 
 import lombok.experimental.UtilityClass;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -12,6 +13,7 @@ import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.net.URI;
+import java.time.Duration;
 
 @UtilityClass
 public class MinIOContainerUtils {
@@ -20,11 +22,15 @@ public class MinIOContainerUtils {
     public static final String MINIO_BUCKET = "test-bucket";
 
     public static GenericContainer<?> newMinIOContainer() {
-        return new GenericContainer<>(DockerImageName.parse("minio/minio:RELEASE.2025-03-12T18-04-18Z"))
+        return new GenericContainer<>(
+                DockerImageName.parse("docker.io/cloudpirates/image-minio:RELEASE.2025-10-15T17-29-55Z-hardened"))
                 .withExposedPorts(9000)
                 .withEnv("MINIO_ROOT_USER", MINIO_USER)
                 .withEnv("MINIO_ROOT_PASSWORD", MINIO_PASSWORD)
-                .withCommand("server /data --address :9000")
+                .withCreateContainerCmdModifier(cmd -> cmd.withEntrypoint("sh", "-c",
+                        "mkdir -p /data && exec minio server /data --address :9000"))
+                .waitingFor(Wait.forHttp("/minio/health/live").forStatusCode(200)
+                        .withStartupTimeout(Duration.ofSeconds(60)))
                 .withReuse(true);
     }
 

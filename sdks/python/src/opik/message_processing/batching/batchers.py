@@ -93,6 +93,14 @@ class BaseAddFeedbackScoresBatchMessageBatcher(base_batcher.BaseBatcher):
     ]:
         return super()._create_batches_from_accumulated_messages()  # type: ignore
 
+    def _split_accumulated_messages_by_payload_size(
+        self,
+    ) -> List[List[messages.BaseMessage]]:
+        return sequence_splitter.split_into_batches(
+            self._accumulated_messages,
+            max_payload_size_MB=self._batch_memory_limit_mb,
+        )
+
     def add(  # type: ignore
         self,
         message: Union[
@@ -126,9 +134,10 @@ class AddSpanFeedbackScoresBatchMessageBatcher(
     ) -> List[messages.AddSpanFeedbackScoresBatchMessage]:
         return [
             messages.AddSpanFeedbackScoresBatchMessage(
-                batch=self._accumulated_messages,  # type: ignore
+                batch=batch,  # type: ignore
                 supports_batching=False,
             )
+            for batch in self._split_accumulated_messages_by_payload_size()
         ]
 
 
@@ -140,9 +149,10 @@ class AddTraceFeedbackScoresBatchMessageBatcher(
     ) -> List[messages.AddTraceFeedbackScoresBatchMessage]:
         return [
             messages.AddTraceFeedbackScoresBatchMessage(
-                batch=self._accumulated_messages,  # type: ignore
+                batch=batch,  # type: ignore
                 supports_batching=False,
             )
+            for batch in self._split_accumulated_messages_by_payload_size()
         ]
 
 
@@ -154,9 +164,10 @@ class AddThreadsFeedbackScoresBatchMessageBatcher(
     ) -> List[messages.AddThreadsFeedbackScoresBatchMessage]:
         return [
             messages.AddThreadsFeedbackScoresBatchMessage(
-                batch=self._accumulated_messages,  # type: ignore
+                batch=batch,  # type: ignore
                 supports_batching=False,
             )
+            for batch in self._split_accumulated_messages_by_payload_size()
         ]
 
 

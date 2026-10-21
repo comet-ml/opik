@@ -10,8 +10,10 @@ import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
+import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
+import com.comet.opik.infrastructure.llm.MediaContentUtils;
 import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
@@ -25,13 +27,10 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.google.common.annotations.VisibleForTesting;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.PathNotFoundException;
-import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.AllArgsConstructor;
@@ -39,6 +38,7 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -84,6 +84,11 @@ public class OnlineScoringEngine {
     private static final int MAX_REPORTED_FIELD_NAMES = 10;
     private static final int MAX_LOGGED_VALUE_CHARS = 100;
     private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
+    // Values trail so the leading sentence is a fixed prefix to grep on; the entity label is one of them
+    // because it differs per scorer and would otherwise split that prefix in two.
+    private static final String UNRESOLVED_ARGUMENTS_LOG = "None of the metric's declared arguments resolved,"
+            + " so there is no data to evaluate. Check the declared paths against the input, output and"
+            + " metadata present on the entity. {} '{}', rule '{}', unresolved arguments: {}";
 
     private static final Map<String, Boolean> PASS_FAIL_SCORES = Map.of(
             "pass", true, "passed", true, "fail", false, "failed", false);
@@ -133,13 +138,24 @@ public class OnlineScoringEngine {
             @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
             StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
             @NonNull List<Span> spans, String traceStructureJson) {
+        var renderedMessages = renderTraceMessages(evaluatorCode, trace, promptType, spans, traceStructureJson);
+        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    /**
+     * Renders the rule's messages with the trace variables (and {@code {{spans}}} / {@code {{trace}}} when the
+     * template references them), without building a chat request. Used directly by decisions models, which
+     * read the rendered text as their state.
+     */
+    public static List<ChatMessage> renderTraceMessages(
+            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace, @NonNull PromptType promptType,
+            @NonNull List<Span> spans, String traceStructureJson) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
         injectSpansIntoReplacements(replacements, evaluatorCode.variables(),
                 evaluatorCode.messages(), promptType, spans);
         injectTraceIntoReplacements(replacements, evaluatorCode.variables(),
                 evaluatorCode.messages(), promptType, traceStructureJson);
-        var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
-        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+        return renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
     }
 
     /**
@@ -832,19 +848,19 @@ public class OnlineScoringEngine {
                 case "image_url" -> {
                     if (part.imageUrl() != null && part.imageUrl().url() != null) {
                         var url = TemplateParseUtils.render(part.imageUrl().url(), replacements, promptType);
-                        builder.addContent(ImageContent.from(url));
+                        builder.addContent(MediaContentUtils.toImageContent(url));
                     }
                 }
                 case "video_url" -> {
                     if (part.videoUrl() != null && part.videoUrl().url() != null) {
                         var url = TemplateParseUtils.render(part.videoUrl().url(), replacements, promptType);
-                        builder.addContent(VideoContent.from(url));
+                        builder.addContent(MediaContentUtils.toVideoContent(url));
                     }
                 }
                 case "audio_url" -> {
                     if (part.audioUrl() != null && part.audioUrl().url() != null) {
                         var url = TemplateParseUtils.render(part.audioUrl().url(), replacements, promptType);
-                        builder.addContent(AudioContent.from(url));
+                        builder.addContent(MediaContentUtils.toAudioContent(url));
                     }
                 }
                 default -> log.warn("Unknown content type: {}", part.type());
@@ -1505,6 +1521,40 @@ public class OnlineScoringEngine {
             TraceSection traceSection, String variableName, String jsonPath, String valueToReplace) {
     }
 
+    // Paths and names are rule configuration the user controls, so they are sanitized like judge-supplied
+    // text: a newline must not forge an entry in the persisted log, nor one rule decide how much it carries.
+    public static void logUnresolvedEvaluatorArguments(
+            @NonNull Logger userFacingLogger,
+            @NonNull Logger internalLogger,
+            @NonNull Map<String, String> mdc,
+            @NonNull String entityLabel,
+            @NonNull Object entityId,
+            String ruleName,
+            @NonNull Map<String, String> declaredArguments) {
+        // Each half capped separately so a long name cannot crowd out the path, the actionable half.
+        var reported = declaredArguments.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .limit(MAX_REPORTED_FIELD_NAMES)
+                .map(argument -> "'%s' -> '%s'".formatted(sanitize(argument.getKey()), sanitize(argument.getValue())))
+                .toList();
+        var omitted = declaredArguments.size() - reported.size();
+        var renderedArguments = reported.isEmpty()
+                ? "(none declared)"
+                : renderPairs(reported, omitted);
+        var safeRuleName = sanitize(String.valueOf(ruleName));
+        // Only the user-facing logger needs the scope: the ClickHouse appender fills its columns from the MDC.
+        try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
+            userFacingLogger.warn(UNRESOLVED_ARGUMENTS_LOG, entityLabel, entityId, safeRuleName, renderedArguments);
+        }
+        internalLogger.warn(UNRESOLVED_ARGUMENTS_LOG, entityLabel, entityId, safeRuleName, renderedArguments);
+    }
+
+    /** Mirrors {@link #renderNames}' "and N more" shape for entries that carry their own quoting. */
+    private static String renderPairs(List<String> pairs, int omitted) {
+        var shown = String.join(", ", pairs);
+        return omitted == 0 ? shown : "%s and %,d more".formatted(shown, omitted);
+    }
+
     /**
      * Shared "evaluate → prepare → log" wrapper used by the trace and span Python scorers.
      * Eliminates the boilerplate that duplicated the MDC scope, the "Evaluating X 'id' sampled
@@ -1530,7 +1580,9 @@ public class OnlineScoringEngine {
             userFacingLogger.info("Evaluating {} '{}' sampled by rule '{}'", entityLabel, entityId, ruleName);
             try {
                 Map<String, Object> data = dataSupplier.get();
-                if (userFacingLogger.isInfoEnabled()) {
+                // Both callers fail an empty map instead of calling the evaluator, so claiming a send
+                // here would contradict the warning that follows it in the same sink.
+                if (!data.isEmpty() && userFacingLogger.isInfoEnabled()) {
                     userFacingLogger.info("Sending {} '{}' to Python evaluator: '{}'",
                             entityLabel, entityId, summarizeEvaluatorInput(data));
                 }
@@ -1542,6 +1594,128 @@ public class OnlineScoringEngine {
                 throw exception;
             }
         }
+    }
+
+    /**
+     * Splits Python evaluator results three ways: the ones that can be stored, and the names of the ones
+     * that cannot, by reason. Shared by the trace, span and thread Python scorers.
+     *
+     * <p>A user metric is free to return a score with no value — {@code ScoreResult(value=None)} for a
+     * check that did not apply, or a scoring attempt the metric itself gave up on. Such a score cannot
+     * be persisted: {@code feedback_scores.value} is not nullable and {@code FeedbackScoreItem} declares
+     * it {@code @NotNull}. It used to reach the insert bind and raise an NPE there, which failed the
+     * whole batch — every other score for the same entity was lost with it, and the rule's user saw only
+     * a generic "Unexpected error" naming neither the metric nor the reason. Dropped per score instead,
+     * mirroring how the judge path treats a null judge score.
+     *
+     * <p>A result the metric itself flagged with {@code scoring_failed} is dropped for a different
+     * reason: the SDK pairs that flag with a placeholder {@code 0.0}, so the score is storable but
+     * storing it would record a failed evaluation as a genuine zero, indistinguishable in the UI from a
+     * metric that deliberately scored zero.
+     */
+    public PythonScoreSplit splitPythonScores(List<PythonScoreResult> scoreResults) {
+        if (CollectionUtils.isEmpty(scoreResults)) {
+            return PythonScoreSplit.builder().build();
+        }
+
+        var storable = new ArrayList<PythonScoreResult>(scoreResults.size());
+        var valuelessNames = new ArrayList<String>();
+
+        var failedNames = new ArrayList<String>();
+
+        scoreResults.forEach(scoreResult -> {
+            // A null entry is what a JSON `null` inside the evaluator's array deserializes to. It carries no
+            // value either, so it joins the dropped scores rather than being dereferenced — one unusable
+            // entry must not cost the batch, which is the whole point of this split. An unnamed score keeps
+            // its missing name here; the record normalizes it, and it is reported as <unnamed>.
+            if (scoreResult == null) {
+                valuelessNames.add(null);
+            } else if (BooleanUtils.isTrue(scoreResult.scoringFailed())) {
+                // Checked before the value, so a metric that both failed and returned nothing is reported by
+                // its cause rather than the symptom. Either way the score is dropped.
+                failedNames.add(scoreResult.name());
+            } else if (scoreResult.value() == null) {
+                valuelessNames.add(scoreResult.name());
+            } else {
+                storable.add(scoreResult);
+            }
+        });
+
+        return PythonScoreSplit.builder()
+                .storable(storable)
+                .valuelessNames(valuelessNames)
+                .failedNames(failedNames)
+                .build();
+    }
+
+    @Builder(toBuilder = true)
+    public record PythonScoreSplit(List<PythonScoreResult> storable, List<String> valuelessNames,
+            List<String> failedNames) {
+
+        // Snapshotted, defaulted and normalized here rather than at the call sites: this record hands its
+        // lists to its callers, so it is the one place that has to guarantee they are immutable, never null,
+        // and free of null elements — a metric may leave a score unnamed, and List.copyOf rejects a null
+        // element, which would throw from inside the type meant to make an unusable score harmless.
+        public PythonScoreSplit {
+            storable = storable == null ? List.of() : List.copyOf(storable);
+            valuelessNames = copyOfNames(valuelessNames);
+            failedNames = copyOfNames(failedNames);
+        }
+
+        private static List<String> copyOfNames(List<String> names) {
+            return names == null
+                    ? List.of()
+                    : names.stream().map(StringUtils::defaultString).toList();
+        }
+    }
+
+    /**
+     * Reports the dropped scores on the rule's log stream so the user can see which metric returned no
+     * value instead of inferring it from a batch that stored fewer scores than it ran.
+     *
+     * <p>One line for the whole batch, with the names capped and the remainder counted, the way the judge
+     * path reports unreadable and undeclared names. A metric returning a list of scores decides how many
+     * names land here, so a line per name would let one evaluation flood the rule's log.
+     *
+     * <p>Every interpolated value is user-controlled and gets the same sanitizing applied to judge-chosen
+     * text: the names come from the metric's code, and {@code entityId} is a UUID on the trace and span
+     * paths but the caller-supplied thread id on the thread one — a CR/LF in it would forge entries in the
+     * log, and an oversized one would flood a single entry.
+     */
+    public void logDroppedPythonScores(
+            @NonNull Logger userFacingLogger,
+            @NonNull Map<String, String> mdc,
+            @NonNull PythonScoreSplit scores,
+            @NonNull String entityLabel,
+            @NonNull Object entityId) {
+        if (CollectionUtils.isEmpty(scores.valuelessNames()) && CollectionUtils.isEmpty(scores.failedNames())) {
+            return;
+        }
+
+        try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
+            var safeEntityId = sanitize(String.valueOf(entityId));
+            logDropped(userFacingLogger, scores.valuelessNames(), entityLabel, safeEntityId,
+                    "Skipped {} for {} '{}' because the metric returned no value");
+            logDropped(userFacingLogger, scores.failedNames(), entityLabel, safeEntityId,
+                    "Skipped {} for {} '{}' because the metric reported the scoring as failed");
+        }
+    }
+
+    private void logDropped(Logger userFacingLogger, List<String> names, String entityLabel, String safeEntityId,
+            String message) {
+        if (names.isEmpty()) {
+            return;
+        }
+
+        // A metric is free to leave a score unnamed; rendered rather than dropped, so the count a user sees
+        // still matches the scores their rule ran.
+        var reported = names.stream()
+                .map(name -> StringUtils.isBlank(name) ? "<unnamed>" : name)
+                .limit(MAX_REPORTED_FIELD_NAMES)
+                .toList();
+
+        userFacingLogger.warn(message, renderNames(reported, names.size() - reported.size()), entityLabel,
+                safeEntityId);
     }
 
     /**

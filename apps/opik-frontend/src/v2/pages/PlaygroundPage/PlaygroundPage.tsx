@@ -10,6 +10,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { Separator } from "@/ui/separator";
 import { Skeleton } from "@/ui/skeleton";
 import PlaygroundOutputs from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
+import PlaygroundScrollContainer from "@/v2/pages/PlaygroundPage/PlaygroundScrollContainer";
 import PlaygroundAddVariant from "@/v2/pages/PlaygroundPage/PlaygroundAddVariant";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -26,12 +27,7 @@ import {
   useIsRunning,
   usePromptCount,
   useSetPromptMap,
-  useSetSelectedRuleIds,
   useClearCreatedExperiments,
-  useClearRunningMap,
-  useResetDatasetFilters,
-  useSetDatasetVariables,
-  useSetExperimentNamePrefix,
   useDatasetFilters,
   useDatasetPage,
   useDatasetSize,
@@ -44,6 +40,11 @@ import { transformDataColumnFilters } from "@/lib/filters";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
+import useLastPickedModel from "@/hooks/useLastPickedModel";
+import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
+import { generateDefaultPrompt } from "@/lib/playground";
+import useResetPlaygroundSession from "@/v2/pages-shared/playground/useResetPlaygroundSession";
+import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 
 import { DEFAULT_LOADED_DATASETS } from "@/v2/pages-shared/DatasetVersionSelectBox/useDatasetVersionSelect";
 
@@ -89,40 +90,71 @@ const PlaygroundPage = () => {
   const triggerProviderValidation = useTriggerProviderValidation();
   const isRunning = useIsRunning();
   const promptCount = usePromptCount();
-  const ref = useRef<HTMLDivElement>(null);
 
-  const { datasetId, versionName, versionHash, setDatasetId } =
+  const { datasetId, versionName, versionHash, itemsTotal, setDatasetId } =
     usePlaygroundDataset();
 
   const setPromptMap = useSetPromptMap();
-  const setSelectedRuleIds = useSetSelectedRuleIds();
   const clearCreatedExperiments = useClearCreatedExperiments();
-  const clearRunningMap = useClearRunningMap();
-  const resetDatasetFilters = useResetDatasetFilters();
-  const setDatasetVariables = useSetDatasetVariables();
-  const setExperimentNamePrefix = useSetExperimentNamePrefix();
+  const resetPlaygroundSession = useResetPlaygroundSession();
   const lastActiveProjectId = useLastActiveProjectId();
   const setLastActiveProjectId = useSetLastActiveProjectId();
 
-  const resetPlayground = useCallback(() => {
-    setPromptMap([], {});
-    setDatasetId(null);
-    setSelectedRuleIds(null);
-    clearCreatedExperiments();
-    clearRunningMap();
-    resetDatasetFilters();
-    setDatasetVariables([]);
-    setExperimentNamePrefix(null);
+  const {
+    data: providerKeysData,
+    isPending: isPendingProviderKeys,
+    isFetched: isFetchedProviderKeys,
+  } = useProviderKeys({ workspaceName });
+
+  const providerKeys: COMPOSED_PROVIDER_TYPE[] = useMemo(() => {
+    return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
+  }, [providerKeysData]);
+  const hasLoadedProviderKeys = !!providerKeysData;
+
+  const [lastPickedModel] = useLastPickedModel({
+    key: PLAYGROUND_LAST_PICKED_MODEL,
+  });
+  const {
+    calculateModelProvider,
+    calculateDefaultModel,
+    isDropdownModel,
+    isFetched: isFetchedModels,
+  } = useLLMProviderModelsData();
+
+  // Prompts created or validated before the model registry lands get an empty provider, so the
+  // prompts mount only once the keys and the registry have each answered. isFetched, not !isPending:
+  // a query that failed without data goes back to pending whenever a new observer mounts, and the
+  // prompts mount observers of both, so an isPending gate unmounts them and refetches in a loop.
+  const isPendingPlaygroundSetup = !isFetchedProviderKeys || !isFetchedModels;
+
+  const resetPrompts = useCallback(() => {
+    if (isPendingPlaygroundSetup) {
+      setPromptMap([], {});
+      return;
+    }
+
+    const prompt = generateDefaultPrompt({
+      setupProviders: providerKeys,
+      lastPickedModel,
+      providerResolver: calculateModelProvider,
+      modelResolver: calculateDefaultModel,
+      isDropdownModel,
+    });
+    setPromptMap([prompt.id], { [prompt.id]: prompt });
   }, [
+    isPendingPlaygroundSetup,
+    providerKeys,
+    lastPickedModel,
+    calculateModelProvider,
+    calculateDefaultModel,
+    isDropdownModel,
     setPromptMap,
-    setDatasetId,
-    setSelectedRuleIds,
-    clearCreatedExperiments,
-    clearRunningMap,
-    resetDatasetFilters,
-    setDatasetVariables,
-    setExperimentNamePrefix,
   ]);
+
+  const resetPlayground = useCallback(() => {
+    resetPrompts();
+    resetPlaygroundSession();
+  }, [resetPrompts, resetPlaygroundSession]);
 
   useEffect(() => {
     if (lastActiveProjectId != activeProjectId) {
@@ -159,22 +191,15 @@ const PlaygroundPage = () => {
     cancelText: "Stay and wait",
   });
 
-  const { data: providerKeysData, isPending: isPendingProviderKeys } =
-    useProviderKeys({ workspaceName });
-
-  const providerKeys: COMPOSED_PROVIDER_TYPE[] = useMemo(() => {
-    return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
-  }, [providerKeysData]);
-
   // Auto-open setup dialog when no providers configured (only on initial load)
   useEffect(() => {
-    if (!isPendingProviderKeys && !hasCheckedInitialProviders) {
+    if (hasLoadedProviderKeys && !hasCheckedInitialProviders) {
       setHasCheckedInitialProviders(true);
       if (providerKeys.length === 0) {
         setSetupDialogOpen(true);
       }
     }
-  }, [isPendingProviderKeys, hasCheckedInitialProviders, providerKeys.length]);
+  }, [hasLoadedProviderKeys, hasCheckedInitialProviders, providerKeys.length]);
 
   // Handle provider addition - trigger validation for all prompts
   const handleProviderAdded = useCallback(() => {
@@ -239,13 +264,12 @@ const PlaygroundPage = () => {
     return () => stopAll();
   }, [stopAll]);
 
-  const headerMaxWidth = isPendingProviderKeys
+  const headerMaxWidth = isPendingPlaygroundSetup
     ? undefined
     : `calc(${promptCount} * var(--max-prompt-width) + var(--add-variant-width))`;
 
   return (
-    <div
-      ref={ref}
+    <PlaygroundScrollContainer
       className="-mx-6 h-full overflow-y-auto overflow-x-hidden"
       style={
         {
@@ -259,10 +283,10 @@ const PlaygroundPage = () => {
         <div className="bg-gray-100">
           <PlaygroundHeader
             workspaceName={workspaceName}
-            providerKeys={providerKeys}
             datasetId={datasetId}
             datasetName={datasetName}
             versionName={versionName}
+            versionItemsTotal={itemsTotal}
             onChangeDatasetId={setDatasetId}
             onReset={resetPlayground}
             onRunAll={runAll}
@@ -273,7 +297,7 @@ const PlaygroundPage = () => {
 
         <Separator />
 
-        {isPendingProviderKeys ? (
+        {isPendingPlaygroundSetup ? (
           renderPlaygroundLoadingSkeleton()
         ) : isExperimentMode ? (
           <>
@@ -289,6 +313,7 @@ const PlaygroundPage = () => {
                   workspaceName={workspaceName}
                   providerKeys={providerKeys}
                   isPendingProviderKeys={isPendingProviderKeys}
+                  hasLoadedProviderKeys={hasLoadedProviderKeys}
                   runSingle={runSingle}
                   stopSingle={stopSingle}
                 />
@@ -318,6 +343,7 @@ const PlaygroundPage = () => {
                   workspaceName={workspaceName}
                   providerKeys={providerKeys}
                   isPendingProviderKeys={isPendingProviderKeys}
+                  hasLoadedProviderKeys={hasLoadedProviderKeys}
                 />
               </div>
 
@@ -343,7 +369,7 @@ const PlaygroundPage = () => {
       />
 
       {DialogComponent}
-    </div>
+    </PlaygroundScrollContainer>
   );
 };
 

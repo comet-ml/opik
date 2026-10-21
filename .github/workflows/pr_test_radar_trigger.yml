@@ -1,24 +1,25 @@
 name: PR Test Radar (trigger)
 
-# Asks the QA test radar, on every PR: is this change worth a test, and does one
-# already exist? The radar itself lives in comet-ml/comet-automation-tests
-# (pr_test_radar.yml) beside the rest of the QA tooling; this file only dispatches
-# it.
+# Asks the QA test radar, on every PR: is this change worth testing, and does it
+# work? The radar lives in comet-ml/comet-automation-tests beside the rest of the
+# QA tooling; this file only dispatches it.
 #
-# What the radar does, for anyone arriving here from a PR comment:
+# What happens, for anyone arriving here from a PR comment:
 #
-#   1. triage  — reads the diff against the capability-coverage map and decides
-#   2. explore — for a test-worthy PR, applies `test-environment` (which deploys
-#      pr-<N>.dev.comet.com via trigger_test_env_on_label.yaml) and drives the
-#      change there
-#   3. propose — opens a DRAFT PR with a permanent spec
+#   on open / push (pr_test_radar.yml)
+#     1. triage  — reads the diff against the capability-coverage map and decides
+#     2. explore — for a test-worthy PR, applies `test-environment` (which deploys
+#        pr-<N>.dev.comet.com via trigger_test_env_on_label.yaml), drives the
+#        change there, and reports every flow it checked in one PR comment
+#   on merge to main (qa_spec_harvest.yml)
+#     3. the verified flows become specs on the `qa/next-release` branch. They
+#        reach main in one QA PR per release; no PR is opened per PR.
 #
 # Only PRs from branches on THIS repo: a fork cannot get a test environment, so
 # the radar skips them entirely.
 #
-# ADVISORY. It comments; it never requests changes, never fails a required check,
-# and everything it writes is a draft. A bot that can block a merge is a bot that
-# gets removed.
+# ADVISORY. It comments; it never requests changes and never fails a required
+# check. A bot that can block a merge is a bot that gets removed.
 #
 # WHY DISPATCH RATHER THAN `uses:`
 #
@@ -51,7 +52,7 @@ on:
   # scope. See the dangerous-triggers audit rationale:
   # https://docs.zizmor.sh/audits/#dangerous-triggers
   pull_request_target: # zizmor: ignore[dangerous-triggers]
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review, closed]
 
 # Read-only here: everything that writes (the PR comment, the label) is done by
 # the radar with its own token, in the other repo.
@@ -90,6 +91,9 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
           AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+          ACTION: ${{ github.event.action }}
+          MERGED: ${{ github.event.pull_request.merged }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           # Cheap pre-filter, before spending even the radar's triage job. The
           # radar rejects these too (pr_surface.py sees no product surface), but
@@ -116,6 +120,22 @@ jobs:
             exit 0
           fi
 
+          # Merged to main: its verified flows become specs. Any other close ends
+          # the PR's QA here. The harvest sweeps its whole backlog, so a lost
+          # dispatch is picked up by the next one.
+          if [ "$ACTION" = "closed" ]; then
+            if [ "$MERGED" != "true" ] || [ "$BASE_REF" != "main" ]; then
+              echo "opik#${PR} closed without reaching main — nothing to harvest"
+              exit 0
+            fi
+            gh workflow run qa_spec_harvest.yml \
+              --repo comet-ml/comet-automation-tests \
+              --ref master \
+              -f pr="$PR" \
+              || echo "::warning::could not dispatch the QA spec harvest — the next harvest run picks this PR up"
+            exit 0
+          fi
+
           # The event payload is a snapshot from when the event fired. A PR can be
           # converted back to draft, or closed, between then and now — and the
           # radar's side effects (a label that deploys an environment, a comment)
@@ -138,5 +158,4 @@ jobs:
             -f pr="$PR" \
             -f comment=true \
             -f apply_label=true \
-            -f propose_tests=true \
             || echo "::warning::could not dispatch the QA test radar — this PR is unaffected"

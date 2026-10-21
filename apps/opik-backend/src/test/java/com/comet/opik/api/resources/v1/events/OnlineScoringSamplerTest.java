@@ -168,7 +168,7 @@ class OnlineScoringSamplerTest {
 
         @ParameterizedTest
         @EnumSource(value = Source.class, mode = EnumSource.Mode.EXCLUDE, names = {"SDK", "EXPERIMENT"})
-        void skipsNonScorableTracesWithoutSelectedRuleIds(Source source) {
+        void skipsTracesFromNonScorableSources(Source source) {
             var trace = createTrace(source);
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
@@ -179,9 +179,9 @@ class OnlineScoringSamplerTest {
 
         @Test
         void skipsEvaluatorSourceMonitoringTraces() {
-            // The engine's own monitoring traces (OPIK-6994) carry Source.EVALUATOR (a non-logging
-            // source) and no selected_rule_ids, so the sampler never scores them — the engine cannot
-            // evaluate its own output.
+            // The engine's own monitoring traces (OPIK-6994) carry Source.EVALUATOR, which is neither
+            // an experiment nor production traffic, so the sampler never scores them — the engine
+            // cannot evaluate its own output.
             var trace = createTrace(Source.EVALUATOR);
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
@@ -236,16 +236,16 @@ class OnlineScoringSamplerTest {
                     List.of(toLlmMessage(evaluator, sdkTrace), toLlmMessage(evaluator, expTrace)),
                     AutomationRuleEvaluatorType.LLM_AS_JUDGE);
         }
+
     }
 
     @Nested
     class SelectedRuleIdsTests {
 
-        @ParameterizedTest
-        @EnumSource(value = Source.class, mode = EnumSource.Mode.EXCLUDE, names = {"SDK", "EXPERIMENT"})
-        void scoresNonScorableTracesCarryingSelectedRuleIds(Source source) {
-            var evaluator = createLlmEvaluator(true, 1.0f, List.of());
-            var trace = createTrace(source).toBuilder()
+        @Test
+        void scoresPickedRuleOnExperimentTracesWhateverItsTriggerScope() {
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
+            var trace = createTrace(Source.EXPERIMENT).toBuilder()
                     .metadata(metadataWithRuleIds(evaluator.getId()))
                     .build();
             whenFindAllLlmEvaluators(evaluator);
@@ -257,30 +257,115 @@ class OnlineScoringSamplerTest {
         }
 
         @Test
-        void narrowsEvaluatorsToSelectedRuleIdsSet() {
-            var selected = createLlmEvaluator(true, 1.0f, List.of());
-            var other = createLlmEvaluator(true, 1.0f, List.of());
-            var trace = createTrace(Source.PLAYGROUND).toBuilder()
-                    .metadata(metadataWithRuleIds(selected.getId()))
+        void scoresPickedRuleThoughItIsDisabledFilteredAndSampledOut() {
+            var filter = TraceFilter.builder()
+                    .field(TraceField.NAME)
+                    .operator(Operator.EQUAL)
+                    .value("expected-name")
                     .build();
-            whenFindAllLlmEvaluators(selected, other);
+            var evaluator = createLlmEvaluator(false, 0.0f, List.of(filter), EvalTriggerScope.PRODUCTION);
+            var trace = createTrace(Source.EXPERIMENT).toBuilder()
+                    .name("no-match")
+                    .metadata(metadataWithRuleIds(evaluator.getId()))
+                    .build();
+            whenFindAllLlmEvaluators(evaluator);
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(selected, trace)),
+            verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
                     AutomationRuleEvaluatorType.LLM_AS_JUDGE);
         }
 
         @Test
-        void scoresEachNonSdkTraceOnlyByItsOwnSelectedRuleIds() {
-            var evalA = createLlmEvaluator(true, 1.0f, List.of());
-            var evalB = createLlmEvaluator(true, 1.0f, List.of());
-            var unrelated = createLlmEvaluator(true, 1.0f, List.of());
+        void scoresPickedPythonRuleOnExperimentTracesWhenToggleIsEnabled() {
+            when(serviceTogglesConfig.isPythonEvaluatorEnabled()).thenReturn(true);
+            var evaluator = createPythonEvaluator(0.0f, EvalTriggerScope.PRODUCTION);
+            var trace = createTrace(Source.EXPERIMENT).toBuilder()
+                    .metadata(metadataWithRuleIds(evaluator.getId()))
+                    .build();
+            whenFindAllPythonEvaluators(evaluator);
 
-            var traceA = createTrace(Source.PLAYGROUND).toBuilder()
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(toPythonMessage(evaluator, trace)),
+                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+        }
+
+        @Test
+        void skipsPickedPythonRuleOnExperimentTracesWhenToggleIsDisabled() {
+            when(serviceTogglesConfig.isPythonEvaluatorEnabled()).thenReturn(false);
+            var evaluator = createPythonEvaluator(0.0f, EvalTriggerScope.PRODUCTION);
+            var trace = createTrace(Source.EXPERIMENT).toBuilder()
+                    .metadata(metadataWithRuleIds(evaluator.getId()))
+                    .build();
+            whenFindAllPythonEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+        }
+
+        @Test
+        void skipsUnpickedProductionScopedRuleOnExperimentTraces() {
+            var picked = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
+            var unpicked = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
+            var trace = createTrace(Source.EXPERIMENT).toBuilder()
+                    .metadata(metadataWithRuleIds(picked.getId()))
+                    .build();
+            whenFindAllLlmEvaluators(picked, unpicked);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(picked, trace)),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+            verify(onlineScorePublisher, times(1)).enqueueMessage(any(), any());
+        }
+
+        @Test
+        void scoresUnpickedExperimentScopedRuleAlongsideThePickedOne() {
+            var picked = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
+            var experimentScoped = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.EXPERIMENT);
+            var trace = createTrace(Source.EXPERIMENT).toBuilder()
+                    .metadata(metadataWithRuleIds(picked.getId()))
+                    .build();
+            whenFindAllLlmEvaluators(picked, experimentScoped);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher, times(2)).enqueueMessage(captor.capture(),
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+
+            assertThat(captor.getAllValues()).containsExactlyInAnyOrder(
+                    List.of(toLlmMessage(picked, trace)),
+                    List.of(toLlmMessage(experimentScoped, trace)));
+        }
+
+        @Test
+        void scoresARuleQualifyingOnBothPathsOnlyOnce() {
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.BOTH);
+            var trace = createTrace(Source.EXPERIMENT).toBuilder()
+                    .metadata(metadataWithRuleIds(evaluator.getId()))
+                    .build();
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+            verify(onlineScorePublisher, times(1)).enqueueMessage(any(), any());
+        }
+
+        @Test
+        void scoresEachExperimentTraceOnlyByItsOwnSelectedRuleIds() {
+            var evalA = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
+            var evalB = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
+            var unrelated = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
+
+            var traceA = createTrace(Source.EXPERIMENT).toBuilder()
                     .metadata(metadataWithRuleIds(evalA.getId()))
                     .build();
-            var traceB = createTrace(Source.PLAYGROUND).toBuilder()
+            var traceB = createTrace(Source.EXPERIMENT).toBuilder()
                     .metadata(metadataWithRuleIds(evalB.getId()))
                     .build();
 
@@ -298,39 +383,33 @@ class OnlineScoringSamplerTest {
                     List.of(toLlmMessage(evalB, traceB)));
         }
 
-        @Test
-        void scoresSdkTraceByAllEvaluatorsEvenWhenBatchIncludesNonSdkSelection() {
-            var selected = createLlmEvaluator(true, 1.0f, List.of());
-            var other = createLlmEvaluator(true, 1.0f, List.of());
-            var sdkTrace = createTrace(Source.SDK);
-            var playgroundTrace = createTrace(Source.PLAYGROUND).toBuilder()
-                    .metadata(metadataWithRuleIds(selected.getId()))
+        @ParameterizedTest
+        @EnumSource(value = Source.class, names = {"SDK"})
+        @NullSource
+        void ignoresSelectedRuleIdsOnProductionTraffic(Source source) {
+            var picked = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
+            var unpicked = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
+            var trace = createTrace(source).toBuilder()
+                    .metadata(metadataWithRuleIds(picked.getId()))
                     .build();
-            whenFindAllLlmEvaluators(selected, other);
+            whenFindAllLlmEvaluators(picked, unpicked);
 
-            onlineScoringSampler
-                    .onTracesCreated(new TracesCreated(List.of(sdkTrace, playgroundTrace), workspaceId, userName));
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            // Two enqueue calls (one per evaluator, parallelStream):
-            //   - selected: scores both traces (SDK + playground, since playground selected it)
-            //   - other:    scores only the SDK trace (playground did not select it)
-            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
-            verify(onlineScorePublisher, times(2)).enqueueMessage(captor.capture(),
-                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
-
-            assertThat(captor.getAllValues()).containsExactlyInAnyOrder(
-                    List.of(toLlmMessage(selected, sdkTrace), toLlmMessage(selected, playgroundTrace)),
-                    List.of(toLlmMessage(other, sdkTrace)));
+            verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(picked, trace)),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+            verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(unpicked, trace)),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
         }
 
         @Test
         void skipsMalformedUuidsButKeepsValidOnesInSelectedRuleIds() {
-            var evaluator = createLlmEvaluator(true, 1.0f, List.of());
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
             var metadata = JsonUtils.createObjectNode();
             metadata.putArray("selected_rule_ids")
                     .add(evaluator.getId().toString())
                     .add("not-a-uuid");
-            var trace = createTrace(Source.PLAYGROUND).toBuilder().metadata(metadata).build();
+            var trace = createTrace(Source.EXPERIMENT).toBuilder().metadata(metadata).build();
             whenFindAllLlmEvaluators(evaluator);
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
@@ -341,36 +420,38 @@ class OnlineScoringSamplerTest {
 
         @Test
         void treatsNonArraySelectedRuleIdsAsAbsent() {
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
             var metadata = JsonUtils.createObjectNode();
             metadata.put("selected_rule_ids", "not-an-array");
-            var trace = createTrace(Source.PLAYGROUND).toBuilder().metadata(metadata).build();
+            var trace = createTrace(Source.EXPERIMENT).toBuilder().metadata(metadata).build();
+            whenFindAllLlmEvaluators(evaluator);
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verifyNoInteractions(ruleEvaluatorService);
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
 
         @Test
         void treatsMissingSelectedRuleIdsKeyAsAbsent() {
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
             var metadata = JsonUtils.createObjectNode();
             metadata.put("other_field", "value");
-            var trace = createTrace(Source.PLAYGROUND).toBuilder().metadata(metadata).build();
+            var trace = createTrace(Source.EXPERIMENT).toBuilder().metadata(metadata).build();
+            whenFindAllLlmEvaluators(evaluator);
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verifyNoInteractions(ruleEvaluatorService);
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
 
         @Test
         void skipsNonTextualEntriesInSelectedRuleIdsArray() {
-            var evaluator = createLlmEvaluator(true, 1.0f, List.of());
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of(), EvalTriggerScope.PRODUCTION);
             var metadata = JsonUtils.createObjectNode();
             metadata.putArray("selected_rule_ids")
                     .add(evaluator.getId().toString())
                     .add(123);
-            var trace = createTrace(Source.PLAYGROUND).toBuilder().metadata(metadata).build();
+            var trace = createTrace(Source.EXPERIMENT).toBuilder().metadata(metadata).build();
             whenFindAllLlmEvaluators(evaluator);
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
@@ -494,11 +575,10 @@ class OnlineScoringSamplerTest {
                     AutomationRuleEvaluatorType.LLM_AS_JUDGE);
         }
 
-        @ParameterizedTest
-        @EnumSource(value = Source.class, mode = EnumSource.Mode.EXCLUDE, names = {"SDK", "EXPERIMENT"})
-        void scoresSelectedRuleTracesWhenSamplingRateIsZero(Source source) {
-            var evaluator = createLlmEvaluator(true, 0.0f, List.of());
-            var trace = createTrace(source).toBuilder()
+        @Test
+        void scoresPickedRuleTracesWhenSamplingRateIsZero() {
+            var evaluator = createLlmEvaluator(true, 0.0f, List.of(), EvalTriggerScope.PRODUCTION);
+            var trace = createTrace(Source.EXPERIMENT).toBuilder()
                     .metadata(metadataWithRuleIds(evaluator.getId()))
                     .build();
             whenFindAllLlmEvaluators(evaluator);
@@ -523,7 +603,7 @@ class OnlineScoringSamplerTest {
         }
 
         @Test
-        void stillHonoursFiltersOnExperimentTracesWhenSamplingIsBypassed() {
+        void ignoresFiltersOnExperimentTraces() {
             var trace = createTrace(Source.EXPERIMENT).toBuilder().name("no-match").build();
             var filter = TraceFilter.builder()
                     .field(TraceField.NAME)
@@ -535,11 +615,12 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
         }
 
         @Test
-        void stillHonoursDisabledRuleOnExperimentTracesWhenSamplingIsBypassed() {
+        void stillHonoursDisabledRuleOnExperimentTraces() {
             var trace = createTrace(Source.EXPERIMENT);
             var evaluator = createLlmEvaluator(false, 0.0f, List.of());
             whenFindAllLlmEvaluators(evaluator);
@@ -771,11 +852,16 @@ class OnlineScoringSamplerTest {
     }
 
     private AutomationRuleEvaluatorUserDefinedMetricPython createPythonEvaluator(float samplingRate) {
+        return createPythonEvaluator(samplingRate, EvalTriggerScope.BOTH);
+    }
+
+    private AutomationRuleEvaluatorUserDefinedMetricPython createPythonEvaluator(float samplingRate,
+            EvalTriggerScope triggerScope) {
         return podamFactory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class).toBuilder()
                 .projects(toProjects(Set.of(projectId)))
                 .samplingRate(samplingRate)
                 .enabled(true)
-                .triggerScope(EvalTriggerScope.BOTH)
+                .triggerScope(triggerScope)
                 .filters(List.of())
                 .build();
     }

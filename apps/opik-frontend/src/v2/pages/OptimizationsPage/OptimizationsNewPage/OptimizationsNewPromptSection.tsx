@@ -29,6 +29,7 @@ import LLMPromptMessages, {
 } from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
+import { OPTIMIZATION_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import PromptLibraryMenu from "@/v2/pages-shared/llm/PromptLibraryMenu/PromptLibraryMenu";
 import LoadedPromptDisplay from "@/v2/pages-shared/llm/LoadedPromptDisplay/LoadedPromptDisplay";
 import { OPTIMIZATION_MESSAGE_TYPE_OPTIONS } from "@/constants/optimizations";
@@ -190,6 +191,7 @@ const OptimizationsNewPromptSection: React.FC<
                     onChange={onModelConfigChange}
                     size="icon-2xs"
                     variant="ghost"
+                    unsupportedParams={OPTIMIZATION_UNSUPPORTED_PARAMS}
                   />
                 </FormItem>
               )}

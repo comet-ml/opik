@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from typing import Any, List, Optional, Type, Union
 
@@ -94,5 +95,9 @@ class BaseMetric(_opik_base_metric.BaseMetric):
     ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
         """
         Async public method that can be called independently.
+
+        Defaults to running `score` in a worker thread, so a blocking
+        implementation does not stall the caller's event loop. Override this
+        when the metric has a genuinely asynchronous implementation.
         """
-        return self.score(*args, **kwargs)
+        return await asyncio.to_thread(self.score, *args, **kwargs)

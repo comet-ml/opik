@@ -145,6 +145,7 @@ def usage_report(
                 api_key=api_key_to_use,
                 check_tls_certificate=cfg.check_tls_certificate,
                 compress_json_requests=cfg.enable_json_request_compression,
+                compression_level=cfg.request_compression_level,
             ) as client:
                 base_url = url_helpers.get_base_url(cfg.url_override)
                 workspace_list_url = url_helpers.get_workspace_list_url(base_url)

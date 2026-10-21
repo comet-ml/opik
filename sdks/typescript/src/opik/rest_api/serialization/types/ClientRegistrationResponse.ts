@@ -12,6 +12,9 @@ export const ClientRegistrationResponse: core.serialization.ObjectSchema<
     clientIdIssuedAt: core.serialization.property("client_id_issued_at", core.serialization.number().optional()),
     clientName: core.serialization.property("client_name", core.serialization.string().optional()),
     logoUri: core.serialization.property("logo_uri", core.serialization.string().optional()),
+    softwareId: core.serialization.property("software_id", core.serialization.string().optional()),
+    softwareVersion: core.serialization.property("software_version", core.serialization.string().optional()),
+    clientUri: core.serialization.property("client_uri", core.serialization.string().optional()),
     redirectUris: core.serialization.property(
         "redirect_uris",
         core.serialization.list(core.serialization.string()).optional(),
@@ -36,6 +39,9 @@ export declare namespace ClientRegistrationResponse {
         client_id_issued_at?: number | null;
         client_name?: string | null;
         logo_uri?: string | null;
+        software_id?: string | null;
+        software_version?: string | null;
+        client_uri?: string | null;
         redirect_uris?: string[] | null;
         token_endpoint_auth_method?: string | null;
         grant_types?: string[] | null;

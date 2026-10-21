@@ -41,8 +41,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -83,40 +81,6 @@ class TracesLegacyTablePruningMutationTest {
 
     /** A UUIDv7 carrying id_at 2200-01-01 — the litellm shape, and the id the legacy 32-bit column wraps. */
     private static final UUID FAR_FUTURE_ID = UUID.fromString("0699eb8a-59dd-7215-8000-03b8d2a8d5e2");
-
-    /**
-     * The week that id partitions into under a {@code DateTime64} {@code id_at} — its honest one, and the only value the
-     * flag-gated predicate used to carry. Stated as a literal because it is what ClickHouse returned for
-     * {@code toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))} on that id, not something re-derived
-     * here.
-     */
-    private static final long HONEST_WEEK = 21991230L;
-
-    /**
-     * The week the same id partitions into on <b>this</b> table: {@code CAST(UUIDv7ToDateTime(...) AS DateTime('UTC'))}
-     * wraps 2200-01-01 to 2063-11-25, a Wednesday, whose Monday is 2063-11-19. This is the value that makes the delete
-     * below land, and the reason the predicate needs no flag.
-     */
-    private static final long LEGACY_WEEK = 20631119L;
-
-    /** {@link UUID#randomUUID()} is a v4 by definition: no embedded timestamp to derive a partition from. */
-    private static final UUID NON_V7_ID = UUID.randomUUID();
-
-    /**
-     * The partition-key fragment the DAO's template emits. Only ever <b>compared against</b> the statement read back
-     * from {@code system.query_log} — never spliced into a query this suite runs.
-     */
-    private static final String PARTITION_PREDICATE = "toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))";
-
-    /**
-     * The {@code IN} clause the DAO emitted, captured to end of line: the predicate sits on its own line in the
-     * template with {@code SETTINGS log_comment} on the next, so the line boundary delimits it exactly.
-     */
-    private static final Pattern EMITTED_IN_CLAUSE = Pattern.compile(
-            Pattern.quote(PARTITION_PREDICATE) + "\\s+IN\\s+([^\\n]*)");
-
-    /** A weekly partition value as it appears in SQL — {@code yyyyMMdd}, so always eight digits. */
-    private static final Pattern PARTITION_VALUE = Pattern.compile("\\d{8}");
 
     private static final String INSERT_RAW_TRACE = """
             INSERT INTO traces (workspace_id, project_id, id)
@@ -213,45 +177,46 @@ class TracesLegacyTablePruningMutationTest {
     }
 
     @Test
-    @DisplayName("a far-future row on the legacy table is deleted by the same pruned statement")
-    void farFutureRowOnLegacyTableIsDeletedByAPrunedStatement() {
-        // The one test that shows the union is load-bearing rather than decorative. With only the honest week in the
-        // set, this delete matches nothing on this table and reports success - which is exactly the failure the
-        // configuration flag used to exist to avoid, now avoided by the predicate itself.
+    @DisplayName("a far-future row on the legacy table is still deleted, by the unbounded form")
+    void farFutureRowOnLegacyTableIsStillDeleted() {
+        // OPIK-8230 changes what this test proves. IN PARTITION cannot be used against a table with no partition key
+        // at all - ClickHouse rejects it outright (Code 248 INVALID_PARTITION_VALUE, "Wrong number of fields in the
+        // partition expression: 1, must be: 0") - so TraceDAO#deleteBatch now gates the scoped path on the mutation's
+        // OWN resolved table, not merely on whether WeeklyPartitions can derive a value. WeeklyPartitions itself stays
+        // schema-agnostic (it still derives BOTH representations for a far-future id, honest and legacy-wrapped, on
+        // purpose - see its Javadoc), but the DAO never spends that derivation here: on the legacy table every delete
+        // takes the unbounded form, correctly, and this is that guarantee restated for the topology it actually
+        // guards.
         //
-        // The project and its id come from the real ingestion path - create a trace through the endpoint, then read the
-        // project id back off it - so the delete runs against a project that exists and a genuine UUIDv7 project id,
-        // not a fabricated one.
+        // The project and its id come from the real ingestion path - create a trace through the endpoint, then read
+        // the project id back off it - so the delete runs against a project that exists and a genuine UUIDv7 project
+        // id, not a fabricated one.
         var projectId = projectIdOf(createTrace());
 
-        // Only the far-future row is raw, because ingestion rejects it by design (24h window). A recent id would prove
-        // nothing here: the legacy id_at is accurate for one, so even an honest-week-only predicate would match it.
+        // Only the far-future row is raw, because ingestion rejects it by design (24h window).
         insertRawTrace(projectId, FAR_FUTURE_ID);
         assertThat(liveRowCount(projectId, FAR_FUTURE_ID)).as("the far-future row is seeded").isEqualTo("1");
 
         delete(Set.of(Pair.of(projectId, FAR_FUTURE_ID)));
 
         assertThat(liveRowCount(projectId, FAR_FUTURE_ID))
-                .as("it is deleted - so the predicate named the week THIS table filed it under, not only the honest one")
+                .as("it is deleted - the unbounded form is always correct, merely unscoped")
                 .isEqualTo("0");
 
         var sql = lastTraceDeleteSql(FAR_FUTURE_ID);
         assertThat(sql)
-                .as("the predicate is emitted here too - there is no schema flag holding it back any more")
-                .contains(PARTITION_PREDICATE);
-        // Asserted as an exact set, both ways round. Only the legacy week can match a row on this table, so a set
-        // missing it would fail the delete above; and a set missing the honest week would pass here while breaking the
-        // post-EXCHANGE suite, which is the pair this has to stay consistent with.
-        assertThat(boundPartitionsOf(sql))
-                .as("both representations of the same id: the honest week and the one the 32-bit column wraps it to")
-                .containsExactlyInAnyOrder(HONEST_WEEK, LEGACY_WEEK);
+                .as("no id_at predicate of any kind, and no IN PARTITION clause: the legacy table has no partition"
+                        + " key for either to name")
+                .doesNotContain("id_at")
+                .doesNotContain("IN PARTITION");
     }
 
     @Test
-    @DisplayName("an ordinary row is deleted by a single-week statement, since both id_at types agree below 2106")
-    void ordinaryRowIsBoundedToOneWeek() {
-        // The counterweight: the union widens only where the two representations differ, so real traffic binds exactly
-        // what it bound before. A regression that added the wrapped week unconditionally would show up here.
+    @DisplayName("an ordinary row is also deleted by the unbounded form, same as a far-future one")
+    void ordinaryRowIsAlsoDeletedUnbounded() {
+        // The counterweight to the far-future case above: on the legacy table there is no "recent id gets the scoped
+        // form, far-future gets the unbounded one" split. Every delete here is unbounded, regardless of era - proving
+        // that ONLY with a far-future row would leave open whether an ordinary one still worked.
         var target = createTrace();
         var projectId = projectIdOf(target);
         assertThat(liveRowCount(projectId, target.id())).as("the row is there").isEqualTo("1");
@@ -260,40 +225,10 @@ class TracesLegacyTablePruningMutationTest {
 
         assertThat(liveRowCount(projectId, target.id())).as("and it is deleted").isEqualTo("0");
         var sql = lastTraceDeleteSql(target.id());
-        assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
-        assertThat(boundPartitionsOf(sql))
-                .as("one week, not two: a recent id_at is inside the 32-bit range, so the two derivations coincide")
-                .hasSize(1);
-    }
-
-    @Test
-    @DisplayName("a non-v7 id still disables pruning here, and the delete still lands")
-    void nonV7IdDisablesPruning() {
-        // The fallback is unchanged by the flag removal and still has to hold on this table: a row whose id_at cannot
-        // be trusted is STILL DELETED, by an unbounded mutation. Seeded raw, since ingestion rejects a non-v7 id.
-        var target = createTrace();
-        var projectId = projectIdOf(target);
-        insertRawTrace(projectId, NON_V7_ID);
-        assertThat(liveRowCount(projectId, NON_V7_ID)).as("the non-v7 row is seeded").isEqualTo("1");
-
-        delete(Set.of(Pair.of(projectId, target.id()), Pair.of(projectId, NON_V7_ID)));
-
-        assertThat(liveRowCount(projectId, NON_V7_ID))
-                .as("the non-v7 row is itself deleted, not skipped")
-                .isEqualTo("0");
-        assertThat(liveRowCount(projectId, target.id()))
-                .as("and so is the derivable row batched alongside it")
-                .isEqualTo("0");
-
-        // Asserted as the absence of ANY id_at predicate, not just of this expression: a regression that narrowed the
-        // mutation with toMonday(id_at), an id_at range, or anything else would skip exactly the rows this reaches.
-        var sql = lastTraceDeleteSql(NON_V7_ID);
         assertThat(sql)
-                .as("the unbounded form carries no id_at predicate of any kind")
-                .doesNotContain("id_at");
-        assertThat(EMITTED_IN_CLAUSE.matcher(sql).find())
-                .as("and no partition IN clause: %s", sql)
-                .isFalse();
+                .as("no id_at predicate of any kind, and no IN PARTITION clause")
+                .doesNotContain("id_at")
+                .doesNotContain("IN PARTITION");
     }
 
     /** A trace through the real ingestion path, with the fields podam cannot fill sensibly cleared. */
@@ -304,26 +239,6 @@ class TracesLegacyTablePruningMutationTest {
                 .build();
         traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
         return trace;
-    }
-
-    /**
-     * The partition values actually bound into the emitted {@code IN} clause, so a test can assert the set is exact
-     * rather than merely inclusive. The driver substitutes bound values into the query text client-side, which is why
-     * they are readable here at all; the two assertions below are what make a change in that behaviour say so plainly
-     * instead of quietly turning every set assertion into a tautology on an empty set.
-     */
-    private static Set<Long> boundPartitionsOf(String sql) {
-        var clause = EMITTED_IN_CLAUSE.matcher(sql);
-        assertThat(clause.find())
-                .as("the delete SQL carries the partition predicate followed by an IN clause:%n%s", sql)
-                .isTrue();
-        var bound = PARTITION_VALUE.matcher(clause.group(1)).results()
-                .map(match -> Long.parseLong(match.group()))
-                .collect(Collectors.toUnmodifiableSet());
-        assertThat(bound)
-                .as("the IN clause carries inlined partition values — got '%s'", clause.group(1))
-                .isNotEmpty();
-        return bound;
     }
 
     /** Invokes the DAO under a workspace/user context, as {@code TraceService} does for the live delete path. */

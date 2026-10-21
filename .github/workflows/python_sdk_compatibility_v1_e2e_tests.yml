@@ -10,6 +10,8 @@ on:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
           - '.github/workflows/python_sdk_compatibility_v1_e2e_tests.yml'
+          - 'opik.sh'
+          - 'opik.ps1'
     push:
         branches:
           - 'main'
@@ -17,11 +19,18 @@ on:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
           - '.github/workflows/python_sdk_compatibility_v1_e2e_tests.yml'
+          - 'opik.sh'
+          - 'opik.ps1'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
   OPIK_ANALYTICS_ENABLE: False
@@ -54,6 +63,9 @@ jobs:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
     build-opik:
+        # Fork PRs get a read-only GITHUB_TOKEN, so the GHCR push below always
+        # 403s. Skip rather than fail; delete once fork PRs can run E2E.
+        if: ${{ github.event.pull_request.head.repo.fork != true }}
         # The reusable build workflow pushes images to GHCR; pass down the
         # packages: write grant here rather than at the workflow level (a
         # called workflow's permissions can only be maintained or reduced from
@@ -62,10 +74,10 @@ jobs:
           contents: read
           packages: write
         uses: ./.github/workflows/build_e2e_docker.yaml
-        with:
-          include_guardrails: true
 
     run-compatibility-v1-e2e:
+        # No explicit if: needed here -- the default success() check skips this
+        # whenever build-opik is skipped.
         needs: [select-matrix, build-opik]
         name: Python SDK Compatibility V1.x E2E Tests ${{matrix.python_version}}
         runs-on: ubuntu-latest
@@ -99,10 +111,8 @@ jobs:
           run: |
             docker pull "ghcr.io/comet-ml/opik/opik-backend:$TAG"
             docker pull "ghcr.io/comet-ml/opik/opik-python-backend:$TAG"
-            docker pull "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG"
             docker tag "ghcr.io/comet-ml/opik/opik-backend:$TAG" ghcr.io/comet-ml/opik/opik-backend:latest
             docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
-            docker tag "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG" ghcr.io/comet-ml/opik/opik-guardrails-backend:latest
 
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v7
@@ -110,7 +120,7 @@ jobs:
             python-version: ${{matrix.python_version}}
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v10.0.1
+          uses: astral-sh/setup-uv@v10.3.0
 
         - name: Run latest Opik server
           env:
@@ -121,10 +131,9 @@ jobs:
             TOGGLE_AGENT_CONFIGURATION_ENABLED: "true"
             OPIK_BACKEND_PULL_POLICY: never
             PYTHON_BACKEND_PULL_POLICY: never
-            OPIK_GUARDRAILS_BACKEND_PULL_POLICY: never
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --backend --port-mapping --guardrails
+            ./opik.sh --backend --port-mapping
 
         - name: Check Opik server availability
           shell: bash
@@ -177,4 +186,4 @@ jobs:
           if: always()
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --stop --guardrails
+            ./opik.sh --stop

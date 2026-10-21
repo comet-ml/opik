@@ -15,8 +15,8 @@ export const ChatCompletionResponse: core.serialization.ObjectSchema<
     model: core.serialization.string().optional(),
     choices: core.serialization.list(ChatCompletionChoice).optional(),
     usage: Usage.optional(),
-    systemFingerprint: core.serialization.property("system_fingerprint", core.serialization.string().optional()),
-    serviceTier: core.serialization.property("service_tier", core.serialization.string().optional()),
+    systemFingerprint: core.serialization.string().optional(),
+    serviceTier: core.serialization.string().optional(),
 });
 
 export declare namespace ChatCompletionResponse {
@@ -26,7 +26,7 @@ export declare namespace ChatCompletionResponse {
         model?: string | null;
         choices?: ChatCompletionChoice.Raw[] | null;
         usage?: Usage.Raw | null;
-        system_fingerprint?: string | null;
-        service_tier?: string | null;
+        systemFingerprint?: string | null;
+        serviceTier?: string | null;
     }
 }

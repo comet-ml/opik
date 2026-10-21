@@ -1,7 +1,7 @@
 import getpass
 import logging
 import os
-from typing import Any, Callable, Dict, Final, List, Optional
+from typing import Any, Callable, Dict, Final, NamedTuple, Optional
 
 import httpx
 import opik.config
@@ -10,13 +10,9 @@ from opik.api_objects.opik_client import get_current_client_raw
 from opik import config
 from opik.configurator.interactive_helpers import (
     ask_user_for_approval,
-    ask_user_for_approval_default_no,
     is_interactive,
 )
-from opik.configurator import consent
-from opik.configurator import mcp
 from opik.configurator import opik_rest_helpers
-from opik.configurator import skills
 from opik.exceptions import ConfigurationError
 import opik.url_helpers as url_helpers
 from opik.api_key import opik_api_key
@@ -27,10 +23,38 @@ from opik.api_key import opik_api_key
 #: was passed. Injected by the CLI so the configurator itself never renders.
 AssistantSetup = Callable[[Dict[str, Any], Optional[bool], Optional[bool], bool], None]
 
+#: Shows a line pointing the user somewhere — where to find their API key, say.
+#: Injected by the CLI so it can colour the URL and make it clickable; the
+#: default keeps ``opik.configure()`` on the logger, where a library belongs.
+Announce = Callable[[str], None]
+
+
+class Configured(NamedTuple):
+    """What a run of the configurator settled on, for a caller that shows it."""
+
+    #: Whether this run wrote the config file. False when nothing needed
+    #: writing, and the settings were only applied to the running session.
+    saved: bool
+    config_file: str
+    #: None for Opik Cloud, which needs no reminding.
+    url: Optional[str]
+    workspace: str
+    project_name: str
+
+
+#: Shows how the run ended; the CLI renders it as a block, and without one the
+#: configurator logs what `opik.configure()` always has.
+ReportConfigured = Callable[[Configured], None]
+
 LOGGER = logging.getLogger(__name__)
 
 OPIK_BASE_URL_CLOUD: Final[str] = "https://www.comet.com/"
 OPIK_BASE_URL_LOCAL: Final[str] = "http://localhost:5173/"
+
+#: Where to read about changing the project traces go to.
+PROJECT_NAME_DOCS_URL: Final[str] = (
+    "https://www.comet.com/docs/opik/tracing/advanced/log_traces#logging-to-a-specific-project"
+)
 
 
 class OpikConfigurator:
@@ -47,6 +71,9 @@ class OpikConfigurator:
         install_mcp: Optional[bool] = None,
         install_skills: Optional[bool] = None,
         assistant_setup: Optional[AssistantSetup] = None,
+        announce: Optional[Announce] = None,
+        report_configured: Optional[ReportConfigured] = None,
+        connection_only: bool = False,
     ):
         self.api_key = api_key
         self.workspace = workspace
@@ -59,9 +86,14 @@ class OpikConfigurator:
         self.install_mcp = install_mcp
         self.install_skills = install_skills
         self.assistant_setup = assistant_setup
-        # Set when the consent prompt named the detected hosts, so the installer
-        # can skip re-confirming the very same list.
-        self._mcp_prompt_named_detected_hosts = False
+        self._announce: Announce = announce if announce is not None else LOGGER.info
+        self._report_configured = report_configured
+        # Only which Opik to connect to — URL, API key, workspace — with nothing
+        # saved or reported: for a caller connecting something else to Opik (the
+        # MCP server), not configuring this SDK. The answers reach it through
+        # `assistant_setup`.
+        self.connection_only = connection_only
+        self._saved = False
 
         # Handle URL
         #
@@ -85,10 +117,14 @@ class OpikConfigurator:
             ConnectionError
         """
 
+        # Per run, in case one configurator is used twice.
+        self._saved = False
+
         # if there is already cached Opik client instance
         if get_current_client_raw() is not None:
-            LOGGER.info(
-                'Existing Opik clients will not use updated values for "url", "api_key", "workspace".'
+            self._announce(
+                'Existing Opik clients will not use updated values for "url", '
+                '"api_key", "workspace".'
             )
 
         if not self.use_local:
@@ -101,106 +137,36 @@ class OpikConfigurator:
         self._setup_assistants()
 
     def _setup_assistants(self) -> None:
-        """Register the MCP server and install the skill pack.
+        """Hand the AI-client step to the caller's renderer, if there is one.
 
-        Delegated when the caller supplied a renderer — that is how the CLI gets
-        its selectors and formatted output. ``opik.configure()`` has no renderer
-        and keeps the plain-text prompts, since a library must not take over the
-        caller's terminal.
+        Only the CLI supplies one. ``opik.configure()`` does not do this step at
+        all: registering an MCP server and installing the skill pack write into
+        files owned by Cursor, Claude Code and friends, and a library call has no
+        business editing another tool's configuration on the strength of a
+        prompt the caller never asked to be shown. It had grown its own
+        plain-text prompts for both, which meant `opik.configure()` could write
+        to every detected client from a question that named none of them.
+
+        Anyone wanting the step from Python can call the CLI, which is where the
+        consent, the client picker and the reporting all live.
         """
-        if self.assistant_setup is not None:
-            self.assistant_setup(
-                {
-                    "api_key": self.api_key,
-                    "workspace": self.workspace,
-                    "base_url": self.base_url,
-                    "api_url": self.api_url,
-                    "use_local": self.use_local,
-                    "self_hosted_comet": self.self_hosted_comet,
-                    "check_tls_certificate": self.current_config.check_tls_certificate,
-                },
-                self.install_mcp,
-                self.install_skills,
-                self.automatic_approvals,
-            )
+        if self.assistant_setup is None:
             return
 
-        self._maybe_setup_mcp_server()
-        self._maybe_setup_skills()
-
-    def _maybe_setup_skills(self) -> None:
-        """Offer the Opik skill pack, which is a separate decision from the server.
-
-        Asked after MCP rather than folded into the same question: the MCP step
-        writes credentials into a config file the user already trusts with them,
-        while this writes instruction files the assistant then acts on with its
-        own permissions. Same list of assistants, materially different consent.
-        """
-        host_keys = self._skills_host_keys()
-        if host_keys is None:
-            return
-
-        result = skills.setup_skills(host_keys)
-        if result.succeeded:
-            LOGGER.info(
-                "Installed the Opik skill pack (%s) in %s.",
-                ", ".join(result.skills),
-                result.shared_dir,
-            )
-        else:
-            LOGGER.warning("Could not install the Opik skill pack: %s.", result.error)
-
-    def _skills_host_keys(self) -> Optional[List[str]]:
-        """Hosts to install the skill pack for, or ``None`` to skip."""
-        detected = skills.detected_host_keys()
-        verdict = consent.resolve(
-            self.install_skills,
-            assume_yes=self.automatic_approvals,
-            interactive=is_interactive(),
-            anything_detected=len(detected) > 0,
-        )
-        granted = consent.granted(
-            verdict, lambda: ask_user_for_approval(consent.SKILLS_PROMPT)
-        )
-        return detected if granted else None
-
-    def _maybe_setup_mcp_server(self) -> None:
-        if not self._should_setup_mcp_server():
-            return
-
-        mcp.setup_mcp_server(
-            api_key=self.api_key,
-            workspace=self.workspace,
-            base_url=self.base_url,
-            api_url=self.api_url,
-            use_local=self.use_local,
-            self_hosted_comet=self.self_hosted_comet,
-            check_tls_certificate=self.current_config.check_tls_certificate,
-            force_local_server=False,
-            # The prompt below already named the detected hosts, so re-confirming
-            # them inside the installer would ask the same question twice.
-            assume_confirmed=self._mcp_prompt_named_detected_hosts,
-        )
-
-    def _should_setup_mcp_server(self) -> bool:
-        """Decide whether to offer registering the Opik MCP server.
-
-        The rules and the wording live in ``configurator.consent``; this only wires
-        them to the configurator's state and does the asking.
-        """
-        detected = mcp.detected_host_names()
-        verdict = consent.resolve(
+        self.assistant_setup(
+            {
+                "api_key": self.api_key,
+                "workspace": self.workspace,
+                "base_url": self.base_url,
+                "api_url": self.api_url,
+                "use_local": self.use_local,
+                "self_hosted_comet": self.self_hosted_comet,
+                "check_tls_certificate": self.current_config.check_tls_certificate,
+            },
             self.install_mcp,
-            assume_yes=self.automatic_approvals,
-            interactive=is_interactive(),
-            anything_detected=len(detected) > 0,
+            self.install_skills,
+            self.automatic_approvals,
         )
-        return consent.granted(verdict, lambda: self._ask_about_mcp(detected))
-
-    def _ask_about_mcp(self, detected: List[str]) -> bool:
-        """Ask, recording that the prompt already named the detected hosts."""
-        self._mcp_prompt_named_detected_hosts = True
-        return ask_user_for_approval_default_no(consent.mcp_prompt(detected))
 
     def _configure_cloud(self) -> None:
         """
@@ -233,10 +199,13 @@ class OpikConfigurator:
                 workspace=self.workspace,
                 project_name=self.project_name,
             )
-            LOGGER.info(
-                "Opik is already configured. You can check the settings by viewing the config file at %s",
-                self.current_config.config_file_fullpath,
-            )
+            # A caller that renders its own ending says this as its headline.
+            if self._report_configured is None:
+                self._announce(
+                    "Opik is already configured. You can check the settings by "
+                    f"viewing the config file at "
+                    f"{self.current_config.config_file_fullpath}"
+                )
 
         self._log_project_configuration_message()
 
@@ -255,6 +224,10 @@ class OpikConfigurator:
 
         # Step 1: If the URL is provided and active, update the configuration
         if url_was_provided and opik_rest_helpers.is_instance_active(self.base_url):
+            if self.connection_only:
+                # Taken without a question, and with no closing block to name it:
+                # a second local Opik on another port would otherwise go unseen.
+                self._announce(f"Using the local Opik at {self.base_url}")
             self._update_config_local_mode(save_to_file=self.force)
             return
 
@@ -264,9 +237,10 @@ class OpikConfigurator:
                 not self.force
                 and self.current_config.url_override == OPIK_BASE_URL_LOCAL
             ):
-                LOGGER.info(
-                    f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}."
-                )
+                if self._report_configured is None:
+                    self._announce(
+                        f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}."
+                    )
                 self._update_config_local_mode(save_to_file=False)
                 return
 
@@ -280,7 +254,7 @@ class OpikConfigurator:
                 True
                 if self.automatic_approvals
                 else ask_user_for_approval(
-                    f"Found local Opik instance on: {OPIK_BASE_URL_LOCAL}, do you want to use it? (Y/n)"
+                    f"Found a local Opik instance at {OPIK_BASE_URL_LOCAL}. Use it?"
                 )
             )
 
@@ -379,18 +353,11 @@ class OpikConfigurator:
             url_helpers.get_base_url(self.base_url), "/api/my/settings/"
         )
 
-        url_was_not_passed = self.base_url == OPIK_BASE_URL_CLOUD
         if not self.self_hosted_comet:
-            if url_was_not_passed:
-                LOGGER.info(
-                    "Your Opik API key is available in your account settings, can be found at %s for Opik cloud",
-                    settings_url,
-                )
-            else:
-                LOGGER.info(
-                    "Your Opik API key is available in your account settings, can be found at %s",
-                    settings_url,
-                )
+            # Interpolated rather than left to the logger's `%s`: the renderer the
+            # CLI injects takes a finished line, and the URL has to be in it for
+            # the link styling to find it.
+            self._announce(f"Get your Opik API key at {settings_url}")
 
         if not is_interactive():
             raise ConfigurationError(
@@ -398,7 +365,7 @@ class OpikConfigurator:
             )
 
         while retries > 0:
-            user_input_api_key = getpass.getpass("Please enter your Opik API key:")
+            user_input_api_key = getpass.getpass("  Opik API key: ")
 
             extracted_base_url = _extract_base_url_from_api_key(user_input_api_key)
             if extracted_base_url is None and self.self_hosted_comet:
@@ -411,10 +378,14 @@ class OpikConfigurator:
                 url=current_iteration_url,
             ):
                 self.api_key = user_input_api_key
+                # A gap before the workspace question.
+                print()
                 return
             else:
-                LOGGER.error(
-                    f"The API key provided is not valid on {current_iteration_url}. Please try again."
+                # Printed like the prompt it answers, not logged.
+                print(
+                    f"  That API key is not valid on {current_iteration_url}. "
+                    "Please try again."
                 )
                 retries -= 1
         raise ConfigurationError("API key is incorrect.")
@@ -454,9 +425,7 @@ class OpikConfigurator:
         use_default_workspace = (
             True
             if self.automatic_approvals
-            else ask_user_for_approval(
-                f'Do you want to use "{default_workspace}" workspace? (Y/n)'
-            )
+            else ask_user_for_approval(f'Use the "{default_workspace}" workspace?')
         )
 
         if use_default_workspace:
@@ -521,9 +490,7 @@ class OpikConfigurator:
             )
 
         while retries > 0:
-            user_input_workspace = input(
-                "Please enter your Opik instance workspace name: "
-            )
+            user_input_workspace = input("  Workspace name: ")
             if opik_rest_helpers.is_workspace_name_correct(
                 api_key=self.api_key, workspace=user_input_workspace, url=self.base_url
             ):
@@ -552,6 +519,10 @@ class OpikConfigurator:
         Returns:
             bool: Indicates whether a new project name was explicitly set or not.
         """
+        if self.connection_only:
+            # Where this SDK logs traces; not part of which Opik to connect to.
+            return False
+
         # Case 1: Project name was provided by the user and is valid
         if self.project_name is not None:
             return True if self.force else False
@@ -571,7 +542,7 @@ class OpikConfigurator:
             True
             if self.automatic_approvals
             else ask_user_for_approval(
-                f'Do you want to use "{default_project_name}" project name? (Y/n)'
+                f'Use "{default_project_name}" as the project name?'
             )
         )
 
@@ -603,7 +574,7 @@ class OpikConfigurator:
             return urllib.parse.urljoin(self.base_url, "/api/")
 
     def _ask_for_project_name(self) -> None:
-        user_input_project_name = input("Please enter the project name: ")
+        user_input_project_name = input("  Project name: ")
         if user_input_project_name == "":
             raise ConfigurationError(
                 "The project name cannot be empty. Please enter a valid project name. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration."
@@ -617,6 +588,9 @@ class OpikConfigurator:
         Raises:
             ConfigurationError: Raised if there is an issue saving the configuration or updating the session.
         """
+        if self.connection_only:
+            return
+
         try:
             url = self.api_url
 
@@ -632,6 +606,12 @@ class OpikConfigurator:
                     else config.OPIK_PROJECT_DEFAULT_NAME,
                 )
                 new_config.save_to_file()
+                self._saved = True
+                if self._report_configured is None:
+                    LOGGER.info(
+                        "Configuration saved to file: %s",
+                        new_config.config_file_fullpath,
+                    )
 
             # Update current session configuration
             opik.config.update_session_config("api_key", self.api_key)
@@ -645,13 +625,27 @@ class OpikConfigurator:
 
     def _log_project_configuration_message(self) -> None:
         """
-        Log an informative message about project configuration after successful setup.
+        Say where traces will go, now that the configuration is settled.
         """
-        project_name = self.project_name
+        if self.connection_only:
+            return
 
-        LOGGER.info(
-            f"Configuration completed successfully. Traces will be logged to '{project_name}' project. "
-            "To change the destination project, see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name"
+        if self._report_configured is not None:
+            self._report_configured(
+                Configured(
+                    saved=self._saved,
+                    config_file=str(self.current_config.config_file_fullpath),
+                    url=None if self.base_url == OPIK_BASE_URL_CLOUD else self.base_url,
+                    workspace=self.workspace or config.OPIK_WORKSPACE_DEFAULT_NAME,
+                    project_name=self.project_name or config.OPIK_PROJECT_DEFAULT_NAME,
+                )
+            )
+            return
+
+        self._announce(
+            f"Configuration completed successfully. Traces will be logged to "
+            f"'{self.project_name}' project. To change the destination project, see: "
+            f"{PROJECT_NAME_DOCS_URL}"
         )
 
     def _ask_for_url(self) -> None:
@@ -664,7 +658,7 @@ class OpikConfigurator:
         """
         retries = 3
         while retries > 0:
-            user_input_opik_url = input("Please enter your Opik instance URL:")
+            user_input_opik_url = input("  Opik instance URL: ")
 
             if user_input_opik_url == "":
                 raise ConfigurationError(

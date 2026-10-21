@@ -82,6 +82,33 @@ def test_opik_storage__pop_span_data__multiple_spans__returns_in_lifo_order():
     assert tested.span_data_stack_empty() is True
 
 
+def test_opik_storage__pop_span_data__without_ensure_id__finished_span_on_top__pops_the_live_span_beneath():
+    tested = OpikContextStorage()
+    live_span = span.SpanData(trace_id="some-trace-id")
+    stale_span = span.SpanData(trace_id="some-trace-id")
+    stale_span.init_end_time()
+
+    tested.add_span_data(live_span)
+    tested.add_span_data(stale_span)
+
+    popped_span = tested.pop_span_data()
+    assert popped_span is live_span
+    assert tested.span_data_stack_empty() is True
+
+
+def test_opik_storage__pop_span_data__with_ensure_id__own_span_finished_before_pop__returns_none_and_keeps_parent():
+    tested = OpikContextStorage()
+    parent_span = span.SpanData(trace_id="some-trace-id")
+    own_span = span.SpanData(trace_id="some-trace-id")
+
+    tested.add_span_data(parent_span)
+    tested.add_span_data(own_span)
+    own_span.init_end_time()
+
+    assert tested.pop_span_data(ensure_id=own_span.id) is None
+    assert tested.top_span_data() is parent_span
+
+
 def test_opik_storage__get_trace_data__no_trace_set__returns_none():
     tested = OpikContextStorage()
     assert tested.get_trace_data() is None

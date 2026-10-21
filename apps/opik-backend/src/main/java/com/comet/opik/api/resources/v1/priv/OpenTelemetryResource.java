@@ -11,6 +11,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -36,7 +38,7 @@ public class OpenTelemetryResource {
     @POST
     @Consumes("application/x-protobuf")
     public Response receiveProtobufTraces(
-            @Schema(implementation = JsonNode.class, ref = "JsonNode") ExportTraceServiceRequest request) {
+            @Schema(implementation = JsonNode.class, ref = "JsonNode") @NotNull @Valid ExportTraceServiceRequest request) {
         return handleOtelTraceRequest(request);
     }
 
@@ -44,27 +46,29 @@ public class OpenTelemetryResource {
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     public Response receiveJsonTraces(
-            @Schema(implementation = JsonNode.class, ref = "JsonNode") ExportTraceServiceRequest request) {
+            @Schema(implementation = JsonNode.class, ref = "JsonNode") @NotNull @Valid ExportTraceServiceRequest request) {
         return handleOtelTraceRequest(request);
     }
 
+    // A request with no entity arrives here as null, which parseAndStoreSpans declares @NonNull and so
+    // raised an NPE from inside the service — answering 500 for a body the caller never sent. @NotNull on
+    // both endpoints above rejects it in the validation layer instead, before this method runs and before
+    // the "Received spans batch" log line announces a batch that never arrived.
     private Response handleOtelTraceRequest(ExportTraceServiceRequest traceRequest) {
-        var projectName = requestContext.get().getHeaders()
+        var fallbackProjectName = requestContext.get().getHeaders()
                 .getOrDefault(RequestContext.PROJECT_NAME, List.of(ProjectService.DEFAULT_PROJECT))
                 .getFirst();
         var userName = requestContext.get().getUserName();
         var workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Received spans batch via OpenTelemetry for project '{}' in workspaceId '{}'", projectName,
-                workspaceId);
+        log.info("Received spans batch via OpenTelemetry in workspaceId '{}'", workspaceId);
 
         Long stored = openTelemetryService
-                .parseAndStoreSpans(traceRequest, projectName)
+                .parseAndStoreSpans(traceRequest, fallbackProjectName)
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                 .block();
 
-        log.info("Stored {} spans via OpenTelemetry for project '{}' in workspaceId '{}'", stored, projectName,
-                workspaceId);
+        log.info("Stored {} spans via OpenTelemetry in workspaceId '{}'", stored, workspaceId);
 
         // Return a successful HTTP response
         return Response.ok().build();

@@ -60,7 +60,11 @@ class ContextPrecision(base_metric.BaseMetric):
         )
         self._seed = seed
         self._init_model(model, temperature=temperature)
-        self.few_shot_examples = few_shot_examples or template.FEW_SHOT_EXAMPLES
+        self.few_shot_examples = (
+            template.FEW_SHOT_EXAMPLES
+            if few_shot_examples is None
+            else few_shot_examples
+        )
 
     def _init_model(
         self,

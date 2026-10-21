@@ -4,10 +4,12 @@ import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
+import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Lists;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -90,7 +92,10 @@ public class CipxSpendBlockDAO {
             @NonNull String label,
             int isDefinition,
             double alloc,
-            @NonNull String contentSha256) {
+            @NonNull String contentSha256,
+            /** The block's share of the span's usage units (alloc x its tier's per-token rate);
+             * null when the span reports none. */
+            @Nullable Double aiuNano) {
 
         /**
          * Derives all rows for one cipx span: one attributed row per non-identity block (keeping the
@@ -120,6 +125,8 @@ public class CipxSpendBlockDAO {
                     && cacheCreation.path("ephemeral_1h_input_tokens").asLong(0) == 0
                             ? "cache_creation_5m"
                             : "cache_creation_1h";
+
+            double[] aiuRates = aiuRatesPerToken(CipxMetadata.copilotUsage(metadata));
 
             JsonNode blocks = metadata.path("cipx").path("blocks");
             long[] tierChars = new long[TIER_NAMES.length];
@@ -151,15 +158,44 @@ public class CipxSpendBlockDAO {
                     if (isIdentityContext(block)) {
                         continue;
                     }
-                    rows.add(attributed(base, idx, block, tierTokens, tierChars, writeTier));
+                    rows.add(attributed(base, idx, block, tierTokens, tierChars, writeTier, aiuRates));
                 }
             }
             for (int tier = 0; tier < TIER_NAMES.length; tier++) {
                 if (!tierPresent[tier] && tierTokens[tier] > 0) {
-                    rows.add(residual(base, tier, tierTokens[tier], writeTier));
+                    rows.add(residual(base, tier, tierTokens[tier], writeTier, aiuRates));
                 }
             }
             return rows;
+        }
+
+        /** Usage units per token, indexed by tier ordinal; null when the span reports none. */
+        private static double[] aiuRatesPerToken(JsonNode copilotUsage) {
+            if (!copilotUsage.isObject()) {
+                return null;
+            }
+            double[] rates = new double[TIER_NAMES.length];
+            for (JsonNode detail : copilotUsage.path("token_details")) {
+                int tier = switch (detail.path("token_type").asText("")) {
+                    case "input" -> 0;
+                    case "cache_read" -> 1;
+                    case "cache_write" -> CACHE_CREATION_TIER;
+                    case "output" -> 3;
+                    default -> -1;
+                };
+                long batchSize = detail.path("batch_size").asLong(0);
+                if (tier >= 0 && batchSize > 0) {
+                    rates[tier] = detail.path("cost_per_batch").asDouble(0) / batchSize;
+                }
+            }
+            return rates;
+        }
+
+        private static Double aiuNano(double[] aiuRates, int tier, double tokens) {
+            if (aiuRates == null) {
+                return null;
+            }
+            return tier >= 0 ? tokens * aiuRates[tier] : 0.0;
         }
 
         /** cache_creation (ordinal 2) is written as its per-span TTL variant; the rest are fixed. */
@@ -168,7 +204,7 @@ public class CipxSpendBlockDAO {
         }
 
         private static BlockRow attributed(BlockRowBuilder base, int idx, JsonNode block, long[] tierTokens,
-                long[] tierChars, String writeTier) {
+                long[] tierChars, String writeTier, double[] aiuRates) {
             String category = block.path("category").asText("");
             String side = block.path("side").asText("");
             String cacheStatus = block.path("cache_status").asText("");
@@ -203,10 +239,12 @@ public class CipxSpendBlockDAO {
                     .isDefinition(isDefinition(category))
                     .alloc(alloc)
                     .contentSha256(block.path("sha256").asText(""))
+                    .aiuNano(aiuNano(aiuRates, tier, alloc))
                     .build();
         }
 
-        private static BlockRow residual(BlockRowBuilder base, int tier, long tokens, String writeTier) {
+        private static BlockRow residual(BlockRowBuilder base, int tier, long tokens, String writeTier,
+                double[] aiuRates) {
             return base
                     .blockIdx(RESIDUAL_IDX_BASE + tier)
                     .src(SRC_RESIDUAL)
@@ -228,6 +266,7 @@ public class CipxSpendBlockDAO {
                     .isDefinition(0)
                     .alloc(tokens)
                     .contentSha256("")
+                    .aiuNano(aiuNano(aiuRates, tier, tokens))
                     .build();
         }
 
@@ -285,7 +324,12 @@ public class CipxSpendBlockDAO {
          * intentional differences, so the two tables can't drift apart on a future category addition.
          */
         private static String bdLane(String category, String toolServer) {
-            if (category.equals("mcp_tools_deferred") || category.equals("mcp_server_instructions")) {
+            // MCP instructions and deferred listings join a server's row only when the engine named the
+            // server (OPIK-8721). Blocks from older engines, and from harnesses whose wire format names no
+            // server, stay in the lane total alone, which the breakdown reports as not attributable to a
+            // server.
+            if (toolServer.isEmpty()
+                    && (category.equals("mcp_tools_deferred") || category.equals("mcp_server_instructions"))) {
                 return "";
             }
             String baseLane = lane(category, toolServer);
@@ -304,7 +348,8 @@ public class CipxSpendBlockDAO {
                 case "tool_io" -> toolServer.isEmpty() ? toolName : toolServer;
                 case "system_tools", "system_tools_deferred" -> toolName.isEmpty() ? "(unattributed)" : toolName;
                 case "prior_assistant" -> kind;
-                case "mcp_tools_active", "mcp_tool_calls" -> toolServer;
+                case "mcp_tools_active", "mcp_tool_calls", "mcp_server_instructions", "mcp_tools_deferred" ->
+                    toolServer;
                 case "system_prompt", "env_info", "auto_classifier", "agent_overhead", "identity_context" -> category;
                 case "thinking" -> "thinking";
                 case "assistant_text" -> "assistant_text";
@@ -316,8 +361,9 @@ public class CipxSpendBlockDAO {
         /** 1 = cost of carrying the thing (schemas, menus, standing context); 0 = cost of using it. */
         private static int isDefinition(String category) {
             return switch (category) {
-                case "skills_menu", "custom_agents", "memory", "mcp_tools_active",
-                        "system_prompt", "env_info", "system_tools", "system_tools_deferred" ->
+                case "skills_menu", "custom_agents", "memory", "mcp_tools_active", "mcp_tools_deferred",
+                        "mcp_server_instructions", "system_prompt", "env_info", "system_tools",
+                        "system_tools_deferred" ->
                     1;
                 default -> 0;
             };
@@ -355,7 +401,7 @@ public class CipxSpendBlockDAO {
     }
 
     private Mono<Long> insertChunk(List<BlockRow> rows, String workspaceId, String userName) {
-        return Mono.fromFuture(() -> {
+        return AsyncUtils.usingClickHouseFuture(() -> {
             StringBuilder body = new StringBuilder();
             for (BlockRow row : rows) {
                 appendJsonRow(body, workspaceId, row);
@@ -372,11 +418,7 @@ public class CipxSpendBlockDAO {
                     new ByteArrayInputStream(payload),
                     ClickHouseFormat.JSONEachRow,
                     settings);
-        }).map(response -> {
-            try (response) {
-                return response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong();
-            }
-        });
+        }, response -> response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong());
     }
 
     private void appendJsonRow(StringBuilder out, String workspaceId, BlockRow row) {
@@ -407,6 +449,7 @@ public class CipxSpendBlockDAO {
         node.put("is_definition", row.isDefinition());
         node.put("alloc", row.alloc());
         node.put("content_sha256", row.contentSha256());
+        node.put("aiu_nano", row.aiuNano());
         node.put("start_time", ClickHouseDateTimeFormat.formatNanos(row.startTime()));
         out.append(node).append('\n');
     }

@@ -12,7 +12,7 @@ MODEL_PARAMS = [
     ),
     pytest.param(
         (
-            f"anthropic/{llm_constants.ANTHROPIC_CLAUDE_SONNET}",
+            llm_constants.LITELLM_ANTHROPIC_CLAUDE_HAIKU,
             ["ensure_anthropic_configured"],
         ),
         id="anthropic",

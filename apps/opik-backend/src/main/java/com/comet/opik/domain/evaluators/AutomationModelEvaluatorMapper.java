@@ -14,20 +14,38 @@ import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectReader;
 import dev.langchain4j.data.message.ChatMessageType;
 import org.apache.commons.lang3.StringUtils;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Mapper
 interface AutomationModelEvaluatorMapper {
 
     AutomationModelEvaluatorMapper INSTANCE = Mappers.getMapper(AutomationModelEvaluatorMapper.class);
+
+    Logger log = LoggerFactory.getLogger(AutomationModelEvaluatorMapper.class);
+
+    /**
+     * Reads the stored content as a raw list — raw first, to handle the potential LinkedHashMap issue.
+     * FAIL_ON_TRAILING_TOKENS because the shared mapper does not set it: readValue otherwise stops at
+     * the first complete array and drops the rest, so a prompt that opens with an example array and
+     * continues in prose would keep the example and lose the instruction. ObjectReader is immutable and
+     * thread-safe, so it is built once rather than per message read.
+     */
+    ObjectReader CONTENT_PARTS_READER = JsonUtils.getMapper()
+            .readerFor(JsonUtils.getMapper().getTypeFactory().constructCollectionType(List.class, Object.class))
+            .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
     @Mapping(target = "id", expression = "java(model.id())")
     @Mapping(target = "projectId", expression = "java(model.projectId())")
@@ -260,35 +278,68 @@ interface AutomationModelEvaluatorMapper {
             return LlmAsJudgeMessage.builder()
                     .role(role)
                     .build();
-        } else if (contentString.trim().startsWith("[")) {
-            // It's a JSON array, deserialize to List<LlmAsJudgeMessageContent>
-            try {
-                // Deserialize as raw list first to handle potential LinkedHashMap issue
-                List<?> rawList = JsonUtils.getMapper().readValue(
-                        contentString,
-                        JsonUtils.getMapper().getTypeFactory().constructCollectionType(
-                                List.class,
-                                Object.class));
-
-                // Convert each element to LlmAsJudgeMessageContent
-                List<LlmAsJudgeMessageContent> contentArray = rawList.stream()
-                        .map(this::convertToMessageContent)
-                        .toList();
-
-                return LlmAsJudgeMessage.builder()
-                        .role(role)
-                        .contentArray(contentArray)
-                        .build();
-            } catch (JsonProcessingException e) {
-                throw new RuntimeException("Failed to deserialize message content from JSON", e);
-            }
-        } else {
-            // It's a plain string
-            return LlmAsJudgeMessage.builder()
-                    .role(role)
-                    .content(contentString)
-                    .build();
         }
+
+        return parseContentArray(contentString)
+                .map(contentArray -> LlmAsJudgeMessage.builder().role(role).contentArray(contentArray).build())
+                .orElseGet(() -> LlmAsJudgeMessage.builder().role(role).content(contentString).build());
+    }
+
+    /**
+     * Read the stored content back as structured content parts, or empty when it is not that shape.
+     *
+     * <p>The column keeps no discriminator, so a leading '[' is a hint and not a guarantee: a plain
+     * prompt may legitimately open with one ("[Source Text]..."). Treating unparseable content as the
+     * plain string it looks like keeps such a rule listable; throwing here fails the whole page, and
+     * with it every other rule in the project.
+     */
+    private Optional<List<LlmAsJudgeMessageContent>> parseContentArray(String contentString) {
+        if (!contentString.trim().startsWith("[")) {
+            return Optional.empty();
+        }
+
+        List<?> rawList;
+        try {
+            rawList = CONTENT_PARTS_READER.readValue(contentString);
+        } catch (JsonProcessingException e) {
+            // Prose that happens to open with '[' — the ordinary case, not a failure.
+            return Optional.empty();
+        }
+
+        // allMatch is vacuously true on an empty list, and a message with no parts is not something
+        // the renderer can build: langchain4j rejects a UserMessage with no contents. Empty is prose.
+        if (rawList.isEmpty() || !rawList.stream().allMatch(AutomationModelEvaluatorMapper::isContentPart)) {
+            // JSON, but not content parts: a null element, or an object carrying no discriminator.
+            // Admitting one would hand the renderer a part with a null type, which its switch
+            // dereferences.
+            return Optional.empty();
+        }
+
+        try {
+            // Convert each element to LlmAsJudgeMessageContent
+            return Optional.of(rawList.stream()
+                    .map(this::convertToMessageContent)
+                    .toList());
+        } catch (IllegalStateException | ClassCastException e) {
+            // The discriminator was right and the payload still would not convert. Unlike the two
+            // fallbacks above this is surprising, so record it — without the content, which is a
+            // customer prompt.
+            log.warn("Failed to read judge message content parts, falling back to plain string", e);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Whether a deserialized element is a content part at all — an object declaring a string
+     * discriminator. Deliberately not a closed set: {@code type} is unconstrained on write, so
+     * rejecting a value this renderer does not know would downgrade an array the API accepted into a
+     * string, and the next save would store it as one. The renderer already skips a type it cannot
+     * render; losing the shape on the way out is the worse failure.
+     */
+    private static boolean isContentPart(Object element) {
+        // Deserialized as List<Object>, so Jackson only ever hands us Map / String / Number /
+        // Boolean / List / null — never an LlmAsJudgeMessageContent.
+        return element instanceof Map<?, ?> map && map.get("type") instanceof String;
     }
 
     /**

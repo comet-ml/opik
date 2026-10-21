@@ -2,7 +2,9 @@ import { useCallback } from "react";
 import { LogProcessor } from "@/api/playground/createLogPlaygroundProcessor";
 import { DatasetItem } from "@/types/datasets";
 import { PlaygroundPromptType } from "@/types/playground";
+import { OpenAiPipelineMode } from "@/types/providers";
 import usePlaygroundStore, {
+  getExperimentNamesForPrompts,
   usePromptIds,
   usePromptMap,
   useUpdateOutput,
@@ -25,15 +27,26 @@ import cloneDeep from "lodash/cloneDeep";
 import set from "lodash/set";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
-import { parseCompletionOutput } from "@/lib/playground";
+import {
+  describeRunFailure,
+  dropEmptySystemMessages,
+  RunFailedError,
+  RunFailure,
+} from "@/lib/playground";
+import { hasVisibleControls } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
+import { parseComposedProviderType } from "@/lib/provider";
 import { useHydrateDatasetItemData } from "@/v2/pages/PlaygroundPage/useHydrateDatasetItemData";
 import { useHydratePromptMetadata } from "@/v2/pages/PlaygroundPage/useHydratePromptMetadata";
 import { collectPromptVersionRefs } from "@/api/playground/promptLinkage";
-import { getTextFromMessageContent } from "@/lib/llm";
+import {
+  getMediaUrlsFromListVariable,
+  getTextFromMessageContent,
+} from "@/lib/llm";
 
 export interface DatasetItemPromptCombination {
   datasetItem?: DatasetItem;
   prompt: PlaygroundPromptType;
+  experimentName?: string;
 }
 
 const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
@@ -78,59 +91,49 @@ const transformMessageIntoProviderMessage = (
       { escape: (val: string) => val },
     );
   } else {
+    const renderMediaUrls = (template: string): string[] =>
+      getMediaUrlsFromListVariable(template, datasetItem) ?? [
+        mustache.render(
+          template,
+          serializedDatasetItem,
+          {},
+          { escape: (val: string) => val },
+        ),
+      ];
+
     // Array with images/videos/audios: render mustache in text and media URLs
-    processedContent = message.content.map((part) => {
-      if (part.type === "text") {
-        return {
-          type: "text",
-          text: mustache.render(
-            part.text,
-            serializedDatasetItem,
-            {},
-            { escape: (val: string) => val },
-          ),
-        } as TextPart;
-      } else if (part.type === "image_url") {
-        // Render mustache variables in image URLs
-        return {
-          type: "image_url",
-          image_url: {
-            url: mustache.render(
-              part.image_url.url,
-              serializedDatasetItem,
-              {},
-              { escape: (val: string) => val },
-            ),
-          },
-        } as ImagePart;
-      } else if (part.type === "video_url") {
-        // Render mustache variables in video URLs
-        return {
-          type: "video_url",
-          video_url: {
-            url: mustache.render(
-              part.video_url.url,
-              serializedDatasetItem,
-              {},
-              { escape: (val: string) => val },
-            ),
-          },
-        } as VideoPart;
-      } else {
-        // Render mustache variables in audio URLs
-        return {
-          type: "audio_url",
-          audio_url: {
-            url: mustache.render(
-              part.audio_url.url,
-              serializedDatasetItem,
-              {},
-              { escape: (val: string) => val },
-            ),
-          },
-        } as AudioPart;
-      }
-    });
+    processedContent = message.content.flatMap(
+      (part): Array<TextPart | ImagePart | VideoPart | AudioPart> => {
+        if (part.type === "text") {
+          return [
+            {
+              type: "text",
+              text: mustache.render(
+                part.text,
+                serializedDatasetItem,
+                {},
+                { escape: (val: string) => val },
+              ),
+            },
+          ];
+        } else if (part.type === "image_url") {
+          return renderMediaUrls(part.image_url.url).map((url) => ({
+            type: "image_url",
+            image_url: { url },
+          }));
+        } else if (part.type === "video_url") {
+          return renderMediaUrls(part.video_url.url).map((url) => ({
+            type: "video_url",
+            video_url: { url },
+          }));
+        } else {
+          return renderMediaUrls(part.audio_url.url).map((url) => ({
+            type: "audio_url",
+            audio_url: { url },
+          }));
+        }
+      },
+    );
   }
 
   return {
@@ -153,6 +156,7 @@ interface UsePromptDatasetItemCombinationArgs {
   ) => void;
   deleteAbortController: (key: string) => void;
   throttlingSeconds: number;
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 const usePromptDatasetItemCombination = ({
@@ -164,6 +168,7 @@ const usePromptDatasetItemCombination = ({
   addAbortController,
   deleteAbortController,
   throttlingSeconds,
+  openAiPipelineMode,
 }: UsePromptDatasetItemCombinationArgs) => {
   const updateOutput = useUpdateOutput();
   const hydrateDatasetItemData = useHydrateDatasetItemData();
@@ -177,23 +182,27 @@ const usePromptDatasetItemCombination = ({
   const promptMap = usePromptMap();
 
   const createCombinations = useCallback((): DatasetItemPromptCombination[] => {
+    const experimentNames = getExperimentNamesForPrompts(promptIds);
+
     if (datasetItems.length > 0 && promptIds.length > 0) {
       return datasetItems.flatMap((di) =>
         promptIds.map((promptId) => ({
           datasetItem: di,
           prompt: promptMap[promptId],
+          experimentName: experimentNames[promptId],
         })),
       );
     }
 
     return promptIds.map((promptId) => ({
       prompt: promptMap[promptId],
+      experimentName: experimentNames[promptId],
     }));
   }, [datasetItems, promptMap, promptIds]);
 
   const processCombination = useCallback(
     async (
-      { datasetItem, prompt }: DatasetItemPromptCombination,
+      { datasetItem, prompt, experimentName }: DatasetItemPromptCombination,
       logProcessor: LogProcessor,
     ) => {
       if (!usePlaygroundStore.getState().isRunningMap[prompt.id]) {
@@ -212,11 +221,14 @@ const usePromptDatasetItemCombination = ({
         updateOutput(prompt.id, datasetItemId, {
           isLoading: true,
           value: null,
+          error: undefined,
+          errorHint: undefined,
           selectedRuleIds,
           usage: undefined,
         });
 
-        const providerMessages = prompt.messages.map((m) =>
+        const messagesToSend = dropEmptySystemMessages(prompt.messages);
+        const providerMessages = messagesToSend.map((m) =>
           transformMessageIntoProviderMessage(m, datasetItemData),
         );
 
@@ -237,6 +249,7 @@ const usePromptDatasetItemCombination = ({
           model: prompt.model,
           messages: providerMessages,
           configs: prompt.configs,
+          openAiPipelineMode,
           signal: controller.signal,
           onAddChunk: (o) => {
             updateOutput(prompt.id, datasetItemId, {
@@ -269,9 +282,18 @@ const usePromptDatasetItemCombination = ({
         logProcessor.log({
           ...run,
           providerMessages,
+          // Only role and content describe the template; id, promptId,
+          // promptVersionId and autoImprove are Playground editor state and
+          // have no place in the stored experiment config.
+          templateMessages: messagesToSend.map(({ role, content }) => ({
+            role,
+            content,
+          })),
           promptLibraryVersions,
           promptLibraryMetadata,
+          experimentName,
           configs: prompt.configs,
+          openAiPipelineMode,
           model: prompt.model,
           provider: prompt.provider,
           promptId: prompt.id,
@@ -288,14 +310,31 @@ const usePromptDatasetItemCombination = ({
           run.pythonProxyError ||
           !run.result
         ) {
-          throw new Error(parseCompletionOutput(run));
+          throw new RunFailedError(
+            describeRunFailure(run, {
+              canTuneRequestRate: hasVisibleControls(
+                parseComposedProviderType(prompt.provider),
+                prompt.model,
+                prompt.configs,
+              ),
+              sentMessages: messagesToSend,
+              model: prompt.model,
+            }),
+          );
         }
       } catch (error) {
-        const typedError = error as Error;
+        // Stopping a run is not a failure
+        const stopped = controller.signal.aborted;
+        const failure: RunFailure =
+          error instanceof RunFailedError
+            ? error.failure
+            : { message: (error as Error).message || "Unknown error" };
 
         updateOutput(prompt.id, datasetItemId, {
-          value: typedError.message,
           isLoading: false,
+          ...(stopped
+            ? {}
+            : { error: failure.message, errorHint: failure.hint }),
         });
       } finally {
         deleteAbortController(key);
@@ -322,6 +361,7 @@ const usePromptDatasetItemCombination = ({
       deleteAbortController,
       selectedRuleIds,
       throttlingSeconds,
+      openAiPipelineMode,
     ],
   );
 

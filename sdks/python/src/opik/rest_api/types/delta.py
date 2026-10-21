@@ -3,7 +3,9 @@
 import typing
 
 import pydantic
+import typing_extensions
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from ..core.serialization import FieldMetadata
 from .function_call import FunctionCall
 from .tool_call import ToolCall
 
@@ -11,9 +13,13 @@ from .tool_call import ToolCall
 class Delta(UniversalBaseModel):
     role: typing.Optional[str] = None
     content: typing.Optional[str] = None
-    reasoning_content: typing.Optional[str] = None
-    tool_calls: typing.Optional[typing.List[ToolCall]] = None
-    function_call: typing.Optional[FunctionCall] = None
+    reasoning_content: typing_extensions.Annotated[typing.Optional[str], FieldMetadata(alias="reasoningContent")] = None
+    tool_calls: typing_extensions.Annotated[
+        typing.Optional[typing.List[ToolCall]], FieldMetadata(alias="toolCalls")
+    ] = None
+    function_call: typing_extensions.Annotated[typing.Optional[FunctionCall], FieldMetadata(alias="functionCall")] = (
+        None
+    )
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

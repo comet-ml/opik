@@ -11,7 +11,9 @@ workspace, and the studio job processor routes LLM calls through the backend's
 `/v1/private` gateway, which resolves the key server-side.
 """
 
+import functools
 import os
+import re
 import uuid
 from collections.abc import Iterator
 from typing import Any, Callable
@@ -21,6 +23,7 @@ import pytest
 
 import opik
 
+from llm_constants import ANTHROPIC_CLAUDE_HAIKU, OPENAI_GPT_MINI
 from opik_backend.jobs.optimizer import process_optimizer_job
 
 _PROVIDER = "anthropic"
@@ -43,6 +46,106 @@ def _provider_for_model(model: str | None) -> str:
     if remainder and provider in _PROVIDER_SECRET_ENV:
         return provider
     return "openai" if model.startswith("gpt") else _PROVIDER
+
+
+_ANTHROPIC_PROBE_MODEL = "claude-haiku-4-5"
+_PROBE_TIMEOUT_S = 15
+# Billing/quota exhaustion, which Anthropic reports as a 400, not a 401.
+_BALANCE_HINT = re.compile(
+    r"credit balance|too low|billing|quota|insufficient", re.IGNORECASE
+)
+
+
+def _is_credential_rejection(status: int, message: str) -> bool:
+    """Whether a non-OK probe response condemns the credential itself.
+
+    401/403 can only mean a bad credential. 400 is narrower: Anthropic returns
+    it both for an exhausted balance and for a request this probe got wrong (an
+    unknown model, schema drift), and treating every 400 as a dead key would let
+    retiring the probe model silently move the whole suite onto OpenAI.
+    """
+    if status in (401, 403):
+        return True
+    if status == 400:
+        return bool(_BALANCE_HINT.search(message))
+    return False
+
+
+def _anthropic_rejection_reason(api_key: str) -> str | None:
+    """Reason Anthropic refuses this credential, or None if it looks usable.
+
+    Presence and usability are different claims: the e2e key was live but
+    disabled after an unexplained spend spike, which surfaced only as an opaque
+    gateway AuthenticationError several minutes into an optimization. Probing up
+    front turns that into a provider choice made before any test runs.
+
+    Deliberately narrow, mirroring tests_end_to_end/e2e/core/llm-key-preflight.ts:
+    only an authoritative rejection counts, so a timeout or 5xx keeps the key
+    rather than letting a flaky network silently switch providers.
+    """
+    try:
+        response = httpx.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": _ANTHROPIC_PROBE_MODEL,
+                "max_tokens": 1,
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+            timeout=_PROBE_TIMEOUT_S,
+        )
+    except httpx.HTTPError:
+        return None
+
+    if response.is_success:
+        return None
+
+    detail = f"HTTP {response.status_code}"
+    try:
+        message = response.json().get("error", {}).get("message")
+        if message:
+            detail = message
+    except ValueError:
+        pass
+
+    return detail if _is_credential_rejection(response.status_code, detail) else None
+
+
+@functools.lru_cache(maxsize=1)
+def resolve_e2e_model() -> str:
+    """The task model these tests should run, given the keys actually available.
+
+    An explicit ``OPTSTUDIO_E2E_MODEL`` always wins — pinning a model must not be
+    second-guessed. Otherwise prefer Anthropic, and fall back to OpenAI when the
+    Anthropic key is absent or the provider rejects it, so a dead Anthropic
+    credential costs the suite its provider rather than its coverage.
+
+    Cached: the probe is a live network call and every test requests the model.
+    """
+    pinned = os.getenv("OPTSTUDIO_E2E_MODEL")
+    if pinned:
+        return pinned
+
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    rejection = _anthropic_rejection_reason(anthropic_key) if anthropic_key else "not set"
+    if not rejection:
+        return ANTHROPIC_CLAUDE_HAIKU
+
+    # Anthropic unusable. Fall back only if OpenAI can actually run; otherwise
+    # stay on Anthropic so workspace_provider_key skips with a clear reason
+    # rather than failing mid-optimization.
+    if not os.getenv("OPENAI_API_KEY"):
+        return ANTHROPIC_CLAUDE_HAIKU
+
+    print(
+        f"[e2e-preflight] Anthropic unusable ({rejection}); "
+        f"running against {OPENAI_GPT_MINI} instead."
+    )
+    return OPENAI_GPT_MINI
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -97,12 +200,24 @@ def workspace_provider_key() -> None:
     base = _backend_base()
     if not base:
         pytest.skip("OPIK_URL_OVERRIDE not set; e2e requires a running Opik backend")
-    provider = _provider_for_model(os.getenv("OPTSTUDIO_E2E_MODEL"))
+    provider = _provider_for_model(resolve_e2e_model())
     headers = _workspace_headers()
-    if _provider_configured(base, headers, provider):
-        return
     secret_env = _PROVIDER_SECRET_ENV[provider]
     secret = os.getenv(secret_env)
+
+    # Staying on Anthropic despite a rejected key means no fallback was
+    # available (see resolve_e2e_model) — skip with the reason rather than
+    # storing a dead key and failing several minutes into the optimization.
+    if provider == "anthropic" and secret:
+        rejection = _anthropic_rejection_reason(secret)
+        if rejection:
+            pytest.skip(
+                f"{secret_env} is set but Anthropic rejects it ({rejection}) "
+                "and OPENAI_API_KEY is not set to fall back to"
+            )
+
+    if _provider_configured(base, headers, provider):
+        return
     if not secret:
         pytest.skip(
             f"no {provider} provider key configured in the workspace and "

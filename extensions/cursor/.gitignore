@@ -1,4 +1,5 @@
 out/
+out-test/
 node_modules/
 .vscode/
 

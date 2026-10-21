@@ -1,18 +1,24 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.Dashboard.DashboardPage;
 import com.comet.opik.api.DashboardScope;
 import com.comet.opik.api.DashboardUpdate;
+import com.comet.opik.api.DashboardWidgetQueryRequest;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.DashboardFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.SortingFactoryDashboards;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DashboardService;
+import com.comet.opik.domain.DashboardWidgetQueryService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -59,6 +65,7 @@ import java.util.UUID;
 public class InsightsViewsResource {
 
     private final @NonNull DashboardService service;
+    private final @NonNull DashboardWidgetQueryService widgetQueryService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull SortingFactoryDashboards sortingFactory;
@@ -69,6 +76,7 @@ public class InsightsViewsResource {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/insights-views/{insightsViewId}", schema = @Schema(implementation = String.class))}, content = @Content(schema = @Schema(implementation = Dashboard.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_CREATE)
     @JsonView(Dashboard.View.Public.class)
     @RateLimited
     public Response createInsightsView(
@@ -93,6 +101,7 @@ public class InsightsViewsResource {
             @ApiResponse(responseCode = "200", description = "Insights view resource", content = @Content(schema = @Schema(implementation = Dashboard.class))),
             @ApiResponse(responseCode = "404", description = "Insights view not found")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_VIEW)
     @JsonView(Dashboard.View.Public.class)
     public Response getInsightsViewById(@PathParam("insightsViewId") UUID id) {
 
@@ -109,6 +118,7 @@ public class InsightsViewsResource {
     @Operation(operationId = "findInsightsViews", summary = "Find insights views", description = "Find insights views in a workspace", responses = {
             @ApiResponse(responseCode = "200", description = "Insights view page", content = @Content(schema = @Schema(implementation = DashboardPage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_VIEW)
     @JsonView(Dashboard.View.Public.class)
     public Response findInsightsViews(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
@@ -140,6 +150,7 @@ public class InsightsViewsResource {
             @ApiResponse(responseCode = "404", description = "Insights view not found"),
             @ApiResponse(responseCode = "409", description = "Conflict - insights view with this name already exists")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_EDIT)
     @JsonView(Dashboard.View.Public.class)
     @RateLimited
     public Response updateInsightsView(
@@ -157,11 +168,33 @@ public class InsightsViewsResource {
         return Response.ok().entity(updatedDashboard).build();
     }
 
+    @POST
+    @Path("/{insightsViewId}/widgets/{widgetId}/query")
+    @Operation(operationId = "runInsightsViewWidgetQuery", summary = "Run a saved widget query", description = "Runs the query saved on an Ollie chart widget of this insights view over the given date range and returns its rows. The query is read from the saved widget; the request carries no SQL. Returns 501 when Ollie or Custom Charts is not enabled for the workspace.", responses = {
+            @ApiResponse(responseCode = "200", description = "Query results", content = @Content(schema = @Schema(implementation = AnalyticsQueryResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Insights view not found, or the widget has no dashboard saved query"),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "429", description = "Too many queries are running; retry after the Retry-After delay", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "501", description = "Ollie or Custom Charts is not enabled for this workspace")
+    })
+    // The rows are project data, so this is gated like the endpoints behind the built-in charts.
+    @RequiredPermissions({WorkspaceUserPermission.DASHBOARD_VIEW, WorkspaceUserPermission.PROJECT_DATA_VIEW})
+    @RateLimited(value = "dashboardWidgetQueries:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    public Response runWidgetQuery(
+            @PathParam("insightsViewId") UUID id,
+            @PathParam("widgetId") String widgetId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DashboardWidgetQueryRequest.class))) @NotNull @Valid DashboardWidgetQueryRequest request) {
+
+        return Response.ok(widgetQueryService.runSavedQuery(id, DashboardScope.INSIGHTS, widgetId, request)).build();
+    }
+
     @DELETE
     @Path("/{insightsViewId}")
     @Operation(operationId = "deleteInsightsView", summary = "Delete insights view", description = "Delete insights view by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_DELETE)
     public Response deleteInsightsView(@PathParam("insightsViewId") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -178,6 +211,7 @@ public class InsightsViewsResource {
     @Operation(operationId = "deleteInsightsViewsBatch", summary = "Delete insights views", description = "Delete insights views batch", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_DELETE)
     public Response deleteInsightsViewsBatch(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
 

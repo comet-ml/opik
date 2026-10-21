@@ -26,7 +26,7 @@ Once configured, providers appear in two places:
 </Frame>
 
 2. In the Provider Configuration dialog that appears:
-   - Select a provider from the dropdown menu
+   - Select a provider
    - Enter your API key for that provider
    - Click **Save** to store the configuration
 
@@ -60,6 +60,7 @@ Below are instructions for obtaining API keys and other required information for
 3. Click "Create new secret key"
 4. Copy your API key (it will only be shown once)
 5. In Opik, select "OpenAI" as the provider and paste your key
+6. (Optional) Under **Custom headers**, add any static HTTP headers to send with every request to OpenAI (see the note under OpenRouter for the headers you can't set)
 
 #### Anthropic
 
@@ -76,6 +77,16 @@ Below are instructions for obtaining API keys and other required information for
 3. Create a new API key
 4. Copy your API key
 5. In Opik, select "OpenRouter" as the provider and paste your key
+6. (Optional) Under **Custom headers**, add any static HTTP headers to send with every request. For example, OpenRouter's app attribution headers make Opik calls show up under your app name in OpenRouter's activity view:
+   - `HTTP-Referer`: `https://your-app.example.com`
+   - `X-OpenRouter-Title`: `Your App Name`
+
+<Note>
+  For OpenAI and OpenRouter, the `Authorization` and `api-key` headers are rejected, because they would override the API
+  key, with the error "Use the API key field instead of this header". Put the key in the API key field instead. You no
+  longer need a Custom provider entry (see vLLM / Custom Provider below) just to send headers, and the built-in provider
+  keeps Opik cost tracking.
+</Note>
 
 #### Gemini
 
@@ -117,7 +128,7 @@ Once saved, you can use your Azure OpenAI models directly from Online Scores and
 
 1. **Create a Custom IAM Role**
 
-```bash
+```bash wordWrap
 gcloud iam roles create opik \
   --project=<my-project> \
   --title="Opik" \
@@ -128,7 +139,7 @@ gcloud iam roles create opik \
 
 2. **Create a Service Account**
 
-```bash
+```bash wordWrap
 gcloud iam service-accounts create opik-sa \
   --description="Service account for Opik role" \
   --display-name="Opik Service Account"
@@ -136,7 +147,7 @@ gcloud iam service-accounts create opik-sa \
 
 3. **Assign the Role to the Service Account**
 
-```bash
+```bash wordWrap
 gcloud projects add-iam-policy-binding <my-project> \
   --member="serviceAccount:opik-sa@<my-project>.iam.gserviceaccount.com" \
   --role="projects/<my-project>/roles/opik"
@@ -144,7 +155,7 @@ gcloud projects add-iam-policy-binding <my-project> \
 
 4. **Generate the Service Account Key File**
 
-```bash
+```bash wordWrap
 gcloud iam service-accounts keys create opik-key.json \
   --iam-account=opik-sa@<my-project>.iam.gserviceaccount.com
 ```
@@ -241,8 +252,8 @@ Before configuring Bedrock in Opik, ensure you have:
 4. Fill in the configuration:
    - **Provider name**: A unique identifier for this provider instance (e.g., "Bedrock us-east-1")
    - **URL**: Your Bedrock endpoint URL (see format below)
-   - **API Key**: Your AWS Bedrock API key (see [AWS documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api-keys.html) for setup instructions)
-   - **Models list**: Comma-separated list of models you want to use (e.g., `us.anthropic.claude-3-5-sonnet-20241022-v2:0,us.meta.llama3-2-3b-instruct-v1:0`)
+   - **Authentication**: Your AWS Bedrock API key (see [AWS documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api-keys.html) for setup instructions), or OAuth2 client credentials if your gateway issues short-lived tokens (see [OAuth2 Client Credentials Authentication](#oauth2-client-credentials-authentication) below)
+   - **Models list**: Comma-separated list of models you want to use (e.g., `us.anthropic.claude-sonnet-4-6,us.meta.llama3-2-3b-instruct-v1:0`)
    - **Custom headers** (optional): Add any additional HTTP headers required by your configuration
 5. Click **Add configuration** to save
 
@@ -284,7 +295,7 @@ Opik connects to [Ollama](https://ollama.com/) using the OpenAI-compatible API, 
    - **Provider name**: A name for this instance (e.g., "Ollama local")
    - **URL**: Base URL of your Ollama instance, ending with `/v1` (e.g., `http://localhost:11434/v1`)
    - **API Key** (optional): Leave blank unless your Ollama instance requires authentication
-   - Use **"Test connection"** to verify Opik can reach the instance, then **"Discover models"** to load the model list
+   - Click **Connect**: Opik checks that it can reach the instance and loads its model list
 5. Click **Save** to store the configuration
 
 You can configure multiple Ollama instances with different provider names and URLs.
@@ -301,7 +312,7 @@ Use this option to add any other OpenAI API-compliant provider such as vLLM, etc
 
 1. **Provider Name**: Enter a unique name to identify this custom provider (e.g., "vLLM Production", "Ollama Local", "Azure OpenAI Dev")
 2. **URL**: Enter your server URL, for example: `http://host.docker.internal:8000/v1`
-3. **API Key** (optional): If your model access requires authentication, enter the API key. Otherwise, leave this field blank.
+3. **Authentication** (optional): If your model access requires authentication, either enter a static API key or use OAuth2 client credentials (see [OAuth2 Client Credentials Authentication](#oauth2-client-credentials-authentication) below). Otherwise, leave it blank.
 4. **Models**: List all models available on your server. You'll be able to select one of them for use later.
 5. **Custom Headers** (optional): Add any additional HTTP headers required by your custom endpoint as key-value pairs.
 
@@ -339,12 +350,45 @@ Once you've configured multiple custom providers, you can:
 
 Each custom provider appears as a separate option in the provider dropdown, making it easy to work with multiple self-hosted or custom LLM deployments.
 
-## API Key Security
+### OAuth2 Client Credentials Authentication
 
-API keys are encrypted and stored securely. Only the name and provider type are visible after configuration.
+Some LLM gateways require a short-lived access token from an OAuth2 authorization server instead of a static API key. For these setups, custom providers (as well as Bedrock) can authenticate using the **OAuth2 client credentials** flow.
+
+When configured, Opik requests an access token from your auth service using the [client credentials grant](https://datatracker.ietf.org/doc/html/rfc6749#section-4.4), attaches it as a `Bearer` token to every model call, and caches and refreshes it automatically before it expires. If the provider rejects a token as invalid or expired (for example, after a revocation), Opik fetches a fresh token and retries the call.
+
+<Frame>
+  <img src="/img/configuration/custom_provider_oauth2.png" alt="Custom Provider OAuth2 Client Credentials Configuration" />
+</Frame>
+
+#### Configuring OAuth2 Authentication
+
+1. In the provider configuration dialog, switch the **Authentication** mode from **Static API key** to **OAuth2 client credentials**
+2. Fill in:
+   - **Token URL**: The token endpoint of your authorization server (e.g., `https://auth.example.com/oauth/token`)
+   - **Credentials**: Enter your `client_id` and `client_secret` in the pre-filled rows. Add more rows if your auth service requires them (e.g., `scope`, `audience`). `grant_type=client_credentials` is added automatically by the dialog, so you don't need to add it (REST API callers must include it themselves).
+3. Click **Test connection** to verify the setup. Opik performs the token fetch on the backend and reports the token lifetime.
+4. Click **Save** to store the configuration
+
+<Note>
+  Locked credential values are encrypted at rest and write-only: after saving, they can be replaced but not read back, either in the UI or through the API. Use the lock button on each row to control which values are treated this way. The dialog locks values with secret-like names automatically (`client_secret`, and any key containing "secret", "password", or "token"); through the REST API, set the credential's `secret` flag explicitly. A value that was saved as locked cannot be unlocked, only replaced. Re-saving the configuration without changing a locked value keeps the stored secret.
+</Note>
+
+A provider uses either a static API key or OAuth2 authentication, never both. Saving an OAuth2 configuration clears any stored static key, and switching back to a static key clears the stored OAuth2 configuration. Changing the **Token URL** requires re-entering the credentials, since stored secrets are only ever sent to the endpoint they were saved for.
+
+<Tip>
+  **Self-hosted deployments:** The Docker Compose and Helm deployments allow token URLs on private networks (`LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed`), so internal auth services work out of the box. Other launch paths default to `strict`, which allows only public `https` token URLs; set the variable to `relaxed` if you need a private token URL, or to `strict` on Compose/Helm to harden them. Note that `relaxed` disables the SSRF protection on token URLs, so it is only appropriate where provider configuration is restricted to trusted administrators. On Opik Cloud, the token URL must be publicly reachable.
+</Tip>
+
+The UI covers the standard OAuth2 client credentials flow. If your token endpoint deviates from the standard, additional options are available through the [REST API](/reference/rest-api/llm-provider-key/store-llm-provider-api-key) in the `auth_config` field.
+
+## Credential Security
+
+All provider credentials are encrypted at rest, whether a static API key or OAuth2 client credentials. Static API keys are shown masked after saving, and locked OAuth2 credential values are write-only.
 
 ## Troubleshooting
 
 - **Authentication Errors**: Ensure your API key is valid and hasn't expired
 - **Access Denied**: Check that your API key has the required permissions for the models you're trying to use
 - **Rate Limiting**: Adjust your request frequency or contact your provider to increase limits
+- **Token fetch failures**: Use **Test connection** in the provider dialog; the error message includes the auth server's response
+- **Missing token lifetime**: The token reply must state its lifetime (`expires_in` by default); for endpoints that omit it, set `fallback_ttl_seconds` through the REST API

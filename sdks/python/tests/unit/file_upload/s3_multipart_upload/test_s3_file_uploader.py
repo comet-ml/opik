@@ -1,5 +1,4 @@
 import re
-import importlib
 from unittest.mock import patch
 
 import httpx
@@ -85,30 +84,26 @@ def test_upload_file_parts_to_s3__error_status(data_file, respx_mock):
     with pytest.raises(s3_upload_error.S3UploadFileError):
         uploader.upload()
 
+    route = respx.put(rx_url)
+    assert route.call_count == 1
+
 
 class TestS3FileDataUploaderRetry:
-    # It is done as it is to patch retry decorator to minimize a retry interval
+    # Patch only the wait strategy so tests exercise the production retry policy.
     def setup_method(self):
-        s3_retry = tenacity.retry(
-            stop=tenacity.stop_after_attempt(3),
-            wait=tenacity.wait_exponential(multiplier=1, min=0.5, max=2),
-            retry=tenacity.retry_if_exception(s3_httpx_client._allowed_to_retry),
-        )
-        # Now patch the decorator where the decorator is being imported from
-        patch(
-            "opik.s3_httpx_client.s3_retry",
-            lambda x: s3_retry(x),
+        patch.object(
+            s3_file_uploader.S3FileDataUploader._send_data_part.retry,
+            "wait",
+            tenacity.wait_none(),
         ).start()
-        # Reloads the module which applies our patched decorator
-        importlib.reload(s3_file_uploader)
 
     def teardown_method(self):
-        # Stops all patches started with start()
         patch.stopall()
-        # Reload our module, which restores the original decorator
-        importlib.reload(s3_file_uploader)
 
-    def test_upload_file_parts_to_s3__retry_on_500(self, data_file, respx_mock):
+    @pytest.mark.parametrize("status_code", [500, 502, 503, 504])
+    def test_upload_file_parts_to_s3__retryable_status__retries(
+        self, data_file, respx_mock, status_code
+    ):
         max_file_part_size = 5 * 1024 * 1024
         file_parts = file_parts_strategy.FilePartsStrategy(
             file_path=data_file.name,
@@ -121,10 +116,12 @@ class TestS3FileDataUploaderRetry:
             "https://s3.amazonaws.com/bucket/3",
         ]
         rx_url = re.compile("https://s3\\.amazonaws\\.com/bucket/*")
+        requests: list[tuple[httpx.URL, bytes]] = []
 
         def retry_side_effect(request, route):
+            requests.append((request.url, request.content))
             if route.call_count < 1:
-                return httpx.Response(500)
+                return httpx.Response(status_code)
             else:
                 return httpx.Response(200, headers={"ETag": "e-tag"})
 
@@ -146,4 +143,92 @@ class TestS3FileDataUploaderRetry:
         assert monitor.bytes_sent == conftest.FILE_SIZE
 
         route = respx.put(rx_url)
-        assert route.call_count == 3 + 1  # we have one retry due to 500
+        assert route.call_count == 3 + 1
+        assert requests[0] == requests[1]
+
+    def test_upload_file_parts_to_s3__remote_protocol_error__retries(
+        self, data_file, respx_mock
+    ):
+        max_file_part_size = 5 * 1024 * 1024
+        file_parts = file_parts_strategy.FilePartsStrategy(
+            file_path=data_file.name,
+            file_size=conftest.FILE_SIZE,
+            max_file_part_size=max_file_part_size,
+        )
+        pre_sign_urls = [
+            "https://s3.amazonaws.com/bucket/1",
+            "https://s3.amazonaws.com/bucket/2",
+            "https://s3.amazonaws.com/bucket/3",
+        ]
+        rx_url = re.compile("https://s3\\.amazonaws\\.com/bucket/*")
+        requests: list[tuple[httpx.URL, bytes]] = []
+
+        def retry_side_effect(request, route):
+            requests.append((request.url, request.content))
+            if route.call_count < 1:
+                raise httpx.RemoteProtocolError(
+                    "Server disconnected without sending a response",
+                    request=request,
+                )
+            return httpx.Response(200, headers={"ETag": "e-tag"})
+
+        respx_mock.put(rx_url).mock(side_effect=retry_side_effect)
+
+        httpx_client = s3_httpx_client.get()
+        monitor = file_upload_monitor.FileUploadMonitor()
+
+        uploader = s3_file_uploader.S3FileDataUploader(
+            file_parts=file_parts,
+            pre_sign_urls=pre_sign_urls,
+            httpx_client=httpx_client,
+            monitor=monitor,
+        )
+
+        uploader.upload()
+
+        assert monitor.bytes_sent == conftest.FILE_SIZE
+
+        route = respx.put(rx_url)
+        assert route.call_count == 3 + 1
+        assert requests[0] == requests[1]
+
+    def test_upload_file_parts_to_s3__remote_protocol_error_exhausted__retains_for_replay(
+        self, data_file, respx_mock
+    ):
+        file_parts = file_parts_strategy.FilePartsStrategy(
+            file_path=data_file.name,
+            file_size=conftest.FILE_SIZE,
+        )
+        pre_sign_urls = [
+            "https://s3.amazonaws.com/bucket/1",
+            "https://s3.amazonaws.com/bucket/2",
+            "https://s3.amazonaws.com/bucket/3",
+        ]
+        rx_url = re.compile("https://s3\\.amazonaws\\.com/bucket/*")
+
+        def remote_protocol_error(request, route):
+            raise httpx.RemoteProtocolError(
+                "Server disconnected without sending a response",
+                request=request,
+            )
+
+        respx_mock.put(rx_url).mock(side_effect=remote_protocol_error)
+
+        uploader = s3_file_uploader.S3FileDataUploader(
+            file_parts=file_parts,
+            pre_sign_urls=pre_sign_urls,
+            httpx_client=s3_httpx_client.get(),
+        )
+
+        with pytest.raises(s3_upload_error.S3UploadFileError) as exc_info:
+            uploader.upload()
+
+        upload_error = exc_info.value
+        assert upload_error.connection_error is True
+        assert isinstance(upload_error.__cause__, httpx.RemoteProtocolError)
+        assert str(upload_error.__cause__) == (
+            "Server disconnected without sending a response"
+        )
+
+        route = respx.put(rx_url)
+        assert route.call_count == 3

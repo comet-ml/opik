@@ -18,6 +18,7 @@ public record ModelCostData(String litellmProvider,
         String cacheReadInputTokenCost,
         String inputCostPerAudioToken,
         String outputCostPerAudioToken,
+        String outputCostPerReasoningToken,
         // Jackson's SnakeCaseStrategy doesn't insert an underscore between letters and digits,
         // so the camelCase fields below would resolve to keys like "above200k" without an
         // underscore. Pin each tier field to the literal LiteLLM JSON key with @JsonProperty.
@@ -29,6 +30,7 @@ public record ModelCostData(String litellmProvider,
         @JsonProperty("cache_read_input_token_cost_above_200k_tokens") String cacheReadInputTokenCostAbove200kTokens,
         @JsonProperty("input_cost_per_token_above_272k_tokens") String inputCostPerTokenAbove272kTokens,
         @JsonProperty("output_cost_per_token_above_272k_tokens") String outputCostPerTokenAbove272kTokens,
+        @JsonProperty("cache_creation_input_token_cost_above_1hr") String cacheCreationInputTokenCostAbove1hr,
         String mode,
         boolean supportsVision,
         String aliasOf) {

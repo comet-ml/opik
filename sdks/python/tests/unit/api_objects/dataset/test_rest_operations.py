@@ -1,6 +1,8 @@
 from unittest.mock import Mock, patch
 
 from opik.api_objects.dataset import rest_operations
+
+from .upload_capture import UploadCapture
 from opik.rest_api.types import dataset_item as rest_dataset_item
 
 
@@ -39,6 +41,13 @@ def test_get_test_suites__insert_duplicates_existing_item__duplicate_not_submitt
         [_backend_dataset("my-suite", "evaluation_suite", items_total=1)]
     )
 
+    capture = UploadCapture()
+    # The capture goes where the Dataset looks for its transport, so the suite the factory
+    # builds resolves it the way it would in production -- no reaching into the object
+    # afterwards.
+    mock_rest_client._client_wrapper.httpx_client.httpx_client = capture
+    mock_rest_client._client_wrapper.get_base_url.return_value = capture.base_url
+
     suites = rest_operations.get_test_suites(
         project_name="Test project",
         rest_client=mock_rest_client,
@@ -59,14 +68,7 @@ def test_get_test_suites__insert_duplicates_existing_item__duplicate_not_submitt
             ]
         )
 
-    create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
-    submitted = [
-        item
-        for call in create_or_update.call_args_list
-        for item in call.kwargs["items"]
-    ]
-
-    assert [item.data for item in submitted] == [{"question": "brand new"}], (
+    assert [item["data"] for item in capture.items] == [{"question": "brand new"}], (
         "The item the suite already holds must be recognised as a duplicate and "
         "left out of the batch"
     )

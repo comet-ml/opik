@@ -124,6 +124,7 @@ module.exports = {
 
         /* Recoverable-waste callout colors (AI Spend) */
         "waste-bg": "var(--waste-bg)",
+        "guidance-callout-bg": "var(--guidance-callout-bg)",
         "waste-border": "var(--waste-border)",
         "waste-text": "var(--waste-text)",
 
@@ -134,10 +135,12 @@ module.exports = {
         "chart-red": "var(--chart-red)",
         "chart-burgundy": "var(--chart-burgundy)",
         "chart-purple": "var(--chart-purple)",
+        "chart-violet": "var(--chart-violet)",
         "chart-pink": "var(--chart-pink)",
         "chart-orange": "var(--chart-orange)",
         "chart-teal": "var(--chart-teal)",
         "chart-gray-light": "var(--chart-gray-light)",
+        "chart-yellow-light": "var(--chart-yellow-light)",
         "chart-gray-dark": "var(--chart-gray-dark)",
 
         /* Accent colors */
