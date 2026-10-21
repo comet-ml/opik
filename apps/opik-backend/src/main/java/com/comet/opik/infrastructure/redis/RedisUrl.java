@@ -56,6 +56,13 @@ public record RedisUrl(
      * @see <a href="https://github.com/redis/lettuce/wiki/Redis-URI-and-connection-details">Redis URI Documentation</a>
      */
     public static RedisUrl parse(String redisUrl) {
+        return parse(redisUrl, DEFAULT_REDIS_PORT);
+    }
+
+    /**
+     * Same as {@link #parse(String)}, with the port to assume when the URL has none, e.g. 26379 for a sentinel.
+     */
+    public static RedisUrl parse(String redisUrl, int defaultPort) {
         Preconditions.checkArgument(StringUtils.isNotBlank(redisUrl), "Redis url cannot be blank");
         redisUrl = redisUrl.trim();
         var urlWithoutCredentials = redisUrl;
@@ -93,7 +100,7 @@ public record RedisUrl(
             var uri = new URI(urlWithoutCredentials);
             var scheme = uri.getScheme();
             var host = uri.getHost();
-            int port = uri.getPort() == -1 ? DEFAULT_REDIS_PORT : uri.getPort();
+            int port = uri.getPort() == -1 ? defaultPort : uri.getPort();
             return RedisUrl.builder()
                     .scheme(scheme)
                     .host(host)

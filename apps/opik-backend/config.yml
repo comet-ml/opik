@@ -295,7 +295,8 @@ redis:
     # Description: Name of the master group monitored by the sentinels. Required when enabled
     masterName: ${OPIK_REDIS_SENTINEL_MASTER_NAME:-''}
     # Description: Comma separated extra seed sentinels, e.g. redis://sentinel-1:26379,redis://sentinel-2:26379. They
-    # must use the scheme of singleNodeUrl and carry no credentials. The seed from singleNodeUrl is always included
+    # must use the scheme of singleNodeUrl and carry no credentials; the port defaults to 26379. The seed from
+    # singleNodeUrl, whose port also defaults to 26379 in this mode, is always included
     nodes: ${OPIK_REDIS_SENTINEL_NODES:-''}
     # Description: Username for the sentinel nodes themselves, if they enforce ACLs
     username: ${OPIK_REDIS_SENTINEL_USERNAME:-''}

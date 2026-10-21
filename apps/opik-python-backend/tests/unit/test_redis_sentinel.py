@@ -63,7 +63,7 @@ def test_builds_sentinel_master_client_from_environment(sentinel_env):
     monkeypatch, master_name = sentinel_env
     monkeypatch.setenv("REDIS_URL", "rediss://data-user:data%40pass@sentinel-1:26379/3")
     # Padded, with an empty entry and a duplicate of the seed, which must collapse
-    monkeypatch.setenv("OPIK_REDIS_SENTINEL_NODES", " rediss://sentinel-2:26380 , ,rediss://sentinel-1:26379")
+    monkeypatch.setenv("OPIK_REDIS_SENTINEL_NODES", " rediss://sentinel-2:26380 , ,rediss://sentinel-1:26379,rediss://sentinel-3")
     monkeypatch.setenv("OPIK_REDIS_SENTINEL_USERNAME", "sentinel-user")
     monkeypatch.setenv("OPIK_REDIS_SENTINEL_PASSWORD", "sentinel-pass")
     monkeypatch.setenv("OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS", "7")
@@ -101,12 +101,15 @@ def test_builds_sentinel_master_client_from_environment(sentinel_env):
         "sentinels": [
             {"host": "sentinel-1", "port": 26379, **sentinel},
             {"host": "sentinel-2", "port": 26380, **sentinel},
+            {"host": "sentinel-3", "port": 26379, **sentinel},
         ],
     }
 
 
 def test_applies_java_backend_defaults(sentinel_env):
     monkeypatch, master_name = sentinel_env
+    # Without a port the seed is a sentinel on 26379, not a Redis data node on 6379
+    monkeypatch.setenv("REDIS_URL", "redis://data-user:data%40pass@sentinel-1/3")
     # An exported but empty variable must behave like an unset one
     monkeypatch.setenv("OPIK_REDIS_SENTINEL_NODES", "")
 
@@ -165,8 +168,9 @@ def test_keeps_direct_client_when_sentinel_is_disabled(sentinel_env):
         ("OPIK_REDIS_SENTINEL_NODES", "rediss://sentinel-2:26379", "must use the same scheme as REDIS_URL"),
         ("OPIK_REDIS_SENTINEL_NODES", "http://sentinel-2:26379", "must use the redis or rediss scheme"),
         ("OPIK_REDIS_SENTINEL_NODES", "redis://user:secret@sentinel-2:26379", "must not carry credentials"),
-        ("OPIK_REDIS_SENTINEL_NODES", "redis://sentinel-2", "must include a host and a port"),
-        ("OPIK_REDIS_SENTINEL_NODES", "redis://sentinel-2:port", "invalid port"),
+        ("OPIK_REDIS_SENTINEL_NODES", "redis://sentinel-2:65536", "a port between 1 and 65535"),
+        ("OPIK_REDIS_SENTINEL_NODES", "redis://:26379", "must include a host"),
+        ("REDIS_URL", "", "REDIS_URL must point at a sentinel"),
     ],
 )
 def test_rejects_invalid_sentinel_settings(sentinel_env, variable, value, message):

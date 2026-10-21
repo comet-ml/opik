@@ -39,7 +39,9 @@ public class RedisConfig {
 
     public Config build() {
         Objects.requireNonNull(singleNodeUrl, "singleNodeUrl must not be null");
-        var redisUrl = RedisUrl.parse(singleNodeUrl);
+        var redisUrl = sentinel.isEnabled()
+                ? RedisUrl.parse(singleNodeUrl, RedisSentinelConfig.DEFAULT_PORT)
+                : RedisUrl.parse(singleNodeUrl);
         var config = new Config();
         BaseConfig<?> serverConfig = sentinel.isEnabled()
                 ? sentinel.useSentinelServers(config, redisUrl)

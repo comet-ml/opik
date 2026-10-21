@@ -68,7 +68,7 @@ class RedisSentinelConfigTest {
         environment.put("OPIK_REDIS_SENTINEL_MASTER_NAME", " %s ".formatted(masterName));
         // Padded, with an empty entry and a duplicate of the seed, which must collapse
         environment.put("OPIK_REDIS_SENTINEL_NODES",
-                " rediss://%s:26379 , ,rediss://%s:%d".formatted(otherHost, seedHost, seedPort));
+                " rediss://%s , ,rediss://%s:%d".formatted(otherHost, seedHost, seedPort));
         environment.put("OPIK_REDIS_SENTINEL_USERNAME", "sentinel-user");
         environment.put("OPIK_REDIS_SENTINEL_PASSWORD", "sentinel-password");
         environment.put("OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS", "7");
@@ -102,7 +102,9 @@ class RedisSentinelConfigTest {
 
     @Test
     void appliesShippedDefaults() throws Exception {
-        var environment = sentinelEnvironment(seedUrl("redis"));
+        // Without a port the seed is a sentinel on 26379, not a Redis data node on 6379
+        var environment = sentinelEnvironment(
+                "redis://data-user:data-password@%s/%d".formatted(seedHost, database));
         // An exported but empty variable substitutes to null rather than to the '' default
         environment.put("OPIK_REDIS_SENTINEL_NODES", "");
 
@@ -110,7 +112,7 @@ class RedisSentinelConfigTest {
 
         var expected = new Config().useSentinelServers()
                 .setMasterName(masterName)
-                .addSentinelAddress("redis://%s:%d".formatted(seedHost, seedPort))
+                .addSentinelAddress("redis://%s:26379".formatted(seedHost))
                 .setDatabase(database)
                 .setRetryAttempts(3)
                 .setRetryDelay(new FullJitterDelay(java.time.Duration.ofMillis(500), java.time.Duration.ofSeconds(2)))
@@ -166,7 +168,8 @@ class RedisSentinelConfigTest {
                 arguments("redis", "rediss://sentinel-2:26379", "must use the same scheme as redis.singleNodeUrl"),
                 arguments("redis", "http://sentinel-2:26379", "must use the redis or rediss scheme"),
                 arguments("redis", "redis://user:secret@sentinel-2:26379", "must not carry credentials"),
-                arguments("redis", "redis://sentinel-2", "must include a host and a port"),
+                arguments("redis", "redis://sentinel-2:65536", "a port between 1 and 65535"),
+                arguments("redis", "redis://:26379", "must include a host"),
                 arguments("redis", "redis://bad host:26379", "not a valid URL"),
                 arguments("http", "", "redis.singleNodeUrl must use the redis or rediss scheme"));
     }

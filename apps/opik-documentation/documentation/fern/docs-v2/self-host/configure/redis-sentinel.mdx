@@ -99,7 +99,7 @@ When Sentinel mode is disabled, `REDIS_URL` remains the direct single-node Redis
 | URL part | Meaning in Sentinel mode |
 |---|---|
 | Scheme (`redis://` or `rediss://`) | Connection scheme for the Sentinel topology |
-| Host and port | Initial Sentinel seed, commonly port `26379` |
+| Host and port | Initial Sentinel seed; the port defaults to `26379` |
 | Username and password | Credentials for Redis data nodes, not for Sentinel |
 | Path | Redis database selected on the discovered master |
 
@@ -124,7 +124,7 @@ Configure these environment variables, with the same values, on both the Java ba
 | `REDIS_URL` | `redis://:opik@localhost:6379/0` | Direct Redis URL in single-node mode. In Sentinel mode, its host and port identify the initial Sentinel seed, while its credentials and database apply to Redis data nodes. |
 | `OPIK_REDIS_SENTINEL_ENABLED` | `false` | Enables Sentinel-based master discovery. |
 | `OPIK_REDIS_SENTINEL_MASTER_NAME` | Empty | Sentinel master set name. Required when Sentinel mode is enabled. |
-| `OPIK_REDIS_SENTINEL_NODES` | Empty | Comma-separated additional Sentinel seed addresses, each with a host and port and the same `redis://` or `rediss://` scheme as `REDIS_URL`. Do not embed credentials; use the Sentinel username and password variables. |
+| `OPIK_REDIS_SENTINEL_NODES` | Empty | Comma-separated additional Sentinel seed addresses, each with a host, an optional port (default `26379`) and the same `redis://` or `rediss://` scheme as `REDIS_URL`. Do not embed credentials; use the Sentinel username and password variables. |
 | `OPIK_REDIS_SENTINEL_USERNAME` | Empty | Username used to authenticate to Sentinel nodes when Sentinel ACLs are enabled. |
 | `OPIK_REDIS_SENTINEL_PASSWORD` | Empty | Password used to authenticate to Sentinel nodes. |
 | `OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS` | `3` | Number of retry attempts for commands that fail during a topology change, between `0` and `20`. |

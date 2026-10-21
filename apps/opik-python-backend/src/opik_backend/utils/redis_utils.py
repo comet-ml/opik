@@ -16,7 +16,7 @@ _redis_client = None
 _master_follower_pid = None
 
 _SENTINEL_SCHEMES = ("redis", "rediss")
-_DEFAULT_REDIS_PORT = 6379
+_DEFAULT_SENTINEL_PORT = 26379
 _MAX_SENTINEL_RETRY_ATTEMPTS = 20
 # Same format as the Java backend's Dropwizard durations, e.g. 500ms, 5s, 1m
 _DURATION = re.compile(r"^(\d+)\s*([a-z]+)$")
@@ -36,7 +36,9 @@ def _create_redis_client_from_env(*, decode_responses: bool = True) -> redis.Red
     timeout = float(os.getenv("REDIS_TIMEOUT_SECONDS", "5"))
     health_interval = int(os.getenv("REDIS_HEALTH_CHECK_INTERVAL_SECONDS", "60"))
 
-    if redis_url and os.getenv("OPIK_REDIS_SENTINEL_ENABLED", "false").strip().lower() == "true":
+    if os.getenv("OPIK_REDIS_SENTINEL_ENABLED", "false").strip().lower() == "true":
+        if not redis_url:
+            raise ValueError("REDIS_URL must point at a sentinel when OPIK_REDIS_SENTINEL_ENABLED is true")
         return _create_sentinel_master_client(
             redis_url,
             decode_responses=decode_responses,
@@ -100,7 +102,8 @@ def _create_sentinel_master_client(
     command_timeout = _duration_env("OPIK_REDIS_SENTINEL_TIMEOUT", "5s")
     scan_interval = _duration_env("OPIK_REDIS_SENTINEL_SCAN_INTERVAL", "2s")
 
-    sentinels = [(seed.hostname, seed.port or _DEFAULT_REDIS_PORT)]
+    # Without a port the seed is a sentinel on 26379, not a Redis data node on 6379
+    sentinels = [(seed.hostname, seed.port or _DEFAULT_SENTINEL_PORT)]
     for node in os.getenv("OPIK_REDIS_SENTINEL_NODES", "").split(","):
         if node.strip():
             address = _sentinel_address(node.strip(), seed.scheme)
@@ -187,10 +190,12 @@ def _sentinel_address(node: str, scheme: str) -> tuple[str, int]:
     try:
         port = parsed.port
     except ValueError as exception:
-        raise ValueError("OPIK_REDIS_SENTINEL_NODES has an entry with an invalid port") from exception
-    if not parsed.hostname or not port:
-        raise ValueError("OPIK_REDIS_SENTINEL_NODES entries must include a host and a port")
-    return parsed.hostname, port
+        raise ValueError(
+            "OPIK_REDIS_SENTINEL_NODES entries must include a host, and a port between 1 and 65535 if any"
+        ) from exception
+    if not parsed.hostname:
+        raise ValueError("OPIK_REDIS_SENTINEL_NODES entries must include a host, and a port between 1 and 65535 if any")
+    return parsed.hostname, port or _DEFAULT_SENTINEL_PORT
 
 
 def get_redis_client() -> redis.Redis:
