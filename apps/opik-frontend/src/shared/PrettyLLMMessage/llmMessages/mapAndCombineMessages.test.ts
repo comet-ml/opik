@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { mapAndCombineMessages } from "./mapAndCombineMessages";
-import { detectLLMMessages, canShowLLMMessages } from "./detectLLMMessages";
+import {
+  detectLLMMessages,
+  detectLLMMessagePair,
+  canShowLLMMessages,
+} from "./detectLLMMessages";
 import { resolveOpenInferenceHint } from "@/lib/openinference";
 import { getDisplayUsage } from "../usage";
 
@@ -9,6 +13,76 @@ const config = {
   formatHintIsAuthoritative: true,
 };
 describe("message detection and combining", () => {
+  it.each([{}, { formatHint: "openinference" as const }, config])(
+    "keeps OpenAI multimodal blocks beside OpenInference output: %j",
+    (settings) => {
+      const input = {
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Describe this picture and recording" },
+              { type: "image_url", image_url: { url: "[image_0]" } },
+              {
+                type: "input_audio",
+                input_audio: { data: "[audio_0]", format: "wav" },
+              },
+            ],
+          },
+        ],
+      };
+      const output = {
+        "llm.output_messages.0.message.role": "assistant",
+        "llm.output_messages.0.message.content": "Answer",
+      };
+
+      expect(
+        detectLLMMessagePair(input, output, settings).inputDetection,
+      ).toMatchObject({ supported: true, format: "openai" });
+      const result = mapAndCombineMessages(input, output, settings);
+
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].blocks).toMatchObject([
+        {
+          blockType: "text",
+          props: { children: "Describe this picture and recording" },
+        },
+        { blockType: "image", props: { images: [{ url: "[image_0]" }] } },
+        { blockType: "audio", props: { audios: [{ url: "[audio_0]" }] } },
+      ]);
+      expect(result.messages[1].blocks[0].props).toMatchObject({
+        children: "Answer",
+      });
+    },
+  );
+
+  it("keeps native OpenInference contents and tool definitions", () => {
+    const input = {
+      messages: [
+        {
+          role: "user",
+          contents: [
+            { type: "text", text: "Question" },
+            { type: "image", image: { url: "[image_0]" } },
+          ],
+        },
+      ],
+      tools: [{ name: "weather" }],
+    };
+    const output = { "llm.output_messages.0.message.content": "Answer" };
+
+    expect(
+      detectLLMMessagePair(input, output, {}).inputDetection,
+    ).toMatchObject({ supported: true, format: "openinference" });
+    const result = mapAndCombineMessages(input, output);
+
+    expect(result.messages).toHaveLength(3);
+    expect(result.messages[0].blocks.map(({ blockType }) => blockType)).toEqual(
+      ["text", "image"],
+    );
+    expect(result.messages[1].label).toBe("Available tools");
+  });
+
   it("lets native span usage override provider usage in the display", () => {
     const result = mapAndCombineMessages(
       { messages: [{ role: "user", content: "Question" }] },
