@@ -1,4 +1,4 @@
-export { test, expect } from './openai-responses-stub.fixture';
+export { test, expect } from './studio-rerun-optimization.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -384,3 +384,16 @@ export {
   STUB_OUTPUT_TOKENS,
   STUB_OUTPUT_TEXT,
 } from './openai-responses-stub.fixture';
+export type {
+  OpenRouterProviderRef,
+  OpenRouterProviderFixtures,
+} from './open-router-provider.fixture';
+export { OPEN_ROUTER_MODEL, OPEN_ROUTER_GROUP } from './open-router-provider.fixture';
+export type {
+  StudioRerunOptimizationRef,
+  StudioRerunOptimizationFixtures,
+} from './studio-rerun-optimization.fixture';
+export {
+  RETIRED_MODEL,
+  SAVED_MODEL_PARAMETERS,
+} from './studio-rerun-optimization.fixture';

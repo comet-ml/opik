@@ -23,6 +23,7 @@ export {
   type AttachmentRef,
   type ProjectStatsRef,
   type ExperimentRefDetail,
+  type StudioConfigSeed,
   type ExecutePromptSeed,
   type ExecuteExperimentsResult,
   type TestSuiteRef as BackendTestSuiteRef,

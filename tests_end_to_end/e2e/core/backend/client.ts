@@ -24,6 +24,24 @@ export interface ProjectRef {
   name: string;
 }
 
+/**
+ * The Optimization Studio payload a seeded run carries, as `createOptimization`
+ * takes it.
+ *
+ * Every field is required by the backend record (`OptimizationStudioConfig`),
+ * so this is deliberately not a `Partial`: a seed that omitted `evaluation`
+ * would be rejected with a 422 that reads as a fixture bug long after the fact.
+ * `parameters` stay free-form `JsonNode` on both sides — the model parameters a
+ * run saved are whatever its provider took.
+ */
+export interface StudioConfigSeed {
+  datasetName: string;
+  prompt: { messages: Array<{ role: string; content: string }> };
+  llmModel: { model: string; parameters?: Record<string, unknown> };
+  evaluation: { metrics: Array<{ type: string; parameters?: Record<string, unknown> }> };
+  optimizer: { type: string; parameters?: Record<string, unknown> };
+}
+
 export interface DashboardRef {
   id: string;
   name: string;
@@ -5621,6 +5639,12 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       projectName: string;
       objectiveName: string;
       status?: 'completed' | 'running';
+      /**
+       * The Studio payload the run was launched from. Only a row that carries
+       * one is rerunnable — `NewRunSidebar` ignores an optimization whose
+       * `studio_config` is absent, so a fixture seeding a rerun must set it.
+       */
+      studioConfig?: StudioConfigSeed;
     }): Promise<string> {
       await opik.api.optimizations.createOptimization({
         id: args.id,
@@ -5629,8 +5653,52 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         projectName: args.projectName,
         objectiveName: args.objectiveName,
         status: args.status ?? 'completed',
+        ...(args.studioConfig ? { studioConfig: args.studioConfig } : {}),
       });
       return args.id;
+    },
+
+    /**
+     * Every model id the deployment's LLM registry serves, across all
+     * providers.
+     *
+     * The endpoint answers a map of provider → models, which is the shape the
+     * model pickers are built from. Flattened to ids here because the question
+     * a caller has is almost always "can this deployment serve X at all" —
+     * and the answer must not depend on which provider would serve it.
+     *
+     * Not on the pinned SDK (no generated method for `/llm/models`), hence
+     * `rawFetch` — which is also what gets the workspace and auth headers
+     * right on a cloud deployment, unlike a hand-rolled request from a spec.
+     */
+    async listRegistryModelIds(): Promise<string[]> {
+      const res = await rawFetch('GET', '/v1/private/llm/models');
+      if (res.status !== 200) {
+        throw new Error(`list registry models returned ${res.status}: ${res.message}`);
+      }
+      const byProvider = (res.json ?? {}) as Record<string, Array<{ id?: string }>>;
+      return Object.values(byProvider).flatMap((models) =>
+        (models ?? []).map((model) => model.id).filter((id): id is string => !!id),
+      );
+    },
+
+    /**
+     * An optimization's stored Studio payload, read back from the server.
+     *
+     * A fixture that seeds a `studio_config` cannot verify it through the
+     * create call: the write answers 204 with no body, and the backend enriches
+     * the config on the way in. So a spec whose premise is "this run was saved
+     * holding model X with parameters Y" has to read it back, or a payload the
+     * backend silently dropped would leave every later assertion vacuous.
+     */
+    async getOptimizationStudioConfig(
+      optimizationId: string,
+    ): Promise<StudioConfigSeed | undefined> {
+      const optimization = await opik.api.optimizations.getOptimizationById(optimizationId);
+      // The read and write shapes are field-for-field identical (the SDK
+      // camel-cases both), so the seed type doubles as the read type — there is
+      // no second shape here to drift from it.
+      return optimization.studioConfig as StudioConfigSeed | undefined;
     },
 
     /**

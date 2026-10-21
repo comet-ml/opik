@@ -208,6 +208,172 @@ export class OptimizationStudioPage {
   }
 
   /**
+   * Open the new-run panel seeded from an existing run — the "rerun" flow.
+   *
+   * The panel is query-param driven off the runs list (`?new=true&rerun=<id>`),
+   * not a route of its own, so this navigates the list and lets
+   * `OptimizationsPage` mount the sidebar. Waiting on the model picker rather
+   * than only on the panel is load-bearing: the seeded model resolves after the
+   * provider-keys AND registry queries settle (`providersReady` in
+   * NewRunSidebar), and until then the form holds no model at all — so a spec
+   * that read the panel the moment it appeared would read a blank picker and a
+   * missing replacement notice.
+   */
+  async gotoRerun(optimizationId: string): Promise<void> {
+    return test.step(`Open the new-run panel as a rerun of ${optimizationId}`, async () => {
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/optimizations` +
+          `?new=true&rerun=${optimizationId}`,
+      );
+      await this.newRunPanel().waitFor();
+      await this.waitForModelResolved();
+    });
+  }
+
+  /**
+   * Open the new-run panel with nothing seeded — a blank run.
+   *
+   * `gotoNew()` reaches the same panel through the legacy `/optimizations/new`
+   * redirect; this one goes at the query param directly, which is the shape a
+   * rerun uses. A spec comparing a rerun against a blank form wants the two to
+   * differ in the `rerun` param and nothing else.
+   */
+  async gotoNewBlank(): Promise<void> {
+    return test.step('Open the new-run panel with nothing seeded', async () => {
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/optimizations?new=true`,
+      );
+      await this.newRunPanel().waitFor();
+      await this.waitForModelResolved();
+    });
+  }
+
+  /**
+   * Wait until the form has resolved a prompt model, and return its label.
+   *
+   * The placeholder is the signal: `PromptModelSelect` renders "Select an LLM
+   * model" until a model is set, so a non-placeholder trigger means
+   * `providersReady` has turned true and `convertOptimizationStudioToFormData`
+   * has seeded a real one.
+   */
+  async waitForModelResolved(): Promise<string> {
+    return test.step('Wait for the form to resolve a prompt model', async () => {
+      const picker = this.modelPickerTrigger();
+      await expect(
+        picker,
+        'the form resolves a prompt model once the provider keys and the registry answer',
+      ).not.toHaveText('Select an LLM model');
+      return ((await picker.textContent()) ?? '').trim();
+    });
+  }
+
+  /**
+   * The prompt model the form currently shows.
+   *
+   * In the compact picker this is the model OPTION'S LABEL — the same string
+   * `NewRunSidebar` puts in the replacement notice as `replacementLabel` — so a
+   * spec can hold the notice and the picker to each other exactly.
+   */
+  async readPromptModel(): Promise<string> {
+    return test.step('Read the prompt model the form shows', async () => {
+      return ((await this.modelPickerTrigger().textContent()) ?? '').trim();
+    });
+  }
+
+  /**
+   * The notice shown when the saved run's model cannot be served here.
+   *
+   * Text, not a testid: this panel carries none, and the notice is a plain
+   * `<span>`. Anchored on the opening clause rather than the whole sentence so
+   * the spec can assert the rest — which model replaced it, and whether its
+   * settings were inherited — itself.
+   */
+  savedModelReplacementNotice(): Locator {
+    return this.newRunPanel().getByText(/isn't available here/);
+  }
+
+  /**
+   * The warning that the ALGORITHM model's provider has no key. Distinct copy
+   * from the prompt model's ("this provider"), which is the pair a spec must
+   * tell apart.
+   */
+  optimizerKeyWarning(): Locator {
+    return this.newRunPanel().getByText(/API key for the algorithm model's provider/);
+  }
+
+  /** Is "Optimize prompt" offered as runnable? */
+  async expectOptimizeEnabled(): Promise<void> {
+    return test.step('Assert Optimize prompt is enabled', async () => {
+      await expect(this.optimizeButton()).toBeEnabled();
+    });
+  }
+
+  /**
+   * Open the prompt model's parameters popover and read every slider it mounts,
+   * by control id, then close it again.
+   *
+   * Returned as a map rather than asserted here because the useful assertion is
+   * a COMPARISON — a rerun's panel against a blank form's on the same model —
+   * and the set of mounted controls is itself part of what must match. Reading
+   * only the two parameters a spec happens to care about would let a build that
+   * dropped half the panel pass.
+   *
+   * `PromptModelConfigs` is the same component the playground mounts, so the
+   * ids and the `-input` testids are the playground's.
+   */
+  async readModelParameters(): Promise<Record<string, string>> {
+    return test.step('Read the prompt model’s parameters panel', async () => {
+      await this.modelParametersTrigger().click();
+      const panel = this.modelParametersPanel();
+      await panel.waitFor({ state: 'visible' });
+
+      const entries = await panel
+        .locator('input[data-testid$="-input"]')
+        .evaluateAll((els) =>
+          els.map((e) => [
+            (e.getAttribute('data-testid') ?? '').replace(/-input$/, ''),
+            (e as HTMLInputElement).value,
+          ]),
+        );
+      expect(
+        entries.length,
+        'the parameters panel mounts at least one slider — an empty read would make ' +
+          'any comparison against it vacuous',
+      ).toBeGreaterThan(0);
+
+      await this.closeModelParameters();
+      return Object.fromEntries(entries);
+    });
+  }
+
+  /**
+   * Close the model-parameters popover by toggling its own trigger.
+   *
+   * NOT with Escape, which is how `PlaygroundPage` closes the identical
+   * dropdown: here the panel lives inside a `ResizableSidePanel`, and the
+   * keypress bubbles past the closed dropdown to dismiss the whole new-run
+   * sidebar — so every assertion after the read found an empty runs list
+   * instead of the form. Clicking the trigger closes only the menu it opened.
+   */
+  private async closeModelParameters(): Promise<void> {
+    const panel = this.modelParametersPanel();
+    // `force`, because a modal Radix dropdown sets `pointer-events: none` on
+    // everything behind its content — so the trigger fails Playwright's
+    // actionability check even though a pointerdown at that point is exactly
+    // what dismisses the menu.
+    await expect(async () => {
+      await this.modelParametersTrigger().click({ force: true, timeout: 2_000 });
+      await expect(panel).toBeHidden({ timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
+    await expect(
+      this.newRunPanel(),
+      'closing the parameters popover must not dismiss the new-run sidebar',
+    ).toBeVisible();
+  }
+
+  /**
    * Open the project's Optimization runs list — the page the run rows and
    * their cost columns render on.
    */
@@ -422,6 +588,50 @@ export class OptimizationStudioPage {
    */
   private datasetPickerButton(): Locator {
     return this.page.getByRole('button', { name: /Select (an )?item source|Select a dataset/ });
+  }
+
+  /**
+   * The prompt model picker's trigger, as the element whose text IS the chosen
+   * model's label.
+   *
+   * Anchored on the `SelectValue`'s own testid rather than on `modelCombobox`'s
+   * text filter: that filter has to match a provider name or the placeholder,
+   * so it cannot be used to READ what the picker currently shows without
+   * assuming the answer. The ancestor button is the trigger Radix gives the
+   * combobox role.
+   */
+  private modelPickerTrigger(): Locator {
+    return this.newRunPanel().locator(
+      'button[role="combobox"]:has(> [data-testid="select-a-llm-model"])',
+    );
+  }
+
+  /**
+   * The gear that opens the prompt model's parameters.
+   *
+   * Anchored to the model picker rather than addressed directly, for the same
+   * reason as `PlaygroundPage.modelParametersTrigger`: the trigger carries no
+   * testid and no accessible name (its tooltip is a Radix `TooltipContent`, not
+   * an `aria-label`), and the panel holds other `aria-haspopup="menu"` buttons —
+   * every message row's role selector is one. "The menu button immediately
+   * after the model picker" is the one stable description available.
+   *
+   * Note it is absent, not disabled, when the selected model has nothing to set
+   * (`PromptModelConfigs` returns null) — so a caller gets a loud "not found"
+   * rather than a panel that silently reads empty.
+   */
+  private modelParametersTrigger(): Locator {
+    return this.newRunPanel().locator(
+      'button[role="combobox"]:has(> [data-testid="select-a-llm-model"]) + button[aria-haspopup="menu"]',
+    );
+  }
+
+  /**
+   * The open model-parameters popover. One is open at a time — it is a
+   * `DropdownMenu`, and Radix unmounts a closed one's content.
+   */
+  private modelParametersPanel(): Locator {
+    return this.page.getByRole('menu');
   }
 
   private modelCombobox(): Locator {
