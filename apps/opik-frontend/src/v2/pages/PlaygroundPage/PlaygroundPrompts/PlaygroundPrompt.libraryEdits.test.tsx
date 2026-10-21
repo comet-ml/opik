@@ -197,7 +197,8 @@ const renderCard = () =>
           index={0}
           promptId={CARD_ID}
           providerKeys={[]}
-          isPendingProviderKeys
+          hasLoadedProviderKeys={false}
+          hasRegistryModels={false}
           providerResolver={vi.fn(() => "") as unknown as ProviderResolver}
           modelResolver={vi.fn((model) => model) as unknown as ModelResolver}
         />
