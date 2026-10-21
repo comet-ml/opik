@@ -81,10 +81,13 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
     /**
      * Scores live in both the legacy {@code feedback_scores} table and {@code authored_feedback_scores} (every write
-     * with an author, e.g. SDK, UI and online scoring). Both are read and deduped the same way as
-     * {@code ProjectMetricsDAO}'s {@code feedback_scores_deduped}, then averaged per trace and score name before the
-     * window aggregate. A trace score's {@code entity_id} is the trace id, so the {@code entity_id} range bounds both
-     * scans to the traces in the window before the sort.
+     * with an author, e.g. SDK, UI and online scoring). Both are read with the same dedup key as
+     * {@code ProjectMetricsDAO}'s {@code feedback_scores_deduped}, keeping the latest value per key, then averaged per
+     * trace and score name before the window aggregate. The latest value is taken with {@code argMax} over a
+     * {@code GROUP BY} rather than {@code ORDER BY ... LIMIT 1 BY}: same result, but no global sort, which made the
+     * heaviest workspace-wide windows about 40% faster on prod. The legacy table keeps {@code FINAL} because its
+     * {@code last_updated_by}, used as the author, can differ between versions of one row. A trace score's
+     * {@code entity_id} is the trace id, so the {@code entity_id} range bounds both scans to the traces in the window.
      */
     private static final String GET_FEEDBACK_SCORES_SUMMARY = """
             WITH feedback_scores_deduped AS (
@@ -92,7 +95,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                        project_id,
                        entity_id,
                        name,
-                       value,
+                       argMax(value, last_updated_at) AS value,
                        author,
                        source_queue_id
                 FROM (
@@ -124,8 +127,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                       AND entity_type = 'trace'
                       AND entity_id BETWEEN :id_prior_start AND :id_end
                 )
-                ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
+                GROUP BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT project_id,
                        entity_id,
@@ -177,7 +179,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                        project_id,
                        entity_id,
                        name,
-                       value,
+                       argMax(value, last_updated_at) AS value,
                        author,
                        source_queue_id
                 FROM (
@@ -211,8 +213,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                       AND entity_id BETWEEN :id_start AND :id_end
                       AND name = :name
                 )
-                ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
+                GROUP BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT project_id,
                        entity_id,
@@ -260,7 +261,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                        project_id,
                        entity_id,
                        name,
-                       value,
+                       argMax(value, last_updated_at) AS value,
                        author,
                        source_queue_id
                 FROM (
@@ -292,8 +293,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                       AND entity_id BETWEEN :id_start AND :id_end
                       AND name = :name
                 )
-                ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
+                GROUP BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT project_id,
                        entity_id,
