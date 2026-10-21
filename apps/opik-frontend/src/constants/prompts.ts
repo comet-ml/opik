@@ -5,6 +5,9 @@ export const PROMPT_UNSAVED_EXPERIMENT_TOOLTIP =
 
 export const PROMPT_SAVE_AS_CHAT_TOOLTIP = "Save as chat prompt";
 
+export const PROMPT_SAVE_EMPTY_MESSAGE_TOOLTIP =
+  "Message is empty. Please add some text to save";
+
 export const PROMPT_SAVE_TO_LIBRARY_TOOLTIP = "Save to prompt library";
 
 export const PROMPT_SAVE_NEW_VERSION_TOOLTIP = "Save as new version";
