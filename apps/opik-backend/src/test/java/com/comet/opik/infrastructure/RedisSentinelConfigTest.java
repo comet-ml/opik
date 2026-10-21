@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import io.dropwizard.jersey.validation.Validators;
 import io.dropwizard.util.Duration;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
@@ -7,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.redisson.config.Config;
 import org.redisson.config.FullJitterDelay;
 
@@ -118,13 +120,32 @@ class RedisSentinelConfigTest {
                 .hasMessageNotContaining("secret");
     }
 
-    @Test
-    void rejectsSeedWithoutPortSinceSentinelsListenOnAnyPort() {
-        var redisConfig = redisConfig("redis://%s/%d".formatted(seedHost, database), sentinel().build());
+    @ParameterizedTest
+    @ValueSource(strings = {"", ":0", ":65536"})
+    void rejectsSeedWithoutValidPortSinceSentinelsListenOnAnyPort(String port) {
+        var redisConfig = redisConfig("redis://%s%s/%d".formatted(seedHost, port, database), sentinel().build());
 
         assertThatThrownBy(redisConfig::build)
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("redis.singleNodeUrl must include the sentinel port");
+                .hasMessageContaining("redis.singleNodeUrl must include a sentinel port between 1 and 65535");
+    }
+
+    @Test
+    void acceptsRedisConfigWithoutSentinelBlock() {
+        // Older custom configs have no redis.sentinel block; single-node mode must still validate
+        var redisConfig = new RedisConfig();
+        redisConfig.setSingleNodeUrl(seedUrl("redis"));
+
+        assertThat(Validators.newValidator().validate(redisConfig)).isEmpty();
+    }
+
+    @Test
+    void rejectsEnabledSentinelWithMissingSettings() {
+        var sentinel = RedisSentinelConfig.builder().enabled(true).masterName(masterName).build();
+
+        assertThat(Validators.newValidator().validate(sentinel))
+                .extracting(violation -> violation.getPropertyPath().toString())
+                .containsExactly("completeWhenEnabled");
     }
 
     @Test

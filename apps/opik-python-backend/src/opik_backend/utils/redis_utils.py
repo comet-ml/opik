@@ -12,6 +12,11 @@ logger = logging.getLogger(__name__)
 
 _redis_client = None
 
+
+class RedisSentinelConfigError(ValueError):
+    """Invalid OPIK_REDIS_SENTINEL_* or REDIS_URL settings, which must stop startup rather than be logged."""
+
+
 _SENTINEL_SCHEMES = ("redis", "rediss")
 _MAX_SENTINEL_RETRY_ATTEMPTS = 20
 # Same format as the Java backend's Dropwizard durations, e.g. 500ms, 5s, 1m
@@ -34,7 +39,7 @@ def _create_redis_client_from_env(*, decode_responses: bool = True) -> redis.Red
 
     if os.getenv("OPIK_REDIS_SENTINEL_ENABLED", "false").strip().lower() == "true":
         if not redis_url:
-            raise ValueError("REDIS_URL must point at a sentinel when OPIK_REDIS_SENTINEL_ENABLED is true")
+            raise RedisSentinelConfigError("REDIS_URL must point at a sentinel when OPIK_REDIS_SENTINEL_ENABLED is true")
         return _create_sentinel_master_client(
             redis_url,
             decode_responses=decode_responses,
@@ -84,23 +89,23 @@ def _create_sentinel_master_client(
     """
     seed = urlparse(redis_url)
     if seed.scheme not in _SENTINEL_SCHEMES:
-        raise ValueError("REDIS_URL must use the redis or rediss scheme when Sentinel is enabled")
+        raise RedisSentinelConfigError("REDIS_URL must use the redis or rediss scheme when Sentinel is enabled")
     master_name = os.getenv("OPIK_REDIS_SENTINEL_MASTER_NAME", "").strip()
     if not master_name:
-        raise ValueError("OPIK_REDIS_SENTINEL_MASTER_NAME must not be blank when Sentinel is enabled")
+        raise RedisSentinelConfigError("OPIK_REDIS_SENTINEL_MASTER_NAME must not be blank when Sentinel is enabled")
     retry_attempts = _int_env("OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS", "3")
     if not 0 <= retry_attempts <= _MAX_SENTINEL_RETRY_ATTEMPTS:
-        raise ValueError(f"OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS must be between 0 and {_MAX_SENTINEL_RETRY_ATTEMPTS}")
+        raise RedisSentinelConfigError(f"OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS must be between 0 and {_MAX_SENTINEL_RETRY_ATTEMPTS}")
     backoff_base = _duration_env("OPIK_REDIS_SENTINEL_RETRY_BACKOFF_BASE", "500ms", minimum=0.001)
     backoff_cap = _duration_env("OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP", "2s", minimum=0.001)
     if backoff_base > backoff_cap:
-        raise ValueError("OPIK_REDIS_SENTINEL_RETRY_BACKOFF_BASE must not exceed OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP")
+        raise RedisSentinelConfigError("OPIK_REDIS_SENTINEL_RETRY_BACKOFF_BASE must not exceed OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP")
     connect_timeout = _duration_env("OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT", "10s")
     command_timeout = _duration_env("OPIK_REDIS_SENTINEL_TIMEOUT", "5s")
 
     # Sentinels can listen on any port, so it is never assumed
     if not seed.port:
-        raise ValueError("REDIS_URL must include the sentinel port when Sentinel is enabled")
+        raise RedisSentinelConfigError("REDIS_URL must include the sentinel port when Sentinel is enabled")
     sentinels = [(seed.hostname, seed.port)]
     for node in os.getenv("OPIK_REDIS_SENTINEL_NODES", "").split(","):
         if node.strip():
@@ -143,7 +148,7 @@ def _required_env(name: str, default: str) -> str:
     # Like the Java backend, an exported but empty variable is an error rather than a fallback to the default
     value = os.getenv(name, default).strip()
     if not value:
-        raise ValueError(f"{name} must not be empty when Sentinel is enabled")
+        raise RedisSentinelConfigError(f"{name} must not be empty when Sentinel is enabled")
     return value
 
 
@@ -152,13 +157,13 @@ def _int_env(name: str, default: str) -> int:
     try:
         return int(value)
     except ValueError as exception:
-        raise ValueError(f"{name} must be an integer") from exception
+        raise RedisSentinelConfigError(f"{name} must be an integer") from exception
 
 
 def _bool_env(name: str, default: str) -> bool:
     value = _required_env(name, default).lower()
     if value not in ("true", "false"):
-        raise ValueError(f"{name} must be true or false")
+        raise RedisSentinelConfigError(f"{name} must be true or false")
     return value == "true"
 
 
@@ -167,10 +172,10 @@ def _duration_env(
 ) -> float:
     match = _DURATION.match(_required_env(name, default).lower())
     if not match or match.group(2) not in _DURATION_UNITS:
-        raise ValueError(f"{name} must be a duration such as 500ms, 5s or 1m")
+        raise RedisSentinelConfigError(f"{name} must be a duration such as 500ms, 5s or 1m")
     seconds = int(match.group(1)) * _DURATION_UNITS[match.group(2)]
     if not minimum <= seconds <= maximum:
-        raise ValueError(f"{name} must be between {minimum}s and {maximum}s")
+        raise RedisSentinelConfigError(f"{name} must be between {minimum}s and {maximum}s")
     return seconds
 
 
@@ -178,20 +183,20 @@ def _sentinel_address(node: str, scheme: str) -> tuple[str, int]:
     # Credentials belong in OPIK_REDIS_SENTINEL_USERNAME/PASSWORD, so errors never echo the entry
     parsed = urlparse(node)
     if parsed.scheme not in _SENTINEL_SCHEMES:
-        raise ValueError("OPIK_REDIS_SENTINEL_NODES entries must use the redis or rediss scheme")
+        raise RedisSentinelConfigError("OPIK_REDIS_SENTINEL_NODES entries must use the redis or rediss scheme")
     if parsed.scheme != scheme:
-        raise ValueError("OPIK_REDIS_SENTINEL_NODES entries must use the same scheme as REDIS_URL")
+        raise RedisSentinelConfigError("OPIK_REDIS_SENTINEL_NODES entries must use the same scheme as REDIS_URL")
     if parsed.username or parsed.password:
-        raise ValueError(
+        raise RedisSentinelConfigError(
             "OPIK_REDIS_SENTINEL_NODES entries must not carry credentials, "
             "use OPIK_REDIS_SENTINEL_USERNAME/PASSWORD"
         )
     try:
         port = parsed.port
     except ValueError as exception:
-        raise ValueError("OPIK_REDIS_SENTINEL_NODES entries must include a host and a port between 1 and 65535") from exception
+        raise RedisSentinelConfigError("OPIK_REDIS_SENTINEL_NODES entries must include a host and a port between 1 and 65535") from exception
     if not parsed.hostname or not port:
-        raise ValueError("OPIK_REDIS_SENTINEL_NODES entries must include a host and a port between 1 and 65535")
+        raise RedisSentinelConfigError("OPIK_REDIS_SENTINEL_NODES entries must include a host and a port between 1 and 65535")
     return parsed.hostname, port
 
 

@@ -4,6 +4,7 @@ import secrets
 import pytest
 from redis.backoff import FullJitterBackoff
 
+from opik_backend import create_app
 from opik_backend.utils import redis_utils
 
 SENTINEL_VARIABLES = (
@@ -180,3 +181,14 @@ def test_rejects_invalid_sentinel_settings(sentinel_env, variable, value, messag
         redis_utils._create_redis_client_from_env(decode_responses=False)
 
     assert "secret" not in str(error.value)
+
+
+def test_invalid_sentinel_settings_stop_app_startup(sentinel_env):
+    monkeypatch, _ = sentinel_env
+    monkeypatch.setenv("RQ_WORKER_ENABLED", "true")
+    monkeypatch.setenv("OPIK_REDIS_SENTINEL_TIMEOUT", "")
+    monkeypatch.setattr(redis_utils, "_redis_client", None)
+
+    # Unlike an unreachable Redis, which startup only logs, a misconfiguration must not leave a pod running unready
+    with pytest.raises(redis_utils.RedisSentinelConfigError, match="OPIK_REDIS_SENTINEL_TIMEOUT must not be empty"):
+        create_app(should_init_executor=False)

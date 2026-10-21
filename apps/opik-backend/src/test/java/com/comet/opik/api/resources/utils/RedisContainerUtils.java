@@ -6,6 +6,7 @@ import com.github.dockerjava.api.model.Ports;
 import com.redis.testcontainers.RedisContainer;
 import lombok.Builder;
 import lombok.experimental.UtilityClass;
+import org.testcontainers.containers.ContainerLaunchException;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
@@ -32,6 +33,30 @@ public class RedisContainerUtils {
         public String sentinelUrl(String host) {
             return "redis://%s:%d/0".formatted(host, sentinelPort);
         }
+    }
+
+    /** A started {@link #newSentinelContainer(SentinelTopology)} with the topology it listens on. */
+    public record StartedSentinel(SentinelTopology topology, GenericContainer<?> container) {
+    }
+
+    /**
+     * Starts a sentinel topology on free host ports. A port can be taken between probing it and Docker binding it, so
+     * a failed start is retried on fresh ports rather than failing the test.
+     */
+    public static StartedSentinel startSentinel(String masterName) {
+        ContainerLaunchException lastFailure = null;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            var topology = newSentinelTopology(masterName);
+            var container = newSentinelContainer(topology);
+            try {
+                container.start();
+                return new StartedSentinel(topology, container);
+            } catch (ContainerLaunchException exception) {
+                container.stop();
+                lastFailure = exception;
+            }
+        }
+        throw lastFailure;
     }
 
     public static SentinelTopology newSentinelTopology(String masterName) {
@@ -66,7 +91,9 @@ public class RedisContainerUtils {
         return new GenericContainer<>(REDIS_IMAGE)
                 .withExposedPorts(IntStream.of(ports).boxed().toArray(Integer[]::new))
                 .withCreateContainerCmdModifier(cmd -> cmd.getHostConfig().withPortBindings(IntStream.of(ports)
-                        .mapToObj(port -> new PortBinding(Ports.Binding.bindPort(port), ExposedPort.tcp(port)))
+                        // Loopback only: the topology has no auth
+                        .mapToObj(port -> new PortBinding(Ports.Binding.bindIpAndPort("127.0.0.1", port),
+                                ExposedPort.tcp(port)))
                         .toList()))
                 .withCommand("sh", "-c", script)
                 .waitingFor(Wait.forSuccessfulCommand(ready));

@@ -89,6 +89,7 @@ def create_app(test_config=None, should_init_executor=True):
     # Initialize Redis connection at application startup if RQ worker enabled (non-fatal)
     from opik_backend.utils.env_utils import is_rq_worker_enabled
     if is_rq_worker_enabled():
+        from opik_backend.utils.redis_utils import RedisSentinelConfigError
         try:
             from opik_backend.utils.redis_utils import get_redis_client
             get_redis_client().ping()
@@ -96,6 +97,9 @@ def create_app(test_config=None, should_init_executor=True):
 
             # Initialize RQ worker (only starts when running under Gunicorn)
             init_rq_worker(app)
+        except RedisSentinelConfigError:
+            # A misconfiguration never heals on its own, unlike an unreachable Redis
+            raise
         except Exception as e:
             app.logger.warning(f"Redis client initialization failed at startup: {e}")
 

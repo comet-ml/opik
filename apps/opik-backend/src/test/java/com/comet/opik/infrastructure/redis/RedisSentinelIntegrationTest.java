@@ -45,9 +45,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class RedisSentinelIntegrationTest {
 
-    private final RedisContainerUtils.SentinelTopology topology = RedisContainerUtils
-            .newSentinelTopology("master-" + RandomStringUtils.secure().nextAlphanumeric(8));
-    private final GenericContainer<?> sentinel = RedisContainerUtils.newSentinelContainer(topology);
+    private final RedisContainerUtils.StartedSentinel sentinel = RedisContainerUtils
+            .startSentinel("master-" + RandomStringUtils.secure().nextAlphanumeric(8));
+    private final RedisContainerUtils.SentinelTopology topology = sentinel.topology();
     private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer clickHouse = ClickHouseContainerUtils.newClickHouseContainer(zookeeper);
@@ -56,7 +56,7 @@ class RedisSentinelIntegrationTest {
     private final TestDropwizardAppExtension app;
 
     {
-        Startables.deepStart(sentinel, mysql, clickHouse, zookeeper).join();
+        Startables.deepStart(mysql, clickHouse, zookeeper).join();
         MigrationUtils.runMysqlDbMigration(mysql);
         MigrationUtils.runClickhouseDbMigration(clickHouse);
 
@@ -64,7 +64,7 @@ class RedisSentinelIntegrationTest {
                 .jdbcUrl(mysql.getJdbcUrl())
                 .databaseAnalyticsFactory(ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouse,
                         DATABASE_NAME))
-                .redisUrl(topology.sentinelUrl(sentinel.getHost()))
+                .redisUrl(topology.sentinelUrl(sentinel.container().getHost()))
                 .customConfigs(List.of(
                         new CustomConfig("redis.sentinel.enabled", "true"),
                         new CustomConfig("redis.sentinel.masterName", topology.masterName()),
