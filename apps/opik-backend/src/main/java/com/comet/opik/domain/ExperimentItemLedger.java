@@ -5,6 +5,7 @@ import com.google.common.collect.Lists;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.BatchOptions;
 import org.redisson.api.RMapReactive;
@@ -30,6 +31,7 @@ import java.util.UUID;
  * dataset item more than once, and each of those is its own piece of work.
  */
 @Singleton
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class ExperimentItemLedger {
 
@@ -42,16 +44,8 @@ public class ExperimentItemLedger {
         SKIPPED
     }
 
-    private final RedissonReactiveClient redisClient;
-    private final ExperimentExecutionConfig config;
-
-    @Inject
-    public ExperimentItemLedger(
-            @NonNull RedissonReactiveClient redisClient,
-            @NonNull @Config("experimentExecution") ExperimentExecutionConfig config) {
-        this.redisClient = redisClient;
-        this.config = config;
-    }
+    private final @NonNull RedissonReactiveClient redisClient;
+    private final @NonNull @Config("experimentExecution") ExperimentExecutionConfig config;
 
     /** Empty while the entry has not been handled. */
     public Mono<Outcome> outcome(@NonNull String workspaceId, @NonNull UUID experimentId,
