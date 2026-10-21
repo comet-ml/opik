@@ -42,6 +42,43 @@ const hasProducedOutput = (text: string): boolean =>
 /** The title `useRunCompletionToast` gives the toast a finished run raises. */
 const RUN_COMPLETE_TEXT = /Run complete/;
 
+/** The localStorage key zustand persists the Playground store under. */
+const PLAYGROUND_STORE_KEY = 'PLAYGROUND_STATE';
+
+/**
+ * One persisted Playground prompt, reduced to the fields that decide whether a
+ * remount re-applies a library template over the user's own edits.
+ *
+ * Every field is optional because their ABSENCE is the state under test: a
+ * prompt written before `appliedChatPromptVersionId` existed carries no marker,
+ * and a card that followed the library's latest version carries no pinned
+ * version either.
+ */
+export interface StoredChatPrompt {
+  loadedChatPromptId?: string;
+  loadedChatPromptVersionId?: string;
+  appliedChatPromptVersionId?: string;
+  messages: Array<{ role: string; content: string }>;
+}
+
+/**
+ * A `PLAYGROUND_STATE` blob to plant, as a user carrying one would have it.
+ *
+ * Optional fields are omitted to model a state that genuinely lacks them —
+ * see {@link StoredChatPrompt} — so `undefined` here means "delete the key",
+ * not "set it to undefined".
+ */
+export interface PlantedChatPrompt {
+  loadedChatPromptId: string;
+  /** Omit to model a card that followed the library's LATEST version. */
+  loadedChatPromptVersionId?: string;
+  /** Omit to model state written before the applied-version marker existed. */
+  appliedChatPromptVersionId?: string;
+  messages: Array<{ role: 'system' | 'user'; content: string }>;
+  /** Omit to model state written before the backfill flag existed. */
+  backfilled?: boolean;
+}
+
 export interface PlaygroundVariantConfig {
   systemPrompt?: string;
   /** User prompt body. Supports `{{column}}` templating against suite/dataset items. */
@@ -1059,6 +1096,18 @@ export class PlaygroundPage {
   /**
    * Open the prompt library menu in the first variant card, hover the named prompt
    * to reveal the version submenu, and click the specified version label (e.g. "v1").
+   *
+   * Two things here are worked around rather than waited on, and neither is a
+   * product defect — a human moving a mouse continuously hits neither:
+   *
+   * 1. The row list REMOUNTS when the search result lands, so a pointer already
+   *    parked over the row raises no fresh `pointerenter` and the Radix
+   *    `HoverCard` (`openDelay: 120`) never opens. The pointer is moved away and
+   *    the row hovered again until the submenu is really up.
+   * 2. The HoverCard content ANIMATES in, and a real click has to walk the
+   *    pointer off the trigger to reach it — so Playwright's actionability check
+   *    never settles and `click()` times out. The click is dispatched on the
+   *    version row instead.
    */
   private async navigateLibraryMenuToVersion(promptName: string, versionLabel: string): Promise<void> {
     const menu = this.page.getByTestId('prompt-library-menu');
@@ -1068,16 +1117,21 @@ export class PlaygroundPage {
 
     const promptRow = menu.getByRole('button').filter({ hasText: promptName }).first();
     await promptRow.waitFor({ state: 'visible' });
-    await promptRow.hover();
 
     const versionSubmenu = this.page.getByTestId('prompt-versions-submenu');
-    await versionSubmenu.waitFor({ state: 'visible' });
+    await expect(async () => {
+      await this.page.mouse.move(0, 0);
+      await promptRow.hover();
+      await expect(versionSubmenu).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
 
-    await versionSubmenu
+    const versionRow = versionSubmenu
       .getByRole('button')
-      .filter({ has: this.page.getByText(versionLabel, { exact: true }) })
-      .first()
-      .click();
+      .filter({ has: this.page.getByText(versionLabel, { exact: true }) });
+    // Exactly one, not `.first()`: an ambiguous match would silently load a
+    // version the caller did not ask for.
+    await expect(versionRow, `version "${versionLabel}" of "${promptName}"`).toHaveCount(1);
+    await versionRow.dispatchEvent('click');
   }
 
   async loadPromptVersionFromLibrary(promptName: string, versionLabel: string): Promise<void> {
@@ -1117,6 +1171,178 @@ export class PlaygroundPage {
       await expect(card.getByText(promptName)).toBeVisible();
       await expect(card.getByText(versionLabel, { exact: true })).toBeVisible();
     });
+  }
+
+  /**
+   * Detach the library prompt loaded into variant 0.
+   *
+   * While a chat prompt is loaded, `LoadedPromptDisplay` REPLACES the library
+   * trigger, so `load-prompt-button` does not exist and a second pick is only
+   * reachable through this control. It is icon-only with no accessible name —
+   * "Detach loaded prompt" is a Radix `TooltipContent`, not an `aria-label` — so
+   * the rendered icon is the only handle, the same trade-off (and the same
+   * reason) as `resetButton` above: these specs also run against a deployed
+   * Opik, where a `data-testid` added alongside them would not exist in the
+   * version under test.
+   */
+  async detachLoadedPrompt(): Promise<void> {
+    return test.step('detach the loaded prompt from variant 0', async () => {
+      const card = this.variantCard(0);
+      await card.hover();
+      const button = card.locator('button:has(svg.lucide-circle-x)');
+      await expect(button, 'the detach control of the loaded-prompt chip').toHaveCount(1);
+      await button.click();
+      // The library trigger comes back only once the prompt is really detached,
+      // so this is the signal — and it is also what the next pick needs.
+      await expect(card.getByTestId('load-prompt-button')).toHaveCount(1);
+    });
+  }
+
+  // ── persisted store (PLAYGROUND_STATE) ──────────────────────────────────
+  //
+  // Read and written directly because this is where the behaviour under test
+  // lives. `appliedChatPromptVersionId` is the record of WHICH library version
+  // was last applied to the editors, it is a field of the persisted prompt, and
+  // nothing renders it — so a spec about which version a remount re-applies
+  // cannot observe it any other way. The blob is also the only way to express
+  // "state written by a build that predates the marker", which is a real user's
+  // localStorage after an upgrade and is unreachable through the UI by
+  // construction.
+
+  /**
+   * Arm a wait for the Playground's own fetch of one prompt version, and for
+   * the render that follows it.
+   *
+   * ARM IT BEFORE the navigation or reload it covers, and await the returned
+   * promise after. This is the signal a "the template was NOT re-applied"
+   * assertion needs: the re-apply happens the moment this response lands, so a
+   * spec that asserted before it did would go green on a build that clobbers
+   * the editors a tick later — the exact regression these specs exist for.
+   *
+   * `/prompts/versions/{id}` is `usePromptVersionById`'s request, which the
+   * variant card issues on every mount (the query carries no `staleTime`, so
+   * coming back through the SPA refetches as surely as a reload does).
+   */
+  waitForPromptVersionFetch(versionId: string): Promise<void> {
+    return this.page
+      .waitForResponse(
+        (response) =>
+          response.url().includes(`/prompts/versions/${versionId}`) && response.ok(),
+        { timeout: 30_000 },
+      )
+      .then(() => this.settle());
+  }
+
+  /**
+   * The single persisted Playground prompt.
+   *
+   * Exactly one, asserted rather than indexed: every caller here drives one
+   * variant card, and a second prompt in the map would mean the read is
+   * reporting a card the assertions never touched.
+   */
+  async readStoredPrompt(): Promise<StoredChatPrompt> {
+    return test.step('read the persisted Playground prompt', async () => {
+      const state = await this.readStoredState();
+      const prompts = Object.values(state.promptMap ?? {});
+      expect(prompts, 'the persisted Playground holds exactly one prompt').toHaveLength(1);
+      return prompts[0];
+    });
+  }
+
+  /**
+   * The store's one-shot migration flag, `appliedChatPromptVersionsBackfilled`.
+   *
+   * `boolean | undefined` and never defaulted: absent is precisely the pre-fix
+   * state the backfill keys off, so collapsing it into `false` would erase the
+   * difference a hydration assertion exists to check.
+   */
+  async readStoredBackfillFlag(): Promise<boolean | undefined> {
+    return test.step('read the persisted applied-version backfill flag', async () => {
+      return (await this.readStoredState()).appliedChatPromptVersionsBackfilled;
+    });
+  }
+
+  /**
+   * Overwrite the persisted prompt with `planted`, and prove the write landed.
+   *
+   * PRECONDITION: call this from a page the Playground is NOT mounted on (the
+   * Prompt library, say). The store persists on every change, so a plant made
+   * while the Playground is live races the app's own next write.
+   *
+   * The blob is edited in place rather than built from scratch, so the planted
+   * state keeps the exact shape this build writes — a hand-rolled one would
+   * drift from it silently and the spec would then be asserting against a
+   * fiction. Absent optional fields are DELETED, which is what makes
+   * "written before this key existed" expressible at all.
+   */
+  async plantStoredPrompt(planted: PlantedChatPrompt): Promise<void> {
+    return test.step('plant a persisted Playground prompt', async () => {
+      const written = await this.page.evaluate(
+        ({ key, seed }) => {
+          const raw = window.localStorage.getItem(key);
+          if (!raw) throw new Error(`${key} is not in localStorage yet`);
+          const blob = JSON.parse(raw);
+          const map = blob.state?.promptMap ?? {};
+          const ids = Object.keys(map);
+          if (ids.length !== 1) {
+            throw new Error(`${key} holds ${ids.length} prompts, expected exactly 1`);
+          }
+          const prompt = map[ids[0]];
+
+          prompt.loadedChatPromptId = seed.loadedChatPromptId;
+          if (seed.loadedChatPromptVersionId === undefined) {
+            delete prompt.loadedChatPromptVersionId;
+          } else {
+            prompt.loadedChatPromptVersionId = seed.loadedChatPromptVersionId;
+          }
+          if (seed.appliedChatPromptVersionId === undefined) {
+            delete prompt.appliedChatPromptVersionId;
+          } else {
+            prompt.appliedChatPromptVersionId = seed.appliedChatPromptVersionId;
+          }
+          prompt.messages = seed.messages.map((message, index) => ({
+            ...message,
+            id: `planted-${index}`,
+          }));
+
+          if (seed.backfilled === undefined) {
+            delete blob.state.appliedChatPromptVersionsBackfilled;
+          } else {
+            blob.state.appliedChatPromptVersionsBackfilled = seed.backfilled;
+          }
+
+          window.localStorage.setItem(key, JSON.stringify(blob));
+          return JSON.parse(window.localStorage.getItem(key)!);
+        },
+        { key: PLAYGROUND_STORE_KEY, seed: planted },
+      );
+
+      // The plant is the whole precondition of every assertion that follows, so
+      // it is read back here rather than taken on trust: a blob that silently
+      // failed to change would leave a test that cannot fail.
+      const prompt = Object.values(
+        written.state.promptMap as Record<string, StoredChatPrompt>,
+      )[0];
+      expect(prompt.loadedChatPromptId).toBe(planted.loadedChatPromptId);
+      expect(prompt.loadedChatPromptVersionId).toBe(planted.loadedChatPromptVersionId);
+      expect(prompt.appliedChatPromptVersionId).toBe(planted.appliedChatPromptVersionId);
+      expect(prompt.messages.map((m) => m.content)).toEqual(
+        planted.messages.map((m) => m.content),
+      );
+      expect(written.state.appliedChatPromptVersionsBackfilled).toBe(planted.backfilled);
+    });
+  }
+
+  private async readStoredState(): Promise<{
+    promptMap?: Record<string, StoredChatPrompt>;
+    appliedChatPromptVersionsBackfilled?: boolean;
+  }> {
+    const raw = await this.page.evaluate(
+      (key) => window.localStorage.getItem(key),
+      PLAYGROUND_STORE_KEY,
+    );
+    expect(raw, `${PLAYGROUND_STORE_KEY} in localStorage`).not.toBeNull();
+    return JSON.parse(raw!).state;
   }
 
   /** Edit the content of the User message in variant 0 directly in the Playground editor. */

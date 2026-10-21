@@ -1,0 +1,17 @@
+# pending capabilities from opik#8780 — applied by the release job
+- area: playground
+  capability: keep-unsaved-prompt-edits
+  note: >-
+    An unsaved edit to a library prompt loaded into a variant card survives
+    leaving the Playground, a reload, and a newer library version being
+    published while it is unsaved — and a PLAYGROUND_STATE written before
+    appliedChatPromptVersionId existed keeps its edit on first load, with the
+    marker backfilled once. Filed as its own key rather than under
+    playground.load-prompt-version: that key is about loading a version and is
+    already covered, so counting "the template is NOT re-applied over my
+    edits" there would read as coverage nobody added. NOT covered: a card that
+    followed the library's LATEST version (no loadedChatPromptVersionId) is
+    deliberately left unmarked by the migration, so a pre-upgrade edit on one
+    is still overwritten on first load — the documented limit of the fix
+    (PlaygroundStore.ts, markStoredPinnedChatPromptApplied), confirmed by hand
+    on pr-8780.dev.comet.com and worth a release note rather than a spec.
