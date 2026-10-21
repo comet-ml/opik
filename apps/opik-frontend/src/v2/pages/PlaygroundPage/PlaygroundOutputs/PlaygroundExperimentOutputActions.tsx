@@ -3,6 +3,7 @@ import React from "react";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import PlaygroundExperimentName from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundExperimentName";
 import PlaygroundProgressIndicator from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundProgressIndicator";
+import PlaygroundLastRunSummary from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundLastRunSummary";
 import { useIsRunning } from "@/store/PlaygroundStore";
 import { toPlainDatasetId } from "@/utils/datasetVersionStorage";
 
@@ -54,6 +55,9 @@ const PlaygroundExperimentOutputActions = ({
             />
           </div>
         </div>
+      )}
+      {!isRunning && (
+        <PlaygroundLastRunSummary datasetId={toPlainDatasetId(datasetId)} />
       )}
     </div>
   );

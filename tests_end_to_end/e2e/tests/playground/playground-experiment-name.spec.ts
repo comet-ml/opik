@@ -85,6 +85,12 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
    * `/experiments/execute` share the prefix, and only the bare collection
    * endpoint is the dataset-mode write path.
    */
+  const comparedExperimentIds = (href: string | null, datasetId: string): string[] => {
+    const url = new URL(href ?? '', 'http://localhost');
+    expect(url.pathname).toMatch(new RegExp(`/experiments/${datasetId}/compare$`));
+    return (JSON.parse(url.searchParams.get('experiments') ?? '[]') as string[]).sort();
+  };
+
   const collectExperimentPosts = (page: Page): PostedExperiment[] => {
     const posted: PostedExperiment[] = [];
     page.on('request', (request) => {
@@ -221,6 +227,19 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         return listExperiments();
       });
 
+      await test.step('The run summary links each experiment and their comparison', async () => {
+        await expect(playground.lastRunSummary()).toContainText(`Last run complete: ${runName}`);
+        for (const experiment of experiments) {
+          const href = await playground.lastRunExperimentLink(experiment.name).getAttribute('href');
+          expect(comparedExperimentIds(href, dataset.id)).toEqual([experiment.id]);
+        }
+
+        const allIds = experiments.map((e) => e.id).sort();
+        await playground.lastRunCompareLink().click();
+        await page.waitForURL((url) => url.pathname.endsWith(`/experiments/${dataset.id}/compare`));
+        expect(comparedExperimentIds(page.url(), dataset.id)).toEqual(allIds);
+      });
+
       await test.step('Both names render on the project Experiments page', async () => {
         const experimentsPage = new ExperimentsPage(page);
         await experimentsPage.goto(project.id);
@@ -339,6 +358,7 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         await playground.waitForRunSettled();
         expect(await playground.readExperimentName()).toBe('');
         await expect(playground.experimentNamePreview()).toBeHidden();
+        await expect(playground.lastRunSummary()).toBeHidden();
       });
 
       const experiment = await test.step('The experiment landed under a generated name', async () => {
