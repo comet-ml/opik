@@ -25,8 +25,12 @@ public class MediaUrlCheckConfig {
     @MaxDuration(value = 30, unit = TimeUnit.SECONDS)
     private Duration connectTimeout = Duration.seconds(3);
 
+    /**
+     * Capped below the frontend's 8s request timeout: past it the frontend gives up and runs without the check, so
+     * a slower verdict would never be shown.
+     */
     @JsonProperty
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-    @MaxDuration(value = 30, unit = TimeUnit.SECONDS)
+    @MaxDuration(value = 6, unit = TimeUnit.SECONDS)
     private Duration perUrlTimeout = Duration.seconds(5);
 }

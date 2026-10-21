@@ -1580,7 +1580,8 @@ mediaUrlCheck:
   # Description: Connection timeout for each request to a media host
   connectTimeout: ${MEDIA_URL_CHECK_CONNECT_TIMEOUT:-3s}
   # Default: 5s
-  # Description: Time budget for one URL, redirects included. A URL that runs out of it is reported as a timeout
+  # Description: Time budget for one URL, redirects included. A URL that runs out of it is reported as a timeout.
+  # At most 6s, because the frontend stops waiting for the check after 8s
   perUrlTimeout: ${MEDIA_URL_CHECK_PER_URL_TIMEOUT:-5s}
 
 llmProviderClient:

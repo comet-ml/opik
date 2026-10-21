@@ -23,8 +23,8 @@ interface MediaUrlCheckResponse {
   results: MediaUrlCheckResult[];
 }
 
-// Above the backend's 5 s per-URL budget, so a slow host is reported as a
-// timeout instead of the whole check being dropped.
+// The backend caps its per-URL budget at 6 s so its answer always lands
+// before this; past it the run starts without the check.
 const MEDIA_URLS_CHECK_TIMEOUT_MS = 8000;
 
 const checkMediaUrls = async (urls: string[]) => {
