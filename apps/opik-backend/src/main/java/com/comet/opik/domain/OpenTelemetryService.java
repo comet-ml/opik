@@ -33,6 +33,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -54,7 +55,7 @@ public interface OpenTelemetryService {
 @Slf4j
 class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
-    private static final int MAX_LOGGED_SKIPPED_PROJECT_NAMES = 10;
+    private static final int MAX_LOGGED_PROJECT_NAMES = 10;
     private static final int MAX_LOGGED_SKIPPED_PROJECT_NAME_LENGTH = 300;
     private static final String OTEL_METRICS_SCOPE = "opik.otel";
     private static final Meter METER = GlobalOpenTelemetry.get().getMeter(OTEL_METRICS_SCOPE);
@@ -134,18 +135,24 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
         String loggableNames() {
             var loggable = names.stream()
-                    .limit(MAX_LOGGED_SKIPPED_PROJECT_NAMES)
+                    .limit(MAX_LOGGED_PROJECT_NAMES)
                     .map(name -> "'" + StringUtils.abbreviate(name, MAX_LOGGED_SKIPPED_PROJECT_NAME_LENGTH) + "'")
                     .collect(Collectors.joining(", "));
-            var hidden = names.size() - MAX_LOGGED_SKIPPED_PROJECT_NAMES;
+            var hidden = names.size() - MAX_LOGGED_PROJECT_NAMES;
             return hidden > 0 ? loggable + " and " + hidden + " more" : loggable;
         }
     }
 
     private static String describeProjects(Map<String, List<Span>> spansByProjectName) {
-        return spansByProjectName.entrySet().stream()
+        var described = spansByProjectName.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue(Comparator.comparingInt(List<Span>::size).reversed()))
+                .limit(MAX_LOGGED_PROJECT_NAMES)
                 .map(entry -> spans(entry.getValue().size()) + " to project '" + entry.getKey() + "'")
                 .collect(Collectors.joining(", "));
+        var hidden = spansByProjectName.size() - MAX_LOGGED_PROJECT_NAMES;
+        return hidden > 0
+                ? described + " and " + hidden + " more " + (hidden == 1 ? "project" : "projects")
+                : described;
     }
 
     private static String spans(long count) {
