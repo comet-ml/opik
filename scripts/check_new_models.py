@@ -71,6 +71,7 @@ PROVIDER_LABELS = {
 }
 
 REASON_PRIORITY = {"new": 0, "changed": 1, "params": 2}
+OVER_CAP_NOTE = "over the call cap"
 
 SMOKE_MODELS = {
     "openai": "gpt-4.1-nano",
@@ -489,7 +490,7 @@ class Backend:
             )
         return True
 
-    def run(self, probe: Probe) -> CheckResult:
+    def run(self, probe: Probe, max_calls: int) -> CheckResult:
         fields = dict(probe.fields)
         rejections = []
         started = time.monotonic()
@@ -508,7 +509,7 @@ class Backend:
             named = [f for f in named_fields(note, fields) if f in probe.claims]
             result = "fail"
             rejections += [Rejection(f, fields.pop(f), note) for f in named]
-            if not named or not any(f in probe.claims for f in fields) or calls > MAX_RESENDS:
+            if not named or not any(f in probe.claims for f in fields) or calls > MAX_RESENDS or calls >= max_calls:
                 break
         return CheckResult(probe, result, round(time.monotonic() - started, 1), note, tuple(rejections), calls)
 
@@ -583,11 +584,13 @@ def render_report(
     )
     lines.append(
         f"{compared} Each model is called "
-        "through the backend with the params its API serves: once plain, then with every number at the top and "
-        "the bottom of its range, with the settings it refuses, and once per effort level. A `refused` call passes "
-        "when the backend leaves those settings out or when the provider takes them anyway, so it fails only when "
-        "they reach a provider that rejects them. A failure is for a person to read: it can be a real gap in the "
-        "model data, or a provider-side limit."
+        "through the backend with the params its API serves: once plain, then with the numbers at the top and the "
+        "bottom of their ranges (only one of temperature and top_p for a model that takes one at a time), with the "
+        "settings it refuses, and once per effort level that sets a request field (not the Gemini and Vertex AI "
+        "`auto` or `none` levels). Resending without a rejected setting counts toward the call cap. A `refused` call "
+        "passes when the backend leaves those settings out or when the provider takes them anyway, so it fails only "
+        "when they reach a provider that rejects them. A failure is for a person to read: it can be a real gap in "
+        "the model data, or a provider-side limit."
     )
     providers = _provider_order(results)
     if providers:
@@ -794,22 +797,24 @@ def run(args: argparse.Namespace) -> int:
     results = []
     queues = {}
     for model in sorted(to_check, key=lambda m: REASON_PRIORITY.get(m.reason, len(REASON_PRIORITY))):
-        params = (catalog.get(model.provider, {}).get(model.model_id) or {}).get("params")
-        probes = plan_probes(model, params)
-        if not keys.get(model.provider):
+        served = catalog.get(model.provider, {}).get(model.model_id)
+        probes = plan_probes(model, (served or {}).get("params"))
+        if served is None:
+            results += [CheckResult(p, "not checked", None, "the backend doesn't list this model") for p in probes]
+        elif not keys.get(model.provider):
             results += [CheckResult(p, "not checked", None, "no CI key") for p in probes]
         else:
             queues.setdefault(model.provider, []).append(probes)
     planned, over_cap = share_call_cap(queues, args.max_calls)
-    results += [CheckResult(p, "not checked", None, "over the call cap") for p in over_cap]
-    cut = len({p.model for p in over_cap})
+    results += [CheckResult(p, "not checked", None, OVER_CAP_NOTE) for p in over_cap]
 
     if args.dry_run:
         results += [CheckResult(p, "would call", None, "") for p in planned]
     else:
         for provider in sorted({p.model.provider for p in planned}):
             backend.add_provider_key(provider, keys[provider])
-        results += run_probes(backend, planned)
+        results += run_probes(backend, planned, args.max_calls)
+    cut = len({r.probe.model for r in results if r.note == OVER_CAP_NOTE})
 
     report = render_report(results, unexercised, mode, args.base_ref, args.max_calls, cut)
     if args.output:
@@ -837,8 +842,9 @@ def share_call_cap(queues: dict[str, list[list[Probe]]], max_calls: int) -> tupl
     return planned, over_cap
 
 
-def run_probes(backend: Backend, probes: list[Probe]) -> list[CheckResult]:
+def run_probes(backend: Backend, probes: list[Probe], max_calls: int) -> list[CheckResult]:
     results = []
+    calls = 0
     by_route = {}
     for probe in probes:
         by_route.setdefault((probe.model.provider, probe.route), []).append(probe)
@@ -846,21 +852,27 @@ def run_probes(backend: Backend, probes: list[Probe]) -> list[CheckResult]:
         if not backend.set_route(provider, route):
             results += [CheckResult(p, "not checked", None, "the key was already there") for p in route_probes]
             continue
-        failed_plain = set()
-        for probe in route_probes:
-            if probe.model in failed_plain:
-                results.append(CheckResult(probe, "skipped", None, "the plain call failed"))
-                continue
-            result = backend.run(probe)
-            if probe.name == "plain" and result.result != "pass":
-                failed_plain.add(probe.model)
-            print(
-                f"  {result.result:7}  {provider}/{probe.model.request_model}  {ROUTE_LABELS[route]}  "
-                f"{probe.name}  {result.seconds}s  {result.note}",
-                flush=True,
-            )
-            results.append(result)
-        backend.set_route(provider, None)
+        try:
+            failed_plain = set()
+            for probe in route_probes:
+                if probe.model in failed_plain:
+                    results.append(CheckResult(probe, "skipped", None, "the plain call failed"))
+                    continue
+                if calls >= max_calls:
+                    results.append(CheckResult(probe, "not checked", None, OVER_CAP_NOTE))
+                    continue
+                result = backend.run(probe, max_calls - calls)
+                calls += result.calls
+                if probe.name == "plain" and result.result != "pass":
+                    failed_plain.add(probe.model)
+                print(
+                    f"  {result.result:7}  {provider}/{probe.model.request_model}  {ROUTE_LABELS[route]}  "
+                    f"{probe.name}  {result.seconds}s  {result.note}",
+                    flush=True,
+                )
+                results.append(result)
+        finally:
+            backend.set_route(provider, None)
     return results
 
 
