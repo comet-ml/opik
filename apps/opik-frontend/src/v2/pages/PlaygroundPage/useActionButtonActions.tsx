@@ -104,6 +104,9 @@ const useActionButtonActions = ({
   const clearRunningMap = useClearRunningMap();
   const setPromptRunning = useSetPromptRunning();
   const isToStopRef = useRef(false);
+  // A stopped run's poll timer can still fire after Run is clicked again, when
+  // isToStopRef is already false; the run id tells that poll it is stale.
+  const runIdRef = useRef(0);
   const setCreatedExperiments = useSetCreatedExperiments();
   const clearCreatedExperiments = useClearCreatedExperiments();
   const promptIds = usePromptIds();
@@ -159,6 +162,7 @@ const useActionButtonActions = ({
   const resetProgress = useResetProgress();
 
   const resetState = useCallback(() => {
+    runIdRef.current += 1;
     resetOutputMap();
     abortControllersRef.current.clear();
     clearRunningMap();
@@ -322,15 +326,19 @@ const useActionButtonActions = ({
   const pollAssertionEvaluation = useCallback(
     async (
       experimentIds: string[],
+      totalItems: number,
       curDatasetId: string,
       scope?: PollScope,
     ) => {
       const startTime = Date.now();
       const pollKey = `poll-assertion${scope?.pollKeySuffix ?? ""}`;
       const isScoped = !!scope?.scopedPromptIds;
+      const runId = runIdRef.current;
 
       const poll = async () => {
-        if (!isScoped && isToStopRef.current) return;
+        if (!isScoped && (isToStopRef.current || runId !== runIdRef.current)) {
+          return;
+        }
 
         if (Date.now() - startTime > MAX_POLL_DURATION_MS) {
           if (isScoped) {
@@ -383,27 +391,25 @@ const useActionButtonActions = ({
           const rows: ExperimentsCompare[] = data?.content ?? [];
 
           let scoredItems = 0;
-          let totalExperimentItems = 0;
 
           for (const row of rows) {
             const experimentItems = row.experiment_items ?? [];
             const noEvaluators = (row.evaluators?.length ?? 0) === 0;
 
             for (const ei of experimentItems) {
-              totalExperimentItems++;
               if (noEvaluators || isItemScored(ei)) {
                 scoredItems++;
               }
             }
           }
 
-          if (!isScoped && totalExperimentItems > 0) {
-            setProgress(scoredItems, totalExperimentItems);
+          if (!isScoped) {
+            setProgress(Math.min(scoredItems, totalItems), totalItems);
           }
 
           if (experimentsFinished) {
             if (!isScoped) {
-              setProgress(totalExperimentItems, totalExperimentItems);
+              setProgress(totalItems, totalItems);
               setTimeout(() => resetProgress(), 3000);
             }
             finishPollScope(scope);
@@ -457,9 +463,12 @@ const useActionButtonActions = ({
       const startTime = Date.now();
       const pollKey = `poll-experiment${scope?.pollKeySuffix ?? ""}`;
       const isScoped = !!scope?.scopedPromptIds;
+      const runId = runIdRef.current;
 
       const poll = async () => {
-        if (!isScoped && isToStopRef.current) return;
+        if (!isScoped && (isToStopRef.current || runId !== runIdRef.current)) {
+          return;
+        }
 
         if (Date.now() - startTime > MAX_POLL_DURATION_MS) {
           if (isScoped) {
@@ -528,12 +537,16 @@ const useActionButtonActions = ({
           const allTracesCollected = totalTraces >= totalItems;
           if (allTracesCollected) {
             if (!isScoped) {
-              setProgress(totalItems, totalItems);
               setProgressPhase("evaluating");
               setProgress(0, totalItems);
             }
             queryClient.invalidateQueries({ queryKey: ["experiments"] });
-            pollAssertionEvaluation(experimentIds, curDatasetId, scope);
+            pollAssertionEvaluation(
+              experimentIds,
+              totalItems,
+              curDatasetId,
+              scope,
+            );
             return;
           }
 

@@ -488,17 +488,29 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      // Test-suite progress comes from polls that can hit a lagging read
+      // replica, so a later poll may report less than an earlier one. Inside
+      // a step the numbers only move forward; a new step starts from zero.
       setProgress: (completed, total) => {
         set((state) => {
           return {
             ...state,
-            progressCompleted: completed,
-            progressTotal: total,
+            progressCompleted: Math.max(state.progressCompleted, completed),
+            progressTotal: Math.max(state.progressTotal, total),
           };
         });
       },
       setProgressPhase: (phase) => {
-        set((state) => ({ ...state, progressPhase: phase }));
+        set((state) =>
+          state.progressPhase === phase
+            ? state
+            : {
+                ...state,
+                progressPhase: phase,
+                progressCompleted: 0,
+                progressTotal: 0,
+              },
+        );
       },
       resetProgress: () => {
         set((state) => {
