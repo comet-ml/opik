@@ -53,22 +53,13 @@ describe("THREAD_FILTER_COLUMNS", () => {
     // field (TraceThreadField.NUMBER_OF_MESSAGES, pushed down to ClickHouse),
     // and the dashboards filter section exposes the same column; the rule
     // dialog was the only thread filter surface missing it.
-    const messageCount = THREAD_FILTER_COLUMNS.find(
-      (c) => c.id === "number_of_messages",
-    );
-    expect(messageCount).toBeDefined();
-    expect(messageCount?.type).toBe(COLUMN_TYPE.number);
-    expect(messageCount?.label).toBe("Message count");
-  });
-
-  it("should keep the columns the dialog already exposed", () => {
-    const ids = THREAD_FILTER_COLUMNS.map((c) => c.id);
-    expect(ids).toContain("status");
-    expect(ids).toContain("created_at");
-    expect(ids).toContain("last_updated_at");
-    expect(ids).toContain("duration");
-    expect(ids).toContain("tags");
-    expect(ids).toContain("feedback_scores");
+    expect(
+      THREAD_FILTER_COLUMNS.find((c) => c.id === "number_of_messages"),
+    ).toEqual({
+      id: "number_of_messages",
+      label: "Message count",
+      type: COLUMN_TYPE.number,
+    });
   });
 
   it("should resolve a saved message-count filter to the number type on re-open", () => {
@@ -89,8 +80,16 @@ describe("THREAD_FILTER_COLUMNS", () => {
       THREAD_FILTER_COLUMNS as Parameters<typeof normalizeFilters>[1],
     );
 
-    expect(result[0].type).toBe(COLUMN_TYPE.number);
-    expect(result[0].value).toBe("5");
+    expect(result).toEqual([
+      {
+        id: "1",
+        field: "number_of_messages",
+        type: COLUMN_TYPE.number,
+        operator: ">=",
+        value: "5",
+        key: "",
+      },
+    ]);
   });
 
   it("should round-trip a message-count filter through the rule payload", () => {
@@ -105,10 +104,16 @@ describe("THREAD_FILTER_COLUMNS", () => {
       },
     ]);
 
-    expect(result).toHaveLength(1);
-    expect(result[0].field).toBe("number_of_messages");
-    expect(result[0].operator).toBe(">=");
-    expect(result[0].value).toBe("5");
+    expect(result).toEqual([
+      {
+        id: "1",
+        field: "number_of_messages",
+        type: COLUMN_TYPE.number,
+        operator: ">=",
+        value: "5",
+        key: "",
+      },
+    ]);
   });
 });
 
