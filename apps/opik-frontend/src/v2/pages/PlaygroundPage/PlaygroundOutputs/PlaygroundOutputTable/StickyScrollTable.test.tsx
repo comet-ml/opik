@@ -11,7 +11,7 @@ const COLUMNS: ColumnDef<Row, unknown>[] = [
   { id: "name", accessorKey: "name", header: "Name" },
 ];
 
-const renderTable = (scrollLinked: boolean) => {
+const renderTable = (scrollLinked: boolean, textSize?: "default" | "xs") => {
   vi.stubGlobal("CSS", { supports: () => scrollLinked });
   render(
     <StickyScrollTable
@@ -22,6 +22,7 @@ const renderTable = (scrollLinked: boolean) => {
       noData={null}
       showLoadingOverlay={false}
       testId="table"
+      textSize={textSize}
     />,
   );
   return {
@@ -76,6 +77,25 @@ describe("StickyScrollTable", () => {
       fireEvent.scroll(header);
 
       expect(body.scrollLeft).toBe(90);
+    });
+  });
+
+  describe("text size", () => {
+    const XS_TEXT_CLASSES = [
+      "[&_[data-cell-wrapper]]:text-xs",
+      "[&_[data-header-wrapper]]:text-xs",
+    ];
+
+    it("should leave the text size to the row height by default", () => {
+      const { header } = renderTable(false);
+
+      expect(header.parentElement).not.toHaveClass(...XS_TEXT_CLASSES);
+    });
+
+    it("should make the header and cell text xs at the xs text size", () => {
+      const { header } = renderTable(false, "xs");
+
+      expect(header.parentElement).toHaveClass(...XS_TEXT_CLASSES);
     });
   });
 });
