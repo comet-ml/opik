@@ -1,5 +1,6 @@
 import React from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   ColumnDef,
@@ -44,6 +45,24 @@ function TestTable<TData>({
 }
 
 describe("PrettyCell", () => {
+  it("reuses the preview config when the same row renders again", () => {
+    const row = {
+      last_message: { messages: [{ contents: [{ text: "Answer" }] }] },
+    };
+    const config = vi.fn(getThreadPrettifyConfig);
+    const value = (thread: typeof row) => thread.last_message;
+    const { rerender, unmount } = render(
+      <TestTable row={row} value={value} config={config} />,
+    );
+    rerender(<TestTable row={row} value={value} config={config} />);
+    expect(config).toHaveBeenCalledTimes(1);
+    const updated = {
+      last_message: { messages: [{ contents: [{ text: "New answer" }] }] },
+    };
+    rerender(<TestTable row={updated} value={value} config={config} />);
+    expect(config).toHaveBeenCalledTimes(2);
+    unmount();
+  });
   it.each([0, false])("preserves scalar thread output %s", (last_message) => {
     const html = renderToStaticMarkup(
       <TestTable

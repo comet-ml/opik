@@ -23,7 +23,15 @@ const USAGE_LABELS: Record<string, string> = {
   "prompt_tokens_details.audio_tokens": "Input audio tokens",
   "completion_tokens_details.audio_tokens": "Output audio tokens",
 };
-const ORIGINAL_USAGE_ALIASES: Record<string, string> = {
+const USAGE_ALIASES: Record<string, string> = {
+  prompt: "prompt_tokens",
+  completion: "completion_tokens",
+  total: "total_tokens",
+  "prompt_details.cache_read": "cache_read_input_tokens",
+  "prompt_details.cache_write": "cache_creation_input_tokens",
+  "prompt_details.audio": "prompt_tokens_details.audio_tokens",
+  "completion_details.audio": "completion_tokens_details.audio_tokens",
+  "completion_details.reasoning": "reasoning_tokens",
   cache_read_input_tokens: "cache_read_input_tokens",
   cache_creation_input_tokens: "cache_creation_input_tokens",
   "prompt_tokens_details.cached_tokens": "cache_read_input_tokens",
@@ -39,11 +47,13 @@ export const getDisplayUsage = (usage?: MessageUsage) => {
   const values = numericUsage(usage);
   const display = Object.fromEntries(
     Object.entries(values).filter(
-      ([key]) => !key.startsWith("original_usage."),
+      ([key]) =>
+        !key.startsWith("original_usage.") &&
+        (!USAGE_ALIASES[key] || USAGE_ALIASES[key] === key),
     ),
   );
-  for (const [original, canonical] of Object.entries(ORIGINAL_USAGE_ALIASES)) {
-    const value = values[`original_usage.${original}`];
+  for (const [original, canonical] of Object.entries(USAGE_ALIASES)) {
+    const value = values[original] ?? values[`original_usage.${original}`];
     if (display[canonical] === undefined && value !== undefined)
       display[canonical] = value;
   }

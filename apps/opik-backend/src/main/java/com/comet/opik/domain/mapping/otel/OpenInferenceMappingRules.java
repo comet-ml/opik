@@ -16,11 +16,6 @@ public final class OpenInferenceMappingRules {
 
     private static final List<OpenTelemetryMappingRule> RULES = List.of(
             OpenTelemetryMappingRule.builder()
-                    // Keep the legacy unmarked-span fallback, but match the real semantic key.
-                    // Marked OpenInference spans are handled atomically by OpenInferenceSpanNormalizer.
-                    .rule("llm.invocation_parameters").source(SOURCE)
-                    .outcome(OpenTelemetryMappingRule.Outcome.INPUT).spanType(SpanType.llm).build(),
-            OpenTelemetryMappingRule.builder()
                     .rule("llm.model_name").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL)
                     .spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()

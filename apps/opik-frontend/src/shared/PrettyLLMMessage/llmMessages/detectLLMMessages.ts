@@ -1,8 +1,35 @@
 import {
   LLMMessageFormatDetectionResult,
   LLMMessagePrettifyConfig,
+  LLMMessagePairDetections,
 } from "./types";
 import { getFormat, getAllFormats } from "./providers/registry";
+import { resolveOpenInferenceHint } from "@/lib/openinference";
+
+export const detectLLMMessagePair = (
+  input: unknown,
+  output: unknown,
+  config: LLMMessagePrettifyConfig,
+  detections?: LLMMessagePairDetections,
+) => {
+  const hint = resolveOpenInferenceHint(undefined, input, output);
+  const prettifyConfig: LLMMessagePrettifyConfig = {
+    ...config,
+    formatHint:
+      config.formatHint ?? (hint.detected ? "openinference" : undefined),
+    formatHintIsAuthoritative:
+      config.formatHintIsAuthoritative ?? hint.authoritative,
+  };
+  return {
+    prettifyConfig,
+    inputDetection:
+      detections?.input ??
+      detectLLMMessages(input, { ...prettifyConfig, fieldType: "input" }),
+    outputDetection:
+      detections?.output ??
+      detectLLMMessages(output, { ...prettifyConfig, fieldType: "output" }),
+  };
+};
 
 /**
  * Detects if the provided data supports LLM messages pretty mode rendering.

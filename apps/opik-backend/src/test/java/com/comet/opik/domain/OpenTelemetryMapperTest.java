@@ -26,8 +26,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -2379,6 +2379,38 @@ class OpenTelemetryMapperTest {
     @Nested
     class OpenInferenceNormalization {
 
+        @ParameterizedTest
+        @CsvSource({"CHAIN", "AGENT"})
+        void preservesRawValueAndCustomAttributeScoringPaths(String kind) {
+            var span = enrich(List.of(
+                    str("openinference.span.kind", kind),
+                    str("input.mime_type", "application/json"),
+                    str("input.value", "{\"question\":\"Question\"}"),
+                    str("output.value", "Answer"),
+                    str("custom.context", "Context")));
+            assertThat(OnlineScoringEngine.toReplacements(Map.of(
+                    "question", "input.value.question",
+                    "answer", "output.value",
+                    "context", "input.custom.context"), span))
+                    .isEqualTo(Map.of("question", "Question", "answer", "Answer", "context", "Context"));
+        }
+
+        @Test
+        void preservesRawProviderFieldsOnSemanticCollisions() {
+            var raw = """
+                    {"messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"https://example.test/image.png","detail":"high"},"cache_control":{"type":"ephemeral"}}],"refusal":"raw"}],"tools":[{"name":"raw-tool","custom":true}]}
+                    """;
+            var span = enrich(List.of(
+                    str("openinference.span.kind", "LLM"),
+                    str("input.mime_type", "application/json"),
+                    str("input.value", raw),
+                    str("llm.input_messages.0.message.role", "user"),
+                    str("llm.input_messages.0.message.content", "Normalized"),
+                    str("llm.tools.0.tool.name", "normalized-tool")));
+            assertThat(span.input().path("value")).isEqualTo(JsonUtils.getJsonNodeFromString(raw));
+            assertThat(span.input().path("messages").get(0).path("content").asText()).isEqualTo("Normalized");
+        }
+
         @Test
         void preservesLegacyScoringPathsWithOriginalMessageIndices() {
             var span = enrich(List.of(
@@ -2394,7 +2426,7 @@ class OpenTelemetryMapperTest {
                     "new_output", "output.messages[0].content"), span))
                     .isEqualTo(Map.of("old_input", "Question", "old_output", "Answer",
                             "new_input", "Question", "new_output", "Answer"));
-            assertThat(span.input().path("llm.output_messages.7.message.function_call_arguments_json")
+            assertThat(span.output().path("llm.output_messages.7.message.function_call_arguments_json")
                     .path("city").asText()).isEqualTo("Paris");
         }
 
@@ -2472,14 +2504,18 @@ class OpenTelemetryMapperTest {
         }
 
         @ParameterizedTest
-        @CsvSource({"100,80,50,0", "100,20,10,70", "2147483647,0,0,2147483647"})
-        void boundsExclusiveOpenInferenceUsage(int prompt, int read, int write, int expected) {
+        @CsvSource({"100,80,50,100", "100,20,10,70", "2147483647,0,0,2147483647"})
+        void usesProviderUsageSemanticsWithoutSyntheticKeys(int prompt, int read, int write, int expected) {
             var span = enrich(List.of(str("openinference.span.kind", "LLM"), str("llm.provider", "anthropic"),
                     integer("llm.token_count.prompt", prompt),
                     integer("llm.token_count.prompt_details.cache_read", read),
                     integer("llm.token_count.prompt_details.cache_write", write),
                     integer("gen_ai.usage.cache_read_input_tokens", 999)));
-            assertThat(span.usage()).containsEntry("original_usage.input_tokens", expected);
+            assertThat(span.usage()).doesNotContainKey("original_usage.input_tokens");
+            assertThat(
+                    com.comet.opik.domain.token_usage.SpanUsageFactory.create("anthropic", span.usage()).nativeUsage())
+                    .isInstanceOfSatisfying(com.comet.opik.domain.token_usage.model.AnthropicNativeUsage.class,
+                            usage -> assertThat(usage.inputTokens()).isEqualTo(expected));
         }
 
         private Span enrich(List<KeyValue> attributes) {
@@ -2602,10 +2638,10 @@ class OpenTelemetryMapperTest {
                     .isEqualTo("tool-signature");
             assertThat(span.input().path("llm.input_messages.2.message.content").asText())
                     .isEqualTo("What is the weather?");
-            assertThat(span.input().path("llm.output_messages.7.message.role").asText())
+            assertThat(span.output().path("llm.output_messages.7.message.role").asText())
                     .isEqualTo("model");
-            assertThat(span.output().fieldNames()).toIterable()
-                    .noneMatch(name -> name.startsWith("llm."));
+            assertThat(span.input().fieldNames()).toIterable()
+                    .noneMatch(name -> name.startsWith("llm.output_messages."));
         }
 
         @Test
@@ -2629,14 +2665,14 @@ class OpenTelemetryMapperTest {
             var attributes = new ArrayList<>(
                     List.of(str("openinference.span.kind", "CHAIN"), str("input.value", value)));
             if (mime != null) attributes.add(str("input.mime_type", mime));
-            assertThat(enrich(attributes).input()).isEqualTo(JsonUtils.valueToTree(value));
+            assertThat(enrich(attributes).input().path("value")).isEqualTo(JsonUtils.valueToTree(value));
         }
 
         @Test
         void preservesWhitespaceRawJson() {
             var span = enrich(List.of(str("openinference.span.kind", "CHAIN"),
                     str("output.mime_type", "application/json"), str("output.value", "   ")));
-            assertThat(span.output()).isEqualTo(JsonUtils.valueToTree("   "));
+            assertThat(span.output().path("value")).isEqualTo(JsonUtils.valueToTree("   "));
         }
 
         @Test
@@ -2673,9 +2709,9 @@ class OpenTelemetryMapperTest {
                     array("input.value",
                             AnyValue.newBuilder().setIntValue(1).build(),
                             AnyValue.newBuilder().setStringValue("two").build())));
-            assertThat(nativeArray.input().isArray()).isTrue();
-            assertThat(nativeArray.input().get(0).asInt()).isEqualTo(1);
-            assertThat(nativeArray.input().get(1).asText()).isEqualTo("two");
+            assertThat(nativeArray.input().path("value").isArray()).isTrue();
+            assertThat(nativeArray.input().path("value").get(0).asInt()).isEqualTo(1);
+            assertThat(nativeArray.input().path("value").get(1).asText()).isEqualTo("two");
         }
 
         @Test
@@ -2769,14 +2805,14 @@ class OpenTelemetryMapperTest {
                 assertThat(span.model()).isEqualTo("actual-model");
                 assertThat(span.provider()).isEqualTo("openai");
                 assertThat(span.type()).isEqualTo(SpanType.llm);
-                assertThat(span.usage()).containsEntry("prompt_tokens", 20)
-                        .containsEntry("completion_tokens", 8)
-                        .containsEntry("total_tokens", 28)
-                        .containsEntry("cache_read_input_tokens", 4)
-                        .containsEntry("cache_creation_input_tokens", 2)
-                        .containsEntry("prompt_tokens_details.audio_tokens", 3)
-                        .containsEntry("reasoning_tokens", 5)
-                        .containsEntry("completion_tokens_details.audio_tokens", 1);
+                assertThat(span.usage()).containsEntry("prompt", 20)
+                        .containsEntry("completion", 8)
+                        .containsEntry("total", 28)
+                        .containsEntry("prompt_details.cache_read", 4)
+                        .containsEntry("prompt_details.cache_write", 2)
+                        .containsEntry("prompt_details.audio", 3)
+                        .containsEntry("completion_details.reasoning", 5)
+                        .containsEntry("completion_details.audio", 1);
                 assertThat(span.totalEstimatedCost()).isEqualByComparingTo("0.0125");
                 assertThat(span.metadata().path("thread_id").asText()).isEqualTo("explicit-thread");
                 assertThat(span.metadata().path("custom").asText()).isEqualTo("kept");
@@ -2802,13 +2838,13 @@ class OpenTelemetryMapperTest {
 
         @ParameterizedTest
         @CsvSource({
-                "anthropic, claude-haiku-4-5, original_usage.input_tokens, 0.000405",
-                "aws, anthropic.claude-3-5-haiku-20241022-v1:0, original_usage.inputTokens, 0.000324",
-                "bedrock_converse, anthropic.claude-haiku-4-5-20251001-v1:0, original_usage.inputTokens, 0.000405",
-                "anthropic_vertexai, vertex_ai/claude-haiku-4-5, original_usage.input_tokens, 0.000405"
+                "anthropic, claude-haiku-4-5, 0.000405",
+                "aws, anthropic.claude-3-5-haiku-20241022-v1:0, 0.000324",
+                "bedrock_converse, anthropic.claude-haiku-4-5-20251001-v1:0, 0.000405",
+                "anthropic_vertexai, vertex_ai/claude-haiku-4-5, 0.000405"
         })
         void calculatesCacheCostWithoutCountingCachedPromptTokensTwice(
-                String provider, String model, String exclusiveInputKey, String expectedCost) {
+                String provider, String model, String expectedCost) {
             var span = enrich(List.of(
                     str("openinference.span.kind", "LLM"),
                     str("llm.provider", provider),
@@ -2818,9 +2854,9 @@ class OpenTelemetryMapperTest {
                     integer("llm.token_count.prompt_details.cache_read", 800),
                     integer("llm.token_count.prompt_details.cache_write", 100)));
 
-            assertThat(span.usage()).containsEntry("prompt_tokens", 1000)
-                    .containsEntry("total_tokens", 1020)
-                    .containsEntry(exclusiveInputKey, 100);
+            assertThat(span.usage()).containsExactlyInAnyOrderEntriesOf(Map.of(
+                    "prompt", 1000, "completion", 20, "prompt_details.cache_read", 800, "prompt_details.cache_write",
+                    100));
             assertThat(CostService.calculateCost(span.model(), span.provider(), span.usage(), span.metadata()))
                     .isEqualByComparingTo(expectedCost);
         }
@@ -2831,14 +2867,14 @@ class OpenTelemetryMapperTest {
             var span = enrich(List.of(
                     str("openinference.span.kind", "LLM"),
                     str("llm.provider", "openai"),
-                    str("llm.model_name", "gpt-4o-audio-preview"),
+                    str("llm.model_name", "gpt-4o-audio-preview-2024-12-17"),
                     integer("llm.token_count.prompt", 1000),
                     integer("llm.token_count.completion", 500),
                     integer("llm.token_count.prompt_details.audio", inputAudio),
                     integer("llm.token_count.completion_details.audio", outputAudio)));
 
-            assertThat(span.usage()).containsEntry("prompt_tokens_details.audio_tokens", inputAudio)
-                    .containsEntry("completion_tokens_details.audio_tokens", outputAudio);
+            assertThat(span.usage()).containsEntry("prompt_details.audio", inputAudio)
+                    .containsEntry("completion_details.audio", outputAudio);
             assertThat(CostService.calculateCost(span.model(), span.provider(), span.usage(), span.metadata()))
                     .isEqualByComparingTo(expectedCost);
         }
@@ -2925,8 +2961,8 @@ class OpenTelemetryMapperTest {
                     str("llm.prompt_template.variables", "{\"city\":\"Paris\"} true"),
                     str("llm.tools.0.tool.json_schema", "{\"type\":\"object\"} null"),
                     str("llm.output_messages.0.message.function_call_arguments_json", "{\"city\":\"Paris\"} 7")));
-            assertThat(trailingJsonTokens.input().asText()).isEqualTo("{\"request\":true} {}");
-            assertThat(trailingJsonTokens.output().asText()).isEqualTo("[1,2] false");
+            assertThat(trailingJsonTokens.input().path("value").asText()).isEqualTo("{\"request\":true} {}");
+            assertThat(trailingJsonTokens.output().path("value").asText()).isEqualTo("[1,2] false");
             assertThat(trailingJsonTokens.metadata().path("llm.invocation_parameters").asText())
                     .isEqualTo("{\"temperature\":0.2} {}");
             assertThat(trailingJsonTokens.metadata().path("llm.function_call").asText())
@@ -2970,12 +3006,13 @@ class OpenTelemetryMapperTest {
             var unmarkedInvocation = enrich(List.of(str("llm.invocation_parameters", "{\"temperature\":0.5}")));
 
             assertThat(marked.output().path("messages").get(0).path("content").asText()).isEqualTo("hello");
-            assertThat(marked.input().path("llm.output_messages.0.message.content").asText()).isEqualTo("hello");
+            assertThat(marked.input()).isNull();
+            assertThat(marked.output().path("llm.output_messages.0.message.content").asText()).isEqualTo("hello");
             assertThat(unmarked.input().path("llm.output_messages.0.message.content").asText()).isEqualTo("hello");
             assertThat(unmarked.output()).isNull();
             assertThat(unmarkedInvocation.input().path("llm.invocation_parameters").path("temperature").asDouble())
                     .isEqualTo(0.5);
-            assertThat(unmarkedInvocation.type()).isEqualTo(SpanType.llm);
+            assertThat(unmarkedInvocation.type()).isNull();
         }
     }
 }

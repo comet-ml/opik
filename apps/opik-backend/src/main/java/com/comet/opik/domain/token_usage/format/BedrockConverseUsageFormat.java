@@ -23,6 +23,9 @@ final class BedrockConverseUsageFormat implements UsageFormat {
                     keys -> keys.has("prompt_tokens")
                             && keys.hasAny("cache_read_input_tokens", "cache_creation_input_tokens"),
                     BedrockConverseUsageFormat::fromLiteLlm),
+            new InputVariant("openinference",
+                    keys -> keys.hasAny("prompt", "completion"),
+                    BedrockConverseUsageFormat::fromOpenInference),
             new InputVariant("totals_only",
                     keys -> keys.hasAny("prompt_tokens", "completion_tokens"),
                     BedrockConverseUsageFormat::fromTotals));
@@ -72,6 +75,18 @@ final class BedrockConverseUsageFormat implements UsageFormat {
         return builder(input)
                 .inputTokens(input.keys().get("prompt_tokens"))
                 .outputTokens(input.keys().get("completion_tokens"))
+                .build();
+    }
+
+    private static NativeUsage fromOpenInference(VariantInput input) {
+        var keys = input.keys();
+        long cacheRead = keys.get("prompt_details.cache_read");
+        long cacheWrite = keys.get("prompt_details.cache_write");
+        return builder(input)
+                .inputTokens(input.excludingCache(keys.get("prompt"), cacheRead + cacheWrite, keys.get("completion")))
+                .cacheReadInputTokens(cacheRead)
+                .cacheWriteInputTokens(cacheWrite)
+                .outputTokens(keys.get("completion"))
                 .build();
     }
 

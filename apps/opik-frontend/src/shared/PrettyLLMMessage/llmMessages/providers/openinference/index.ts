@@ -1,5 +1,6 @@
 import { LLMMessageFormatImplementation } from "../../types";
 import { detectOpenInferenceFormat } from "./detector";
+import { mapOpenInferenceMessagePair } from "./pairMapper";
 import {
   combineOpenInferenceMessages,
   mapOpenInferenceMessages,
@@ -10,6 +11,7 @@ export const openinferenceFormat: LLMMessageFormatImplementation = {
   detector: detectOpenInferenceFormat,
   mapper: mapOpenInferenceMessages,
   combiner: combineOpenInferenceMessages,
+  pairMapper: mapOpenInferenceMessagePair,
 };
 
 export {

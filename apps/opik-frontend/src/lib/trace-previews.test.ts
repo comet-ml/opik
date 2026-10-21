@@ -6,6 +6,18 @@ import {
   prettifyTraceField,
 } from "./traces";
 describe("trace preview context", () => {
+  it.each([0, false])(
+    "previews a preserved scalar value alias: %j",
+    (value) => {
+      const trace = {
+        metadata: { "openinference.span.kind": "LLM" },
+        input: { value },
+        output: { value },
+      };
+      expect(prettifyTraceField(trace, "input").message).toBe(String(value));
+      expect(prettifyTraceField(trace, "output").message).toBe(String(value));
+    },
+  );
   it("recovers output with legacy attributes only in input", () => {
     const trace = {
       input: { "llm.output_messages.0.message.content": "Recovered" },
@@ -34,6 +46,54 @@ describe("trace preview context", () => {
 });
 
 describe("thread preview context", () => {
+  it.each([0, false])(
+    "previews a scalar value alias without source metadata: %j",
+    (value) => {
+      const thread = { first_message: { value }, last_message: { value } };
+      expect(prettifyThreadField(thread, "input").message).toBe(String(value));
+      expect(prettifyThreadField(thread, "output").message).toBe(String(value));
+    },
+  );
+  it("keeps plain OpenAI array-content inputs on their provider path", () => {
+    const thread = {
+      first_message: {
+        messages: [
+          { role: "system", content: "System instructions" },
+          { role: "user", content: "Earlier question" },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Earlier text part" },
+              { type: "text", text: "What's in this image?" },
+              {
+                type: "image_url",
+                image_url: { url: "https://example.test/image.png" },
+              },
+            ],
+          },
+        ],
+      },
+    };
+    expect(getThreadPrettifyConfig(thread, "input").openInferenceHint).toBe(
+      false,
+    );
+    expect(prettifyThreadField(thread, "input").message).toBe(
+      "What's in this image?",
+    );
+  });
+
+  it("does not use a user question as a plain OpenAI output preview", () => {
+    const thread = {
+      last_message: {
+        messages: [{ role: "user", content: "Question without a reply" }],
+      },
+    };
+    expect(getThreadPrettifyConfig(thread, "output").openInferenceHint).toBe(
+      false,
+    );
+    expect(prettifyThreadField(thread, "output").prettified).toBe(false);
+  });
+
   it.each([0, false, true, "Plain answer", null, ["First", "Second"]])(
     "accepts the JSON wire domain without casting: %j",
     (value) => {

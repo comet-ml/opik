@@ -2,12 +2,27 @@ import { describe, it, expect } from "vitest";
 import { mapAndCombineMessages } from "./mapAndCombineMessages";
 import { detectLLMMessages, canShowLLMMessages } from "./detectLLMMessages";
 import { resolveOpenInferenceHint } from "@/lib/openinference";
+import { getDisplayUsage } from "../usage";
 
 const config = {
   formatHint: "openinference" as const,
   formatHintIsAuthoritative: true,
 };
 describe("message detection and combining", () => {
+  it("lets native span usage override provider usage in the display", () => {
+    const result = mapAndCombineMessages(
+      { messages: [{ role: "user", content: "Question" }] },
+      {
+        choices: [{ message: { role: "assistant", content: "Answer" } }],
+        usage: { prompt_tokens: 3, completion_tokens: 4 },
+      },
+      { spanUsage: { prompt: 1000, completion: 20 } },
+    );
+    expect(getDisplayUsage(result.usage)).toEqual([
+      { key: "prompt_tokens", value: 1000, label: "Input tokens" },
+      { key: "completion_tokens", value: 20, label: "Output tokens" },
+    ]);
+  });
   it.each([{}, { completion_tokens: 5 }])(
     "retains provider usage when span usage is incomplete: %j",
     (spanUsage) => {
@@ -188,7 +203,6 @@ describe("message detection and combining", () => {
     });
   });
 });
-
 
 const textOf = (message: { blocks: { blockType: string }[] }) => {
   const block = message.blocks[0];

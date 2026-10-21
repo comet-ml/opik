@@ -61,14 +61,14 @@ public final class OpenInferenceSpanNormalizer {
             "^llm\\.choices\\.([^.]+)\\.completion\\.text$");
 
     private static final Map<String, String> USAGE_KEYS = Map.of(
-            "llm.token_count.prompt", "prompt_tokens",
-            "llm.token_count.completion", "completion_tokens",
-            "llm.token_count.total", "total_tokens",
-            "llm.token_count.prompt_details.cache_read", "cache_read_input_tokens",
-            "llm.token_count.prompt_details.cache_write", "cache_creation_input_tokens",
-            "llm.token_count.prompt_details.audio", "prompt_tokens_details.audio_tokens",
-            "llm.token_count.completion_details.reasoning", "reasoning_tokens",
-            "llm.token_count.completion_details.audio", "completion_tokens_details.audio_tokens");
+            "llm.token_count.prompt", "prompt",
+            "llm.token_count.completion", "completion",
+            "llm.token_count.total", "total",
+            "llm.token_count.prompt_details.cache_read", "prompt_details.cache_read",
+            "llm.token_count.prompt_details.cache_write", "prompt_details.cache_write",
+            "llm.token_count.prompt_details.audio", "prompt_details.audio",
+            "llm.token_count.completion_details.reasoning", "completion_details.reasoning",
+            "llm.token_count.completion_details.audio", "completion_details.audio");
 
     private static final Set<String> RESERVED_METADATA_KEYS = Set.of(
             "thread_id", "integration", "server.address", SPAN_KIND, INPUT_MIME_TYPE, OUTPUT_MIME_TYPE,
@@ -131,9 +131,6 @@ public final class OpenInferenceSpanNormalizer {
             boolean hasCommon = common != null && !common.isEmpty();
             boolean hasSemantic = semantic != null && !semantic.isEmpty();
 
-            if (hasRaw && !raw.isObject() && !hasCommon && !hasSemantic) {
-                return raw.deepCopy();
-            }
             if (!hasRaw && !hasCommon && !hasSemantic) {
                 return null;
             }
@@ -142,8 +139,6 @@ public final class OpenInferenceSpanNormalizer {
             if (hasRaw) {
                 if (raw.isObject()) {
                     result.setAll((ObjectNode) raw);
-                } else {
-                    result.set("value", raw.deepCopy());
                 }
             }
             if (hasCommon) {
@@ -151,6 +146,11 @@ public final class OpenInferenceSpanNormalizer {
             }
             if (hasSemantic) {
                 result.setAll(semantic);
+            }
+            // Preserve the complete provider payload and legacy online-scoring paths,
+            // including fields that canonical messages/tools cannot represent.
+            if (hasRaw) {
+                result.set("value", raw.deepCopy());
             }
             return result;
         }
@@ -336,9 +336,10 @@ public final class OpenInferenceSpanNormalizer {
             if (!message.accept(matcher.group(3), value)) {
                 metadata.set(key, toJsonNode(value));
             } else {
-                // Existing scoring rules address the original flattened input keys, including
-                // sparse indices. Keep those aliases alongside the canonical message arrays.
-                input.set(key, toLegacyMessageValue(value));
+                // Preserve sparse-index scoring aliases in their own direction. The scoring
+                // engine redirects historical input.llm.output_messages paths to output.
+                var target = "input".equals(matcher.group(1)) ? input : output;
+                target.set(key, message.legacyValue(matcher.group(3), value));
             }
             return true;
         }
@@ -558,6 +559,13 @@ public final class OpenInferenceSpanNormalizer {
         private final TreeMap<Integer, ContentBuilder> contents = new TreeMap<>();
         private final TreeMap<Integer, ToolCallBuilder> toolCalls = new TreeMap<>();
         private final ObjectNode functionCall = JsonUtils.createObjectNode();
+
+        private JsonNode legacyValue(String path, AnyValue value) {
+            // accept() has already decoded these arguments. Reuse that result for the alias.
+            return "function_call_arguments_json".equals(path)
+                    ? functionCall.get("arguments").deepCopy()
+                    : toLegacyMessageValue(value);
+        }
 
         private boolean accept(String path, AnyValue value) {
             if (Set.of("role", "content", "name", "tool_call_id").contains(path)) {

@@ -32,6 +32,11 @@ export interface LLMMessageFormatDetectionResult {
   confidence?: "high" | "medium" | "low";
 }
 
+export type LLMMessagePairDetections = {
+  input: LLMMessageFormatDetectionResult;
+  output: LLMMessageFormatDetectionResult;
+};
+
 // Block descriptor with component reference (Component-as-Data pattern)
 export type LLMBlockDescriptor =
   | {
@@ -94,10 +99,17 @@ export type FormatCombiner = (
   output: { raw: unknown; mapped: LLMMapperResult },
 ) => LLMMapperResult;
 
+export type FormatPairMapper = (
+  input: { raw: unknown; detection: LLMMessageFormatDetectionResult },
+  output: { raw: unknown; detection: LLMMessageFormatDetectionResult },
+  config: LLMMessagePrettifyConfig,
+) => LLMMapperResult | null;
+
 // Format interface
 export interface LLMMessageFormatImplementation {
   name: LLMMessageFormat;
   detector: FormatDetector;
   mapper: FormatMapper;
   combiner?: FormatCombiner;
+  pairMapper?: FormatPairMapper;
 }

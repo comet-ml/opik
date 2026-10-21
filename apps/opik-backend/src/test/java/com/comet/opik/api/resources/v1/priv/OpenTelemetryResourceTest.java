@@ -19,6 +19,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
+import com.comet.opik.api.resources.v1.events.OnlineScoringEngine;
 import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanType;
@@ -609,6 +610,88 @@ class OpenTelemetryResourceTest {
                     .setValue(AnyValue.newBuilder().setIntValue(value)).build();
         }
 
+        Stream<Arguments> testOpenInferenceCostUsesNativeUsageKeys() {
+            var cacheUsage = Map.of("prompt", 1000, "completion", 20, "total", 1020,
+                    "prompt_details.cache_read", 800, "prompt_details.cache_write", 100);
+            return Stream.of(
+                    arguments("anthropic", "claude-haiku-4-5", cacheUsage, "0.000405"),
+                    arguments("aws", "anthropic.claude-3-5-haiku-20241022-v1:0", cacheUsage, "0.000324"),
+                    arguments("bedrock_converse", "anthropic.claude-haiku-4-5-20251001-v1:0", cacheUsage, "0.000405"),
+                    arguments("anthropic_vertexai", "vertex_ai/claude-haiku-4-5", cacheUsage, "0.000405"),
+                    arguments("anthropic", "claude-haiku-4-5", Map.of("completion", 20), "0.0001"),
+                    arguments("aws", "anthropic.claude-3-5-haiku-20241022-v1:0", Map.of("completion", 20), "0.00008"),
+                    arguments("openai", "gpt-4o-audio-preview-2024-12-17",
+                            Map.of("prompt", 1000, "completion", 500, "total", 1500,
+                                    "prompt_details.audio", 300, "completion_details.audio", 200),
+                            "0.03275"));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void testOpenInferenceCostUsesNativeUsageKeys(String provider, String model,
+                Map<String, Integer> tokenCounts, String expectedCost) {
+            String workspaceName = UUID.randomUUID().toString();
+            var attributes = new ArrayList<>(List.of(
+                    stringAttribute("openinference.span.kind", "LLM"),
+                    stringAttribute("llm.provider", provider), stringAttribute("llm.model_name", model)));
+            tokenCounts.forEach((key, value) -> attributes.add(intAttribute("llm.token_count." + key, value)));
+
+            var span = persistOpenInferenceSpan(attributes, workspaceName);
+            assertThat(span.usage()).containsExactlyInAnyOrderEntriesOf(tokenCounts);
+            assertThat(span.totalEstimatedCost()).isEqualByComparingTo(expectedCost);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"CHAIN", "AGENT"})
+        void testOpenInferenceLegacyScoringPaths(String kind) {
+            String workspaceName = UUID.randomUUID().toString();
+            var rawInput = JsonUtils.getJsonNodeFromString(
+                    """
+                            {"question":"Question","messages":[{"role":"user","content":[{"type":"input_audio","input_audio":{"data":"AA==","format":"wav"}}],"cache_control":{"type":"ephemeral"}}],"tools":[{"name":"tool","custom":true}]}
+                            """);
+            var rawOutput = JsonUtils.getJsonNodeFromString(
+                    """
+                            {"answer":"Answer","messages":[{"role":"assistant","refusal":"raw refusal","content":[{"type":"file","file":{"file_id":"file-7"}}]}]}
+                            """);
+            var span = persistOpenInferenceSpan(List.of(
+                    stringAttribute("openinference.span.kind", kind),
+                    stringAttribute("input.mime_type", "application/json"),
+                    stringAttribute("input.value", rawInput.toString()),
+                    stringAttribute("output.mime_type", "application/json"),
+                    stringAttribute("output.value", rawOutput.toString()),
+                    stringAttribute("custom.context", "Context"),
+                    stringAttribute("llm.input_messages.2.message.content", "Question"),
+                    stringAttribute("llm.output_messages.7.message.content", "Answer")), workspaceName);
+            var variables = Map.of("question", "input.value.question", "answer", "output.value.answer",
+                    "context", "input.custom.context", "old_input", "input.llm.input_messages.2.message.content",
+                    "old_output", "input.llm.output_messages.7.message.content");
+            var expected = Map.of("question", "Question", "answer", "Answer", "context", "Context",
+                    "old_input", "Question", "old_output", "Answer");
+
+            assertThat(span.input().path("value")).isEqualTo(rawInput);
+            assertThat(span.output().path("value")).isEqualTo(rawOutput);
+            assertThat(span.input().fieldNames()).toIterable().noneMatch(key -> key.startsWith("llm.output_messages."));
+            assertThat(OnlineScoringEngine.toReplacements(variables, span)).isEqualTo(expected);
+            var trace = traceResourceClient.getById(span.traceId(), workspaceName, okApikey);
+            assertThat(OnlineScoringEngine.toReplacements(variables, trace)).isEqualTo(expected);
+        }
+
+        private com.comet.opik.api.Span persistOpenInferenceSpan(List<KeyValue> attributes, String workspaceName) {
+            mockTargetWorkspace(okApikey, workspaceName);
+            var traceId = UUID.randomUUID().toString().getBytes();
+            var span = Span.newBuilder().setName("openinference call")
+                    .setTraceId(ByteString.copyFrom(traceId))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAllAttributes(attributes).build();
+            var opikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(traceId,
+                    Duration.ofNanos(span.getStartTimeUnixNano()).toMillis());
+            sendProtobufTraces(List.of(span), "OpenInference Test", workspaceName, okApikey, true, null);
+            return spanResourceClient.getByTraceIdAndProject(opikTraceId, "OpenInference Test", workspaceName, okApikey)
+                    .content().getFirst();
+        }
+
         @Test
         @DisplayName("normalizes OpenInference spans through the OTLP protobuf endpoint")
         void testOpenInferenceSpanNormalization() {
@@ -671,13 +754,13 @@ class OpenTelemetryResourceTest {
             assertThat(persistedOpenInferenceSpan.provider()).isEqualTo("openai");
             assertThat(persistedOpenInferenceSpan.usage())
                     .containsExactlyInAnyOrderEntriesOf(
-                            Map.of("prompt_tokens", 3, "completion_tokens", 4, "total_tokens", 7));
+                            Map.of("prompt", 3, "completion", 4, "total", 7));
             assertThat(persistedOpenInferenceSpan.input().path("request_id").asText()).isEqualTo("request-7");
             assertThat(persistedOpenInferenceSpan.input().path("messages").get(0).path("role").asText())
                     .isEqualTo("user");
             assertThat(persistedOpenInferenceSpan.input().path("llm.input_messages.2.message.content").asText())
                     .isEqualTo("Hello");
-            assertThat(persistedOpenInferenceSpan.input().path("llm.output_messages.4.message.content").asText())
+            assertThat(persistedOpenInferenceSpan.output().path("llm.output_messages.4.message.content").asText())
                     .isEqualTo("Hello from Opik");
             assertThat(persistedOpenInferenceSpan.output().path("response_id").asText()).isEqualTo("response-7");
             assertThat(persistedOpenInferenceSpan.output().path("messages").get(0).path("content").asText())
