@@ -689,6 +689,17 @@ export interface SpanPayload {
 export interface ThreadDetail {
   id: string;
   projectId: string;
+  /**
+   * The thread's own row id, as distinct from `id` (the `thread_id` string the
+   * SDK caller chose). The two are not interchangeable: an annotation queue of
+   * `scope: 'thread'` takes its items by THIS id, and
+   * `POST /annotation-queues/{id}/items/add` accepts the `thread_id` string
+   * without error while adding nothing — so a seed that used the wrong one
+   * leaves an empty queue rather than a failure. `null` when the endpoint did
+   * not answer it, so a caller that needs it asserts rather than passing
+   * `'undefined'` on to the queue.
+   */
+  threadModelId: string | null;
   feedbackScores: FeedbackScoreRef[];
   /**
    * The aggregate `find_thread_by_id` computes over the thread's OWN traces —
@@ -5131,6 +5142,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       return {
         id: String(thread.id ?? ''),
         projectId: String(thread.projectId ?? ''),
+        threadModelId: thread.threadModelId ?? null,
         feedbackScores: (thread.feedbackScores ?? []).map((fs) => ({
           name: fs.name,
           value: Number(fs.value),
@@ -5231,6 +5243,54 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.toTime ? { toTime: args.toTime } : {}),
       });
       return (page.content ?? []).map((t) => String(t.id));
+    },
+
+    /**
+     * One thread's traces, in start-time order, carrying the `metadata` the
+     * row was written with — `GET /v1/private/traces` filtered on `thread_id`,
+     * which is the exact read the thread Messages panel (`useTracesList`)
+     * issues to build its turns.
+     *
+     * Separate from `listTraceIds` for two reasons, both load-bearing for a
+     * spec about what the panel renders:
+     *
+     *  - ids alone cannot say whether a per-trace flag survived the LIST read.
+     *    `getTracePayload` reads `GET /traces/{id}`, a different query: a list
+     *    endpoint that dropped `metadata` would leave that by-id read green
+     *    while the panel, which never makes it, saw no flag at all.
+     *  - `truncate: false`, where `listTraceIds` sends `true`. Truncation is
+     *    what the table wants and the opposite of what this wants — the whole
+     *    point is to compare the metadata byte-for-byte with what was seeded.
+     *
+     * `metadata` is `unknown`: the caller asserts the shape it seeded rather
+     * than being handed a pre-digested boolean, so a flag that came back under
+     * the wrong key, or as the string `"true"`, fails instead of narrowing to
+     * the same answer as the real thing.
+     */
+    async listThreadTraces(args: {
+      projectId: string;
+      threadId: string;
+      size?: number;
+    }): Promise<Array<{ id: string; name: string; metadata: unknown }>> {
+      const page = await opik.api.traces.getTracesByProject({
+        projectId: args.projectId,
+        size: args.size ?? 200,
+        page: 1,
+        truncate: false,
+        filters: JSON.stringify([
+          { field: 'thread_id', operator: '=', value: args.threadId, type: 'string' },
+        ] satisfies BackendFilter[]),
+      });
+      // The endpoint answers newest-first; the panel renders oldest-first, and
+      // every caller here asserts on chronological order, so reverse once here
+      // rather than in each spec.
+      return (page.content ?? [])
+        .map((t) => ({
+          id: String(t.id ?? ''),
+          name: t.name ?? '',
+          metadata: t.metadata ?? null,
+        }))
+        .reverse();
     },
 
     /**

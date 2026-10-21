@@ -1,4 +1,4 @@
-export { test, expect } from './openai-responses-stub.fixture';
+export { test, expect } from './sme-internal-thread-queue.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -384,3 +384,14 @@ export {
   STUB_OUTPUT_TOKENS,
   STUB_OUTPUT_TEXT,
 } from './openai-responses-stub.fixture';
+export type {
+  InternalTraceTurnRef,
+  InternalTraceThreadRef,
+  InternalTraceThreadsRef,
+  InternalTraceThreadsFixtures,
+} from './internal-trace-threads.fixture';
+export { OPIK_METADATA_KEY, IS_INTERNAL_KEY } from './internal-trace-threads.fixture';
+export type {
+  SmeInternalThreadQueueRef,
+  SmeInternalThreadQueueFixtures,
+} from './sme-internal-thread-queue.fixture';
