@@ -7,6 +7,7 @@ import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
@@ -50,6 +51,7 @@ import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
+import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -83,6 +85,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -99,9 +102,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
- * The trace-keyed spans reads bounded by the span_weeks index ({@code spanWeeksReadEnabled}) return every span of
- * their traces, a far-future one included, on the weekly-partitioned spans table: each read is compared as a whole
- * against what its traces' spans add up to. Weeks are registered by {@code span_weeks_mv} alone
+ * The spans reads bounded by the span_weeks index ({@code spanWeeksReadEnabled}), keyed by traces or by a project,
+ * return every span of their traces or project, a far-future one included, on the weekly-partitioned spans table: each
+ * read is compared as a whole against what those spans add up to. Weeks are registered by {@code span_weeks_mv} alone
  * ({@link SpanWeeksListener} is disabled), and each fixture waits for them to be indexed unless it says otherwise.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -564,6 +567,122 @@ class SpanWeeksReadBoundTest {
         SpanAssertions.assertSpan(actualSpans, expectedSpans, USER);
     }
 
+    /**
+     * The spans of a project and their count, bound to the project's span weeks: the default page, the span id
+     * prefilter of both statements (a span filter with an is-empty feedback score filter), the deduped spans of a
+     * custom sort, a search without and with the prefilter, and a span time window that ends past the far-future span.
+     */
+    private Stream<Arguments> projectSpansPageCountsAFarFutureSpan() {
+        return Stream.of(
+                arguments(Named.of("default", (Function<FarFutureTrace, Span.SpanPage>) trace -> findProjectSpans(
+                        trace, null, null, null, null, null))),
+                arguments(Named.of("filtered", (Function<FarFutureTrace, Span.SpanPage>) trace -> findProjectSpans(
+                        trace, prefilteredFilters(), null, null, null, null))),
+                arguments(Named.of("custom sort", (Function<FarFutureTrace, Span.SpanPage>) trace -> findProjectSpans(
+                        trace, null, List.of(SortingField.builder()
+                                .field(SortableFields.ID)
+                                .direction(Direction.DESC)
+                                .build()),
+                        null, null, null))),
+                arguments(Named.of("search", (Function<FarFutureTrace, Span.SpanPage>) trace -> findProjectSpans(
+                        trace, null, null, null, null, trace.trace().id().toString()))),
+                arguments(Named.of("search, filtered",
+                        (Function<FarFutureTrace, Span.SpanPage>) trace -> findProjectSpans(trace,
+                                prefilteredFilters(), null, null, null, trace.trace().id().toString()))),
+                arguments(Named.of("time window", (Function<FarFutureTrace, Span.SpanPage>) trace -> {
+                    var window = spanTimeWindow(trace);
+                    return findProjectSpans(trace, null, null, window.get("from_time"), window.get("to_time"), null);
+                })));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void projectSpansPageCountsAFarFutureSpan(Function<FarFutureTrace, Span.SpanPage> read) {
+        var trace = fixtures.createFarFutureTrace();
+
+        var actualPage = read.apply(trace);
+
+        var expectedSpans = fixtures.expectedSpans(trace.spans());
+        SpanAssertions.assertPage(actualPage, 1, expectedSpans.size(), expectedSpans.size());
+        SpanAssertions.assertSpan(actualPage.content(), expectedSpans, USER);
+    }
+
+    /** The cursor sits past the far-future span, which comes first in the stream's id order. */
+    private Stream<Arguments> projectSpansStreamIncludesAFarFutureSpan() {
+        return Stream.of(
+                arguments(Named.of("project",
+                        (Function<FarFutureTrace, SpanSearchStreamRequest>) trace -> SpanSearchStreamRequest
+                                .builder()
+                                .projectName(trace.projectName())
+                                .build())),
+                arguments(Named.of("cursor",
+                        (Function<FarFutureTrace, SpanSearchStreamRequest>) trace -> SpanSearchStreamRequest
+                                .builder()
+                                .projectName(trace.projectName())
+                                .lastRetrievedId(ID_GENERATOR.getTimeOrderedEpoch(
+                                        farFutureSpanTime(trace).plus(Duration.ofDays(1)).toEpochMilli()))
+                                .build())),
+                arguments(Named.of("time window", (Function<FarFutureTrace, SpanSearchStreamRequest>) trace -> {
+                    var window = spanTimeWindow(trace);
+                    return SpanSearchStreamRequest.builder()
+                            .projectName(trace.projectName())
+                            .fromTime(Instant.parse(window.get("from_time")))
+                            .toTime(Instant.parse(window.get("to_time")))
+                            .build();
+                })));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void projectSpansStreamIncludesAFarFutureSpan(Function<FarFutureTrace, SpanSearchStreamRequest> request) {
+        var trace = fixtures.createFarFutureTrace();
+
+        var actualSpans = spanResourceClient.getStreamAndAssertContent(API_KEY, WORKSPACE_NAME, request.apply(trace));
+
+        var expectedSpans = fixtures.expectedSpans(trace.spans());
+        SpanAssertions.assertSpan(actualSpans, expectedSpans, USER);
+    }
+
+    /**
+     * The span stats of a project, all-time, over a span time window, filtered, and searched. A filter or a search also
+     * scopes the feedback-score stats to the matching spans, so the far-future span's score is averaged only if that
+     * span is read there too.
+     */
+    private Stream<Arguments> projectSpanStatsCountAFarFutureSpan() {
+        return Stream.of(
+                arguments(Named.of("project", (Function<FarFutureTrace, ProjectStats>) trace -> spanResourceClient
+                        .getSpansStats(trace.projectName(), null, null, API_KEY, WORKSPACE_NAME, Map.of()))),
+                arguments(Named.of("time window", (Function<FarFutureTrace, ProjectStats>) trace -> spanResourceClient
+                        .getSpansStats(trace.projectName(), null, null, API_KEY, WORKSPACE_NAME,
+                                spanTimeWindow(trace)))),
+                arguments(Named.of("filtered", (Function<FarFutureTrace, ProjectStats>) trace -> spanResourceClient
+                        .getSpansStats(trace.projectName(), null, positiveCostFilter(), API_KEY, WORKSPACE_NAME,
+                                Map.of()))),
+                arguments(Named.of("search", (Function<FarFutureTrace, ProjectStats>) trace -> spanResourceClient
+                        .getSpansStats(trace.projectName(), null, null, API_KEY, WORKSPACE_NAME,
+                                Map.of("search", trace.trace().id().toString())))));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void projectSpanStatsCountAFarFutureSpan(Function<FarFutureTrace, ProjectStats> read) {
+        var trace = fixtures.createFarFutureTrace();
+        var farFutureSpan = trace.spans().getLast();
+        var score = factory.manufacturePojo(FeedbackScore.class);
+        spanResourceClient.feedbackScore(farFutureSpan.id(), score, WORKSPACE_NAME, API_KEY);
+
+        var actual = read.apply(trace);
+
+        var expectedSpans = trace.spans().stream()
+                .map(span -> span.id().equals(farFutureSpan.id())
+                        ? span.toBuilder().feedbackScores(List.of(score)).build()
+                        : span)
+                .toList();
+        var expectedStats = withExplicitCost(StatsUtils.getProjectSpanStatItems(expectedSpans),
+                trace.totalCost().divide(BigDecimal.valueOf(expectedSpans.size())), trace.totalCost());
+        TraceAssertions.assertStats(actual.stats(), expectedStats);
+    }
+
     @Test
     void spansByTraceIdsIncludeAFarFutureSpan() {
         var trace = fixtures.createFarFutureTrace();
@@ -597,6 +716,45 @@ class SpanWeeksReadBoundTest {
         return spanService.getSpansSizeByTraceIds(traceIds)
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, USER, WORKSPACE_ID))
                 .block();
+    }
+
+    private Span.SpanPage findProjectSpans(FarFutureTrace trace, List<SpanFilter> filters, List<SortingField> sorting,
+            String fromTime, String toTime, String search) {
+        return spanResourceClient.findSpans(WORKSPACE_NAME, API_KEY, trace.projectName(), null, 1, 10, null, null,
+                filters, sorting, null, fromTime, toTime, search);
+    }
+
+    /** Every fixture span has a cost. */
+    private List<SpanFilter> positiveCostFilter() {
+        return List.of(SpanFilter.builder()
+                .field(SpanField.TOTAL_ESTIMATED_COST)
+                .operator(Operator.GREATER_THAN)
+                .value("0")
+                .build());
+    }
+
+    /**
+     * No span has a score, so the is-empty feedback score filter keeps both. It disables the page-keyed aggregates,
+     * and with the span filter turns on the span id prefilter of the page and of the count.
+     */
+    private List<SpanFilter> prefilteredFilters() {
+        return List.of(positiveCostFilter().getFirst(), SpanFilter.builder()
+                .field(SpanField.FEEDBACK_SCORES)
+                .operator(Operator.IS_EMPTY)
+                .key("score-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                .value("")
+                .build());
+    }
+
+    /** From an hour before the trace to a day past the far-future span: both spans, and their weeks at either end. */
+    private Map<String, String> spanTimeWindow(FarFutureTrace trace) {
+        return Map.of(
+                "from_time", trace.trace().startTime().minus(Duration.ofHours(1)).toString(),
+                "to_time", farFutureSpanTime(trace).plus(Duration.ofDays(1)).toString());
+    }
+
+    private Instant farFutureSpanTime(FarFutureTrace trace) {
+        return RetentionUtils.extractInstant(trace.spans().getLast().id());
     }
 
     private List<TraceFilter> nameFilter(FarFutureTrace trace) {

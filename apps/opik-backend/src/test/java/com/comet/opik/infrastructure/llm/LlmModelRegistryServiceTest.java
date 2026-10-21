@@ -5,6 +5,7 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService.ModelEntry;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.client.WebTarget;
@@ -422,7 +423,9 @@ class LlmModelRegistryServiceTest {
 
         var service = new LlmModelRegistryService(config);
 
-        assertThat(JsonUtils.valueToTree(service.getRegistry().get("openai").get(1)))
+        var json = (ObjectNode) JsonUtils.valueToTree(service.getRegistry().get("openai").get(1));
+        json.remove("params");
+        assertThat(json)
                 .isEqualTo(JsonUtils.getJsonNodeFromString("""
                         {"id": "gpt-3.5-turbo", "structured_output": false, "reasoning": false}"""));
     }
@@ -546,6 +549,8 @@ class LlmModelRegistryServiceTest {
 
         assertThat(service.findModel("o3")).get()
                 .extracting(LlmModelRegistryService.ModelLookupResult::model)
+                .usingRecursiveComparison()
+                .ignoringFields("params")
                 .isEqualTo(LlmModelDefinition.builder().id("o3").label("O3 from remote").structuredOutput(true)
                         .reasoning(true).build());
         assertThat(service.findModel("gpt-4o")).get()

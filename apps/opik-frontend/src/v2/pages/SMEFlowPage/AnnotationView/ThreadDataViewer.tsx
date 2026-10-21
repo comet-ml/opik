@@ -8,6 +8,12 @@ import { Filter } from "@/types/filters";
 import { useSMEFlow } from "../SMEFlowContext";
 import useTracesList from "@/api/traces/useTracesList";
 import TraceMessages from "@/v2/pages-shared/traces/TraceMessages/TraceMessages";
+import InternalTracesToggle from "@/v2/pages-shared/traces/InternalTracesToggle";
+import {
+  ONLY_INTERNAL_CALLS_MESSAGE,
+  useVisibleTraces,
+} from "@/v2/pages-shared/traces/hiddenSpans";
+import NoData from "@/shared/NoData/NoData";
 import { COLUMN_TYPE } from "@/types/shared";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import ThreadDetailsPanel from "@/v2/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
@@ -95,6 +101,10 @@ const useThreadData = () => {
     [tracesData],
   );
 
+  // Same as the thread panel: internal traces are not conversation turns, but the one open
+  // in the trace panel stays listed.
+  const visibleTraces = useVisibleTraces(traces, traceId || undefined);
+
   const handleOpenTrace = useCallback(
     (id: string, shouldFilterToolCalls: boolean) => {
       setTracePanelFilters((previousFilters: Filter[] | null | undefined) =>
@@ -126,6 +136,7 @@ const useThreadData = () => {
   return {
     thread,
     traces,
+    visibleTraces,
     isFetching,
     traceId,
     setTraceId,
@@ -140,7 +151,8 @@ const useThreadData = () => {
 };
 
 const ThreadHeader: React.FC = () => {
-  const { thread, isFetching, handleOpenThread } = useThreadData();
+  const { thread, traces, traceId, isFetching, handleOpenThread } =
+    useThreadData();
 
   const dateRange = formatThreadDateRange(thread?.start_time, thread?.end_time);
 
@@ -157,6 +169,10 @@ const ThreadHeader: React.FC = () => {
         <TraceIdentifier name={dateRange} id={thread?.id || ""} />
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        <InternalTracesToggle
+          traces={traces}
+          keepTraceId={traceId || undefined}
+        />
         <Button variant="ghost" size="2xs" onClick={handleOpenThread}>
           Thread
           <ArrowUpRight className="ml-1 size-3" />
@@ -170,6 +186,7 @@ const ThreadContent: React.FC = () => {
   const {
     thread,
     traces,
+    visibleTraces,
     traceId,
     setTraceId,
     spanId,
@@ -184,11 +201,15 @@ const ThreadContent: React.FC = () => {
 
   return (
     <>
-      <TraceMessages
-        traces={traces}
-        traceId={last(traces)?.id}
-        handleOpenTrace={handleOpenTrace}
-      />
+      {traces.length > 0 && !visibleTraces.length ? (
+        <NoData message={ONLY_INTERNAL_CALLS_MESSAGE} icon={null} />
+      ) : (
+        <TraceMessages
+          traces={visibleTraces}
+          traceId={last(visibleTraces)?.id}
+          handleOpenTrace={handleOpenTrace}
+        />
+      )}
       <TraceDetailsPanel
         projectId={thread?.project_id || ""}
         traceId={traceId ?? ""}

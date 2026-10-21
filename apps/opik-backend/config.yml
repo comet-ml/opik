@@ -210,10 +210,11 @@ databaseAnalyticsDataModel:
   #   instance: the backfill covers the spans written until its first run, live registration the rest.
   spanWeeksBackfillEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED:-false}
   #  Default: false
-  #  Description: Bound the spans reads keyed by traces (by trace id, a trace range or a project's traces) to the weeks
-  #   the span_weeks index holds for them. Effective only while spanColumnsNonNullable is also true (the legacy spans
-  #   id_at wraps far-future ids). New spans are indexed by span_weeks_mv in their insert, older ones by the span weeks
-  #   backfill: turn true once the backfill logs that it is complete, as spans it has not indexed yet would be skipped.
+  #  Description: Bound the spans reads keyed by traces (by trace id, a trace range or a project's traces) or by a
+  #   project (the spans list, count, stream and stats) to the weeks the span_weeks index holds for them. Effective
+  #   only while spanColumnsNonNullable is also true (the legacy spans id_at wraps far-future ids). New spans are
+  #   indexed by span_weeks_mv in their insert, older ones by the span weeks backfill: turn true once the backfill logs
+  #   that it is complete, as spans it has not indexed yet would be skipped.
   spanWeeksReadEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_READ_ENABLED:-false}
 
 # Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
@@ -1702,6 +1703,10 @@ alertsEventBridge:
   # Description: AWS region of the bus. When empty, the region in an ARN bus is used, then the default
   #   AWS region provider chain
   region: ${ALERTS_EVENTBRIDGE_REGION:-}
+  # Default: empty
+  # Description: SageMaker Partner AI App endpoint that vends the customer role's credentials. When set, PutEvents
+  #   is signed only with those credentials, never IRSA, EKS Pod Identity or the default AWS chain
+  customerCredentialsEndpoint: ${SAGEMAKER_PARTNER_CUSTOMER_CREDENTIALS_ENDPOINT:-}
 
 # Configuration AWS S3
 s3Config:
