@@ -296,30 +296,22 @@ class OpenTelemetryMapperTest {
         return Stream.of(
                 Arguments.of("absent", List.of(), null),
                 Arguments.of("blank", List.of(projectNameAttribute("  ")), null),
-                Arguments.of("150 characters", List.of(projectNameAttribute("a".repeat(150))), "a".repeat(150)),
-                Arguments.of("151 characters", List.of(projectNameAttribute("a".repeat(151))), null),
-                Arguments.of("150 characters with surrounding spaces",
-                        List.of(projectNameAttribute(" " + "a".repeat(150) + " ")), " " + "a".repeat(150) + " "),
-                Arguments.of("150 surrogate pair characters", List.of(projectNameAttribute("🙂".repeat(150))),
-                        "🙂".repeat(150)),
-                Arguments.of("151 surrogate pair characters", List.of(projectNameAttribute("🙂".repeat(151))),
-                        null));
+                Arguments.of("present", List.of(projectNameAttribute("my-project")), "my-project"));
     }
 
-    @ParameterizedTest(name = "opik.project_name as {0}")
-    @MethodSource("extractTooLongProjectNameCases")
-    void extractTooLongProjectName(String label, List<KeyValue> attributes, String expected) {
-        assertThat(OpenTelemetryMapper.extractTooLongProjectName(attributes)).isEqualTo(Optional.ofNullable(expected));
+    @ParameterizedTest(name = "opik.project_name of {0} is valid: {2}")
+    @MethodSource("projectNameLengthCases")
+    void isValidProjectName(String label, String projectName, boolean expected) {
+        assertThat(OpenTelemetryMapper.isValidProjectName(projectName)).isEqualTo(expected);
     }
 
-    static Stream<Arguments> extractTooLongProjectNameCases() {
+    static Stream<Arguments> projectNameLengthCases() {
         return Stream.of(
-                Arguments.of("absent", List.of(), null),
-                Arguments.of("blank", List.of(projectNameAttribute("  ")), null),
-                Arguments.of("150 characters", List.of(projectNameAttribute("a".repeat(150))), null),
-                Arguments.of("151 characters", List.of(projectNameAttribute("a".repeat(151))), "a".repeat(151)),
-                Arguments.of("151 surrogate pair characters", List.of(projectNameAttribute("🙂".repeat(151))),
-                        "🙂".repeat(151)));
+                Arguments.of("150 characters", "a".repeat(150), true),
+                Arguments.of("151 characters", "a".repeat(151), false),
+                Arguments.of("150 characters with surrounding spaces", " " + "a".repeat(150) + " ", true),
+                Arguments.of("150 surrogate pair characters", "🙂".repeat(150), true),
+                Arguments.of("151 surrogate pair characters", "🙂".repeat(151), false));
     }
 
     private static KeyValue projectNameAttribute(String value) {

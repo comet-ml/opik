@@ -548,16 +548,10 @@ public class OpenTelemetryMapper {
     }
 
     public static Optional<String> extractOpikProjectName(List<KeyValue> attributes) {
-        return extractStringAttribute(attributes, GeneralMappingRules.OPIK_PROJECT_NAME_ATTR)
-                .filter(OpenTelemetryMapper::isValidProjectName);
+        return extractStringAttribute(attributes, GeneralMappingRules.OPIK_PROJECT_NAME_ATTR);
     }
 
-    public static Optional<String> extractTooLongProjectName(List<KeyValue> attributes) {
-        return extractStringAttribute(attributes, GeneralMappingRules.OPIK_PROJECT_NAME_ATTR)
-                .filter(projectName -> !isValidProjectName(projectName));
-    }
-
-    private static boolean isValidProjectName(String projectName) {
+    public static boolean isValidProjectName(String projectName) {
         var stripped = projectName.strip();
         return stripped.codePointCount(0, stripped.length()) <= MAX_PROJECT_NAME_LENGTH;
     }

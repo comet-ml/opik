@@ -20,7 +20,6 @@ import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
 import io.opentelemetry.proto.trace.v1.Span;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,13 +32,16 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -109,25 +111,47 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 .findFirst()
                 .orElse(null);
 
-        var spansByProjectName = groupSpansByProjectName(traceRequest, fallbackProjectName);
-        var skippedProjectNames = findSkippedProjectNames(traceRequest);
+        Map<String, List<Span>> spansByProjectName = new HashMap<>();
+        Set<String> skippedProjectNames = new LinkedHashSet<>();
+        long skippedSpans = 0;
+        for (var resourceSpans : traceRequest.getResourceSpansList()) {
+            var resourceProjectName = OpenTelemetryMapper
+                    .extractOpikProjectName(resourceSpans.getResource().getAttributesList());
+            for (var scopeSpans : resourceSpans.getScopeSpansList()) {
+                for (var span : scopeSpans.getSpansList()) {
+                    var spanProjectName = OpenTelemetryMapper.extractOpikProjectName(span.getAttributesList());
+                    var tooLong = Stream.of(spanProjectName, resourceProjectName)
+                            .flatMap(Optional::stream)
+                            .filter(name -> !OpenTelemetryMapper.isValidProjectName(name))
+                            .toList();
+                    if (!tooLong.isEmpty()) {
+                        skippedSpans++;
+                        skippedProjectNames.addAll(tooLong);
+                    }
+                    var projectName = spanProjectName.filter(OpenTelemetryMapper::isValidProjectName)
+                            .or(() -> resourceProjectName.filter(OpenTelemetryMapper::isValidProjectName))
+                            .orElse(fallbackProjectName);
+                    spansByProjectName.computeIfAbsent(WorkspaceUtils.getProjectName(projectName),
+                            name -> new ArrayList<>()).add(span);
+                }
+            }
+        }
+        var skippedSpanCount = skippedSpans;
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            if (skippedProjectNames.spanCount() > 0) {
+            if (skippedSpanCount > 0) {
                 log.warn("Ignored '{}' on {} in workspaceId '{}' because the value is longer than {} characters: {}",
-                        GeneralMappingRules.OPIK_PROJECT_NAME_ATTR, spans(skippedProjectNames.spanCount()),
-                        workspaceId, OpenTelemetryMapper.MAX_PROJECT_NAME_LENGTH,
-                        skippedProjectNames.loggableNames());
+                        GeneralMappingRules.OPIK_PROJECT_NAME_ATTR, spans(skippedSpanCount), workspaceId,
+                        OpenTelemetryMapper.MAX_PROJECT_NAME_LENGTH, describeSkippedProjectNames(skippedProjectNames));
             }
 
             return Flux.fromIterable(spansByProjectName.entrySet())
                     .flatMap(entry -> projectService.getOrCreate(entry.getKey())
                             .map(project -> Map.entry(project, entry.getValue())))
                     .collect(Collectors.toMap(entry -> entry.getKey().id(), Function.identity(),
-                            (left, right) -> Map.entry(left.getKey(),
-                                    Stream.concat(left.getValue().stream(), right.getValue().stream()).toList())))
+                            OpenTelemetryServiceImpl::mergeSpans))
                     .flatMapMany(spansByProjectId -> {
                         log.info(
                                 "Storing OpenTelemetry spans in workspaceId '{}': {}. Spans without a valid '{}' go to project '{}'",
@@ -140,17 +164,18 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    @Builder(toBuilder = true)
-    private record SkippedProjectNames(long spanCount, @NonNull Set<String> names) {
+    private static Map.Entry<Project, List<Span>> mergeSpans(Map.Entry<Project, List<Span>> left,
+            Map.Entry<Project, List<Span>> right) {
+        return Map.entry(left.getKey(), Stream.concat(left.getValue().stream(), right.getValue().stream()).toList());
+    }
 
-        String loggableNames() {
-            var loggable = names.stream()
-                    .limit(MAX_LOGGED_PROJECT_NAMES)
-                    .map(name -> "'" + StringUtils.abbreviate(name, MAX_LOGGED_SKIPPED_PROJECT_NAME_LENGTH) + "'")
-                    .collect(Collectors.joining(", "));
-            var hidden = names.size() - MAX_LOGGED_PROJECT_NAMES;
-            return hidden > 0 ? loggable + " and " + hidden + " more" : loggable;
-        }
+    private static String describeSkippedProjectNames(Set<String> names) {
+        var described = names.stream()
+                .limit(MAX_LOGGED_PROJECT_NAMES)
+                .map(name -> "'" + StringUtils.abbreviate(name, MAX_LOGGED_SKIPPED_PROJECT_NAME_LENGTH) + "'")
+                .collect(Collectors.joining(", "));
+        var hidden = names.size() - MAX_LOGGED_PROJECT_NAMES;
+        return hidden > 0 ? described + " and " + hidden + " more" : described;
     }
 
     private static String describeProjects(Collection<Map.Entry<Project, List<Span>>> spansByProject) {
@@ -167,44 +192,6 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
     private static String spans(long count) {
         return count + (count == 1 ? " span" : " spans");
-    }
-
-    private SkippedProjectNames findSkippedProjectNames(ExportTraceServiceRequest traceRequest) {
-        long spanCount = 0;
-        var names = new LinkedHashSet<String>();
-        for (var resourceSpans : traceRequest.getResourceSpansList()) {
-            var resourceName = OpenTelemetryMapper
-                    .extractTooLongProjectName(resourceSpans.getResource().getAttributesList());
-            for (var scopeSpans : resourceSpans.getScopeSpansList()) {
-                for (var span : scopeSpans.getSpansList()) {
-                    var spanName = OpenTelemetryMapper.extractTooLongProjectName(span.getAttributesList());
-                    if (resourceName.isPresent() || spanName.isPresent()) {
-                        spanCount++;
-                        resourceName.ifPresent(names::add);
-                        spanName.ifPresent(names::add);
-                    }
-                }
-            }
-        }
-        return SkippedProjectNames.builder().spanCount(spanCount).names(names).build();
-    }
-
-    private Map<String, List<Span>> groupSpansByProjectName(ExportTraceServiceRequest traceRequest,
-            String fallbackProjectName) {
-        return traceRequest.getResourceSpansList().stream()
-                .flatMap(resourceSpans -> {
-                    var resourceProjectName = OpenTelemetryMapper
-                            .extractOpikProjectName(resourceSpans.getResource().getAttributesList());
-                    return resourceSpans.getScopeSpansList().stream()
-                            .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
-                            .map(span -> Map.entry(WorkspaceUtils.getProjectName(OpenTelemetryMapper
-                                    .extractOpikProjectName(span.getAttributesList())
-                                    .or(() -> resourceProjectName)
-                                    .orElse(fallbackProjectName)), span));
-                })
-                .collect(Collectors.groupingBy(
-                        Map.Entry::getKey,
-                        Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
     }
 
     private Mono<Long> storeProjectSpans(List<Span> otelSpans, Project project, String integrationName) {
