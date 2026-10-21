@@ -72,6 +72,14 @@ def _extract_usage_from_chunk(
 def aggregate(
     items: List[litellm.types.utils.ModelResponse],
 ) -> Optional[litellm.types.utils.ModelResponse]:
+    """Combine the chunks of a streamed completion into one ``ModelResponse``.
+
+    Text deltas are joined into ``message["content"]``. Tool call fragments are
+    merged into ``message["tool_calls"]`` by their ``index`` (a fragment without
+    one continues the call with the same ``id``, or opens a new call), their
+    ``function.arguments`` are concatenated, and the calls are returned in index
+    order. A stream without tool calls leaves ``tool_calls`` unset.
+    """
     try:
         if not items:
             return None

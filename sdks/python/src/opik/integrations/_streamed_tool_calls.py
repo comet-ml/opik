@@ -12,6 +12,9 @@ class StreamedToolCalls:
 
     def __init__(self) -> None:
         self._calls: Dict[int, Dict[str, Any]] = {}
+        # Argument fragments per call, joined once in ``to_list`` so a long
+        # argument string is not copied again for every fragment.
+        self._arguments: Dict[int, List[str]] = {}
         self._keys_by_call_id: Dict[str, int] = {}
 
     def add(self, tool_call: Any) -> None:
@@ -19,6 +22,10 @@ class StreamedToolCalls:
         # `index` only orders fragments inside the stream; a non-streamed
         # response message does not carry it.
         index: Optional[float] = payload.pop("index", None)
+        if index is not None and not float(index).is_integer():
+            # Not a position in the stream; truncating it would merge the
+            # fragment into an unrelated call.
+            index = None
         call_id: Optional[str] = payload.get("id")
 
         key = self._keys_by_call_id.get(call_id) if call_id else None
@@ -27,29 +34,39 @@ class StreamedToolCalls:
         if call_id:
             self._keys_by_call_id[call_id] = key
 
+        function = payload.get("function") or {}
         existing = self._calls.get(key)
         if existing is None:
             self._calls[key] = payload
+            self._arguments[key] = []
+            if function.get("arguments"):
+                self._arguments[key].append(function["arguments"])
             return
 
         for field in ("id", "type"):
             if not existing.get(field) and payload.get(field):
                 existing[field] = payload[field]
 
-        function = payload.get("function") or {}
         existing_function = existing.setdefault("function", {})
         if not existing_function.get("name") and function.get("name"):
             existing_function["name"] = function["name"]
         if function.get("arguments"):
-            existing_function["arguments"] = (
-                existing_function.get("arguments") or ""
-            ) + function["arguments"]
+            self._arguments[key].append(function["arguments"])
 
     def to_list(self) -> List[Dict[str, Any]]:
         # Calls in index order, as OpenAI's aggregator returns them, then the
         # calls opened without an index in arrival order (-1, -2, ...).
         keys = sorted(self._calls, key=lambda key: (key < 0, abs(key)))
-        return [self._calls[key] for key in keys]
+        calls = []
+        for key in keys:
+            call = dict(self._calls[key])
+            if self._arguments[key]:
+                call["function"] = {
+                    **call["function"],
+                    "arguments": "".join(self._arguments[key]),
+                }
+            calls.append(call)
+        return calls
 
     def _next_unindexed_key(self) -> int:
         # Kept below every provider index, so a later fragment that does send an
