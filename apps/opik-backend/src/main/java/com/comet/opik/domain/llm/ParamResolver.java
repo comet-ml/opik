@@ -97,33 +97,35 @@ public class ParamResolver {
         var params = openAiParams(model, route);
         if (params.isPresent()) {
             var modelParams = params.get();
-            var sent = route == null || modelParams.routes() == null
+            var effectiveParams = route == null || modelParams.routes() == null
                     ? modelParams
                     : modelParams.routes().getOrDefault(route, modelParams);
-            if (temperature != null && isRefused(sent.temperature())) {
+            if (temperature != null && isRefused(effectiveParams.temperature())) {
                 builder.temperature(null);
-                changes.add(new ParamChange(TEMPERATURE, refusal(isRefused(modelParams.temperature()))));
+                changes.add(new ParamChange(TEMPERATURE, refusalReason(isRefused(modelParams.temperature()))));
             }
-            if (topP != null && isRefused(sent.topP())) {
+            if (topP != null && isRefused(effectiveParams.topP())) {
                 builder.topP(null);
-                changes.add(new ParamChange(TOP_P, refusal(isRefused(modelParams.topP()))));
+                changes.add(new ParamChange(TOP_P, refusalReason(isRefused(modelParams.topP()))));
             }
-            if (request.frequencyPenalty() != null && isRefused(sent.frequencyPenalty())) {
+            if (request.frequencyPenalty() != null && isRefused(effectiveParams.frequencyPenalty())) {
                 builder.frequencyPenalty(null);
-                changes.add(new ParamChange("frequency_penalty", refusal(isRefused(modelParams.frequencyPenalty()))));
+                changes.add(
+                        new ParamChange("frequency_penalty", refusalReason(isRefused(modelParams.frequencyPenalty()))));
             }
-            if (request.presencePenalty() != null && isRefused(sent.presencePenalty())) {
+            if (request.presencePenalty() != null && isRefused(effectiveParams.presencePenalty())) {
                 builder.presencePenalty(null);
-                changes.add(new ParamChange("presence_penalty", refusal(isRefused(modelParams.presencePenalty()))));
+                changes.add(
+                        new ParamChange("presence_penalty", refusalReason(isRefused(modelParams.presencePenalty()))));
             }
-            if (CollectionUtils.isNotEmpty(request.stop()) && isRefused(sent.stop())) {
+            if (CollectionUtils.isNotEmpty(request.stop()) && isRefused(effectiveParams.stop())) {
                 // stop(null) keeps the list from() copied; an empty one is left out of the body (NON_EMPTY).
                 builder.stop(List.of());
-                changes.add(new ParamChange("stop", refusal(isRefused(modelParams.stop()))));
+                changes.add(new ParamChange("stop", refusalReason(isRefused(modelParams.stop()))));
             }
-            if (request.seed() != null && isRefused(sent.seed())) {
+            if (request.seed() != null && isRefused(effectiveParams.seed())) {
                 builder.seed(null);
-                changes.add(new ParamChange("seed", refusal(isRefused(modelParams.seed()))));
+                changes.add(new ParamChange("seed", refusalReason(isRefused(modelParams.seed()))));
             }
         }
 
@@ -167,7 +169,7 @@ public class ParamResolver {
                         : Optional.ofNullable(registryService.paramsOf(LlmProvider.OPEN_AI.getValue(), model)));
     }
 
-    private static ParamChange.Reason refusal(boolean refusedByModel) {
+    private static ParamChange.Reason refusalReason(boolean refusedByModel) {
         return refusedByModel ? ParamChange.Reason.REFUSED_BY_MODEL : ParamChange.Reason.REFUSED_BY_ROUTE;
     }
 

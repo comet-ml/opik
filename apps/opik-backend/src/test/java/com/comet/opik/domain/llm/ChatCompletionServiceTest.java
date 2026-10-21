@@ -1515,19 +1515,16 @@ class ChatCompletionServiceTest {
         private static final String WORKSPACE_ID = "test-workspace-id";
         private static final String MODEL = "gpt-4.1";
 
-        private ChatCompletionRequest requestWithEverySetting() {
-            return ChatCompletionRequest.builder()
-                    .model(MODEL)
-                    .addUserMessage("ping")
-                    .temperature(0.7)
-                    .topP(0.9)
-                    .frequencyPenalty(0.5)
-                    .presencePenalty(0.4)
-                    .stop(List.of("END"))
-                    .seed(7)
-                    .maxCompletionTokens(100)
-                    .build();
-        }
+        private final ChatCompletionRequest requestWithEverySetting = ChatCompletionRequest.builder()
+                .from(podamFactory.manufacturePojo(ChatCompletionRequest.class))
+                .model(MODEL)
+                .temperature(0.7)
+                .topP(0.9)
+                .frequencyPenalty(0.5)
+                .presencePenalty(0.4)
+                .stop(List.of("END"))
+                .seed(7)
+                .build();
 
         private void givenTheShippedCatalogAnd(String route) {
             when(llmProviderFactory.openAiParams(MODEL))
@@ -1542,14 +1539,14 @@ class ChatCompletionServiceTest {
             when(llmProviderService.generate(captor.capture(), anyString()))
                     .thenReturn(podamFactory.manufacturePojo(ChatCompletionResponse.class));
 
-            chatCompletionService.create(requestWithEverySetting(), WORKSPACE_ID);
+            chatCompletionService.create(requestWithEverySetting, WORKSPACE_ID);
 
             return captor.getValue();
         }
 
         private ChatCompletionRequest withoutWhatTheResponsesRouteRefuses() {
             return ChatCompletionRequest.builder()
-                    .from(requestWithEverySetting())
+                    .from(requestWithEverySetting)
                     .frequencyPenalty(null)
                     .presencePenalty(null)
                     .stop(List.of())
@@ -1567,7 +1564,7 @@ class ChatCompletionServiceTest {
         @Test
         @DisplayName("create: a Chat Completions key sends every setting the model takes")
         void create__whenNoRoute__thenKeepEverySetting() {
-            assertThat(requestSentByCreate(null)).isEqualTo(requestWithEverySetting());
+            assertThat(requestSentByCreate(null)).isEqualTo(requestWithEverySetting);
         }
 
         @Test
@@ -1576,7 +1573,7 @@ class ChatCompletionServiceTest {
             givenTheShippedCatalogAnd(ParamResolver.RESPONSES_API_ROUTE);
             var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
 
-            chatCompletionService.createAndStreamResponse(requestWithEverySetting(), WORKSPACE_ID,
+            chatCompletionService.createAndStreamResponse(requestWithEverySetting, WORKSPACE_ID,
                     mock(ChunkedOutputHandlers.class));
 
             verify(llmProviderService).generateStream(captor.capture(), anyString(), any(), any(), any());
