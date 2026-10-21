@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
@@ -26,12 +27,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -143,6 +147,37 @@ class ExperimentsResourceExecuteTest {
         assertThat(awaitUpstreamRequestBodies(upstreamPath))
                 .hasSize(1)
                 .allSatisfy(body -> assertThat(body.has("reasoning_effort")).isFalse());
+    }
+
+    @ParameterizedTest
+    @EnumSource(DatasetType.class)
+    void executeRejectsAnEmptyDatasetOrTestSuiteWithoutCreatingExperiments(DatasetType type) {
+        var workspace = newWorkspace();
+        var dataset = DatasetResourceClient.buildDataset(podamFactory).toBuilder().type(type).build();
+        var datasetId = datasetResourceClient.createDataset(dataset, workspace.apiKey(), workspace.name());
+
+        var request = ExperimentExecutionRequest.builder()
+                .datasetName(dataset.name())
+                .datasetId(datasetId)
+                .prompts(List.of(ExperimentExecutionRequest.PromptVariant.builder()
+                        .model(CUSTOM_MODEL)
+                        .messages(List.of(ExperimentExecutionRequest.PromptVariant.Message.builder()
+                                .role("user")
+                                .content(TextNode.valueOf("{{question}}"))
+                                .build()))
+                        .build()))
+                .build();
+
+        try (var response = experimentResourceClient.callExecute(request, workspace.apiKey(), workspace.name())) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(ErrorMessage.class).getMessage())
+                    .isEqualTo("Dataset '%s' has no items. Add items to it before running an experiment"
+                            .formatted(dataset.name()));
+        }
+
+        var experiments = experimentResourceClient.findExperiments(1, 10, datasetId, null, null, null, false, null,
+                null, null, workspace.apiKey(), workspace.name(), HttpStatus.SC_OK);
+        assertThat(experiments.content()).isEmpty();
     }
 
     private record Workspace(String apiKey, String name) {
