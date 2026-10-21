@@ -1,11 +1,13 @@
 import { useMemo } from "react";
 import { QueryFunctionContext, useQueries } from "@tanstack/react-query";
+import uniq from "lodash/uniq";
 import { getExperimentById } from "@/api/datasets/useExperimentById";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import { COMPARE_EXPERIMENTS_MAX_PAGE_SIZE } from "@/constants/experiments";
 import useAppStore from "@/store/AppStore";
 import {
   useExperimentByPromptId,
+  useRunExperimentIdsByPromptId,
   useDatasetType,
 } from "@/store/PlaygroundStore";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
@@ -48,8 +50,13 @@ const isItemScoredByAssertions = (
   return isItemScored(ei);
 };
 
-export const areAllRowItemsScored = (row: ExperimentsCompare): boolean => {
-  const items = row.experiment_items ?? [];
+export const areAllRowItemsScored = (
+  row: ExperimentsCompare,
+  experimentId?: string,
+): boolean => {
+  const items = (row.experiment_items ?? []).filter(
+    (ei) => !experimentId || ei.experiment_id === experimentId,
+  );
   if (items.length === 0) return false;
 
   if ((row.evaluators?.length ?? 0) === 0) return true;
@@ -71,6 +78,7 @@ export default function useTestSuitePromptResults(): Record<
 > | null {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const experimentByPromptId = useExperimentByPromptId();
+  const runExperimentIdsByPromptId = useRunExperimentIdsByPromptId();
   const datasetType = useDatasetType();
   const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
 
@@ -85,8 +93,25 @@ export default function useTestSuitePromptResults(): Record<
 
   const experimentIds = useMemo(() => entries.map(([, id]) => id), [entries]);
 
+  // A prompt without its own run entry ran together with every current one.
+  const runIdsByPromptId = useMemo(
+    () =>
+      Object.fromEntries(
+        entries.map(([promptId]) => [
+          promptId,
+          runExperimentIdsByPromptId[promptId] ?? experimentIds,
+        ]),
+      ),
+    [entries, experimentIds, runExperimentIdsByPromptId],
+  );
+
+  const fetchedExperimentIds = useMemo(
+    () => uniq([...experimentIds, ...Object.values(runIdsByPromptId).flat()]),
+    [experimentIds, runIdsByPromptId],
+  );
+
   const experimentStatusResults = useQueries({
-    queries: entries.map(([, experimentId]) => ({
+    queries: fetchedExperimentIds.map((experimentId) => ({
       queryKey: ["experiment", { experimentId }],
       queryFn: (context: QueryFunctionContext) =>
         getExperimentById(context, { experimentId }),
@@ -103,15 +128,35 @@ export default function useTestSuitePromptResults(): Record<
     })),
   });
 
+  const experimentById = useMemo(
+    () =>
+      Object.fromEntries(
+        fetchedExperimentIds.map((id, i) => [
+          id,
+          experimentStatusResults[i]?.data as Experiment | undefined,
+        ]),
+      ),
+    [fetchedExperimentIds, experimentStatusResults],
+  );
+
+  const failedExperimentIds = useMemo(
+    () =>
+      new Set(
+        fetchedExperimentIds.filter(
+          (_, i) => experimentStatusResults[i]?.isError,
+        ),
+      ),
+    [fetchedExperimentIds, experimentStatusResults],
+  );
+
   const allExperimentsFinished = useMemo(() => {
-    if (experimentStatusResults.length === 0) return false;
-    return experimentStatusResults.every((r) => {
-      const data = r.data as Experiment | undefined;
-      return isExperimentTerminal(
-        data?.status as EXPERIMENT_STATUS | undefined,
-      );
-    });
-  }, [experimentStatusResults]);
+    if (experimentIds.length === 0) return false;
+    return experimentIds.every((id) =>
+      isExperimentTerminal(
+        experimentById[id]?.status as EXPERIMENT_STATUS | undefined,
+      ),
+    );
+  }, [experimentIds, experimentById]);
 
   const { data: compareData } = useCompareExperimentsList(
     {
@@ -129,52 +174,70 @@ export default function useTestSuitePromptResults(): Record<
         if (rows.length === 0) return REFETCH_INTERVAL;
 
         if (allExperimentsFinished) return false;
-        return rows.every(areAllRowItemsScored) ? false : REFETCH_INTERVAL;
+        return rows.every((row) => areAllRowItemsScored(row))
+          ? false
+          : REFETCH_INTERVAL;
       },
     },
   );
 
-  const allItemsScored = useMemo(() => {
-    if (allExperimentsFinished) return true;
+  const scoredExperimentIds = useMemo(() => {
     const rows = compareData?.content ?? [];
-    if (rows.length === 0) return false;
-    return rows.every(areAllRowItemsScored);
-  }, [compareData?.content, allExperimentsFinished]);
+    return new Set(
+      fetchedExperimentIds.filter((id) => {
+        const data = experimentById[id];
+        if (!data) return false;
+        if (isExperimentTerminal(data.status as EXPERIMENT_STATUS)) {
+          return true;
+        }
+        return (
+          rows.length > 0 && rows.every((row) => areAllRowItemsScored(row, id))
+        );
+      }),
+    );
+  }, [compareData?.content, fetchedExperimentIds, experimentById]);
 
   return useMemo(() => {
-    if (!isTestSuite || entries.length === 0 || !allItemsScored) return null;
-
-    const allLoaded = entries.every(
-      (_, i) => experimentStatusResults[i]?.data != null,
-    );
-    if (!allLoaded) return null;
-
-    const experimentsData = entries.map(
-      (_, i) => experimentStatusResults[i]?.data as Experiment | undefined,
-    );
-
-    const passRates = experimentsData
-      .map((d) => d?.pass_rate)
-      .filter((r): r is number => r != null);
-
-    const maxPassRate =
-      passRates.length > 0 ? Math.max(...passRates) : undefined;
+    if (!isTestSuite || entries.length === 0) return null;
 
     return Object.fromEntries(
-      entries.map(([promptId], i) => {
-        const data = experimentsData[i];
+      entries.flatMap(([promptId, experimentId]) => {
+        // An older run's experiment that can no longer be read (for example,
+        // deleted) must not keep this prompt uncolored forever.
+        const runIds = runIdsByPromptId[promptId].filter(
+          (id) => id === experimentId || !failedExperimentIds.has(id),
+        );
+        if (!runIds.every((id) => scoredExperimentIds.has(id))) return [];
+
+        const passRates = runIds
+          .map((id) => experimentById[id]?.pass_rate)
+          .filter((r): r is number => r != null);
+
+        const maxPassRate =
+          passRates.length > 0 ? Math.max(...passRates) : undefined;
+
+        const data = experimentById[experimentId];
         const passRate = data?.pass_rate;
 
         return [
-          promptId,
-          {
-            passRate,
-            passedCount: data?.passed_count,
-            totalCount: data?.total_count,
-            isWinner: maxPassRate != null && passRate === maxPassRate,
-          },
+          [
+            promptId,
+            {
+              passRate,
+              passedCount: data?.passed_count,
+              totalCount: data?.total_count,
+              isWinner: maxPassRate != null && passRate === maxPassRate,
+            },
+          ],
         ];
       }),
     );
-  }, [isTestSuite, entries, allItemsScored, experimentStatusResults]);
+  }, [
+    isTestSuite,
+    entries,
+    runIdsByPromptId,
+    failedExperimentIds,
+    scoredExperimentIds,
+    experimentById,
+  ]);
 }

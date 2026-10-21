@@ -40,6 +40,7 @@ import usePlaygroundStore, {
   useUpdateOutputTraceId,
   useDatasetType,
   useSetExperimentByPromptId,
+  useSetPromptExperiment,
 } from "@/store/PlaygroundStore";
 
 import { useToast } from "@/ui/use-toast";
@@ -111,6 +112,7 @@ const useActionButtonActions = ({
   const selectedRuleIds = useSelectedRuleIds();
   const datasetType = useDatasetType();
   const setExperimentByPromptId = useSetExperimentByPromptId();
+  const setPromptExperiment = useSetPromptExperiment();
   const abortControllersRef = useRef(
     new Map<string, { controller: AbortController; promptId: string }>(),
   );
@@ -825,12 +827,7 @@ const useActionButtonActions = ({
           return;
         }
 
-        const existing =
-          usePlaygroundStore.getState().experimentByPromptId ?? {};
-        setExperimentByPromptId({
-          ...existing,
-          [promptId]: experiment.experiment_id,
-        });
+        setPromptExperiment(promptId, experiment.experiment_id);
 
         queryClient.invalidateQueries({ queryKey: ["experiments"] });
 
@@ -865,7 +862,7 @@ const useActionButtonActions = ({
       runExperimentExecution,
       openAiPipelineMode,
       setPromptRunning,
-      setExperimentByPromptId,
+      setPromptExperiment,
       queryClient,
       pollExperimentCompletion,
     ],

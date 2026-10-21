@@ -175,6 +175,7 @@ export type PlaygroundStore = {
   lastSuggestedExperimentName: string | null;
   datasetType: DATASET_TYPE | null;
   experimentByPromptId: Record<string, string>;
+  runExperimentIdsByPromptId: Record<string, string[]>;
   scoresByDatasetId: Record<string, string[] | null>;
   appliedChatPromptVersionsBackfilled: boolean;
 
@@ -221,6 +222,7 @@ export type PlaygroundStore = {
   setLastActiveProjectId: (projectId: string | null) => void;
   setDatasetType: (type: DATASET_TYPE | null) => void;
   setExperimentByPromptId: (map: Record<string, string>) => void;
+  setPromptExperiment: (promptId: string, experimentId: string) => void;
   setScoresForDataset: (datasetId: string, ruleIds: string[] | null) => void;
 };
 
@@ -248,6 +250,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       lastSuggestedExperimentName: null,
       datasetType: null,
       experimentByPromptId: {},
+      runExperimentIdsByPromptId: {},
       scoresByDatasetId: {},
       appliedChatPromptVersionsBackfilled: true,
 
@@ -416,6 +419,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
             ...state,
             createdExperiments: [],
             experimentByPromptId: {},
+            runExperimentIdsByPromptId: {},
           };
         });
       },
@@ -532,7 +536,36 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           return {
             ...state,
             experimentByPromptId: map,
+            runExperimentIdsByPromptId: {},
             outputMap: newOutputMap,
+          };
+        });
+      },
+      setPromptExperiment: (promptId, experimentId) => {
+        set((state) => {
+          // The other prompts stay ranked within the run they were scored in,
+          // so a prompt that runs on its own never recolors them.
+          const currentRunIds = Object.values(state.experimentByPromptId);
+          return {
+            ...state,
+            experimentByPromptId: {
+              ...state.experimentByPromptId,
+              [promptId]: experimentId,
+            },
+            runExperimentIdsByPromptId: {
+              ...mapValues(
+                state.experimentByPromptId,
+                (_, id) =>
+                  state.runExperimentIdsByPromptId[id] ?? currentRunIds,
+              ),
+              [promptId]: [experimentId],
+            },
+            // Test-suite outputs live on the BE; this entry only carries the
+            // stale flag, which the new run makes current again.
+            outputMap: {
+              ...state.outputMap,
+              [promptId]: { isLoading: false, value: null, stale: false },
+            },
           };
         });
       },
@@ -812,6 +845,12 @@ export const useExperimentIdByPromptId = (promptId: string) =>
 
 export const useSetExperimentByPromptId = () =>
   usePlaygroundStore((state) => state.setExperimentByPromptId);
+
+export const useRunExperimentIdsByPromptId = () =>
+  usePlaygroundStore((state) => state.runExperimentIdsByPromptId);
+
+export const useSetPromptExperiment = () =>
+  usePlaygroundStore((state) => state.setPromptExperiment);
 
 export const useScoresByDatasetId = () =>
   usePlaygroundStore((state) => state.scoresByDatasetId);
