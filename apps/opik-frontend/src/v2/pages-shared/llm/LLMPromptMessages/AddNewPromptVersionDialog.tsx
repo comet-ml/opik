@@ -256,14 +256,17 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
             project_id: activeProjectId,
           },
           withResponse: true,
+          // Here and not in mutate's own onSuccess: that one is skipped if the
+          // dialog unmounts before the save ends.
+          onSuccess: (data) =>
+            toast({
+              description: `Saved new ${promptLabel} "${name}"`,
+              actions: getGoToPromptActions(data.id),
+            }),
         },
         {
           ...closeWhenSaved,
           onSuccess: (data?: PromptWithLatestVersion) => {
-            toast({
-              description: `Saved new ${promptLabel} "${name}"`,
-              actions: getGoToPromptActions(data?.id),
-            });
             if (data?.latest_version)
               onSave(data.latest_version, data.name, data.id);
             closeWhenSaved.onSuccess();
