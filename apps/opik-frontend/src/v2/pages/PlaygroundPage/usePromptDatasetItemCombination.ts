@@ -223,6 +223,7 @@ const usePromptDatasetItemCombination = ({
           value: null,
           error: undefined,
           errorHint: undefined,
+          stopped: false,
           selectedRuleIds,
           usage: undefined,
         });
@@ -271,6 +272,7 @@ const usePromptDatasetItemCombination = ({
 
         updateOutput(prompt.id, datasetItemId, {
           isLoading: false,
+          stopped: controller.signal.aborted,
           usage: {
             duration,
             totalTokens,

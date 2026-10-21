@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
 import PlaygroundStaleOutputNote from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundStaleOutputNote";
+import PlaygroundStoppedTag from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundStoppedTag";
 import { generateTracesURL } from "@/lib/annotation-queues";
 import { EXPERIMENT_TAB } from "@/lib/experiments";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -60,6 +61,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
   const value = output?.value ?? null;
   const isLoading = output?.isLoading ?? false;
   const stale = output?.stale ?? false;
+  const stopped = output?.stopped ?? false;
   const traceId = output?.traceId ?? null;
   const error = output?.error;
   const errorHint = output?.errorHint;
@@ -114,6 +116,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
     value !== null ||
     Boolean(error) ||
     isLoading ||
+    stopped ||
     // Suite results have no stale styling, so a stale suite still shows No runs
     // yet rather than old pass/fail tags that look current.
     (isTestSuite && !!experimentId && !stale);
@@ -169,6 +172,9 @@ const PlaygroundOutputCell: React.FunctionComponent<
               compact
               className="mb-1"
             />
+          )}
+          {stopped && (
+            <PlaygroundStoppedTag stale={stale} className="mb-1 w-fit" />
           )}
           <div className="mb-2 min-h-[var(--cell-top-height)]">
             {error ? (

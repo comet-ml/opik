@@ -26,6 +26,7 @@ interface PlaygroundOutput {
   value: string | null;
   error?: string;
   errorHint?: RunFailureHint;
+  stopped?: boolean;
   stale: boolean;
   staleChanges?: PlaygroundRunInputChange[];
   traceId?: string;
