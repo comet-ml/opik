@@ -5,11 +5,13 @@ import {
   PROMPT_TEMPLATE_STRUCTURE,
   PromptWithLatestVersion,
 } from "@/types/prompts";
+import { Toast, ToastProvider, ToastViewport } from "@/ui/toast";
 import AddNewPromptVersionDialog from "./AddNewPromptVersionDialog";
 
 const newVersionMutate = vi.fn();
 const createMutate = vi.fn();
 const toast = vi.fn();
+const navigate = vi.fn();
 
 vi.mock("@/api/prompts/useCreatePromptVersionMutation", () => ({
   default: () => ({ mutate: newVersionMutate, isPending: false }),
@@ -45,6 +47,7 @@ vi.mock("@/hooks/useCodemirrorTheme", () => ({
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useNavigate: () => navigate,
 }));
 
 vi.mock("@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox", () => ({
@@ -105,10 +108,21 @@ const finishSave = (mutate: ReturnType<typeof vi.fn>, data: unknown) =>
 const saveButton = () =>
   screen.getByRole("button", { name: "Save to library" });
 
+const clickGoToPrompt = () => {
+  render(
+    <ToastProvider>
+      <Toast open>{toast.mock.calls[0][0].actions}</Toast>
+      <ToastViewport />
+    </ToastProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Go to prompt" }));
+};
+
 beforeEach(() => {
   newVersionMutate.mockClear();
   createMutate.mockClear();
   toast.mockClear();
+  navigate.mockClear();
   setOpen.mockClear();
   onSave.mockClear();
 });
@@ -207,7 +221,9 @@ describe("AddNewPromptVersionDialog success toast", () => {
       finishSave(createMutate, SAVED_PROMPT);
 
       expect(toast).toHaveBeenCalledTimes(1);
-      expect(toast).toHaveBeenCalledWith({ description: expected });
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ description: expected }),
+      );
       expect(onSave).toHaveBeenCalledWith(
         SAVED_PROMPT.latest_version,
         "Support reply",
@@ -236,7 +252,9 @@ describe("AddNewPromptVersionDialog success toast", () => {
       finishSave(newVersionMutate, SAVED_VERSION);
 
       expect(toast).toHaveBeenCalledTimes(1);
-      expect(toast).toHaveBeenCalledWith({ description: expected });
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ description: expected }),
+      );
       expect(onSave).toHaveBeenCalledWith(
         SAVED_VERSION,
         "Support reply",
@@ -244,4 +262,51 @@ describe("AddNewPromptVersionDialog success toast", () => {
       );
     },
   );
+});
+
+describe("AddNewPromptVersionDialog success toast link", () => {
+  const PROMPT_PAGE = {
+    to: "/$workspaceName/projects/$projectId/prompts/$promptId",
+    params: {
+      workspaceName: "default",
+      projectId: "project-id",
+      promptId: "prompt-id",
+    },
+  };
+
+  it("goes to the new prompt", () => {
+    render(renderDialog());
+    fireEvent.click(saveButton());
+    finishSave(createMutate, SAVED_PROMPT);
+
+    clickGoToPrompt();
+
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith({ ...PROMPT_PAGE, search: {} });
+  });
+
+  it("goes to the new version of an existing prompt", () => {
+    render(renderDialog({ prompt: LIBRARY_PROMPT }));
+    fireEvent.click(saveButton());
+    finishSave(newVersionMutate, SAVED_VERSION);
+
+    clickGoToPrompt();
+
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith({
+      ...PROMPT_PAGE,
+      search: { activeVersionId: "new-version-id" },
+    });
+  });
+
+  it("shows no link when the created prompt comes back without an id", () => {
+    render(renderDialog());
+    fireEvent.click(saveButton());
+    finishSave(createMutate, { name: "Support reply" });
+
+    expect(toast).toHaveBeenCalledWith({
+      description: 'Saved new prompt "Support reply"',
+    });
+    expect(toast.mock.calls[0][0].actions).toBeUndefined();
+  });
 });

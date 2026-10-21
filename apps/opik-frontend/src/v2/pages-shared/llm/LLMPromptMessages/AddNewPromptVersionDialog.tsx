@@ -3,7 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { EditorView } from "@codemirror/view";
 import { ExternalLink, Loader2 } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import {
@@ -28,6 +28,7 @@ import {
   AccordionTrigger,
 } from "@/ui/accordion";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
+import { ToastAction } from "@/ui/toast";
 import { useToast } from "@/ui/use-toast";
 import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
 import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
@@ -88,6 +89,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const {
     permissions: { canCreatePrompts, canEditPrompts },
@@ -170,6 +172,32 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   const isValid =
     hasValidTemplate && (canSaveNewPrompt || canSaveExistingPrompt);
 
+  const getGoToPromptActions = (savedPromptId?: string, versionId?: string) =>
+    savedPromptId && activeProjectId
+      ? [
+          <ToastAction
+            variant="link"
+            size="sm"
+            className="px-0"
+            altText="Go to prompt"
+            key="Go to prompt"
+            onClick={() =>
+              navigate({
+                to: "/$workspaceName/projects/$projectId/prompts/$promptId",
+                params: {
+                  workspaceName,
+                  projectId: activeProjectId,
+                  promptId: savedPromptId,
+                },
+                search: versionId ? { activeVersionId: versionId } : {},
+              })
+            }
+          >
+            Go to prompt
+          </ToastAction>,
+        ]
+      : undefined;
+
   const handleClickEditPrompt = () => {
     const isMetadataValid = metadata === "" || isValidJsonObject(metadata);
 
@@ -207,6 +235,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
             onSuccess: (data) => {
               toast({
                 description: `Saved new version of ${promptLabel} "${selectedPrompt.name}"`,
+                actions: getGoToPromptActions(data.prompt_id, data.id),
               });
               onSave(data, selectedPrompt.name, selectedPrompt.id);
             },
@@ -231,7 +260,10 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
         {
           ...closeWhenSaved,
           onSuccess: (data?: PromptWithLatestVersion) => {
-            toast({ description: `Saved new ${promptLabel} "${name}"` });
+            toast({
+              description: `Saved new ${promptLabel} "${name}"`,
+              actions: getGoToPromptActions(data?.id),
+            });
             if (data?.latest_version)
               onSave(data.latest_version, data.name, data.id);
             closeWhenSaved.onSuccess();
