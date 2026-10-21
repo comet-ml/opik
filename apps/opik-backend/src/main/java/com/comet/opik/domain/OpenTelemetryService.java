@@ -20,6 +20,7 @@ import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
 import io.opentelemetry.proto.trace.v1.Span;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -131,7 +132,8 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    private record SkippedProjectNames(long spanCount, Set<String> names) {
+    @Builder(toBuilder = true)
+    private record SkippedProjectNames(long spanCount, @NonNull Set<String> names) {
 
         String loggableNames() {
             var loggable = names.stream()
@@ -176,7 +178,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 }
             }
         }
-        return new SkippedProjectNames(spanCount, names);
+        return SkippedProjectNames.builder().spanCount(spanCount).names(names).build();
     }
 
     private Map<String, List<Span>> groupSpansByProjectName(ExportTraceServiceRequest traceRequest,
