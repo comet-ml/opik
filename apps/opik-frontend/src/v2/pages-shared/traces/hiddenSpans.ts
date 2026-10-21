@@ -74,6 +74,9 @@ export const excludeHiddenTraces = (
       !isSpanHiddenByDefault(trace),
   );
 
+// Shown in a thread view when every trace is internal and hidden, so the tab isn't blank.
+export const ONLY_INTERNAL_CALLS_MESSAGE = "Only internal calls in this thread";
+
 // The traces a thread view should actually render, given the shared collapse preference.
 export const useVisibleTraces = (
   traces: Trace[],

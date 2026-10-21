@@ -54,7 +54,10 @@ import useTracesList from "@/api/traces/useTracesList";
 import useThreadBatchDeleteMutation from "@/api/traces/useThreadBatchDeleteMutation";
 import TraceMessages from "@/v2/pages-shared/traces/TraceMessages/TraceMessages";
 import InternalTracesToggle from "@/v2/pages-shared/traces/InternalTracesToggle";
-import { useVisibleTraces } from "@/v2/pages-shared/traces/hiddenSpans";
+import {
+  ONLY_INTERNAL_CALLS_MESSAGE,
+  useVisibleTraces,
+} from "@/v2/pages-shared/traces/hiddenSpans";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import {
   ButtonLayoutSize,
@@ -529,11 +532,15 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                 </div>
               )}
               <div style={bodyStyle}>
-                <TraceMessages
-                  traces={visibleTraces}
-                  handleOpenTrace={handleOpenTrace}
-                  traceId={traceId}
-                />
+                {traces.length > 0 && !visibleTraces.length ? (
+                  <NoData message={ONLY_INTERNAL_CALLS_MESSAGE} icon={null} />
+                ) : (
+                  <TraceMessages
+                    traces={visibleTraces}
+                    handleOpenTrace={handleOpenTrace}
+                    traceId={traceId}
+                  />
+                )}
               </div>
             </MediaProvider>
           )}

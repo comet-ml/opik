@@ -9,7 +9,11 @@ import { useSMEFlow } from "../SMEFlowContext";
 import useTracesList from "@/api/traces/useTracesList";
 import TraceMessages from "@/v2/pages-shared/traces/TraceMessages/TraceMessages";
 import InternalTracesToggle from "@/v2/pages-shared/traces/InternalTracesToggle";
-import { useVisibleTraces } from "@/v2/pages-shared/traces/hiddenSpans";
+import {
+  ONLY_INTERNAL_CALLS_MESSAGE,
+  useVisibleTraces,
+} from "@/v2/pages-shared/traces/hiddenSpans";
+import NoData from "@/shared/NoData/NoData";
 import { COLUMN_TYPE } from "@/types/shared";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import ThreadDetailsPanel from "@/v2/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
@@ -181,6 +185,7 @@ const ThreadHeader: React.FC = () => {
 const ThreadContent: React.FC = () => {
   const {
     thread,
+    traces,
     visibleTraces,
     traceId,
     setTraceId,
@@ -196,11 +201,15 @@ const ThreadContent: React.FC = () => {
 
   return (
     <>
-      <TraceMessages
-        traces={visibleTraces}
-        traceId={last(visibleTraces)?.id}
-        handleOpenTrace={handleOpenTrace}
-      />
+      {traces.length > 0 && !visibleTraces.length ? (
+        <NoData message={ONLY_INTERNAL_CALLS_MESSAGE} icon={null} />
+      ) : (
+        <TraceMessages
+          traces={visibleTraces}
+          traceId={last(visibleTraces)?.id}
+          handleOpenTrace={handleOpenTrace}
+        />
+      )}
       <TraceDetailsPanel
         projectId={thread?.project_id || ""}
         traceId={traceId ?? ""}

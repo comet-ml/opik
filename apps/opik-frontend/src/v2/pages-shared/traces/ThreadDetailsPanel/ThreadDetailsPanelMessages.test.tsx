@@ -296,4 +296,32 @@ describe("ThreadDetailsPanel messages", () => {
       "Number of messages in the thread",
     );
   });
+
+  it("explains the empty Messages tab when every trace is internal, until the control shows them", () => {
+    mocks.traces = [
+      makeTrace("trace-1", INTERNAL_METADATA),
+      makeTrace("trace-2", INTERNAL_METADATA),
+    ];
+    mocks.thread = makeThread(4);
+
+    renderPanel();
+
+    expect(renderedMessages()).toEqual([]);
+    expect(
+      screen.getByText("Only internal calls in this thread"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("0 messages")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show internal calls (2)" }),
+    );
+
+    expect(renderedMessages()).toEqual([
+      internal("trace-1"),
+      internal("trace-2"),
+    ]);
+    expect(
+      screen.queryByText("Only internal calls in this thread"),
+    ).not.toBeInTheDocument();
+  });
 });

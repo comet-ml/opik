@@ -183,4 +183,30 @@ describe("ThreadDataViewer (annotation queue thread view)", () => {
       screen.queryByRole("button", { name: /internal calls/ }),
     ).not.toBeInTheDocument();
   });
+
+  it("explains the empty thread when every trace is internal, until the control shows them", () => {
+    mocks.traces = [
+      makeTrace("trace-1", INTERNAL_METADATA),
+      makeTrace("trace-2", INTERNAL_METADATA),
+    ];
+
+    renderViewer();
+
+    expect(renderedMessages()).toEqual([]);
+    expect(
+      screen.getByText("Only internal calls in this thread"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show internal calls (2)" }),
+    );
+
+    expect(renderedMessages()).toEqual([
+      internal("trace-1"),
+      internal("trace-2"),
+    ]);
+    expect(
+      screen.queryByText("Only internal calls in this thread"),
+    ).not.toBeInTheDocument();
+  });
 });
