@@ -20,6 +20,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -46,7 +47,7 @@ class ParamResolverTest {
     }
 
     private static ChatCompletionRequest resolve(ChatCompletionRequest request) {
-        return RESOLVER.resolve(request).request();
+        return RESOLVER.resolve(request, null).request();
     }
 
     private static ChatCompletionRequest request(String model, Double temperature, Double topP) {
@@ -246,7 +247,7 @@ class ParamResolverTest {
                 .temperature(0.7)
                 .topP(0.9)
                 .customParameters(Map.of("output_config", Map.of("effort", "low")))
-                .build());
+                .build(), null);
 
         assertThat(resolution.request().temperature()).isNull();
         assertThat(resolution.request().topP()).isNull();
@@ -268,7 +269,7 @@ class ParamResolverTest {
                 .customParameters(JsonUtils.readValue(customParameters, MAP_TYPE))
                 .build();
 
-        assertThat(RESOLVER.resolve(request).request()).isSameAs(request);
+        assertThat(RESOLVER.resolve(request, null).request()).isSameAs(request);
     }
 
     private static ChatCompletionRequest thinkingRequest(String model, Double temperature, Double topP,
@@ -341,12 +342,13 @@ class ParamResolverTest {
 
         var resolver = resolverWithOverride(tempDir, new LlmModelRegistryConfig().getCuratedResource());
 
-        var resolution = resolver.resolve(request);
+        var resolution = resolver.resolve(request, null);
 
         assertThat(resolution.request().temperature()).isNull();
         assertThat(resolution.changes()).containsExactly(new ParamChange("temperature", Reason.REFUSED_BY_MODEL));
-        assertThat(resolver.resolve(request("claude-sonnet-4-6", 0.7, null)).request().temperature()).isEqualTo(0.7);
-        assertThat(resolver.resolve(request("claude-sonnet-4-6", null, 0.9)).changes())
+        assertThat(resolver.resolve(request("claude-sonnet-4-6", 0.7, null), null).request().temperature())
+                .isEqualTo(0.7);
+        assertThat(resolver.resolve(request("claude-sonnet-4-6", null, 0.9), null).changes())
                 .containsExactly(new ParamChange("top_p", Reason.REFUSED_BY_MODEL));
     }
 
@@ -354,10 +356,11 @@ class ParamResolverTest {
     void followsALocalOverrideWithTheCuratedLayerTurnedOff(@TempDir Path tempDir) throws IOException {
         var resolver = resolverWithOverride(tempDir, "");
 
-        assertThat(resolver.resolve(request("claude-opus-4-6", 0.7, null)).changes())
+        assertThat(resolver.resolve(request("claude-opus-4-6", 0.7, null), null).changes())
                 .containsExactly(new ParamChange("temperature", Reason.REFUSED_BY_MODEL));
-        assertThat(resolver.resolve(request("claude-sonnet-4-6", 0.7, null)).request().temperature()).isEqualTo(0.7);
-        assertThat(resolver.resolve(request("claude-sonnet-4-6", null, 0.9)).changes())
+        assertThat(resolver.resolve(request("claude-sonnet-4-6", 0.7, null), null).request().temperature())
+                .isEqualTo(0.7);
+        assertThat(resolver.resolve(request("claude-sonnet-4-6", null, 0.9), null).changes())
                 .containsExactly(new ParamChange("top_p", Reason.REFUSED_BY_MODEL));
     }
 
@@ -371,7 +374,7 @@ class ParamResolverTest {
 
         var resolver = new ParamResolver(mock(LlmProviderFactory.class), registry);
 
-        assertThat(resolver.resolve(request("claude-sonnet-5", 0.7, 0.9)).changes()).containsExactly(
+        assertThat(resolver.resolve(request("claude-sonnet-5", 0.7, 0.9), null).changes()).containsExactly(
                 new ParamChange("temperature", Reason.REFUSED_BY_MODEL),
                 new ParamChange("top_p", Reason.REFUSED_BY_MODEL));
         assertThat(resolver.resolve(judge("claude-sonnet-5", null)).request().temperature()).isNull();
@@ -379,7 +382,7 @@ class ParamResolverTest {
 
     @Test
     void reportsEachSettingItDropsAndWhy() {
-        var resolution = RESOLVER.resolve(request("claude-sonnet-5", 0.7, 0.9));
+        var resolution = RESOLVER.resolve(request("claude-sonnet-5", 0.7, 0.9), null);
 
         assertThat(resolution.changes()).containsExactly(
                 new ParamChange("temperature", Reason.REFUSED_BY_MODEL),
@@ -388,7 +391,7 @@ class ParamResolverTest {
 
     @Test
     void reportsTheTopPItDropsForAModelThatTakesOnlyOneOfThem() {
-        var resolution = RESOLVER.resolve(request("claude-sonnet-4-6", 0.7, 0.9));
+        var resolution = RESOLVER.resolve(request("claude-sonnet-4-6", 0.7, 0.9), null);
 
         assertThat(resolution.changes())
                 .containsExactly(new ParamChange("top_p", Reason.EXCLUSIVE_SAMPLING));
@@ -406,7 +409,7 @@ class ParamResolverTest {
                 .seed(7)
                 .build();
 
-        var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(request);
+        var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(request, null);
 
         var normalized = resolution.request();
         assertThat(normalized.temperature()).isNull();
@@ -427,10 +430,65 @@ class ParamResolverTest {
     void returnsTheSameRequestWhenTheOpenAiCatalogParamsRefuseNothingThatIsSet() {
         var request = ChatCompletionRequest.builder().model("o3").maxCompletionTokens(100).build();
 
-        var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(request);
+        var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(request, null);
 
         assertThat(resolution.request()).isSameAs(request);
         assertThat(resolution.changes()).isEmpty();
+    }
+
+    private static ChatCompletionRequest everyOpenAiSetting(String model) {
+        return ChatCompletionRequest.builder()
+                .model(model)
+                .temperature(0.7)
+                .topP(0.9)
+                .frequencyPenalty(0.5)
+                .presencePenalty(0.4)
+                .stop(List.of("END"))
+                .seed(7)
+                .maxCompletionTokens(100)
+                .build();
+    }
+
+    // gpt-4.1 is listed in the shipped registry; my-finetune is not, and still gets the OpenAI profile's route.
+    @ParameterizedTest
+    @ValueSource(strings = {"gpt-4.1", "my-finetune"})
+    void dropsWhatTheResponsesRouteRefusesFromTheShippedCatalog(String model) {
+        var resolution = RESOLVER.resolve(everyOpenAiSetting(model), ParamResolver.RESPONSES_API_ROUTE);
+
+        var expected = ChatCompletionRequest.builder()
+                .from(everyOpenAiSetting(model))
+                .frequencyPenalty(null)
+                .presencePenalty(null)
+                .stop(List.of())
+                .seed(null)
+                .build();
+        assertThat(resolution).isEqualTo(new ParamResolver.Resolution<>(expected, List.of(
+                new ParamChange("frequency_penalty", Reason.REFUSED_BY_ROUTE),
+                new ParamChange("presence_penalty", Reason.REFUSED_BY_ROUTE),
+                new ParamChange("stop", Reason.REFUSED_BY_ROUTE),
+                new ParamChange("seed", Reason.REFUSED_BY_ROUTE))));
+    }
+
+    @Test
+    void keepsEveryOpenAiSettingOnChatCompletionsForAModelThatTakesThem() {
+        var request = everyOpenAiSetting("gpt-4.1");
+        var resolver = resolverWithOpenAiParams(bundledRegistry().paramsOf("openai", "gpt-4.1"));
+
+        var resolution = resolver.resolve(request, null);
+
+        assertThat(resolution).isEqualTo(new ParamResolver.Resolution<>(request, List.of()));
+    }
+
+    @Test
+    void reportsTheModelNotTheRouteWhenTheModelItselfRefusesASetting() {
+        var request = ChatCompletionRequest.builder().model("o3").temperature(0.7).build();
+
+        var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(request,
+                ParamResolver.RESPONSES_API_ROUTE);
+
+        assertThat(resolution).isEqualTo(new ParamResolver.Resolution<>(
+                ChatCompletionRequest.builder().model("o3").build(),
+                List.of(new ParamChange("temperature", Reason.REFUSED_BY_MODEL))));
     }
 
     @Test

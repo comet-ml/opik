@@ -19,6 +19,7 @@ profiles:
         frequencyPenalty: {accepted: false}
         presencePenalty: {accepted: false}
         stop: {accepted: false}
+        seed: {accepted: false}
         maxOutputTokens: {min: 16}
   openai-reasoning:
     temperature: {accepted: false}

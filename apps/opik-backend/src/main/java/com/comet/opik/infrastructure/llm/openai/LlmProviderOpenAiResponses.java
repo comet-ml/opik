@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.domain.llm.ParamResolver;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.infrastructure.llm.OpenAiCompatStatusCodes;
@@ -83,6 +84,11 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
         return findOpenAiServiceException(throwable)
                 .map(LlmProviderOpenAiResponses::toErrorMessage)
                 .or(() -> LlmProviderLangChainMapper.INSTANCE.getErrorObject(throwable, log));
+    }
+
+    @Override
+    public String paramsRoute() {
+        return ParamResolver.RESPONSES_API_ROUTE;
     }
 
     private static Optional<OpenAIServiceException> findOpenAiServiceException(Throwable throwable) {

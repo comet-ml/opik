@@ -89,9 +89,9 @@ class LlmProviderOpenAiResponsesMapper {
         Optional.ofNullable(request.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(request.topP()).ifPresent(builder::topP);
         Optional.ofNullable(resolveMaxOutputTokens(request)).ifPresent(builder::maxOutputTokens);
+        // No penalties, stop or seed: langchain4j's validate() throws UnsupportedFeatureException for them, and the
+        // catalog's responses_api route already has ParamResolver drop them before this runs.
         Optional.ofNullable(toResponsesParameters(request)).ifPresent(builder::parameters);
-
-        warnIfDroppedSamplingParam(request);
 
         if (CollectionUtils.isNotEmpty(request.tools())) {
             builder.toolSpecifications(toToolSpecifications(request.tools()));
@@ -386,30 +386,6 @@ class LlmProviderOpenAiResponsesMapper {
                     .ifPresent(builder::completionTokensDetails);
         }
         return builder.build();
-    }
-
-    /**
-     * {@code frequency_penalty}, {@code presence_penalty}, {@code stop}, and {@code top_k} are NOT
-     * supported by the OpenAI Responses API — langchain4j's
-     * {@code OpenAiOfficialResponsesChatModel.validate()} throws {@code UnsupportedFeatureException}
-     * for any of them. Clients (notably the playground) often send {@code frequency_penalty: 0} /
-     * {@code presence_penalty: 0} as framework defaults even when the user didn't tune them, so the
-     * request would fail before reaching OpenAI. We silently drop these fields rather than 500 the
-     * call; a user who explicitly tunes them and expects them to apply should use
-     * {@code pipeline_mode=CHAT_COMPLETIONS_API}.
-     */
-    private void warnIfDroppedSamplingParam(ChatCompletionRequest request) {
-        if (request.frequencyPenalty() != null && request.frequencyPenalty() != 0.0) {
-            log.debug("Dropping unsupported 'frequency_penalty'='{}' for OpenAI Responses API",
-                    request.frequencyPenalty());
-        }
-        if (request.presencePenalty() != null && request.presencePenalty() != 0.0) {
-            log.debug("Dropping unsupported 'presence_penalty'='{}' for OpenAI Responses API",
-                    request.presencePenalty());
-        }
-        if (CollectionUtils.isNotEmpty(request.stop())) {
-            log.debug("Dropping unsupported 'stop'='{}' for OpenAI Responses API", request.stop());
-        }
     }
 
     /**
