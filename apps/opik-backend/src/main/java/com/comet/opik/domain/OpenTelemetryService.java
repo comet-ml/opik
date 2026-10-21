@@ -5,6 +5,7 @@ import com.comet.opik.api.Source;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
+import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
 import com.comet.opik.infrastructure.OpenTelemetryConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.WorkspaceUtils;
@@ -103,11 +104,36 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
         var spansByProjectName = groupSpansByProjectName(traceRequest, fallbackProjectName);
 
-        return Flux.fromIterable(spansByProjectName.entrySet())
-                .flatMap(entry -> projectService.getOrCreate(entry.getKey())
-                        .flatMap(project -> storeProjectSpans(entry.getValue(), project, integrationName)))
-                .reduce(0L, Long::sum)
-                .subscribeOn(Schedulers.boundedElastic());
+        var spansWithSkippedProjectName = countSpansWithSkippedProjectName(traceRequest);
+
+        return Mono.deferContextual(ctx -> {
+            if (spansWithSkippedProjectName > 0) {
+                log.warn("Ignored '{}' longer than '{}' characters on '{}' spans in workspaceId '{}'",
+                        GeneralMappingRules.OPIK_PROJECT_NAME_ATTR, OpenTelemetryMapper.MAX_PROJECT_NAME_LENGTH,
+                        spansWithSkippedProjectName, ctx.<String>get(RequestContext.WORKSPACE_ID));
+            }
+
+            return Flux.fromIterable(spansByProjectName.entrySet())
+                    .flatMap(entry -> projectService.getOrCreate(entry.getKey())
+                            .flatMap(project -> storeProjectSpans(entry.getValue(), project, integrationName)))
+                    .reduce(0L, Long::sum);
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private long countSpansWithSkippedProjectName(ExportTraceServiceRequest traceRequest) {
+        long count = 0;
+        for (var resourceSpans : traceRequest.getResourceSpansList()) {
+            var resourceExceeds = OpenTelemetryMapper
+                    .exceedsProjectNameLength(resourceSpans.getResource().getAttributesList());
+            for (var scopeSpans : resourceSpans.getScopeSpansList()) {
+                for (var span : scopeSpans.getSpansList()) {
+                    if (resourceExceeds || OpenTelemetryMapper.exceedsProjectNameLength(span.getAttributesList())) {
+                        count++;
+                    }
+                }
+            }
+        }
+        return count;
     }
 
     private Map<String, List<Span>> groupSpansByProjectName(ExportTraceServiceRequest traceRequest,

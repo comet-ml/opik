@@ -306,6 +306,22 @@ class OpenTelemetryMapperTest {
                         null));
     }
 
+    @ParameterizedTest(name = "opik.project_name as {0}")
+    @MethodSource("exceedsProjectNameLengthCases")
+    void exceedsProjectNameLength(String label, List<KeyValue> attributes, boolean expected) {
+        assertThat(OpenTelemetryMapper.exceedsProjectNameLength(attributes)).isEqualTo(expected);
+    }
+
+    static Stream<Arguments> exceedsProjectNameLengthCases() {
+        return Stream.of(
+                Arguments.of("absent", List.of(), false),
+                Arguments.of("blank", List.of(projectNameAttribute("  ")), false),
+                Arguments.of("150 characters", List.of(projectNameAttribute("a".repeat(150))), false),
+                Arguments.of("151 characters", List.of(projectNameAttribute("a".repeat(151))), true),
+                Arguments.of("151 surrogate pair characters", List.of(projectNameAttribute("🙂".repeat(151))),
+                        true));
+    }
+
     private static KeyValue projectNameAttribute(String value) {
         return KeyValue.newBuilder()
                 .setKey("opik.project_name")
