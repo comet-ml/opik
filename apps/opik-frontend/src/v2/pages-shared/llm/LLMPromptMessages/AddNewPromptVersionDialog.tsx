@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { EditorView } from "@codemirror/view";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -178,24 +178,30 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
         ? { ...userMetadata, ...providedMetadata }
         : undefined;
 
+    const closeWhenSaved = {
+      onSuccess: () => setOpen(false),
+      onError: () => setIsSaving(false),
+    };
+
     if (isEdit) {
       if (selectedPrompt) {
         const promptType = selectedPrompt?.latest_version?.type;
 
         setIsSaving(true);
-        newVersionMutate({
-          name: selectedPrompt?.name,
-          template,
-          changeDescription,
-          ...(finalMetadata && { metadata: finalMetadata }),
-          ...(templateStructure && { templateStructure }),
-          ...(promptType && { type: promptType }),
-          projectId: activeProjectId ?? undefined,
-          onSuccess: (data) =>
-            onSave(data, selectedPrompt?.name, selectedPrompt?.id),
-        });
-
-        setOpen(false);
+        newVersionMutate(
+          {
+            name: selectedPrompt?.name,
+            template,
+            changeDescription,
+            ...(finalMetadata && { metadata: finalMetadata }),
+            ...(templateStructure && { templateStructure }),
+            ...(promptType && { type: promptType }),
+            projectId: activeProjectId ?? undefined,
+            onSuccess: (data) =>
+              onSave(data, selectedPrompt?.name, selectedPrompt?.id),
+          },
+          closeWhenSaved,
+        );
       }
     } else {
       setIsSaving(true);
@@ -212,13 +218,14 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           withResponse: true,
         },
         {
+          ...closeWhenSaved,
           onSuccess: (data?: PromptWithLatestVersion) => {
             if (data?.latest_version)
               onSave(data.latest_version, data.name, data.id);
+            closeWhenSaved.onSuccess();
           },
         },
       );
-      setOpen(false);
     }
   };
 
@@ -374,6 +381,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
             disabled={!isValid || isSaving}
             onClick={handleClickEditPrompt}
           >
+            {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
             Save to library
           </Button>
         </DialogFooter>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { PromptWithLatestVersion } from "@/types/prompts";
 import AddNewPromptVersionDialog from "./AddNewPromptVersionDialog";
@@ -49,19 +49,28 @@ const LIBRARY_PROMPT = {
   latest_version: { id: "version-id", template: "Hi" },
 } as unknown as PromptWithLatestVersion;
 
+const setOpen = vi.fn();
+const onSave = vi.fn();
+
 const renderDialog = ({
   open = true,
   prompt,
 }: { open?: boolean; prompt?: PromptWithLatestVersion } = {}) => (
   <AddNewPromptVersionDialog
     open={open}
-    setOpen={vi.fn()}
+    setOpen={setOpen}
     prompt={prompt}
     template="Hello {{name}}"
     defaultName="Support reply"
-    onSave={vi.fn()}
+    onSave={onSave}
   />
 );
+
+const callOptionsOf = (mutate: ReturnType<typeof vi.fn>) =>
+  mutate.mock.calls[0][1] as {
+    onSuccess: (data?: unknown) => void;
+    onError: () => void;
+  };
 
 const saveButton = () =>
   screen.getByRole("button", { name: "Save to library" });
@@ -69,6 +78,8 @@ const saveButton = () =>
 beforeEach(() => {
   newVersionMutate.mockClear();
   createMutate.mockClear();
+  setOpen.mockClear();
+  onSave.mockClear();
 });
 
 describe("AddNewPromptVersionDialog double click", () => {
@@ -100,5 +111,52 @@ describe("AddNewPromptVersionDialog double click", () => {
     rerender(renderDialog({ open: true }));
 
     expect(saveButton()).toBeEnabled();
+  });
+});
+
+describe("AddNewPromptVersionDialog while saving", () => {
+  it("stays open with a spinner until a new prompt is saved, then closes", () => {
+    render(renderDialog());
+    fireEvent.click(saveButton());
+
+    expect(setOpen).not.toHaveBeenCalledWith(false);
+    expect(saveButton().querySelector(".animate-spin")).not.toBeNull();
+
+    act(() =>
+      callOptionsOf(createMutate).onSuccess({
+        id: "prompt-id",
+        name: "Support reply",
+        latest_version: { id: "version-id" },
+      }),
+    );
+
+    expect(onSave).toHaveBeenCalledWith(
+      { id: "version-id" },
+      "Support reply",
+      "prompt-id",
+    );
+    expect(setOpen).toHaveBeenCalledWith(false);
+  });
+
+  it("closes once a new version of an existing prompt is saved", () => {
+    render(renderDialog({ prompt: LIBRARY_PROMPT }));
+    fireEvent.click(saveButton());
+
+    expect(setOpen).not.toHaveBeenCalledWith(false);
+
+    act(() => callOptionsOf(newVersionMutate).onSuccess());
+
+    expect(setOpen).toHaveBeenCalledWith(false);
+  });
+
+  it("stays open and lets you retry when the save fails", () => {
+    render(renderDialog());
+    fireEvent.click(saveButton());
+
+    act(() => callOptionsOf(createMutate).onError());
+
+    expect(setOpen).not.toHaveBeenCalledWith(false);
+    expect(saveButton()).toBeEnabled();
+    expect(saveButton().querySelector(".animate-spin")).toBeNull();
   });
 });
