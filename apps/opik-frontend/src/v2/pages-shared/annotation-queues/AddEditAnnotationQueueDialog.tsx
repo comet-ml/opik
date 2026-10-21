@@ -494,8 +494,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                             key={option.value}
                             value={option.value}
                             size="sm"
-                            // bg-muted is the design's active fill and follows dark mode.
-                            className="comet-body-xs h-[22px] flex-1 hover:bg-upload-icon-bg data-[state=on]:bg-muted data-[state=on]:text-foreground"
+                            className="flex-1"
                           >
                             {option.label}
                           </ToggleGroupItem>
