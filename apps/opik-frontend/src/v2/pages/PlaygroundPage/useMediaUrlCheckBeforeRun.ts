@@ -32,7 +32,7 @@ const useMediaUrlCheckBeforeRun = ({
 
   const runAfterCheck = useCallback(
     async (promptIds: string[], run: () => unknown) => {
-      if (isCheckingRef.current) return;
+      if (isCheckingRef.current || pendingRun) return;
 
       const { promptMap } = usePlaygroundStore.getState();
       const prompts = promptIds.map((id) => promptMap[id]).filter(Boolean);
@@ -59,7 +59,7 @@ const useMediaUrlCheckBeforeRun = ({
       }
       setPendingRun({ failures, run });
     },
-    [datasetItems, checkMediaUrls],
+    [datasetItems, checkMediaUrls, pendingRun],
   );
 
   const checkedRunAll = useCallback(

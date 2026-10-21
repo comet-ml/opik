@@ -125,6 +125,20 @@ describe("useMediaUrlCheckBeforeRun", () => {
     expect(result.current.mediaUrlFailures).toBeNull();
   });
 
+  it("ignores Run while the dialog is open", async () => {
+    setPrompts(prompt("p1", [image(BROKEN_URL)]));
+    mocks.checkMediaUrls.mockResolvedValue([
+      { url: BROKEN_URL, status: "unreachable" },
+    ]);
+    const { result, runAll } = renderCheck();
+
+    await act(() => result.current.runAll());
+    await act(() => result.current.runAll());
+
+    expect(mocks.checkMediaUrls).toHaveBeenCalledTimes(1);
+    expect(runAll).not.toHaveBeenCalled();
+  });
+
   it("runs as before when the check itself fails", async () => {
     setPrompts(prompt("p1", [image(GOOD_URL)]));
     mocks.checkMediaUrls.mockRejectedValue(new Error("timeout of 8000ms"));
