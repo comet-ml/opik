@@ -104,8 +104,9 @@ const useActionButtonActions = ({
   const clearRunningMap = useClearRunningMap();
   const setPromptRunning = useSetPromptRunning();
   const isToStopRef = useRef(false);
-  // A stopped run's poll timer can still fire after Run is clicked again, when
-  // isToStopRef is already false; the run id tells that poll it is stale.
+  // A stopped run's poll timer or late start response can still arrive after
+  // Run is clicked again, when isToStopRef is already false; the run id tells
+  // them they belong to an older run.
   const runIdRef = useRef(0);
   const setCreatedExperiments = useSetCreatedExperiments();
   const clearCreatedExperiments = useClearCreatedExperiments();
@@ -581,6 +582,7 @@ const useActionButtonActions = ({
     if (!datasetName || !datasetId) return;
 
     resetState();
+    const runId = runIdRef.current;
     isToStopRef.current = false;
     setAllRunning(true);
 
@@ -599,6 +601,7 @@ const useActionButtonActions = ({
         experimentNames,
         openAiPipelineMode,
       });
+      if (runId !== runIdRef.current) return;
 
       // Build experiment-to-prompt mapping from BE response
       const experimentPromptMap: Record<string, string> = {};
@@ -627,6 +630,7 @@ const useActionButtonActions = ({
         announceExperiments: experiments,
       });
     } catch {
+      if (runId !== runIdRef.current) return;
       clearRunningMap();
       isToStopRef.current = false;
     }

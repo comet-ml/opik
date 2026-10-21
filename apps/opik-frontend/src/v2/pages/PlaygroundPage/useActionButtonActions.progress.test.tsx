@@ -222,4 +222,52 @@ describe("useActionButtonActions test-suite progress", () => {
       progressTotal: 2,
     });
   });
+
+  it("should drop a stopped run's late start response after Run is clicked again", async () => {
+    vi.mocked(getExperimentById).mockImplementation(
+      async (_, { experimentId }) =>
+        experimentId === EXPERIMENT_ID
+          ? runningExperiment(3)
+          : { ...runningExperiment(1), id: experimentId },
+    );
+    let resolveFirstRun: (value: unknown) => void = () => {};
+    mutateAsync
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirstRun = resolve;
+        }),
+      )
+      .mockResolvedValueOnce({
+        experiments: [{ experiment_id: "experiment-2", prompt_index: 0 }],
+        total_items: 2,
+      });
+    const result = renderActions();
+    let firstRun: Promise<unknown> = Promise.resolve();
+    act(() => {
+      firstRun = result.current.runAll();
+    });
+    act(() => result.current.stopAll());
+    await runAll(result);
+
+    await act(async () => {
+      resolveFirstRun({
+        experiments: [{ experiment_id: EXPERIMENT_ID, prompt_index: 0 }],
+        total_items: TOTAL_ITEMS,
+      });
+      await firstRun;
+    });
+    await nextPoll(2000);
+
+    expect(getExperimentById).not.toHaveBeenCalledWith(expect.anything(), {
+      experimentId: EXPERIMENT_ID,
+    });
+    expect(usePlaygroundStore.getState().experimentByPromptId).toEqual({
+      [PROMPT_ID]: "experiment-2",
+    });
+    expect(getProgress()).toEqual({
+      progressPhase: "running",
+      progressCompleted: 1,
+      progressTotal: 2,
+    });
+  });
 });
