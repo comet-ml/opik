@@ -161,4 +161,31 @@ describe("PLAYGROUND_STATE hydration of a prompt loaded from the library", () =>
       expect(prompt.messages).toEqual(fields.messages);
     },
   );
+
+  it("does not record an applied version in state stored by this version, where a pick can still be loading", async () => {
+    seed({
+      promptIds: ["p1"],
+      promptMap: {
+        p1: storedPromptWith({
+          loadedChatPromptVersionId: "v2",
+          messages: EDITED_MESSAGES,
+        }),
+      },
+      appliedChatPromptVersionsBackfilled: true,
+    });
+
+    const prompt = (await loadPromptMap()).p1;
+
+    expect(prompt.appliedChatPromptVersionId).toBeUndefined();
+    expect(prompt.messages).toEqual(EDITED_MESSAGES);
+  });
+
+  it("stores that the backfill ran, so the next load skips it", async () => {
+    seed({ promptIds: [], promptMap: {} });
+
+    await loadPromptMap();
+
+    const stored = JSON.parse(localStorage.getItem("PLAYGROUND_STATE")!);
+    expect(stored.state.appliedChatPromptVersionsBackfilled).toBe(true);
+  });
 });

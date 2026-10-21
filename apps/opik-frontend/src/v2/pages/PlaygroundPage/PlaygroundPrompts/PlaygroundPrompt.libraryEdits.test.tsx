@@ -70,9 +70,18 @@ vi.mock("@/v2/pages-shared/llm/PromptLibraryMenu/PromptLibraryMenu", () => ({
   default: ({
     onSelect,
   }: {
-    onSelect: (selection: { promptId: string }) => void;
+    onSelect: (selection: { promptId: string; versionId?: string }) => void;
   }) => (
-    <button onClick={() => onSelect({ promptId: "other" })}>Pick Other</button>
+    <>
+      <button onClick={() => onSelect({ promptId: "other" })}>
+        Pick Other
+      </button>
+      <button
+        onClick={() => onSelect({ promptId: "greeter", versionId: "v2" })}
+      >
+        Pick Greeter v2
+      </button>
+    </>
   ),
 }));
 vi.mock("@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect", () => ({
@@ -124,6 +133,7 @@ const PROMPT_NAMES: Record<string, string> = {
 };
 
 let latestVersionIds: Record<string, string>;
+let unreachableVersionIds: Set<string>;
 
 const CARD_ID = "card-1";
 
@@ -213,6 +223,7 @@ const leaveAndComeBack = (card: ReturnType<typeof renderCard>) => {
 
 beforeEach(() => {
   latestVersionIds = { greeter: "v2", other: "v3" };
+  unreachableVersionIds = new Set();
 
   vi.mocked(usePromptById).mockImplementation(({ promptId }, options) => {
     const name =
@@ -231,7 +242,9 @@ beforeEach(() => {
   vi.mocked(usePromptVersionById).mockImplementation(
     ({ versionId }, options) => {
       const template =
-        options?.enabled === false ? undefined : TEMPLATES[versionId];
+        options?.enabled === false || unreachableVersionIds.has(versionId)
+          ? undefined
+          : TEMPLATES[versionId];
       return {
         data: template && { id: versionId, template: JSON.stringify(template) },
         isSuccess: Boolean(template),
@@ -305,6 +318,30 @@ describe("PlaygroundPrompt with a prompt loaded from the library", () => {
     expect(screen.getByText("user: Another prompt")).toBeInTheDocument();
     expect(screen.queryByText(/UNSAVED-EDIT/)).not.toBeInTheDocument();
     expect(screen.getByText("Loaded: Other")).toBeInTheDocument();
+  });
+});
+
+describe("PlaygroundPrompt reloaded before a picked version arrived", () => {
+  it("loads the picked version after the reload", async () => {
+    seedPlaygroundPrompt({
+      loadedChatPromptId: "greeter",
+      loadedChatPromptVersionId: "v1",
+    });
+    const card = renderCard();
+    expect(screen.getByText("user: Say hi to {{name}}")).toBeInTheDocument();
+
+    unreachableVersionIds.add("v2");
+    fireEvent.click(screen.getByRole("button", { name: "Detach" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pick Greeter v2" }));
+    expect(screen.getByText("user: Say hi to {{name}}")).toBeInTheDocument();
+
+    card.unmount();
+    await act(() => usePlaygroundStore.persist.rehydrate());
+    unreachableVersionIds.clear();
+    renderCard();
+
+    expect(screen.getByText("user: Greet {{name}}")).toBeInTheDocument();
+    expect(storedPrompt().appliedChatPromptVersionId).toBe("v2");
   });
 });
 
