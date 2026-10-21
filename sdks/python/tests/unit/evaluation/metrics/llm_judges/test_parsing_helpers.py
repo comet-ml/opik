@@ -87,6 +87,13 @@ class TestNormalizeVerdict:
         assert parsing_helpers.normalize_verdict("no!") == "no"
         assert parsing_helpers.normalize_verdict("yes,") == "yes"
 
+    def test_normalize_verdict__whitespace_before_punctuation__trimmed(self):
+        # A space between the verdict and its punctuation must not survive:
+        # "No ." would otherwise read as "no " and fail the exact comparison.
+        assert parsing_helpers.normalize_verdict("No .") == "no"
+        assert parsing_helpers.normalize_verdict("Yes !") == "yes"
+        assert parsing_helpers.normalize_verdict("no ;") == "no"
+
     def test_normalize_verdict__unrecognized_words__left_as_is(self):
         # A genuinely ambiguous verdict stays ambiguous: the caller decides
         # how to count it, the normalizer only removes drift.

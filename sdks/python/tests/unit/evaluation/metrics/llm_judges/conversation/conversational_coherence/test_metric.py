@@ -750,4 +750,7 @@ def test_score__punctuated_no_verdict__still_counts_as_irrelevant(mock_model):
     metric = ConversationalCoherenceMetric(model=mock_model, track=False)
     result = metric.score(conversation=conversation)
 
+    assert result.name == "conversational_coherence_score"
     assert result.value == 0.0
+    assert result.reason == "The reply is off-topic."
+    assert result.scoring_failed is False

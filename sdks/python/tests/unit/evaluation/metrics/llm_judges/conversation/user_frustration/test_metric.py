@@ -409,4 +409,7 @@ def test_score__punctuated_yes_verdict__still_counts_as_frustrated(mock_model):
     metric = UserFrustrationMetric(model=mock_model, track=False)
     result = metric.score(conversation=conversation)
 
+    assert result.name == "user_frustration_score"
     assert result.value == 1.0
+    assert result.reason == "The user is frustrated."
+    assert result.scoring_failed is False
