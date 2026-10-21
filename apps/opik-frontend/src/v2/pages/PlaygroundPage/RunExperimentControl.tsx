@@ -30,6 +30,7 @@ import {
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { DATASET_TYPE } from "@/types/datasets";
 import { EvaluatorsRule } from "@/types/automations";
+import { isTraceRule } from "@/v2/pages/PlaygroundPage/metricSelection";
 import {
   parseDatasetVersionKey,
   toPlainDatasetId,
@@ -180,6 +181,7 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
 
   const handleRuleCreated = useCallback(
     (rule: EvaluatorsRule) => {
+      if (!isTraceRule(rule)) return;
       const next = [...(selectedRuleIds ?? []), rule.id];
       setSelectedRuleIds(next);
       const plainId = toPlainDatasetId(datasetId);
