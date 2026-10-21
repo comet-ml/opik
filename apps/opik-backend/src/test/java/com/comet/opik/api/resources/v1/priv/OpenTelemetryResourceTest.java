@@ -1,7 +1,9 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.error.InvalidUUIDException.Reason;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -15,6 +17,8 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.OpenTelemetryResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.spans.SpanAssertions;
+import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanType;
@@ -1329,6 +1333,34 @@ class OpenTelemetryResourceTest {
             assertTraceStoredInProject(accentRouted, existingProject, workspaceName);
         }
 
+        @Test
+        @DisplayName("opik.project_name on the root span only: the child falls back to the header project with its own trace id")
+        void opikProjectNameOnRootSpanOnlySplitsRootAndChildAcrossProjects() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var headerProject = "header-project-" + UUID.randomUUID();
+            var rootProject = "root-project-" + UUID.randomUUID();
+
+            var spans = rootAndChild();
+            var root = spans.getFirst().toBuilder().addAttributes(projectNameAttribute(rootProject)).build();
+            var child = spans.getLast();
+
+            sendBatch(Entity.entity(exportRequest(List.of(root, child)).toByteArray(), "application/x-protobuf"),
+                    "application/x-protobuf", headerProject, workspaceName, okApikey, HttpStatus.SC_OK, null);
+
+            assertTraceStoredInProject(List.of(root), rootProject, workspaceName);
+
+            var childTraceId = opikTraceIdOf(child);
+            assertThat(childTraceId).isNotEqualTo(opikTraceIdOf(root));
+            assertSpansStoredInProject(List.of(child), childTraceId, headerProject, workspaceName);
+
+            assertThat(traceResourceClient.getTracesByPage(okApikey, workspaceName, rootProject, List.of(),
+                    List.of(), 1, 10).content()).extracting(Trace::id).containsExactly(opikTraceIdOf(root));
+            assertThat(traceResourceClient.getTracesByPage(okApikey, workspaceName, headerProject, List.of(),
+                    List.of(), 1, 10).content()).isEmpty();
+        }
+
         private ExportTraceServiceRequest exportRequest(List<Span> spans) {
             return ExportTraceServiceRequest.newBuilder()
                     .addResourceSpans(ResourceSpans.newBuilder()
@@ -1365,19 +1397,56 @@ class OpenTelemetryResourceTest {
             return List.of(root, child);
         }
 
-        private void assertTraceStoredInProject(List<Span> otelSpans, String projectName, String workspaceName) {
-            var root = otelSpans.getFirst();
-            var opikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(root.getTraceId().toByteArray(),
-                    Duration.ofNanos(root.getStartTimeUnixNano()).toMillis());
+        private UUID opikTraceIdOf(Span otelSpan) {
+            return OpenTelemetryMapper.convertOtelIdToUUIDv7(otelSpan.getTraceId().toByteArray(),
+                    Duration.ofNanos(otelSpan.getStartTimeUnixNano()).toMillis());
+        }
+
+        private com.comet.opik.api.Span.SpanPage assertSpansStoredInProject(List<Span> otelSpans, UUID opikTraceId,
+                String projectName, String workspaceName) {
+            var expectedSpans = otelSpans.stream()
+                    .map(otelSpan -> OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, null).toBuilder()
+                            .environment("")
+                            .build())
+                    .toList();
 
             var spans = spanResourceClient.getByTraceIdAndProject(opikTraceId, projectName, workspaceName,
                     okApikey);
-            assertThat(spans.content()).extracting(span -> span.name())
-                    .containsExactlyInAnyOrderElementsOf(otelSpans.stream().map(Span::getName).toList());
+            assertThat(spans.content())
+                    .usingRecursiveComparison()
+                    .ignoringFields(SpanAssertions.IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedSpans);
             assertThat(spans.content()).allSatisfy(span -> assertThat(
                     span.metadata() == null || !span.metadata().has("opik.project_name")).isTrue());
+            return spans;
+        }
+
+        private void assertTraceStoredInProject(List<Span> otelSpans, String projectName, String workspaceName) {
+            var opikTraceId = opikTraceIdOf(otelSpans.getFirst());
+            var spans = assertSpansStoredInProject(otelSpans, opikTraceId, projectName, workspaceName);
+
+            var expectedRoot = OpenTelemetryMapper.toOpikSpan(otelSpans.getFirst(), opikTraceId, null);
+            var expectedTrace = Trace.builder()
+                    .id(opikTraceId)
+                    .name(expectedRoot.name())
+                    .startTime(expectedRoot.startTime())
+                    .endTime(expectedRoot.endTime())
+                    .input(expectedRoot.input())
+                    .output(expectedRoot.output())
+                    .metadata(expectedRoot.metadata())
+                    .tags(expectedRoot.tags())
+                    .errorInfo(expectedRoot.errorInfo())
+                    .source(Source.SDK)
+                    .environment("")
+                    .visibilityMode(VisibilityMode.DEFAULT)
+                    .build();
 
             var trace = traceResourceClient.getById(opikTraceId, workspaceName, okApikey);
+            assertThat(trace)
+                    .usingRecursiveComparison()
+                    .ignoringFields(TraceAssertions.IGNORED_FIELDS_TRACES)
+                    .isEqualTo(expectedTrace);
             assertThat(trace.projectId()).isEqualTo(spans.content().getFirst().projectId());
         }
 
