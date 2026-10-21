@@ -62,30 +62,29 @@ describe("PrettyLLMMessageUsage", () => {
     expect(html).toContain("Output tokens");
     expect(html).toContain(">0<");
   });
-});
-
-it("renders display metrics without internal duplicates", () => {
-  const html = renderToStaticMarkup(
-    <PrettyLLMMessageUsage
-      usage={{
-        prompt_tokens: 10,
-        completion_tokens: 5,
-        total_tokens: 15,
-        "original_usage.input_tokens": 8,
-        "original_usage.prompt_tokens": 10,
-        "original_usage.cache_read_input_tokens": 2,
-        invalid: NaN,
-      }}
-    />,
-  );
-  for (const [label, value] of [
-    ["Input tokens", 10],
-    ["Output tokens", 5],
-    ["Total tokens", 15],
-    ["Cache read tokens", 2],
-  ]) {
-    expect(html).toContain(`${label}</span><span>${value}</span>`);
-  }
-  expect(html).not.toContain("Original");
-  expect(html).not.toContain("Invalid");
+  it("renders display metrics without internal duplicates", () => {
+    const html = renderToStaticMarkup(
+      <PrettyLLMMessageUsage
+        usage={{
+          prompt_tokens: 10,
+          completion_tokens: 5,
+          total_tokens: 15,
+          "original_usage.input_tokens": 8,
+          "original_usage.prompt_tokens": 10,
+          "original_usage.cache_read_input_tokens": 2,
+          invalid: NaN,
+        }}
+      />,
+    );
+    for (const [label, value] of [
+      ["Input tokens", 10],
+      ["Output tokens", 5],
+      ["Total tokens", 15],
+      ["Cache read tokens", 2],
+    ]) {
+      expect(html).toContain(`${label}</span><span>${value}</span>`);
+    }
+    expect(html).not.toContain("Original");
+    expect(html).not.toContain("Invalid");
+  });
 });

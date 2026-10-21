@@ -4,7 +4,6 @@ import {
   LLMMessagePairDetections,
 } from "./types";
 import { getFormat, getAllFormats } from "./providers/registry";
-import { resolveOpenInferenceHint } from "@/lib/openinference";
 
 export const detectLLMMessagePair = (
   input: unknown,
@@ -12,13 +11,16 @@ export const detectLLMMessagePair = (
   config: LLMMessagePrettifyConfig,
   detections?: LLMMessagePairDetections,
 ) => {
-  const hint = resolveOpenInferenceHint(undefined, input, output);
+  let hint: LLMMessagePrettifyConfig | undefined;
+  for (const format of getAllFormats()) {
+    hint = format.resolveHint?.(input, output);
+    if (hint) break;
+  }
   const prettifyConfig: LLMMessagePrettifyConfig = {
     ...config,
-    formatHint:
-      config.formatHint ?? (hint.detected ? "openinference" : undefined),
+    formatHint: config.formatHint ?? hint?.formatHint,
     formatHintIsAuthoritative:
-      config.formatHintIsAuthoritative ?? hint.authoritative,
+      config.formatHintIsAuthoritative ?? hint?.formatHintIsAuthoritative,
   };
   return {
     prettifyConfig,

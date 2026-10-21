@@ -105,6 +105,13 @@ export type FormatPairMapper = (
   config: LLMMessagePrettifyConfig,
 ) => LLMMapperResult | null;
 
+export type FormatHintResolver = (
+  input: unknown,
+  output: unknown,
+) =>
+  | Pick<LLMMessagePrettifyConfig, "formatHint" | "formatHintIsAuthoritative">
+  | undefined;
+
 // Format interface
 export interface LLMMessageFormatImplementation {
   name: LLMMessageFormat;
@@ -112,4 +119,5 @@ export interface LLMMessageFormatImplementation {
   mapper: FormatMapper;
   combiner?: FormatCombiner;
   pairMapper?: FormatPairMapper;
+  resolveHint?: FormatHintResolver;
 }

@@ -48,8 +48,9 @@ export type ParsedOpenInferenceFields = {
   outputFallback?: unknown;
 };
 
-const MEDIA_PLACEHOLDER_RE = /^\[(image|audio)_\d+\]$/;
-const MEDIA_DATA_URI_RE = /^data:(image|audio)\/([a-z0-9.+-]+)(?:;[^,]*)?,/i;
+const MEDIA_PLACEHOLDER_PATTERN = /^\[(image|audio)_\d+\]$/;
+const MEDIA_DATA_URI_PATTERN =
+  /^data:(image|audio)\/([a-z0-9.+-]+)(?:;[^,]*)?,/i;
 const INLINE_IMAGE_SUBTYPES = new Set([
   "png",
   "jpeg",
@@ -64,9 +65,9 @@ export const isSafeOpenInferenceMediaUrl = (
   type: "image" | "audio",
 ): boolean => {
   if (isBackendAttachmentPlaceholder(url)) return true;
-  const placeholderMatch = MEDIA_PLACEHOLDER_RE.exec(url);
+  const placeholderMatch = MEDIA_PLACEHOLDER_PATTERN.exec(url);
   if (placeholderMatch?.[1] === type) return true;
-  const dataUriMatch = MEDIA_DATA_URI_RE.exec(url);
+  const dataUriMatch = MEDIA_DATA_URI_PATTERN.exec(url);
   if (dataUriMatch?.[1].toLowerCase() === type) {
     return (
       type === "audio" ||
@@ -78,14 +79,14 @@ export const isSafeOpenInferenceMediaUrl = (
 
 type UnknownRecord = Record<string, unknown>;
 
-const MESSAGE_ATTRIBUTE_RE =
+const MESSAGE_ATTRIBUTE_PATTERN =
   /^llm\.(input|output)_messages\.([^.]+)\.message\.(.+)$/;
-const CONTENT_ATTRIBUTE_RE = /^contents\.([^.]+)\.(.+)$/;
-const TOOL_CALL_ATTRIBUTE_RE = /^tool_calls\.([^.]+)\.tool_call\.(.+)$/;
-const TOOL_ATTRIBUTE_RE =
+const CONTENT_ATTRIBUTE_PATTERN = /^contents\.([^.]+)\.(.+)$/;
+const TOOL_CALL_ATTRIBUTE_PATTERN = /^tool_calls\.([^.]+)\.tool_call\.(.+)$/;
+const TOOL_ATTRIBUTE_PATTERN =
   /^llm\.tools\.([^.]+)\.tool\.(name|description|json_schema)$/;
-const PROMPT_ATTRIBUTE_RE = /^llm\.prompts\.([^.]+)\.prompt\.text$/;
-const CHOICE_ATTRIBUTE_RE = /^llm\.choices\.([^.]+)\.completion\.text$/;
+const PROMPT_ATTRIBUTE_PATTERN = /^llm\.prompts\.([^.]+)\.prompt\.text$/;
+const CHOICE_ATTRIBUTE_PATTERN = /^llm\.choices\.([^.]+)\.completion\.text$/;
 
 const LEGACY_OPENINFERENCE_PREFIXES = [
   "llm.input_messages.",
@@ -275,7 +276,7 @@ class MessageBuilder {
       return true;
     }
 
-    const contentMatch = path.match(CONTENT_ATTRIBUTE_RE);
+    const contentMatch = path.match(CONTENT_ATTRIBUTE_PATTERN);
     if (contentMatch) {
       const index = parseIndex(contentMatch[1]);
       if (index === undefined) return false;
@@ -287,7 +288,7 @@ class MessageBuilder {
       return content.accept(contentMatch[2], rawValue);
     }
 
-    const toolCallMatch = path.match(TOOL_CALL_ATTRIBUTE_RE);
+    const toolCallMatch = path.match(TOOL_CALL_ATTRIBUTE_PATTERN);
     if (toolCallMatch) {
       const index = parseIndex(toolCallMatch[1]);
       if (index === undefined) return false;
@@ -342,7 +343,7 @@ const acceptLegacyAttribute = (
   key: string,
   value: unknown,
 ) => {
-  const messageMatch = key.match(MESSAGE_ATTRIBUTE_RE);
+  const messageMatch = key.match(MESSAGE_ATTRIBUTE_PATTERN);
   if (messageMatch) {
     const index = parseIndex(messageMatch[2]);
     if (index === undefined) return;
@@ -359,7 +360,7 @@ const acceptLegacyAttribute = (
     return;
   }
 
-  const toolMatch = key.match(TOOL_ATTRIBUTE_RE);
+  const toolMatch = key.match(TOOL_ATTRIBUTE_PATTERN);
   if (toolMatch) {
     const index = parseIndex(toolMatch[1]);
     if (index === undefined) return;
@@ -370,7 +371,7 @@ const acceptLegacyAttribute = (
     return;
   }
 
-  const promptMatch = key.match(PROMPT_ATTRIBUTE_RE);
+  const promptMatch = key.match(PROMPT_ATTRIBUTE_PATTERN);
   if (promptMatch) {
     const index = parseIndex(promptMatch[1]);
     const text = toStringValue(value);
@@ -379,7 +380,7 @@ const acceptLegacyAttribute = (
     return;
   }
 
-  const choiceMatch = key.match(CHOICE_ATTRIBUTE_RE);
+  const choiceMatch = key.match(CHOICE_ATTRIBUTE_PATTERN);
   if (choiceMatch) {
     const index = parseIndex(choiceMatch[1]);
     const text = toStringValue(value);
@@ -550,14 +551,10 @@ export const isRenderableOpenInferenceFallback = (value: unknown): boolean => {
   );
 };
 
-const extractFallback = (data: unknown): unknown => {
-  if (!isRecord(data))
-    return isRenderableOpenInferenceFallback(data) ? data : undefined;
-  if (hasOwn(data, "value"))
-    return isRenderableOpenInferenceFallback(data.value)
-      ? data.value
-      : undefined;
-  const raw = Object.fromEntries(
+export const omitOpenInferenceStructuredFields = (
+  data: UnknownRecord,
+): UnknownRecord =>
+  Object.fromEntries(
     Object.entries(data).filter(
       ([key]) =>
         !STRUCTURED_OPENINFERENCE_KEYS.has(key) &&
@@ -565,7 +562,18 @@ const extractFallback = (data: unknown): unknown => {
         !LEGACY_OPENINFERENCE_PREFIXES.some((prefix) => key.startsWith(prefix)),
     ),
   );
-  return Object.keys(raw).length > 0 ? raw : undefined;
+
+const extractFallback = (
+  data: unknown,
+  hasStructuredFields: boolean,
+): unknown => {
+  const hasEnvelope = isRecord(data) && hasOwn(data, "value");
+  const raw = hasEnvelope ? data.value : data;
+  const fallback =
+    isRecord(raw) && (!hasEnvelope || hasStructuredFields)
+      ? omitOpenInferenceStructuredFields(raw)
+      : raw;
+  return isRenderableOpenInferenceFallback(fallback) ? fallback : undefined;
 };
 
 // A span-level instrumentation hint must not override an explicit message schema.
@@ -774,7 +782,7 @@ export const parseOpenInferenceFields = (
     ? currentFunctionCall
     : legacy.functionCall ?? undefined;
 
-  return {
+  const parsed: ParsedOpenInferenceFields = {
     inputMessages: mergeRepresentations(
       canonicalInputMessages,
       buildLegacyMessages(legacy.inputMessages),
@@ -790,9 +798,16 @@ export const parseOpenInferenceFields = (
     tools,
     finishReason,
     functionCall,
-    inputFallback: extractFallback(input),
-    outputFallback: extractFallback(output),
   };
+  parsed.inputFallback = extractFallback(
+    input,
+    hasRenderableParsedField(parsed, "input"),
+  );
+  parsed.outputFallback = extractFallback(
+    output,
+    hasRenderableParsedField(parsed, "output"),
+  );
+  return parsed;
 };
 
 const hasRenderableParsedField = (
