@@ -14,6 +14,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.redisson.config.Config;
+import org.redisson.config.FullJitterDelay;
 import org.redisson.config.SentinelServersConfig;
 
 import java.util.HashMap;
@@ -75,6 +76,8 @@ class RedisSentinelConfigTest {
         environment.put("OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT", "11s");
         environment.put("OPIK_REDIS_SENTINEL_TIMEOUT", "6s");
         environment.put("OPIK_REDIS_SENTINEL_SCAN_INTERVAL", "1500ms");
+        environment.put("OPIK_REDIS_SENTINEL_RETRY_BACKOFF_BASE", "300ms");
+        environment.put("OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP", "4s");
 
         var actual = loadRedisConfig(environment).build();
 
@@ -84,6 +87,7 @@ class RedisSentinelConfigTest {
                         "rediss://%s:26379".formatted(otherHost))
                 .setDatabase(database)
                 .setRetryAttempts(7)
+                .setRetryDelay(new FullJitterDelay(java.time.Duration.ofMillis(300), java.time.Duration.ofSeconds(4)))
                 .setCheckSentinelsList(false)
                 .setConnectTimeout(11_000)
                 .setTimeout(6_000)
@@ -109,6 +113,7 @@ class RedisSentinelConfigTest {
                 .addSentinelAddress("redis://%s:%d".formatted(seedHost, seedPort))
                 .setDatabase(database)
                 .setRetryAttempts(3)
+                .setRetryDelay(new FullJitterDelay(java.time.Duration.ofMillis(500), java.time.Duration.ofSeconds(2)))
                 .setCheckSentinelsList(true)
                 .setConnectTimeout(10_000)
                 .setTimeout(5_000)
@@ -140,7 +145,9 @@ class RedisSentinelConfigTest {
                 arguments("OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS", "21", "retryAttempts"),
                 arguments("OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT", "6m", "connectTimeout"),
                 arguments("OPIK_REDIS_SENTINEL_TIMEOUT", "6m", "timeout"),
-                arguments("OPIK_REDIS_SENTINEL_SCAN_INTERVAL", "50ms", "scanInterval"));
+                arguments("OPIK_REDIS_SENTINEL_SCAN_INTERVAL", "50ms", "scanInterval"),
+                arguments("OPIK_REDIS_SENTINEL_RETRY_BACKOFF_BASE", "3s", "retryBackoffBase must not exceed"),
+                arguments("OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP", "6m", "retryBackoffCap"));
     }
 
     @ParameterizedTest

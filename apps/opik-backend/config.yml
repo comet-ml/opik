@@ -287,7 +287,7 @@ redis:
   # Redis Sentinel configuration (optional)
   # When enabled, singleNodeUrl is the seed sentinel (usually port 26379) instead of a Redis data node: its scheme selects
   # TLS for every sentinel, and its credentials and database number apply to the master data nodes. Redisson discovers
-  # the master through the sentinels and follows it on failover. Only the Java backend supports it.
+  # the master through the sentinels and follows it on failover. The Python backend reads the same variables.
   sentinel:
     # Default: false
     # Description: Enable Redis Sentinel master discovery
@@ -304,6 +304,13 @@ redis:
     # Default: 3
     # Description: Times a failed command is retried, e.g. while a failover is in progress. Between 0 and 20
     retryAttempts: ${OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS:-3}
+    # Default: 500ms
+    # Description: Base of the full-jitter backoff between retries: each waits a random time up to
+    # min(base * 2^attempt, cap). At least 1ms
+    retryBackoffBase: ${OPIK_REDIS_SENTINEL_RETRY_BACKOFF_BASE:-500ms}
+    # Default: 2s
+    # Description: Longest wait between retries. At least retryBackoffBase and at most 5m
+    retryBackoffCap: ${OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP:-2s}
     # Default: true
     # Description: Require the sentinels to report at least two of them, as a production quorum needs. Set to false to
     # allow a single sentinel, e.g. in development setups

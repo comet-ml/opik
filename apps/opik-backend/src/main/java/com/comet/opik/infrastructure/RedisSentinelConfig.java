@@ -15,6 +15,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.config.Config;
+import org.redisson.config.FullJitterDelay;
 import org.redisson.config.SentinelServersConfig;
 
 import java.net.URI;
@@ -56,6 +57,17 @@ public class RedisSentinelConfig {
     @Valid @JsonProperty
     @Min(0) @Max(20) private int retryAttempts = 3;
 
+    // Full jitter: each retry waits a random time up to min(base * 2^attempt, cap), like the Python backend
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
+    private Duration retryBackoffBase = Duration.milliseconds(500);
+
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
+    private Duration retryBackoffCap = Duration.seconds(2);
+
     // Redisson refuses to start unless the sentinels report at least two of them; single-sentinel dev setups turn it off
     @Valid @JsonProperty
     private boolean checkSentinelsList = true;
@@ -82,6 +94,12 @@ public class RedisSentinelConfig {
     }
 
     @JsonIgnore
+    @AssertTrue(message = "retryBackoffBase must not exceed retryBackoffCap") public boolean isRetryBackoffValid() {
+        return retryBackoffBase == null || retryBackoffCap == null
+                || retryBackoffBase.toMilliseconds() <= retryBackoffCap.toMilliseconds();
+    }
+
+    @JsonIgnore
     public List<String> getNodeList() {
         return Arrays.stream(StringUtils.defaultString(nodes).split(","))
                 .map(String::strip)
@@ -96,6 +114,7 @@ public class RedisSentinelConfig {
                 .addSentinelAddress(sentinelAddresses(seed).toArray(String[]::new))
                 .setDatabase(seed.database())
                 .setRetryAttempts(retryAttempts)
+                .setRetryDelay(new FullJitterDelay(retryBackoffBase.toJavaDuration(), retryBackoffCap.toJavaDuration()))
                 .setCheckSentinelsList(checkSentinelsList)
                 .setConnectTimeout(Math.toIntExact(connectTimeout.toMilliseconds()))
                 .setTimeout(Math.toIntExact(timeout.toMilliseconds()))

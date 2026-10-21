@@ -1,6 +1,6 @@
 ---
 headline: Redis Sentinel
-og:description: Configure the Opik Java backend to use Redis Sentinel for master
+og:description: Configure the Opik backends to use Redis Sentinel for master
   discovery and automatic reconnection after failover.
 og:site_name: Opik Documentation
 og:title: Configure Redis Sentinel for self-hosted Opik
@@ -8,10 +8,10 @@ subtitle: Use Sentinel-based Redis master discovery in self-hosted deployments
 title: Redis Sentinel
 ---
 
-By default, the Opik Java backend connects directly to a single Redis endpoint through `REDIS_URL`. Enable Redis Sentinel when you want the backend to discover the active Redis master and reconnect after Sentinel promotes a replica. Opik configures the backend client only; you must provide and operate the Redis master, replicas, and Sentinel processes.
+By default, the Opik backends connect directly to a single Redis endpoint through `REDIS_URL`. Enable Redis Sentinel when you want them to discover the active Redis master and reconnect after Sentinel promotes a replica. Opik configures the clients only; you must provide and operate the Redis master, replicas, and Sentinel processes.
 
 <Callout intent="warning">
-  Redis Sentinel support currently applies only to the **Java backend**. The Python backend and its RQ workers still expect `REDIS_URL` to point to a Redis data endpoint. Do not configure those services with a Sentinel port; this feature alone does not provide Redis high availability for them.
+  Configure Sentinel on **both** the Java backend and the Python backend, which runs the RQ workers. A service left on a fixed Redis address keeps writing to the old master after a failover: those writes are lost when Sentinel demotes it, and later ones fail with `READONLY`.
 </Callout>
 
 ## Prerequisites
@@ -20,13 +20,13 @@ Before enabling Sentinel mode, make sure that:
 
 - A Redis master and at least one replica are running and synchronized.
 - All Sentinel processes monitor the same master set name.
-- Sentinel-announced Redis and Sentinel addresses are reachable from the Java backend.
+- Sentinel-announced Redis and Sentinel addresses are reachable from both backends.
 - Authentication and TLS settings are consistent across the topology.
 - Production deployments use at least three Sentinel processes in independent failure domains. A typical three-Sentinel deployment uses a quorum of `2`.
 
 See the [Redis Sentinel documentation](https://redis.io/docs/latest/operate/oss_and_stack/management/sentinel/) for Redis-side deployment and quorum guidance.
 
-## Configure the Java backend
+## Configure the backends
 
 The example below uses:
 
@@ -39,32 +39,43 @@ The example below uses:
 
 <Tabs>
   <Tab title="Docker Compose">
-    Add the Java backend overrides to `deployment/docker-compose/docker-compose.override.yaml`:
+    Add the same overrides to both backends in `deployment/docker-compose/docker-compose.override.yaml`:
 
     ```yaml
+    x-redis-sentinel: &redis-sentinel
+      REDIS_URL: "redis://:redis-password@sentinel-1:26379/0"
+      OPIK_REDIS_SENTINEL_ENABLED: "true"
+      OPIK_REDIS_SENTINEL_MASTER_NAME: "mymaster"
+      OPIK_REDIS_SENTINEL_NODES: "redis://sentinel-2:26379,redis://sentinel-3:26379"
+      OPIK_REDIS_SENTINEL_PASSWORD: "sentinel-password"
+
     services:
       backend:
-        environment:
-          REDIS_URL: "redis://:redis-password@sentinel-1:26379/0"
-          OPIK_REDIS_SENTINEL_ENABLED: "true"
-          OPIK_REDIS_SENTINEL_MASTER_NAME: "mymaster"
-          OPIK_REDIS_SENTINEL_NODES: "redis://sentinel-2:26379,redis://sentinel-3:26379"
-          OPIK_REDIS_SENTINEL_PASSWORD: "sentinel-password"
+        environment: *redis-sentinel
+      python-backend:
+        environment: *redis-sentinel
     ```
 
     Apply the change from the `deployment/docker-compose` directory:
 
     ```bash
-    docker compose up -d backend
+    docker compose up -d backend python-backend
     ```
   </Tab>
 
   <Tab title="Kubernetes / Helm">
-    Add the Java backend environment variables to your Helm values file:
+    Add the same environment variables to both backends in your Helm values file:
 
     ```yaml
     component:
       backend:
+        env:
+          REDIS_URL: "redis://:redis-password@sentinel-1:26379/0"
+          OPIK_REDIS_SENTINEL_ENABLED: "true"
+          OPIK_REDIS_SENTINEL_MASTER_NAME: "mymaster"
+          OPIK_REDIS_SENTINEL_NODES: "redis://sentinel-2:26379,redis://sentinel-3:26379"
+          OPIK_REDIS_SENTINEL_PASSWORD: "sentinel-password"
+      python-backend:
         env:
           REDIS_URL: "redis://:redis-password@sentinel-1:26379/0"
           OPIK_REDIS_SENTINEL_ENABLED: "true"
@@ -80,8 +91,6 @@ The example below uses:
     ```
   </Tab>
 </Tabs>
-
-Keep the Python backend's `REDIS_URL` configured separately and pointed at a direct or otherwise stable Redis data endpoint, not at a Sentinel port.
 
 ## How `REDIS_URL` is interpreted
 
@@ -108,7 +117,7 @@ If Sentinel does not require authentication, omit the Sentinel username and pass
 
 ## Configuration reference
 
-Configure these environment variables on the Java backend service:
+Configure these environment variables, with the same values, on both the Java backend and the Python backend. Both read them the same way:
 
 | Environment variable | Default | Description |
 |---|---:|---|
@@ -119,12 +128,14 @@ Configure these environment variables on the Java backend service:
 | `OPIK_REDIS_SENTINEL_USERNAME` | Empty | Username used to authenticate to Sentinel nodes when Sentinel ACLs are enabled. |
 | `OPIK_REDIS_SENTINEL_PASSWORD` | Empty | Password used to authenticate to Sentinel nodes. |
 | `OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS` | `3` | Number of retry attempts for commands that fail during a topology change, between `0` and `20`. |
+| `OPIK_REDIS_SENTINEL_RETRY_BACKOFF_BASE` | `500ms` | Base of the full-jitter backoff: each retry waits a random time up to `min(base × 2^attempt, cap)`. |
+| `OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP` | `2s` | Longest wait between retries. Must be at least the base. Keep the total retry time above your Sentinel promotion time, `down-after-milliseconds` plus the election. |
 | `OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST` | `true` | Requires Sentinel discovery to report at least two Sentinel nodes. Set to `false` only for single-Sentinel development environments. |
 | `OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT` | `10s` | Timeout for establishing Redis or Sentinel connections. |
 | `OPIK_REDIS_SENTINEL_TIMEOUT` | `5s` | Timeout for Redis command responses. |
-| `OPIK_REDIS_SENTINEL_SCAN_INTERVAL` | `2s` | Interval at which Redisson checks for Sentinel topology changes. |
+| `OPIK_REDIS_SENTINEL_SCAN_INTERVAL` | `2s` | Interval at which the backends ask Sentinel for the current master. |
 
-Duration values accept forms such as `500ms`, `5s`, and `1m`, and must be between `100ms` and `5m`.
+Duration values accept forms such as `500ms`, `5s`, and `1m`. Timeouts and the scan interval must be between `100ms` and `5m`; the backoff base and cap between `1ms` and `5m`.
 
 ## TLS
 
@@ -134,7 +145,7 @@ Opik does not expose separate connection schemes for Sentinel and Redis data nod
 
 For TLS deployments, make sure Sentinel announces hostnames or addresses that:
 
-- Are reachable from the Java backend
+- Are reachable from both backends
 - Match the subject alternative names in the Redis server certificates
 
 ## Production guidance
@@ -172,6 +183,8 @@ Built redis config with address 'redis://sentinel-1:26379', database '0', sentin
 </Tabs>
 
 If the log reports `sentinel 'false'`, Sentinel mode is not enabled in the Java backend process.
+
+The Python backend logs `Redis: using Sentinel master 'mymaster' through 3 sentinels, database 0` at startup.
 
 ### Check Redis health
 
@@ -212,7 +225,7 @@ A healthy Redis topology returns HTTP `200`.
   Perform this procedure only in a development or staging environment. Triggering a failover changes the writable Redis node and can interrupt active requests.
 </Callout>
 
-Keep the Opik Java backend running while performing this check.
+Keep both Opik backends running while performing this check.
 
 The commands below use `OPIK_REDIS_SENTINEL_USERNAME` and `OPIK_REDIS_SENTINEL_PASSWORD`. Set these variables in the shell running `redis-cli`. If the username is unset, the commands authenticate as the Redis `default` ACL user.
 
@@ -239,8 +252,8 @@ The commands below use `OPIK_REDIS_SENTINEL_USERNAME` and `OPIK_REDIS_SENTINEL_P
     Repeat the first step until `SENTINEL GET-MASTER-ADDR-BY-NAME` reports the promoted replica.
   </Step>
   <Step title="Check Opik still works">
-    Without restarting the Java backend, repeat a normal Opik operation that uses Redis and confirm it succeeds, and
-    that the backend process stayed up throughout the failover.
+    Without restarting either backend, repeat a normal Opik operation that uses Redis and confirm it succeeds, and
+    that both backend processes stayed up throughout the failover.
   </Step>
 </Steps>
 
@@ -255,7 +268,7 @@ Requests may briefly fail or time out while Sentinel promotes a replica and Redi
 | Sentinel authentication succeeds but Redis commands fail with authentication errors | Sentinel credentials were also used as data-node credentials, or the reverse | Put Redis data-node credentials in `REDIS_URL` and Sentinel credentials in the dedicated Sentinel variables. |
 | TLS handshake or hostname verification fails | The URL scheme is incorrect, or Sentinel announces an address that does not match the certificate | Use the correct `redis://` or `rediss://` scheme and configure routable certificate-valid announced hostnames. |
 | Sentinel reports a new master, but Opik cannot reconnect | The promoted node's announced address is not reachable from the Java backend | Correct Redis and Sentinel announce settings, DNS, firewall rules, or network routes. |
-| The Python backend or RQ workers cannot connect after being pointed at port `26379` | Those components do not use Sentinel discovery | Point their `REDIS_URL` at a Redis data endpoint rather than a Sentinel endpoint. |
+| The Python backend or RQ workers fail with `READONLY` after a failover | The Python backend still uses a fixed Redis address | Set the same `REDIS_URL` and `OPIK_REDIS_SENTINEL_*` variables on the Python backend as on the Java backend. |
 
 Useful Sentinel diagnostics:
 
