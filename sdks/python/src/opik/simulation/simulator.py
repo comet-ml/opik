@@ -56,7 +56,7 @@ def run_simulation(
     conversation_history: List[Dict[str, str]] = []
 
     # Route everything the simulation logs (app traces and simulated-user LLM
-    # calls) to project_name
+    # calls) to project_name, unless an enclosing project context overrides it
     project_scope = (
         context_storage.project_context(project_name)
         if project_name is not None
