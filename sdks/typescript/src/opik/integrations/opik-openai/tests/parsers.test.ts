@@ -393,136 +393,115 @@ describe("OpenAI Parsers", () => {
   });
 
   describe("streamed tool calls", () => {
+    const callFor = (index: number) => ({
+      index,
+      id: `call_${crypto.randomUUID()}`,
+      type: "function" as const,
+      function: {
+        name: `fn_${crypto.randomUUID()}`,
+        arguments: JSON.stringify({ value: crypto.randomUUID() }),
+      },
+    });
+
+    const expectedCall = (call: ReturnType<typeof callFor>) => ({
+      id: call.id,
+      type: call.type,
+      function: { ...call.function },
+    });
+
     it("keeps parallel tool calls apart, matching fragments by index", () => {
+      const first = callFor(0);
+      const second = callFor(1);
+      const cut = (args: string) => Math.floor(args.length / 2);
+      const firstArgs = first.function.arguments;
+      const secondArgs = second.function.arguments;
+
       const fragments = collectToolCalls([
+        toolCallChunk([
+          { ...first, function: { name: first.function.name, arguments: "" } },
+        ]),
         toolCallChunk([
           {
             index: 0,
-            id: "call_1",
-            type: "function",
-            function: { name: "get_weather", arguments: "" },
+            function: { arguments: firstArgs.slice(0, cut(firstArgs)) },
           },
         ]),
-        toolCallChunk([{ index: 0, function: { arguments: '{"city": ' } }]),
         toolCallChunk([
           {
-            index: 1,
-            id: "call_2",
-            type: "function",
-            function: { name: "get_time", arguments: "" },
+            ...second,
+            function: { name: second.function.name, arguments: "" },
           },
         ]),
-        toolCallChunk([{ index: 0, function: { arguments: '"Paris"}' } }]),
-        toolCallChunk([{ index: 1, function: { arguments: '{"tz": "CET"}' } }]),
+        toolCallChunk([
+          {
+            index: 0,
+            function: { arguments: firstArgs.slice(cut(firstArgs)) },
+          },
+        ]),
+        toolCallChunk([{ index: 1, function: { arguments: secondArgs } }]),
       ]);
 
       expect(getToolCallOutput(fragments)).toEqual({
-        tool_calls: [
-          {
-            id: "call_1",
-            type: "function",
-            function: { name: "get_weather", arguments: '{"city": "Paris"}' },
-          },
-          {
-            id: "call_2",
-            type: "function",
-            function: { name: "get_time", arguments: '{"tz": "CET"}' },
-          },
-        ],
+        tool_calls: [expectedCall(first), expectedCall(second)],
       });
     });
 
     it("keeps every tool call carried by a single chunk", () => {
-      const fragments = collectToolCalls([
-        toolCallChunk([
-          {
-            index: 0,
-            id: "call_1",
-            type: "function",
-            function: { name: "get_weather", arguments: '{"city": "Paris"}' },
-          },
-          {
-            index: 1,
-            id: "call_2",
-            type: "function",
-            function: { name: "get_weather", arguments: '{"city": "Rome"}' },
-          },
-        ]),
-      ]);
+      const first = callFor(0);
+      const second = callFor(1);
 
-      expect(
-        getToolCallOutput(fragments).tool_calls.map((call) => call.id)
-      ).toEqual(["call_1", "call_2"]);
+      const fragments = collectToolCalls([toolCallChunk([first, second])]);
+
+      expect(getToolCallOutput(fragments)).toEqual({
+        tool_calls: [expectedCall(first), expectedCall(second)],
+      });
     });
 
     it("keeps streamed text next to the tool calls", () => {
-      const fragments = collectToolCalls([
-        toolCallChunk([
-          {
-            index: 0,
-            id: "call_1",
-            type: "function",
-            function: { name: "get_weather", arguments: '{"city": "Paris"}' },
-          },
-        ]),
-      ]);
+      const call = callFor(0);
+      const fragments = collectToolCalls([toolCallChunk([call])]);
 
-      expect(buildStreamOutput(["Checking ", "the weather."], fragments)).toEqual({
+      expect(
+        buildStreamOutput(["Checking ", "the weather."], fragments)
+      ).toEqual({
         message: "Checking the weather.",
-        tool_calls: [
-          {
-            id: "call_1",
-            type: "function",
-            function: { name: "get_weather", arguments: '{"city": "Paris"}' },
-          },
-        ],
+        tool_calls: [expectedCall(call)],
       });
     });
 
     it("orders tool calls by index when fragments arrive out of order", () => {
+      const first = callFor(0);
+      const second = callFor(1);
+
       const fragments = collectToolCalls([
-        toolCallChunk([
-          {
-            index: 1,
-            id: "call_2",
-            type: "function",
-            function: { name: "get_time", arguments: "{}" },
-          },
-        ]),
-        toolCallChunk([
-          {
-            index: 0,
-            id: "call_1",
-            type: "function",
-            function: { name: "get_weather", arguments: "{}" },
-          },
-        ]),
+        toolCallChunk([second]),
+        toolCallChunk([first]),
       ]);
 
-      expect(
-        getToolCallOutput(fragments).tool_calls.map((call) => call.id)
-      ).toEqual(["call_1", "call_2"]);
+      expect(getToolCallOutput(fragments)).toEqual({
+        tool_calls: [expectedCall(first), expectedCall(second)],
+      });
     });
 
     it("keeps the text of a chunk that also carries tool calls", () => {
-      const chunk = toolCallChunk([
-        {
-          index: 0,
-          id: "call_1",
-          type: "function",
-          function: { name: "get_weather", arguments: "{}" },
-        },
-      ]);
-      chunk.choices[0].delta.content = "Checking the weather.";
+      const call = callFor(0);
+      const text = `text_${crypto.randomUUID()}`;
+      const chunk = toolCallChunk([call]);
+      chunk.choices[0].delta.content = text;
 
-      const parsed = parseChunk(chunk);
-
-      expect(parsed.isToolCall && parsed.text).toBe("Checking the weather.");
+      expect(parseChunk(chunk)).toEqual({
+        isToolCall: true,
+        data: [call],
+        text,
+      });
     });
 
     it("returns only the message for a text stream", () => {
-      expect(buildStreamOutput(["Hello", "!"], [])).toEqual({
-        message: "Hello!",
+      const first = crypto.randomUUID();
+      const second = crypto.randomUUID();
+
+      expect(buildStreamOutput([first, second], [])).toEqual({
+        message: `${first}${second}`,
       });
     });
   });

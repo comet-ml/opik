@@ -535,7 +535,9 @@ export const getToolCallOutput = (
 export const buildStreamOutput = (
   textChunks: string[],
   toolCallChunks: ToolCallDelta[]
-): { message: string } | { message?: string; tool_calls: StreamedToolCall[] } => {
+):
+  | { message: string }
+  | { message?: string; tool_calls: StreamedToolCall[] } => {
   const message = textChunks.join("");
   if (toolCallChunks.length === 0) {
     return { message };
