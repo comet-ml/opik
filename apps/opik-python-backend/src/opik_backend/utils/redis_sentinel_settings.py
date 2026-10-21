@@ -3,12 +3,14 @@ import os
 import re
 from dataclasses import dataclass
 from typing import Optional
-from urllib.parse import unquote, urlparse
+from urllib.parse import ParseResult, unquote, urlparse
 
 SCHEMES = ("redis", "rediss")
 MAX_RETRY_ATTEMPTS = 20
 # Same format as the Java backend's Dropwizard durations, e.g. 500ms, 5s, 1m
-_DURATION = re.compile(r"^(\d+)\s*([a-z]+)$")
+# ASCII digits only: \d and str.isdigit() also accept digits int() rejects, such as "²"
+_DURATION = re.compile(r"^([0-9]+)\s*([a-z]+)$")
+_DATABASE = re.compile(r"^[0-9]+$")
 _DURATION_UNITS = {
     "ms": 0.001, "millisecond": 0.001, "milliseconds": 0.001,
     "s": 1, "second": 1, "seconds": 1,
@@ -108,7 +110,7 @@ class RedisSentinelSettings:
         )
 
 
-def _sentinels(seed) -> list[tuple[str, int]]:
+def _sentinels(seed: ParseResult) -> list[tuple[str, int]]:
     """The seed first, then OPIK_REDIS_SENTINEL_NODES in order, without duplicates. Ports are never assumed."""
     if not seed.port:
         raise RedisSentinelConfigError("REDIS_URL must include the sentinel port when Sentinel is enabled")
@@ -121,9 +123,9 @@ def _sentinels(seed) -> list[tuple[str, int]]:
     return sentinels
 
 
-def _database(seed) -> int:
+def _database(seed: ParseResult) -> int:
     value = seed.path.lstrip("/") or "0"
-    if not value.isdigit():
+    if not _DATABASE.match(value):
         raise RedisSentinelConfigError("REDIS_URL must select a non-negative database when Sentinel is enabled")
     return int(value)
 

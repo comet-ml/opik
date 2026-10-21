@@ -177,6 +177,8 @@ def test_keeps_direct_client_when_sentinel_is_disabled(sentinel_env, enabled):
         ("REDIS_URL", "", "REDIS_URL must point at a sentinel"),
         ("REDIS_URL", "redis://sentinel-1:26379/-1", "REDIS_URL must select a non-negative database"),
         ("REDIS_URL", "redis://sentinel-1:26379/abc", "REDIS_URL must select a non-negative database"),
+        ("REDIS_URL", "redis://sentinel-1:26379/\u00b2", "REDIS_URL must select a non-negative database"),
+        ("OPIK_REDIS_SENTINEL_TIMEOUT", "\u00b2s", "OPIK_REDIS_SENTINEL_TIMEOUT must be a duration"),
         ("OPIK_REDIS_SENTINEL_ENABLED", "enabled", "OPIK_REDIS_SENTINEL_ENABLED must be true or false"),
     ],
 )
