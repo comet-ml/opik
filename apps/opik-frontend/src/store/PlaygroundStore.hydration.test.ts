@@ -241,7 +241,7 @@ describe("PLAYGROUND_STATE hydration of entries the playground can't render", ()
     expect(promptMap).toEqual({ p1: storedPrompt("p1") });
   });
 
-  it.each([
+  it.each<[string, Record<string, unknown>]>([
     ["messages that aren't a list", { messages: "Say hi" }],
     ["no messages", { messages: undefined }],
     ["a message that is null", { messages: [null] }],
@@ -257,6 +257,18 @@ describe("PLAYGROUND_STATE hydration of entries the playground can't render", ()
       "a content part that is null",
       { messages: [{ ...IMAGE_MESSAGE, content: [null] }] },
     ],
+    [
+      "an image part without its image",
+      { messages: [{ ...IMAGE_MESSAGE, content: [{ type: "image_url" }] }] },
+    ],
+    [
+      "a video part without its video",
+      { messages: [{ ...IMAGE_MESSAGE, content: [{ type: "video_url" }] }] },
+    ],
+    [
+      "an audio part without its audio",
+      { messages: [{ ...IMAGE_MESSAGE, content: [{ type: "audio_url" }] }] },
+    ],
   ])("drops a prompt with %s and keeps the others", async (_, fields) => {
     seed({
       promptIds: ["broken", "p1"],
@@ -270,6 +282,19 @@ describe("PLAYGROUND_STATE hydration of entries the playground can't render", ()
 
     expect(promptIds).toEqual(["p1"]);
     expect(promptMap).toEqual({ p1: storedPrompt("p1") });
+  });
+
+  it("drops the outputs of the prompts it drops", async () => {
+    const output = { isLoading: false, value: "Hi!", stale: false };
+    seed({
+      promptIds: ["p1", "missing"],
+      promptMap: { p1: storedPrompt("p1") },
+      outputMap: { p1: output, missing: output, unlisted: output },
+    });
+
+    const { outputMap } = await loadState();
+
+    expect(outputMap).toEqual({ p1: output });
   });
 
   it("gives a prompt saved without a config or a provider an empty config", async () => {

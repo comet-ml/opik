@@ -156,14 +156,26 @@ const markStoredPinnedChatPromptApplied = (
   };
 };
 
+const MEDIA_PART_TYPES = new Set(["image_url", "video_url", "audio_url"]);
+
+// A media part keeps its payload under a key named after its type, and the
+// readers go straight to part[type].url.
+const isUsablePart = (part: unknown) => {
+  if (!isPlainObject(part)) return false;
+
+  const { type } = part as { type?: unknown };
+
+  return isString(type) && MEDIA_PART_TYPES.has(type)
+    ? isPlainObject(get(part, type))
+    : true;
+};
+
 const isUsableMessage = (message: unknown) => {
   if (!isPlainObject(message)) return false;
 
   const { content } = message as LLMMessage;
 
-  return (
-    isString(content) || (isArray(content) && content.every(isPlainObject))
-  );
+  return isString(content) || (isArray(content) && content.every(isUsablePart));
 };
 
 const isRenderablePrompt = (prompt: unknown) =>
@@ -663,6 +675,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
         return {
           ...state,
           promptIds,
+          outputMap: pick(state.outputMap, promptIds),
           appliedChatPromptVersionsBackfilled: true,
           promptMap: mapValues(promptMap, (prompt) => {
             const restored = restoreMissingConfigKeys(prompt);
