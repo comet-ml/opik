@@ -38,7 +38,7 @@ class MediaUrlCheckConfigTest {
     @DisplayName("a per-URL timeout the frontend would not wait for is rejected")
     void perUrlTimeoutAboveCeilingIsRejected() {
         var config = new MediaUrlCheckConfig();
-        config.setPerUrlTimeout(Duration.seconds(7));
+        config.setPerUrlTimeout(Duration.milliseconds(6001));
 
         assertThat(validator.validate(config))
                 .as("the frontend gives up after 8s and runs without the check, so a slower verdict would be lost")
