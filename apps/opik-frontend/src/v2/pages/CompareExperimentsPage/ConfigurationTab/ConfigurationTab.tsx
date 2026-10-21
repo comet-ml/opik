@@ -23,7 +23,6 @@ import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/P
 import { convertColumnDataToColumn } from "@/lib/table";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import { Experiment } from "@/types/datasets";
-import PromptVersionTag from "@/v2/pages-shared/experiments/PromptVersionTag/PromptVersionTag";
 import {
   formatExperimentPromptVersions,
   sortPromptVersions,
@@ -70,11 +69,6 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   });
 
   const isCompare = experimentsIds.length > 1;
-
-  // Outside compare mode the prompt versions are navigable tags next to the
-  // search box; in compare mode they become a table row instead, so each
-  // experiment's version sits in its own column and the diff toggle applies.
-  const promptVersions = isCompare ? [] : experiments[0]?.prompt_versions ?? [];
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -214,18 +208,13 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         direction="bidirectional"
         limitWidth
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <SearchInput
-            searchText={search as string}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[200px] shrink-0"
-            dimension="xs"
-          ></SearchInput>
-          {promptVersions.map((pv) => (
-            <PromptVersionTag key={pv.id} promptVersion={pv} />
-          ))}
-        </div>
+        <SearchInput
+          searchText={search as string}
+          setSearchText={setSearch}
+          placeholder="Search by name"
+          className="w-[200px] shrink-0"
+          dimension="xs"
+        ></SearchInput>
         <div className="flex items-center gap-2">
           <CompareExperimentsActionsPanel />
           {isCompare && (
