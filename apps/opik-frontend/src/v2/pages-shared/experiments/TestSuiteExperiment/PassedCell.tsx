@@ -40,7 +40,9 @@ type StatusInfo = {
 };
 
 const NO_EXPERIMENT_ITEM_REASON = "No experiment item defined";
-const NO_ASSERTIONS_REASON = "No assertions defined";
+// Suite-level assertions are not on the row, so a missing result can't be told apart from no assertions.
+const NO_ASSERTION_RESULTS_REASON =
+  "No assertion results for this item. Either no assertions apply to it, or they haven't been scored.";
 const SCORING_ERROR_REASON =
   "Assertion scoring failed. Check that the configured model is available and try again.";
 
@@ -95,7 +97,7 @@ function resolveSkippedStatus(
 ): StatusInfo | null {
   if (!status) {
     const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
-    if (!hasEvaluators) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
+    if (!hasEvaluators) return SKIPPED_RESULT(NO_ASSERTION_RESULTS_REASON);
     if (experimentFinished) return ERROR_RESULT(SCORING_ERROR_REASON);
   }
   return null;
