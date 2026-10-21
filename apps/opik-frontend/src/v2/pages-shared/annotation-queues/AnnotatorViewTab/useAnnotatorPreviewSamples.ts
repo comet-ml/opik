@@ -38,21 +38,29 @@ const useAnnotatorPreviewSamples = ({
     { ...sampleParams, filters: queueFilters },
     { enabled: useQueueSample },
   );
+  const hasQueueSamples = Boolean(queueTraces?.content.length);
+  const useProjectSample =
+    !useQueueSample || (!isQueuePending && !hasQueueSamples);
   const { data: projectTraces, isPending: isProjectPending } = useTracesList(
     sampleParams,
-    { enabled: Boolean(projectId) },
+    { enabled: Boolean(projectId) && useProjectSample },
   );
 
-  const samples: Trace[] = queueTraces?.content.length
-    ? queueTraces.content
-    : projectTraces?.content ?? [];
+  const samples: Trace[] =
+    useQueueSample && hasQueueSamples
+      ? queueTraces?.content ?? []
+      : projectTraces?.content ?? [];
+
+  const currentIndex = Math.min(sampleIndex, Math.max(samples.length - 1, 0));
 
   return {
     samples,
-    sample: samples[Math.min(sampleIndex, samples.length - 1)],
-    sampleIndex,
+    sample: samples[currentIndex],
+    sampleIndex: currentIndex,
     setSampleIndex,
-    isPending: (useQueueSample && isQueuePending) || isProjectPending,
+    isPending:
+      (useQueueSample && isQueuePending) ||
+      (useProjectSample && isProjectPending),
   };
 };
 

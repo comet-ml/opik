@@ -10,7 +10,7 @@ import { prettifyMessage } from "@/lib/traces";
 import { Trace } from "@/types/traces";
 import AnnotatorFieldValue from "./AnnotatorFieldValue";
 import AnnotatorFieldsView from "./AnnotatorFieldsView";
-import { resolveMessage } from "./annotatorViewConfig";
+import { extractMessageText, resolveMessage } from "./annotatorViewConfig";
 import { AnnotatorViewDraft } from "./useAnnotatorViewDraft";
 
 const ThreadMessagePreview: React.FC<{
@@ -23,7 +23,11 @@ const ThreadMessagePreview: React.FC<{
     type: "input" | "output",
   ) => {
     if (path) {
-      return <AnnotatorFieldValue value={resolveMessage(data, path)} />;
+      return (
+        <AnnotatorFieldValue
+          value={extractMessageText(resolveMessage(data, path))}
+        />
+      );
     }
     const message = prettifyMessage(data as object, { type }).message;
     return isString(message) ? (

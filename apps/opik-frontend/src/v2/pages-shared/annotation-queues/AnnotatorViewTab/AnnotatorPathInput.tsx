@@ -9,6 +9,7 @@ import {
 import PathSourcePicker from "@/v2/pages-shared/traces/AddToDatasetDialog/PathSourcePicker";
 import { JsonObject } from "@/types/shared";
 import { cn, setJSONPathIndex, splitJSONPathByIndexes } from "@/lib/utils";
+import { toAnnotatorPath } from "./annotatorViewConfig";
 
 const FIRST_INDEX = 0;
 const LAST_INDEX = -1;
@@ -125,7 +126,9 @@ const AnnotatorPathInput: React.FC<AnnotatorPathInputProps> = ({
       treeData={treeData}
       isPending={isPending}
       trigger={trigger}
-      onSelect={onChange}
+      onSelect={(selectedPath) =>
+        onChange(toAnnotatorPath(treeData, selectedPath))
+      }
     />
   );
 };

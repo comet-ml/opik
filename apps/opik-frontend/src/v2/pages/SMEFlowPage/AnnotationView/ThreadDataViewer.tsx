@@ -19,6 +19,7 @@ import { RenderMessageContent } from "@/v2/pages-shared/traces/TraceMessages/Tra
 import AnnotatorFieldValue from "@/v2/pages-shared/annotation-queues/AnnotatorViewTab/AnnotatorFieldValue";
 import {
   EMPTY_ANNOTATOR_VIEW,
+  extractMessageText,
   resolveMessage,
 } from "@/v2/pages-shared/annotation-queues/AnnotatorViewTab/annotatorViewConfig";
 
@@ -193,7 +194,11 @@ const ThreadContent: React.FC = () => {
     (trace, type) => {
       const path = annotatorView[type];
       if (!path) return undefined;
-      return <AnnotatorFieldValue value={resolveMessage(trace[type], path)} />;
+      return (
+        <AnnotatorFieldValue
+          value={extractMessageText(resolveMessage(trace[type], path))}
+        />
+      );
     },
     [annotatorView],
   );

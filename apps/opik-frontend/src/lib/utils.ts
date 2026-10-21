@@ -147,7 +147,7 @@ export type JSONPathPart = { key: string } | { index: number };
 
 const PATH_SYNTAX_CHARS = /[.[\]]/;
 
-const quoteKey = (key: string): string =>
+export const quoteKey = (key: string): string =>
   `["${key.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"]`;
 
 const isIndex = (part: JSONPathPart): part is { index: number } =>

@@ -49,4 +49,38 @@ describe("useAnnotatorViewDraft", () => {
 
     expect(result.current.annotatorView.output).toBe("answer");
   });
+
+  it("leaves fields out while they match the defaults", () => {
+    const { result } = renderDraft({});
+
+    expect(result.current.annotatorView).toEqual({
+      input: undefined,
+      output: undefined,
+    });
+  });
+
+  it("saves fields once they differ from the defaults", () => {
+    const { result } = renderDraft({});
+
+    act(() =>
+      result.current.setDraft({
+        ...result.current.draft,
+        fields: result.current.draft.fields.slice(1),
+      }),
+    );
+
+    expect(result.current.annotatorView.fields).toHaveLength(3);
+  });
+
+  it("is dirty only while the draft differs from the loaded view", () => {
+    const { result } = renderDraft({ input: "messages[-1].content" });
+    expect(result.current.isDirty).toBe(false);
+
+    const loaded = result.current.draft;
+    act(() => result.current.setDraft({ ...loaded, output: "answer" }));
+    expect(result.current.isDirty).toBe(true);
+
+    act(() => result.current.setDraft({ ...loaded }));
+    expect(result.current.isDirty).toBe(false);
+  });
 });

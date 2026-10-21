@@ -11,29 +11,12 @@ import {
 } from "@/lib/annotation-queues";
 import { Trace, Thread } from "@/types/traces";
 import { isObjectThread } from "@/lib/traces";
-import { prettifyMessage } from "@/lib/traces";
 import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 import { AnnotationQueueAnnotatorView } from "@/types/annotation-queues";
 import {
   EMPTY_ANNOTATOR_VIEW,
-  messagePreviewText,
-  resolveMessage,
+  getMessagePreview,
 } from "@/v2/pages-shared/annotation-queues/AnnotatorViewTab/annotatorViewConfig";
-
-const getPreviewText = (
-  obj: object | undefined,
-  type: "input" | "output",
-  path?: string,
-): string => {
-  if (!obj) return "";
-  if (path) {
-    const value = resolveMessage(obj, path);
-    return value === undefined ? "" : messagePreviewText(value);
-  }
-  const result = prettifyMessage(obj, { type });
-  if (typeof result.message === "string") return result.message;
-  return JSON.stringify(obj).slice(0, 80);
-};
 
 const getItemPreviews = (
   item: Trace | Thread,
@@ -46,17 +29,17 @@ const getItemPreviews = (
       thread.id.slice(-12);
     return {
       name,
-      input: getPreviewText(thread.first_message, "input", view.input),
+      input: getMessagePreview(thread.first_message, "input", view.input),
       output: thread.last_message
-        ? getPreviewText(thread.last_message, "output", view.output)
+        ? getMessagePreview(thread.last_message, "output", view.output)
         : "",
     };
   }
   const trace = item as Trace;
   return {
     name: trace.name || trace.id.slice(-12),
-    input: getPreviewText(trace.input, "input", view.input),
-    output: getPreviewText(trace.output, "output", view.output),
+    input: getMessagePreview(trace.input, "input", view.input),
+    output: getMessagePreview(trace.output, "output", view.output),
   };
 };
 

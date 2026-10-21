@@ -9,8 +9,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 
 import { Button } from "@/ui/button";
-import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
-import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
+import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import {
   Form,
   FormControl,
@@ -339,6 +338,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     setDraft: setAnnotatorViewDraft,
     annotatorView,
     isInvalid: isAnnotatorViewInvalid,
+    isDirty: isAnnotatorViewDirty,
   } = useAnnotatorViewDraft({
     view: defaultQueue?.annotator_view,
     isThreadScope,
@@ -435,40 +435,37 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   });
 
   return (
-    <ResizableSidePanel
-      panelId="annotation-queue-sidebar"
-      entity="annotation queue"
+    <Sheet
       open={
         open && (isEdit ? canEditAnnotationQueues : canCreateAnnotationQueues)
       }
-      onClose={() => setOpen(false)}
-      initialWidth={0.5}
-      minWidth={640}
-      // A select or nested dialog opened from inside the form must not be treated as an outside
-      // click, or configuring a field would close the whole form.
-      // A form with edits closes only through X or Cancel, never by a stray click on the overlay.
-      blockOverlayClose={isNestedDialogOpen || form.formState.isDirty}
-      header={
-        <ResizableSidePanelTopBar
-          variant="form"
-          title={title}
-          onClose={() => setOpen(false)}
-        >
-          <Button
-            variant="outline"
-            size="2xs"
-            className="rounded-[4px]"
-            asChild
-          >
-            <a href={QUEUE_DOCS_LINK} target="_blank" rel="noreferrer">
-              Docs
-              <ArrowUpRight className="ml-1 size-3" />
-            </a>
-          </Button>
-        </ResizableSidePanelTopBar>
-      }
+      onOpenChange={setOpen}
     >
-      <div className="flex size-full flex-col">
+      <SheetContent
+        side="right"
+        className="flex w-full max-w-none flex-col gap-0 p-0 sm:max-w-[800px]"
+        // A select or nested dialog opened from inside the form must not be treated as an outside
+        // click, or configuring a field would close the whole form.
+        // A form with edits closes only through X or Cancel, never by a stray click on the overlay.
+        blockOverlayClose={
+          isNestedDialogOpen || form.formState.isDirty || isAnnotatorViewDirty
+        }
+        header={
+          <SheetTopBar variant="form" title={title}>
+            <Button
+              variant="outline"
+              size="2xs"
+              className="rounded-[4px]"
+              asChild
+            >
+              <a href={QUEUE_DOCS_LINK} target="_blank" rel="noreferrer">
+                Docs
+                <ArrowUpRight className="ml-1 size-3" />
+              </a>
+            </Button>
+          </SheetTopBar>
+        }
+      >
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
@@ -841,8 +838,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
             {submitText}
           </Button>
         </div>
-      </div>
-    </ResizableSidePanel>
+      </SheetContent>
+    </Sheet>
   );
 };
 

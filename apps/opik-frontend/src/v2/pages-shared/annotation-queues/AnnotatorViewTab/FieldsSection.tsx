@@ -19,7 +19,11 @@ import PathSourcePicker from "@/v2/pages-shared/traces/AddToDatasetDialog/PathSo
 import { JsonObject } from "@/types/shared";
 import { Trace } from "@/types/traces";
 import FieldRow from "./FieldRow";
-import { buildFieldsTree, labelFromPath } from "./annotatorViewConfig";
+import {
+  buildFieldsTree,
+  labelFromPath,
+  toAnnotatorPath,
+} from "./annotatorViewConfig";
 import {
   AnnotatorFieldDraft,
   AnnotatorViewDraft,
@@ -110,12 +114,13 @@ const FieldsSection: React.FC<FieldsSectionProps> = ({
           treeData={treeData}
           isPending={isSamplePending}
           sideOffset={-ADD_FIELD_TRIGGER_HEIGHT}
-          onSelect={(path) =>
+          onSelect={(selectedPath) => {
+            const path = toAnnotatorPath(treeData, selectedPath);
             setFields([
               ...value.fields,
               toFieldDraft({ label: labelFromPath(path), path }),
-            ])
-          }
+            ]);
+          }}
           trigger={
             <div className="flex h-8 cursor-pointer items-center justify-center rounded-md border border-dashed border-border bg-soft-background data-[state=open]:invisible">
               <Button variant="ghost" size="2xs">
