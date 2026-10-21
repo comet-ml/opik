@@ -1184,7 +1184,7 @@ experimentExecution:
   # Description: Duration for long-polling reads on the Redis Stream
   longPollingDuration: ${EXPERIMENT_EXECUTION_LONG_POLLING_DURATION:-5s}
   # Default: 10000
-  # Description: Maximum length of the Redis Stream (trimmed non-strictly)
+  # Description: Maximum length of the Redis Stream (trimmed non-strictly). A run is admitted against a lower bound derived from it, so that launches arriving together overshoot into headroom instead of trimming entries no consumer has taken
   streamMaxLen: ${EXPERIMENT_EXECUTION_STREAM_MAX_LEN:-10000}
   # Default: 100
   # Description: Trim limit for the Redis Stream
@@ -1201,6 +1201,9 @@ experimentExecution:
   # Default: 24h
   # Description: TTL for the batch completion counter in Redis
   batchCounterTtl: ${EXPERIMENT_EXECUTION_BATCH_COUNTER_TTL:-24h}
+  # Default: 60s
+  # Description: Lease on the lock that serialises launching a run, held from the queue-capacity check through publishing so the check cannot be overtaken. Must exceed the time to publish the largest run; a pod that dies holding it stalls launches until it expires
+  publishLockLease: ${EXPERIMENT_EXECUTION_PUBLISH_LOCK_LEASE:-60s}
 
 # Configuration for Dataset Export
 datasetExport:
