@@ -1,4 +1,4 @@
-export { test, expect } from './studio-rerun-optimization.fixture';
+export { test, expect } from './emptied-source-versions.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -397,3 +397,8 @@ export {
   RETIRED_MODEL,
   SAVED_MODEL_PARAMETERS,
 } from './studio-rerun-optimization.fixture';
+export type {
+  SourceVersionRef,
+  EmptiedSourceRef,
+  EmptiedSourceVersionsFixtures,
+} from './emptied-source-versions.fixture';

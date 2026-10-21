@@ -145,6 +145,14 @@ export interface RawApiResult {
 
 /** One row of the dataset's Version history tab. */
 export interface DatasetVersionRef {
+  /**
+   * The version's own id — what the Playground's picker keys a selection on
+   * (`datasetId::versionId`) and what `/experiments/execute` carries as
+   * `dataset_version_id`. Nullable for the same reason the hash is: the API
+   * marks it optional, and a caller pinning a specific version has to assert it
+   * arrived rather than send an absent id and read the answer as version-scoped.
+   */
+  id: string | null;
   versionName: string;
   /**
    * The version's content hash. Nullable because the API's own shape makes it
@@ -2406,6 +2414,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       const page = await opik.api.datasets.listDatasetVersions(datasetId, { size: 100 });
       const content = page.content ?? [];
       return content.map((v) => ({
+        id: v.id ?? null,
         versionName: String(v.versionName ?? ''),
         versionHash: v.versionHash ?? null,
         itemsTotal: Number(v.itemsTotal ?? 0),
@@ -3355,18 +3364,32 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      *
      * Returns rather than throws on a non-2xx: the endpoint's rejection of a
      * blank name is behaviour under test.
+     *
+     * `versionHash` and `datasetVersionId` are the pair the Playground sends
+     * (`useRunExperimentExecution`), and both are omitted rather than nulled
+     * when absent so a caller testing the unversioned payload exercises the
+     * shape the page actually posts. The hash is the load-bearing one: the
+     * backend streams the dataset's items AT that version, so it is what decides
+     * whether `requireDatasetItems` sees any — and therefore the only way to ask
+     * this endpoint about one version of a dataset rather than its latest.
      */
     async executeExperiments(args: {
       datasetName: string;
       datasetId: string;
       projectName: string;
       prompts: ExecutePromptSeed[];
+      versionHash?: string;
+      datasetVersionId?: string;
     }): Promise<ExecuteExperimentsResult> {
       const { status, message, json } = await rawFetch('POST', '/v1/private/experiments/execute', {
         body: {
           dataset_name: args.datasetName,
           dataset_id: args.datasetId,
           project_name: args.projectName,
+          ...(args.versionHash === undefined ? {} : { version_hash: args.versionHash }),
+          ...(args.datasetVersionId === undefined
+            ? {}
+            : { dataset_version_id: args.datasetVersionId }),
           prompts: args.prompts.map((prompt) => ({
             model: prompt.model,
             messages: prompt.messages,

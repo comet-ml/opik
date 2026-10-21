@@ -553,6 +553,99 @@ export class PlaygroundPage {
     });
   }
 
+  // ── the run gate (opik#8813) ────────────────────────────────────────────
+  //
+  // Both Run surfaces refuse a source whose SELECTED version has no items, and
+  // each decides that for itself — `PlaygroundHeader` from the `versionItemsTotal`
+  // prop, `PlaygroundRunButton` from its own `usePlaygroundDataset()` call — so a
+  // spec about the gate has to address them separately. One is not evidence
+  // about the other.
+  //
+  // The reason a control gives is a Radix `TooltipContent`, not an `aria-label`
+  // or a `title`, so hovering is the only way to read it. Both buttons keep
+  // `pointer-events: auto` while disabled (`style={isRunDisabled ? ... : {}}`)
+  // precisely so that the hover still lands — which is what makes the reason
+  // readable at all in the state it matters in.
+
+  /**
+   * The header's Run / Re-run control, whichever of the two is mounted.
+   *
+   * Public because the gate is about the button's own disabled state, not about
+   * clicking it: `clickReRun` presses the same element but cannot say anything
+   * about a press that must not be possible.
+   */
+  headerRunButton(): Locator {
+    return this.runButton();
+  }
+
+  /** Hover the header's Run and read the reason it gives. */
+  async headerRunTooltipText(): Promise<string> {
+    return test.step('read the header Run tooltip', async () =>
+      this.hoverAndReadTooltip(this.headerRunButton()),
+    );
+  }
+
+  /** Hover one variant's own Run and read the reason it gives. */
+  async variantRunTooltipText(index: number): Promise<string> {
+    return test.step(`read variant ${index}'s Run tooltip`, async () =>
+      this.hoverAndReadTooltip(this.variantRunButton(index)),
+    );
+  }
+
+  /**
+   * Fire the Run-all keyboard shortcut.
+   *
+   * `PlaygroundHeader` listens on `window` in the CAPTURE phase and returns
+   * early on `isRunDisabled`, so the shortcut reaches the handler whatever has
+   * focus — including the CodeMirror message editor a variant's configuration
+   * leaves focused. That is why this does not park focus anywhere first: doing
+   * so would test a path the keyboard handler does not have.
+   */
+  async pressRunAllHotkey(): Promise<void> {
+    return test.step('press Shift+Enter', async () => {
+      await this.page.keyboard.press('Shift+Enter');
+    });
+  }
+
+  /**
+   * Hover a control and return the reason IT gave.
+   *
+   * Read through the trigger's own `aria-describedby`, which Radix points at
+   * the content it opened for that trigger, rather than by looking up "the
+   * tooltip on the page". The difference is load-bearing when several controls'
+   * reasons are read in a row: a DISABLED button never receives the
+   * pointer-leave that would close its tooltip, so the previous one is still
+   * mounted when the next is read — measured here, where the header's reason
+   * outlived a move to the far corner of the page for a full ten seconds. A
+   * page-scoped lookup would have quietly returned the header's reason as the
+   * variant card's.
+   *
+   * Addressed with an attribute selector rather than `#id`: Radix's generated
+   * ids contain colons, which a CSS id selector reads as a pseudo-class.
+   */
+  private async hoverAndReadTooltip(control: Locator): Promise<string> {
+    // Dismiss whatever is still open before hovering the next control, and
+    // confirm it went. A disabled button never receives the pointer-leave that
+    // would close its own tooltip, and the positioning wrapper Radix puts
+    // around the content is wider than the visible bubble — wide enough, from
+    // the header, to sit over the variant cards' Run buttons, where it
+    // swallowed the hover entirely and left the next read waiting on a tooltip
+    // that could never open. Escape is the dismissal Radix listens for on
+    // `document`, and `TooltipWrapper` honours it.
+    await this.page.keyboard.press('Escape');
+    await expect(this.page.getByRole('tooltip')).toHaveCount(0, { timeout: 10_000 });
+
+    await control.hover();
+    await expect(control).toHaveAttribute('aria-describedby', /.+/, { timeout: 10_000 });
+    const describedBy = await control.getAttribute('aria-describedby');
+    if (!describedBy) {
+      throw new Error('tooltip trigger carried no aria-describedby after it opened');
+    }
+    const tooltip = this.page.locator(`[id="${describedBy}"]`);
+    await expect(tooltip).toHaveCount(1);
+    return (await tooltip.innerText()).trim();
+  }
+
   /**
    * Wait until a loaded dataset/suite can actually be run.
    *
@@ -700,6 +793,74 @@ export class PlaygroundPage {
   /** Confirm the suite/dataset pill is showing with the expected entity name. */
   loadedSourcePill(): Locator {
     return this.page.getByTestId('playground-loaded-source-pill');
+  }
+
+  // ── the loaded source's version ─────────────────────────────────────────
+  //
+  // The pill's own control is a Radix Select listing the project's datasets (or
+  // suites); each row carries a submenu of THAT source's versions, opened by
+  // hovering its chevron (`DatasetVersionSelectBox`). Clicking the row itself
+  // takes the latest version, so the submenu is the only way to put an earlier
+  // version in front of the Playground — and therefore the only way to ask
+  // whether the run gate reads the SELECTED version's item count or the
+  // source's live one.
+
+  /**
+   * The version label the loaded-source pill is showing, e.g. `v2`.
+   *
+   * Also the settle signal for a freshly loaded source, and the reason the
+   * specs wait on it before asserting anything about the gate: the label and
+   * the `itemsTotal` the gate reads come out of the SAME
+   * `GET /datasets/{id}/versions` response (`useValidatedDatasetVersion`), and
+   * the pill commits with the selection, strictly before that response lands.
+   * In the window between the two, `itemsTotal` is `undefined` and the gate
+   * reads it as "not empty" — so an assertion made before the label is painted
+   * is racing a state in which Run is legitimately still enabled.
+   */
+  loadedSourceVersionLabel(): Locator {
+    return this.loadedSourcePill().getByRole('combobox').getByText(/^v\d+$/);
+  }
+
+  /**
+   * Switch the loaded source to a named version through the pill's picker.
+   *
+   * The source is reached by SEARCHING for it rather than by position, and the
+   * resulting row count is asserted, so a search that matched two sources fails
+   * here instead of hovering whichever the DOM happened to order first.
+   */
+  async selectSourceVersion(args: {
+    entityName: string;
+    versionName: string;
+  }): Promise<void> {
+    return test.step(`select version ${args.versionName} of "${args.entityName}"`, async () => {
+      await this.loadedSourcePill().getByRole('combobox').click();
+      const listbox = this.page.getByRole('listbox');
+      await listbox.waitFor({ state: 'visible' });
+      await listbox.getByPlaceholder('Search').fill(args.entityName);
+
+      // Hovered, not clicked: the chevron is a `PopoverTrigger asChild` over a
+      // bare div whose only handler is `onMouseEnter`, and a click would land on
+      // the row instead and select the LATEST version — the state this method
+      // exists to leave. One such trigger per listed source that has a version
+      // at all, which is why the list is filtered to this one source first.
+      const versionSubmenuTrigger = listbox.locator('[aria-haspopup="dialog"]');
+      await expect(versionSubmenuTrigger).toHaveCount(1);
+      await versionSubmenuTrigger.hover();
+
+      // The submenu is a portalled Popover, so its options are addressed at
+      // page scope — and they are the only `role="option"` elements the picker
+      // renders, since the source rows themselves are plain divs. Matched on
+      // the version-name span EXACTLY, because the option's accessible name
+      // also carries the version's change description, and because `v1` as a
+      // substring would match `v10` once a source has ten versions.
+      const option = this.page
+        .getByRole('option')
+        .filter({ has: this.page.getByText(args.versionName, { exact: true }) });
+      await expect(option).toHaveCount(1);
+      await option.click();
+
+      await expect(this.loadedSourceVersionLabel()).toHaveText(args.versionName);
+    });
   }
 
   // ── metrics picker ──────────────────────────────────────────────────────
