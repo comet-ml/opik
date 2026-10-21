@@ -103,11 +103,9 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
         var spansByProjectName = groupSpansByProjectName(traceRequest, fallbackProjectName);
 
-        return projectService.retrieveByNamesOrCreate(spansByProjectName.keySet())
-                .map(ProjectService::groupByName)
-                .flatMapMany(projectsByName -> Flux.fromIterable(spansByProjectName.entrySet())
-                        .flatMap(entry -> storeProjectSpans(entry.getValue(), projectsByName.get(entry.getKey()),
-                                integrationName)))
+        return Flux.fromIterable(spansByProjectName.entrySet())
+                .flatMap(entry -> projectService.getOrCreate(entry.getKey())
+                        .flatMap(project -> storeProjectSpans(entry.getValue(), project, integrationName)))
                 .reduce(0L, Long::sum)
                 .subscribeOn(Schedulers.boundedElastic());
     }

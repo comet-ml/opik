@@ -1308,6 +1308,34 @@ class OpenTelemetryResourceTest {
             assertTraceStoredInProject(tooLongNameRouted, headerProject, workspaceName);
         }
 
+        @Test
+        @DisplayName("opik.project_name that differs only by accents from an existing project uses that project")
+        void opikProjectNameMatchesExistingProjectIgnoringAccents() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var suffix = UUID.randomUUID().toString();
+            var existingProject = "cafe-" + suffix;
+            var existingProjectRouted = rootAndChild();
+            var accentRouted = rootAndChild(projectNameAttribute("café-" + suffix));
+
+            sendBatch(Entity.entity(exportRequest(existingProjectRouted).toByteArray(), "application/x-protobuf"),
+                    "application/x-protobuf", existingProject, workspaceName, okApikey, HttpStatus.SC_OK, null);
+            sendBatch(Entity.entity(exportRequest(accentRouted).toByteArray(), "application/x-protobuf"),
+                    "application/x-protobuf", "header-project-" + suffix, workspaceName, okApikey, HttpStatus.SC_OK,
+                    null);
+
+            assertTraceStoredInProject(existingProjectRouted, existingProject, workspaceName);
+            assertTraceStoredInProject(accentRouted, existingProject, workspaceName);
+        }
+
+        private ExportTraceServiceRequest exportRequest(List<Span> spans) {
+            return ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .addScopeSpans(ScopeSpans.newBuilder().addAllSpans(spans)))
+                    .build();
+        }
+
         private KeyValue projectNameAttribute(String projectName) {
             return KeyValue.newBuilder()
                     .setKey("opik.project_name")
