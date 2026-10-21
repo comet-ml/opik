@@ -30,16 +30,21 @@ export const clearSavedPlaygroundState = () => {
   SAVED_PLAYGROUND_KEYS.forEach((key) => localStorage.removeItem(key));
 };
 
-const buildErrorDetails = (error: Error, componentStack: string) =>
-  [
-    `${error.name}: ${error.message}`,
-    error.stack ?? "",
+const buildErrorDetails = (error: Error, componentStack: string) => {
+  const title = `${error.name}: ${error.message}`;
+  const stack = error.stack ?? "";
+
+  return [
+    // Chrome's stack already starts with the title; Firefox's and Safari's don't.
+    stack.startsWith(title) ? "" : title,
+    stack,
     componentStack ? `Component stack:${componentStack}` : "",
     `URL: ${window.location.href}`,
     `User agent: ${navigator.userAgent}`,
   ]
     .filter(Boolean)
     .join("\n\n");
+};
 
 type PlaygroundCrashFallbackProps = {
   error: Error;
@@ -55,8 +60,16 @@ const PlaygroundCrashFallback: React.FC<PlaygroundCrashFallbackProps> = ({
   const { toast } = useToast();
 
   const handleCopyDetails = useCallback(async () => {
-    await copy(buildErrorDetails(error, componentStack));
-    toast({ description: "Error details copied" });
+    try {
+      await copy(buildErrorDetails(error, componentStack));
+      toast({ description: "Error details copied" });
+    } catch {
+      toast({
+        description:
+          "Couldn't copy the error details: the browser blocked the clipboard",
+        variant: "destructive",
+      });
+    }
   }, [error, componentStack, toast]);
 
   return (

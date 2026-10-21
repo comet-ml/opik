@@ -36,6 +36,12 @@ const renderPlayground = () =>
     </PlaygroundErrorBoundary>,
   );
 
+const STACK_WITHOUT_TITLE = "render@http://localhost/app.js:1:1";
+
+const ThrowsWithStackWithoutTitle = () => {
+  throw Object.assign(new Error("boom"), { stack: STACK_WITHOUT_TITLE });
+};
+
 describe("PlaygroundErrorBoundary", () => {
   beforeEach(() => {
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -95,5 +101,45 @@ describe("PlaygroundErrorBoundary", () => {
     expect(details).toMatch(/^TypeError: .*reading 'model'/);
     expect(details).toContain("Component stack:");
     expect(details).toContain("PromptModels");
+  });
+
+  it("copies the error line once when the stack already starts with it", async () => {
+    renderPlayground();
+
+    fireEvent.click(screen.getByRole("button", { name: /Copy details/ }));
+
+    await waitFor(() => expect(copy).toHaveBeenCalled());
+    const details = vi.mocked(copy).mock.calls[0][0];
+    expect(details.match(/TypeError: /g)).toHaveLength(1);
+  });
+
+  it("keeps the error line when the stack doesn't start with it", async () => {
+    render(
+      <PlaygroundErrorBoundary>
+        <ThrowsWithStackWithoutTitle />
+      </PlaygroundErrorBoundary>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Copy details/ }));
+
+    await waitFor(() => expect(copy).toHaveBeenCalled());
+    const details = vi.mocked(copy).mock.calls[0][0];
+    expect(details).toMatch(/^Error: boom\n\nrender@http/);
+  });
+
+  it("says so when the browser refuses the clipboard write", async () => {
+    vi.mocked(copy).mockRejectedValueOnce(new Error("denied"));
+    renderPlayground();
+
+    fireEvent.click(screen.getByRole("button", { name: /Copy details/ }));
+
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: "destructive" }),
+      ),
+    );
+    expect(toast).not.toHaveBeenCalledWith({
+      description: "Error details copied",
+    });
   });
 });
