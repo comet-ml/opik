@@ -139,6 +139,20 @@ describe("collectRunMediaUrls", () => {
     ).toEqual(["https://cdn.example.com/ok.png"]);
   });
 
+  it("skips the whole row when another message of the prompt can't be built", () => {
+    const prompts = [prompt("p1", "Answer {{question}}", [image("{{photo}}")])];
+
+    expect(
+      collectRunMediaUrls(
+        prompts,
+        rows(
+          { photo: "https://cdn.example.com/no-question.png" },
+          { question: "q", photo: "https://cdn.example.com/ok.png" },
+        ),
+      ),
+    ).toEqual(["https://cdn.example.com/ok.png"]);
+  });
+
   it(`stops at ${MAX_CHECKED_MEDIA_URLS} unique URLs`, () => {
     const prompts = [prompt("p1", [image("{{photo}}")])];
     const items = rows(

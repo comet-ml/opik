@@ -30,21 +30,21 @@ export const collectRunMediaUrls = (
 
   for (const row of rows) {
     for (const prompt of prompts) {
-      for (const message of dropEmptySystemMessages(prompt.messages)) {
-        if (typeof message.content === "string") continue;
+      let contents: MessageContent[];
+      try {
+        // all-or-nothing like the run: one message that can't be built means the row is never sent
+        contents = dropEmptySystemMessages(prompt.messages).map(
+          (message) =>
+            transformMessageIntoProviderMessage(message, row).content,
+        );
+      } catch {
+        continue;
+      }
 
-        let content: MessageContent;
-        try {
-          content = transformMessageIntoProviderMessage(message, row).content;
-        } catch {
-          continue;
-        }
-
-        for (const url of getMediaUrls(content)) {
-          if (!HTTP_URL_REGEX.test(url)) continue;
-          urls.add(url);
-          if (urls.size === MAX_CHECKED_MEDIA_URLS) return [...urls];
-        }
+      for (const url of contents.flatMap(getMediaUrls)) {
+        if (!HTTP_URL_REGEX.test(url)) continue;
+        urls.add(url);
+        if (urls.size === MAX_CHECKED_MEDIA_URLS) return [...urls];
       }
     }
   }
