@@ -42,6 +42,8 @@ export {
   type SpanReadPage,
   type SpanBatchSeed,
   type OtelSpanSeed,
+  type OtelExportSpanSeed,
+  type ProjectSpanRef,
   type TraceBatchSeed,
   type SpanIdPage,
   type EntityIdPage,

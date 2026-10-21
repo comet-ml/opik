@@ -529,6 +529,48 @@ export interface OtelSpanSeed {
   attributes: Record<string, string | number>;
 }
 
+/**
+ * One span of a `postOtelExport` export — the general OTLP shape, where the
+ * span's own routing inputs are the subject rather than protocol detail.
+ *
+ * Deliberately NOT `OtelSpanSeed` with extra fields. That seed exists to write
+ * spans onto a trace that already exists, so `postOtelSpans` sets
+ * `opik.trace_id` on every span and mints one OTLP trace id for the batch. Both
+ * of those are precisely what routing-by-attribute must be asserted WITHOUT:
+ * an `opik.trace_id` pins the spans to a trace that already belongs to a
+ * project, which is the project they would then land in whatever
+ * `opik.project_name` says.
+ */
+export interface OtelExportSpanSeed {
+  name: string;
+  /**
+   * Span-level attributes, `opik.project_name` among them when the span routes
+   * itself. Sent through the same encoder as the resource attributes.
+   */
+  attributes?: Record<string, string | number>;
+  /**
+   * This span's own OTLP trace id, as lowercase hex.
+   *
+   * Absent means the export's single shared id, which is what a real Collector
+   * batch looks like. Stated per span when the spans of ONE export must land in
+   * DIFFERENT projects: an Opik trace id is derived from the OTLP trace id
+   * (`convertOtelIdToUUIDv7`), so same-id spans fanning out to several projects
+   * collide on the per-project trace upsert and the loser is rejected with
+   * `409 Project name and workspace name do not match the existing trace`,
+   * losing its span. Giving each span its own id is the only way to make a
+   * multi-project export deterministic — see the note in the spec.
+   */
+  otelTraceIdHex?: string;
+}
+
+/** One span of a project-scoped read, carrying what OTLP routing is asserted on. */
+export interface ProjectSpanRef {
+  id: string;
+  name: string;
+  /** The Opik trace the span was stored under — minted by the service here. */
+  traceId: string;
+}
+
 /** One span of a `POST /v1/private/spans/batch` write. */
 export interface SpanBatchSeed {
   /** Caller-minted so the seed knows the exact id set it wrote. Must be a UUIDv7. */
@@ -1561,6 +1603,22 @@ function randomOtelId(bytes: 8 | 16): string {
 /** The protobuf `bytes` encoding of a hex OTLP id. See `postOtelSpans`. */
 function hexToBase64(hex: string): string {
   return Buffer.from(hex, 'hex').toString('base64');
+}
+
+/**
+ * One attribute value as proto3 JSON `AnyValue`, shared by both OTLP exporters
+ * below so there is exactly one encoder to be right about.
+ *
+ * Numbers become `intValue` carrying a STRING, not a bare JSON number: proto3
+ * JSON represents int64 as a string, and a large count sent as a number
+ * overflows silently. There is no float case for the reason `OtelSpanSeed`
+ * gives — every numeric attribute Opik reads off an OTel span is a token count,
+ * and `extractUsageField` only reads `hasIntValue()`.
+ */
+function toOtelAnyValue(value: string | number): { intValue: string } | { stringValue: string } {
+  return typeof value === 'number'
+    ? { intValue: String(Math.trunc(value)) }
+    : { stringValue: value };
 }
 
 export function makeBackendClient(apiKey: string | null = null, workspaceName: string | null = null) {
@@ -5914,12 +5972,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       const otelTraceId = randomOtelId(16);
       const startNanos = BigInt(Date.now()) * 1_000_000n;
 
-      const toAnyValue = (value: string | number) =>
-        typeof value === 'number'
-          ? // `String`, not the number itself: proto3 JSON represents int64 as a
-            // string, and a bare JSON number overflows silently for large counts.
-            { intValue: String(Math.trunc(value)) }
-          : { stringValue: value };
+      const toAnyValue = toOtelAnyValue;
 
       const { status, message } = await rawFetchWithHeaders(
         'POST',
@@ -5964,6 +6017,138 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             `'${args.projectName}', got ${status}: ${message}`,
         );
       }
+    },
+
+    /**
+     * `POST /v1/private/otel/v1/traces` for an export that ROUTES ITSELF —
+     * resource attributes, per-span attributes, and per-span OTLP trace ids,
+     * with no `opik.trace_id` anywhere.
+     *
+     * The sibling of `postOtelSpans`, which cannot express this and should not
+     * be made to: it attaches spans to a caller-minted trace, which is the one
+     * thing an assertion about `opik.project_name` routing must not do (see
+     * `OtelExportSpanSeed`). Here the service mints the trace itself, from the
+     * OTLP trace id, in whichever project the attribute resolves to — so the
+     * caller learns which project won by reading the projects back, which is
+     * exactly the user-visible question opik#9036 is about.
+     *
+     * Three things this deliberately does differently:
+     *
+     *  - **The status is RETURNED, not thrown on.** The export's own answer is
+     *    part of what a routing spec asserts: a multi-project export that
+     *    answers `409` stores only some of its spans, and a helper that threw
+     *    would turn that into an error with no way to say "the export was
+     *    refused" apart from "the spans never landed".
+     *  - **`resourceAttributes` go on `resource.attributes`**, the level a real
+     *    Collector sets a service-wide project name at, and a different branch
+     *    of `OpenTelemetryMapper` from the span-level one — so the two can
+     *    regress apart and a spec wants to drive each.
+     *  - **No `opik.trace_id` is ever added.** Not even optionally: a caller
+     *    who wants one wants `postOtelSpans`.
+     *
+     * `projectNameHeader` is still always sent, for the reason `postOtelSpans`
+     * gives — absent, the endpoint falls back to the workspace's DEFAULT
+     * project, scattering spans outside the run prefix where no teardown will
+     * find them. It is also the fallback under test: every span whose attribute
+     * is missing or refused must land there.
+     */
+    async postOtelExport(args: {
+      /** The `projectName` header — the fallback every unrouted span must follow. */
+      projectNameHeader: string;
+      /** Export-wide attributes, on `resource.attributes`. */
+      resourceAttributes?: Record<string, string | number>;
+      spans: OtelExportSpanSeed[];
+    }): Promise<{ status: number; message: string }> {
+      if (args.spans.length === 0) {
+        throw new Error(
+          'postOtelExport: an export with no spans is a no-op the backend answers 200 for',
+        );
+      }
+      // The export's shared id, used by every span that did not state its own.
+      const sharedOtelTraceId = randomOtelId(16);
+      const startNanos = BigInt(Date.now()) * 1_000_000n;
+
+      return rawFetchWithHeaders(
+        'POST',
+        '/v1/private/otel/v1/traces',
+        { projectName: args.projectNameHeader },
+        {
+          resourceSpans: [
+            {
+              ...(args.resourceAttributes === undefined
+                ? {}
+                : {
+                    resource: {
+                      attributes: Object.entries(args.resourceAttributes).map(
+                        ([key, value]) => ({ key, value: toOtelAnyValue(value) }),
+                      ),
+                    },
+                  }),
+              scopeSpans: [
+                {
+                  spans: args.spans.map((span, index) => ({
+                    traceId: hexToBase64(span.otelTraceIdHex ?? sharedOtelTraceId),
+                    spanId: hexToBase64(randomOtelId(8)),
+                    name: span.name,
+                    // SPAN_KIND_CLIENT — what an instrumented call is.
+                    kind: 3,
+                    startTimeUnixNano: String(startNanos + BigInt(index)),
+                    endTimeUnixNano: String(startNanos + BigInt(index) + 1_000_000n),
+                    attributes: Object.entries(span.attributes ?? {}).map(
+                      ([key, value]) => ({ key, value: toOtelAnyValue(value) }),
+                    ),
+                  })),
+                },
+              ],
+            },
+          ],
+        },
+      );
+    },
+
+    /**
+     * Every span a PROJECT holds — `GET /v1/private/spans` with a project and no
+     * trace id — as `{ total, spans }`.
+     *
+     * `listSpansPage` cannot answer this: it requires a `traceId`, and a span
+     * routed by `opik.project_name` is stored under a trace the SERVICE minted,
+     * whose id the caller does not know and must not have to re-derive. "Which
+     * project holds this span" is the whole claim here, so the project is the
+     * only key the read is allowed to need.
+     *
+     * `total` comes from the envelope rather than from `spans.length`, and both
+     * are returned: a caller asserting a project holds exactly its own span
+     * needs the population as well as the rows, or an export that also leaked a
+     * span into the project would still satisfy a lookup for the expected one.
+     */
+    async listProjectSpans(args: {
+      projectId: string;
+      size?: number;
+    }): Promise<{ total: number; spans: ProjectSpanRef[] }> {
+      const answer = await withRateLimitRetry(() =>
+        withReadRetry(() =>
+          opik.api.spans.getSpansByProject({
+            projectId: args.projectId,
+            page: 1,
+            size: args.size ?? 100,
+            truncate: true,
+          }),
+        ),
+      );
+      if (typeof answer.total !== 'number') {
+        throw new Error(
+          `listProjectSpans(project ${args.projectId}): the 200 response carried no numeric ` +
+            "'total' — the envelope is what a dropped span shows up in, so it cannot be assumed.",
+        );
+      }
+      return {
+        total: answer.total,
+        spans: (answer.content ?? []).map((s) => ({
+          id: String(s.id ?? ''),
+          name: String(s.name ?? ''),
+          traceId: String(s.traceId ?? ''),
+        })),
+      };
     },
 
     /**

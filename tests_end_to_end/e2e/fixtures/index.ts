@@ -1,4 +1,4 @@
-export { test, expect } from './sme-internal-thread-queue.fixture';
+export { test, expect } from './otel-routed-projects.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -474,3 +474,4 @@ export type {
   SmeInternalThreadQueueRef,
   SmeInternalThreadQueueFixtures,
 } from './sme-internal-thread-queue.fixture';
+export type { OtelRoutedProjectsFixtures } from './otel-routed-projects.fixture';
