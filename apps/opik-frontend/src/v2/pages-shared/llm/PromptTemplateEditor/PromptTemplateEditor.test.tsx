@@ -1,5 +1,5 @@
 import React from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 
 import PromptTemplateEditor from "@/v2/pages-shared/llm/PromptTemplateEditor/PromptTemplateEditor";
@@ -27,8 +27,11 @@ vi.mock(
 );
 
 describe("PromptTemplateEditor chat messages", () => {
-  it("keeps the message editors at the default size", () => {
+  beforeEach(() => {
     messagesProps.current = null;
+  });
+
+  it("keeps the message editors at the default size", () => {
     const editor = {
       isChatPrompt: true,
       chatViewMode: "pretty",
