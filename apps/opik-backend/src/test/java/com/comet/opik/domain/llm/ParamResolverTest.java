@@ -440,7 +440,7 @@ class ParamResolverTest {
     @ParameterizedTest
     @ValueSource(strings = {"gpt-4.1", "my-finetune"})
     void dropsWhatTheResponsesRouteRefusesFromTheShippedCatalog(String model) {
-        assertThat(RESOLVER.resolve(everyOpenAiSetting(model), ParamResolver.RESPONSES_API_ROUTE)).isEqualTo(resolution(
+        assertThat(RESOLVER.resolve(everyOpenAiSetting(model), ModelParams.RESPONSES_API_ROUTE)).isEqualTo(resolution(
                 openAiRequest(model).stop(List.of()).build(),
                 new ParamChange("frequency_penalty", Reason.REFUSED_BY_ROUTE),
                 new ParamChange("presence_penalty", Reason.REFUSED_BY_ROUTE),
@@ -464,7 +464,7 @@ class ParamResolverTest {
                 .temperature(0.7)
                 .build();
 
-        assertThat(resolverWithOpenAiParams(OPENAI_REASONING).resolve(request, ParamResolver.RESPONSES_API_ROUTE))
+        assertThat(resolverWithOpenAiParams(OPENAI_REASONING).resolve(request, ModelParams.RESPONSES_API_ROUTE))
                 .isEqualTo(resolution(
                         ChatCompletionRequest.builder().model("o3").messages(List.of(UserMessage.from(MESSAGE)))
                                 .build(),

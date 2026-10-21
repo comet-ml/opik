@@ -45,8 +45,6 @@ public class ParamResolver {
         }
     }
 
-    public static final String RESPONSES_API_ROUTE = "responses_api";
-
     private static final String TEMPERATURE = "temperature";
     private static final String TOP_P = "top_p";
 

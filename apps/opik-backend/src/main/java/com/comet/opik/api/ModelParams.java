@@ -29,6 +29,8 @@ public record ModelParams(
         Boolean thinksByDefault,
         Map<String, ModelParams> routes) {
 
+    public static final String RESPONSES_API_ROUTE = "responses_api";
+
     public ModelParams {
         if (routes != null) {
             var copy = new LinkedHashMap<String, ModelParams>();

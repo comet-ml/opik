@@ -90,7 +90,9 @@ class LlmProviderOpenAiResponsesMapper {
         Optional.ofNullable(request.topP()).ifPresent(builder::topP);
         Optional.ofNullable(resolveMaxOutputTokens(request)).ifPresent(builder::maxOutputTokens);
         // No penalties, stop or seed: langchain4j's validate() throws UnsupportedFeatureException for them, and the
-        // catalog's responses_api route already has ParamResolver drop them before this runs.
+        // playground sends penalties of 0 by default, so mapping them would fail ordinary requests. The catalog's
+        // responses_api route has ParamResolver drop them before this runs; a user who needs them switches the key's
+        // openai_pipeline_mode to Chat Completions.
         Optional.ofNullable(toResponsesParameters(request)).ifPresent(builder::parameters);
 
         if (CollectionUtils.isNotEmpty(request.tools())) {

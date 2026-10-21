@@ -51,6 +51,7 @@ import java.nio.channels.ClosedChannelException;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -1512,7 +1513,7 @@ class ChatCompletionServiceTest {
     @DisplayName("OpenAI Responses route:")
     class OpenAiResponsesRoute {
 
-        private static final String WORKSPACE_ID = "test-workspace-id";
+        private static final String WORKSPACE_ID = UUID.randomUUID().toString();
         private static final String MODEL = "gpt-4.1";
 
         private final ChatCompletionRequest requestWithEverySetting = ChatCompletionRequest.builder()
@@ -1557,7 +1558,7 @@ class ChatCompletionServiceTest {
         @Test
         @DisplayName("create: a Responses key sends no penalties, stop or seed, and keeps the rest")
         void create__whenResponsesRoute__thenDropWhatTheRouteRefuses() {
-            assertThat(requestSentByCreate(ParamResolver.RESPONSES_API_ROUTE))
+            assertThat(requestSentByCreate(ModelParams.RESPONSES_API_ROUTE))
                     .isEqualTo(withoutWhatTheResponsesRouteRefuses());
         }
 
@@ -1570,7 +1571,7 @@ class ChatCompletionServiceTest {
         @Test
         @DisplayName("createAndStreamResponse: a Responses key sends no penalties, stop or seed")
         void stream__whenResponsesRoute__thenDropWhatTheRouteRefuses() {
-            givenTheShippedCatalogAnd(ParamResolver.RESPONSES_API_ROUTE);
+            givenTheShippedCatalogAnd(ModelParams.RESPONSES_API_ROUTE);
             var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
 
             chatCompletionService.createAndStreamResponse(requestWithEverySetting, WORKSPACE_ID,
