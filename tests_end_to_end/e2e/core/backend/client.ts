@@ -125,6 +125,48 @@ export interface RawApiResult {
   location?: string | null;
 }
 
+/**
+ * One model's curated row as `GET /v1/private/llm/models` serves it, reduced to
+ * the `effort` parameter.
+ *
+ * This endpoint is the *catalog* — the same `llm-models-curated.yaml` data the
+ * backend's own parameter gate reads through `registryService.curatedParamsOf`
+ * since opik#8928 replaced the hardcoded `EFFORT_LEVELS_BY_MODEL_ID` map with
+ * it. That is what makes it usable as an oracle rather than a second opinion:
+ * a spec comparing the playground's effort control against this is comparing
+ * the frontend's still-hardcoded `ANTHROPIC_MODEL_CAPABILITIES` against the
+ * data the backend will actually enforce.
+ *
+ * `accepted: false` and `levels: []` are deliberately NOT collapsed into one
+ * another. A row that refuses the parameter outright is a different fact from a
+ * row that accepts it with no levels curated yet, and the gate answers them
+ * with two different 400 messages — so a reader must be able to tell them
+ * apart. `levels` is therefore only meaningful when `accepted` is true, and a
+ * caller that needs it must assert `accepted` first.
+ */
+export interface LlmCatalogEffortRef {
+  /** Whether the row admits `custom_parameters.output_config.effort` at all. */
+  accepted: boolean;
+  /** The curated levels, in catalog order. Empty when `accepted` is false. */
+  levels: string[];
+  /** The level the row declares as its default, absent when it curates none. */
+  default: string | null;
+}
+
+/** One model of one provider in the curated catalog. */
+export interface LlmCatalogModelRef {
+  /** The provider model id — what a request's `model` field must name. */
+  id: string;
+  /**
+   * The display label, when the row carries one. Nullable because only some
+   * rows do: the eight dated/alias ids answer with no `label` at all, and a
+   * caller matching the UI's model picker has to know that rather than compare
+   * against the string `"undefined"`.
+   */
+  label: string | null;
+  effort: LlmCatalogEffortRef;
+}
+
 /** One row of the dataset's Version history tab. */
 export interface DatasetVersionRef {
   versionName: string;
@@ -5042,6 +5084,87 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         level: String(item.level ?? ''),
         message: String(item.message ?? ''),
       }));
+    },
+
+    /**
+     * One provider's curated rows from `GET /v1/private/llm/models`.
+     *
+     * `rawFetch` rather than the typed client: the pinned SDK has no binding
+     * for this endpoint at all. Same reason as `getProjectStats`.
+     *
+     * Throws when the provider is absent instead of answering `[]`. An empty
+     * list and "this provider is not in the catalog" are the same value to a
+     * caller iterating it, and the second one would make every per-model
+     * assertion below it vacuously pass — a spec that asserted nothing while
+     * reporting green.
+     */
+    async getLlmCatalogModels(provider: string): Promise<LlmCatalogModelRef[]> {
+      const { status, message, json } = await rawFetch('GET', '/v1/private/llm/models');
+      if (status !== 200) {
+        throw new Error(`getLlmCatalogModels: expected 200, got ${status}: ${message}`);
+      }
+      const byProvider = (json ?? {}) as Record<string, unknown>;
+      const rows = byProvider[provider];
+      if (!Array.isArray(rows)) {
+        throw new Error(
+          `getLlmCatalogModels: the catalog carries no '${provider}' provider ` +
+            `(it has: ${Object.keys(byProvider).join(', ') || 'nothing'})`,
+        );
+      }
+      return rows.map((row) => {
+        const model = (row ?? {}) as {
+          id?: unknown;
+          label?: unknown;
+          params?: { effort?: { accepted?: unknown; levels?: unknown; default?: unknown } };
+        };
+        const effort = model.params?.effort ?? {};
+        return {
+          id: String(model.id),
+          label: typeof model.label === 'string' ? model.label : null,
+          effort: {
+            accepted: effort.accepted === true,
+            levels: Array.isArray(effort.levels) ? effort.levels.map(String) : [],
+            default: typeof effort.default === 'string' ? effort.default : null,
+          },
+        };
+      });
+    },
+
+    /**
+     * One `POST /v1/private/chat/completions`, reported rather than thrown.
+     *
+     * The status and the message together ARE the contract here: the parameter
+     * gate opik#8928 moved onto the catalog refuses a request during mapping,
+     * before any provider is called, with a 400 whose text names the model, the
+     * effort and — when the row curates any levels — the whole supported list.
+     * A helper that threw on non-2xx would discard exactly the half a gate
+     * assertion reads.
+     *
+     * **This endpoint reaches the provider when the gate lets a request
+     * through.** A caller probing the gate must therefore send an effort the
+     * row cannot accept, which is refused for free; see
+     * `probeAnthropicEffortGate` for the sentinel that makes that reliable.
+     */
+    async postChatCompletion(args: {
+      model: string;
+      /** Lowercase roles — this endpoint deserializes langchain4j's own enum. */
+      messages?: Array<{ role: string; content: string }>;
+      customParameters?: Record<string, unknown>;
+    }): Promise<RawApiResult> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/chat/completions',
+        {
+          body: {
+            model: args.model,
+            messages: args.messages ?? [{ role: 'user', content: 'Reply with the word OK.' }],
+            ...(args.customParameters === undefined
+              ? {}
+              : { custom_parameters: args.customParameters }),
+          },
+        },
+      );
+      return { status, message, location };
     },
 
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {

@@ -13,6 +13,8 @@ export {
   type DatasetSummaryRef,
   type DatasetVersionRef,
   type RawApiResult,
+  type LlmCatalogEffortRef,
+  type LlmCatalogModelRef,
   type BackendSort,
   type MetricSeries,
   type MetricInterval,

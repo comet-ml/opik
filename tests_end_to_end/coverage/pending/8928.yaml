@@ -1,0 +1,18 @@
+# pending capabilities from opik#8928 — applied by the release job
+- area: playground
+  capability: model-parameter-gate
+  note: >-
+    The backend's own acceptance of the model parameters the playground's
+    settings panel offers — `ChatCompletionService`'s request-mapping gate,
+    which refuses a parameter before any provider is called. Distinct from
+    `configure-model-settings`, which is the panel: that capability's specs all
+    fulfil POST /v1/private/chat/completions in the browser and so never reach
+    this gate (the taxonomy note there already lists "the backend hop itself"
+    as uncovered). Covered for Anthropic `effort` only
+    (playground-anthropic-effort-options-match-catalog.spec.ts): every curated
+    row in GET /v1/private/llm/models is asserted to be exactly what the gate
+    enforces, read back from the gate's own 400. OPIK-8748 / opik#8928 moved
+    that accept set off a hardcoded map onto the curated catalog, so the gate
+    is now data-driven and can silently stop matching the data. The OpenAI,
+    Gemini and Vertex branches of the same ParamResolver, and the sampling
+    parameters it drops rather than refuses, are not covered.
