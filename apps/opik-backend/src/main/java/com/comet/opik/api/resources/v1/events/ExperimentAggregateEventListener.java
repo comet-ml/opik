@@ -39,6 +39,7 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -49,8 +50,9 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ExperimentAggregateEventListener {
 
-    public static final Set<ExperimentStatus> FINISHED_STATUSES = Set.of(
-            ExperimentStatus.COMPLETED, ExperimentStatus.CANCELLED);
+    public static final Set<ExperimentStatus> FINISHED_STATUSES = Arrays.stream(ExperimentStatus.values())
+            .filter(ExperimentStatus::isTerminal)
+            .collect(Collectors.toUnmodifiableSet());
 
     private final ExperimentItemService experimentItemService;
     private final ExperimentAggregationPublisher publisher;

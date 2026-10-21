@@ -47,7 +47,7 @@ describe("PlaygroundStore updatePrompt", () => {
     const prompt = createPrompt();
     const { setPromptMap, updateOutput } = usePlaygroundStore.getState();
     setPromptMap([PROMPT_ID], { [PROMPT_ID]: prompt });
-    updateOutput(PROMPT_ID, "", { isLoading: false, value: "Hi!" });
+    updateOutput(PROMPT_ID, { isLoading: false, value: "Hi!" });
   });
 
   it.each<[string, Partial<PlaygroundPromptType>]>([
@@ -109,7 +109,7 @@ describe("PlaygroundStore staleChanges", () => {
   beforeEach(() => {
     const { setPromptMap, updateOutput } = usePlaygroundStore.getState();
     setPromptMap([PROMPT_ID], { [PROMPT_ID]: createPrompt() });
-    updateOutput(PROMPT_ID, "", { isLoading: false, value: "Hi!" });
+    updateOutput(PROMPT_ID, { isLoading: false, value: "Hi!" });
   });
 
   it.each<[string, Partial<PlaygroundPromptType>, string[]]>([
@@ -160,7 +160,7 @@ describe("PlaygroundStore staleChanges", () => {
 
     usePlaygroundStore
       .getState()
-      .updateOutput(PROMPT_ID, "", { isLoading: true, value: null });
+      .updateOutput(PROMPT_ID, { isLoading: true, value: null });
 
     expect(getOutput()).toMatchObject({ stale: false });
     expect(getStaleChanges()).toBeUndefined();
@@ -168,21 +168,5 @@ describe("PlaygroundStore staleChanges", () => {
     updatePrompt({ configs: { ...CONFIGS, temperature: 1 } });
 
     expect(getStaleChanges()).toEqual(["parameters"]);
-  });
-
-  it("should record the change on every dataset item", () => {
-    const { setPromptMap, updateOutput } = usePlaygroundStore.getState();
-    setPromptMap([PROMPT_ID], { [PROMPT_ID]: createPrompt() });
-    usePlaygroundStore.setState({ outputMap: {} });
-    updateOutput(PROMPT_ID, "item-1", { isLoading: false, value: "A" });
-    updateOutput(PROMPT_ID, "item-2", { isLoading: false, value: "B" });
-
-    updatePrompt({ configs: { ...CONFIGS, temperature: 1 } });
-
-    const output = getOutput();
-    expect("datasetItemMap" in output && output.datasetItemMap).toMatchObject({
-      "item-1": { stale: true, staleChanges: ["parameters"] },
-      "item-2": { stale: true, staleChanges: ["parameters"] },
-    });
   });
 });
