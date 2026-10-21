@@ -1,73 +1,68 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { Info, MessageCircleWarning } from "lucide-react";
+import { FileText, MessageCircleWarning, X } from "lucide-react";
 import find from "lodash/find";
 import get from "lodash/get";
 
 import { Alert, AlertDescription } from "@/ui/alert";
-import { Label } from "@/ui/label";
-import { Input } from "@/ui/input";
+import { Button } from "@/ui/button";
+import { FormErrorSkeleton, FormField } from "@/ui/form";
+import { Tag } from "@/ui/tag";
 import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/ui/form";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import { RULE_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
-import SelectBox from "@/shared/SelectBox/SelectBox";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import IconBadge from "@/shared/IconBadge/IconBadge";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
-import LLMPromptMessagesVariables from "@/v2/pages-shared/llm/LLMPromptMessagesVariables/LLMPromptMessagesVariables";
-import LLMJudgeScores from "@/v2/pages-shared/llm/LLMJudgeScores/LLMJudgeScores";
 import {
   LLM_MESSAGE_ROLE_NAME_MAP,
   LLM_PROMPT_TEMPLATES,
+  RESERVED_SPAN_LLM_JUDGE_VARIABLES,
+  RESERVED_TRACE_LLM_JUDGE_VARIABLES,
 } from "@/constants/llm";
+import { DECISION_MODELS } from "@/constants/decisionModels";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
   LLMMessage,
   LLMPromptTemplate,
+  MessageContent,
 } from "@/types/llm";
 import {
   generateDefaultLLMPromptMessage,
   getAllTemplateStringsFromContent,
+  getTextFromMessageContent,
   resolveTraceEvaluatorVariableDefault,
 } from "@/lib/llm";
 import {
   COMPOSED_PROVIDER_TYPE,
+  LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
   ProviderModelsMap,
 } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
-import { cn } from "@/lib/utils";
-import {
-  RESERVED_SPAN_LLM_JUDGE_VARIABLES,
-  RESERVED_TRACE_LLM_JUDGE_VARIABLES,
-} from "@/constants/llm";
+import { isDecisionModel } from "@/lib/modelCapabilities";
+import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
+import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import {
   EvaluationRuleFormType,
+  THREAD_CONTEXT_VARIABLE,
   updateConfigForModelChange,
 } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
-import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
-import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
-import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
-import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import { isDecisionModel } from "@/lib/modelCapabilities";
-import { DECISION_MODELS } from "@/constants/decisionModels";
 import {
-  DECISION_MODEL_SCORE_TYPES,
-  getDecisionModelReservedVariables,
   fromDecisionModelDetails,
-  getDecisionModelTemplates,
+  getDecisionModelReservedVariables,
   toDecisionModelDetails,
 } from "@/v2/pages-shared/automations/AddEditRuleDialog/decisionModelRule";
+import { getTemplatePresentation } from "@/v2/pages-shared/automations/AddEditRuleDialog/templatePresentation";
+import { useEntitySampleJson } from "@/v2/pages-shared/automations/AddEditRuleDialog/useEntitySampleJson";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -99,68 +94,25 @@ const DECISION_MODEL_PROVIDER_MODELS: ProviderModelsMap = {
 
 type LLMJudgeRuleDetailsProps = {
   workspaceName: string;
+  projectId?: string;
   form: UseFormReturn<EvaluationRuleFormType>;
   datasetColumnNames?: string[];
 };
 
-// Positive decimal only (also rejects the sign/exponent/comma that type=number would accept).
-const POSITIVE_DECIMAL_REGEX = /^\d*\.?\d*$/;
-
-type MaxCostInputProps = {
-  value: number | null | undefined;
-  hasError: boolean;
-  onChange: (value: number | null) => void;
-};
-
-// Decimal budget field. The committed form value is a number, but a controlled type=number bound to
-// that number erases an in-progress trailing decimal point ("1." commits as 1 and re-renders "1"),
-// making fractional entry impossible. So keep the raw text as the source of truth for what's displayed
-// and commit the parsed number separately, re-syncing only when the value changes from outside typing.
-const MaxCostInput: React.FC<MaxCostInputProps> = ({
-  value,
-  hasError,
-  onChange,
-}) => {
-  const [text, setText] = useState(value == null ? "" : String(value));
-
-  useEffect(() => {
-    const parsed = text === "" ? null : Number(text);
-    const reflectsCurrentText =
-      value === parsed || (value == null && parsed == null);
-    if (!reflectsCurrentText) {
-      setText(value == null ? "" : String(value));
-    }
-    // Re-sync display only on external value changes (form reset / editing an existing rule), not on
-    // the value we just committed from our own typing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
-  return (
-    <Input
-      type="text"
-      inputMode="decimal"
-      placeholder="No limit"
-      value={text}
-      className={cn("max-w-40", { "border-destructive": hasError })}
-      onChange={(event) => {
-        const raw = event.target.value;
-        if (raw !== "" && !POSITIVE_DECIMAL_REGEX.test(raw)) {
-          return;
-        }
-        setText(raw);
-        const parsed = raw === "" ? null : Number(raw);
-        onChange(parsed === null || Number.isNaN(parsed) ? null : parsed);
-      }}
-    />
-  );
+const TemplateBadge: React.FC<{
+  template: LLMPromptTemplate;
+  className?: string;
+}> = ({ template, className }) => {
+  const { Icon, color } = getTemplatePresentation(template.value);
+  return <IconBadge Icon={Icon} color={color} className={className} />;
 };
 
 const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   workspaceName,
+  projectId = "",
   form,
   datasetColumnNames,
 }) => {
-  const cache = useRef<Record<string | LLM_JUDGE, LLMPromptTemplate>>({});
   const { calculateModelProvider, calculateDefaultModel } =
     useLLMProviderModelsData();
 
@@ -168,23 +120,38 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const [decisionModelNotes, setDecisionModelNotes] = useState<string[]>([]);
 
   const scope = form.watch("scope");
+  const messages = form.watch("llmJudgeDetails.messages");
+  const currentTemplate = form.watch("llmJudgeDetails.template");
+  const model = form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE | "";
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
-  const isDecision = isDecisionModel(form.watch("llmJudgeDetails.model"));
+  const isDecision = isDecisionModel(model);
 
-  const templates = isDecision
-    ? getDecisionModelTemplates(scope)
-    : LLM_PROMPT_TEMPLATES[scope];
+  // Jev has only its own Custom template, applied on the switch, so it gets no chips or menu.
+  const templates = useMemo(
+    () =>
+      isDecision
+        ? []
+        : LLM_PROMPT_TEMPLATES[scope].filter(
+            (t) => t.value !== LLM_JUDGE.custom,
+          ),
+    [scope, isDecision],
+  );
+  const appliedTemplate = find(templates, (t) => t.value === currentTemplate);
+  const isPromptEmpty = messages.every(
+    (m) => !getTextFromMessageContent(m.content).trim(),
+  );
 
   // Thread rules don't support decisions models.
   const extraProviderModels = !isThreadScope
     ? DECISION_MODEL_PROVIDER_MODELS
     : undefined;
 
-  // Determine the type for autocomplete based on scope
-  const autocompleteType = isSpanScope
-    ? TRACE_DATA_TYPE.spans
-    : TRACE_DATA_TYPE.traces;
+  const sampleJson = useEntitySampleJson({
+    projectId,
+    scope,
+    datasetColumnNames,
+  });
 
   // Adapts the form when switching to a decisions model (see toDecisionModelDetails) and keeps what it changed.
   const handleSwitchToDecisionModel = useCallback(() => {
@@ -237,12 +204,16 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
 
   const handleAddProvider = useCallback(
     (provider: COMPOSED_PROVIDER_TYPE) => {
-      const model =
+      const currentModel =
         (form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE) || "";
 
-      if (!model) {
-        const defaultModel = calculateDefaultModel(model, [provider], provider);
-        handleModelTransition(model, defaultModel);
+      if (!currentModel) {
+        const defaultModel = calculateDefaultModel(
+          currentModel,
+          [provider],
+          provider,
+        );
+        handleModelTransition(currentModel, defaultModel);
         form.setValue("llmJudgeDetails.model", defaultModel);
       }
     },
@@ -251,11 +222,11 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
 
   const handleDeleteProvider = useCallback(
     (provider: COMPOSED_PROVIDER_TYPE) => {
-      const model =
+      const currentModel =
         (form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE) || "";
-      const currentProvider = calculateModelProvider(model, provider);
+      const currentProvider = calculateModelProvider(currentModel, provider);
       if (currentProvider === provider) {
-        handleModelTransition(model, "");
+        handleModelTransition(currentModel, "");
         form.setValue("llmJudgeDetails.model", "");
         // With no model left, the next pick or added provider has no previous provider to compare
         // against, so updateConfigForModelChange could not tell the extra body belonged to this one.
@@ -271,34 +242,26 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     [calculateModelProvider, form, handleModelTransition],
   );
 
-  // Memoized callback to handle messages change
   const handleMessagesChange = useCallback(
-    (
-      messages: LLMMessage[],
-      fieldOnChange: (messages: LLMMessage[]) => void,
-      formInstance: UseFormReturn<EvaluationRuleFormType>,
-    ) => {
-      fieldOnChange(messages);
+    (nextMessages: LLMMessage[]) => {
+      form.setValue("llmJudgeDetails.messages", nextMessages, {
+        shouldDirty: true,
+      });
 
-      // recalculate variables
-      const variables = formInstance.getValues("llmJudgeDetails.variables");
-      const currentScope = formInstance.getValues("scope");
+      const currentVariables = form.getValues("llmJudgeDetails.variables");
+      const currentScope = form.getValues("scope");
       // {{span}} is reserved on span scope; {{trace}} / {{spans}} on trace scope.
       // Decisions models don't take {{trace}} / {{span}}, so those aren't auto-mapped to the sentinel.
-      const reservedVariables = isDecisionModel(
-        formInstance.getValues("llmJudgeDetails.model"),
-      )
+      const reserved = isDecisionModel(form.getValues("llmJudgeDetails.model"))
         ? getDecisionModelReservedVariables(currentScope)
         : currentScope === EVALUATORS_RULE_SCOPE.span
           ? RESERVED_SPAN_LLM_JUDGE_VARIABLES
           : RESERVED_TRACE_LLM_JUDGE_VARIABLES;
       const localVariables: Record<string, string> = {};
-      let parsingVariablesError: boolean = false;
-      messages
+      let parsingVariablesError = false;
+      nextMessages
         .reduce<string[]>((acc, m) => {
-          // Extract template strings from both text and image URLs
           const templateStrings = getAllTemplateStringsFromContent(m.content);
-          // Get mustache tags from all template strings
           const allTags = templateStrings.flatMap((str) => {
             const tags = safelyGetPromptMustacheTags(str);
             if (!tags) {
@@ -313,329 +276,307 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
         .forEach((v: string) => {
           localVariables[v] = resolveTraceEvaluatorVariableDefault(
             v,
-            variables[v],
+            currentVariables[v],
             currentScope,
-            reservedVariables,
+            reserved,
           );
         });
 
-      formInstance.setValue("llmJudgeDetails.variables", localVariables);
-      formInstance.setValue(
+      form.setValue("llmJudgeDetails.variables", localVariables);
+      form.setValue(
         "llmJudgeDetails.parsingVariablesError",
         parsingVariablesError,
       );
     },
-    [],
+    [form],
+  );
+
+  const applyTemplate = useCallback(
+    (value: string) => {
+      const template = find(templates, (t) => t.value === value);
+      if (!template) return;
+      form.setValue("llmJudgeDetails.template", template.value);
+      form.setValue("llmJudgeDetails.schema", template.schema);
+      form.setValue("llmJudgeDetails.variables", template.variables ?? {});
+      handleMessagesChange(
+        template.messages.map((m) => generateDefaultLLMPromptMessage(m)),
+      );
+    },
+    [form, handleMessagesChange, templates],
+  );
+
+  // Back to a blank prompt; the score definition resets to the scope's default.
+  const removeTemplate = useCallback(() => {
+    const custom = find(
+      LLM_PROMPT_TEMPLATES[scope],
+      (t) => t.value === LLM_JUDGE.custom,
+    );
+    form.setValue("llmJudgeDetails.template", LLM_JUDGE.custom);
+    if (custom) form.setValue("llmJudgeDetails.schema", custom.schema);
+    form.setValue("llmJudgeDetails.variables", {});
+    handleMessagesChange([
+      generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user }),
+    ]);
+  }, [form, handleMessagesChange, scope]);
+
+  const provider = calculateModelProvider(model);
+  const modelError = get(form.formState.errors, [
+    "llmJudgeDetails",
+    "model",
+    "message",
+  ]) as string | undefined;
+
+  const improvePromptConfig = useMemo(
+    () => ({
+      model,
+      provider,
+      configs: form.getValues(
+        "llmJudgeDetails.config",
+      ) as unknown as LLMPromptConfigsType,
+      workspaceName,
+      onAccept: (messageId: string, improvedContent: MessageContent) =>
+        handleMessagesChange(
+          form
+            .getValues("llmJudgeDetails.messages")
+            .map((m) =>
+              m.id === messageId ? { ...m, content: improvedContent } : m,
+            ),
+        ),
+    }),
+    [model, provider, form, workspaceName, handleMessagesChange],
   );
 
   return (
-    <>
-      <FormField
-        control={form.control}
-        name="llmJudgeDetails.model"
-        render={({ field, formState }) => {
-          const model = field.value as PROVIDER_MODEL_TYPE | "";
-          const provider = calculateModelProvider(model);
-          const validationErrors = get(formState.errors, [
-            "llmJudgeDetails",
-            "model",
-          ]);
-
-          return (
-            <FormItem>
-              <Label>Model</Label>
-              <FormControl>
-                <div className="flex h-10 items-center justify-center gap-2">
-                  <PromptModelSelect
-                    value={model}
-                    onChange={(m, selectedProvider) => {
-                      if (m) {
-                        const previousModel = field.value;
-                        field.onChange(m);
-                        handleModelTransition(previousModel, m);
-                        const currentConfig = form.getValues(
-                          "llmJudgeDetails.config",
-                        );
-                        // The picker reports the bare provider type ("custom-llm"), while `provider` is the
-                        // row's key ("custom-llm:mock"). Compared as is, two models of one Custom LLM row
-                        // would look like a provider change and lose the extra body.
-                        const adjustedConfig = updateConfigForModelChange(
-                          currentConfig,
-                          { model: previousModel, provider },
-                          {
-                            model: m,
-                            provider:
-                              calculateModelProvider(m, selectedProvider) ||
-                              selectedProvider,
-                          },
-                        );
-                        if (adjustedConfig !== currentConfig) {
-                          form.setValue(
-                            "llmJudgeDetails.config",
-                            adjustedConfig,
-                          );
-                        }
-                      }
-                    }}
+    <div className="flex flex-col gap-2">
+      <div
+        className="flex min-h-[420px] flex-col overflow-hidden rounded-md border border-border"
+        data-testid="llm-judge-prompt-card"
+      >
+        <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-soft-background px-2">
+          <div className="flex min-w-0 items-center gap-1">
+            <PromptModelSelect
+              compact
+              value={model}
+              onChange={(m, selectedProvider) => {
+                if (!m) return;
+                const previousModel = model;
+                form.setValue("llmJudgeDetails.model", m, {
+                  shouldValidate: true,
+                });
+                handleModelTransition(previousModel, m);
+                const currentConfig = form.getValues("llmJudgeDetails.config");
+                // The picker reports the bare provider type ("custom-llm"), while `provider` is the
+                // row's key ("custom-llm:mock"). Compared as is, two models of one Custom LLM row
+                // would look like a provider change and lose the extra body.
+                const adjustedConfig = updateConfigForModelChange(
+                  currentConfig,
+                  { model: previousModel, provider },
+                  {
+                    model: m,
+                    provider:
+                      calculateModelProvider(m, selectedProvider) ||
+                      selectedProvider,
+                  },
+                );
+                if (adjustedConfig !== currentConfig) {
+                  form.setValue("llmJudgeDetails.config", adjustedConfig);
+                }
+              }}
+              provider={provider}
+              hasError={Boolean(modelError)}
+              workspaceName={workspaceName}
+              onAddProvider={handleAddProvider}
+              onDeleteProvider={handleDeleteProvider}
+              extraProviderModels={extraProviderModels}
+            />
+            {/* A decisions model takes no settings: no temperature, seed, thinking or custom parameters. */}
+            {!isDecision && (
+              <FormField
+                control={form.control}
+                name="llmJudgeDetails.config"
+                render={({ field }) => (
+                  <PromptModelConfigs
+                    size="icon-2xs"
+                    variant="minimal"
                     provider={provider}
-                    hasError={Boolean(validationErrors?.message)}
-                    workspaceName={workspaceName}
-                    onAddProvider={handleAddProvider}
-                    onDeleteProvider={handleDeleteProvider}
-                    extraProviderModels={extraProviderModels}
+                    model={model}
+                    configs={field.value}
+                    unsupportedParams={RULE_UNSUPPORTED_PARAMS}
+                    onChange={(partialConfig) => {
+                      field.onChange({ ...field.value, ...partialConfig });
+                    }}
                   />
-
-                  {/* A decisions model takes no settings: no temperature, seed, thinking or custom parameters. */}
-                  {!isDecision && (
-                    <FormField
-                      control={form.control}
-                      name="llmJudgeDetails.config"
-                      render={({ field }) => (
-                        <PromptModelConfigs
-                          size="icon"
-                          provider={provider}
-                          model={model}
-                          configs={field.value}
-                          unsupportedParams={RULE_UNSUPPORTED_PARAMS}
-                          onChange={(partialConfig) => {
-                            field.onChange({
-                              ...field.value,
-                              ...partialConfig,
-                            });
-                          }}
-                        />
-                      )}
-                    ></FormField>
-                  )}
-                </div>
-              </FormControl>
-              {isDecision && (
-                <FormDescription className="comet-body-xs text-muted-slate">
-                  Jev answers each score as a yes/no question about your prompt.
-                  The prompt is the text Jev reads; each score&apos;s
-                  description is its question. Ask one thing per score, phrased
-                  so that a high probability means yes. A score is 1 when the
-                  probability is 0.5 or higher, and the reason shows the
-                  probability.
-                </FormDescription>
-              )}
-              <FormMessage />
-            </FormItem>
-          );
-        }}
-      />
-      {isDecision && decisionModelNotes.length > 0 && (
-        <Alert size="sm">
-          <MessageCircleWarning />
-          <AlertDescription size="sm" className="flex flex-col gap-1">
-            {decisionModelNotes.map((note) => (
-              <span key={note}>{note}</span>
-            ))}
-          </AlertDescription>
-        </Alert>
-      )}
-      {/* Budget applies only to agentic (multi-turn) evaluations — trace and thread. Span scoring is
-          a single LLM call with no loop to wrap up, so the field is hidden there, as it is for
-          decisions models, which never run the agentic loop. */}
-      {!isSpanScope && !isDecision && (
-        <FormField
-          control={form.control}
-          name="llmJudgeDetails.maxCostUsd"
-          render={({ field, formState }) => {
-            const validationErrors = get(formState.errors, [
-              "llmJudgeDetails",
-              "maxCostUsd",
-            ]);
-
-            return (
-              <FormItem>
-                <FormLabel>Max cost per evaluation (USD)</FormLabel>
-                <FormControl>
-                  <MaxCostInput
-                    value={field.value}
-                    hasError={Boolean(validationErrors?.message)}
-                    onChange={field.onChange}
-                  />
-                </FormControl>
-                <FormDescription className="comet-body-xs text-muted-slate">
-                  Once an evaluation&apos;s spend reaches this amount the judge
-                  wraps up and returns its scores so far. Leave empty for no
-                  limit.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            );
-          }}
-        />
-      )}
-      <FormField
-        control={form.control}
-        name="llmJudgeDetails.template"
-        render={({ field }) => (
-          <FormItem>
-            <Label>
-              Prompt{" "}
-              <ExplainerIcon
-                className="inline"
-                {...EXPLAINERS_MAP[EXPLAINER_ID.whats_that_prompt_select]}
+                )}
               />
-            </Label>
-            <FormControl>
-              <SelectBox
-                value={field.value}
-                onChange={(newTemplate: string) => {
-                  const { variables, messages, schema, template } =
-                    form.getValues("llmJudgeDetails");
-                  if (newTemplate !== template) {
-                    cache.current[template] = {
-                      ...cache.current[template],
-                      messages: messages,
-                      variables: variables,
-                      schema: schema,
-                    };
-
-                    const templateData =
-                      cache.current[newTemplate] ??
-                      find(templates, (t) => t.value === newTemplate);
-
-                    form.setValue(
-                      "llmJudgeDetails.messages",
-                      templateData.messages,
-                    );
-                    form.setValue(
-                      "llmJudgeDetails.variables",
-                      templateData.variables ?? {},
-                    );
-                    form.setValue(
-                      "llmJudgeDetails.schema",
-                      templateData.schema,
-                    );
-                    form.setValue(
-                      "llmJudgeDetails.template",
-                      newTemplate as LLM_JUDGE,
-                    );
-                  }
-                }}
-                options={templates}
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-      <div className="-mt-2 flex flex-col gap-2">
-        <FormField
-          control={form.control}
-          name="llmJudgeDetails.messages"
-          render={({ field, formState }) => {
-            const messages = field.value;
-            const validationErrors = get(formState.errors, [
-              "llmJudgeDetails",
-              "messages",
-            ]);
-
-            return (
-              <>
-                <LLMPromptMessages
-                  messages={messages}
-                  validationErrors={validationErrors}
-                  possibleTypes={
-                    isDecision
-                      ? DECISION_MODEL_MESSAGE_TYPE_OPTIONS
-                      : MESSAGE_TYPE_OPTIONS
-                  }
-                  disableMedia={isThreadScope || isDecision}
-                  hideAddButton={isDecision && messages.length > 0}
-                  promptVariables={datasetColumnNames}
-                  onChange={(messages: LLMMessage[]) =>
-                    handleMessagesChange(messages, field.onChange, form)
-                  }
-                  onAddMessage={() =>
-                    field.onChange([
-                      ...messages,
-                      generateDefaultLLMPromptMessage({
-                        role: LLM_MESSAGE_ROLE.user,
-                      }),
-                    ])
-                  }
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {appliedTemplate && (
+              <div
+                className="comet-body-xs flex h-6 items-center gap-1 rounded-sm border border-border bg-background pl-1.5 pr-0.5"
+                data-testid="llm-judge-applied-template"
+              >
+                <TemplateBadge
+                  template={appliedTemplate}
+                  className="size-3.5"
                 />
-              </>
-            );
-          }}
-        />
-        {!isThreadScope && (
+                <span className="truncate">{appliedTemplate.label}</span>
+                <TooltipWrapper content="Remove template">
+                  <Button
+                    variant="minimal"
+                    size="icon-3xs"
+                    type="button"
+                    aria-label="Remove template"
+                    onClick={removeTemplate}
+                  >
+                    <X />
+                  </Button>
+                </TooltipWrapper>
+              </div>
+            )}
+            {templates.length > 0 && (
+              <DropdownMenu>
+                <TooltipWrapper content="Start from a template">
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="minimal"
+                      size="icon-2xs"
+                      type="button"
+                      aria-label="Prompt templates"
+                      data-testid="llm-judge-template-menu"
+                    >
+                      <FileText />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipWrapper>
+                <DropdownMenuContent align="end" className="w-80 p-1">
+                  {templates.map((template) => (
+                    <DropdownMenuItem
+                      key={template.value}
+                      onClick={() => applyTemplate(template.value)}
+                      className="h-auto items-start gap-2 py-2"
+                    >
+                      <TemplateBadge template={template} className="mt-0.5" />
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <span className="comet-body-s-accented">
+                          {template.label}
+                        </span>
+                        <span className="comet-body-xs whitespace-normal text-muted-slate">
+                          {template.description}
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </div>
+        {modelError && (
+          <FormErrorSkeleton className="mx-2 mt-2">
+            {modelError}
+          </FormErrorSkeleton>
+        )}
+        {isDecision && decisionModelNotes.length > 0 && (
+          <Alert size="sm" className="mx-2 mt-2">
+            <MessageCircleWarning />
+            <AlertDescription size="sm" className="flex flex-col gap-1">
+              {decisionModelNotes.map((note) => (
+                <span key={note}>{note}</span>
+              ))}
+            </AlertDescription>
+          </Alert>
+        )}
+        <div className="flex flex-1 flex-col gap-2 p-2">
           <FormField
             control={form.control}
-            name="llmJudgeDetails.variables"
-            render={({ field, formState }) => {
-              const parsingVariablesError = form.getValues(
-                "llmJudgeDetails.parsingVariablesError",
-              );
-              const validationErrors = get(formState.errors, [
-                "llmJudgeDetails",
-                "variables",
-              ]);
-
-              return (
-                <>
-                  <LLMPromptMessagesVariables
-                    parsingError={parsingVariablesError}
-                    validationErrors={validationErrors}
-                    projectId={form.watch("projectIds")[0] || ""}
-                    variables={field.value}
-                    onChange={field.onChange}
-                    datasetColumnNames={datasetColumnNames}
-                    type={autocompleteType}
-                    includeIntermediateNodes
-                    reservedSentinels={
-                      isDecision
-                        ? getDecisionModelReservedVariables(scope)
-                        : isSpanScope
-                          ? RESERVED_SPAN_LLM_JUDGE_VARIABLES
-                          : RESERVED_TRACE_LLM_JUDGE_VARIABLES
-                    }
-                  />
-                </>
-              );
-            }}
-          />
-        )}
-      </div>
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center">
-          <Label htmlFor="name">Score definition</Label>
-          <TooltipWrapper
-            content={`The score definition is used to define which
-feedback scores are returned by this rule.
-To return more than one score, simply add
-multiple scores to this section.`}
-          >
-            <Info className="ml-1 size-4 text-light-slate" />
-          </TooltipWrapper>
-        </div>
-        <FormField
-          control={form.control}
-          name="llmJudgeDetails.schema"
-          render={({ field, formState }) => {
-            const validationErrors = get(formState.errors, [
-              "llmJudgeDetails",
-              "schema",
-            ]);
-
-            return (
-              <LLMJudgeScores
-                validationErrors={validationErrors}
-                scores={field.value}
-                onChange={field.onChange}
-                allowedTypes={
-                  isDecision ? DECISION_MODEL_SCORE_TYPES : undefined
+            name="llmJudgeDetails.messages"
+            render={({ field, formState }) => (
+              <LLMPromptMessages
+                messages={field.value}
+                validationErrors={get(formState.errors, [
+                  "llmJudgeDetails",
+                  "messages",
+                ])}
+                possibleTypes={
+                  isDecision
+                    ? DECISION_MODEL_MESSAGE_TYPE_OPTIONS
+                    : MESSAGE_TYPE_OPTIONS
+                }
+                disableMedia={isThreadScope || isDecision}
+                hidePromptActions={false}
+                hideAddButton
+                improvePromptConfig={improvePromptConfig}
+                promptVariables={datasetColumnNames}
+                jsonTreeData={sampleJson}
+                onChange={handleMessagesChange}
+                onAddMessage={() =>
+                  handleMessagesChange([
+                    ...field.value,
+                    generateDefaultLLMPromptMessage({
+                      role: LLM_MESSAGE_ROLE.user,
+                    }),
+                  ])
                 }
               />
-            );
-          }}
-        />
+            )}
+          />
+          {/* Templates only offer a starting point: once anything is typed they get out of the way. */}
+          {isPromptEmpty && templates.length > 0 && (
+            <div
+              className="mt-auto flex flex-col gap-2 pt-2"
+              data-testid="llm-judge-template-chips"
+            >
+              <span className="comet-body-s text-muted-slate">
+                Or get started with a template
+              </span>
+              <div className="flex flex-nowrap gap-1 overflow-x-auto pb-1">
+                {templates.map((template) => (
+                  <Button
+                    key={template.value}
+                    variant="outline"
+                    size="2xs"
+                    type="button"
+                    className="shrink-0 gap-1 px-1"
+                    onClick={() => applyTemplate(template.value)}
+                  >
+                    <TemplateBadge template={template} className="size-3.5" />
+                    {template.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </>
+      {isDecision && (
+        <span className="comet-body-s text-light-slate">
+          Jev answers each score as a yes/no question about your prompt. The
+          prompt is the text Jev reads; each score&apos;s description is its
+          question. Ask one thing per score, phrased so that a high probability
+          means yes. A score is 1 when the probability is 0.5 or higher, and the
+          reason shows the probability.
+        </span>
+      )}
+      <span className="comet-body-s text-light-slate">
+        {isThreadScope ? (
+          <>
+            Use {THREAD_CONTEXT_VARIABLE} once to insert the whole thread as
+            user and assistant turns. It is the only variable available for
+            thread rules.
+          </>
+        ) : (
+          <>
+            Use{" "}
+            <Tag variant="green" size="sm" className="px-1">
+              {"{{"}
+            </Tag>{" "}
+            to insert variables, which will automatically pull data from{" "}
+            {isSpanScope ? "spans" : "traces"} when the rule runs.
+          </>
+        )}
+      </span>
+    </div>
   );
 };
 

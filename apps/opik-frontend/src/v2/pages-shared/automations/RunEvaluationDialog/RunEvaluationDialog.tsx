@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles, ChevronDown, Plus } from "lucide-react";
+import { Sparkles, ChevronDown } from "lucide-react";
 import {
   Dialog,
   DialogClose,
@@ -18,9 +18,11 @@ import {
   EVALUATORS_RULE_SCOPE,
   EVALUATORS_RULE_TYPE,
   EvaluatorsRule,
+  UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
 import Loader from "@/shared/Loader/Loader";
 import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
+import CreateRuleMenu from "@/v2/pages-shared/automations/CreateRuleMenu";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ManualEvaluationEntityType = "trace" | "thread" | "span";
@@ -130,7 +132,11 @@ const RunEvaluationDialog: React.FunctionComponent<
     [setOpen],
   );
 
-  const handleCreateRule = useCallback(() => {
+  const [createUIType, setCreateUIType] = useState<UI_EVALUATORS_RULE_TYPE>(
+    UI_EVALUATORS_RULE_TYPE.llm_judge,
+  );
+  const handleCreateRule = useCallback((uiType: UI_EVALUATORS_RULE_TYPE) => {
+    setCreateUIType(uiType);
     setOpenCreateRuleDialog(true);
   }, []);
 
@@ -146,14 +152,14 @@ const RunEvaluationDialog: React.FunctionComponent<
             Create a new rule, or assign an existing rule in the Online
             evaluation page
           </p>
-          <Button
+          <CreateRuleMenu
+            onSelect={handleCreateRule}
+            label="Create a new rule"
             variant="link"
             size="sm"
-            onClick={handleCreateRule}
             className="mt-2"
-          >
-            Create a new rule
-          </Button>
+            align="start"
+          />
         </div>
       </div>
     );
@@ -286,10 +292,12 @@ const RunEvaluationDialog: React.FunctionComponent<
             </p>
             {canUpdateOnlineEvaluationRules && rules.length > 0 && (
               <div className="mb-4 flex justify-end">
-                <Button variant="ghost" size="sm" onClick={handleCreateRule}>
-                  <Plus className="mr-1 size-4" />
-                  Create a new rule
-                </Button>
+                <CreateRuleMenu
+                  onSelect={handleCreateRule}
+                  label="Create a new rule"
+                  variant="ghost"
+                  size="sm"
+                />
               </div>
             )}
             <div className="my-4 flex max-h-[500px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
@@ -316,6 +324,7 @@ const RunEvaluationDialog: React.FunctionComponent<
         open={openCreateRuleDialog}
         setOpen={setOpenCreateRuleDialog}
         projectId={projectId}
+        uiType={createUIType}
         defaultScope={ruleScope}
       />
     </>

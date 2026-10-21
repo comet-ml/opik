@@ -14,7 +14,6 @@ import {
   RowSelectionState,
 } from "@tanstack/react-table";
 import round from "lodash/round";
-import { Plus } from "lucide-react";
 
 import {
   COLUMN_ID_ID,
@@ -23,7 +22,7 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { EvaluatorsRule } from "@/types/automations";
+import { EvaluatorsRule, UI_EVALUATORS_RULE_TYPE } from "@/types/automations";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   generateActionsColumDef,
@@ -31,7 +30,6 @@ import {
 } from "@/shared/DataTable/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
@@ -49,6 +47,7 @@ import emptyOnlineEvalLightUrl from "/images/empty-online-eval-light.svg";
 import emptyOnlineEvalDarkUrl from "/images/empty-online-eval-dark.svg";
 import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
 import RulesActionsPanel from "@/v2/pages-shared/automations/RulesActionsPanel";
+import CreateRuleMenu from "@/v2/pages-shared/automations/CreateRuleMenu";
 import RuleRowActionsCell from "@/v2/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/v2/pages-shared/automations/RuleLogsCell";
 import RuleTracesCell from "@/v2/pages-shared/automations/RuleTracesCell";
@@ -158,6 +157,9 @@ export const OnlineEvaluationPage: React.FC = () => {
   const resetDialogKeyRef = useRef(0);
   const [openDialogForCreate, setOpenDialogForCreate] =
     useState<boolean>(false);
+  const [createUIType, setCreateUIType] = useState<UI_EVALUATORS_RULE_TYPE>(
+    UI_EVALUATORS_RULE_TYPE.llm_judge,
+  );
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -352,10 +354,15 @@ export const OnlineEvaluationPage: React.FC = () => {
     [sortedColumns, setSortedColumns],
   );
 
-  const handleNewRuleClick = useCallback(() => {
+  const handleNewRuleClick = useCallback((uiType: UI_EVALUATORS_RULE_TYPE) => {
+    setCreateUIType(uiType);
     setOpenDialogForCreate(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
+  const handleNewLLMJudgeRuleClick = useCallback(
+    () => handleNewRuleClick(UI_EVALUATORS_RULE_TYPE.llm_judge),
+    [handleNewRuleClick],
+  );
 
   const handleCloseDialog = useCallback(
     (open: boolean) => {
@@ -378,15 +385,10 @@ export const OnlineEvaluationPage: React.FC = () => {
           Online evaluation
         </h1>
         {canUpdateOnlineEvaluationRules && (
-          <Button
-            variant="default"
-            size="xs"
-            onClick={handleNewRuleClick}
-            data-testid="online-evaluation-create-rule-button"
-          >
-            <Plus className="mr-1 size-4" />
-            Create rule
-          </Button>
+          <CreateRuleMenu
+            onSelect={handleNewRuleClick}
+            testId="online-evaluation-create-rule-button"
+          />
         )}
       </div>
       {isEmpty ? (
@@ -403,7 +405,9 @@ export const OnlineEvaluationPage: React.FC = () => {
               : undefined
           }
           onPrimaryAction={
-            canUpdateOnlineEvaluationRules ? handleNewRuleClick : undefined
+            canUpdateOnlineEvaluationRules
+              ? handleNewLLMJudgeRuleClick
+              : undefined
           }
           docsUrl={buildDocsUrl("/production/online-evaluation/rules")}
         />
@@ -470,6 +474,7 @@ export const OnlineEvaluationPage: React.FC = () => {
         </>
       )}
       <AddEditRuleDialog
+        uiType={createUIType}
         key={resetDialogKeyRef.current}
         open={isDialogOpen}
         setOpen={handleCloseDialog}
