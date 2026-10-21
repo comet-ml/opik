@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist, PersistStorage } from "zustand/middleware";
 import pick from "lodash/pick";
 import mapValues from "lodash/mapValues";
 import union from "lodash/union";
@@ -18,6 +18,9 @@ import { Filters } from "@/types/filters";
 import { DATASET_TYPE } from "@/types/datasets";
 import isEmpty from "lodash/isEmpty";
 import isUndefined from "lodash/isUndefined";
+import isArray from "lodash/isArray";
+import isPlainObject from "lodash/isPlainObject";
+import isString from "lodash/isString";
 import get from "lodash/get";
 import lodashSet from "lodash/set";
 
@@ -150,6 +153,91 @@ const markStoredPinnedChatPromptApplied = (
   return {
     ...prompt,
     appliedChatPromptVersionId: prompt.loadedChatPromptVersionId,
+  };
+};
+
+const isUsableMessage = (message: unknown) => {
+  if (!isPlainObject(message)) return false;
+
+  const { content } = message as LLMMessage;
+
+  return (
+    isString(content) || (isArray(content) && content.every(isPlainObject))
+  );
+};
+
+const isRenderablePrompt = (prompt: unknown) =>
+  isPlainObject(prompt) &&
+  isArray((prompt as PlaygroundPromptType).messages) &&
+  (prompt as PlaygroundPromptType).messages.every(isUsableMessage);
+
+// The page reads every listed prompt and every prompt in the map, so a single
+// saved entry it can't render crashed the playground on every load.
+const keepRenderablePrompts = (promptIds: unknown, promptMap: unknown) => {
+  const storedPromptMap: Record<string, unknown> = isPlainObject(promptMap)
+    ? (promptMap as Record<string, unknown>)
+    : {};
+  const renderablePromptIds = (isArray(promptIds) ? promptIds : []).filter(
+    (id): id is string =>
+      isString(id) && isRenderablePrompt(storedPromptMap[id]),
+  );
+
+  return {
+    promptIds: renderablePromptIds,
+    promptMap: Object.fromEntries(
+      renderablePromptIds.map((id) => {
+        const prompt = storedPromptMap[id] as PlaygroundPromptType;
+        return [
+          id,
+          isPlainObject(prompt.configs) ? prompt : { ...prompt, configs: {} },
+        ];
+      }),
+    ) as Record<string, PlaygroundPromptType>,
+  };
+};
+
+let hasWarnedAboutFailedSave = false;
+
+const warnOnceAboutFailedSave = (message: string, error: unknown) => {
+  if (hasWarnedAboutFailedSave) return;
+  hasWarnedAboutFailedSave = true;
+  console.warn(message, error);
+};
+
+// zustand saves after every update and doesn't catch a failed write, so with a
+// full localStorage every store action threw, and one called from an effect
+// took the whole page down. The update is already in memory by then.
+const createPlaygroundStorage = <
+  S extends { outputMap: PlaygroundOutputMap },
+>(): PersistStorage<S> | undefined => {
+  const storage = createJSONStorage<S>(() => localStorage);
+
+  if (!storage) return storage;
+
+  return {
+    ...storage,
+    setItem: (name, value) => {
+      try {
+        storage.setItem(name, value);
+      } catch (error) {
+        // Outputs are most of what is saved, and the prompts matter more.
+        try {
+          storage.setItem(name, {
+            ...value,
+            state: { ...value.state, outputMap: {} },
+          });
+          warnOnceAboutFailedSave(
+            "The playground outputs don't fit in this browser's storage, so only the prompts are saved.",
+            error,
+          );
+        } catch {
+          warnOnceAboutFailedSave(
+            "The playground can't be saved in this browser's storage. Changes stay until the page is reloaded.",
+            error,
+          );
+        }
+      }
+    },
   };
 };
 
@@ -548,6 +636,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
     }),
     {
       name: "PLAYGROUND_STATE",
+      storage: createPlaygroundStorage(),
       // Normalizes on every load rather than through `migrate`: persisted blobs carry no version
       // (this store never set one), and zustand only migrates a blob whose stored version is a
       // number — so a migrate hook would skip exactly the states that need repairing. Cheap and
@@ -558,10 +647,10 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           ...current,
           ...stored,
         };
-
-        if (!state.promptMap) {
-          return state;
-        }
+        const { promptIds, promptMap } = keepRenderablePrompts(
+          state.promptIds,
+          state.promptMap,
+        );
 
         // Only state written before appliedChatPromptVersionId existed is backfilled: current
         // state can hold a version picked a moment ago whose messages have not loaded yet, and
@@ -573,8 +662,9 @@ const usePlaygroundStore = create<PlaygroundStore>()(
 
         return {
           ...state,
+          promptIds,
           appliedChatPromptVersionsBackfilled: true,
-          promptMap: mapValues(state.promptMap, (prompt) => {
+          promptMap: mapValues(promptMap, (prompt) => {
             const restored = restoreMissingConfigKeys(prompt);
             return backfillAppliedVersions
               ? markStoredPinnedChatPromptApplied(restored)
