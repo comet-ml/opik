@@ -2380,7 +2380,7 @@ class OpenTelemetryMapperTest {
     class OpenInferenceNormalization {
 
         @ParameterizedTest
-        @CsvSource({"LLM", "AGENT", "TOOL"})
+        @ValueSource(strings = {"LLM", "AGENT", "TOOL"})
         void invokeAgentTakesPrecedenceOverOpenInferenceKind(String kind) {
             var span = enrich(List.of(
                     str("openinference.span.kind", kind),
