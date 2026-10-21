@@ -19,6 +19,9 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -40,6 +43,14 @@ import java.util.stream.Collectors;
 public class ExperimentCancellationService {
 
     private static final int ID_CHUNK_SIZE = 500;
+    // Only has to beat the entries a consumer holds at once, which is a batch per pod, so one read
+    // covers it unless consumers have stalled and left the list to grow.
+    private static final int PENDING_PAGE_SIZE = 1_000;
+
+    // StreamMessageId is not Comparable, and its order is the stream's: timestamp, then sequence.
+    private static final Comparator<StreamMessageId> BY_ENTRY_ID = Comparator
+            .comparingLong(StreamMessageId::getId0)
+            .thenComparingLong(StreamMessageId::getId1);
 
     private final RedissonReactiveClient redisClient;
     private final ExperimentExecutionConfig config;
@@ -61,7 +72,7 @@ public class ExperimentCancellationService {
                 .flatMap(experimentId -> bucket(workspaceId, experimentId)
                         .set("1", config.getBatchCounterTtl().toJavaDuration()))
                 .then()
-                .doOnSuccess(unused -> log.info("Marked '{}' experiments as cancelled, workspaceId '{}'",
+                .doOnSuccess(unused -> log.info("Marked experiments as cancelled, experiments '{}', workspaceId '{}'",
                         experimentIds.size(), workspaceId));
     }
 
@@ -100,16 +111,19 @@ public class ExperimentCancellationService {
                         return Mono.just(false);
                     }
 
-                    return inFlightIds()
+                    var recorded = ids.stream().map(ExperimentCancellationService::parseId).toList();
+
+                    return inFlightIds(Collections.min(recorded, BY_ENTRY_ID), Collections.max(recorded, BY_ENTRY_ID))
                             .flatMap(inFlight -> {
-                                var queued = ids.stream()
-                                        .map(ExperimentCancellationService::parseId)
+                                var queued = recorded.stream()
                                         .filter(id -> !inFlight.contains(id))
                                         .toList();
 
                                 if (queued.isEmpty()) {
-                                    log.info("Nothing left to purge for cancelled experiment '{}': all '{}' items"
-                                            + " are already with a consumer", experimentId, ids.size());
+                                    log.info(
+                                            "Nothing left to purge for a cancelled experiment, every item is already with"
+                                                    + " a consumer, items '{}', experimentId '{}'",
+                                            ids.size(), experimentId);
                                     return Mono.just(false);
                                 }
 
@@ -117,18 +131,22 @@ public class ExperimentCancellationService {
                                         .concatMap(chunk -> stream().remove(chunk.toArray(StreamMessageId[]::new)))
                                         .reduce(0L, Long::sum)
                                         .flatMap(removed -> {
-                                            log.info("Removed '{}' queued messages for cancelled experiment '{}',"
-                                                    + " leaving '{}' already with a consumer",
-                                                    removed, experimentId, ids.size() - queued.size());
+                                            log.info("Removed queued messages for a cancelled experiment, removed '{}',"
+                                                    + " withConsumer '{}', experimentId '{}'",
+                                                    removed, ids.size() - queued.size(), experimentId);
                                             return subtractPurgedItems(workspaceId, experimentId, removed);
                                         });
-                            });
+                            })
+                            // Trimmed, not deleted: a run still publishing goes on appending here,
+                            // and the key would take those ids with it, unpurged. Appends go to the
+                            // tail, so what was read is the prefix.
+                            .flatMap(drained -> list.trim(ids.size(), -1).thenReturn(drained));
                 })
-                .flatMap(drained -> list.delete().thenReturn(drained))
                 .onErrorResume(error -> {
                     // The mark still stops the run; failing here only means the consumer walks what is
                     // left and counts it down itself.
-                    log.warn("Failed to remove queued messages for cancelled experiment '{}'", experimentId, error);
+                    log.warn("Failed to remove queued messages for a cancelled experiment, experimentId '{}'",
+                            experimentId, error);
                     return Mono.just(false);
                 });
     }
@@ -143,12 +161,13 @@ public class ExperimentCancellationService {
                 .delete()
                 .doOnNext(deleted -> {
                     if (deleted) {
-                        log.debug("Discarded the queued ids of drained experiment '{}'", experimentId);
+                        log.debug("Discarded the queued ids of a drained experiment, experimentId '{}'", experimentId);
                     }
                 })
                 .onErrorResume(error -> {
                     // The TTL clears them in the end; the run has drained either way
-                    log.warn("Failed to discard the queued ids of experiment '{}'", experimentId, error);
+                    log.warn("Failed to discard the queued ids of an experiment, experimentId '{}'", experimentId,
+                            error);
                     return Mono.just(false);
                 })
                 .then();
@@ -166,8 +185,9 @@ public class ExperimentCancellationService {
         return redisClient
                 .getAtomicLong(ExperimentExecutionConfig.itemCounterKey(workspaceId, experimentId))
                 .addAndGet(-removed)
-                .doOnNext(remaining -> log.info("Experiment '{}' has '{}' items left after the purge",
-                        experimentId, remaining))
+                .doOnNext(
+                        remaining -> log.info("Counted the purge off an experiment, remaining '{}', experimentId '{}'",
+                                remaining, experimentId))
                 .map(remaining -> remaining <= 0);
     }
 
@@ -176,19 +196,31 @@ public class ExperimentCancellationService {
      * these would drain the counter while their calls are still running; their own consumer counts
      * them down when it finishes.
      */
-    private Mono<Set<StreamMessageId>> inFlightIds() {
-        return stream()
-                .listPending(StreamPendingRangeArgs.groupName(config.getConsumerGroupName())
-                        .startId(StreamMessageId.MIN)
-                        .endId(StreamMessageId.MAX)
-                        .count(config.getStreamMaxLen()))
-                .map(entries -> entries.stream()
-                        .map(PendingEntry::getId)
-                        .collect(Collectors.toSet()))
+    private Mono<Set<StreamMessageId>> inFlightIds(StreamMessageId from, StreamMessageId to) {
+        return pendingPage(from, to)
+                .expand(page -> page.size() < PENDING_PAGE_SIZE
+                        ? Mono.empty()
+                        : pendingPage(nextId(page.getLast().getId()), to))
+                .flatMapIterable(page -> page)
+                .map(PendingEntry::getId)
+                .collect(Collectors.toSet())
                 // No consumer group means nothing was ever delivered, so nothing is in flight
                 .onErrorResume(error -> isMissingGroup(error)
                         ? Mono.just(Set.<StreamMessageId>of())
                         : Mono.error(error));
+    }
+
+    private Mono<List<PendingEntry>> pendingPage(StreamMessageId startId, StreamMessageId endId) {
+        return stream()
+                .listPending(StreamPendingRangeArgs.groupName(config.getConsumerGroupName())
+                        .startId(startId)
+                        .endId(endId)
+                        .count(PENDING_PAGE_SIZE));
+    }
+
+    /** XPENDING's range is inclusive, so the next page starts one sequence past the last entry. */
+    private static StreamMessageId nextId(StreamMessageId id) {
+        return new StreamMessageId(id.getId0(), id.getId1() + 1);
     }
 
     private static boolean isMissingGroup(Throwable error) {
