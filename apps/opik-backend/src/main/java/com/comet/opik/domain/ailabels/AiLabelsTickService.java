@@ -106,6 +106,14 @@ public class AiLabelsTickService {
     private final Map<String, Instant> throttledUntil = new ConcurrentHashMap<>();
     private final AtomicLong inFlightBytes = new AtomicLong();
     private long sweeps;
+    // What the latest tick saw, for its dashboard. Workspaces is 0 until a tick runs, which is true; the sweep is null
+    // until one runs, so its gauges report nothing rather than a sweep of 0 buckets that never happened.
+    private final AtomicLong tickWorkspaces = new AtomicLong();
+    private volatile SweepObservation lastSweep;
+
+    /** What one sweep found: its candidates and how many of the N buckets it swept before its deadline. */
+    record SweepObservation(int candidates, int bucketsReached) {
+    }
 
     private final LongCounter itemsSubmitted;
     private final LongCounter itemsDone;
@@ -149,6 +157,26 @@ public class AiLabelsTickService {
         meter.gaugeBuilder("ai_labels.budget.limit").ofLongs().setUnit("By")
                 .setDescription("The global in-flight budget")
                 .buildWithCallback(measurement -> measurement.record(config.getBudgetBytes()));
+        meter.gaugeBuilder("ai_labels.tick.interval_seconds").setUnit("s")
+                .setDescription("How often the leader ticks")
+                .buildWithCallback(measurement -> measurement.record(config.getTickInterval().toMilliseconds() / 1e3));
+        meter.gaugeBuilder("ai_labels.tick.budget_seconds").setUnit("s")
+                .setDescription(
+                        "The time a tick may use: loading stops starting work at %.0f%% of it, the sweep at %.0f%%"
+                                .formatted(LOAD_SHARE * 100, SWEEP_SHARE * 100))
+                .buildWithCallback(measurement -> measurement.record(config.getTickBudget().toMilliseconds() / 1e3));
+        meter.gaugeBuilder("ai_labels.tick.workspaces").ofLongs()
+                .setDescription("Workspaces with candidates in the latest tick")
+                .buildWithCallback(measurement -> measurement.record(tickWorkspaces.get()));
+        meter.gaugeBuilder("ai_labels.sweep.candidates").ofLongs()
+                .setDescription("Traces the latest sweep found to label")
+                .buildWithCallback(measurement -> Optional.ofNullable(lastSweep)
+                        .ifPresent(sweep -> measurement.record(sweep.candidates())));
+        meter.gaugeBuilder("ai_labels.sweep.buckets_reached").ofLongs()
+                .setDescription(
+                        "Buckets the latest sweep swept before its deadline; under ai_labels.sweep.buckets, it overran")
+                .buildWithCallback(measurement -> Optional.ofNullable(lastSweep)
+                        .ifPresent(sweep -> measurement.record(sweep.bucketsReached())));
         this.itemsSubmitted = meter.counterBuilder("ai_labels.items.submitted").build();
         this.itemsDone = meter.counterBuilder("ai_labels.items.done").build();
         this.itemsFailed = meter.counterBuilder("ai_labels.items.failed").build();
@@ -207,7 +235,10 @@ public class AiLabelsTickService {
             var candidates = whenDue(SWEEP_LOCK, config.getSweepInterval().toJavaDuration(),
                     () -> timed("sweep", () -> sweep(sweepTasks, start.plus(share(budget, SWEEP_SHARE)))))
                     .orElse(List.of());
+            tickWorkspaces.set(candidates.stream().map(Candidate::workspaceId).distinct().count());
             timed("submit", () -> submit(candidates, tasks, free, start, start.plus(budget)));
+        } else {
+            tickWorkspaces.set(0);
         }
         // After submitting, so the health query never eats the time this sweep's candidates need.
         whenDue(HEALTH_LOCK, config.getHealthInterval().toJavaDuration(),
@@ -430,6 +461,8 @@ public class AiLabelsTickService {
         var buckets = sweepService.buckets();
         int offset = (int) Math.floorMod(sweeps++, buckets.size());
         var candidates = new ArrayList<Candidate>();
+        // A bucket whose query a guard stopped still counts as swept: it ran, and ai_labels.sweep.guard_trips has it.
+        int swept = 0;
         for (int i = 0; i < buckets.size(); i++) {
             if (i > 0 && Instant.now().isAfter(deadline)) {
                 sweepOverrun.add(1);
@@ -438,8 +471,20 @@ public class AiLabelsTickService {
             }
             int index = (offset + i) % buckets.size();
             candidates.addAll(sweepService.sweep(buckets.get(index), index, tasks).collectList().block());
+            swept++;
         }
+        lastSweep = new SweepObservation(candidates.size(), swept);
         return candidates;
+    }
+
+    /** The latest sweep this pod ran, or null before the first. */
+    SweepObservation lastSweep() {
+        return lastSweep;
+    }
+
+    /** Workspaces with candidates in the latest tick this pod ran. */
+    long lastTickWorkspaces() {
+        return tickWorkspaces.get();
     }
 
     // --- 3. Submit ---
