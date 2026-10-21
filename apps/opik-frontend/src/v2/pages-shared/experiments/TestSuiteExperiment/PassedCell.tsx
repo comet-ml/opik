@@ -40,7 +40,6 @@ type StatusInfo = {
 };
 
 const NO_EXPERIMENT_ITEM_REASON = "No experiment item defined";
-// Suite-level assertions are not on the row, so a missing result can't be told apart from no assertions.
 const NO_ASSERTION_RESULTS_REASON =
   "No assertion results for this item. Either no assertions apply to it, or they haven't been scored.";
 const SCORING_ERROR_REASON =
