@@ -71,11 +71,12 @@ public class ChatCompletionService {
     }
 
     public ChatCompletionResponse create(@NonNull ChatCompletionRequest rawRequest, @NonNull String workspaceId) {
-        // must be final or effectively final for lambda
-        var request = normalizeRequest(rawRequest);
-        rejectDecisionModel(request.model());
+        var normalized = MessageContentNormalizer.normalizeRequest(rawRequest);
+        rejectDecisionModel(normalized.model());
 
-        var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
+        var llmProviderClient = llmProviderFactory.getService(workspaceId, normalized.model());
+        // must be final or effectively final for lambda
+        var request = resolve(normalized, llmProviderClient);
         llmProviderClient.validateRequest(request);
 
         ChatCompletionResponse chatCompletionResponse;
@@ -105,12 +106,14 @@ public class ChatCompletionService {
             @NonNull ChatCompletionRequest rawRequest,
             @NonNull String workspaceId,
             @NonNull ChunkedOutputHandlers handlers) {
-        var request = normalizeRequest(rawRequest);
-        rejectDecisionModel(request.model());
+        var normalized = MessageContentNormalizer.normalizeRequest(rawRequest);
+        rejectDecisionModel(normalized.model());
 
-        log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
+        log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId,
+                normalized.model());
 
-        var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
+        var llmProviderClient = llmProviderFactory.getService(workspaceId, normalized.model());
+        var request = resolve(normalized, llmProviderClient);
         var errorHandler = getErrorHandler(handlers, llmProviderClient);
 
         try {
@@ -257,8 +260,9 @@ public class ChatCompletionService {
         }
     }
 
-    private ChatCompletionRequest normalizeRequest(ChatCompletionRequest rawRequest) {
-        var resolved = paramResolver.resolve(MessageContentNormalizer.normalizeRequest(rawRequest));
+    // After the key lookup, because the key decides the route, and a route can refuse what the model takes.
+    private ChatCompletionRequest resolve(ChatCompletionRequest request, LlmProviderService llmProviderClient) {
+        var resolved = paramResolver.resolve(request, llmProviderClient.paramsRoute());
         logChanges(resolved.request().model(), resolved.changes());
         return resolved.request();
     }

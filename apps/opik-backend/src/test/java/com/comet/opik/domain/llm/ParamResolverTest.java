@@ -13,6 +13,8 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -41,6 +43,8 @@ class ParamResolverTest {
     private static final ParamResolver RESOLVER = new ParamResolver(mock(LlmProviderFactory.class), bundledRegistry());
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
+    private static final String MESSAGE = RandomStringUtils.secure().nextAlphanumeric(20);
+    private static final int SEED = RandomUtils.secure().randomInt();
 
     private static final ParamChange TEMPERATURE_REFUSED = new ParamChange("temperature", Reason.REFUSED_BY_MODEL);
     private static final ParamChange TOP_P_REFUSED = new ParamChange("top_p", Reason.REFUSED_BY_MODEL);
@@ -66,10 +70,10 @@ class ParamResolverTest {
             Map<String, Object> customParameters) {
         return ChatCompletionRequest.builder()
                 .model(model)
-                .messages(List.of(UserMessage.from("Hi")))
+                .messages(List.of(UserMessage.from(MESSAGE)))
                 .temperature(temperature)
                 .topP(topP)
-                .seed(7)
+                .seed(SEED)
                 .customParameters(customParameters)
                 .build();
     }
@@ -99,7 +103,7 @@ class ParamResolverTest {
             "CLAUDE-HAIKU-4-5-20251001"
     })
     void dropsTopPForClaudeWhateverServesIt(String model) {
-        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9)))
+        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9), null))
                 .isEqualTo(resolution(request(model, 0.7, null), TOP_P_EXCLUSIVE));
     }
 
@@ -116,7 +120,7 @@ class ParamResolverTest {
     void doesNotTreatAGatewayNamedAfterClaudeAsClaude(String model) {
         var request = request(model, 0.7, 0.9);
 
-        assertThat(RESOLVER.resolve(request)).isEqualTo(resolution(request));
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     /**
@@ -128,14 +132,14 @@ class ParamResolverTest {
     void doesNotClassifyAnIdWithNoModelSegment() {
         var request = request("custom-llm/claude-gw/", 0.7, 0.9);
 
-        assertThat(RESOLVER.resolve(request)).isEqualTo(resolution(request));
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     @Test
     void stillMatchesClaudeBehindSuchAGateway() {
         var model = "custom-llm/claude-gw/claude-opus-4-6";
 
-        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9)))
+        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9), null))
                 .isEqualTo(resolution(request(model, 0.7, null), TOP_P_EXCLUSIVE));
     }
 
@@ -157,7 +161,7 @@ class ParamResolverTest {
             "anthropic/claude-opus-4.8"
     })
     void dropsBothForModelsThatTakeNeither(String model) {
-        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9)))
+        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9), null))
                 .isEqualTo(resolution(request(model, null, null), TEMPERATURE_REFUSED, TOP_P_REFUSED));
     }
 
@@ -176,7 +180,7 @@ class ParamResolverTest {
             "anthropic/claude-fable-5.1:batch"
     })
     void dropsBothForARecognisedClaudeNotMarkedCapable(String model) {
-        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9)))
+        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9), null))
                 .isEqualTo(resolution(request(model, null, null), TEMPERATURE_REFUSED, TOP_P_REFUSED));
     }
 
@@ -189,14 +193,14 @@ class ParamResolverTest {
     void leavesAnUnrecognisedClaudeItsTemperature() {
         var request = request("custom-llm/gw/my-claude-deployment", 0.7, null);
 
-        assertThat(RESOLVER.resolve(request)).isEqualTo(resolution(request));
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     @Test
     void dropsALoneTemperatureForAModelThatTakesNeither() {
         var model = "custom-llm/gw/claude-sonnet-5";
 
-        assertThat(RESOLVER.resolve(request(model, 0.7, null)))
+        assertThat(RESOLVER.resolve(request(model, 0.7, null), null))
                 .isEqualTo(resolution(request(model, null, null), TEMPERATURE_REFUSED));
     }
 
@@ -216,7 +220,7 @@ class ParamResolverTest {
     void keepsTemperatureForACapableClaudeHoweverItIsSpelled(String model) {
         var request = request(model, 0.7, null);
 
-        assertThat(RESOLVER.resolve(request)).isEqualTo(resolution(request));
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     /**
@@ -230,7 +234,7 @@ class ParamResolverTest {
     void dropsBothWhenExtendedThinkingIsEnabled(String type) {
         var model = "custom-llm/gw/claude-sonnet-4-6";
 
-        assertThat(RESOLVER.resolve(thinkingRequest(model, 0.7, 0.9, type))).isEqualTo(
+        assertThat(RESOLVER.resolve(thinkingRequest(model, 0.7, 0.9, type), null)).isEqualTo(
                 resolution(thinkingRequest(model, null, null, type), TEMPERATURE_THINKING, TOP_P_THINKING));
     }
 
@@ -239,7 +243,7 @@ class ParamResolverTest {
     void leavesTemperatureWhenThinkingIsNotEnabled(String type) {
         var request = thinkingRequest("custom-llm/gw/claude-sonnet-4-6", 0.7, null, type);
 
-        assertThat(RESOLVER.resolve(request)).isEqualTo(resolution(request));
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     /** Asserted from the Top P side too, since the thinking gate drops both and only one is live. */
@@ -248,7 +252,7 @@ class ParamResolverTest {
     void leavesTopPWhenThinkingIsNotEnabled(String type) {
         var request = thinkingRequest("custom-llm/gw/claude-sonnet-4-6", null, 0.9, type);
 
-        assertThat(RESOLVER.resolve(request)).isEqualTo(resolution(request));
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     /**
@@ -260,7 +264,7 @@ class ParamResolverTest {
     void dropsBothWhenAnEffortTurnsThinkingOn(String model) {
         var effort = Map.<String, Object>of("output_config", Map.of("effort", "low"));
 
-        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9, effort)))
+        assertThat(RESOLVER.resolve(request(model, 0.7, 0.9, effort), null))
                 .isEqualTo(resolution(request(model, null, null, effort), TEMPERATURE_THINKING, TOP_P_THINKING));
     }
 
@@ -273,35 +277,35 @@ class ParamResolverTest {
     void keepsTemperatureWhenTheEffortLeavesThinkingOff(String model, String customParameters) {
         var request = request(model, 0.7, null, customParameters(customParameters));
 
-        assertThat(RESOLVER.resolve(request)).isEqualTo(resolution(request));
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     @Test
     void leavesASamplingCapableClaudeAlone() {
         var request = request("custom-llm/gw/claude-sonnet-4-6", 0.7, null);
 
-        assertThat(RESOLVER.resolve(request)).isEqualTo(resolution(request));
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     @Test
     void keepsTopPForClaudeWhenTemperatureIsAbsent() {
         var request = request("claude-opus-4-6", null, 0.9);
 
-        assertThat(RESOLVER.resolve(request)).isEqualTo(resolution(request));
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     @Test
     void leavesModelsWithoutTheConstraintAlone() {
         var request = request("gpt-4o", 0.7, 0.9);
 
-        assertThat(RESOLVER.resolve(request)).isEqualTo(resolution(request));
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
     }
 
     @Test
     void returnsTheSameRequestWhenNothingNeedsDropping() {
         var original = request("claude-opus-4-6", 0.7, null);
 
-        var resolution = RESOLVER.resolve(original);
+        var resolution = RESOLVER.resolve(original, null);
 
         assertThat(resolution.request()).isSameAs(original);
         assertThat(resolution.changes()).isEmpty();
@@ -311,7 +315,10 @@ class ParamResolverTest {
     void toleratesARequestWithNoModel() {
         var original = request(null, 0.7, 0.9);
 
-        assertThat(RESOLVER.resolve(original).request()).isSameAs(original);
+        var resolution = RESOLVER.resolve(original, null);
+
+        assertThat(resolution).isEqualTo(resolution(original));
+        assertThat(resolution.request()).isSameAs(original);
     }
 
     private LlmModelRegistryService registryWithOverride(Path tempDir, String overrideResource,
@@ -334,7 +341,7 @@ class ParamResolverTest {
     @Test
     void followsALocalOverrideOfTheShippedCatalog(@TempDir Path tempDir) throws IOException {
         var opusTemperature = request("claude-opus-4-6", 0.7, null);
-        assertThat(RESOLVER.resolve(opusTemperature)).isEqualTo(resolution(opusTemperature));
+        assertThat(RESOLVER.resolve(opusTemperature, null)).isEqualTo(resolution(opusTemperature));
 
         var resolver = resolverWithOverride(tempDir, new LlmModelRegistryConfig().getCuratedResource());
 
@@ -347,11 +354,11 @@ class ParamResolverTest {
     }
 
     private static void assertOverrideRefusesOpusTemperatureAndSonnetTopP(ParamResolver resolver) {
-        assertThat(resolver.resolve(request("claude-opus-4-6", 0.7, null)))
+        assertThat(resolver.resolve(request("claude-opus-4-6", 0.7, null), null))
                 .isEqualTo(resolution(request("claude-opus-4-6", null, null), TEMPERATURE_REFUSED));
         var sonnetTemperature = request("claude-sonnet-4-6", 0.7, null);
-        assertThat(resolver.resolve(sonnetTemperature)).isEqualTo(resolution(sonnetTemperature));
-        assertThat(resolver.resolve(request("claude-sonnet-4-6", null, 0.9)))
+        assertThat(resolver.resolve(sonnetTemperature, null)).isEqualTo(resolution(sonnetTemperature));
+        assertThat(resolver.resolve(request("claude-sonnet-4-6", null, 0.9), null))
                 .isEqualTo(resolution(request("claude-sonnet-4-6", null, null), TOP_P_REFUSED));
     }
 
@@ -365,7 +372,7 @@ class ParamResolverTest {
 
         var resolver = new ParamResolver(mock(LlmProviderFactory.class), registry);
 
-        assertThat(resolver.resolve(request("claude-sonnet-5", 0.7, 0.9))).isEqualTo(
+        assertThat(resolver.resolve(request("claude-sonnet-5", 0.7, 0.9), null)).isEqualTo(
                 resolution(request("claude-sonnet-5", null, null), TEMPERATURE_REFUSED, TOP_P_REFUSED));
         assertThat(resolver.resolve(judge("claude-sonnet-5", 0.7, null)))
                 .isEqualTo(resolution(judge("claude-sonnet-5", null, null), TEMPERATURE_REFUSED));
@@ -375,24 +382,24 @@ class ParamResolverTest {
     void dropsTheSettingsTheOpenAiCatalogParamsRefuseAndKeepsTheRest() {
         var request = ChatCompletionRequest.builder()
                 .model("gpt-5-mini")
-                .messages(List.of(UserMessage.from("Hi")))
+                .messages(List.of(UserMessage.from(MESSAGE)))
                 .temperature(0.7)
                 .topP(0.9)
                 .frequencyPenalty(0.5)
                 .presencePenalty(0.4)
                 .maxCompletionTokens(100)
-                .seed(7)
+                .seed(SEED)
                 .customParameters(Map.of("verbosity", "low"))
                 .build();
 
-        var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(request);
+        var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(request, null);
 
         assertThat(resolution).isEqualTo(resolution(
                 ChatCompletionRequest.builder()
                         .model("gpt-5-mini")
-                        .messages(List.of(UserMessage.from("Hi")))
+                        .messages(List.of(UserMessage.from(MESSAGE)))
                         .maxCompletionTokens(100)
-                        .seed(7)
+                        .seed(SEED)
                         .customParameters(Map.of("verbosity", "low"))
                         .build(),
                 TEMPERATURE_REFUSED,
@@ -405,25 +412,78 @@ class ParamResolverTest {
     void returnsTheSameRequestWhenTheOpenAiCatalogParamsRefuseNothingThatIsSet() {
         var request = ChatCompletionRequest.builder().model("o3").maxCompletionTokens(100).build();
 
-        var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(request);
+        var resolution = resolverWithOpenAiParams(OPENAI_REASONING).resolve(request, null);
 
         assertThat(resolution.request()).isSameAs(request);
         assertThat(resolution.changes()).isEmpty();
     }
 
+    private static ChatCompletionRequest.Builder openAiRequest(String model) {
+        return ChatCompletionRequest.builder()
+                .model(model)
+                .messages(List.of(UserMessage.from(MESSAGE)))
+                .temperature(0.7)
+                .topP(0.9)
+                .maxCompletionTokens(100);
+    }
+
+    private static ChatCompletionRequest everyOpenAiSetting(String model) {
+        return openAiRequest(model)
+                .frequencyPenalty(0.5)
+                .presencePenalty(0.4)
+                .stop(List.of("END"))
+                .seed(SEED)
+                .build();
+    }
+
+    // gpt-4.1 is listed in the shipped registry; my-finetune is not, and still gets the OpenAI profile's route.
+    @ParameterizedTest
+    @ValueSource(strings = {"gpt-4.1", "my-finetune"})
+    void dropsWhatTheResponsesRouteRefusesFromTheShippedCatalog(String model) {
+        assertThat(RESOLVER.resolve(everyOpenAiSetting(model), ModelParams.RESPONSES_API_ROUTE)).isEqualTo(resolution(
+                openAiRequest(model).stop(List.of()).build(),
+                new ParamChange("frequency_penalty", Reason.REFUSED_BY_ROUTE),
+                new ParamChange("presence_penalty", Reason.REFUSED_BY_ROUTE),
+                new ParamChange("stop", Reason.REFUSED_BY_ROUTE),
+                new ParamChange("seed", Reason.REFUSED_BY_ROUTE)));
+    }
+
+    @Test
+    void keepsEveryOpenAiSettingOnChatCompletionsForAModelThatTakesThem() {
+        var request = everyOpenAiSetting("gpt-4.1");
+        var resolver = resolverWithOpenAiParams(bundledRegistry().paramsOf("openai", "gpt-4.1"));
+
+        assertThat(resolver.resolve(request, null)).isEqualTo(resolution(request));
+    }
+
+    @Test
+    void reportsTheModelNotTheRouteWhenTheModelItselfRefusesASetting() {
+        var request = ChatCompletionRequest.builder()
+                .model("o3")
+                .messages(List.of(UserMessage.from(MESSAGE)))
+                .temperature(0.7)
+                .build();
+
+        assertThat(resolverWithOpenAiParams(OPENAI_REASONING).resolve(request, ModelParams.RESPONSES_API_ROUTE))
+                .isEqualTo(resolution(
+                        ChatCompletionRequest.builder().model("o3").messages(List.of(UserMessage.from(MESSAGE)))
+                                .build(),
+                        TEMPERATURE_REFUSED));
+    }
+
     @Test
     void dropsAJudgeTemperatureTheOpenAiCatalogParamsRefuse() {
-        var parameters = LlmAsJudgeModelParameters.builder().name("o3").temperature(0.0).seed(3).build();
+        var parameters = LlmAsJudgeModelParameters.builder().name("o3").temperature(0.0).seed(SEED).build();
 
         assertThat(resolverWithOpenAiParams(OPENAI_REASONING).resolve(parameters)).isEqualTo(resolution(
-                LlmAsJudgeModelParameters.builder().name("o3").seed(3).build(), TEMPERATURE_REFUSED));
+                LlmAsJudgeModelParameters.builder().name("o3").seed(SEED).build(), TEMPERATURE_REFUSED));
     }
 
     private static LlmAsJudgeModelParameters judge(String model, Double temperature, String customParameters) {
         return LlmAsJudgeModelParameters.builder()
                 .name(model)
                 .temperature(temperature)
-                .seed(3)
+                .seed(SEED)
                 .customParameters(customParameters == null ? null : JsonUtils.getJsonNodeFromString(customParameters))
                 .build();
     }

@@ -198,7 +198,7 @@ public class AnthropicMappersTest {
         void gatesSamplingParams(String description, ChatCompletionRequest request, Double expectedTemperature,
                 Double expectedTopP) {
             var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(
-                    resolver.resolve(request).request(), bundledRegistry());
+                    resolver.resolve(request, null).request(), bundledRegistry());
 
             // Build the expected payload independently of the mapper (not by re-calling it), so a regression in
             // any collateral field — model, messages, max_tokens, etc. — can't hide by changing actual and
@@ -492,7 +492,7 @@ public class AnthropicMappersTest {
                 bundledRegistry());
 
         private AnthropicCreateMessageRequest toWireRequest(ChatCompletionRequest request) {
-            return LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(resolver.resolve(request).request(),
+            return LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(resolver.resolve(request, null).request(),
                     bundledRegistry());
         }
 
