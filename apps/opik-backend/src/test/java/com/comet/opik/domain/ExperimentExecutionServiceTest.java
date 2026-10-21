@@ -57,6 +57,7 @@ import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
@@ -172,6 +173,16 @@ class ExperimentExecutionServiceTest {
     private void stubDatasetItems(List<DatasetItem> items) {
         when(datasetItemService.getItems(any(DatasetItemStreamRequest.class), any()))
                 .thenReturn(Flux.fromIterable(items));
+    }
+
+    /** The read that refuses a run on an empty dataset, which comes before the stream it then pages. */
+    private static boolean isEmptinessCheck(DatasetItemStreamRequest request) {
+        return request != null && Integer.valueOf(1).equals(request.steamLimit());
+    }
+
+    private void stubDatasetIsNotEmpty() {
+        lenient().when(datasetItemService.getItems(argThat(ExperimentExecutionServiceTest::isEmptinessCheck), any()))
+                .thenReturn(Flux.just(buildDatasetItem(UUID.randomUUID(), null)));
     }
 
     private void stubExperimentCreate() {
@@ -483,6 +494,8 @@ class ExperimentExecutionServiceTest {
         @Test
         void createAndExecuteFailsRatherThanRunWithoutThePolicyItCouldNotRead() {
             var datasetId = UUID.randomUUID();
+            // The run is refused on an empty dataset before the policy is read, so it has an item
+            stubDatasetIsNotEmpty();
             when(datasetVersionService.getLatestVersion(any(UUID.class), any()))
                     .thenThrow(new IllegalStateException("version store is down"));
 
@@ -1499,7 +1512,8 @@ class ExperimentExecutionServiceTest {
 
             var captor = ArgumentCaptor.forClass(DatasetItemStreamRequest.class);
             verify(datasetItemService, atLeastOnce()).getItems(captor.capture(), any());
-            assertThat(captor.getAllValues())
+            assertThat(captor.getAllValues().stream().filter(request -> !isEmptinessCheck(request)).toList())
+                    .isNotEmpty()
                     .allSatisfy(streamed -> assertThat(streamed.datasetVersion()).isEqualTo("the-latest-hash"));
         }
 
@@ -1525,7 +1539,8 @@ class ExperimentExecutionServiceTest {
 
             var captor = ArgumentCaptor.forClass(DatasetItemStreamRequest.class);
             verify(datasetItemService, atLeastOnce()).getItems(captor.capture(), any());
-            assertThat(captor.getAllValues())
+            assertThat(captor.getAllValues().stream().filter(request -> !isEmptinessCheck(request)).toList())
+                    .isNotEmpty()
                     .allSatisfy(streamed -> assertThat(streamed.datasetVersion()).isEqualTo("pinned-hash"));
             verify(datasetVersionService, never()).getLatestVersion(any(UUID.class), any());
         }
@@ -1555,8 +1570,9 @@ class ExperimentExecutionServiceTest {
 
             var captor = ArgumentCaptor.forClass(DatasetItemStreamRequest.class);
             verify(datasetItemService, atLeastOnce()).getItems(captor.capture(), any());
-            assertThat(captor.getAllValues())
+            assertThat(captor.getAllValues().stream().filter(request -> !isEmptinessCheck(request)).toList())
                     .as("the items must come from the legacy read, not the version")
+                    .isNotEmpty()
                     .allSatisfy(streamed -> assertThat(streamed.datasetVersion()).isNull());
         }
 
@@ -1578,7 +1594,9 @@ class ExperimentExecutionServiceTest {
 
             var captor = ArgumentCaptor.forClass(DatasetItemStreamRequest.class);
             verify(datasetItemService, atLeastOnce()).getItems(captor.capture(), any());
-            assertThat(captor.getValue().datasetVersion()).isNull();
+            assertThat(captor.getAllValues().stream().filter(request -> !isEmptinessCheck(request)).toList())
+                    .isNotEmpty()
+                    .allSatisfy(streamed -> assertThat(streamed.datasetVersion()).isNull());
         }
 
         private ExperimentExecutionRequest buildRequest(List<UUID> selectedRuleIds, String filters) {
@@ -1599,8 +1617,15 @@ class ExperimentExecutionServiceTest {
             var secondPage = List.of(buildDatasetItem(UUID.randomUUID(), null));
 
             when(datasetItemService.getItems(any(DatasetItemStreamRequest.class), any()))
-                    .thenReturn(Flux.fromIterable(firstPage))
-                    .thenReturn(Flux.fromIterable(secondPage));
+                    .thenAnswer(invocation -> {
+                        DatasetItemStreamRequest request = invocation.getArgument(0);
+                        if (isEmptinessCheck(request)) {
+                            return Flux.just(firstPage.getFirst());
+                        }
+                        return request.lastRetrievedId() == null
+                                ? Flux.fromIterable(firstPage)
+                                : Flux.fromIterable(secondPage);
+                    });
             when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
             stubExperimentCreate();
             stubFinishExperiments();
@@ -1610,9 +1635,10 @@ class ExperimentExecutionServiceTest {
             assertThat(response.totalItems()).isEqualTo(STREAM_PAGE_SIZE + 1);
 
             var captor = ArgumentCaptor.forClass(DatasetItemStreamRequest.class);
-            verify(datasetItemService, times(2)).getItems(captor.capture(), any());
+            verify(datasetItemService, atLeastOnce()).getItems(captor.capture(), any());
 
-            var requests = captor.getAllValues();
+            var requests = captor.getAllValues().stream().filter(request -> !isEmptinessCheck(request)).toList();
+            assertThat(requests).hasSize(2);
             assertThat(requests.getFirst().steamLimit()).isEqualTo(STREAM_PAGE_SIZE);
             assertThat(requests.getFirst().lastRetrievedId()).isNull();
             assertThat(requests.get(1).lastRetrievedId()).isEqualTo(firstPage.getLast().id());
@@ -1627,7 +1653,11 @@ class ExperimentExecutionServiceTest {
 
             executeRequest(buildRequest(null, null));
 
-            verify(datasetItemService, times(1)).getItems(any(DatasetItemStreamRequest.class), any());
+            var captor = ArgumentCaptor.forClass(DatasetItemStreamRequest.class);
+            verify(datasetItemService, atLeastOnce()).getItems(captor.capture(), any());
+
+            assertThat(captor.getAllValues().stream().filter(request -> !isEmptinessCheck(request)).toList())
+                    .hasSize(1);
         }
 
         @Test

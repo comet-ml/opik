@@ -32,6 +32,10 @@ vi.mock("@/store/PlaygroundStore", () => ({
   useDatasetType: () => datasetType,
   useDatasetFilters: () => [],
   useSetDatasetFilters: () => vi.fn(),
+  // Added with the server-side run: the header reads a run's state to decide what it may offer
+  useIsStopPending: () => false,
+  useIsResumingRun: () => false,
+  useDatasetItemsTotal: () => null,
 }));
 
 vi.mock("@/contexts/PermissionsContext", () => ({
