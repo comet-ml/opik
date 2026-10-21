@@ -1,7 +1,10 @@
 import React from "react";
 
 import TraceLogsSidebar from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebar";
-import { TraceLogsViewConfig } from "@/v2/pages-shared/traces/TraceLogsView/TraceLogsView";
+import {
+  DEFAULT_TRACE_LOGS_VIEW_CONFIG,
+  TraceLogsViewConfig,
+} from "@/v2/pages-shared/traces/TraceLogsView/TraceLogsView";
 import { useTraceLogsSidebarControls } from "@/v2/pages-shared/traces/TraceLogsSidebar/useTraceLogsSidebarControls";
 import { DATE_RANGE_PRESET_ALLTIME } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import { LOGS_SOURCE, TRACE_VISIBILITY_MODE } from "@/types/traces";
@@ -25,6 +28,8 @@ export const EVALUATION_TRACES_VIEW_CONFIG: TraceLogsViewConfig = {
   visibilityMode: TRACE_VISIBILITY_MODE.hidden,
   defaultDateRangePreset: DATE_RANGE_PRESET_ALLTIME,
   showTableControls: true,
+  emptyStateTitle: DEFAULT_TRACE_LOGS_VIEW_CONFIG.emptyStateTitle,
+  emptyStateDescription: DEFAULT_TRACE_LOGS_VIEW_CONFIG.emptyStateDescription,
 };
 
 /**

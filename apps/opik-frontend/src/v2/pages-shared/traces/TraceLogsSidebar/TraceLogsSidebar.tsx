@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
+import { cn } from "@/lib/utils";
 import { LOGS_SOURCE } from "@/types/traces";
 import { Filter } from "@/types/filters";
 import { COLUMN_EXPERIMENT_IDS } from "@/types/shared";
@@ -20,6 +21,7 @@ type TraceLogsSidebarProps = {
   title?: string;
   viewConfig?: TraceLogsViewConfig;
   scopeTooltip?: string;
+  className?: string;
 };
 
 /**
@@ -37,6 +39,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   title = "Logs",
   viewConfig = DEFAULT_TRACE_LOGS_VIEW_CONFIG,
   scopeTooltip,
+  className,
 }) => {
   const [sheetContentRef, setSheetContentRef] = useState<HTMLDivElement | null>(
     null,
@@ -77,7 +80,10 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         ref={setSheetContentRef}
-        className="flex w-screen flex-col shadow-none sm:max-w-full"
+        className={cn(
+          "flex w-screen flex-col shadow-none sm:max-w-full",
+          className,
+        )}
         header={<SheetTopBar variant="info" title={title} />}
         onEscapeKeyDown={(e) => {
           if (traceId) {
