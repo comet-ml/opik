@@ -509,7 +509,10 @@ class Backend:
             named = [f for f in named_fields(note, fields) if f in probe.claims]
             result = "fail"
             rejections += [Rejection(f, fields.pop(f), note) for f in named]
-            if not named or not any(f in probe.claims for f in fields) or calls > MAX_RESENDS or calls >= max_calls:
+            if not named or not any(f in probe.claims for f in fields) or calls > MAX_RESENDS:
+                break
+            if calls >= max_calls:
+                note = f"{OVER_CAP_NOTE} before checking " + ", ".join(f for f in fields if f in probe.claims)
                 break
         return CheckResult(probe, result, round(time.monotonic() - started, 1), note, tuple(rejections), calls)
 
@@ -814,7 +817,7 @@ def run(args: argparse.Namespace) -> int:
         for provider in sorted({p.model.provider for p in planned}):
             backend.add_provider_key(provider, keys[provider])
         results += run_probes(backend, planned, args.max_calls)
-    cut = len({r.probe.model for r in results if r.note == OVER_CAP_NOTE})
+    cut = len({r.probe.model for r in results if r.note.startswith(OVER_CAP_NOTE)})
 
     report = render_report(results, unexercised, mode, args.base_ref, args.max_calls, cut)
     if args.output:
@@ -871,8 +874,13 @@ def run_probes(backend: Backend, probes: list[Probe], max_calls: int) -> list[Ch
                     flush=True,
                 )
                 results.append(result)
-        finally:
-            backend.set_route(provider, None)
+        except BaseException:
+            try:
+                backend.set_route(provider, None)
+            except (RuntimeError, requests.RequestException) as reset_error:
+                print(f"::warning::Could not switch the {provider} key back: {reset_error}", file=sys.stderr)
+            raise
+        backend.set_route(provider, None)
     return results
 
 
