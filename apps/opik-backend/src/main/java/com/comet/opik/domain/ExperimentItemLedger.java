@@ -97,6 +97,12 @@ public class ExperimentItemLedger {
         });
     }
 
+    /** Whether the run's total still exists. It is gone once a failed launch discards it, or once it expires. */
+    public Mono<Boolean> hasTotal(@NonNull String workspaceId, @NonNull UUID experimentId) {
+        return redisClient.getAtomicLong(ExperimentExecutionConfig.itemCounterKey(workspaceId, experimentId))
+                .isExists();
+    }
+
     /**
      * Items of the experiment with no outcome yet. Zero or below means it has stopped producing; a missing
      * total reads as zero, so a run whose counters were discarded or expired reads as drained.

@@ -111,6 +111,17 @@ class ExperimentItemLedgerTest {
     }
 
     @Test
+    @DisplayName("should report whether the run's total still exists")
+    void hasTotalReflectsTheTotalKey() {
+        var experimentId = UUID.randomUUID();
+        assertThat(ledger.hasTotal(WORKSPACE_ID, experimentId).block()).isFalse();
+
+        setTotal(experimentId, 3);
+
+        assertThat(ledger.hasTotal(WORKSPACE_ID, experimentId).block()).isTrue();
+    }
+
+    @Test
     @DisplayName("should read a run whose total is gone as drained")
     void missingTotalReadsAsDrained() {
         assertThat(ledger.remaining(WORKSPACE_ID, UUID.randomUUID()).block()).isZero();

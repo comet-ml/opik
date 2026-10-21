@@ -78,6 +78,7 @@ class ExperimentItemProcessingSubscriberTest {
         // One item left of a larger batch: the batch does not drain, so the finish path stays out of
         // these tests and they describe the skip alone.
         lenient().when(itemLedger.remaining(anyString(), any(UUID.class))).thenReturn(Mono.just(5L));
+        lenient().when(itemLedger.hasTotal(anyString(), any(UUID.class))).thenReturn(Mono.just(true));
         lenient().when(itemLedger.failures(anyString(), any(UUID.class))).thenReturn(Mono.just(0L));
         // The drain hands the finish to one caller; these tests are always that caller.
         lenient().when(cancellationService.claimFinish(anyString(), any(UUID.class)))
@@ -456,5 +457,20 @@ class ExperimentItemProcessingSubscriberTest {
         verify(itemLedger, never()).failures(any(), any());
         verify(experimentService).stampFinished(experimentId);
         verify(experimentService, never()).update(any(UUID.class), any());
+    }
+
+    // An aborted launch discards the run's total and outcomes, then its already published items still arrive.
+    // Recording each as skipped brought the outcomes back for a day with nothing left to read them.
+    @Test
+    @DisplayName("should not record a skip for an aborted run whose total is gone")
+    void skipOfAnAbortedRunIsNotRecorded() {
+        var experimentId = UUID.randomUUID();
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(true));
+        when(itemLedger.hasTotal(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
+
+        verify(itemProcessor, never()).process(any());
+        verify(itemLedger, never()).record(any(), any(), any(), any());
     }
 }

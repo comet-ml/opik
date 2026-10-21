@@ -99,22 +99,42 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
 
     private Mono<Void> runAndRecord(ExperimentItemToProcess message, StreamMessageId entryId) {
         return cancellationService.isCancelled(message.workspaceId(), message.experimentId())
-                .flatMap(cancelled -> {
-                    if (cancelled) {
-                        log.debug("Skipping item for cancelled experiment '{}'", message.experimentId());
-                        return Mono.just(Outcome.SKIPPED);
+                .flatMap(cancelled -> cancelled
+                        ? recordSkipped(message, entryId)
+                        // Failed items stay on the assertion counter: the drain fails the run, and a zeroed
+                        // counter would let the assertion path record COMPLETED first.
+                        : run(message).flatMap(outcome -> itemLedger.record(
+                                message.workspaceId(), message.experimentId(), entryId, outcome)));
+    }
+
+    private Mono<Outcome> run(ExperimentItemToProcess message) {
+        return itemProcessor.process(message)
+                .thenReturn(Outcome.OK)
+                .onErrorResume(e -> {
+                    log.error("Failed to process an experiment item, experimentId '{}', datasetItemId '{}'",
+                            message.experimentId(), message.datasetItemId(), e);
+                    return Mono.just(Outcome.FAILED);
+                });
+    }
+
+    /**
+     * Counts a stopped run's item as skipped, which is what lets the run drain. Not once its total is gone: an
+     * aborted launch discards the total together with the outcomes, and recording one would bring the outcomes
+     * back for a day with nothing left to read them.
+     */
+    private Mono<Void> recordSkipped(ExperimentItemToProcess message, StreamMessageId entryId) {
+        return itemLedger.hasTotal(message.workspaceId(), message.experimentId())
+                .flatMap(tracked -> {
+                    if (!tracked) {
+                        log.debug("Not recording a skip for an experiment no longer tracked, entryId '{}',"
+                                + " experimentId '{}'", entryId, message.experimentId());
+                        return Mono.empty();
                     }
-                    return itemProcessor.process(message)
-                            .thenReturn(Outcome.OK)
-                            .onErrorResume(e -> {
-                                log.error("Failed to process experiment item for experiment '{}', dataset item '{}'",
-                                        message.experimentId(), message.datasetItemId(), e);
-                                return Mono.just(Outcome.FAILED);
-                            });
-                })
-                // Failed items stay on the assertion counter: the drain fails the run, and a zeroed counter
-                // would let the assertion path record COMPLETED first.
-                .flatMap(outcome -> itemLedger.record(message.workspaceId(), message.experimentId(), entryId, outcome));
+                    log.debug("Skipping an item of a cancelled experiment, entryId '{}', experimentId '{}'",
+                            entryId, message.experimentId());
+                    return itemLedger.record(message.workspaceId(), message.experimentId(), entryId,
+                            Outcome.SKIPPED);
+                });
     }
 
     /**
@@ -126,7 +146,8 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
         return itemLedger.remaining(message.workspaceId(), message.experimentId())
                 .flatMap(remaining -> {
                     if (remaining > 0) {
-                        log.debug("Experiment '{}' has '{}' remaining items", message.experimentId(), remaining);
+                        log.debug("Items still to come, remaining '{}', experimentId '{}'", remaining,
+                                message.experimentId());
                         return Mono.empty();
                     }
                     return cancellationService.discardQueued(message.workspaceId(), message.experimentId())
@@ -149,18 +170,18 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
         return itemLedger.failures(message.workspaceId(), message.experimentId())
                 .flatMap(failures -> {
                     if (failures > 0) {
-                        log.warn("Experiment '{}' complete with '{}' failures, marking as FAILED",
-                                message.experimentId(), failures);
+                        log.warn("Marking a drained experiment FAILED, failures '{}', experimentId '{}'", failures,
+                                message.experimentId());
                         return markExperimentFailed(message, buildReactorContext(message));
                     }
                     if (message.isTestSuite()) {
-                        log.info("Experiment '{}' complete, waiting for assertions to finish",
+                        log.info("Drained a test suite, waiting for its assertions, experimentId '{}'",
                                 message.experimentId());
                         // Stamped here, not with the assertions: a cancelled suite never
                         // reaches those, and would look forever like a run still going.
                         return stampFinished(message);
                     }
-                    log.info("Experiment '{}' complete, finishing", message.experimentId());
+                    log.info("Drained an experiment, finishing it, experimentId '{}'", message.experimentId());
                     return finishExperiment(message);
                 });
     }
