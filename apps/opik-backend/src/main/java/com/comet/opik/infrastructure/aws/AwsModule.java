@@ -30,6 +30,8 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
 
     static final Duration EVENT_BRIDGE_CALL_ATTEMPT_TIMEOUT = Duration.ofSeconds(2);
     static final Duration EVENT_BRIDGE_CALL_TIMEOUT = Duration.ofSeconds(8);
+    // A local credentials service; fetching runs inside EVENT_BRIDGE_CALL_TIMEOUT, so this must stay well under it
+    static final Duration CUSTOMER_CREDENTIALS_TIMEOUT = Duration.ofSeconds(2);
 
     @Provides
     @Singleton
@@ -90,7 +92,7 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
 
         // Retries are bounded by the publisher, which also retries throttled entries of partial failures
         var builder = EventBridgeClient.builder()
-                .credentialsProvider(eventBridgeCredentialsProvider())
+                .credentialsProvider(eventBridgeCredentialsProvider(config))
                 .overrideConfiguration(override -> override.retryStrategy(AwsRetryStrategy.doNotRetry())
                         .apiCallAttemptTimeout(EVENT_BRIDGE_CALL_ATTEMPT_TIMEOUT)
                         // Backstop: bounds the whole call, including signing and credential resolution that happen
@@ -103,11 +105,19 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
     }
 
     /**
-     * IRSA and EKS Pod Identity first, then the default chain. Not the shared S3 provider: the default chain reads
-     * AWS_ACCESS_KEY_ID before web identity, so a deployment with static S3 keys there (e.g. MinIO) would sign
-     * PutEvents with them and never assume the role it was given for EventBridge.
+     * On a SageMaker Partner AI App, only the customer-credentials endpoint, with no fallback: every other source
+     * there resolves to the partner account, which the customer's bus denies.
+     *
+     * <p>Otherwise IRSA and EKS Pod Identity first, then the default chain. Not the shared S3 provider: the default
+     * chain reads AWS_ACCESS_KEY_ID before web identity, so a deployment with static S3 keys there (e.g. MinIO) would
+     * sign PutEvents with them and never assume the role it was given for EventBridge.
      */
-    static AwsCredentialsProvider eventBridgeCredentialsProvider() {
+    static AwsCredentialsProvider eventBridgeCredentialsProvider(@NonNull AlertsEventBridgeConfig config) {
+        if (StringUtils.isNotBlank(config.getCustomerCredentialsEndpoint())) {
+            return new CustomerCredentialsProvider(config.getCustomerCredentialsEndpoint(),
+                    CUSTOMER_CREDENTIALS_TIMEOUT);
+        }
+
         return AwsCredentialsProviderChain.builder()
                 .credentialsProviders(
                         WebIdentityTokenFileCredentialsProvider.create(),
