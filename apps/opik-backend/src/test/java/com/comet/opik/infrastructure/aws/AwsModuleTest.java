@@ -20,6 +20,7 @@ import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.regions.Region;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -28,10 +29,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
-import static com.github.tomakehurst.wiremock.client.WireMock.serverError;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -190,33 +191,32 @@ class AwsModuleTest {
             endpoint.verify(2, getRequestedFor(urlEqualTo(PATH)));
         }
 
-        @Test
-        void failsInsteadOfFallingBackWhenEndpointErrors() {
-            endpoint.stubFor(get(PATH).willReturn(serverError()));
+        @ParameterizedTest
+        @ValueSource(ints = {500, 403})
+        void failsRetryablyInsteadOfFallingBackWhenEndpointErrors(int status) {
+            endpoint.stubFor(get(PATH).willReturn(aResponse().withStatus(status)));
 
             withSystemProperties(Map.of("aws.accessKeyId", "PARTNER", "aws.secretAccessKey", "partner-secret"), () -> {
                 var provider = AwsModule.eventBridgeCredentialsProvider(config());
 
+                // The I/O cause is what makes the alert publisher retry it
                 assertThatThrownBy(provider::resolveCredentials)
                         .isInstanceOf(SdkClientException.class)
-                        .hasMessageContaining("HTTP '500'");
+                        .hasMessageContaining("HTTP '%s'".formatted(status))
+                        .hasCauseInstanceOf(IOException.class);
             });
         }
 
         @ParameterizedTest
-        @ValueSource(strings = {
-                "\"Token\": \"token-CUSTOMER1\"",
-                "\"SessionToken\": \" \", \"Token\": \"token-CUSTOMER1\""})
-        void readsTokenWhenSessionTokenIsMissingOrBlank(String tokenFields) {
+        @ValueSource(strings = {"\"Token\": \"token-CUSTOMER1\"", "\"SessionToken\": \" \""})
+        void rejectsResponseWithoutSessionToken(String tokenFields) {
             endpoint.stubFor(get(PATH).willReturn(okJson("""
                     {"AccessKeyId": "CUSTOMER1", "SecretAccessKey": "secret-CUSTOMER1", %s, "Expiration": "%s"}
                     """.formatted(tokenFields, Instant.now().plus(1, ChronoUnit.HOURS)))));
 
-            assertThat(AwsModule.eventBridgeCredentialsProvider(config()).resolveCredentials())
-                    .isInstanceOfSatisfying(AwsSessionCredentials.class, session -> assertThat(session)
-                            .extracting(AwsSessionCredentials::accessKeyId, AwsSessionCredentials::secretAccessKey,
-                                    AwsSessionCredentials::sessionToken)
-                            .containsExactly("CUSTOMER1", "secret-CUSTOMER1", "token-CUSTOMER1"));
+            assertThatThrownBy(AwsModule.eventBridgeCredentialsProvider(config())::resolveCredentials)
+                    .isInstanceOf(SdkClientException.class)
+                    .hasMessageContaining("'SessionToken'");
         }
 
         @Test

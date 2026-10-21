@@ -65,22 +65,20 @@ class CustomerCredentialsProvider implements AwsCredentialsProvider, SdkAutoClos
             throw SdkClientException.create("Interrupted while calling the customer credentials endpoint", exception);
         }
         if (response.statusCode() != 200) {
-            throw SdkClientException.create(
-                    "Customer credentials endpoint returned HTTP '%s'".formatted(response.statusCode()));
+            // Per AWS, the endpoint answers 5xx while the customer credentials aren't available yet and 4xx on a
+            // token problem, both to be retried with backoff. The IOException cause makes the publisher retry them
+            // like any other transient I/O failure.
+            var message = "Customer credentials endpoint returned HTTP '%s'".formatted(response.statusCode());
+            throw SdkClientException.create(message, new IOException(message));
         }
 
         try {
             JsonNode json = JsonUtils.getJsonNodeFromString(response.body());
             Instant expiration = Instant.parse(required(json, "Expiration"));
-            // SessionToken is the credential_process format; Token is the container format. Accept both until AWS
-            // confirms which one this endpoint returns.
-            String sessionToken = present(json, "SessionToken")
-                    ? json.get("SessionToken").asText()
-                    : required(json, "Token");
             AwsCredentials credentials = AwsSessionCredentials.builder()
                     .accessKeyId(required(json, "AccessKeyId"))
                     .secretAccessKey(required(json, "SecretAccessKey"))
-                    .sessionToken(sessionToken)
+                    .sessionToken(required(json, "SessionToken"))
                     .expirationTime(expiration)
                     .build();
             return RefreshResult.builder(credentials)
@@ -93,12 +91,8 @@ class CustomerCredentialsProvider implements AwsCredentialsProvider, SdkAutoClos
         }
     }
 
-    private static boolean present(JsonNode json, String field) {
-        return json.hasNonNull(field) && !json.get(field).asText().isBlank();
-    }
-
     private static String required(JsonNode json, String field) {
-        if (!present(json, field)) {
+        if (!json.hasNonNull(field) || json.get(field).asText().isBlank()) {
             throw SdkClientException.create("Customer credentials endpoint response has no '%s'".formatted(field));
         }
         return json.get(field).asText();
