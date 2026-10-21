@@ -186,3 +186,64 @@ describe("PlaygroundStore staleChanges", () => {
     });
   });
 });
+
+describe("PlaygroundStore setPromptExperiment", () => {
+  const PROMPT_A = "prompt-a";
+  const PROMPT_B = "prompt-b";
+
+  const getState = () => usePlaygroundStore.getState();
+
+  beforeEach(() => {
+    getState().clearCreatedExperiments();
+    getState().setPromptMap([PROMPT_A, PROMPT_B], {
+      [PROMPT_A]: { ...createPrompt(), id: PROMPT_A },
+      [PROMPT_B]: { ...createPrompt(), id: PROMPT_B },
+    });
+    usePlaygroundStore.setState({ outputMap: {} });
+    getState().setExperimentByPromptId({
+      [PROMPT_A]: "experiment-a1",
+      [PROMPT_B]: "experiment-b1",
+    });
+  });
+
+  it("should keep the other prompts on the run they were scored in", () => {
+    getState().setPromptExperiment(PROMPT_B, "experiment-b2");
+
+    expect(getState().experimentByPromptId).toEqual({
+      [PROMPT_A]: "experiment-a1",
+      [PROMPT_B]: "experiment-b2",
+    });
+    expect(getState().runExperimentIdsByPromptId).toEqual({
+      [PROMPT_A]: ["experiment-a1", "experiment-b1"],
+      [PROMPT_B]: ["experiment-b2"],
+    });
+
+    getState().setPromptExperiment(PROMPT_A, "experiment-a2");
+
+    expect(getState().runExperimentIdsByPromptId).toEqual({
+      [PROMPT_A]: ["experiment-a2"],
+      [PROMPT_B]: ["experiment-b2"],
+    });
+  });
+
+  it("should make the re-run prompt's output current again and leave the others stale", () => {
+    getState().updatePrompt(PROMPT_A, { model: PROVIDER_MODEL_TYPE.GPT_4O });
+    getState().updatePrompt(PROMPT_B, { model: PROVIDER_MODEL_TYPE.GPT_4O });
+
+    getState().setPromptExperiment(PROMPT_B, "experiment-b2");
+
+    expect(getState().outputMap[PROMPT_A]).toMatchObject({ stale: true });
+    expect(getState().outputMap[PROMPT_B]).toMatchObject({ stale: false });
+  });
+
+  it("should rank every prompt together again after a full run", () => {
+    getState().setPromptExperiment(PROMPT_B, "experiment-b2");
+
+    getState().setExperimentByPromptId({
+      [PROMPT_A]: "experiment-a3",
+      [PROMPT_B]: "experiment-b3",
+    });
+
+    expect(getState().runExperimentIdsByPromptId).toEqual({});
+  });
+});
