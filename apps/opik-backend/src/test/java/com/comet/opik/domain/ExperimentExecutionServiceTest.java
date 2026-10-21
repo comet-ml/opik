@@ -148,7 +148,8 @@ class ExperimentExecutionServiceTest {
 
             assertThatThrownBy(() -> executeRequest(request))
                     .isInstanceOf(BadRequestException.class)
-                    .hasMessage("Dataset 'test-dataset' has no items. Add items to it before running an experiment");
+                    .hasMessage(
+                            "Dataset 'test-dataset' has no items in the selected version. Add items to it before running an experiment");
 
             verify(experimentService, never()).create(any(Experiment.class));
             verify(itemPublisher, never()).publish(any(), any());

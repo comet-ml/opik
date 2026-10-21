@@ -171,8 +171,9 @@ class ExperimentsResourceExecuteTest {
         try (var response = experimentResourceClient.callExecute(request, workspace.apiKey(), workspace.name())) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             assertThat(response.readEntity(ErrorMessage.class).getMessage())
-                    .isEqualTo("Dataset '%s' has no items. Add items to it before running an experiment"
-                            .formatted(dataset.name()));
+                    .isEqualTo(
+                            "Dataset '%s' has no items in the selected version. Add items to it before running an experiment"
+                                    .formatted(dataset.name()));
         }
 
         var experiments = experimentResourceClient.findExperiments(1, 10, datasetId, null, null, null, false, null,

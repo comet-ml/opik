@@ -51,7 +51,7 @@ const PlaygroundRunButton = ({
   } else if (isDatasetEmpty) {
     const datasetLabel =
       datasetType === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
-    promptRunDisabledReason = `This ${datasetLabel} is empty. Add items to run an experiment`;
+    promptRunDisabledReason = `This ${datasetLabel} version has no items. Add items or select another version to run an experiment`;
   }
 
   return (

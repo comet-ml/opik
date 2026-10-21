@@ -110,7 +110,7 @@ describe("PlaygroundHeader", () => {
 
       expect(getRunButton()).toBeDisabled();
       expect(await screen.findByRole("tooltip")).toHaveTextContent(
-        "This dataset is empty. Add items to run an experiment",
+        "This dataset version has no items. Add items or select another version to run an experiment",
       );
     });
 
@@ -122,7 +122,7 @@ describe("PlaygroundHeader", () => {
 
       expect(getRunButton()).toBeDisabled();
       expect(await screen.findByRole("tooltip")).toHaveTextContent(
-        "This test suite is empty. Add items to run an experiment",
+        "This test suite version has no items. Add items or select another version to run an experiment",
       );
     });
 

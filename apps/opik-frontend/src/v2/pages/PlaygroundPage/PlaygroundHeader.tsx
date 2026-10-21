@@ -164,7 +164,7 @@ const PlaygroundHeader = ({
     if (isExperimentMode && !datasetName)
       return "Your dataset has been removed. Select another one";
     if (isDatasetEmpty)
-      return `This ${experimentTarget} is empty. Add items to run an experiment`;
+      return `This ${experimentTarget} version has no items. Add items or select another version to run an experiment`;
     return null;
   }, [
     allPromptsHaveModels,

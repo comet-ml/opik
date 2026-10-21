@@ -205,7 +205,7 @@ public class ExperimentExecutionService {
                 .hasElements()
                 .filter(Boolean::booleanValue)
                 .switchIfEmpty(Mono.error(() -> new BadRequestException(
-                        "Dataset '%s' has no items. Add items to it before running an experiment"
+                        "Dataset '%s' has no items in the selected version. Add items to it before running an experiment"
                                 .formatted(request.datasetName()))))
                 .then();
     }
