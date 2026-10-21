@@ -6,7 +6,6 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.DashboardSavedQueryService;
 import com.comet.opik.infrastructure.CustomChartsConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -16,7 +15,6 @@ import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
@@ -51,7 +49,6 @@ import java.util.UUID;
 public class DashboardSavedQueriesResource {
 
     private final DashboardSavedQueryService dashboardSavedQueryService;
-    private final Provider<RequestContext> requestContext;
     private final ServiceTogglesConfig serviceToggles;
     private final CustomChartsConfig customCharts;
 
@@ -60,11 +57,9 @@ public class DashboardSavedQueriesResource {
     @Inject
     public DashboardSavedQueriesResource(
             @NonNull DashboardSavedQueryService dashboardSavedQueryService,
-            @NonNull Provider<RequestContext> requestContext,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
             @NonNull @Config("customCharts") CustomChartsConfig customCharts) {
         this.dashboardSavedQueryService = dashboardSavedQueryService;
-        this.requestContext = requestContext;
         this.serviceToggles = serviceToggles;
         this.customCharts = customCharts;
     }
