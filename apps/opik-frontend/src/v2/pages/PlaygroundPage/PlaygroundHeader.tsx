@@ -311,6 +311,7 @@ const PlaygroundHeader = ({
               logsSource={LOGS_SOURCE.playground}
               variant="icon"
               title="Playground logs"
+              sidebarClassName="w-[calc(100vw-72px)] data-[state=open]:duration-300"
             />
           )}
         </div>
