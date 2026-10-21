@@ -43,6 +43,7 @@ import { buildDocsUrl } from "@/v2/lib/utils";
 import { BREAKDOWN_FIELD } from "@/types/dashboard";
 import {
   BREAKDOWN_GROUP_NAMES,
+  TAG_COST_BREAKDOWN_DESCRIPTION,
   buildBreakdownDrilldownFilter,
   getMetricEntityType,
 } from "./breakdown";
@@ -524,7 +525,17 @@ const ProjectMetricsWidget: React.FunctionComponent<
           dragHandle={<DashboardWidget.DragHandle />}
         />
       )}
-      <DashboardWidget.Content>{renderChartContent()}</DashboardWidget.Content>
+      <DashboardWidget.Content>
+        <div className="flex h-full flex-col">
+          {isCostMetric &&
+            effectiveBreakdown?.field === BREAKDOWN_FIELD.TAGS && (
+              <p className="comet-body-s mb-2 text-light-slate">
+                {TAG_COST_BREAKDOWN_DESCRIPTION}
+              </p>
+            )}
+          <div className="min-h-0 flex-1">{renderChartContent()}</div>
+        </div>
+      </DashboardWidget.Content>
     </DashboardWidget>
   );
 };

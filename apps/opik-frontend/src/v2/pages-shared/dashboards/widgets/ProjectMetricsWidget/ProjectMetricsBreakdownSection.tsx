@@ -23,9 +23,11 @@ import { BreakdownConfig } from "@/types/dashboard";
 import { BREAKDOWN_FIELD } from "@/types/dashboard";
 import {
   BREAKDOWN_FIELD_LABELS,
+  TAG_COST_BREAKDOWN_DESCRIPTION,
   getCompatibleBreakdownFields,
 } from "./breakdown";
 import { ProjectMetricsWidgetFormData } from "./schema";
+import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
 
 interface ProjectMetricsBreakdownSectionProps {
   control: Control<ProjectMetricsWidgetFormData>;
@@ -279,6 +281,13 @@ const ProjectMetricsBreakdownSection: React.FC<
               </ToggleGroup>
             </div>
           </div>
+          {(metricType === METRIC_NAME_TYPE.SPAN_COST ||
+            metricType === METRIC_NAME_TYPE.COST) &&
+            breakdown.field === BREAKDOWN_FIELD.TAGS && (
+              <p className="comet-body-s text-light-slate">
+                {TAG_COST_BREAKDOWN_DESCRIPTION}
+              </p>
+            )}
         </AccordionContent>
       </AccordionItem>
     </Accordion>

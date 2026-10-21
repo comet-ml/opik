@@ -1334,25 +1334,14 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.hasBreakdown() ? GET_TRACE_COUNT_WITH_BREAKDOWN : GET_TRACE_COUNT, "traceCount")
-                .flatMapMany(result -> request.hasBreakdown()
-                        ? rowToDataPointWithBreakdown(result, row -> NAME_TRACES,
-                                row -> row.get("count", Integer.class))
-                        : rowToDataPoint(result, row -> NAME_TRACES, row -> row.get("count", Integer.class)))
-                .collectList());
+        return fetchSingleMetricWithBreakdown(projectId, request, GET_TRACE_COUNT, GET_TRACE_COUNT_WITH_BREAKDOWN,
+                "traceCount", row -> NAME_TRACES, row -> row.get("count", Integer.class));
     }
 
     @Override
     public Mono<List<Entry>> getThreadCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.hasBreakdown() ? GET_THREAD_COUNT_WITH_BREAKDOWN : GET_THREAD_COUNT, "threadCount")
-                .flatMapMany(result -> request.hasBreakdown()
-                        ? rowToDataPointWithBreakdown(result, row -> NAME_THREADS,
-                                row -> row.get("count", Integer.class))
-                        : rowToDataPoint(result, row -> NAME_THREADS,
-                                row -> row.get("count", Integer.class)))
-                .collectList());
+        return fetchSingleMetricWithBreakdown(projectId, request, GET_THREAD_COUNT, GET_THREAD_COUNT_WITH_BREAKDOWN,
+                "threadCount", row -> NAME_THREADS, row -> row.get("count", Integer.class));
     }
 
     @Override
@@ -1415,27 +1404,16 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.hasBreakdown() ? GET_COST_WITH_BREAKDOWN : GET_COST, "cost")
-                .flatMapMany(result -> request.hasBreakdown()
-                        ? rowToDataPointWithBreakdown(result, row -> NAME_COST,
-                                row -> row.get("value", BigDecimal.class))
-                        : rowToDataPoint(result, row -> NAME_COST, row -> row.get("value", BigDecimal.class)))
-                .collectList());
+        return fetchSingleMetricWithBreakdown(projectId, request, GET_COST, GET_COST_WITH_BREAKDOWN,
+                "cost", row -> NAME_COST, row -> row.get("value", BigDecimal.class));
     }
 
     @Override
     public Mono<List<Entry>> getGuardrailsFailedCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.hasBreakdown() ? GET_GUARDRAILS_FAILED_COUNT_WITH_BREAKDOWN : GET_GUARDRAILS_FAILED_COUNT,
-                "guardrailsFailedCount")
-                .flatMapMany(result -> request.hasBreakdown()
-                        ? rowToDataPointWithBreakdown(result, row -> NAME_GUARDRAILS_FAILED_COUNT,
-                                row -> row.get("failed_cnt", Integer.class))
-                        : rowToDataPoint(result,
-                                row -> NAME_GUARDRAILS_FAILED_COUNT,
-                                row -> row.get("failed_cnt", Integer.class)))
-                .collectList());
+        return fetchSingleMetricWithBreakdown(projectId, request, GET_GUARDRAILS_FAILED_COUNT,
+                GET_GUARDRAILS_FAILED_COUNT_WITH_BREAKDOWN,
+                "guardrailsFailedCount", row -> NAME_GUARDRAILS_FAILED_COUNT,
+                row -> row.get("failed_cnt", Integer.class));
     }
 
     @Override
@@ -1524,14 +1502,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<List<Entry>> getSpanCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.hasBreakdown() ? GET_SPAN_COUNT_WITH_BREAKDOWN : GET_SPAN_COUNT, "spanCount")
-                .flatMapMany(result -> request.hasBreakdown()
-                        ? rowToDataPointWithBreakdown(result, row -> "spans",
-                                row -> row.get("count", Integer.class))
-                        : rowToDataPoint(result, row -> "spans",
-                                row -> row.get("count", Integer.class)))
-                .collectList());
+        return fetchSingleMetricWithBreakdown(projectId, request, GET_SPAN_COUNT, GET_SPAN_COUNT_WITH_BREAKDOWN,
+                "spanCount", row -> "spans", row -> row.get("count", Integer.class));
     }
 
     @Override
@@ -1586,6 +1558,19 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .collectList());
     }
 
+    private Mono<List<Entry>> fetchSingleMetricWithBreakdown(@NonNull UUID projectId,
+            @NonNull ProjectMetricRequest request, @NonNull String query, @NonNull String breakdownQuery,
+            @NonNull String segmentName, @NonNull Function<Row, String> nameSupplier,
+            @NonNull Function<Row, ? extends Number> valueExtractor) {
+        boolean hasBreakdown = request.hasBreakdown();
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                hasBreakdown ? breakdownQuery : query, segmentName)
+                .flatMapMany(result -> hasBreakdown
+                        ? rowToDataPointWithBreakdown(result, nameSupplier, valueExtractor)
+                        : rowToDataPoint(result, nameSupplier, valueExtractor))
+                .collectList());
+    }
+
     @Override
     public Mono<List<Entry>> getTraceAverageDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return fetchSingleMetric(projectId, request, GET_TRACE_AVERAGE_DURATION, "traceAverageDuration",
@@ -1606,14 +1591,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<List<Entry>> getSpanCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
-                request.hasBreakdown() ? GET_SPAN_COST_WITH_BREAKDOWN : GET_SPAN_COST, "spanCost")
-                .flatMapMany(result -> request.hasBreakdown()
-                        ? rowToDataPointWithBreakdown(result, row -> NAME_SPAN_COST,
-                                row -> row.get("value", BigDecimal.class))
-                        : rowToDataPoint(result, row -> NAME_SPAN_COST,
-                                row -> row.get("value", BigDecimal.class)))
-                .collectList());
+        return fetchSingleMetricWithBreakdown(projectId, request, GET_SPAN_COST, GET_SPAN_COST_WITH_BREAKDOWN,
+                "spanCost", row -> NAME_SPAN_COST, row -> row.get("value", BigDecimal.class));
     }
 
     @Override

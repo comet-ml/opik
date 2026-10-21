@@ -121,6 +121,8 @@ Displays time-series charts for project metrics over time. Supports both line an
   - Thread metrics: Tags
 
   When a breakdown is active, use the **aggregation toggle** to control how data is bucketed: **Total** shows one value per group for the entire date range, while **Time-based** shows values in time buckets (hourly, daily, or weekly). Click a label in the chart legend to navigate directly to the traces list filtered to that group.
+
+  **Cost by tag uses overlapping groups.** Each tag receives the full cost of its matching spans. For example, a $1 span tagged `prod` and `agent` contributes $1 to each group. Adding the groups (including in a stacked chart) can therefore exceed actual spend. Use **Provider**, **Model**, or **Span type** for span cost groups that add up to total spend. Untagged spans appear as **Unknown**. When there are more than ten groups, **Others** sums the remaining groups' costs once per time bucket; tag overlap still applies.
 - **Filters**: Apply trace or thread filters to focus on specific data based on tags, metadata, or other attributes
 - **Feedback scores**: When using feedback score metrics, optionally select specific scores to display (leave empty to show all)
 
