@@ -1287,6 +1287,8 @@ class OpenTelemetryResourceTest {
             var spanRouted = rootAndChild(projectNameAttribute(spanProject));
             var headerRouted = rootAndChild();
             var tooLongNameRouted = rootAndChild();
+            var tooLongSpanNameRouted = rootAndChild(projectNameAttribute("a".repeat(151)));
+            var tooLongSpanAndResourceNameRouted = rootAndChild(projectNameAttribute("b".repeat(151)));
 
             var request = ExportTraceServiceRequest.newBuilder()
                     .addResourceSpans(ResourceSpans.newBuilder()
@@ -1294,13 +1296,16 @@ class OpenTelemetryResourceTest {
                                     .addAttributes(projectNameAttribute(resourceProject)))
                             .addScopeSpans(ScopeSpans.newBuilder()
                                     .addAllSpans(resourceRouted)
-                                    .addAllSpans(spanRouted)))
+                                    .addAllSpans(spanRouted)
+                                    .addAllSpans(tooLongSpanNameRouted)))
                     .addResourceSpans(ResourceSpans.newBuilder()
                             .addScopeSpans(ScopeSpans.newBuilder().addAllSpans(headerRouted)))
                     .addResourceSpans(ResourceSpans.newBuilder()
                             .setResource(Resource.newBuilder()
                                     .addAttributes(projectNameAttribute("a".repeat(151))))
-                            .addScopeSpans(ScopeSpans.newBuilder().addAllSpans(tooLongNameRouted)))
+                            .addScopeSpans(ScopeSpans.newBuilder()
+                                    .addAllSpans(tooLongNameRouted)
+                                    .addAllSpans(tooLongSpanAndResourceNameRouted)))
                     .build();
 
             sendBatch(Entity.entity(request.toByteArray(), "application/x-protobuf"), "application/x-protobuf",
@@ -1310,6 +1315,8 @@ class OpenTelemetryResourceTest {
             assertTraceStoredInProject(spanRouted, spanProject, workspaceName);
             assertTraceStoredInProject(headerRouted, headerProject, workspaceName);
             assertTraceStoredInProject(tooLongNameRouted, headerProject, workspaceName);
+            assertTraceStoredInProject(tooLongSpanNameRouted, resourceProject, workspaceName);
+            assertTraceStoredInProject(tooLongSpanAndResourceNameRouted, headerProject, workspaceName);
         }
 
         @Test
