@@ -120,14 +120,18 @@ class LLMJudge(base.BaseSuiteEvaluator):
             or the agentic tool-call loop when a ``trace_tool_context`` is
             available. One of:
 
-            - ``"auto"`` (default): use the agentic loop whenever a
-              trace context is supplied, otherwise one-shot. The agentic
+            - ``"auto"``: use the agentic loop when a trace context is
+              supplied and the model is flagged ``agentic_in_auto`` in
+              ``model_capabilities.py``, otherwise one-shot. The agentic
               overview already subsumes the one-shot input/output, and
               the model can answer from it without invoking any tools
-              when the trace is trivial.
+              when the trace is trivial. This is the mode judges built
+              by ``from_config`` (and so by ``run_tests``) use unless
+              overridden.
             - ``"always"``: always run the agentic loop (when a context
               is available; otherwise falls back to one-shot).
-            - ``"never"``: always use the one-shot prompt, even if a
+            - ``"never"`` (default when constructing ``LLMJudge``
+              directly): always use the one-shot prompt, even if a
               context is available. Useful to avoid the tool-schema
               overhead on very cost-sensitive flows.
 
