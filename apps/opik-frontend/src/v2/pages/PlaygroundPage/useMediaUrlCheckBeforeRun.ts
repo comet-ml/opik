@@ -8,7 +8,9 @@ import useMediaUrlsCheckMutation, {
 import {
   collectRunMediaUrls,
   getFailedMediaUrls,
+  hasMediaParts,
 } from "@/v2/pages/PlaygroundPage/mediaUrlCheck";
+import { useHydrateDatasetItemData } from "@/v2/pages/PlaygroundPage/useHydrateDatasetItemData";
 
 interface UseMediaUrlCheckBeforeRunArguments {
   datasetItems: DatasetItem[];
@@ -27,6 +29,7 @@ const useMediaUrlCheckBeforeRun = ({
   runSingle,
 }: UseMediaUrlCheckBeforeRunArguments) => {
   const { mutateAsync: checkMediaUrls } = useMediaUrlsCheckMutation();
+  const hydrateDatasetItemData = useHydrateDatasetItemData();
   const [pendingRun, setPendingRun] = useState<PendingRun | null>(null);
   const isCheckingRef = useRef(false);
 
@@ -36,8 +39,7 @@ const useMediaUrlCheckBeforeRun = ({
 
       const { promptMap } = usePlaygroundStore.getState();
       const prompts = promptIds.map((id) => promptMap[id]).filter(Boolean);
-      const urls = collectRunMediaUrls(prompts, datasetItems);
-      if (urls.length === 0) {
+      if (!hasMediaParts(prompts)) {
         run();
         return;
       }
@@ -45,7 +47,17 @@ const useMediaUrlCheckBeforeRun = ({
       isCheckingRef.current = true;
       let failures: MediaUrlCheckResult[] = [];
       try {
-        failures = getFailedMediaUrls(await checkMediaUrls(urls));
+        // the page holds long values cut short, the run sends the full ones
+        const rows = await Promise.all(
+          datasetItems.map(async (item) => ({
+            ...item,
+            data: await hydrateDatasetItemData(item),
+          })),
+        );
+        const urls = collectRunMediaUrls(prompts, rows);
+        if (urls.length > 0) {
+          failures = getFailedMediaUrls(await checkMediaUrls(urls));
+        }
       } catch {
         // our own check failing must never stop a run
         failures = [];
@@ -59,7 +71,7 @@ const useMediaUrlCheckBeforeRun = ({
       }
       setPendingRun({ failures, run });
     },
-    [datasetItems, checkMediaUrls, pendingRun],
+    [datasetItems, hydrateDatasetItemData, checkMediaUrls, pendingRun],
   );
 
   const checkedRunAll = useCallback(

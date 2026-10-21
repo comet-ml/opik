@@ -20,6 +20,15 @@ const getMediaUrls = (content: MessageContent): string[] => {
   });
 };
 
+export const hasMediaParts = (prompts: PlaygroundPromptType[]) =>
+  prompts.some((prompt) =>
+    prompt.messages.some(
+      ({ content }) =>
+        typeof content !== "string" &&
+        content.some((part) => part.type !== "text"),
+    ),
+  );
+
 export const collectRunMediaUrls = (
   prompts: PlaygroundPromptType[],
   datasetItems: DatasetItem[],

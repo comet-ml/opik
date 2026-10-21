@@ -10,10 +10,14 @@ import useMediaUrlCheckBeforeRun from "./useMediaUrlCheckBeforeRun";
 
 const mocks = vi.hoisted(() => ({
   checkMediaUrls: vi.fn(),
+  hydrate: vi.fn(),
 }));
 
 vi.mock("@/api/playground/useMediaUrlsCheckMutation", () => ({
   default: () => ({ mutateAsync: mocks.checkMediaUrls }),
+}));
+vi.mock("@/v2/pages/PlaygroundPage/useHydrateDatasetItemData", () => ({
+  useHydrateDatasetItemData: () => mocks.hydrate,
 }));
 
 const GOOD_URL = "https://cdn.example.com/cat.png";
@@ -51,6 +55,10 @@ const renderCheck = (datasetItems: DatasetItem[] = []) => {
 describe("useMediaUrlCheckBeforeRun", () => {
   beforeEach(() => {
     mocks.checkMediaUrls.mockReset();
+    mocks.hydrate.mockReset();
+    mocks.hydrate.mockImplementation(
+      async (item?: DatasetItem) => item?.data ?? {},
+    );
   });
 
   it("runs at once and makes no check call when the run has no media URLs", async () => {
@@ -93,6 +101,37 @@ describe("useMediaUrlCheckBeforeRun", () => {
     expect(mocks.checkMediaUrls).toHaveBeenCalledWith([GOOD_URL, BROKEN_URL]);
     expect(runAll).not.toHaveBeenCalled();
     expect(result.current.mediaUrlFailures).toEqual([failure]);
+  });
+
+  it("checks the full list when the page only holds a cut copy of it", async () => {
+    setPrompts(prompt("p1", [image("{{photos}}")]));
+    const fullList = JSON.stringify([GOOD_URL, BROKEN_URL]);
+    mocks.hydrate.mockResolvedValue({ photos: fullList });
+    mocks.checkMediaUrls.mockResolvedValue([
+      { url: GOOD_URL, status: "ok" },
+      { url: BROKEN_URL, status: "http_error", http_status: 404 },
+    ]);
+    const { result, runAll } = renderCheck([
+      { id: "item-1", data: { photos: fullList.slice(0, 20) } } as DatasetItem,
+    ]);
+
+    await act(() => result.current.runAll());
+
+    expect(mocks.checkMediaUrls).toHaveBeenCalledWith([GOOD_URL, BROKEN_URL]);
+    expect(runAll).not.toHaveBeenCalled();
+  });
+
+  it("fetches no rows for a prompt without media", async () => {
+    setPrompts(prompt("p1", "Answer {{question}}"));
+    const { result, runAll } = renderCheck([
+      { id: "item-1", data: { question: "q" } } as DatasetItem,
+    ]);
+
+    await act(() => result.current.runAll());
+
+    expect(mocks.hydrate).not.toHaveBeenCalled();
+    expect(mocks.checkMediaUrls).not.toHaveBeenCalled();
+    expect(runAll).toHaveBeenCalledTimes(1);
   });
 
   it("starts nothing on Cancel", async () => {
