@@ -124,7 +124,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
-                SELECT entity_id,
+                SELECT project_id,
+                       entity_id,
                        name,
                        avg(value) AS value
                 FROM feedback_scores_deduped
@@ -137,6 +138,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             FROM feedback_scores_final fs
             JOIN (
                 SELECT
+                    project_id,
                     id
                 FROM traces final
                 WHERE workspace_id = :workspace_id
@@ -146,7 +148,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                       >= (toDate32(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'), 1)))
                   AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                       \\<= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
-            ) t ON t.id = fs.entity_id
+            ) t ON t.project_id = fs.project_id AND t.id = fs.entity_id
             GROUP BY fs.name;
             """;
 
@@ -221,6 +223,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 FROM feedback_scores_final fs
                 JOIN (
                     SELECT
+                        project_id,
                         id
                     FROM traces final
                     WHERE workspace_id = :workspace_id
@@ -230,7 +233,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                           >= (toDate32(UUIDv7ToDateTime(toUUID(:id_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'), 1)))
                       AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                           <= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
-                ) t ON t.id = fs.entity_id
+                ) t ON t.project_id = fs.project_id AND t.id = fs.entity_id
                 GROUP BY fs.project_id, bucket
                 ORDER BY fs.project_id, bucket
                 WITH FILL
@@ -289,7 +292,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
-                SELECT entity_id,
+                SELECT project_id,
+                       entity_id,
                        avg(value) AS value
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
@@ -299,6 +303,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 FROM feedback_scores_final fs
                 JOIN (
                     SELECT
+                        project_id,
                         id
                     FROM traces final
                     WHERE workspace_id = :workspace_id
@@ -307,7 +312,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                           >= (toDate32(UUIDv7ToDateTime(toUUID(:id_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'), 1)))
                       AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                           <= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
-                ) t ON t.id = fs.entity_id
+                ) t ON t.project_id = fs.project_id AND t.id = fs.entity_id
                 GROUP BY bucket
                 ORDER BY bucket
                 WITH FILL

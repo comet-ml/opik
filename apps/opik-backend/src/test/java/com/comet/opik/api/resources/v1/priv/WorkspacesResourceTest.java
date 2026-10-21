@@ -449,6 +449,52 @@ class WorkspacesResourceTest {
         }
 
         @Test
+        void metricsSummary_countsTraceIdReusedAcrossProjectsOnce() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var otherProjectName = RandomStringUtils.randomAlphabetic(10);
+            var name = RandomStringUtils.randomAlphabetic(10);
+            var startTime = Instant.now();
+
+            var reusedId = idGenerator.generateId();
+            var traces = Stream.of(
+                    factory.manufacturePojo(Trace.class).toBuilder().id(reusedId).projectName(projectName),
+                    factory.manufacturePojo(Trace.class).toBuilder().id(reusedId).projectName(otherProjectName),
+                    factory.manufacturePojo(Trace.class).toBuilder().id(idGenerator.generateId())
+                            .projectName(projectName))
+                    .map(builder -> builder.startTime(Instant.now()).build())
+                    .toList();
+            // Separate requests: a single batch dedups traces by id.
+            traceResourceClient.batchCreateTraces(List.of(traces.get(0), traces.get(2)), apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(List.of(traces.get(1)), apiKey, workspaceName);
+
+            // Only the reused id's copy in projectName is scored, so a join on the id alone would count it twice.
+            var scores = createTraceScores(List.of(traces.get(0), traces.get(2)), projectName, name);
+            traceResourceClient.feedbackScores(scores, apiKey, workspaceName);
+
+            var actualMetricsSummary = workspaceResourceClient.getMetricsSummary(
+                    WorkspaceMetricsSummaryRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(Instant.now())
+                            .build(),
+                    apiKey, workspaceName);
+
+            var expectedMetricsSummary = List.of(WorkspaceMetricsSummaryResponse.Result.builder()
+                    .name(name)
+                    .current(calcAverage(scores.stream().map(FeedbackScoreItem::value).toList()))
+                    .previous(null)
+                    .build());
+
+            assertThat(actualMetricsSummary.results())
+                    .usingRecursiveComparison()
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "current", "previous")
+                    .isEqualTo(expectedMetricsSummary);
+        }
+
+        @Test
         void metrics_isolatesByWorkspace() {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
