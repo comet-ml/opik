@@ -33,14 +33,27 @@ def executor():
         instance.stop_event.set()
 
 
-def run_with_result(executor, exit_code, output: bytes):
+def run_with_result(executor, exit_code, output: bytes, record_outcome=True):
     """Run scoring against a container returning a canned exec result."""
     container = MagicMock()
     container.exec_run.return_value = MagicMock(exit_code=exit_code, output=output)
     with patch.object(executor, "get_container", return_value=container):
         with patch.object(executor, "_record_execution_outcome") as record:
-            response = executor.run_scoring(code="<unused>", data=DATA)
+            response = executor.run_scoring(
+                code="<unused>", data=DATA, record_outcome=record_outcome
+            )
     return response, [call.args[0] for call in record.call_args_list]
+
+
+def recording_span(executor):
+    """Capture the span the run should annotate, and return it after the call."""
+    span = MagicMock()
+    span_context = MagicMock()
+    span_context.__enter__.return_value = span
+    span_context.__exit__.return_value = False
+    executor.tracer = MagicMock()
+    executor.tracer.start_as_current_span.return_value = span_context
+    return span
 
 
 def test_scores_payload_records_success(executor):
@@ -91,6 +104,26 @@ def test_exit_zero_with_no_scores_is_not_recorded_as_success(executor):
 
 
 @pytest.mark.parametrize(
+    "scores",
+    [
+        pytest.param(None, id="null-scores"),
+        pytest.param("not a list", id="string-scores"),
+        pytest.param({"name": "m"}, id="object-scores"),
+    ],
+)
+def test_exit_zero_with_non_list_scores_is_not_recorded_as_success(executor, scores):
+    # A null or non-list `scores` used to reach `len()` inside the executor and turn
+    # a 400 from the endpoint into a 500, while telemetry had already decided the
+    # response was rejected. Both now use the same guard.
+    body = {"scores": scores}
+
+    response, outcomes = run_with_result(executor, 0, json.dumps(body).encode("utf-8"))
+
+    assert response == body
+    assert outcomes == ["invalid_code"]
+
+
+@pytest.mark.parametrize(
     "score",
     [
         pytest.param({"name": "m"}, id="missing-value"),
@@ -100,7 +133,7 @@ def test_exit_zero_with_no_scores_is_not_recorded_as_success(executor):
 )
 def test_exit_zero_with_no_storable_score_is_not_recorded_as_success(executor, score):
     # Same gap one step further on: there is a score, but the backend cannot store it —
-    # no value, or the metric itself flagged it as failed. evaluator.run_scoring rejects
+    # no value, or the metric itself flagged it as failed. execute_evaluator_python rejects
     # both with a 400, so neither may be counted as a success.
     body = {"scores": [score]}
 
@@ -135,12 +168,7 @@ def test_a_genuine_zero_value_is_a_usable_score(executor):
 def test_rejected_response_pins_the_reason_on_the_span(executor):
     # A rejected run used to say only "result_code=None"; the span now carries why the
     # response was rejected so "no usable score" is distinguishable from a real failure.
-    span = MagicMock()
-    span_context = MagicMock()
-    span_context.__enter__.return_value = span
-    span_context.__exit__.return_value = False
-    executor.tracer = MagicMock()
-    executor.tracer.start_as_current_span.return_value = span_context
+    span = recording_span(executor)
 
     body = {"scores": [{"name": "m"}]}
     response, outcomes = run_with_result(executor, 0, json.dumps(body).encode("utf-8"))
@@ -160,12 +188,7 @@ def test_rejected_response_pins_the_reason_on_the_span(executor):
 def test_non_scalar_result_code_is_summarized_on_the_span(executor):
     # `code` comes from the metric's own JSON; a dict or a long string must not be
     # copied into the span status or attributes verbatim.
-    span = MagicMock()
-    span_context = MagicMock()
-    span_context.__enter__.return_value = span
-    span_context.__exit__.return_value = False
-    executor.tracer = MagicMock()
-    executor.tracer.start_as_current_span.return_value = span_context
+    span = recording_span(executor)
 
     body = {"code": {"detail": "x" * 1000}, "scores": []}
     response, outcomes = run_with_result(executor, 0, json.dumps(body).encode("utf-8"))
@@ -177,3 +200,57 @@ def test_non_scalar_result_code_is_summarized_on_the_span(executor):
     assert attributes["error.result_code"] == "dict"
     assert "result_code=dict" in status.description
     assert "detail" not in status.description
+
+
+def test_string_result_code_keeps_its_value_within_a_bound(executor):
+    # A status-like code such as "429" is useful on the span, unlike "str".
+    span = recording_span(executor)
+    body = {"code": "429", "scores": []}
+
+    response, outcomes = run_with_result(executor, 0, json.dumps(body).encode("utf-8"))
+
+    assert response == body
+    assert outcomes == ["invalid_code"]
+    attributes = {call.args[0]: call.args[1] for call in span.set_attribute.call_args_list}
+    assert attributes["error.result_code"] == "429"
+
+    long_span = recording_span(executor)
+    long_body = {"code": "9" * 100, "scores": []}
+    run_with_result(executor, 0, json.dumps(long_body).encode("utf-8"))
+    long_attributes = {
+        call.args[0]: call.args[1] for call in long_span.set_attribute.call_args_list
+    }
+    assert long_attributes["error.result_code"] == "9" * 64
+
+
+def test_nonzero_exit_is_recorded_as_the_reason(executor):
+    # The sandbox always hands a non-zero exit back as an error payload, so checking
+    # that payload first would make every crash indistinguishable from a metric that
+    # printed its own error object.
+    span = recording_span(executor)
+
+    response, outcomes = run_with_result(
+        executor, 1, json.dumps({"error": "bad metric"}).encode("utf-8")
+    )
+
+    assert response == {"code": 400, "error": "bad metric"}
+    assert outcomes == ["invalid_code"]
+    attributes = {call.args[0]: call.args[1] for call in span.set_attribute.call_args_list}
+    status = span.set_status.call_args.args[0]
+    assert attributes["error.reason"] == "nonzero_exit"
+    assert "reason=nonzero_exit" in status.description
+
+
+def test_studio_caller_can_skip_the_endpoint_outcome(executor):
+    # The optimization studio accepts an empty score list as a normal result, so it
+    # must not be counted as a rejection (nor have its span marked as an error).
+    span = recording_span(executor)
+    body = {"scores": []}
+
+    response, outcomes = run_with_result(
+        executor, 0, json.dumps(body).encode("utf-8"), record_outcome=False
+    )
+
+    assert response == body
+    assert outcomes == []
+    span.set_status.assert_not_called()
