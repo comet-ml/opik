@@ -21,6 +21,7 @@ import org.redisson.api.stream.StreamCreateGroupArgs;
 import org.redisson.api.stream.StreamMessageId;
 import org.redisson.api.stream.StreamReadGroupArgs;
 import org.redisson.config.Config;
+import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,7 +29,9 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * The cancellation purge against a real Redis.
@@ -48,6 +51,7 @@ class ExperimentCancellationServiceTest {
     private ExperimentExecutionConfig config;
     private ExperimentItemPublisher publisher;
     private ExperimentCancellationService service;
+    private ExperimentItemLedger ledger;
 
     @BeforeAll
     void setUpAll() {
@@ -77,7 +81,8 @@ class ExperimentCancellationServiceTest {
         config.setStreamName("test-stream-%s".formatted(
                 RandomStringUtils.secure().nextAlphanumeric(10).toLowerCase()));
 
-        service = new ExperimentCancellationService(redissonClient, config);
+        ledger = new ExperimentItemLedger(redissonClient, config);
+        service = new ExperimentCancellationService(redissonClient, config, ledger);
         publisher = new ExperimentItemPublisher(redissonClient, config,
                 mock(TestSuiteAssertionCounterService.class), service);
     }
@@ -136,10 +141,10 @@ class ExperimentCancellationServiceTest {
         assertThat(drained)
                 .as("nothing of the cancelled variant is left with a consumer, so it has stopped producing")
                 .isTrue();
-        assertThat(itemCounter(cancelled).get().block())
-                .as("its own counter is settled, which is what records it as finished")
+        assertThat(ledger.remaining(WORKSPACE_ID, cancelled).block())
+                .as("every item of its own is accounted for, which is what records it as finished")
                 .isZero();
-        assertThat(itemCounter(sibling).get().block())
+        assertThat(ledger.remaining(WORKSPACE_ID, sibling).block())
                 .as("the sibling still has its own two to drain, and nothing else to wait for")
                 .isEqualTo(2L);
     }
@@ -203,9 +208,9 @@ class ExperimentCancellationServiceTest {
         assertThat(drained)
                 .as("two are still with a consumer, so the run has not stopped producing")
                 .isFalse();
-        assertThat(itemCounter(experimentId).get().block())
-                .as("only the three nobody had taken are accounted for here; the other two count"
-                        + " themselves down when their calls return")
+        assertThat(ledger.remaining(WORKSPACE_ID, experimentId).block())
+                .as("only the three nobody had taken are accounted for here; the other two are"
+                        + " recorded by their consumers when their calls return")
                 .isEqualTo(2L);
         assertThat(remainingStreamIds())
                 .as("the entries a consumer holds are left in the stream")
@@ -223,9 +228,78 @@ class ExperimentCancellationServiceTest {
         var drained = service.purgeQueued(WORKSPACE_ID, experimentId).block();
 
         assertThat(drained).isFalse();
-        assertThat(itemCounter(experimentId).get().block())
-                .as("nothing was purged, so every item is still owed a decrement")
+        assertThat(ledger.remaining(WORKSPACE_ID, experimentId).block())
+                .as("nothing was purged, so every item is still owed an outcome")
                 .isEqualTo(3L);
+    }
+
+    // A consumer can take a queued entry between the purge listing what is in flight and deleting the
+    // rest. Subtracting what was purged then counted that item twice, once by the consumer and once
+    // by the stop, and reported the run drained while it still had an item to come.
+    @Test
+    @DisplayName("should not count again an entry a consumer already recorded")
+    void purgeQueuedDoesNotRecountRecordedEntries() {
+        var experimentId = UUID.randomUUID();
+        var sibling = UUID.randomUUID();
+        publish(messages(experimentId, 3));
+        publish(messages(sibling, 1));
+        var recordedByAConsumer = remainingStreamIds().getFirst();
+        ledger.record(WORKSPACE_ID, experimentId, recordedByAConsumer, ExperimentItemLedger.Outcome.OK).block();
+
+        var drained = service.purgeQueued(WORKSPACE_ID, experimentId).block();
+
+        assertThat(drained).isTrue();
+        assertThat(ledger.remaining(WORKSPACE_ID, experimentId).block())
+                .as("three items, three outcomes: none counted twice")
+                .isZero();
+        assertThat(ledger.outcome(WORKSPACE_ID, experimentId, recordedByAConsumer).block())
+                .as("the outcome the consumer recorded stands")
+                .isEqualTo(ExperimentItemLedger.Outcome.OK);
+    }
+
+    // Deleting first and recording after left a run that could never drain whenever the recording failed:
+    // the deleted entries reached no consumer, and a repeat stop skips a run already marked CANCELLED.
+    @Test
+    @DisplayName("should leave the queued entries in place when recording them as skipped fails")
+    void purgeQueuedDeletesNothingWhenRecordingFails() {
+        var experimentId = UUID.randomUUID();
+        publish(messages(experimentId, 3));
+        var queued = remainingStreamIds();
+        var failingLedger = mock(ExperimentItemLedger.class);
+        when(failingLedger.recordSkipped(any(), any(), any()))
+                .thenReturn(Mono.error(new IllegalStateException("redis")));
+        var failingService = new ExperimentCancellationService(redissonClient, config, failingLedger);
+
+        var drained = failingService.purgeQueued(WORKSPACE_ID, experimentId).block();
+
+        assertThat(drained).isFalse();
+        assertThat(remainingStreamIds())
+                .as("still queued, so consumers reach them, see the stop and record them themselves")
+                .containsExactlyElementsOf(queued);
+    }
+
+    // A launch that failed partway discards what its run was counting against. Left behind, the
+    // outcomes would hold one field per item for a day, for a run that will never use them.
+    @Test
+    @DisplayName("should discard an aborted run's total and its recorded outcomes")
+    void discardCountersRemovesTheRecordedOutcomes() {
+        var experimentId = UUID.randomUUID();
+        var sibling = UUID.randomUUID();
+        publish(messages(experimentId, 2), messages(sibling, 1));
+        var entries = remainingStreamIds();
+        ledger.record(WORKSPACE_ID, experimentId, entries.getFirst(), ExperimentItemLedger.Outcome.OK).block();
+        ledger.record(WORKSPACE_ID, sibling, entries.getLast(), ExperimentItemLedger.Outcome.OK).block();
+
+        publisher.discardCounters(WORKSPACE_ID, List.of(experimentId)).block();
+
+        assertThat(itemCounter(experimentId).isExists().block()).isFalse();
+        assertThat(redissonClient.getMap(ExperimentExecutionConfig.itemEntriesKey(WORKSPACE_ID, experimentId))
+                .isExists().block())
+                .isFalse();
+        assertThat(redissonClient.getMap(ExperimentExecutionConfig.itemEntriesKey(WORKSPACE_ID, sibling)).isExists()
+                .block())
+                .as("only the aborted run's outcomes go")
+                .isTrue();
     }
 
     // Both the consumer draining the last item and a cancel emptying the queue reach the finish, and
