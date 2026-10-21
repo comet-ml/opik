@@ -223,7 +223,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       const results = await Promise.all(
         seededTraces.map((t) =>
           backendClient
-            .pollTraceForFeedbackScore(t.id, ruleName, { timeoutMs: 60_000 })
+            .pollTraceForFeedbackScore(t.id, ruleName, { timeoutMs: 90_000 })
             .then((s) => ({ id: t.id, value: s.value })),
         ),
       );

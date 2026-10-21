@@ -46,6 +46,28 @@ class LlmModelCatalogTest {
                 effort: {accepted: true, levels: [low, medium, high], default: high}
             """);
 
+    private static final ModelParams OPENAI_PROFILE = params("""
+            temperature: {accepted: true, min: 0, max: 2, default: 0}
+            maxOutputTokens: {accepted: true, min: 1, max: 128000, default: 4000}
+            effort: {accepted: false}
+            routes:
+              responses_api:
+                temperature: {accepted: true, min: 0, max: 2, default: 0}
+                maxOutputTokens: {accepted: true, min: 16, max: 128000, default: 4000}
+                effort: {accepted: false}
+            """);
+
+    private static final ModelParams OPENAI_REASONING_PROFILE = params("""
+            temperature: {accepted: false}
+            maxOutputTokens: {accepted: true, min: 1, max: 128000, default: 4000}
+            effort: {accepted: false}
+            routes:
+              responses_api:
+                temperature: {accepted: false}
+                maxOutputTokens: {accepted: true, min: 16, max: 128000, default: 4000}
+                effort: {accepted: false}
+            """);
+
     private static final ModelParams CLAUDE_SONNET_4_6 = params("""
             temperature: {accepted: true, min: 0, max: 1, default: 0}
             effort: {accepted: true, levels: [low, medium, high, max], default: high}
@@ -85,16 +107,7 @@ class LlmModelCatalogTest {
 
         @Test
         void aModelWithoutARowTakesItsProviderProfile() {
-            assertThat(model(service(null), "openai", "gpt-4o").params()).isEqualTo(params("""
-                    temperature: {accepted: true, min: 0, max: 2, default: 0}
-                    maxOutputTokens: {accepted: true, min: 1, max: 128000, default: 4000}
-                    effort: {accepted: false}
-                    routes:
-                      responses_api:
-                        temperature: {accepted: true, min: 0, max: 2, default: 0}
-                        maxOutputTokens: {accepted: true, min: 16, max: 128000, default: 4000}
-                        effort: {accepted: false}
-                    """));
+            assertThat(model(service(null), "openai", "gpt-4o").params()).isEqualTo(OPENAI_PROFILE);
         }
 
         @Test
@@ -207,6 +220,27 @@ class LlmModelCatalogTest {
             assertThat(params.effort().levels()).containsExactly("low", "medium", "high", "max");
             assertThat(params.thinksByDefault()).isFalse();
             assertThat(model(withoutCurated, "anthropic", "claude-sonnet-4-6").params()).isEqualTo(params);
+        }
+
+        @Test
+        void curatedParamsFollowAReasoningFlagThatAReloadChanges(@TempDir Path tempDir) throws IOException {
+            var override = tempDir.resolve("override.yaml");
+            Files.writeString(override, """
+                    openai:
+                      - id: "gpt-4o"
+                        reasoning: false
+                    """);
+            var service = service(override.toString());
+            assertThat(service.curatedParamsOf("openai", "gpt-4o")).isEqualTo(OPENAI_PROFILE);
+
+            Files.writeString(override, """
+                    openai:
+                      - id: "gpt-4o"
+                        reasoning: true
+                    """);
+            service.reload();
+
+            assertThat(service.curatedParamsOf("openai", "gpt-4o")).isEqualTo(OPENAI_REASONING_PROFILE);
         }
 
         @Test
