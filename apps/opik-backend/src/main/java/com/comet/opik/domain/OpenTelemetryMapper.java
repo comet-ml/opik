@@ -552,10 +552,9 @@ public class OpenTelemetryMapper {
                 .filter(OpenTelemetryMapper::isValidProjectName);
     }
 
-    public static boolean exceedsProjectNameLength(List<KeyValue> attributes) {
+    public static Optional<String> extractTooLongProjectName(List<KeyValue> attributes) {
         return extractStringAttribute(attributes, GeneralMappingRules.OPIK_PROJECT_NAME_ATTR)
-                .filter(projectName -> !isValidProjectName(projectName))
-                .isPresent();
+                .filter(projectName -> !isValidProjectName(projectName));
     }
 
     private static boolean isValidProjectName(String projectName) {

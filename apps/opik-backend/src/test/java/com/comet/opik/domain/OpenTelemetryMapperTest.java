@@ -307,19 +307,19 @@ class OpenTelemetryMapperTest {
     }
 
     @ParameterizedTest(name = "opik.project_name as {0}")
-    @MethodSource("exceedsProjectNameLengthCases")
-    void exceedsProjectNameLength(String label, List<KeyValue> attributes, boolean expected) {
-        assertThat(OpenTelemetryMapper.exceedsProjectNameLength(attributes)).isEqualTo(expected);
+    @MethodSource("extractTooLongProjectNameCases")
+    void extractTooLongProjectName(String label, List<KeyValue> attributes, String expected) {
+        assertThat(OpenTelemetryMapper.extractTooLongProjectName(attributes)).isEqualTo(Optional.ofNullable(expected));
     }
 
-    static Stream<Arguments> exceedsProjectNameLengthCases() {
+    static Stream<Arguments> extractTooLongProjectNameCases() {
         return Stream.of(
-                Arguments.of("absent", List.of(), false),
-                Arguments.of("blank", List.of(projectNameAttribute("  ")), false),
-                Arguments.of("150 characters", List.of(projectNameAttribute("a".repeat(150))), false),
-                Arguments.of("151 characters", List.of(projectNameAttribute("a".repeat(151))), true),
+                Arguments.of("absent", List.of(), null),
+                Arguments.of("blank", List.of(projectNameAttribute("  ")), null),
+                Arguments.of("150 characters", List.of(projectNameAttribute("a".repeat(150))), null),
+                Arguments.of("151 characters", List.of(projectNameAttribute("a".repeat(151))), "a".repeat(151)),
                 Arguments.of("151 surrogate pair characters", List.of(projectNameAttribute("🙂".repeat(151))),
-                        true));
+                        "🙂".repeat(151)));
     }
 
     private static KeyValue projectNameAttribute(String value) {

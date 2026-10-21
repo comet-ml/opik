@@ -34,6 +34,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -53,6 +54,8 @@ public interface OpenTelemetryService {
 @Slf4j
 class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
+    private static final int MAX_LOGGED_SKIPPED_PROJECT_NAMES = 5;
+    private static final int MAX_LOGGED_SKIPPED_PROJECT_NAME_LENGTH = 50;
     private static final String OTEL_METRICS_SCOPE = "opik.otel";
     private static final Meter METER = GlobalOpenTelemetry.get().getMeter(OTEL_METRICS_SCOPE);
     private static final AttributeKey<String> OPERATION_KEY = AttributeKey.stringKey("operation");
@@ -103,18 +106,20 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 .orElse(null);
 
         var spansByProjectName = groupSpansByProjectName(traceRequest, fallbackProjectName);
-        log.info("Routing OpenTelemetry spans to projects '{}', fallback project '{}'",
-                spansByProjectName.entrySet().stream()
-                        .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().size())),
-                fallbackProjectName);
-
-        var spansWithSkippedProjectName = countSpansWithSkippedProjectName(traceRequest);
+        var skippedProjectNames = findSkippedProjectNames(traceRequest);
 
         return Mono.deferContextual(ctx -> {
-            if (spansWithSkippedProjectName > 0) {
-                log.warn("Ignored '{}' longer than '{}' characters on '{}' spans in workspaceId '{}'",
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            log.info("Routing OpenTelemetry spans to projects '{}', fallback project '{}' in workspaceId '{}'",
+                    spansByProjectName.entrySet().stream()
+                            .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().size())),
+                    fallbackProjectName, workspaceId);
+
+            if (skippedProjectNames.spanCount() > 0) {
+                log.warn("Ignored '{}' longer than '{}' characters on '{}' spans in workspaceId '{}', values '{}'",
                         GeneralMappingRules.OPIK_PROJECT_NAME_ATTR, OpenTelemetryMapper.MAX_PROJECT_NAME_LENGTH,
-                        spansWithSkippedProjectName, ctx.<String>get(RequestContext.WORKSPACE_ID));
+                        skippedProjectNames.spanCount(), workspaceId, skippedProjectNames.loggableNames());
             }
 
             return Flux.fromIterable(spansByProjectName.entrySet())
@@ -124,20 +129,35 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    private long countSpansWithSkippedProjectName(ExportTraceServiceRequest traceRequest) {
-        long count = 0;
+    private record SkippedProjectNames(long spanCount, Set<String> names) {
+
+        String loggableNames() {
+            var loggable = names.stream()
+                    .limit(MAX_LOGGED_SKIPPED_PROJECT_NAMES)
+                    .map(name -> StringUtils.abbreviate(name, MAX_LOGGED_SKIPPED_PROJECT_NAME_LENGTH))
+                    .collect(Collectors.joining(", "));
+            return names.size() > MAX_LOGGED_SKIPPED_PROJECT_NAMES ? loggable + ", ..." : loggable;
+        }
+    }
+
+    private SkippedProjectNames findSkippedProjectNames(ExportTraceServiceRequest traceRequest) {
+        long spanCount = 0;
+        var names = new LinkedHashSet<String>();
         for (var resourceSpans : traceRequest.getResourceSpansList()) {
-            var resourceExceeds = OpenTelemetryMapper
-                    .exceedsProjectNameLength(resourceSpans.getResource().getAttributesList());
+            var resourceName = OpenTelemetryMapper
+                    .extractTooLongProjectName(resourceSpans.getResource().getAttributesList());
             for (var scopeSpans : resourceSpans.getScopeSpansList()) {
                 for (var span : scopeSpans.getSpansList()) {
-                    if (resourceExceeds || OpenTelemetryMapper.exceedsProjectNameLength(span.getAttributesList())) {
-                        count++;
+                    var spanName = OpenTelemetryMapper.extractTooLongProjectName(span.getAttributesList());
+                    if (resourceName.isPresent() || spanName.isPresent()) {
+                        spanCount++;
+                        resourceName.ifPresent(names::add);
+                        spanName.ifPresent(names::add);
                     }
                 }
             }
         }
-        return count;
+        return new SkippedProjectNames(spanCount, names);
     }
 
     private Map<String, List<Span>> groupSpansByProjectName(ExportTraceServiceRequest traceRequest,
