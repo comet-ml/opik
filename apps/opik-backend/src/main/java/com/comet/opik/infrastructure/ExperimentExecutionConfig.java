@@ -99,7 +99,8 @@ public class ExperimentExecutionConfig implements StreamConfiguration {
 
     @JsonIgnore
     @AssertTrue(message = "publishLockWait must be below publishLockLease, so a launch already waiting cannot take the lock the moment a publish outlives its lease and publish beside it") public boolean isWaitBelowLease() {
-        return publishLockWait.toMilliseconds() < publishLockLease.toMilliseconds();
+        return publishLockWait == null || publishLockLease == null
+                || publishLockWait.toMilliseconds() < publishLockLease.toMilliseconds();
     }
 
     @Valid @JsonProperty
