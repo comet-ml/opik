@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { LLM_MESSAGE_ROLE } from "@/types/llm";
 import {
   LLMOpenAIConfigsType,
   PROVIDER_MODEL_TYPE,
@@ -95,4 +96,69 @@ describe("PLAYGROUND_STATE hydration", () => {
     expect(configs.temperature).toBe(0.4);
     expect(configs.maxCompletionTokens).toBe(4000);
   });
+});
+
+describe("PLAYGROUND_STATE hydration of a prompt loaded from the library", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  const EDITED_MESSAGES = [
+    { id: "m1", role: LLM_MESSAGE_ROLE.user, content: "Say hi EDITED" },
+  ];
+  const BLANK_MESSAGES = [
+    { id: "m1", role: LLM_MESSAGE_ROLE.user, content: "" },
+  ];
+
+  const storedPromptWith = (fields: Record<string, unknown>) => ({
+    name: "Prompt 1",
+    id: "p1",
+    model: "",
+    provider: "",
+    configs: {},
+    loadedChatPromptId: "greeter",
+    ...fields,
+  });
+
+  it.each([
+    {
+      stored: "is pinned to a version and has messages",
+      fields: { loadedChatPromptVersionId: "v1", messages: EDITED_MESSAGES },
+      applied: "v1",
+    },
+    {
+      stored: "follows the latest version",
+      fields: { messages: EDITED_MESSAGES },
+      applied: undefined,
+    },
+    {
+      stored: "is pinned to a version but has only a blank message",
+      fields: { loadedChatPromptVersionId: "v1", messages: BLANK_MESSAGES },
+      applied: undefined,
+    },
+    {
+      stored: "already records the version it applied",
+      fields: {
+        loadedChatPromptVersionId: "v2",
+        appliedChatPromptVersionId: "v1",
+        messages: EDITED_MESSAGES,
+      },
+      applied: "v1",
+    },
+    {
+      stored: "has no messages",
+      fields: { loadedChatPromptVersionId: "v1" },
+      applied: undefined,
+    },
+  ])(
+    "records the applied version only when it can be known: a prompt that $stored",
+    async ({ fields, applied }) => {
+      seed({ promptIds: ["p1"], promptMap: { p1: storedPromptWith(fields) } });
+
+      const prompt = (await loadPromptMap()).p1;
+
+      expect(prompt.appliedChatPromptVersionId).toBe(applied);
+      expect(prompt.messages).toEqual(fields.messages);
+    },
+  );
 });

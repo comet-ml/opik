@@ -16,6 +16,7 @@ import { buildExperimentName } from "@/lib/experiments";
 import { JsonObject } from "@/types/shared";
 import { Filters } from "@/types/filters";
 import { DATASET_TYPE } from "@/types/datasets";
+import isEmpty from "lodash/isEmpty";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import lodashSet from "lodash/set";
@@ -125,6 +126,31 @@ const getRunInputChanges = (
   }
 
   return changes;
+};
+
+// Prompts stored before appliedChatPromptVersionId existed show their pinned
+// version's messages, maybe edited, and without the marker the loader would
+// apply the template over them once. A prompt that follows the latest version
+// is left alone, since which version it applied is unknown.
+const markStoredPinnedChatPromptApplied = (
+  prompt: PlaygroundPromptType,
+): PlaygroundPromptType => {
+  if (
+    !prompt ||
+    typeof prompt !== "object" ||
+    !prompt.loadedChatPromptId ||
+    !prompt.loadedChatPromptVersionId ||
+    prompt.appliedChatPromptVersionId ||
+    !Array.isArray(prompt.messages) ||
+    !prompt.messages.some((message) => !isEmpty(message?.content))
+  ) {
+    return prompt;
+  }
+
+  return {
+    ...prompt,
+    appliedChatPromptVersionId: prompt.loadedChatPromptVersionId,
+  };
 };
 
 export type PlaygroundStore = {
@@ -536,7 +562,9 @@ const usePlaygroundStore = create<PlaygroundStore>()(
 
         return {
           ...state,
-          promptMap: mapValues(state.promptMap, restoreMissingConfigKeys),
+          promptMap: mapValues(state.promptMap, (prompt) =>
+            markStoredPinnedChatPromptApplied(restoreMissingConfigKeys(prompt)),
+          ),
         };
       },
       partialize: (state) => {
