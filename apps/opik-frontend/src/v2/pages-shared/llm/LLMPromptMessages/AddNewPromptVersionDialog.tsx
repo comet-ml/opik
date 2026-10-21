@@ -103,6 +103,8 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   const [description, setDescription] = useState("");
   const [name, setName] = useState(defaultName);
   const [changeDescription, setChangeDescription] = useState("");
+  // Not the mutations' isPending: that flips on a later tick, after a double-click's second click.
+  const [isSaving, setIsSaving] = useState(false);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -119,6 +121,10 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   );
 
   const isPending = needsFetch && isFetchPending;
+
+  useEffect(() => {
+    if (open) setIsSaving(false);
+  }, [open]);
 
   useEffect(() => {
     setPromptId(prompt?.id);
@@ -176,6 +182,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
       if (selectedPrompt) {
         const promptType = selectedPrompt?.latest_version?.type;
 
+        setIsSaving(true);
         newVersionMutate({
           name: selectedPrompt?.name,
           template,
@@ -191,6 +198,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
         setOpen(false);
       }
     } else {
+      setIsSaving(true);
       createMutate(
         {
           prompt: {
@@ -363,7 +371,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           </DialogClose>
           <Button
             type="submit"
-            disabled={!isValid}
+            disabled={!isValid || isSaving}
             onClick={handleClickEditPrompt}
           >
             Save to library
