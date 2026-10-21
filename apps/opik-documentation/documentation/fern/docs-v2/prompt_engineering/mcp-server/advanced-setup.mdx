@@ -10,16 +10,29 @@ title: Advanced setup
 everything else: writing the config yourself, checking what each client points
 at, and the difference between the hosted and local server.
 
+## Which setup do I need?
+
+Start from where your Opik runs:
+
+| Your Opik | Server to use | What you need |
+|---|---|---|
+| Opik Cloud (`www.comet.com`) | [Hosted](#hosted-server), or [local](#local-server) | Browser sign-in for the hosted server; an API key and workspace for the local one |
+| A dedicated or self-hosted Comet deployment, such as `https://<company>.comet-hosted.com` | [Local](#self-hosted-and-dedicated-deployments) | An API key, your workspace, and the address you open Comet at |
+| Open-source Opik, such as `http://localhost:5173` | [Local](#self-hosted-and-dedicated-deployments) | Your Opik URL; no API key |
+
+The hosted server does not take API keys: there are no headers to add to its URL.
+If all you have is an API key, use the local server.
+
 ## Check what's configured
 
 Each AI client keeps its own copy of the MCP configuration, and it isn't updated
 when your Opik configuration changes. To see what every detected client points at:
 
-```bash
+```bash wordWrap
 uvx opik mcp status
 ```
 
-```text
+```text wordWrap
   Claude Code
     Config        ~/.claude.json
     Connection    Hosted (HTTP + OAuth)
@@ -62,7 +75,7 @@ confidently. Run `uvx opik configure`, pick a workspace, then re-run
 
 On Opik Cloud, any MCP client can take the hosted server in one line:
 
-```bash
+```bash wordWrap
 npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp
 ```
 
@@ -75,7 +88,7 @@ For the skill pack on a client the CLI doesn't cover, the community
 [`skills`](https://github.com/vercel-labs/skills) CLI knows the skill directories
 for 76+ agents (needs Node.js):
 
-```bash
+```bash wordWrap
 npx skills add comet-ml/opik-skills
 ```
 
@@ -83,26 +96,27 @@ npx skills add comet-ml/opik-skills
 
 Every client below asks for the same URL:
 
-```text title="Remote MCP server URL"
+```text title="Remote MCP server URL" wordWrap
 https://www.comet.com/opik/api/v1/mcp
 ```
 
-On a self-hosted deployment this is your own Opik API base plus `/v1/mcp`, and
-the deployment has to run the MCP OAuth authorization server — it is off by
-default. See [MCP OAuth](/self-host/configure/mcp-oauth) for the flags. Where it
-is off, the endpoint has no sign-in routes at all, so use the local server
-instead.
+This URL is Opik Cloud's. Dedicated and self-hosted Comet deployments don't run
+the hosted server by default, so the same path on your own address, such as
+`https://<company>.comet-hosted.com/opik/api/v1/mcp`, answers `404 Not Found`.
+Use the [local server](#self-hosted-and-dedicated-deployments) there. Turning
+on [MCP OAuth](/self-host/configure/mcp-oauth) adds the sign-in routes, not the
+MCP server itself.
 
 <Tabs>
     <Tab title="Claude Code">
 
-    ```bash
+    ```bash wordWrap
     claude mcp add --transport http opik-mcp https://www.comet.com/opik/api/v1/mcp
     ```
 
     Or edit `~/.claude.json`:
 
-    ```json
+    ```json wordWrap
     {
       "mcpServers": {
         "opik-mcp": {
@@ -115,7 +129,7 @@ instead.
 
     Restart Claude Code, complete the browser sign-in, then ask your assistant:
 
-    ```text title="Check it worked"
+    ```text title="Check it worked" wordWrap
     List my Opik projects.
     ```
 
@@ -124,7 +138,7 @@ instead.
 
     Edit `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
 
-    ```json
+    ```json wordWrap
     {
       "mcpServers": {
         "opik-mcp": {
@@ -143,7 +157,7 @@ instead.
 
     Create or open `.vscode/mcp.json` in your workspace:
 
-    ```json
+    ```json wordWrap
     {
       "servers": {
         "opik-mcp": {
@@ -159,7 +173,7 @@ instead.
     </Tab>
     <Tab title="Codex">
 
-    ```bash
+    ```bash wordWrap
     codex mcp add opik-mcp --url https://www.comet.com/opik/api/v1/mcp
     ```
 
@@ -203,7 +217,7 @@ connect to a named cloud workspace.
 <Tabs>
     <Tab title="Claude Code">
 
-    ```bash
+    ```bash wordWrap
     claude mcp add --transport stdio opik-mcp \
       --env OPIK_API_KEY=<your-key> \
       --env OPIK_WORKSPACE=<your-workspace> \
@@ -212,7 +226,7 @@ connect to a named cloud workspace.
 
     Or edit `~/.claude.json`:
 
-    ```json
+    ```json wordWrap
     {
       "mcpServers": {
         "opik-mcp": {
@@ -235,7 +249,7 @@ connect to a named cloud workspace.
 
     Edit `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
 
-    ```json
+    ```json wordWrap
     {
       "mcpServers": {
         "opik-mcp": {
@@ -259,7 +273,7 @@ connect to a named cloud workspace.
     Create or open `.vscode/mcp.json`, or run the
     **MCP: Open User Configuration** command to add it globally:
 
-    ```json
+    ```json wordWrap
     {
       "servers": {
         "opik-mcp": {
@@ -281,7 +295,7 @@ connect to a named cloud workspace.
     </Tab>
     <Tab title="Codex">
 
-    ```bash
+    ```bash wordWrap
     codex mcp add opik-mcp \
       --env OPIK_API_KEY=<your-key> \
       --env OPIK_WORKSPACE=<your-workspace> \
@@ -290,7 +304,7 @@ connect to a named cloud workspace.
 
     Or add an `[mcp_servers.opik-mcp]` table to `~/.codex/config.toml`:
 
-    ```toml
+    ```toml wordWrap
     [mcp_servers.opik-mcp]
     command = "uvx"
     args = ["opik-mcp"]
@@ -312,7 +326,7 @@ connect to a named cloud workspace.
     `$OPENCODE_CONFIG_DIR`). opencode uses its own vocabulary: `local` rather than
     `stdio`, one `command` list, and `environment` rather than `env`:
 
-    ```json
+    ```json wordWrap
     {
       "mcp": {
         "opik-mcp": {
@@ -331,17 +345,102 @@ connect to a named cloud workspace.
     </Tab>
 </Tabs>
 
-<Tip>
-**Self-hosted Opik.** Add `COMET_URL_OVERRIDE` to the `env` block, and `OPIK_URL`
-if Opik lives at a non-default path.
-</Tip>
+### Self-hosted and dedicated deployments
+
+On a dedicated or self-hosted Comet deployment, use the local server and tell it
+where your Comet is. You need three values:
+
+| Variable | Value | Where to find it |
+|---|---|---|
+| `COMET_URL_OVERRIDE` | The address you open Comet at, with no `/opik` and no trailing slash, such as `https://<company>.comet-hosted.com` | Your browser's address bar. The server adds `/opik/api` itself |
+| `OPIK_API_KEY` | Your API key | Account settings, or the user menu at the top right of Comet |
+| `OPIK_WORKSPACE` | Your workspace name | The address bar, right after `/opik/` |
+
+<Tabs>
+    <Tab title="Claude Code">
+
+    ```bash
+    claude mcp add --transport stdio opik-mcp \
+      --env OPIK_API_KEY=<your-key> \
+      --env OPIK_WORKSPACE=<your-workspace> \
+      --env COMET_URL_OVERRIDE=https://<company>.comet-hosted.com \
+      -- uvx opik-mcp
+    ```
+
+    Or edit `~/.claude.json`, or `.mcp.json` in your project:
+
+    ```json
+    {
+      "mcpServers": {
+        "opik-mcp": {
+          "type": "stdio",
+          "command": "uvx",
+          "args": ["opik-mcp"],
+          "env": {
+            "OPIK_API_KEY": "<your-key>",
+            "OPIK_WORKSPACE": "<your-workspace>",
+            "COMET_URL_OVERRIDE": "https://<company>.comet-hosted.com"
+          }
+        }
+      }
+    }
+    ```
+
+    Restart Claude Code and verify with `/mcp`.
+
+    </Tab>
+    <Tab title="Cursor">
+
+    Edit `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
+
+    ```json
+    {
+      "mcpServers": {
+        "opik-mcp": {
+          "type": "stdio",
+          "command": "uvx",
+          "args": ["opik-mcp"],
+          "env": {
+            "OPIK_API_KEY": "<your-key>",
+            "OPIK_WORKSPACE": "<your-workspace>",
+            "COMET_URL_OVERRIDE": "https://<company>.comet-hosted.com"
+          }
+        }
+      }
+    }
+    ```
+
+    Reload Cursor; the green dot next to `opik-mcp` confirms the connection.
+
+    </Tab>
+    <Tab title="Other clients">
+
+    Take the client's block from [Local server](#local-server) and add
+    `COMET_URL_OVERRIDE` to its `env` block (`environment` in opencode, or
+    `--env` on the `codex mcp add` command line).
+
+    </Tab>
+</Tabs>
+
+Or let the CLI write it. Set `OPIK_API_KEY` in your environment first; it is not
+read from the command line:
+
+```bash
+uvx opik mcp configure --ai-client cursor --deployment self-hosted --local-server \
+  --url https://<company>.comet-hosted.com --workspace <your-workspace>
+```
+
+**Open-source Opik.** Set `OPIK_URL` to the full Opik REST base instead, such as
+`http://localhost:5173/api`, and leave out `OPIK_API_KEY` and `OPIK_WORKSPACE`.
+Use `OPIK_URL` as well on a Comet deployment where Opik lives at a non-default
+path.
 
 ## From a script or CI
 
 Setup writes into your AI client's own configuration, so a run with no terminal
 writes nothing unless you name the client:
 
-```bash
+```bash wordWrap
 uvx opik mcp configure --ai-client cursor --skills
 ```
 
@@ -361,7 +460,7 @@ configuration aside for that run. `cloud` needs no API key: the client signs in
 through the browser. `self-hosted` reads the key from `OPIK_API_KEY` only, and
 the workspace from `--workspace` or `OPIK_WORKSPACE`.
 
-```bash
+```bash wordWrap
 uvx opik mcp configure --ai-client cursor --deployment cloud
 uvx opik mcp configure --ai-client cursor --deployment local --url http://opik.internal:5173
 uvx opik mcp configure --ai-client cursor --deployment self-hosted --url https://comet.example.com --workspace <workspace>

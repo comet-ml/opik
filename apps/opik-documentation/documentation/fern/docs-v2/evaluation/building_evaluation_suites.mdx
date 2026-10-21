@@ -36,7 +36,7 @@ In the Opik dashboard, navigate to the Test Suites section to create and manage 
 Define the quality bars you care about as suite-level assertions:
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   import opik
 
   opik_client = opik.Opik()
@@ -53,7 +53,7 @@ Define the quality bars you care about as suite-level assertions:
   )
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   import { Opik, TestSuite } from "opik";
 
   const client = new Opik();
@@ -76,7 +76,7 @@ Define the quality bars you care about as suite-level assertions:
 Add individual items or batches. Items can include item-level assertions that are checked in addition to the suite-level assertions:
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   suite.insert([
       {
           "data": {
@@ -98,7 +98,7 @@ Add individual items or batches. Items can include item-level assertions that ar
   ])
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   await suite.insert([
     {
       data: {
@@ -126,7 +126,7 @@ Add individual items or batches. Items can include item-level assertions that ar
 The task function receives each item's `data` and must return an object with `input` and `output` keys:
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   from openai import OpenAI
   from opik.integrations.openai import track_openai
 
@@ -154,7 +154,7 @@ The task function receives each item's `data` and must return an object with `in
   print(f"v2 pass rate: {result_v2.pass_rate:.0%}")
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   import { runTests } from "opik";
   import OpenAI from "openai";
 
@@ -201,7 +201,7 @@ Each run creates a separate experiment in Opik, making it easy to compare result
 ### Update assertions and execution policy
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   suite.update_test_settings(
       global_assertions=[
           "The response is grounded in the provided context",
@@ -211,7 +211,7 @@ Each run creates a separate experiment in Opik, making it easy to compare result
   )
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   await suite.updateTestSettings({
     globalAssertions: [
       "The response is grounded in the provided context",
@@ -225,7 +225,7 @@ Each run creates a separate experiment in Opik, making it easy to compare result
 ### Inspect suite contents
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   items = suite.get_items()
   assertions = suite.get_global_assertions()
   policy = suite.get_global_execution_policy()
@@ -235,7 +235,7 @@ Each run creates a separate experiment in Opik, making it easy to compare result
   print(f"Policy: {policy}")
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   const items = await suite.getItems();
   const assertions = await suite.getGlobalAssertions();
   const policy = await suite.getGlobalExecutionPolicy();
@@ -249,23 +249,82 @@ Each run creates a separate experiment in Opik, making it easy to compare result
 ### Delete test items
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   items = suite.get_items()
   suite.delete([items[0]["id"]])
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   const items = await suite.getItems();
   await suite.delete([items[0].id]);
   ```
 </CodeBlocks>
 
-## Execution policies
+## How assertions are judged
 
-Execution policies control how many times each item is run and how many must pass. This is useful for handling non-deterministic LLM outputs.
+An LLM judge reads each run's `input` and `output` and decides whether every assertion holds. Which
+model acts as the judge depends on where you run the suite.
+
+**From the SDK** (`opik.run_tests` / `runTests`), the judge runs in your own process with your own
+provider credentials:
+
+- The default judge model is `gpt-5-nano`, so `OPENAI_API_KEY` must be set.
+- Pass `model` to use another model.
+  - **Python:** any [LiteLLM model name](https://docs.litellm.ai/docs/providers) works, for example
+    `claude-haiku-4-5`, `bedrock/...` or `azure/...`.
+  - **TypeScript:** OpenAI (`gpt-*`, `o1*`, `o3*`, `chatgpt-*`, with `OPENAI_API_KEY`), Anthropic
+    (`claude-*`, with `ANTHROPIC_API_KEY`) or Google Gemini (`gemini-*`, `gemma-*`, with
+    `GOOGLE_API_KEY`) model IDs.
+- To check tool calls and intermediate steps, the judge can open the trace's spans with tools
+  (agentic judging). Under the default `scoring_tool_strategy="auto"`, this happens only for models
+  Opik has profiled for it, such as `gpt-5-mini`, `gpt-4o`, `claude-haiku-4-5` and the Claude Opus
+  models. The default `gpt-5-nano` judges in a single call from `input` and `output`. To judge
+  assertions about intermediate steps, pass one of those models, or set
+  `scoring_tool_strategy="always"`.
+- In Python, the profiled models are matched by their plain names. A provider-prefixed name such as
+  `anthropic/claude-haiku-4-5`, `bedrock/...` or `azure/...` judges in a single call under `"auto"`,
+  so pass `scoring_tool_strategy="always"` with it when assertions need the intermediate steps.
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
+  result = opik.run_tests(
+      test_suite=suite,
+      task=make_task(PROMPT_V2),
+      model="claude-haiku-4-5",
+  )
+  ```
+
+  ```ts title="Typescript" wordWrap
+  const result = await runTests({
+    testSuite: suite,
+    task: makeTask(PROMPT_V2),
+    model: "claude-haiku-4-5",
+  });
+  ```
+</CodeBlocks>
+
+**From the Prompt Playground**, Opik runs the judge for you and picks the model from the AI providers
+configured in your workspace, using the first one found in this order:
+
+| Configured provider | Judge model |
+|---|---|
+| Anthropic | `claude-haiku-4-5` |
+| OpenAI | `gpt-4o-mini` |
+| Gemini | `gemini-2.0-flash` |
+| Vertex AI | `gemini-2.5-flash` |
+
+If none of these providers is configured, the judge uses the same model as the prompt you are
+testing. In the Playground the judge always inspects the trace with tools, so the model must support
+tool calling. With providers that do not (for example a custom OpenAI-compatible endpoint or
+Ollama), the judge falls back to a single call, and assertions about intermediate steps cannot be
+checked.
+
+## Execution policies
+
+Execution policies control how many times each item is run and how many must pass. This is useful for handling non-deterministic LLM outputs. By default, each item runs once and must pass once (`runs_per_item: 1`, `pass_threshold: 1`); the examples on this page raise both.
+
+<CodeBlocks>
+  ```python title="Python" wordWrap
   suite = opik_client.get_or_create_test_suite(
       name="flaky-output-tests",
       global_assertions=["Response follows the expected format"],
@@ -273,7 +332,7 @@ Execution policies control how many times each item is run and how many must pas
   )
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   const suite = await TestSuite.getOrCreate(client, {
     name: "flaky-output-tests",
     globalAssertions: ["Response follows the expected format"],
@@ -290,7 +349,7 @@ Execution policies control how many times each item is run and how many must pas
 You can also override the policy for individual items:
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   suite.insert([{
       "data": {"question": "Is my account compromised?", "context": "..."},
       "assertions": ["Response treats the concern with urgency"],
@@ -298,7 +357,7 @@ You can also override the policy for individual items:
   }])
   ```
 
-  ```ts title="Typescript"
+  ```ts title="Typescript" wordWrap
   await suite.insert([{
     data: { question: "Is my account compromised?", context: "..." },
     assertions: ["Response treats the concern with urgency"],

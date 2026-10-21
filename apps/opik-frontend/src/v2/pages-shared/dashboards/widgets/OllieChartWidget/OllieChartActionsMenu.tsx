@@ -14,8 +14,10 @@ import {
   selectDeleteWidget,
   selectDuplicateWidget,
   selectOnAddEditWidgetCallback,
+  selectRuntimeConfig,
 } from "@/store/DashboardStore";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 type OllieChartActionsMenuProps = {
   sectionId: string;
@@ -45,6 +47,16 @@ const OllieChartActionsMenu: React.FunctionComponent<
   const onAddEditWidgetCallback = useDashboardStore(
     selectOnAddEditWidgetCallback,
   );
+  const runtimeConfig = useDashboardStore(selectRuntimeConfig);
+
+  const handleRemove = () => {
+    trackEvent(OpikEvent.DASHBOARD_OLLIE_WIDGET_REMOVED, {
+      dashboard_id: runtimeConfig.dashboardId,
+      dashboard_scope: runtimeConfig.dashboardScope,
+      widget_id: widgetId,
+    });
+    deleteWidget(sectionId, widgetId);
+  };
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
@@ -119,7 +131,7 @@ const OllieChartActionsMenu: React.FunctionComponent<
       <ConfirmDialog
         open={deleteDialogOpen}
         setOpen={handleDeleteDialogOpenChange}
-        onConfirm={() => deleteWidget(sectionId, widgetId)}
+        onConfirm={handleRemove}
         title="Remove widget?"
         description="Are you sure you want to remove this widget? This action cannot be undone."
         confirmText={`Remove ${widgetTitle}`}

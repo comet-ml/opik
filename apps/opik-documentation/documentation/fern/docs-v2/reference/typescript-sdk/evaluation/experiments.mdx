@@ -28,7 +28,7 @@ The TypeScript SDK provides several methods to create and manage experiments thr
 
 ### Getting Experiments
 
-```typescript
+```typescript wordWrap
 // Get all experiments with a specific name
 const experiments = await opik.getExperimentsByName("my-experiment");
 
@@ -41,7 +41,7 @@ const datasetExperiments = await opik.getDatasetExperiments("my-dataset", 100); 
 
 ### Updating an Experiment
 
-```typescript
+```typescript wordWrap
 // Update experiment name
 await opik.updateExperiment("experiment-id", {
   name: "Updated Experiment Name"
@@ -68,7 +68,7 @@ await opik.updateExperiment("experiment-id", {
 
 ### Deleting an Experiment
 
-```typescript
+```typescript wordWrap
 // Delete an experiment by ID
 await opik.deleteExperiment("experiment-id");
 ```
@@ -79,7 +79,7 @@ Experiment items are the core components that link dataset items with traces. Th
 
 ### Creating Experiment Items
 
-```typescript
+```typescript wordWrap
 import { ExperimentItemReferences } from "opik";
 
 // Get an existing experiment
@@ -103,7 +103,7 @@ await experiment.insert(experimentItems);
 
 ### Retrieving Experiment Items
 
-```typescript
+```typescript wordWrap
 // Get all items in an experiment
 const allItems = await experiment.getItems();
 
@@ -118,7 +118,7 @@ const truncatedItems = await experiment.getItems({ truncate: true });
 
 Get the URL to view the experiment in the Opik web interface:
 
-```typescript
+```typescript wordWrap
 const url = await experiment.getUrl();
 console.log(`View experiment at: ${url}`);
 ```
@@ -129,7 +129,7 @@ console.log(`View experiment at: ${url}`);
 
 Represents an experiment in Opik that connects traces with dataset items:
 
-```typescript
+```typescript wordWrap
 class Experiment {
   readonly id: string; // Unique identifier of the experiment
   readonly name?: string; // Optional name of the experiment
@@ -153,7 +153,7 @@ class Experiment {
 
 References connecting a dataset item to a trace:
 
-```typescript
+```typescript wordWrap
 interface ExperimentItemReferences {
   readonly datasetItemId: string; // ID of the dataset item
   readonly traceId: string; // ID of the trace
@@ -164,7 +164,7 @@ interface ExperimentItemReferences {
 
 Content of an experiment item including evaluation data and feedback scores:
 
-```typescript
+```typescript wordWrap
 interface ExperimentItemContent {
   readonly id?: string; // Experiment item ID
   readonly datasetItemId: string; // Dataset item ID
@@ -179,7 +179,7 @@ interface ExperimentItemContent {
 
 Represents a feedback score for an experiment item:
 
-```typescript
+```typescript wordWrap
 interface FeedbackScore {
   categoryName: string; // Category of the feedback
   name: string; // Name of the feedback metric

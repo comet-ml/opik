@@ -64,7 +64,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 9.15.5
+          version: 10.34.5
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

@@ -50,7 +50,7 @@ public class EnvironmentsResource {
     private final @NonNull Provider<RequestContext> requestContext;
 
     @GET
-    @Operation(operationId = "findEnvironments", summary = "Find environments", description = "Find environments for the workspace. Capped at the workspace limit (default 20).", responses = {
+    @Operation(operationId = "findEnvironments", summary = "Find environments", description = "Find environments for the workspace. Capped at the workspace limit (default 100).", responses = {
             @ApiResponse(responseCode = "200", description = "Environments page", content = @Content(schema = @Schema(implementation = Environment.EnvironmentPage.class)))
     })
     @JsonView({Environment.View.Public.class})

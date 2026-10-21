@@ -16,6 +16,7 @@ import { buildExperimentName } from "@/lib/experiments";
 import { JsonObject } from "@/types/shared";
 import { Filters } from "@/types/filters";
 import { DATASET_TYPE } from "@/types/datasets";
+import isEmpty from "lodash/isEmpty";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import lodashSet from "lodash/set";
@@ -127,6 +128,31 @@ const getRunInputChanges = (
   return changes;
 };
 
+// Prompts stored before appliedChatPromptVersionId existed show their pinned
+// version's messages, maybe edited, and without the marker the loader would
+// apply the template over them once. A prompt that follows the latest version
+// is left alone, since which version it applied is unknown.
+const markStoredPinnedChatPromptApplied = (
+  prompt: PlaygroundPromptType,
+): PlaygroundPromptType => {
+  if (
+    !prompt ||
+    typeof prompt !== "object" ||
+    !prompt.loadedChatPromptId ||
+    !prompt.loadedChatPromptVersionId ||
+    prompt.appliedChatPromptVersionId ||
+    !Array.isArray(prompt.messages) ||
+    !prompt.messages.some((message) => !isEmpty(message?.content))
+  ) {
+    return prompt;
+  }
+
+  return {
+    ...prompt,
+    appliedChatPromptVersionId: prompt.loadedChatPromptVersionId,
+  };
+};
+
 export type PlaygroundStore = {
   lastActiveProjectId: string | null;
   promptIds: string[];
@@ -150,6 +176,7 @@ export type PlaygroundStore = {
   datasetType: DATASET_TYPE | null;
   experimentByPromptId: Record<string, string>;
   scoresByDatasetId: Record<string, string[] | null>;
+  appliedChatPromptVersionsBackfilled: boolean;
 
   setPromptMap: (
     promptIds: string[],
@@ -222,6 +249,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       datasetType: null,
       experimentByPromptId: {},
       scoresByDatasetId: {},
+      appliedChatPromptVersionsBackfilled: true,
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -525,18 +553,33 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       // number — so a migrate hook would skip exactly the states that need repairing. Cheap and
       // idempotent, since restoreMissingConfigKeys returns the prompt untouched when it is complete.
       merge: (persisted, current) => {
+        const stored = persisted as Partial<PlaygroundStore> | undefined;
         const state = {
           ...current,
-          ...(persisted as Partial<PlaygroundStore>),
+          ...stored,
         };
 
         if (!state.promptMap) {
           return state;
         }
 
+        // Only state written before appliedChatPromptVersionId existed is backfilled: current
+        // state can hold a version picked a moment ago whose messages have not loaded yet, and
+        // marking it would keep the old messages under the new version. A stored flag rather
+        // than persist `version`, because an older build that finds a newer version drops the
+        // whole stored state.
+        const backfillAppliedVersions =
+          !stored?.appliedChatPromptVersionsBackfilled;
+
         return {
           ...state,
-          promptMap: mapValues(state.promptMap, restoreMissingConfigKeys),
+          appliedChatPromptVersionsBackfilled: true,
+          promptMap: mapValues(state.promptMap, (prompt) => {
+            const restored = restoreMissingConfigKeys(prompt);
+            return backfillAppliedVersions
+              ? markStoredPinnedChatPromptApplied(restored)
+              : restored;
+          }),
         };
       },
       partialize: (state) => {

@@ -1,7 +1,9 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.error.InvalidUUIDException.Reason;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -15,6 +17,8 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.OpenTelemetryResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.spans.SpanAssertions;
+import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanType;
@@ -31,6 +35,7 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
 import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
+import io.opentelemetry.proto.resource.v1.Resource;
 import io.opentelemetry.proto.trace.v1.ResourceSpans;
 import io.opentelemetry.proto.trace.v1.ScopeSpans;
 import io.opentelemetry.proto.trace.v1.Span;
@@ -1266,6 +1271,209 @@ class OpenTelemetryResourceTest {
             assertThat(existingTraceSpans.size()).isEqualTo(1);
             assertThat(existingTraceSpans.content().getFirst().name()).isEqualTo("override span");
             assertThat(existingTraceSpans.content().getFirst().traceId()).isEqualTo(existingTraceId);
+        }
+
+        @Test
+        @DisplayName("opik.project_name span and resource attributes route each trace to its project, invalid names use the header project")
+        void opikProjectNameRoutesTracesToProjects() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var headerProject = "header-project-" + UUID.randomUUID();
+            var resourceProject = "resource-project-" + UUID.randomUUID();
+            var spanProject = "span-project-" + UUID.randomUUID();
+
+            var resourceRouted = rootAndChild();
+            var spanRouted = rootAndChild(projectNameAttribute(spanProject));
+            var headerRouted = rootAndChild();
+            var tooLongNameRouted = rootAndChild();
+            var tooLongSpanNameRouted = rootAndChild(projectNameAttribute("a".repeat(151)));
+            var tooLongSpanAndResourceNameRouted = rootAndChild(projectNameAttribute("b".repeat(151)));
+
+            var request = ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .setResource(Resource.newBuilder()
+                                    .addAttributes(projectNameAttribute(resourceProject)))
+                            .addScopeSpans(ScopeSpans.newBuilder()
+                                    .addAllSpans(resourceRouted)
+                                    .addAllSpans(spanRouted)
+                                    .addAllSpans(tooLongSpanNameRouted)))
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .addScopeSpans(ScopeSpans.newBuilder().addAllSpans(headerRouted)))
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .setResource(Resource.newBuilder()
+                                    .addAttributes(projectNameAttribute("a".repeat(151))))
+                            .addScopeSpans(ScopeSpans.newBuilder()
+                                    .addAllSpans(tooLongNameRouted)
+                                    .addAllSpans(tooLongSpanAndResourceNameRouted)))
+                    .build();
+
+            sendBatch(Entity.entity(request.toByteArray(), "application/x-protobuf"), "application/x-protobuf",
+                    headerProject, workspaceName, okApikey, HttpStatus.SC_OK, null);
+
+            assertTraceStoredInProject(resourceRouted, resourceProject, workspaceName);
+            assertTraceStoredInProject(spanRouted, spanProject, workspaceName);
+            assertTraceStoredInProject(headerRouted, headerProject, workspaceName);
+            assertTraceStoredInProject(tooLongNameRouted, headerProject, workspaceName);
+            assertTraceStoredInProject(tooLongSpanNameRouted, resourceProject, workspaceName);
+            assertTraceStoredInProject(tooLongSpanAndResourceNameRouted, headerProject, workspaceName);
+        }
+
+        @Test
+        @DisplayName("opik.project_name that differs only by accents from an existing project uses that project")
+        void opikProjectNameMatchesExistingProjectIgnoringAccents() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var suffix = UUID.randomUUID().toString();
+            var existingProject = "cafe-" + suffix;
+            var existingProjectRouted = rootAndChild();
+            var accentRouted = rootAndChild(projectNameAttribute("café-" + suffix));
+
+            sendBatch(Entity.entity(exportRequest(existingProjectRouted).toByteArray(), "application/x-protobuf"),
+                    "application/x-protobuf", existingProject, workspaceName, okApikey, HttpStatus.SC_OK, null);
+            sendBatch(Entity.entity(exportRequest(accentRouted).toByteArray(), "application/x-protobuf"),
+                    "application/x-protobuf", "header-project-" + suffix, workspaceName, okApikey, HttpStatus.SC_OK,
+                    null);
+
+            assertTraceStoredInProject(existingProjectRouted, existingProject, workspaceName);
+            assertTraceStoredInProject(accentRouted, existingProject, workspaceName);
+        }
+
+        @Test
+        @DisplayName("opik.project_name accent variants on the spans of one trace store the trace in one project")
+        void opikProjectNameAccentVariantsInOneTraceShareOneProject() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var suffix = UUID.randomUUID().toString();
+            var spans = rootAndChild();
+            var trace = List.of(
+                    spans.getFirst().toBuilder().addAttributes(projectNameAttribute("cafe-" + suffix)).build(),
+                    spans.getLast().toBuilder().addAttributes(projectNameAttribute("café-" + suffix)).build());
+
+            sendBatch(Entity.entity(exportRequest(trace).toByteArray(), "application/x-protobuf"),
+                    "application/x-protobuf", "header-project-" + suffix, workspaceName, okApikey, HttpStatus.SC_OK,
+                    null);
+
+            assertTraceStoredInProject(trace, "cafe-" + suffix, workspaceName);
+        }
+
+        @Test
+        @DisplayName("opik.project_name on the root span only: the child falls back to the header project with its own trace id")
+        void opikProjectNameOnRootSpanOnlySplitsRootAndChildAcrossProjects() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var headerProject = "header-project-" + UUID.randomUUID();
+            var rootProject = "root-project-" + UUID.randomUUID();
+
+            var spans = rootAndChild();
+            var root = spans.getFirst().toBuilder().addAttributes(projectNameAttribute(rootProject)).build();
+            var child = spans.getLast();
+
+            sendBatch(Entity.entity(exportRequest(List.of(root, child)).toByteArray(), "application/x-protobuf"),
+                    "application/x-protobuf", headerProject, workspaceName, okApikey, HttpStatus.SC_OK, null);
+
+            assertTraceStoredInProject(List.of(root), rootProject, workspaceName);
+
+            var childTraceId = opikTraceIdOf(child);
+            assertThat(childTraceId).isNotEqualTo(opikTraceIdOf(root));
+            assertSpansStoredInProject(List.of(child), childTraceId, headerProject, workspaceName);
+
+            assertThat(traceResourceClient.getTracesByPage(okApikey, workspaceName, rootProject, List.of(),
+                    List.of(), 1, 10).content()).extracting(Trace::id).containsExactly(opikTraceIdOf(root));
+            assertThat(traceResourceClient.getTracesByPage(okApikey, workspaceName, headerProject, List.of(),
+                    List.of(), 1, 10).content()).isEmpty();
+        }
+
+        private ExportTraceServiceRequest exportRequest(List<Span> spans) {
+            return ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .addScopeSpans(ScopeSpans.newBuilder().addAllSpans(spans)))
+                    .build();
+        }
+
+        private KeyValue projectNameAttribute(String projectName) {
+            return KeyValue.newBuilder()
+                    .setKey("opik.project_name")
+                    .setValue(AnyValue.newBuilder().setStringValue(projectName))
+                    .build();
+        }
+
+        private List<Span> rootAndChild(KeyValue... attributes) {
+            var otelTraceId = ByteString.copyFrom(UUID.randomUUID().toString().getBytes());
+            var root = Span.newBuilder()
+                    .setName("root span")
+                    .setTraceId(otelTraceId)
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAllAttributes(List.of(attributes))
+                    .build();
+            var child = Span.newBuilder()
+                    .setName("child span")
+                    .setTraceId(otelTraceId)
+                    .setParentSpanId(root.getSpanId())
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 500) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAllAttributes(List.of(attributes))
+                    .build();
+            return List.of(root, child);
+        }
+
+        private UUID opikTraceIdOf(Span otelSpan) {
+            return OpenTelemetryMapper.convertOtelIdToUUIDv7(otelSpan.getTraceId().toByteArray(),
+                    Duration.ofNanos(otelSpan.getStartTimeUnixNano()).toMillis());
+        }
+
+        private com.comet.opik.api.Span.SpanPage assertSpansStoredInProject(List<Span> otelSpans, UUID opikTraceId,
+                String projectName, String workspaceName) {
+            var expectedSpans = otelSpans.stream()
+                    .map(otelSpan -> OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, null).toBuilder()
+                            .environment("")
+                            .build())
+                    .toList();
+
+            var spans = spanResourceClient.getByTraceIdAndProject(opikTraceId, projectName, workspaceName,
+                    okApikey);
+            assertThat(spans.content())
+                    .usingRecursiveComparison()
+                    .ignoringFields(SpanAssertions.IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedSpans);
+            assertThat(spans.content()).allSatisfy(span -> assertThat(
+                    span.metadata() == null || !span.metadata().has("opik.project_name")).isTrue());
+            return spans;
+        }
+
+        private void assertTraceStoredInProject(List<Span> otelSpans, String projectName, String workspaceName) {
+            var opikTraceId = opikTraceIdOf(otelSpans.getFirst());
+            var spans = assertSpansStoredInProject(otelSpans, opikTraceId, projectName, workspaceName);
+
+            var expectedRoot = OpenTelemetryMapper.toOpikSpan(otelSpans.getFirst(), opikTraceId, null);
+            var expectedTrace = Trace.builder()
+                    .id(opikTraceId)
+                    .name(expectedRoot.name())
+                    .startTime(expectedRoot.startTime())
+                    .endTime(expectedRoot.endTime())
+                    .input(expectedRoot.input())
+                    .output(expectedRoot.output())
+                    .metadata(expectedRoot.metadata())
+                    .tags(expectedRoot.tags())
+                    .errorInfo(expectedRoot.errorInfo())
+                    .source(Source.SDK)
+                    .environment("")
+                    .visibilityMode(VisibilityMode.DEFAULT)
+                    .build();
+
+            var trace = traceResourceClient.getById(opikTraceId, workspaceName, okApikey);
+            assertThat(trace)
+                    .usingRecursiveComparison()
+                    .ignoringFields(TraceAssertions.IGNORED_FIELDS_TRACES)
+                    .isEqualTo(expectedTrace);
+            assertThat(trace.projectId()).isEqualTo(spans.content().getFirst().projectId());
         }
 
         @Test

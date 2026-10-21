@@ -4,6 +4,7 @@ import {
   BRIDGE_PROTOCOL_VERSION,
   BridgeContext,
   ChartEditRequest,
+  ConversationStartOptions,
   HostEventMap,
   RunnerBridgeState,
   SidebarEventMap,
@@ -253,8 +254,8 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
         }
     }
   },
-  startConversation: (message: string) => {
-    sendOrPark(refs, "conversation:start", { message });
+  startConversation: (message: string, options?: ConversationStartOptions) => {
+    sendOrPark(refs, "conversation:start", { message, ...options });
   },
   editChart: (request: ChartEditRequest) => {
     sendOrPark(refs, "chart:edit", request);

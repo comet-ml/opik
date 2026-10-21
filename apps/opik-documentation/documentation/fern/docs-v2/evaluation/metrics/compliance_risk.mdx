@@ -14,7 +14,7 @@ title: Compliance risk
 
 Use this judge when you have to gate user-facing answers in domains like finance, healthcare, or legal advice. Read `score.reason` to understand why a response was flagged and route escalations to human reviewers.
 
-```python title="Flagging risky statements"
+```python title="Flagging risky statements" wordWrap
 from opik.evaluation.metrics import ComplianceRiskJudge
 
 metric = ComplianceRiskJudge(

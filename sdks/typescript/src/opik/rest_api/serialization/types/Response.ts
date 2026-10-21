@@ -16,6 +16,10 @@ export const Response: core.serialization.ObjectSchema<serializers.Response.Raw,
             "already_run_project_ids",
             core.serialization.list(core.serialization.string()).optional(),
         ),
+        resetProjectIds: core.serialization.property(
+            "reset_project_ids",
+            core.serialization.list(core.serialization.string()).optional(),
+        ),
     });
 
 export declare namespace Response {
@@ -24,5 +28,6 @@ export declare namespace Response {
         cleared?: number | null;
         unknown_project_ids?: string[] | null;
         already_run_project_ids?: string[] | null;
+        reset_project_ids?: string[] | null;
     }
 }

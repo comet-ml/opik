@@ -19,12 +19,15 @@ profiles:
         frequencyPenalty: {accepted: false}
         presencePenalty: {accepted: false}
         stop: {accepted: false}
+        seed: {accepted: false}
         maxOutputTokens: {min: 16}
   openai-reasoning:
     temperature: {accepted: false}
     topP: {accepted: false}
     frequencyPenalty: {accepted: false}
     presencePenalty: {accepted: false}
+  # A Claude id without a row takes no sampling params and thinks: newer models increasingly refuse sampling, and
+  # omitting a param beats the 400 a refused one gets. So the rows below name the models that do take them.
   anthropic:
     temperature: {accepted: false, min: 0, max: 1, default: 0}
     topP: {accepted: false, min: 0, max: 1, default: 1}
@@ -337,11 +340,9 @@ models:
       thinksByDefault: false
       effort: {accepted: false}
   - id: claude-sonnet-5-5
-    awaitingSync: true
     params:
       maxOutputTokens: {max: 128000}
   - id: claude-haiku-5-5
-    awaitingSync: true
     params:
       maxOutputTokens: {max: 128000}
       effort:

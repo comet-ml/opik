@@ -1,0 +1,21 @@
+{
+  "job_id": "job-8e4a",
+  "endpoint": "generate",
+  "status": "completed",
+  "counts": {"pending": 0, "ok": 1, "failed": 0, "cancelled": 0},
+  "cancel_requested": false,
+  "results": [
+    {
+      "item_id": "0192f0c4-4d1e-7a6b-9c3d-2e1f0a9b8c7d:trace_summary",
+      "response": {
+        "request_id": "6f1c2c9e-8d0b-4a8e-9a43-3f8f5c6f1a10",
+        "usage": {"input_tokens": 1024, "output_tokens": 17},
+        "cache_hit": true,
+        "latency_ms": 380,
+        "result": {"output": {"summary": "Customer asks where their refund is"}}
+      },
+      "error": null
+    }
+  ],
+  "next_cursor": null
+}

@@ -25,7 +25,7 @@ Together's SDK is OpenAI-shaped but defines its own client and stream classes, s
 
 ### Installation
 
-```bash
+```bash wordWrap
 pip install opik together
 ```
 
@@ -37,7 +37,7 @@ Run `opik configure` and follow the prompts. See the [Python SDK Configuration g
 
 Set your Together AI API key as an environment variable:
 
-```bash
+```bash wordWrap
 export TOGETHER_API_KEY="YOUR_API_KEY"
 ```
 
@@ -45,7 +45,7 @@ export TOGETHER_API_KEY="YOUR_API_KEY"
 
 Create a Together client, wrap it with `track_together`, and use it as usual:
 
-```python
+```python wordWrap
 import together
 from opik.integrations.together import track_together
 
@@ -65,7 +65,7 @@ print(response.choices[0].message.content)
 
 Calls made with a tracked client inside a function decorated with [`@track`](/tracing/advanced/log_traces#using-function-decorators) are nested under that function's trace:
 
-```python
+```python wordWrap
 import together
 from opik import track
 from opik.integrations.together import track_together
@@ -89,7 +89,7 @@ generate_story("Write a short story about Opik.")
 
 Pass `stream=True` and iterate as usual. The span is ended once the stream is fully consumed, and the chunks are aggregated into a single logged response:
 
-```python
+```python wordWrap
 stream = client.chat.completions.create(
     model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
     messages=[{"role": "user", "content": "Why is the sky blue?"}],
@@ -105,7 +105,7 @@ for chunk in stream:
 
 `track_together` works with `together.AsyncTogether` as well, including streaming:
 
-```python
+```python wordWrap
 import asyncio
 
 import together
@@ -143,13 +143,13 @@ If you call Together AI through LiteLLM rather than the Together SDK, use the Li
 
 To start tracking your Together AI calls, you'll need to have both `opik` and `litellm` installed. You can install them using pip:
 
-```bash
+```bash wordWrap
 pip install opik litellm
 ```
 
 In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
 
-```bash
+```bash wordWrap
 opik configure
 ```
 
@@ -157,7 +157,7 @@ opik configure
 
 You'll need to set your Together AI API key as an environment variable:
 
-```bash
+```bash wordWrap
 export TOGETHER_API_KEY="YOUR_API_KEY"
 ```
 
@@ -165,7 +165,7 @@ export TOGETHER_API_KEY="YOUR_API_KEY"
 
 In order to log the LLM calls to Opik, you will need to create the OpikLogger callback. Once the OpikLogger callback is created and added to LiteLLM, you can make calls to LiteLLM as you normally would:
 
-```python
+```python wordWrap
 from litellm.integrations.opik.opik import OpikLogger
 import litellm
 
@@ -184,7 +184,7 @@ response = litellm.completion(
 
 If you are using LiteLLM within a function tracked with the [`@track`](/tracing/advanced/log_traces#using-function-decorators) decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
 
-```python
+```python wordWrap
 from opik import track, opik_context
 import litellm
 

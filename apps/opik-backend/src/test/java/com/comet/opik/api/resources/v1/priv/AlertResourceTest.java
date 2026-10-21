@@ -402,6 +402,37 @@ class AlertResourceTest {
                             new ErrorMessage(List.of("webhook must not be null")),
                             ErrorMessage.class),
 
+                    // Custom fields validation
+                    arguments(
+                            generateAlert().toBuilder().customFields(IntStream.rangeClosed(0, Alert.MAX_CUSTOM_FIELDS)
+                                    .boxed()
+                                    .collect(Collectors.toMap(i -> "key-" + i, i -> "value"))).build(),
+                            422,
+                            new ErrorMessage(List.of("customFields size must be between 0 and 20")),
+                            ErrorMessage.class),
+                    arguments(
+                            generateAlert().toBuilder().customFields(Map.of("impact", " ")).build(),
+                            422,
+                            new ErrorMessage(List.of("customFields[impact].<map value> must not be blank")),
+                            ErrorMessage.class),
+                    arguments(
+                            generateAlert().toBuilder()
+                                    .customFields(Map.of("k".repeat(Alert.MAX_CUSTOM_FIELD_KEY_LENGTH + 1), "1"))
+                                    .build(),
+                            422,
+                            new ErrorMessage(List.of("customFields<K>[%s].<map key> size must be between 0 and 64"
+                                    .formatted("k".repeat(Alert.MAX_CUSTOM_FIELD_KEY_LENGTH + 1)))),
+                            ErrorMessage.class),
+                    arguments(
+                            generateAlert().toBuilder()
+                                    .customFields(
+                                            Map.of("impact", "1", "alertId", "x", "payload", "y", "max_retries", "z"))
+                                    .build(),
+                            HttpStatus.SC_BAD_REQUEST,
+                            new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                                    "'custom_fields' keys [alertId, max_retries, payload] are reserved by the alert event payload, use different keys"),
+                            io.dropwizard.jersey.errors.ErrorMessage.class),
+
                     // Invalid UUID version
                     arguments(
                             generateAlert().toBuilder().id(UUID.randomUUID()).build(),
@@ -878,6 +909,34 @@ class AlertResourceTest {
                     HttpStatus.SC_OK);
 
             compareAlerts(updatedAlert, actualUpdatedAlert, true);
+        }
+
+        @Test
+        @DisplayName("when custom fields are changed or cleared, then the stored alert reflects it")
+        void updateAlert__whenCustomFieldsChangedOrCleared__thenStored() {
+            var mock = prepareMockWorkspace();
+
+            var alertId = alertResourceClient.createAlert(
+                    generateAlert().toBuilder().customFields(Map.of("urgency", "3")).build(),
+                    mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var created = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+            assertThat(created.customFields()).isEqualTo(Map.of("urgency", "3"));
+
+            alertResourceClient.updateAlert(alertId,
+                    generateAlertUpdate(created).toBuilder().customFields(Map.of("urgency", "1", "level", "Error"))
+                            .build(),
+                    mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
+            var updated = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+            assertThat(updated.customFields()).isEqualTo(Map.of("urgency", "1", "level", "Error"));
+
+            alertResourceClient.updateAlert(alertId,
+                    generateAlertUpdate(updated).toBuilder().customFields(null).build(),
+                    mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
+            var cleared = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+            assertThat(cleared.customFields()).isNull();
         }
 
         @Test

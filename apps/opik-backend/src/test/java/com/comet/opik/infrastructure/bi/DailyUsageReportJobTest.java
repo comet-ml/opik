@@ -19,7 +19,9 @@ import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.infrastructure.http.CorsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -63,6 +65,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class DailyUsageReportJobTest {
@@ -122,6 +125,32 @@ class DailyUsageReportJobTest {
                         .withRequestBody(matchingJsonPath("$.event_type",
                                 equalTo(DailyUsageReportJob.STATISTICS_BE))
                                 .and(matchingJsonPath("$.event_properties.daily_traces", equalTo(dailyTraces)))));
+    }
+
+    /**
+     * The run at application startup always sends and marks the day as sent. Waiting for it keeps it from landing
+     * after a test's own reset, which would make the test's run skip.
+     */
+    private static void awaitStartupReport(TransactionTemplate transactionTemplate) {
+        Awaitility.await().atMost(30, TimeUnit.SECONDS).until(() -> transactionTemplate.inTransaction(
+                TransactionTemplateAsync.READ_ONLY,
+                handle -> handle.createQuery("SELECT COUNT(*) FROM metadata WHERE `key` = 'daily_usage_report'")
+                        .mapTo(Integer.class).one()) > 0);
+    }
+
+    /**
+     * Clears the day's "sent" marker, then schedules the report, so every test's run reports on its own data. Waits for
+     * any run still in progress first, as it would otherwise write the marker back after it was cleared.
+     */
+    private static void resetAndScheduleReport(TransactionTemplate transactionTemplate, GuiceJobManager guiceJobManager)
+            throws SchedulerException {
+        var scheduler = guiceJobManager.getScheduler();
+        Awaitility.await().atMost(30, TimeUnit.SECONDS).until(() -> scheduler.getCurrentlyExecutingJobs().stream()
+                .noneMatch(job -> job.getJobInstance() instanceof DailyUsageReportJob));
+        transactionTemplate.inTransaction(TransactionTemplateAsync.WRITE,
+                handle -> handle.createUpdate("DELETE FROM metadata WHERE `key` = 'daily_usage_report'").execute());
+        var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
+        scheduler.scheduleJob(TriggerBuilder.newTrigger().startNow().forJob(key).build());
     }
 
     private void updateDatasets(String workspaceId, TransactionTemplate transactionTemplate, boolean updateUser) {
@@ -286,6 +315,7 @@ class DailyUsageReportJobTest {
             this.guiceJobManager = guiceJobManager;
 
             ClientSupportUtils.config(client);
+            awaitStartupReport(transactionTemplate);
 
             experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, factory);
             traceResourceClient = new TraceResourceClient(this.client, baseURI);
@@ -318,11 +348,7 @@ class DailyUsageReportJobTest {
 
             setUpData(apiKey, workspaceName, workspaceId);
 
-            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
-
-            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
-
-            guiceJobManager.getScheduler().scheduleJob(trigger);
+            resetAndScheduleReport(transactionTemplate, guiceJobManager);
 
             Awaitility
                     .await()
@@ -429,6 +455,7 @@ class DailyUsageReportJobTest {
             this.guiceJobManager = guiceJobManager;
 
             ClientSupportUtils.config(client);
+            awaitStartupReport(transactionTemplate);
 
             experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, factory);
             traceResourceClient = new TraceResourceClient(this.client, baseURI);
@@ -483,11 +510,7 @@ class DailyUsageReportJobTest {
 
             setUpData(apiKey, workspaceName, ProjectService.DEFAULT_WORKSPACE_ID);
 
-            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
-
-            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
-
-            guiceJobManager.getScheduler().scheduleJob(trigger);
+            resetAndScheduleReport(transactionTemplate, guiceJobManager);
 
             Awaitility
                     .await()
@@ -635,9 +658,7 @@ class DailyUsageReportJobTest {
             updateTraces(ProjectService.DEFAULT_WORKSPACE_ID, templateAsync, false);
 
             // Run the daily usage report job
-            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
-            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
-            guiceJobManager.getScheduler().scheduleJob(trigger);
+            resetAndScheduleReport(transactionTemplate, guiceJobManager);
 
             // Wait for job completion and verify
             Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -685,15 +706,43 @@ class DailyUsageReportJobTest {
             updateTraces(ProjectService.DEFAULT_WORKSPACE_ID, templateAsync, false);
 
             // Run the daily usage report job
-            var key = JobKey.jobKey(DailyUsageReportJob.class.getName());
-            var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
-            guiceJobManager.getScheduler().scheduleJob(trigger);
+            resetAndScheduleReport(transactionTemplate, guiceJobManager);
 
             // Wait for job completion and verify
             Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
                 // Both regular projects are summed and the demo projects dropped, so the count is the
                 // traces created here rather than either project's share of them
                 verifyDailyTraces(wireMock.server(), expectedDailyTraces);
+            });
+        }
+
+        @Test
+        @DisplayName("Daily usage report counts distinct clients")
+        void dailyUsageReportCountsActiveClients() {
+            // Fixed IDs, so a Redis reused across runs re-adds the same members and the totals stay the same
+            var browser = "0a8c3bde-6f1e-4b9a-9d2c-5e7f1a2b3c4d";
+
+            // Three distinct SDK clients and one browser: repeats count once and a malformed ID is ignored
+            for (var clientId : List.of("a".repeat(64), "a".repeat(64), "b".repeat(64), "c".repeat(64),
+                    "not-a-client-id")) {
+                try (var response = client.target("%s/v1/private/projects".formatted(baseURI))
+                        .request()
+                        .header(RequestContext.WORKSPACE_HEADER, "default")
+                        .header(CorsFactory.OPIK_CLIENT_ID_HEADER, clientId)
+                        .header(CorsFactory.OPIK_BROWSER_ID_HEADER, browser)
+                        .get()) {
+                    assertThat(response.getStatus()).isEqualTo(200);
+                }
+            }
+
+            // Clients are recorded asynchronously, so report again until the totals have caught up. The report is
+            // sent every day, with or without activity, so no traces are needed here.
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).untilAsserted(() -> {
+                resetAndScheduleReport(transactionTemplate, guiceJobManager);
+                wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(DailyUsageReportJob.STATISTICS_BE))
+                                .and(matchingJsonPath("$.event_properties.total_sdk_clients", equalTo("3")))
+                                .and(matchingJsonPath("$.event_properties.total_ui_clients", equalTo("1")))));
             });
         }
 

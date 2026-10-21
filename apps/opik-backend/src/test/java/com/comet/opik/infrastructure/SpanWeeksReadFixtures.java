@@ -1,11 +1,14 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
@@ -16,6 +19,7 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanWeek;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.TraceEnrichmentOptions;
 import com.comet.opik.utils.AsyncUtils;
 import lombok.Builder;
 import lombok.NonNull;
@@ -34,18 +38,22 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Fixtures for the span_weeks read tests, used by composition: a trace whose spans sit in this week and in a far-future
- * week, the experiment over it, and the wait for the index to hold every span's week. The index is read through
+ * week, the experiment over it, the reads of its spans that have no resource client of their own, and the wait for
+ * the index to hold every span's week. The index is read through
  * {@link SpanService}, the expected weeks are computed from each span id's own timestamp.
  */
 @RequiredArgsConstructor
@@ -67,7 +75,7 @@ class SpanWeeksReadFixtures {
     private final @NonNull ExperimentResourceClient experimentResourceClient;
     private final @NonNull SpanService spanService;
 
-    /** A trace with one span this week and one far in the future, both registered in span_weeks. */
+    /** A trace with one span this week, first, and one far in the future. */
     @Builder(toBuilder = true)
     record FarFutureTrace(String projectName, UUID projectId, Trace trace, List<Span> spans) {
 
@@ -89,14 +97,28 @@ class SpanWeeksReadFixtures {
     }
 
     FarFutureTrace createFarFutureTrace() {
-        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        return createFarFutureTrace(randomThreadId());
+    }
+
+    FarFutureTrace createFarFutureTrace(String threadId) {
+        var farFutureTrace = writeFarFutureTrace(threadId);
+        awaitIndexed(farFutureTrace.projectId(), farFutureTrace.trace().id(), farFutureTrace.spans());
+        return farFutureTrace;
+    }
+
+    /** The trace of {@link #createFarFutureTrace}, without waiting for its weeks to be indexed. */
+    FarFutureTrace createFarFutureTraceWithoutWaiting() {
+        return writeFarFutureTrace(randomThreadId());
+    }
+
+    private FarFutureTrace writeFarFutureTrace(String threadId) {
+        var now = now();
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-        // ClickHouse keeps microseconds, and the CI JVM clock has nanoseconds.
-        var now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
         var trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
                 .projectName(projectName)
-                .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(16))
+                .threadId(threadId)
                 .startTime(now)
                 .endTime(now.plusMillis(RandomUtils.secure().randomInt(10, 1_000)))
                 .feedbackScores(null)
@@ -119,14 +141,70 @@ class SpanWeeksReadFixtures {
                         .build())
                 .toList();
         spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-        awaitIndexed(projectId, trace.id(), spans);
         return FarFutureTrace.builder().projectName(projectName).projectId(projectId).trace(trace).spans(spans)
                 .build();
     }
 
+    /**
+     * The same trace and spans under new ids, all this week, in the same project: what a read of the source trace has
+     * to add up to, for reads whose result cannot be computed from the spans written.
+     */
+    FarFutureTrace createThisWeekCopy(FarFutureTrace source) {
+        return createThisWeekCopy(source, randomThreadId());
+    }
+
+    /** The copy of {@link #createThisWeekCopy(FarFutureTrace)}, in the given thread. */
+    FarFutureTrace createThisWeekCopy(FarFutureTrace source, String threadId) {
+        var now = now();
+        var trace = source.trace().toBuilder()
+                .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
+                .threadId(threadId)
+                .build();
+        traceResourceClient.createTrace(trace, apiKey, workspaceName);
+        var spans = source.spans().stream()
+                .map(span -> span.toBuilder()
+                        .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
+                        .traceId(trace.id())
+                        .build())
+                .toList();
+        spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+        awaitIndexed(source.projectId(), trace.id(), spans);
+        return source.toBuilder().trace(trace).spans(spans).build();
+    }
+
+    /** The trace's spans through the spans search stream, scoped to the trace. */
+    List<Span> streamTraceSpans(FarFutureTrace trace) {
+        return spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, SpanSearchStreamRequest.builder()
+                .projectName(trace.projectName())
+                .traceId(trace.trace().id())
+                .build());
+    }
+
+    /**
+     * The ids of the spans a dataset item created from the trace carries: the public read of the spans by trace ids,
+     * which online scoring and the agent's read tool share.
+     */
+    List<UUID> getSpanIdsOfDatasetItemFromTrace(UUID traceId) {
+        var datasetId = datasetResourceClient.createDataset(DatasetResourceClient.buildDataset(factory).toBuilder()
+                .id(null)
+                // A test suite keeps only the trace input as the item data, dropping the spans.
+                .type(DatasetType.DATASET)
+                .build(), apiKey, workspaceName);
+        datasetResourceClient.createDatasetItemsFromTraces(datasetId, CreateDatasetItemsFromTracesRequest.builder()
+                .traceIds(Set.of(traceId))
+                .enrichmentOptions(TraceEnrichmentOptions.builder().includeSpans(true).build())
+                .build(), apiKey, workspaceName);
+        var items = datasetResourceClient.getDatasetItems(datasetId, Map.of(), apiKey, workspaceName).content();
+        assertThat(items).hasSize(1);
+        return Optional.ofNullable(items.getFirst().data().get("spans")).stream()
+                .flatMap(spans -> StreamSupport.stream(spans.spliterator(), false))
+                .map(span -> UUID.fromString(span.get("id").asText()))
+                .toList();
+    }
+
     /** Creates an experiment over the trace, optionally under an optimization. */
     TraceExperiment createExperiment(UUID traceId, UUID optimizationId) {
-        var datasetName = "dataset-" + RandomStringUtils.secure().nextAlphanumeric(16);
+        var datasetName = "dataset-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
                 .source(DatasetItemSource.SDK)
                 .traceId(null)
@@ -160,7 +238,7 @@ class SpanWeeksReadFixtures {
                 .build();
     }
 
-    /** Registration is asynchronous by design; waits until the index holds every span's week. */
+    /** Waits until the index holds every span's week. */
     private void awaitIndexed(UUID projectId, UUID traceId, List<Span> spans) {
         var expected = spans.stream()
                 .map(span -> SpanWeek.builder().projectId(projectId).traceId(traceId).idWeek(week(span.id())).build())
@@ -173,15 +251,32 @@ class SpanWeeksReadFixtures {
                         .containsExactlyInAnyOrderElementsOf(expected));
     }
 
+    /** As the spans reads return them: newest first, and without a duration, since the fixture sets no end_time. */
+    List<Span> expectedSpans(List<Span> spans) {
+        return spans.stream()
+                .map(span -> span.toBuilder().duration(null).build())
+                .sorted(Comparator.comparing(Span::id).reversed())
+                .toList();
+    }
+
+    String randomThreadId() {
+        return "thread-" + RandomStringUtils.secure().nextAlphanumeric(32);
+    }
+
+    /** ClickHouse keeps microseconds, and the CI JVM clock has nanoseconds. */
+    private Instant now() {
+        return Instant.now().truncatedTo(ChronoUnit.MILLIS);
+    }
+
     /** A span's week from its own v7 timestamp, independently of the production week calculation. */
-    private static long week(UUID spanId) {
+    private long week(UUID spanId) {
         var monday = LocalDate.ofInstant(Instant.ofEpochMilli(spanId.getMostSignificantBits() >>> 16), ZoneOffset.UTC)
                 .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         return Math.min(Long.parseLong(monday.format(DateTimeFormatter.BASIC_ISO_DATE)), PAST_CEILING_WEEK);
     }
 
     /** Past every real clock, short of where {@code id_at} saturates. */
-    private static Instant farFutureInstant() {
+    private Instant farFutureInstant() {
         return LocalDate.of(RandomUtils.secure().randomInt(2150, 2290), 1, 1)
                 .plusDays(RandomUtils.secure().randomInt(0, 365))
                 .atTime(12, 0)
