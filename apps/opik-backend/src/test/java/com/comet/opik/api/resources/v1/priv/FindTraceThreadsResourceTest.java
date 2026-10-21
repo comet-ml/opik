@@ -1154,7 +1154,7 @@ class FindTraceThreadsResourceTest {
             }
         }
 
-        private Stream<Arguments> whenFilterBySourceList__thenReturnThreadsWithListedSources() {
+        private Stream<Arguments> whenFilterBySourceInOrNotIn__thenReturnThreadsWithMatchingSources() {
             return Stream.of(
                     Arguments.of(Operator.IN, "playground,experiment", Set.of("playground", "experiment")),
                     Arguments.of(Operator.IN, "sdk,playground", Set.of("sdk", Source.UNKNOWN_VALUE, "playground")),
@@ -1164,8 +1164,8 @@ class FindTraceThreadsResourceTest {
 
         @ParameterizedTest(name = "{0} \"{1}\"")
         @MethodSource
-        @DisplayName("When filtering by a source list, should return the threads of the listed sources, sdk also matching legacy unknown")
-        void whenFilterBySourceList__thenReturnThreadsWithListedSources(Operator operator, String value,
+        @DisplayName("When filtering by a source list with in or not_in, should return the threads whose source matches, and a listed sdk also covers legacy unknown")
+        void whenFilterBySourceInOrNotIn__thenReturnThreadsWithMatchingSources(Operator operator, String value,
                 Set<String> expectedSources) {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = Stream.of(Source.SDK, null, Source.PLAYGROUND, Source.EXPERIMENT)

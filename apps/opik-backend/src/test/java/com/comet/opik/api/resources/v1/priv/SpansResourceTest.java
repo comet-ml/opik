@@ -4961,7 +4961,7 @@ class SpansResourceTest {
 
         @ParameterizedTest(name = "{0} \"{1}\"")
         @MethodSource
-        @DisplayName("Filter by a source list matches the listed sources, and sdk also matches legacy unknown spans")
+        @DisplayName("Filter by a source list with in or not_in matches spans by source, and a listed sdk also covers legacy unknown spans")
         void filterBySourceList(Operator operator, String value, Set<String> expectedSources) {
             var projectName = "span-source-filter-list-" + UUID.randomUUID();
             var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
