@@ -5,7 +5,8 @@ import { render, screen } from "@testing-library/react";
 import LLMPromptMessageActions from "./LLMPromptMessageActions";
 import usePromptById from "@/api/prompts/usePromptById";
 import usePromptVersionById from "@/api/prompts/usePromptVersionById";
-import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
+import { LLM_MESSAGE_ROLE, LLMMessage, MessageContent } from "@/types/llm";
+import { toContentForRole } from "@/lib/llm";
 import { TooltipProvider } from "@/ui/tooltip";
 
 vi.mock("@/api/prompts/usePromptById", () => ({ default: vi.fn() }));
@@ -48,15 +49,44 @@ const VERSIONS: Record<string, string> = {
   v2: "Say hi to {{name}} EDITED",
 };
 
-const mockLibrary = (latestVersionId: string) => {
+const MEDIA_CONTENT: Record<string, MessageContent> = {
+  v1: [
+    { type: "text", text: "Describe {{image}}" },
+    { type: "image_url", image_url: { url: "{{image}}" } },
+  ],
+  v2: [
+    { type: "text", text: "Describe {{image}} EDITED" },
+    { type: "image_url", image_url: { url: "{{image}}" } },
+  ],
+};
+
+const MESSAGES_JSON_METADATA = {
+  created_from: "opik_ui",
+  type: "messages_json",
+};
+
+const toMediaVersion = (versionId: string) => ({
+  id: versionId,
+  template: JSON.stringify([
+    { role: LLM_MESSAGE_ROLE.user, content: MEDIA_CONTENT[versionId] },
+  ]),
+  metadata: MESSAGES_JSON_METADATA,
+});
+
+const toTextVersion = (versionId: string) => ({
+  id: versionId,
+  template: VERSIONS[versionId],
+});
+
+const mockLibrary = (
+  latestVersionId: string,
+  toVersion: (versionId: string) => object = toTextVersion,
+) => {
   vi.mocked(usePromptById).mockReturnValue({
     data: {
       id: "greeter",
       name: "Greeter",
-      latest_version: {
-        id: latestVersionId,
-        template: VERSIONS[latestVersionId],
-      },
+      latest_version: toVersion(latestVersionId),
     },
     error: null,
   } as unknown as ReturnType<typeof usePromptById>);
@@ -64,15 +94,19 @@ const mockLibrary = (latestVersionId: string) => {
   vi.mocked(usePromptVersionById).mockImplementation(
     ({ versionId }) =>
       ({
-        data: { id: versionId, template: VERSIONS[versionId] },
+        data: toVersion(versionId),
       }) as unknown as ReturnType<typeof usePromptVersionById>,
   );
 };
 
-const renderActions = (promptVersionId: string, content: string) => {
+const renderActions = (
+  promptVersionId: string,
+  content: MessageContent,
+  role: LLM_MESSAGE_ROLE = LLM_MESSAGE_ROLE.user,
+) => {
   const message: LLMMessage = {
     id: "message-1",
-    role: LLM_MESSAGE_ROLE.user,
+    role,
     content,
     promptId: "greeter",
     promptVersionId,
@@ -114,5 +148,25 @@ describe("LLMPromptMessageActions unsaved changes", () => {
     mockLibrary("v2");
 
     expect(renderActions("v1", VERSIONS.v1)).toBe("false");
+  });
+
+  it("treats a system message loaded from a media prompt's latest version as saved, comparing its text only", () => {
+    mockLibrary("v2", toMediaVersion);
+    const loadedText = toContentForRole(
+      MEDIA_CONTENT.v2,
+      LLM_MESSAGE_ROLE.system,
+    ).content;
+
+    expect(renderActions("v1", loadedText, LLM_MESSAGE_ROLE.system)).toBe(
+      "false",
+    );
+  });
+
+  it("flags a system message whose text matches neither media version", () => {
+    mockLibrary("v2", toMediaVersion);
+
+    expect(
+      renderActions("v1", "Describe {{image}} MORE", LLM_MESSAGE_ROLE.system),
+    ).toBe("true");
   });
 });
