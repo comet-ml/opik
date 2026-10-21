@@ -448,6 +448,66 @@ class WorkspacesResourceTest {
                     .isEqualTo(WorkspaceMetricsSummaryResponse.builder().results(expectedMetricsSummary).build());
         }
 
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void metricsDaily_averagesAuthorsPerTraceAndKeepsEachAuthorsLatestScore(boolean withProjectIds) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var otherAuthorApiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), otherAuthorApiKey, workspaceName, workspaceId,
+                    UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var name = RandomStringUtils.randomAlphabetic(10);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .id(idGenerator.generateId())
+                            .projectName(projectName)
+                            .startTime(Instant.now())
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var staleScores = createTraceScores(traces, projectName, name);
+            var latestScores = createTraceScores(traces, projectName, name);
+            var otherAuthorScores = createTraceScores(traces, projectName, name);
+            traceResourceClient.feedbackScores(staleScores, apiKey, workspaceName);
+            traceResourceClient.feedbackScores(latestScores, apiKey, workspaceName);
+            traceResourceClient.feedbackScores(otherAuthorScores, otherAuthorApiKey, workspaceName);
+
+            var endTime = Instant.now();
+            var actualMetrics = workspaceResourceClient.getMetricsDaily(
+                    WorkspaceMetricRequest.builder()
+                            .intervalStart(endTime.minus(Duration.ofDays(1)))
+                            .intervalEnd(endTime)
+                            .projectIds(withProjectIds ? Set.of(projectId) : null)
+                            .name(name)
+                            .build(),
+                    apiKey, workspaceName);
+
+            var perTraceAverages = IntStream.range(0, traces.size())
+                    .mapToObj(i -> calcAverage(List.of(latestScores.get(i).value(), otherAuthorScores.get(i).value())))
+                    .toList();
+            var expectedMetrics = WorkspaceMetricResponse.builder()
+                    .results(List.of(WorkspaceMetricResponse.Result.builder()
+                            .projectId(withProjectIds ? projectId : null)
+                            .name(name)
+                            .data(prepareMetricsAverageDailyData(perTraceAverages,
+                                    WorkspacesResourceTest.this::getAvg))
+                            .build()))
+                    .build();
+
+            assertThat(actualMetrics)
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
+                    .isEqualTo(expectedMetrics);
+        }
+
         @Test
         void metricsSummary_countsTraceIdReusedAcrossProjectsOnce() {
             var workspaceName = UUID.randomUUID().toString();
@@ -492,6 +552,61 @@ class WorkspacesResourceTest {
                     .usingRecursiveComparison()
                     .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
                     .isEqualTo(WorkspaceMetricsSummaryResponse.builder().results(expectedMetricsSummary).build());
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void metricsDaily_countsTraceIdReusedAcrossProjectsOnce(boolean withProjectIds) {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var otherProjectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var otherProjectId = projectResourceClient.createProject(otherProjectName, apiKey, workspaceName);
+            var name = RandomStringUtils.randomAlphabetic(10);
+
+            var reusedId = idGenerator.generateId();
+            var traces = Stream.of(
+                    factory.manufacturePojo(Trace.class).toBuilder().id(reusedId).projectName(projectName),
+                    factory.manufacturePojo(Trace.class).toBuilder().id(reusedId).projectName(otherProjectName),
+                    factory.manufacturePojo(Trace.class).toBuilder().id(idGenerator.generateId())
+                            .projectName(projectName))
+                    .map(builder -> builder.startTime(Instant.now()).build())
+                    .toList();
+            // Separate requests: a single batch dedups traces by id.
+            traceResourceClient.batchCreateTraces(List.of(traces.get(0), traces.get(2)), apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(List.of(traces.get(1)), apiKey, workspaceName);
+
+            // Only the reused id's copy in projectName is scored, so a join on the id alone would count it twice.
+            var scores = createTraceScores(List.of(traces.get(0), traces.get(2)), projectName, name);
+            traceResourceClient.feedbackScores(scores, apiKey, workspaceName);
+
+            var endTime = Instant.now();
+            var actualMetrics = workspaceResourceClient.getMetricsDaily(
+                    WorkspaceMetricRequest.builder()
+                            .intervalStart(endTime.minus(Duration.ofDays(1)))
+                            .intervalEnd(endTime)
+                            .projectIds(withProjectIds ? Set.of(projectId, otherProjectId) : null)
+                            .name(name)
+                            .build(),
+                    apiKey, workspaceName);
+
+            var expectedMetrics = WorkspaceMetricResponse.builder()
+                    .results(List.of(WorkspaceMetricResponse.Result.builder()
+                            .projectId(withProjectIds ? projectId : null)
+                            .name(name)
+                            .data(prepareMetricsAverageDailyData(
+                                    List.of(calcAverage(scores.stream().map(FeedbackScoreItem::value).toList())),
+                                    WorkspacesResourceTest.this::getAvg))
+                            .build()))
+                    .build();
+
+            assertThat(actualMetrics)
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
+                    .isEqualTo(expectedMetrics);
         }
 
         @Test
