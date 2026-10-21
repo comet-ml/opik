@@ -12,6 +12,7 @@ import isEmpty from "lodash/isEmpty";
 
 import JsonTreePopover from "@/shared/JsonTreePopover/JsonTreePopover";
 import { JsonObject, JsonValue } from "@/types/shared";
+import { cn } from "@/lib/utils";
 import {
   codeMirrorPromptTheme,
   mustachePlugin,
@@ -36,6 +37,7 @@ type PromptVariableEditorProps = {
   jsonTreeEmptyState?: string;
   onJsonPathSelect?: (path: string, value: JsonValue) => void;
   openInsideTag?: boolean;
+  size?: "default" | "xs";
 };
 
 const PromptVariableEditor = forwardRef<
@@ -53,6 +55,7 @@ const PromptVariableEditor = forwardRef<
       jsonTreeEmptyState,
       onJsonPathSelect,
       openInsideTag,
+      size = "default",
     },
     ref,
   ) => {
@@ -140,7 +143,9 @@ const PromptVariableEditor = forwardRef<
     }, [hintText, braceStartPos]);
 
     return (
-      <div className="relative">
+      <div
+        className={cn("relative", size === "xs" && "[&_.cm-editor]:text-xs")}
+      >
         <CodeMirror
           onCreateEditor={handleCreateEditor}
           onFocus={onFocus}
