@@ -1122,7 +1122,7 @@ areas:
       # green. Folding these under them would retire the question permanently.
       automated-queue-fill:    { covered: false, note: "A feedback score matching the queue's condition routes its trace in with source 'automated', and a non-matching score keeps its trace out" }
       automation-max-items:    { covered: false, note: "max_items_in_queue caps automated adds (deterministically, lowest ids first) while a manual add still bypasses the ceiling; the list's Automation cell reads 'Cap reached'" }
-      sme-flow:                { covered: false, note: "/sme route, dedicated layout" }
+      sme-flow:                { covered: false, note: "/sme route, dedicated layout. The only spec reaching /sme is sme-thread-internal-traces.spec.ts, and it asserts the route's own layout — the welcome page naming the queue, Start annotating, and the thread view's internal-trace toggle and Internal badge (opik#9073). SCORING through /sme is NOT covered: score-queue-item / score-with-reason / skip-item are all asserted on the project-scoped admin route (annotation-queue-scoring.spec.ts), so a reviewer's submit path through the SME layout has no test. Read this key as 'the SME route renders', not 'the SME journey works'." }
       export-annotated-data:   { covered: false }
 
   # ===================== PRODUCTION =====================
