@@ -1,5 +1,7 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
+import com.comet.opik.api.LlmProvider;
+import com.comet.opik.domain.llm.ModelCapabilities;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -14,8 +16,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -51,8 +55,8 @@ class WireBodyAnthropicGroupsTest {
                 AnthropicModelName.allModelIds());
         assertThat(legacy.size() + sampling.size() + noSampling.size())
                 .isEqualTo(AnthropicModelName.allModelIds().size());
-        assertThat(union(legacy, sampling)).containsExactlyInAnyOrderElementsOf(
-                AnthropicModelName.samplingCapableModelIds());
+        assertThat(union(legacy, sampling)).containsExactlyInAnyOrderElementsOf(idsWhere(
+                id -> !ModelCapabilities.rejectsTemperature(id, bundledRegistry())));
     }
 
     @Test
@@ -72,7 +76,7 @@ class WireBodyAnthropicGroupsTest {
     @Test
     void thinksByDefaultListsEveryModelOutsideTheThinkingOffByDefaultSet() {
         var expected = new HashSet<>(AnthropicModelName.allModelIds());
-        expected.removeAll(AnthropicModelName.thinkingOffByDefaultModelIds());
+        expected.removeAll(idsWhere(id -> !ModelCapabilities.thinksByDefault(id, bundledRegistry())));
 
         assertThat(group("thinks-by-default")).containsExactlyInAnyOrderElementsOf(expected);
     }
@@ -92,10 +96,8 @@ class WireBodyAnthropicGroupsTest {
     }
 
     private String expectedEffortGroup(String id) {
-        var levels = AnthropicModelName.effortLevels(id).orElse(null);
-        if (levels == null) {
-            return "no effort row";
-        }
+        var effort = bundledRegistry().paramsOf(LlmProvider.ANTHROPIC.getValue(), id).effort();
+        var levels = effort != null && Boolean.TRUE.equals(effort.accepted()) ? effort.levels() : List.<String>of();
         return levels.isEmpty() ? "effort-none" : EFFORT_GROUP_BY_LEVELS.getOrDefault(levels, "levels " + levels);
     }
 
@@ -105,6 +107,10 @@ class WireBodyAnthropicGroupsTest {
                 .as("'%s' is listed twice in group '%s'", id.asText(), name)
                 .isTrue());
         return ids;
+    }
+
+    private static Set<String> idsWhere(Predicate<String> test) {
+        return AnthropicModelName.allModelIds().stream().filter(test).collect(Collectors.toSet());
     }
 
     @SafeVarargs

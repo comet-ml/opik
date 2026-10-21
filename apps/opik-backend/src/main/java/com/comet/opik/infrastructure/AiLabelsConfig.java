@@ -135,22 +135,31 @@ public class AiLabelsConfig {
 
     /**
      * A trace's spans are read in start order up to this many; the rest are left out. 200 keeps every span of 99.8% of
-     * the dev agent's traces (p99 117, max 848).
+     * the dev agent's traces (p99 117, max 848). At most 1,000: the span tree is built and walked recursively, and a
+     * chain of spans each nested in the last is as deep as the span count.
      */
     @JsonProperty
-    @Min(1) @Max(100_000) private int maxSpansPerTrace = 200;
+    @Min(1) @Max(1_000) private int maxSpansPerTrace = 200;
 
     /**
-     * A trace's spans are read in start order until their input and output reach this; the rest are left out, as past
+     * A trace's spans are read in start order until their name, input and output reach this; the rest are left out, as past
      * {@code maxSpansPerTrace}. Fitting keeps far less, so a trace's read is bounded without changing what a normal
      * trace renders to.
      */
     @JsonProperty
     @Min(1) private long maxSpanBytesPerTrace = 16L * 1024 * 1024;
 
-    /** A chunk's spans are read in batches of traces whose span input and output add up to at most this. */
+    /** A chunk's spans are read in batches of traces whose span name, input and output add up to at most this. */
     @JsonProperty
     @Min(1) private long renderReadBytes = 64L * 1024 * 1024;
+
+    /**
+     * Each render query's {@code max_execution_time} on the shared ClickHouse. Under the tick budget, so a slow read
+     * can't hold a tick for long; a chunk whose read times out is retried trace by trace until the tick's deadline.
+     */
+    @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration renderMaxExecutionTime = Duration.seconds(20);
 
     /** A trace or span field larger than this is replaced whole in SQL, before it reaches the JVM. */
     @JsonProperty
@@ -183,6 +192,13 @@ public class AiLabelsConfig {
     @JsonIgnore
     @AssertTrue(message = "aiLabels.renderBudgetBytes must be smaller than aiLabels.modelInputBudgetBytes") public boolean isRenderBudgetValid() {
         return renderBudgetBytes < modelInputBudgetBytes;
+    }
+
+    /** A render read started at the end of a tick must still finish within the leader lease. */
+    @JsonIgnore
+    @AssertTrue(message = "aiLabels.renderMaxExecutionTime must not be longer than aiLabels.tickBudget") public boolean isRenderMaxExecutionTimeValid() {
+        return renderMaxExecutionTime == null || tickBudget == null
+                || renderMaxExecutionTime.toMilliseconds() <= tickBudget.toMilliseconds();
     }
 
     @Data

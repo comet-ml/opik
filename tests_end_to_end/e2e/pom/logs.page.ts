@@ -1259,16 +1259,32 @@ export class LogsPage {
     return this.threadRow(threadId).locator(`[data-cell-id="${threadId}_last_message"]`);
   }
 
-  /** Open a thread's detail panel by id, returning the conversation panel POM. */
-  async openThreadById(threadId: string): Promise<ThreadPanelPage> {
-    return test.step(`Open thread ${threadId}`, async () => {
-      if (!this.projectId) {
-        throw new Error('LogsPage.openThreadById: call gotoThreads(projectId) first');
-      }
-      const env = loadEnvConfig();
-      const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs?logsType=threads&thread=${threadId}`;
-      await this.page.goto(url);
-      return new ThreadPanelPage(this.page, threadId);
-    });
+  /**
+   * Open a thread's detail panel by id, returning the conversation panel POM.
+   *
+   * `traceId` sets the panel's `trace` param — the shape a deep link into one
+   * turn of a conversation has. It is not a display detail: the panel treats the
+   * selected trace as one it must keep listed whatever the hide preference says,
+   * so it is the only way to reach that branch.
+   */
+  async openThreadById(
+    threadId: string,
+    opts: { traceId?: string } = {},
+  ): Promise<ThreadPanelPage> {
+    return test.step(
+      `Open thread ${threadId}${opts.traceId ? ` on trace ${opts.traceId}` : ''}`,
+      async () => {
+        if (!this.projectId) {
+          throw new Error('LogsPage.openThreadById: call gotoThreads(projectId) first');
+        }
+        const env = loadEnvConfig();
+        const params = new URLSearchParams({ logsType: 'threads', thread: threadId });
+        if (opts.traceId !== undefined) params.set('trace', opts.traceId);
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs?${params}`,
+        );
+        return new ThreadPanelPage(this.page, threadId);
+      },
+    );
   }
 }

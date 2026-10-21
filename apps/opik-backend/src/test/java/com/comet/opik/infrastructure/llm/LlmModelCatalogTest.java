@@ -173,6 +173,43 @@ class LlmModelCatalogTest {
         }
 
         @Test
+        void withoutTheCuratedLayerAModelGetsTheParamsTheShippedLayerWouldGiveIt() {
+            var withoutCurated = service("llm-models-test.yaml", "", null);
+            var withShipped = service("llm-models-test.yaml", "llm-models-curated.yaml", null);
+
+            var params = withoutCurated.paramsOf("anthropic", "claude-sonnet-4-6");
+
+            assertThat(params).isEqualTo(withShipped.paramsOf("anthropic", "claude-sonnet-4-6"));
+            assertThat(params.temperature().accepted())
+                    .as("only the row's own profile accepts it; the anthropic profile refuses it")
+                    .isTrue();
+            assertThat(model(withoutCurated, "anthropic", "claude-sonnet-4-6").params())
+                    .as("the API serves what the rules read")
+                    .isEqualTo(params);
+        }
+
+        @Test
+        void withoutTheCuratedLayerARowWithSomeParamsKeepsTheShippedRulesForTheRest(@TempDir Path tempDir)
+                throws IOException {
+            var override = tempDir.resolve("override.yaml");
+            try (var fixture = getClass().getClassLoader()
+                    .getResourceAsStream("llm-models-override-claude-no-sampling.yaml")) {
+                Files.copy(fixture, override);
+            }
+            var withoutCurated = service("llm-models-test.yaml", "", override.toString());
+            var withShipped = service("llm-models-test.yaml", "llm-models-curated.yaml", override.toString());
+
+            var params = withoutCurated.paramsOf("anthropic", "claude-sonnet-4-6");
+
+            assertThat(params).isEqualTo(withShipped.paramsOf("anthropic", "claude-sonnet-4-6"));
+            assertThat(params.topP().accepted()).as("the override refuses it").isFalse();
+            assertThat(params.temperature().accepted()).as("the shipped row accepts it").isTrue();
+            assertThat(params.effort().levels()).containsExactly("low", "medium", "high", "max");
+            assertThat(params.thinksByDefault()).isFalse();
+            assertThat(model(withoutCurated, "anthropic", "claude-sonnet-4-6").params()).isEqualTo(params);
+        }
+
+        @Test
         void aProviderWithoutDefaultsGetsNoParams() {
             assertThat(model(service(null), "vertex-ai", "gemini-2.0-flash-001").params()).isNull();
         }

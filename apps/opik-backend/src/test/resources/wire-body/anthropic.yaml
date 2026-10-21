@@ -7,7 +7,7 @@ models:
   # use the instruction strategy instead of a JSON schema.
   legacy:
     - claude-3-7-sonnet-20250219
-  # AnthropicModelName.SAMPLING_CAPABLE_MODEL_IDS, without Claude 3.
+  # The AnthropicModelName ids whose catalog params accept temperature, without Claude 3.
   sampling:
     - claude-haiku-4-5-20251001
     - claude-opus-4-1-20250805
@@ -37,8 +37,8 @@ models:
   # In the registry only, not in AnthropicModelName: what a model the sync or the CDN just added looks like.
   registry-only:
     - claude-opus-6
-  # Every AnthropicModelName id outside THINKING_OFF_BY_DEFAULT_MODEL_IDS. A judge on these thinks even when the rule
-  # names no thinking, so it gets the 5000 max_tokens default instead of 4096; so does a registry-only model.
+  # Every AnthropicModelName id the catalog doesn't mark thinksByDefault: false. A judge on these thinks even when
+  # the rule names no thinking, so it gets the 5000 max_tokens default instead of 4096; so does a registry-only model.
   thinks-by-default:
     - claude-fable-5
     - claude-fable-5-1
@@ -58,7 +58,7 @@ models:
     - claude-opus-4-7-20260416
     - claude-opus-4-8
     - claude-sonnet-4-6
-  # AnthropicModelName.EFFORT_LEVELS_BY_MODEL_ID, by the levels each model is listed with.
+  # The AnthropicModelName ids by the effort levels their catalog params list.
   effort-all:
     - claude-fable-5
     - claude-fable-5-1

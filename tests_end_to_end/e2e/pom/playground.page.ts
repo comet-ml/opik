@@ -1289,9 +1289,30 @@ export class PlaygroundPage {
    * number input), which is why callers assert `toHaveCount(1)` before reading
    * it rather than taking `.first()`. The FE should grow a
    * `data-testid="reasoning-effort-select"` here and this should move to it.
+   *
+   * Shares {@link effortSelectTrigger} with the Anthropic reader below, since
+   * either panel mounts exactly one of these.
    */
   reasoningEffortTrigger(): Locator {
-    return this.modelParametersPanel().getByRole('combobox');
+    return this.effortSelectTrigger();
+  }
+
+  /**
+   * The Anthropic effort control's trigger inside the open model-parameters
+   * panel — the same single combobox as {@link reasoningEffortTrigger}, since a
+   * panel serves one provider at a time.
+   *
+   * Addressed by role rather than by its label even though `SelectBox` does put
+   * the id on the trigger (so `getByLabel('Thinking effort')` resolves): the
+   * label itself is under test. `AnthropicModelConfigs` renders "Effort" instead
+   * of "Thinking effort" for a model declaring `effortWithoutThinking`, because
+   * there the level changes answer length and tool use without turning thinking
+   * on — so a label-based locator would silently stop matching on exactly the
+   * model whose labelling is the assertion. Read the label with
+   * {@link modelParameterLabel} and the value through here.
+   */
+  thinkingEffortTrigger(): Locator {
+    return this.effortSelectTrigger();
   }
 
   /**
@@ -1304,11 +1325,19 @@ export class PlaygroundPage {
    * is the subject of opik#8682, not an artefact of this reader.
    */
   async readReasoningEffort(): Promise<string> {
-    return test.step('read the displayed reasoning effort', async () => {
-      const trigger = this.reasoningEffortTrigger();
-      await expect(trigger, 'the panel mounts exactly one reasoning-effort control').toHaveCount(1);
-      return ((await trigger.textContent()) ?? '').trim();
-    });
+    return test.step('read the displayed reasoning effort', async () => this.readEffortValue());
+  }
+
+  /**
+   * The Anthropic effort the panel currently DISPLAYS.
+   *
+   * Which is not always what the config holds: `resolveEffort` falls back to
+   * the model's default for a stored level the selected model does not offer,
+   * which is exactly what a model switch has to be read through — the panel is
+   * the only place the reconciled level is visible before a Run.
+   */
+  async readThinkingEffort(): Promise<string> {
+    return test.step('read the displayed thinking effort', async () => this.readEffortValue());
   }
 
   /**
@@ -1321,40 +1350,54 @@ export class PlaygroundPage {
    * read from the page's listbox rather than from inside the panel.
    */
   async reasoningEffortOptions(): Promise<string[]> {
-    return test.step('read the offered reasoning efforts', async () => {
-      const trigger = this.reasoningEffortTrigger();
-      await expect(trigger, 'the panel mounts exactly one reasoning-effort control').toHaveCount(1);
-      const listbox = this.page.getByRole('listbox');
-      await expect(async () => {
-        await trigger.click();
-        await expect(listbox).toBeVisible({ timeout: 2_000 });
-      }).toPass({ timeout: 15_000 });
+    return test.step('read the offered reasoning efforts', async () => this.readEffortOptions());
+  }
 
-      const options = await listbox.getByRole('option').allTextContents();
-      await this.page.keyboard.press('Escape');
-      await expect(listbox).toBeHidden();
-      return options.map((o) => o.trim());
-    });
+  /**
+   * Every Anthropic effort the control OFFERS, in the order the panel lists them.
+   *
+   * The whole list is the assertion, not just "Off is there":
+   * `getAnthropicThinkingEffortOptions` prepends Off only for a model that
+   * thinks solely when asked, and each model declares its own level set — so
+   * "Off was added" and "the levels behind it are unchanged" are separate
+   * claims a caller wants to make in one go. A build that lost the Off choice
+   * and one that lost the whole control look identical through a single
+   * negative.
+   */
+  async thinkingEffortOptions(): Promise<string[]> {
+    return test.step('read the offered thinking efforts', async () => this.readEffortOptions());
   }
 
   /** Pick a reasoning effort by its rendered label, e.g. `Max`. */
   async selectReasoningEffort(label: string): Promise<void> {
     return test.step(`select reasoning effort "${label}"`, async () => {
-      const trigger = this.reasoningEffortTrigger();
-      await expect(trigger, 'the panel mounts exactly one reasoning-effort control').toHaveCount(1);
-      const listbox = this.page.getByRole('listbox');
-      await expect(async () => {
-        await trigger.click();
-        await expect(listbox).toBeVisible({ timeout: 2_000 });
-      }).toPass({ timeout: 15_000 });
-
-      const option = listbox.getByRole('option', { name: label, exact: true });
-      // Exactly one, not `.first()`: "High" and "xHigh" are both offered, and
-      // an ambiguous match would silently store the wrong effort.
-      await expect(option, `"${label}" is offered`).toHaveCount(1);
-      await option.click();
-      await expect(listbox).toBeHidden();
+      await this.pickEffort(label);
     });
+  }
+
+  /** Pick an Anthropic thinking effort by its rendered label, e.g. `Off`. */
+  async selectThinkingEffort(label: string): Promise<void> {
+    return test.step(`select thinking effort "${label}"`, async () => {
+      await this.pickEffort(label);
+      // The trigger, not the config: a click Radix swallowed mid-remount would
+      // otherwise leave the caller asserting the next step against the level it
+      // meant to leave behind. Exact, so picking "High" cannot be satisfied by
+      // a trigger still reading "xHigh".
+      await expect(this.thinkingEffortTrigger()).toHaveText(label);
+    });
+  }
+
+  /**
+   * The note that replaces the sampling controls while Claude can think.
+   *
+   * Its WORDING is load-bearing, which is why this returns the element rather
+   * than a boolean: the panel names the parameters the surface can actually
+   * store, so the playground's two-parameter sentence and the judge rule's
+   * temperature-only one are different strings, and a surface rendering the
+   * other one is telling the user to go and set a control that is not there.
+   */
+  samplingOffNote(): Locator {
+    return this.modelParametersPanel().getByText(/(?:are|is) off while Claude can think/);
   }
 
   /** Every slider control mounted in the open panel, by its control id. */
@@ -2056,6 +2099,41 @@ export class PlaygroundPage {
   }
 
   /**
+   * Type a value into a named slider control and commit it to the config.
+   *
+   * Three steps, each of which the control needs:
+   *  - a real click first, not just `fill()`: it moves the pointer off the gear,
+   *    whose hover tooltip would otherwise sit above the menu and swallow the
+   *    Escape that {@link closeModelParameters} sends;
+   *  - `fill()`;
+   *  - a blur, because `SliderInputControl` writes through `onChange` on blur
+   *    (or Enter/Tab/Escape) only, so a value left focused is displayed but not
+   *    stored, and the next Run would carry the old one.
+   *
+   * Asserted back off the control afterwards: a value the control clamped to
+   * its own min/max is silently not the one the caller asked for, and a spec
+   * comparing the request against "the value I set" would then be comparing it
+   * against a number that was never in the config.
+   *
+   * Distinct from {@link setSliderValue}, which deliberately does NOT read the
+   * value back: the max-output-tokens specs set values ABOVE the cap and BELOW
+   * the floor precisely to assert the control clamps them, so a read-back
+   * assertion there would fail on the behaviour under test.
+   */
+  async setModelParameterSlider(controlId: string, value: string): Promise<void> {
+    return test.step(`set ${controlId} to ${value}`, async () => {
+      const input = this.sliderInput(controlId);
+      await input.click();
+      await input.fill(value);
+      await input.blur();
+      await expect(
+        input,
+        `${controlId} holds ${value} — a clamped or rejected value is not the one under test`,
+      ).toHaveValue(value);
+    });
+  }
+
+  /**
    * The hint line a named slider control renders beneath itself — for Max
    * output tokens, the "No limit" note `getNoOutputLimitHint` returns at 0.
    *
@@ -2067,20 +2145,6 @@ export class PlaygroundPage {
    */
   sliderHint(controlId: string): Locator {
     return this.modelParametersPanel().locator(`#${controlId}-slider ~ p`);
-  }
-
-  /** The Thinking effort dropdown. Its text is the effort the panel claims. */
-  thinkingEffortSelect(): Locator {
-    return this.modelParametersPanel().getByLabel('Thinking effort');
-  }
-
-  /** Pick a Thinking effort by its displayed label. */
-  async selectThinkingEffort(label: string): Promise<void> {
-    return test.step(`select thinking effort "${label}"`, async () => {
-      await this.thinkingEffortSelect().click();
-      await this.page.getByRole('option', { name: label, exact: true }).click();
-      await expect(this.thinkingEffortSelect()).toHaveText(label);
-    });
   }
 
   /** Type a prompt into variant 0's User message row. */
@@ -2118,6 +2182,64 @@ export class PlaygroundPage {
   }
 
   // ── private helpers ─────────────────────────────────────────────────────
+
+  /**
+   * The one effort `Select` the open model-parameters panel mounts.
+   *
+   * Shared by the OpenAI reasoning-effort and Anthropic thinking-effort
+   * readers: a panel serves a single provider, and every other control it
+   * renders is a `SliderInputControl` number input or a sampling radio — so
+   * "the panel's only combobox" is the effort dropdown whichever provider is
+   * selected. Callers assert `toHaveCount(1)` before reading it rather than
+   * taking `.first()`, so a panel that grew a second dropdown fails loudly
+   * instead of reading whichever one happened to come first.
+   */
+  private effortSelectTrigger(): Locator {
+    return this.modelParametersPanel().getByRole('combobox');
+  }
+
+  private async readEffortValue(): Promise<string> {
+    const trigger = this.effortSelectTrigger();
+    await expect(trigger, 'the panel mounts exactly one effort control').toHaveCount(1);
+    return ((await trigger.textContent()) ?? '').trim();
+  }
+
+  /**
+   * Open the effort dropdown, read every option, close it again.
+   *
+   * The options render in a portal, so they are read from the page's listbox
+   * rather than from inside the panel.
+   */
+  private async readEffortOptions(): Promise<string[]> {
+    const listbox = await this.openEffortListbox();
+    const options = await listbox.getByRole('option').allTextContents();
+    await this.page.keyboard.press('Escape');
+    await expect(listbox).toBeHidden();
+    return options.map((o) => o.trim());
+  }
+
+  private async pickEffort(label: string): Promise<void> {
+    const listbox = await this.openEffortListbox();
+    const option = listbox.getByRole('option', { name: label, exact: true });
+    // Exactly one, not `.first()`: "High" and "xHigh" are both offered, and
+    // an ambiguous match would silently store the wrong effort.
+    await expect(option, `"${label}" is offered`).toHaveCount(1);
+    await option.click();
+    await expect(listbox).toBeHidden();
+  }
+
+  private async openEffortListbox(): Promise<Locator> {
+    const trigger = this.effortSelectTrigger();
+    await expect(trigger, 'the panel mounts exactly one effort control').toHaveCount(1);
+    const listbox = this.page.getByRole('listbox');
+    // Retried: the panel remounts when /llm/models and the provider-key query
+    // resolve, which detaches the trigger mid-click.
+    await expect(async () => {
+      await trigger.click();
+      await expect(listbox).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
+    return listbox;
+  }
 
   /**
    * The gear button that opens a variant's model parameters.

@@ -255,8 +255,8 @@ export class OnlineEvaluationPage {
    * By its accessible name, not a testid: `AnthropicModelConfigs` renders a
    * `<Label htmlFor="thinkingEffort">` beside a `SelectBox id="thinkingEffort"`,
    * so the label is the one handle on the control that is not a utility class.
-   * `PlaygroundPage.thinkingEffortSelect` addresses the same component the same
-   * way.
+   * `PlaygroundPage.thinkingEffortTrigger` addresses the same component, though
+   * by role rather than by label.
    *
    * Not covered by `mountedJudgeParameterIds`, which reads `SliderInputControl`
    * number inputs — this is a Radix select and has none, so a spec asserting on
@@ -270,6 +270,126 @@ export class OnlineEvaluationPage {
    */
   get judgeThinkingEffortSelect(): Locator {
     return this.judgeModelParametersPanel.getByLabel('Thinking effort');
+  }
+
+  /**
+   * Close the judge parameters panel with ONE Escape, then wait for it to go.
+   *
+   * Exactly one press, deliberately — the opposite of
+   * `PlaygroundPage.closeModelParameters`, which presses until the panel goes.
+   * Here the panel sits inside the rule dialog: its close is animated, so it
+   * still reports visible for a beat, and a second press lands on the DIALOG
+   * and dismisses the whole form (which presents as Cancel detaching
+   * mid-click). One press and a wait is enough because every caller has just
+   * clicked an interactive child, so focus is already inside the panel.
+   *
+   * Needed by any spec that reads the panel and then goes back to the form —
+   * changing the model, naming the rule, saving. A spec that only reads the
+   * panel and stops should open a fresh dialog instead.
+   */
+  async closeJudgeModelParameters(): Promise<void> {
+    return test.step('close the judge model parameters', async () => {
+      await this.page.keyboard.press('Escape');
+      await this.judgeModelParametersPanel.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * A named control's label inside the open judge parameters panel.
+   *
+   * Exact, and the assertion in its own right for the effort control: the
+   * panel renders "Effort" rather than "Thinking effort" for a Claude model
+   * declaring `effortWithoutThinking`, where the level changes answer length
+   * and tool use without turning thinking on. "Thinking level" is the Gemini
+   * spelling of the same slot.
+   */
+  judgeParameterLabel(label: string): Locator {
+    return this.judgeModelParametersPanel.getByText(label, { exact: true });
+  }
+
+  /**
+   * The note that replaces the temperature while Claude can think.
+   *
+   * The WORDING is load-bearing, which is why this returns the element rather
+   * than a boolean. A rule cannot store a Top P — `RULE_UNSUPPORTED_PARAMS`
+   * strips it — so this surface must render the temperature-only sentence and
+   * not the playground's two-parameter one, which would tell the user to go
+   * and set a Top P control that is not there.
+   */
+  get judgeSamplingOffNote(): Locator {
+    return this.judgeModelParametersPanel.getByText(/(?:are|is) off while Claude can think/);
+  }
+
+  /**
+   * The effort / thinking-level `Select` the open judge parameters panel mounts.
+   *
+   * Addressed by role, not by its label: `SelectBox` does put the id on the
+   * trigger, but the label is itself under test and differs per provider
+   * ("Thinking effort", "Effort", "Thinking level"). The panel's only other
+   * controls are `SliderInputControl` number inputs, so its one combobox is
+   * this dropdown — asserted `toHaveCount(1)` before every read rather than
+   * taken as `.first()`.
+   */
+  get judgeEffortTrigger(): Locator {
+    return this.judgeModelParametersPanel.getByRole('combobox');
+  }
+
+  /** The level the judge parameters panel currently DISPLAYS. */
+  async readJudgeEffort(): Promise<string> {
+    return test.step('read the displayed judge effort', async () => {
+      await expect(
+        this.judgeEffortTrigger,
+        'the judge parameters panel mounts exactly one effort control',
+      ).toHaveCount(1);
+      return ((await this.judgeEffortTrigger.textContent()) ?? '').trim();
+    });
+  }
+
+  /**
+   * Every level the judge effort control OFFERS, in the order it lists them.
+   *
+   * The whole list rather than one membership check: "Off is gone" and "the
+   * levels are gone" are different regressions, and for Gemini the absence of
+   * Off is the model's own constraint — Google answers a zero budget with
+   * "Budget 0 is invalid. This model only works in thinking mode."
+   */
+  async judgeEffortOptions(): Promise<string[]> {
+    return test.step('read the offered judge effort levels', async () => {
+      const listbox = await this.openJudgeEffortListbox();
+      const options = await listbox.getByRole('option').allTextContents();
+      await this.page.keyboard.press('Escape');
+      await expect(listbox).toBeHidden();
+      return options.map((o) => o.trim());
+    });
+  }
+
+  /** Pick a judge effort / thinking level by its rendered label, e.g. `Low`. */
+  async selectJudgeEffort(label: string): Promise<void> {
+    return test.step(`select judge effort "${label}"`, async () => {
+      const listbox = await this.openJudgeEffortListbox();
+      const option = listbox.getByRole('option', { name: label, exact: true });
+      // Exactly one, not `.first()`: "High" and "xHigh" are both offered on
+      // some models, and an ambiguous match would store the wrong level.
+      await expect(option, `"${label}" is offered`).toHaveCount(1);
+      await option.click();
+      await expect(listbox).toBeHidden();
+      await expect(this.judgeEffortTrigger).toHaveText(label);
+    });
+  }
+
+  private async openJudgeEffortListbox(): Promise<Locator> {
+    await expect(
+      this.judgeEffortTrigger,
+      'the judge parameters panel mounts exactly one effort control',
+    ).toHaveCount(1);
+    const listbox = this.page.getByRole('listbox');
+    // Retried: the panel remounts when the model and provider-key queries
+    // resolve, which detaches the trigger mid-click.
+    await expect(async () => {
+      await this.judgeEffortTrigger.click();
+      await expect(listbox).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
+    return listbox;
   }
 
   /**
@@ -831,6 +951,24 @@ export class OnlineEvaluationPage {
   async fillAndSubmitCreateRuleDialogLLMJudge(
     fields: CreateRuleDialogLLMJudgeFields,
   ): Promise<void> {
+    await this.fillCreateRuleDialogLLMJudge(fields);
+    await this.submitRuleDialog();
+  }
+
+  /**
+   * The same fill, stopping short of the submit.
+   *
+   * For a spec that has to touch the form between filling it and saving —
+   * setting a model parameter through the gear, say. The order matters and is
+   * why this is one method rather than a caller's own sequence: picking the
+   * template rebuilds the prompt and variable-mapping section, so it has to
+   * come before anything else, and the model has to be chosen before its
+   * parameters panel exists at all. A caller adjusting model parameters does it
+   * AFTER this returns.
+   */
+  async fillCreateRuleDialogLLMJudge(
+    fields: CreateRuleDialogLLMJudgeFields,
+  ): Promise<void> {
     const d = this.dialog;
     await d.getByRole('textbox', { name: 'Rule name' }).fill(fields.name);
 
@@ -870,9 +1008,6 @@ export class OnlineEvaluationPage {
     // OnlineScoringEngine.toVariableMapping — dot-containing paths get
     // `$.output`, bare paths get `$` which yields the whole JSON node).
     await this.setVariableMapping('output', 'output.output');
-
-    await d.getByTestId('add-edit-rule-dialog-submit').click();
-    await d.waitFor({ state: 'hidden' });
   }
 
   /**

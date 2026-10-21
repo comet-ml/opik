@@ -36,11 +36,14 @@ cases and see which variant performs better.
 
 <Steps>
   <Step title="Bind a dataset or test suite">
-    Click **Test on Dataset** in the header and select a dataset or test suite. If you're using
-    template variables (`{{variable_name}}`), they are automatically mapped to dataset columns.
+    Click **Run experiment** in the header, choose **Dataset** or **Test suite**, and select one. For a
+    dataset, also pick the metrics to score with; a test suite is scored by its own assertions. If
+    you're using template variables (`{{variable_name}}`), they are automatically mapped to dataset
+    columns.
   </Step>
   <Step title="Run the experiment">
-    Click **Run experiment** to execute all prompt variants against every item in the dataset.
+    Start the run to execute all prompt variants against every item. Each prompt variant becomes its
+    own experiment.
     Results appear in a table below the prompts, with each variant's output shown side by side.
   </Step>
   <Step title="Review results">

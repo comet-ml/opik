@@ -17,6 +17,8 @@ export {
   type VersionedDatasetItemRef,
   type VersionedDatasetItemPage,
   type RawApiResult,
+  type LlmCatalogEffortRef,
+  type LlmCatalogModelRef,
   type BackendSort,
   type MetricSeries,
   type MetricInterval,
