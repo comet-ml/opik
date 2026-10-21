@@ -22,6 +22,9 @@ public record RedisUrl(
     private static final String SCHEME_SEPARATOR = "://";
     private static final char CREDENTIALS_SEPARATOR = '@';
     private static final char PASSWORD_SEPARATOR = ':';
+    /** Port of a parsed URL that had none, when parsed with it as the default. */
+    public static final int NO_DEFAULT_PORT = -1;
+
     private static final int DEFAULT_REDIS_PORT = 6379;
     private static final int DEFAULT_DATABASE = 0;
 
@@ -60,7 +63,8 @@ public record RedisUrl(
     }
 
     /**
-     * Same as {@link #parse(String)}, with the port to assume when the URL has none, e.g. 26379 for a sentinel.
+     * Same as {@link #parse(String)}, with the port to assume when the URL has none. Pass {@link #NO_DEFAULT_PORT} to
+     * detect a missing port.
      */
     public static RedisUrl parse(String redisUrl, int defaultPort) {
         Preconditions.checkArgument(StringUtils.isNotBlank(redisUrl), "Redis url cannot be blank");

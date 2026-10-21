@@ -2,21 +2,17 @@ import os
 import redis
 import logging
 import re
-import threading
-import time
 from urllib.parse import unquote, urlparse
 
 from redis.backoff import FullJitterBackoff
 from redis.retry import Retry
-from redis.sentinel import Sentinel, SentinelConnectionPool
+from redis.sentinel import Sentinel
 
 logger = logging.getLogger(__name__)
 
 _redis_client = None
-_master_follower_pid = None
 
 _SENTINEL_SCHEMES = ("redis", "rediss")
-_DEFAULT_SENTINEL_PORT = 26379
 _MAX_SENTINEL_RETRY_ATTEMPTS = 20
 # Same format as the Java backend's Dropwizard durations, e.g. 500ms, 5s, 1m
 _DURATION = re.compile(r"^(\d+)\s*([a-z]+)$")
@@ -82,8 +78,9 @@ def _create_sentinel_master_client(
     """Client for the master that the sentinels currently report, configured exactly like the Java backend.
 
     REDIS_URL is the seed sentinel: its scheme selects TLS everywhere, and its credentials and database apply to the
-    master data nodes. Every new connection asks the sentinels for the master, a connection that lands on a demoted
-    master fails with a connection error so the retry reconnects, and _follow_master polls every scan interval.
+    master data nodes. redis-py follows a failover on its own: every new connection asks the sentinels for the master,
+    and a connection that lands on a demoted master fails with a connection error, so the retry reconnects. That is why
+    OPIK_REDIS_SENTINEL_SCAN_INTERVAL, Redisson's polling period, has no Python counterpart.
     """
     seed = urlparse(redis_url)
     if seed.scheme not in _SENTINEL_SCHEMES:
@@ -91,7 +88,7 @@ def _create_sentinel_master_client(
     master_name = os.getenv("OPIK_REDIS_SENTINEL_MASTER_NAME", "").strip()
     if not master_name:
         raise ValueError("OPIK_REDIS_SENTINEL_MASTER_NAME must not be blank when Sentinel is enabled")
-    retry_attempts = int(os.getenv("OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS", "3"))
+    retry_attempts = _int_env("OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS", "3")
     if not 0 <= retry_attempts <= _MAX_SENTINEL_RETRY_ATTEMPTS:
         raise ValueError(f"OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS must be between 0 and {_MAX_SENTINEL_RETRY_ATTEMPTS}")
     backoff_base = _duration_env("OPIK_REDIS_SENTINEL_RETRY_BACKOFF_BASE", "500ms", minimum=0.001)
@@ -100,10 +97,11 @@ def _create_sentinel_master_client(
         raise ValueError("OPIK_REDIS_SENTINEL_RETRY_BACKOFF_BASE must not exceed OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP")
     connect_timeout = _duration_env("OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT", "10s")
     command_timeout = _duration_env("OPIK_REDIS_SENTINEL_TIMEOUT", "5s")
-    scan_interval = _duration_env("OPIK_REDIS_SENTINEL_SCAN_INTERVAL", "2s")
 
-    # Without a port the seed is a sentinel on 26379, not a Redis data node on 6379
-    sentinels = [(seed.hostname, seed.port or _DEFAULT_SENTINEL_PORT)]
+    # Sentinels can listen on any port, so it is never assumed
+    if not seed.port:
+        raise ValueError("REDIS_URL must include the sentinel port when Sentinel is enabled")
+    sentinels = [(seed.hostname, seed.port)]
     for node in os.getenv("OPIK_REDIS_SENTINEL_NODES", "").split(","):
         if node.strip():
             address = _sentinel_address(node.strip(), seed.scheme)
@@ -111,7 +109,7 @@ def _create_sentinel_master_client(
                 sentinels.append(address)
 
     ssl = seed.scheme == "rediss"
-    check_sentinels = os.getenv("OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST", "true").strip().lower() == "true"
+    check_sentinels = _bool_env("OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST", "true")
     sentinel = Sentinel(
         sentinels,
         # Like the Java backend, refuse a master that no other sentinel agrees on, unless single-sentinel dev setups
@@ -129,7 +127,7 @@ def _create_sentinel_master_client(
     )
     db = int(seed.path.lstrip("/") or 0)
     logger.info(f"  Redis: using Sentinel master '{master_name}' through {len(sentinels)} sentinels, database {db}")
-    client = sentinel.master_for(
+    return sentinel.master_for(
         master_name,
         db=db,
         decode_responses=decode_responses,
@@ -139,34 +137,35 @@ def _create_sentinel_master_client(
         # Same formula as Redisson's FullJitterDelay: random(0, min(base * 2^attempt, cap))
         retry=Retry(FullJitterBackoff(cap=backoff_cap, base=backoff_base), retry_attempts),
     )
-    client.sentinel_scan_interval = scan_interval
-    return client
 
 
-def _follow_master(client: redis.Redis) -> None:
-    """Asks the sentinels for the master every scan interval, like Redisson's scanInterval.
+def _required_env(name: str, default: str) -> str:
+    # Like the Java backend, an exported but empty variable is an error rather than a fallback to the default
+    value = os.getenv(name, default).strip()
+    if not value:
+        raise ValueError(f"{name} must not be empty when Sentinel is enabled")
+    return value
 
-    On a change redis-py drops the idle connections, so they reconnect to the new master. Threads do not survive a
-    fork, so every process that uses the client starts its own.
-    """
-    pool = client.connection_pool
 
-    def scan() -> None:
-        while True:
-            time.sleep(client.sentinel_scan_interval)
-            try:
-                pool.get_master_address()
-            except Exception as error:
-                logger.warning(f"Redis Sentinel master scan failed: {error}")
+def _int_env(name: str, default: str) -> int:
+    value = _required_env(name, default)
+    try:
+        return int(value)
+    except ValueError as exception:
+        raise ValueError(f"{name} must be an integer") from exception
 
-    threading.Thread(target=scan, name="redis-sentinel-master-scan", daemon=True).start()
+
+def _bool_env(name: str, default: str) -> bool:
+    value = _required_env(name, default).lower()
+    if value not in ("true", "false"):
+        raise ValueError(f"{name} must be true or false")
+    return value == "true"
 
 
 def _duration_env(
     name: str, default: str, *, minimum: float = _MIN_DURATION_SECONDS, maximum: float = _MAX_DURATION_SECONDS
 ) -> float:
-    value = os.getenv(name) or default
-    match = _DURATION.match(value.strip().lower())
+    match = _DURATION.match(_required_env(name, default).lower())
     if not match or match.group(2) not in _DURATION_UNITS:
         raise ValueError(f"{name} must be a duration such as 500ms, 5s or 1m")
     seconds = int(match.group(1)) * _DURATION_UNITS[match.group(2)]
@@ -190,19 +189,14 @@ def _sentinel_address(node: str, scheme: str) -> tuple[str, int]:
     try:
         port = parsed.port
     except ValueError as exception:
-        raise ValueError(
-            "OPIK_REDIS_SENTINEL_NODES entries must include a host, and a port between 1 and 65535 if any"
-        ) from exception
-    if not parsed.hostname:
-        raise ValueError("OPIK_REDIS_SENTINEL_NODES entries must include a host, and a port between 1 and 65535 if any")
-    return parsed.hostname, port or _DEFAULT_SENTINEL_PORT
+        raise ValueError("OPIK_REDIS_SENTINEL_NODES entries must include a host and a port between 1 and 65535") from exception
+    if not parsed.hostname or not port:
+        raise ValueError("OPIK_REDIS_SENTINEL_NODES entries must include a host and a port between 1 and 65535")
+    return parsed.hostname, port
 
 
 def get_redis_client() -> redis.Redis:
-    global _redis_client, _master_follower_pid
+    global _redis_client
     if _redis_client is None:
         _redis_client = _create_redis_client_from_env(decode_responses=False)
-    if isinstance(_redis_client.connection_pool, SentinelConnectionPool) and _master_follower_pid != os.getpid():
-        _master_follower_pid = os.getpid()
-        _follow_master(_redis_client)
     return _redis_client

@@ -9,11 +9,11 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.resources.HealthCheckResourceClient;
+import com.comet.opik.api.resources.utils.resources.HealthCheckResourceClient.HealthCheckResponse;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
-import jakarta.ws.rs.core.GenericType;
-import lombok.Builder;
 import org.apache.hc.core5.http.HttpStatus;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeAll;
@@ -43,9 +43,6 @@ class HealthCheckIntegrationTest {
 
     private static final String READY = "READY";
     private static final String ALIVE = "ALIVE";
-
-    private static final GenericType<List<HealthCheckResponse>> HEALTH_CHECK_LIST_GENERIC_TYPE = new GenericType<>() {
-    };
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -88,11 +85,13 @@ class HealthCheckIntegrationTest {
 
         private ClientSupport client;
         private String baseURI;
+        private HealthCheckResourceClient healthCheckClient;
 
         @BeforeAll
         void setUpAll(ClientSupport client) {
             this.client = client;
             this.baseURI = TestUtils.getBaseUrl(client);
+            this.healthCheckClient = new HealthCheckResourceClient(client, baseURI);
             ClientSupportUtils.config(client);
         }
 
@@ -153,7 +152,7 @@ class HealthCheckIntegrationTest {
         @ParameterizedTest(name = "healthCheckOk - {0}")
         @MethodSource
         void healthCheckOk(String name, List<HealthCheckResponse> expectedResponse) {
-            callHealthCheckAndAwaitAssertResponse(client, baseURI, name, expectedResponse);
+            healthCheckClient.awaitHealthCheck(name, expectedResponse);
         }
     }
 
@@ -179,11 +178,13 @@ class HealthCheckIntegrationTest {
 
         private ClientSupport client;
         private String baseURI;
+        private HealthCheckResourceClient healthCheckClient;
 
         @BeforeAll
         void setUpAll(ClientSupport client) {
             this.client = client;
             this.baseURI = TestUtils.getBaseUrl(client);
+            this.healthCheckClient = new HealthCheckResourceClient(client, baseURI);
             ClientSupportUtils.config(client);
         }
 
@@ -192,8 +193,7 @@ class HealthCheckIntegrationTest {
             var expected = HealthCheckResponse.builder()
                     .name("clickhouse-readonly-freeform-sql").healthy(true).critical(false).type(READY).build();
 
-            callHealthCheckAndAwaitAssertResponse(
-                    client, baseURI, "clickhouse-readonly-freeform-sql", List.of(expected));
+            healthCheckClient.awaitHealthCheck("clickhouse-readonly-freeform-sql", List.of(expected));
         }
     }
 
@@ -217,11 +217,13 @@ class HealthCheckIntegrationTest {
 
         private ClientSupport client;
         private String baseURI;
+        private HealthCheckResourceClient healthCheckClient;
 
         @BeforeAll
         void setUpAll(ClientSupport client) {
             this.client = client;
             this.baseURI = TestUtils.getBaseUrl(client);
+            this.healthCheckClient = new HealthCheckResourceClient(client, baseURI);
             ClientSupportUtils.config(client);
         }
 
@@ -241,7 +243,8 @@ class HealthCheckIntegrationTest {
 
             Awaitility.await()
                     .atMost(5, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertResponse(readHealthCheck(client, baseURI, name), List.of(expected)));
+                    .untilAsserted(() -> assertThat(healthCheckClient.readHealthCheck(name))
+                            .containsExactlyInAnyOrderElementsOf(List.of(expected)));
         }
     }
 
@@ -268,11 +271,13 @@ class HealthCheckIntegrationTest {
 
         private ClientSupport client;
         private String baseURI;
+        private HealthCheckResourceClient healthCheckClient;
 
         @BeforeAll
         void setUpAll(ClientSupport client) {
             this.client = client;
             this.baseURI = TestUtils.getBaseUrl(client);
+            this.healthCheckClient = new HealthCheckResourceClient(client, baseURI);
             ClientSupportUtils.config(client);
         }
 
@@ -283,8 +288,8 @@ class HealthCheckIntegrationTest {
 
             Awaitility.await()
                     .atMost(5, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertResponse(
-                            readHealthCheck(client, baseURI, "clickhouse-traces-topology"), List.of(expected)));
+                    .untilAsserted(() -> assertThat(healthCheckClient.readHealthCheck("clickhouse-traces-topology"))
+                            .containsExactlyInAnyOrderElementsOf(List.of(expected)));
         }
 
         /**
@@ -304,52 +309,5 @@ class HealthCheckIntegrationTest {
                         }
                     });
         }
-    }
-
-    @Builder
-    private record HealthCheckResponse(String name, boolean healthy, boolean critical, String type) {
-    }
-
-    /**
-     * Polls {@code /health-check?name=...} until the response matches {@code expected}. Required
-     * because Dropwizard's health endpoint returns cached state from the periodic scheduler; the
-     * test ClickHouse/MySQL/Redis containers (and the read-only ClickHouse user under
-     * Agent Insights) take a probe cycle or two after app start to be reflected. The aggressive
-     * schedule in {@code config-test.yml} (100 ms interval, single-attempt thresholds) keeps the
-     * window short, so a broken probe never satisfies the assertion before the timeout.
-     */
-    private void callHealthCheckAndAwaitAssertResponse(ClientSupport client, String baseURI, String name,
-            List<HealthCheckResponse> expected) {
-        Awaitility.await()
-                .atMost(5, TimeUnit.SECONDS)
-                .untilAsserted(() -> {
-                    var actual = callHealthCheckAndAssertOk(client, baseURI, name);
-                    assertResponse(actual, expected);
-                });
-    }
-
-    private List<HealthCheckResponse> callHealthCheckAndAssertOk(ClientSupport client, String baseURI, String name) {
-        try (var response = client.target("%s/health-check?name=%s".formatted(baseURI, name))
-                .request()
-                .get()) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            return response.readEntity(HEALTH_CHECK_LIST_GENERIC_TYPE);
-        }
-    }
-
-    /**
-     * Reads the health check body without asserting the HTTP status: an unhealthy {@code critical}
-     * check makes the endpoint return a non-OK status while still carrying the JSON results.
-     */
-    private List<HealthCheckResponse> readHealthCheck(ClientSupport client, String baseURI, String name) {
-        try (var response = client.target("%s/health-check?name=%s".formatted(baseURI, name))
-                .request()
-                .get()) {
-            return response.readEntity(HEALTH_CHECK_LIST_GENERIC_TYPE);
-        }
-    }
-
-    private void assertResponse(List<HealthCheckResponse> actual, List<HealthCheckResponse> expected) {
-        assertThat(actual).containsExactlyInAnyOrderElementsOf(expected);
     }
 }

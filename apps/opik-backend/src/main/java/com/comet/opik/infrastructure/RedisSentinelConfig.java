@@ -2,17 +2,15 @@ package com.comet.opik.infrastructure;
 
 import com.comet.opik.infrastructure.redis.RedisUrl;
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Preconditions;
 import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import lombok.Data;
+import lombok.Builder;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.config.Config;
 import org.redisson.config.FullJitterDelay;
@@ -22,74 +20,49 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Redis Sentinel topology. When enabled, {@code redis.singleNodeUrl} is the seed sentinel: its scheme selects TLS for
  * every sentinel connection, its host and port identify the seed sentinel, and its credentials and database apply to the
- * master data nodes. Redisson discovers the master through the sentinels and follows it on failover.
+ * master data nodes. Redisson discovers the master through the sentinels and follows it on failover. Defaults live only
+ * in {@code config.yml}.
+ *
+ * @param enabled whether the backend connects through Sentinel instead of a single node.
+ * @param masterName the master group the sentinels monitor. It must match their configuration, so it has no default.
+ * @param nodes comma-separated extra seed sentinels, e.g. {@code redis://sentinel-2:26379}, so that startup does not
+ *        depend on one sentinel. Comma-separated so it binds from a single environment variable.
+ * @param username username for the sentinels themselves, whose ACLs are independent from the master data nodes'.
+ * @param password password for the sentinels themselves.
+ * @param retryAttempts times a failed command is retried, e.g. while a failover is in progress. Boxed so that an
+ *        omitted or empty value fails validation instead of silently disabling retries.
+ * @param retryBackoffBase base of the full-jitter backoff: each retry waits a random time up to
+ *        {@code min(base * 2^attempt, cap)}, the same formula as the Python backend.
+ * @param retryBackoffCap longest wait between retries.
+ * @param checkSentinelsList Redisson's guard requiring the sentinels to report at least two of them; single-sentinel
+ *        setups turn it off. Boxed for the same reason as {@code retryAttempts}.
+ * @param connectTimeout timeout for establishing connections.
+ * @param timeout timeout for command responses.
+ * @param scanInterval how often Redisson polls the sentinels for topology changes.
  */
-@Data
-public class RedisSentinelConfig {
-
-    static final int DEFAULT_PORT = 26379;
+@Builder(toBuilder = true)
+public record RedisSentinelConfig(
+        boolean enabled,
+        String masterName,
+        String nodes,
+        String username,
+        String password,
+        @NotNull @Min(0) @Max(20) Integer retryAttempts,
+        @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS) @MaxDuration(value = 5, unit = TimeUnit.MINUTES) Duration retryBackoffBase,
+        @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS) @MaxDuration(value = 5, unit = TimeUnit.MINUTES) Duration retryBackoffCap,
+        @NotNull Boolean checkSentinelsList,
+        @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS) @MaxDuration(value = 5, unit = TimeUnit.MINUTES) Duration connectTimeout,
+        @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS) @MaxDuration(value = 5, unit = TimeUnit.MINUTES) Duration timeout,
+        @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS) @MaxDuration(value = 5, unit = TimeUnit.MINUTES) Duration scanInterval) {
 
     private static final Set<String> SCHEMES = Set.of("redis", "rediss");
     private static final int MAX_PORT = 65_535;
-
-    @Valid @JsonProperty
-    private boolean enabled;
-
-    // Must match the name the sentinels monitor, so it cannot be defaulted
-    @Valid @JsonProperty
-    private String masterName;
-
-    // Comma-separated, so it binds from a single environment variable. An empty variable binds as null
-    @Valid @JsonProperty
-    private String nodes;
-
-    // Sentinels have their own ACLs, independent from the master data nodes
-    @Valid @JsonProperty
-    private String username;
-
-    @Valid @JsonProperty
-    private String password;
-
-    @Valid @JsonProperty
-    @NotNull @Min(0) @Max(20) private Integer retryAttempts;
-
-    // Full jitter: each retry waits a random time up to min(base * 2^attempt, cap), like the Python backend
-    @Valid @JsonProperty
-    @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
-    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
-    private Duration retryBackoffBase;
-
-    @Valid @JsonProperty
-    @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
-    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
-    private Duration retryBackoffCap;
-
-    // Redisson refuses to start unless the sentinels report at least two of them; single-sentinel dev setups turn it off
-    @Valid @JsonProperty
-    @NotNull private Boolean checkSentinelsList;
-
-    // Redisson takes these as int milliseconds
-    @Valid @JsonProperty
-    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
-    private Duration connectTimeout;
-
-    @Valid @JsonProperty
-    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
-    private Duration timeout;
-
-    @Valid @JsonProperty
-    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
-    private Duration scanInterval;
 
     @JsonIgnore
     @AssertTrue(message = "masterName must not be blank when sentinel is enabled") public boolean isMasterNameValid() {
@@ -100,14 +73,6 @@ public class RedisSentinelConfig {
     @AssertTrue(message = "retryBackoffBase must not exceed retryBackoffCap") public boolean isRetryBackoffValid() {
         return retryBackoffBase == null || retryBackoffCap == null
                 || retryBackoffBase.toMilliseconds() <= retryBackoffCap.toMilliseconds();
-    }
-
-    @JsonIgnore
-    public List<String> getNodeList() {
-        return Arrays.stream(StringUtils.defaultString(nodes).split(","))
-                .map(String::strip)
-                .filter(StringUtils::isNotBlank)
-                .toList();
     }
 
     SentinelServersConfig useSentinelServers(Config config, RedisUrl seed) {
@@ -133,14 +98,19 @@ public class RedisSentinelConfig {
 
     /**
      * The seed from {@code singleNodeUrl} first, then the extra nodes in declaration order, without duplicates. Every
-     * address must share the seed's scheme: Redisson derives the master's transport from the sentinel addresses.
+     * address must share the seed's scheme, since Redisson derives the master's transport from the sentinel addresses,
+     * and carry an explicit port, since sentinels can listen on any port.
      */
-    Set<String> sentinelAddresses(RedisUrl seed) {
+    private Set<String> sentinelAddresses(RedisUrl seed) {
         Preconditions.checkArgument(SCHEMES.contains(seed.scheme()),
                 "redis.singleNodeUrl must use the redis or rediss scheme when sentinel is enabled");
+        Preconditions.checkArgument(seed.port() != RedisUrl.NO_DEFAULT_PORT,
+                "redis.singleNodeUrl must include the sentinel port when sentinel is enabled");
         var addresses = new LinkedHashSet<String>();
         addresses.add(seed.address());
-        getNodeList().stream()
+        Arrays.stream(StringUtils.defaultString(nodes).split(","))
+                .map(String::strip)
+                .filter(StringUtils::isNotBlank)
                 .map(RedisSentinelConfig::toAddress)
                 .forEach(address -> {
                     Preconditions.checkArgument(address.startsWith(seed.scheme() + "://"),
@@ -162,9 +132,9 @@ public class RedisSentinelConfig {
                 "redis.sentinel.nodes entries must use the redis or rediss scheme");
         Preconditions.checkArgument(uri.getUserInfo() == null,
                 "redis.sentinel.nodes entries must not carry credentials, use redis.sentinel.username/password");
-        var port = uri.getPort() == -1 ? DEFAULT_PORT : uri.getPort();
-        Preconditions.checkArgument(StringUtils.isNotBlank(uri.getHost()) && port > 0 && port <= MAX_PORT,
-                "redis.sentinel.nodes entries must include a host, and a port between 1 and 65535 if any");
-        return "%s://%s:%d".formatted(uri.getScheme(), uri.getHost(), port);
+        Preconditions.checkArgument(StringUtils.isNotBlank(uri.getHost()) && uri.getPort() > 0
+                && uri.getPort() <= MAX_PORT,
+                "redis.sentinel.nodes entries must include a host and a port between 1 and 65535");
+        return "%s://%s:%d".formatted(uri.getScheme(), uri.getHost(), uri.getPort());
     }
 }

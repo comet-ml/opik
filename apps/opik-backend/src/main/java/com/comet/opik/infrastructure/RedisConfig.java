@@ -4,6 +4,7 @@ import com.comet.opik.infrastructure.aws.AwsIamCredentialsResolver;
 import com.comet.opik.infrastructure.redis.RedisUrl;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.base.Preconditions;
 import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
@@ -35,15 +36,18 @@ public class RedisConfig {
     private AwsIamAuthConfig awsIamAuth = new AwsIamAuthConfig();
 
     @Valid @JsonProperty
-    @NotNull private RedisSentinelConfig sentinel = new RedisSentinelConfig();
+    @NotNull private RedisSentinelConfig sentinel = RedisSentinelConfig.builder().build();
 
     public Config build() {
         Objects.requireNonNull(singleNodeUrl, "singleNodeUrl must not be null");
-        var redisUrl = sentinel.isEnabled()
-                ? RedisUrl.parse(singleNodeUrl, RedisSentinelConfig.DEFAULT_PORT)
+        // ElastiCache and MemoryDB, where IAM auth applies, offer no Sentinel, and Redisson would send IAM tokens to sentinels
+        Preconditions.checkArgument(!(sentinel.enabled() && awsIamAuth.isEnabled()),
+                "redis.sentinel and redis.awsIamAuth cannot both be enabled");
+        var redisUrl = sentinel.enabled()
+                ? RedisUrl.parse(singleNodeUrl, RedisUrl.NO_DEFAULT_PORT)
                 : RedisUrl.parse(singleNodeUrl);
         var config = new Config();
-        BaseConfig<?> serverConfig = sentinel.isEnabled()
+        BaseConfig<?> serverConfig = sentinel.enabled()
                 ? sentinel.useSentinelServers(config, redisUrl)
                 : config.useSingleServer()
                         .setAddress(redisUrl.address())
@@ -59,7 +63,7 @@ public class RedisConfig {
         }
         config.setCodec(new JsonJacksonCodec(JsonUtils.getMapper()));
         log.info("Built redis config with address '{}', database '{}', sentinel '{}'", redisUrl.address(),
-                redisUrl.database(), sentinel.isEnabled());
+                redisUrl.database(), sentinel.enabled());
         return config;
     }
 

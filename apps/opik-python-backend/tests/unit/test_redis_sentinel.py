@@ -19,7 +19,6 @@ SENTINEL_VARIABLES = (
     "OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP",
     "OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT",
     "OPIK_REDIS_SENTINEL_TIMEOUT",
-    "OPIK_REDIS_SENTINEL_SCAN_INTERVAL",
 )
 
 
@@ -46,7 +45,6 @@ def _sentinel_view(client):
         },
         "retries": pool.connection_kwargs["retry"]._retries,
         "backoff": pool.connection_kwargs["retry"]._backoff,
-        "scan_interval": client.sentinel_scan_interval,
         "min_other_sentinels": manager.min_other_sentinels,
         "sentinels": [
             {
@@ -63,7 +61,7 @@ def test_builds_sentinel_master_client_from_environment(sentinel_env):
     monkeypatch, master_name = sentinel_env
     monkeypatch.setenv("REDIS_URL", "rediss://data-user:data%40pass@sentinel-1:26379/3")
     # Padded, with an empty entry and a duplicate of the seed, which must collapse
-    monkeypatch.setenv("OPIK_REDIS_SENTINEL_NODES", " rediss://sentinel-2:26380 , ,rediss://sentinel-1:26379,rediss://sentinel-3")
+    monkeypatch.setenv("OPIK_REDIS_SENTINEL_NODES", " rediss://sentinel-2:26380 , ,rediss://sentinel-1:26379")
     monkeypatch.setenv("OPIK_REDIS_SENTINEL_USERNAME", "sentinel-user")
     monkeypatch.setenv("OPIK_REDIS_SENTINEL_PASSWORD", "sentinel-pass")
     monkeypatch.setenv("OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS", "7")
@@ -72,7 +70,6 @@ def test_builds_sentinel_master_client_from_environment(sentinel_env):
     monkeypatch.setenv("OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP", "4s")
     monkeypatch.setenv("OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT", "11s")
     monkeypatch.setenv("OPIK_REDIS_SENTINEL_TIMEOUT", "6s")
-    monkeypatch.setenv("OPIK_REDIS_SENTINEL_SCAN_INTERVAL", "1500ms")
 
     client = redis_utils._create_redis_client_from_env(decode_responses=False)
 
@@ -96,21 +93,17 @@ def test_builds_sentinel_master_client_from_environment(sentinel_env):
         },
         "retries": 7,
         "backoff": FullJitterBackoff(cap=4, base=0.3),
-        "scan_interval": 1.5,
         "min_other_sentinels": 0,
         "sentinels": [
             {"host": "sentinel-1", "port": 26379, **sentinel},
             {"host": "sentinel-2", "port": 26380, **sentinel},
-            {"host": "sentinel-3", "port": 26379, **sentinel},
         ],
     }
 
 
 def test_applies_java_backend_defaults(sentinel_env):
     monkeypatch, master_name = sentinel_env
-    # Without a port the seed is a sentinel on 26379, not a Redis data node on 6379
-    monkeypatch.setenv("REDIS_URL", "redis://data-user:data%40pass@sentinel-1/3")
-    # An exported but empty variable must behave like an unset one
+    # Empty optional strings are allowed, as on the Java side
     monkeypatch.setenv("OPIK_REDIS_SENTINEL_NODES", "")
 
     client = redis_utils._create_redis_client_from_env(decode_responses=True)
@@ -128,7 +121,6 @@ def test_applies_java_backend_defaults(sentinel_env):
         },
         "retries": 3,
         "backoff": FullJitterBackoff(cap=2, base=0.5),
-        "scan_interval": 2,
         "min_other_sentinels": 1,
         "sentinels": [
             {
@@ -163,13 +155,20 @@ def test_keeps_direct_client_when_sentinel_is_disabled(sentinel_env):
         ("OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP", "6m", "OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP must be between"),
         ("OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT", "6m", "OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT must be between"),
         ("OPIK_REDIS_SENTINEL_TIMEOUT", "5", "OPIK_REDIS_SENTINEL_TIMEOUT must be a duration"),
-        ("OPIK_REDIS_SENTINEL_SCAN_INTERVAL", "50ms", "OPIK_REDIS_SENTINEL_SCAN_INTERVAL must be between"),
+        # An exported but empty setting fails startup, as it does on the Java side
+        ("OPIK_REDIS_SENTINEL_TIMEOUT", "", "OPIK_REDIS_SENTINEL_TIMEOUT must not be empty"),
+        ("OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS", "", "OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS must not be empty"),
+        ("OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST", "", "OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST must not be empty"),
+        ("OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST", "yes", "OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST must be true or false"),
+        ("OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS", "three", "OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS must be an integer"),
+        ("REDIS_URL", "redis://sentinel-1/0", "REDIS_URL must include the sentinel port"),
         ("REDIS_URL", "http://sentinel-1:26379/0", "REDIS_URL must use the redis or rediss scheme"),
         ("OPIK_REDIS_SENTINEL_NODES", "rediss://sentinel-2:26379", "must use the same scheme as REDIS_URL"),
         ("OPIK_REDIS_SENTINEL_NODES", "http://sentinel-2:26379", "must use the redis or rediss scheme"),
         ("OPIK_REDIS_SENTINEL_NODES", "redis://user:secret@sentinel-2:26379", "must not carry credentials"),
-        ("OPIK_REDIS_SENTINEL_NODES", "redis://sentinel-2:65536", "a port between 1 and 65535"),
-        ("OPIK_REDIS_SENTINEL_NODES", "redis://:26379", "must include a host"),
+        ("OPIK_REDIS_SENTINEL_NODES", "redis://sentinel-2", "must include a host and a port"),
+        ("OPIK_REDIS_SENTINEL_NODES", "redis://sentinel-2:65536", "must include a host and a port"),
+        ("OPIK_REDIS_SENTINEL_NODES", "redis://:26379", "must include a host and a port"),
         ("REDIS_URL", "", "REDIS_URL must point at a sentinel"),
     ],
 )
