@@ -59,8 +59,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * workspace permission." Like the exclusion list in
  * {@link com.comet.opik.infrastructure.redaction.RedactionCoverageArchTest}, it is meant to be awkward to
  * extend: <b>adding an entry is a decision that any workspace member may call that endpoint</b>, and it needs
- * a comment saying why. It holds one entry, {@code checkAccess}, where demanding a permission would be
- * circular. All 85 others were reviewed once (see below) and none qualified.</li>
+ * a comment saying why. Of the seeded endpoints only {@code checkAccess} qualified, where demanding a
+ * permission would be circular. All 85 others were reviewed once (see below) and none did. Later entries
+ * carry their own reason at the list.</li>
  * </ul>
  * Note that liveness and version endpoints ({@code /is-alive}, {@code /ping}, {@code /ver}) need neither list:
  * they live in {@code infrastructure.health}, outside this rule's package scope, and are reads besides.
@@ -100,7 +101,12 @@ class RequiredPermissionsCoverageArchTest {
             // already decided that by the time the handler runs, so the body only echoes the outcome. Demanding
             // a permission to ask the question would be circular — and would change a 204 into a 403 that means
             // the opposite of what the caller asked.
-            "AuthenticationResource.checkAccess");
+            "AuthenticationResource.checkAccess",
+            // A pre-run check for the playground: it writes nothing and reads no workspace data, only whether
+            // the caller's own media URLs load. The run it guards (ChatCompletionsResource.create) asks for no
+            // permission either, and the frontend runs anyway when the check fails, so a permission here would
+            // not stop anyone running a prompt. It would only switch the check off for them without a word.
+            "MediaUrlsResource.check");
 
     /**
      * How many unannotated mutating endpoints existed when this rule landed. A fact about history, so it only
