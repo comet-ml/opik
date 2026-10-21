@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import React from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { LogExperiment } from "@/types/playground";
 import useRunCompletionToast from "@/v2/pages/PlaygroundPage/useRunCompletionToast";
@@ -34,13 +36,26 @@ const experiment = (id: string, name?: string): LogExperiment => ({
   datasetName: "dataset",
 });
 
+let queryClient: QueryClient;
+
 const announce = (experiments: LogExperiment[]) => {
-  const { result } = renderHook(() => useRunCompletionToast("dataset-id"));
+  const { result } = renderHook(() => useRunCompletionToast("dataset-id"), {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
   result.current(experiments);
 };
 
 describe("useRunCompletionToast names", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     toast.mockReset();
     get.mockReset();
     get.mockImplementation(async (url: string) => ({
@@ -79,27 +94,55 @@ describe("useRunCompletionToast names", () => {
   });
 
   it("announces the run without the name when the lookup hangs", async () => {
-    const lookupTimeout = new AbortController();
-    const timeoutSpy = vi
-      .spyOn(AbortSignal, "timeout")
-      .mockReturnValue(lookupTimeout.signal);
-    get.mockImplementation(
-      (_url: string, { signal }: { signal: AbortSignal }) =>
-        new Promise((_, reject) =>
-          signal.addEventListener("abort", () => reject(signal.reason)),
-        ),
-    );
+    vi.useFakeTimers();
+    get.mockImplementation(() => new Promise(() => {}));
 
     announce([experiment("e1")]);
-    expect(timeoutSpy).toHaveBeenCalledWith(3000);
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(2999);
     expect(toast).not.toHaveBeenCalled();
 
-    lookupTimeout.abort();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(toast).toHaveBeenCalledTimes(1);
+    expect(toast.mock.calls[0][0].description).toBe("1 experiment created");
+  });
+
+  it("reads a name the name box already loaded instead of asking again", async () => {
+    queryClient.setQueryData(["experiment", { experimentId: "e1" }], {
+      id: "e1",
+      name: "brave_tiger_1234",
+    });
+
+    announce([experiment("e1")]);
 
     await waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
-    expect(toast.mock.calls[0][0].description).toBe("1 experiment created");
-    timeoutSpy.mockRestore();
+    expect(get).not.toHaveBeenCalled();
+    expect(toast.mock.calls[0][0].description).toBe(
+      "1 experiment created: brave_tiger_1234",
+    );
+  });
+
+  it("shares one request with the name box when both ask at once", async () => {
+    let resolveLookup: (value: unknown) => void = () => {};
+    get.mockImplementation(
+      () => new Promise((resolve) => (resolveLookup = resolve)),
+    );
+    const boxLookup = queryClient.fetchQuery({
+      queryKey: ["experiment", { experimentId: "e1" }],
+      queryFn: () =>
+        get("/v1/private/experiments/e1").then(
+          (response: { data: unknown }) => response.data,
+        ),
+    });
+
+    announce([experiment("e1")]);
+    resolveLookup({ data: { name: "brave_tiger_1234" } });
+
+    await waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
+    await boxLookup;
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(toast.mock.calls[0][0].description).toBe(
+      "1 experiment created: brave_tiger_1234",
+    );
   });
 
   it("announces a named run right away", () => {

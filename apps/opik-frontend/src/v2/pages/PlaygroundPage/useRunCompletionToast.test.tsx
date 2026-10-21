@@ -8,6 +8,7 @@ import {
   vi,
 } from "vitest";
 import { fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toast, ToastProvider, ToastViewport } from "@/ui/toast";
 import { LogExperiment } from "@/types/playground";
 import useRunCompletionToast from "@/v2/pages/PlaygroundPage/useRunCompletionToast";
@@ -42,7 +43,13 @@ const createExperiment = (id: string): LogExperiment => ({
 });
 
 const announceAndRenderToast = (experiments: LogExperiment[]) => {
-  const { result } = renderHook(() => useRunCompletionToast("dataset-id"));
+  const { result } = renderHook(() => useRunCompletionToast("dataset-id"), {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={new QueryClient()}>
+        {children}
+      </QueryClientProvider>
+    ),
+  });
   result.current(experiments);
 
   const { actions } = toastMock.mock.calls[0][0];
