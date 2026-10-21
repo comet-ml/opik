@@ -3,6 +3,20 @@ import json
 import opik.exceptions as exceptions
 
 
+def normalize_verdict(verdict: str) -> str:
+    """Normalize a judge ``verdict`` for comparison.
+
+    The conversation judges ask for ``yes``/``no`` but their schemas accept any
+    string, and models drift: ``"Yes."``, ``" no"`` or ``"YES"`` all reach the
+    score computation. Comparing raw strings made the metrics disagree on the
+    same drifted value - the ``!= "no"`` metrics counted ``"No."`` as a positive
+    verdict while the ``== "yes"`` ones dropped ``"Yes."`` - so every judge now
+    reads the verdict through this one normalizer: case-folded, whitespace- and
+    punctuation-trimmed, so ``"Yes."`` and ``" yes "`` both read as ``"yes"``.
+    """
+    return verdict.strip().lower().rstrip(".,!?;:")
+
+
 def extract_json_content_or_raise(content: str) -> Any:
     try:
         return json.loads(content)
