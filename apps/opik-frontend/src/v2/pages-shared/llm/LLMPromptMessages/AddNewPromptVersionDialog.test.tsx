@@ -12,6 +12,7 @@ const newVersionMutate = vi.fn();
 const createMutate = vi.fn();
 const toast = vi.fn();
 const navigate = vi.fn();
+let canViewPrompts = true;
 
 vi.mock("@/api/prompts/useCreatePromptVersionMutation", () => ({
   default: () => ({ mutate: newVersionMutate, isPending: false }),
@@ -37,7 +38,11 @@ vi.mock("@/store/AppStore", () => ({
 
 vi.mock("@/contexts/PermissionsContext", () => ({
   usePermissions: () => ({
-    permissions: { canCreatePrompts: true, canEditPrompts: true },
+    permissions: {
+      canViewPrompts,
+      canCreatePrompts: true,
+      canEditPrompts: true,
+    },
   }),
 }));
 
@@ -123,6 +128,7 @@ beforeEach(() => {
   createMutate.mockClear();
   toast.mockClear();
   navigate.mockClear();
+  canViewPrompts = true;
   setOpen.mockClear();
   onSave.mockClear();
 });
@@ -306,6 +312,30 @@ describe("AddNewPromptVersionDialog success toast link", () => {
 
     expect(toast).toHaveBeenCalledWith({
       description: 'Saved new prompt "Support reply"',
+    });
+    expect(toast.mock.calls[0][0].actions).toBeUndefined();
+  });
+
+  it("shows no link on a new prompt when the user cannot view prompts", () => {
+    canViewPrompts = false;
+    render(renderDialog());
+    fireEvent.click(saveButton());
+    finishSave(createMutate, SAVED_PROMPT);
+
+    expect(toast).toHaveBeenCalledWith({
+      description: 'Saved new prompt "Support reply"',
+    });
+    expect(toast.mock.calls[0][0].actions).toBeUndefined();
+  });
+
+  it("shows no link on a new version when the user cannot view prompts", () => {
+    canViewPrompts = false;
+    render(renderDialog({ prompt: LIBRARY_PROMPT }));
+    fireEvent.click(saveButton());
+    finishSave(newVersionMutate, SAVED_VERSION);
+
+    expect(toast).toHaveBeenCalledWith({
+      description: 'Saved new version of prompt "Support reply"',
     });
     expect(toast.mock.calls[0][0].actions).toBeUndefined();
   });
