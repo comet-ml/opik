@@ -299,7 +299,7 @@ databaseAnalyticsReadOnlyFreeFormSql:
   socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_SOCKET_TIMEOUT:-200s}
 
 # Description: credentials for the extended free-form SQL read-only ClickHouse user.
-# Only used for workspaces in customCharts.enabledWorkspaces.
+# Only used when customCharts.enabled is true.
 databaseAnalyticsReadOnlyFreeFormExtendedSql:
   #  Default: comet_readonly_freeform_extended_sql_user
   #  Description: The read-only username used to connect to the server
@@ -314,12 +314,12 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
 # Custom Charts. The ClickHouse credentials it runs as are in databaseAnalyticsReadOnlyFreeFormExtendedSql instead:
 # those describe a database connection and keep the same shape as the account Agent Insights uses.
 customCharts:
-  #  Default: empty (feature off everywhere)
-  #  Description: Comma-separated workspace ids allowed to call POST /v1/internal/analytics-queries, which runs as
-  #   the wider ClickHouse account. The path-scoped Agent Insights endpoint is unaffected and keeps its own account
-  #   for every workspace. Requires serviceToggles.ollieEnabled, which
-  #   gates the endpoint, and the account to be provisioned first (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
-  enabledWorkspaces: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
+  #  Default: false (feature off everywhere)
+  #  Description: Lets every workspace call POST /v1/internal/analytics-queries, which runs as the wider ClickHouse
+  #   account. The path-scoped Agent Insights endpoint is unaffected and keeps its own account for every workspace.
+  #   Requires serviceToggles.ollieEnabled, which gates the endpoint, and the account to be provisioned first
+  #   (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
+  enabled: ${TOGGLE_CUSTOM_CHARTS_ENABLED:-false}
   #  Default: 5000
   #  Description: Cap on distinct ids resolved to names in one result. Above it no row gets a name column, rather
   #   than labelling some and not others.
@@ -376,8 +376,8 @@ health:
     - name: clickhouse-readonly-freeform-sql
       critical: false
       type: ready
-    # Non-critical for the same reason as the check above: Custom Charts is opt-in per workspace, and when no
-    # workspace is allowlisted the probe reports healthy without querying ClickHouse.
+    # Non-critical for the same reason as the check above: Custom Charts is opt-in, and when it is off the probe
+    # reports healthy without querying ClickHouse.
     - name: clickhouse-readonly-freeform-extended-sql
       critical: false
       type: ready

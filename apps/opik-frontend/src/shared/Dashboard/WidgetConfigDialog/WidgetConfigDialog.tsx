@@ -116,7 +116,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   const assistantAvailable = usePluginsStore((state) =>
     Boolean(state.AssistantSidebar),
   );
-  // Ollie can only build a widget in a workspace on the Custom Charts allowlist.
+  // Ollie can only build a widget when Custom Charts is enabled.
   const customChartsEnabledForWorkspace = useIsFeatureEnabled(
     FeatureToggleKeys.CUSTOM_CHARTS_ENABLED_FOR_WORKSPACE,
   );
