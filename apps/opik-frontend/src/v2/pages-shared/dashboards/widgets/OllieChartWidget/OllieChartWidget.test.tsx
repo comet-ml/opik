@@ -142,6 +142,20 @@ describe("OllieChartWidget saved widget", () => {
     expect(loadFailures()).toHaveLength(reports);
   });
 
+  it.each([
+    ["http", { status: 500 }],
+    ["network", {}],
+  ])("tells a failure with a response from one without (%s)", (kind, extra) => {
+    renderSaved(["w-1"], Object.assign(new Error("failed"), extra));
+
+    expect(loadFailures()).toEqual([
+      [
+        OpikEvent.DASHBOARD_OLLIE_WIDGET_LOAD_FAILED,
+        expect.objectContaining({ kind }),
+      ],
+    ]);
+  });
+
   it("runs the query again once a widget whose retries ran out gets saved", () => {
     const refetch = renderSaved(["w-2"], notFound());
     expect(refetch).not.toHaveBeenCalled();

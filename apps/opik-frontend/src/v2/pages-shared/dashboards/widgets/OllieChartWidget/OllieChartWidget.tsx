@@ -197,6 +197,8 @@ const OllieChartWidget: React.FunctionComponent<
       widget_id: widgetId,
       query_id: query?.id,
       status: status ?? null,
+      // No status means no response (a dropped connection, a laptop waking up), not a broken widget.
+      kind: status ? "http" : "network",
     });
   }, [
     preview,
