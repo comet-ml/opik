@@ -241,6 +241,20 @@ redis:
   #  Default: 1s
   #  Description: Timeout for the Redis health check ping
   healthCheckTimeout: 1s
+  # Redis Sentinel, disabled; values mirror config.yml, which holds the only defaults
+  sentinel:
+    enabled: false
+    masterName: ''
+    nodes: ''
+    username: ''
+    password: ''
+    retryAttempts: 3
+    retryBackoffBase: 500ms
+    retryBackoffCap: 2s
+    checkSentinelsList: true
+    connectTimeout: 10s
+    timeout: 5s
+    scanInterval: 2s
 
 openTelemetry:
   # Default: 3h

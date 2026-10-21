@@ -34,10 +34,13 @@ import java.util.concurrent.TimeUnit;
 @Data
 public class RedisSentinelConfig {
 
+    static final int DEFAULT_PORT = 26379;
+
     private static final Set<String> SCHEMES = Set.of("redis", "rediss");
+    private static final int MAX_PORT = 65_535;
 
     @Valid @JsonProperty
-    private boolean enabled = false;
+    private boolean enabled;
 
     // Must match the name the sentinels monitor, so it cannot be defaulted
     @Valid @JsonProperty
@@ -55,38 +58,38 @@ public class RedisSentinelConfig {
     private String password;
 
     @Valid @JsonProperty
-    @Min(0) @Max(20) private int retryAttempts = 3;
+    @Min(0) @Max(20) private int retryAttempts;
 
     // Full jitter: each retry waits a random time up to min(base * 2^attempt, cap), like the Python backend
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
-    private Duration retryBackoffBase = Duration.milliseconds(500);
+    private Duration retryBackoffBase;
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
-    private Duration retryBackoffCap = Duration.seconds(2);
+    private Duration retryBackoffCap;
 
     // Redisson refuses to start unless the sentinels report at least two of them; single-sentinel dev setups turn it off
     @Valid @JsonProperty
-    private boolean checkSentinelsList = true;
+    private boolean checkSentinelsList;
 
     // Redisson takes these as int milliseconds
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
-    private Duration connectTimeout = Duration.seconds(10);
+    private Duration connectTimeout;
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
-    private Duration timeout = Duration.seconds(5);
+    private Duration timeout;
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
-    private Duration scanInterval = Duration.seconds(2);
+    private Duration scanInterval;
 
     @JsonIgnore
     @AssertTrue(message = "masterName must not be blank when sentinel is enabled") public boolean isMasterNameValid() {
@@ -159,8 +162,9 @@ public class RedisSentinelConfig {
                 "redis.sentinel.nodes entries must use the redis or rediss scheme");
         Preconditions.checkArgument(uri.getUserInfo() == null,
                 "redis.sentinel.nodes entries must not carry credentials, use redis.sentinel.username/password");
-        Preconditions.checkArgument(StringUtils.isNotBlank(uri.getHost()) && uri.getPort() > 0,
-                "redis.sentinel.nodes entries must include a host and a port");
-        return "%s://%s:%d".formatted(uri.getScheme(), uri.getHost(), uri.getPort());
+        var port = uri.getPort() == -1 ? DEFAULT_PORT : uri.getPort();
+        Preconditions.checkArgument(StringUtils.isNotBlank(uri.getHost()) && port > 0 && port <= MAX_PORT,
+                "redis.sentinel.nodes entries must include a host, and a port between 1 and 65535 if any");
+        return "%s://%s:%d".formatted(uri.getScheme(), uri.getHost(), port);
     }
 }
