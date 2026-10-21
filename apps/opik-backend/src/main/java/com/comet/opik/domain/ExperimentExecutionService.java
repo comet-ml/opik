@@ -22,6 +22,7 @@ import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -40,6 +41,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -56,6 +58,9 @@ import java.util.stream.IntStream;
 public class ExperimentExecutionService {
 
     private static final int STREAM_PAGE_SIZE = 2000;
+    private static final String PUBLISH_LOCK = "experiment-execution-publish";
+    // Well past a publish, so only a stalled holder turns into a refusal.
+    private static final Duration PUBLISH_LOCK_WAIT = Duration.ofSeconds(10);
 
     private final ExperimentService experimentService;
     private final ExperimentCancellationService cancellationService;
@@ -68,6 +73,7 @@ public class ExperimentExecutionService {
     private final ExperimentExecutionConfig experimentExecutionConfig;
     private final PromptService promptService;
     private final FeatureFlags featureFlags;
+    private final LockService lockService;
 
     @Inject
     public ExperimentExecutionService(
@@ -81,7 +87,8 @@ public class ExperimentExecutionService {
             @NonNull TestSuiteEvaluatorMapper testSuiteEvaluatorMapper,
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig experimentExecutionConfig,
             @NonNull PromptService promptService,
-            @NonNull FeatureFlags featureFlags) {
+            @NonNull FeatureFlags featureFlags,
+            @NonNull LockService lockService) {
         this.experimentService = experimentService;
         this.cancellationService = cancellationService;
         this.datasetService = datasetService;
@@ -93,6 +100,7 @@ public class ExperimentExecutionService {
         this.experimentExecutionConfig = experimentExecutionConfig;
         this.promptService = promptService;
         this.featureFlags = featureFlags;
+        this.lockService = lockService;
     }
 
     /**
@@ -169,12 +177,10 @@ public class ExperimentExecutionService {
                                                                     experimentIds).then(Mono.error(error)));
                                                 }
 
-                                                return refuseIfQueueIsFull(messages.size())
-                                                        .then(itemPublisher.startTrackingRun(messages, testSuite)
-                                                                .then(persistExperiments(plannedExperiments))
-                                                                .then(itemPublisher.publish(batchId, messages))
-                                                                .then(purgeIfCancelledWhilePublishing(
-                                                                        workspaceId, experimentIds))
+                                                return admitAndPublish(messages, testSuite, batchId,
+                                                        plannedExperiments, workspaceId, experimentIds)
+                                                        .then(purgeIfCancelledWhilePublishing(
+                                                                workspaceId, experimentIds)
                                                                 .then(Mono.fromCallable(() -> {
                                                                     log.info(
                                                                             "Created '{}' experiments with '{}' total items for dataset '{}', workspaceId '{}'",
@@ -188,10 +194,8 @@ public class ExperimentExecutionService {
                                                                             .totalItems(messages.size())
                                                                             .build();
                                                                 }))
-                                                                // Every failure from the first write on;
-                                                                // the caller still gets the error, just
-                                                                // not a run left running over work that
-                                                                // never started.
+                                                                // What follows the publish, the writes
+                                                                // inside the lock having aborted their own.
                                                                 .onErrorResume(error -> abortRun(workspaceId,
                                                                         experimentIds)
                                                                         .then(Mono.error(error))));
@@ -529,6 +533,39 @@ public class ExperimentExecutionService {
         return new InternalServerErrorException(
                 "Could not stop %d of %d experiments. Their items are no longer being processed, but their status could not be updated — try again."
                         .formatted(notStopped, total));
+    }
+
+    /**
+     * Serialised cluster-wide: the capacity check is a read, and launches that read the same depth
+     * would all be admitted, leaving the trim to take whatever no consumer has claimed. The writes
+     * are inside the lock so a refused run still leaves nothing behind.
+     */
+    private Mono<Void> admitAndPublish(List<ExperimentItemToProcess> messages, boolean testSuite, UUID batchId,
+            List<Experiment> plannedExperiments, String workspaceId, List<UUID> experimentIds) {
+        return lockService.bestEffortLock(
+                new LockService.Lock(PUBLISH_LOCK),
+                refuseIfQueueIsFull(messages.size())
+                        // Scoped to the writes: a refused run has none to undo, and aborting it
+                        // would mark experiments failed that were never created.
+                        .then(itemPublisher.startTrackingRun(messages, testSuite)
+                                .then(persistExperiments(plannedExperiments))
+                                .then(itemPublisher.publish(batchId, messages))
+                                .then(Mono.just(true))
+                                .onErrorResume(error -> abortRun(workspaceId, experimentIds)
+                                        .then(Mono.error(error)))),
+                // Refused rather than queued: the endpoint holds a request thread while it waits,
+                // and those are shared with every other call.
+                Mono.error(anotherRunIsQueueing()),
+                experimentExecutionConfig.getPublishLockLease().toJavaDuration(),
+                PUBLISH_LOCK_WAIT)
+                .then();
+    }
+
+    private ClientErrorException anotherRunIsQueueing() {
+        log.warn("Refusing a run: another is being queued and did not finish within '{}'", PUBLISH_LOCK_WAIT);
+        return new ClientErrorException(
+                "Another run is being queued right now. Try again in a moment.",
+                Response.Status.TOO_MANY_REQUESTS);
     }
 
     /**
