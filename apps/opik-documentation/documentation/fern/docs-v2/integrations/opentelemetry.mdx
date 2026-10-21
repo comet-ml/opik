@@ -176,9 +176,10 @@ Opik picks the project of each span on its own, in this order:
 Opik ignores a value longer than 150 characters.
 
 <Warning>
-  Opik does not copy the project from a parent or root span to its children. If you set `opik.project_name` on the
-  root span only, the other spans of the trace go to the project in the header, and the trace is split across two
-  projects. Set the project as a resource attribute, so that every span has it.
+  Every span must have the `opik.project_name` attribute. Opik does not copy the project from the root span to the
+  other spans: OpenTelemetry exports the spans of a long trace in more than one batch, and the root span usually comes
+  last. If you set the attribute on the root span only, the other spans go to the project in the header, and they do
+  not show under any trace. Set the project as a resource attribute, so that every span has it.
 </Warning>
 
 #### Set the project on every span
@@ -236,5 +237,5 @@ To send all the spans to one project, use a fixed value such as `"<your-project-
 
 <Note>
   All the spans of a trace must have the same project. If one trace goes through services that send to different
-  projects, Opik splits the trace across these projects.
+  projects, the spans that are not in the project of the root span do not show under any trace.
 </Note>
