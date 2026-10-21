@@ -511,6 +511,13 @@ class DockerExecutor(CodeExecutorBase):
                 # parse_execution_result reports as a 4xx. Keying telemetry on the exit code
                 # counted those as successes while the caller was handed an error.
                 result_code = parsed_result.get("code") if isinstance(parsed_result, dict) else None
+                # `code` comes from the metric's own JSON, so keep the span payload bounded:
+                # scalars are shown as-is, anything else only by type.
+                result_code_summary = (
+                    result_code
+                    if isinstance(result_code, (int, float)) and not isinstance(result_code, bool)
+                    else (type(result_code).__name__ if result_code is not None else None)
+                )
                 rejection_reason = self._rejection_reason(parsed_result)
                 if exec_result.exit_code == 0 and rejection_reason is None:
                     outcome_status = "success"
@@ -519,14 +526,14 @@ class DockerExecutor(CodeExecutorBase):
                     reason = rejection_reason or "nonzero_exit"
                     status_message = (
                         f"Execution failed with exit_code={exec_result.exit_code}, "
-                        f"result_code={result_code}, reason={reason}"
+                        f"result_code={result_code_summary}, reason={reason}"
                     )
                     span.set_status(Status(StatusCode.ERROR, status_message))
                     span.set_attribute("error.type", "invalid_code")
                     span.set_attribute("error.reason", reason)
                     span.set_attribute("error.exit_code", exec_result.exit_code)
                     if result_code is not None:
-                        span.set_attribute("error.result_code", result_code)
+                        span.set_attribute("error.result_code", result_code_summary)
 
                 self._record_execution_outcome(outcome_status, payload_type)
                 return parsed_result

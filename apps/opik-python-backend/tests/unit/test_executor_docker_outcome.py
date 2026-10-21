@@ -14,6 +14,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from opentelemetry.trace import StatusCode
 
 from opik_backend.executor_docker import DockerExecutor
 
@@ -147,5 +148,32 @@ def test_rejected_response_pins_the_reason_on_the_span(executor):
     assert response == body
     assert outcomes == ["invalid_code"]
     attributes = {call.args[0]: call.args[1] for call in span.set_attribute.call_args_list}
+    status = span.set_status.call_args.args[0]
+    assert status.status_code == StatusCode.ERROR
     assert attributes["error.reason"] == "no_usable_score"
-    assert "reason=no_usable_score" in span.set_status.call_args.args[0].description
+    assert attributes["error.type"] == "invalid_code"
+    assert attributes["error.exit_code"] == 0
+    assert "error.result_code" not in attributes
+    assert "reason=no_usable_score" in status.description
+
+
+def test_non_scalar_result_code_is_summarized_on_the_span(executor):
+    # `code` comes from the metric's own JSON; a dict or a long string must not be
+    # copied into the span status or attributes verbatim.
+    span = MagicMock()
+    span_context = MagicMock()
+    span_context.__enter__.return_value = span
+    span_context.__exit__.return_value = False
+    executor.tracer = MagicMock()
+    executor.tracer.start_as_current_span.return_value = span_context
+
+    body = {"code": {"detail": "x" * 1000}, "scores": []}
+    response, outcomes = run_with_result(executor, 0, json.dumps(body).encode("utf-8"))
+
+    assert response == body
+    assert outcomes == ["invalid_code"]
+    attributes = {call.args[0]: call.args[1] for call in span.set_attribute.call_args_list}
+    status = span.set_status.call_args.args[0]
+    assert attributes["error.result_code"] == "dict"
+    assert "result_code=dict" in status.description
+    assert "detail" not in status.description
