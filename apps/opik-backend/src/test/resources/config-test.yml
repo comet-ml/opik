@@ -733,6 +733,12 @@ datasetExport:
 llmProviderTokenAuth:
   destinationGuard: "relaxed"
 
+# Media URL check: tests serve media from localhost mock servers
+mediaUrlCheck:
+  destinationGuard: "relaxed"
+  connectTimeout: 1s
+  perUrlTimeout: 2s
+
 # LLM providers client configuration
 llmProviderClient:
   # Default: 60s

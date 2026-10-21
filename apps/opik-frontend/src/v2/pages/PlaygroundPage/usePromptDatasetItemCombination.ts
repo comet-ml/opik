@@ -60,7 +60,7 @@ const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
   return newDatasetItem;
 };
 
-const transformMessageIntoProviderMessage = (
+export const transformMessageIntoProviderMessage = (
   message: LLMMessage,
   datasetItem: DatasetItem["data"] = {},
 ): ProviderMessageType => {

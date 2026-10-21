@@ -1565,6 +1565,24 @@ llmProviderTokenAuth:
   # 'relaxed' explicitly, so self-hosted installs are NOT covered by this default
   destinationGuard: ${LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD:-strict}
 
+# Pre-run check of the media URLs in a playground run (POST /v1/private/media-urls/check)
+mediaUrlCheck:
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: resolves each host, including every redirect target, before connecting, and refuses
+  #     loopback, link-local (including the cloud metadata endpoint 169.254.169.254), RFC 1918
+  #     private ranges, IPv6 unique-local (fc00::/7), multicast, wildcard, and unresolvable hosts
+  #   - relaxed: no destination restrictions, for deployments whose media lives on internal hosts
+  # Description: SSRF guard applied to the user-supplied media URLs. Not overridden by the
+  # docker-compose or Helm distributions, so self-hosted installs are strict unless they set it
+  destinationGuard: ${MEDIA_URL_CHECK_DESTINATION_GUARD:-strict}
+  # Default: 3s
+  # Description: Connection timeout for each request to a media host
+  connectTimeout: ${MEDIA_URL_CHECK_CONNECT_TIMEOUT:-3s}
+  # Default: 5s
+  # Description: Time budget for one URL, redirects included. A URL that runs out of it is reported as a timeout
+  perUrlTimeout: ${MEDIA_URL_CHECK_PER_URL_TIMEOUT:-5s}
+
 llmProviderClient:
   # Default: 3
   # Description: Max amount of attempts to reach the LLM provider before giving up

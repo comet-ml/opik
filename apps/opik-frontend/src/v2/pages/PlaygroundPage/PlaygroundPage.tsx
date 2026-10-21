@@ -20,6 +20,8 @@ import PlaygroundPrompts from "@/v2/pages/PlaygroundPage/PlaygroundPrompts/Playg
 import PlaygroundHeader from "@/v2/pages/PlaygroundPage/PlaygroundHeader";
 import SetupProviderDialog from "@/v2/pages-shared/llm/SetupProviderDialog/SetupProviderDialog";
 import useActionButtonActions from "@/v2/pages/PlaygroundPage/useActionButtonActions";
+import useMediaUrlCheckBeforeRun from "@/v2/pages/PlaygroundPage/useMediaUrlCheckBeforeRun";
+import MediaUrlCheckDialog from "@/v2/pages/PlaygroundPage/MediaUrlCheckDialog";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import {
@@ -258,6 +260,14 @@ const PlaygroundPage = () => {
     projectName: activeProject?.name,
   });
 
+  const {
+    runAll: checkedRunAll,
+    runSingle: checkedRunSingle,
+    mediaUrlFailures,
+    runPendingRunAnyway,
+    cancelPendingRun,
+  } = useMediaUrlCheckBeforeRun({ datasetItems, runAll, runSingle });
+
   const isExperimentMode = !!datasetId && canViewDatasets;
 
   useEffect(() => {
@@ -289,7 +299,7 @@ const PlaygroundPage = () => {
             versionItemsTotal={itemsTotal}
             onChangeDatasetId={setDatasetId}
             onReset={resetPlayground}
-            onRunAll={runAll}
+            onRunAll={checkedRunAll}
             onStopAll={stopAll}
             maxWidth={headerMaxWidth}
           />
@@ -314,7 +324,7 @@ const PlaygroundPage = () => {
                   providerKeys={providerKeys}
                   isPendingProviderKeys={isPendingProviderKeys}
                   hasLoadedProviderKeys={hasLoadedProviderKeys}
-                  runSingle={runSingle}
+                  runSingle={checkedRunSingle}
                   stopSingle={stopSingle}
                 />
               </div>
@@ -325,7 +335,7 @@ const PlaygroundPage = () => {
             <PlaygroundOutputs
               datasetId={datasetId}
               versionHash={versionHash}
-              runSingle={runSingle}
+              runSingle={checkedRunSingle}
               stopSingle={stopSingle}
             />
           </>
@@ -351,7 +361,7 @@ const PlaygroundPage = () => {
                 <PlaygroundOutputs
                   datasetId={datasetId}
                   versionHash={versionHash}
-                  runSingle={runSingle}
+                  runSingle={checkedRunSingle}
                   stopSingle={stopSingle}
                 />
               </div>
@@ -366,6 +376,12 @@ const PlaygroundPage = () => {
         open={setupDialogOpen}
         setOpen={setSetupDialogOpen}
         onProviderAdded={handleProviderAdded}
+      />
+
+      <MediaUrlCheckDialog
+        failures={mediaUrlFailures}
+        onRunAnyway={runPendingRunAnyway}
+        onCancel={cancelPendingRun}
       />
 
       {DialogComponent}
