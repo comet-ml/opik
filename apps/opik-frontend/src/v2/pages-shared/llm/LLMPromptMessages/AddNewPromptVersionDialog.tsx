@@ -381,7 +381,11 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
             disabled={!isValid || isSaving}
             onClick={handleClickEditPrompt}
           >
-            {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
+            {isSaving && (
+              <span className="mr-2 inline-flex animate-spin">
+                <Loader2 className="size-4" />
+              </span>
+            )}
             Save to library
           </Button>
         </DialogFooter>
