@@ -290,11 +290,11 @@ class WorkspacesResourceTest {
 
             var expectedMetricsSummary = prepareMetricsSummary(previousScores, currentScores);
 
-            assertThat(actualMetricsSummary.results())
+            assertThat(actualMetricsSummary)
                     .usingRecursiveComparison()
-                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "current", "previous")
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
                     .ignoringCollectionOrder()
-                    .isEqualTo(expectedMetricsSummary);
+                    .isEqualTo(WorkspaceMetricsSummaryResponse.builder().results(expectedMetricsSummary).build());
         }
 
         @ParameterizedTest
@@ -357,11 +357,11 @@ class WorkspacesResourceTest {
                     : prepareMetricsDailyPerWorkspace(project1Scores.values(), project2Scores.values(), name,
                             WorkspacesResourceTest.this::getAvg);
 
-            assertThat(actualMetrics.results())
+            assertThat(actualMetrics)
                     .usingRecursiveComparison()
                     .ignoringCollectionOrder()
                     .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
-                    .isEqualTo(expectedMetricsDaily);
+                    .isEqualTo(WorkspaceMetricResponse.builder().results(expectedMetricsDaily).build());
         }
 
         @ParameterizedTest
@@ -442,10 +442,10 @@ class WorkspacesResourceTest {
                     .previous(null)
                     .build());
 
-            assertThat(actualMetricsSummary.results())
+            assertThat(actualMetricsSummary)
                     .usingRecursiveComparison()
-                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "current", "previous")
-                    .isEqualTo(expectedMetricsSummary);
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
+                    .isEqualTo(WorkspaceMetricsSummaryResponse.builder().results(expectedMetricsSummary).build());
         }
 
         @Test
@@ -488,10 +488,10 @@ class WorkspacesResourceTest {
                     .previous(null)
                     .build());
 
-            assertThat(actualMetricsSummary.results())
+            assertThat(actualMetricsSummary)
                     .usingRecursiveComparison()
-                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "current", "previous")
-                    .isEqualTo(expectedMetricsSummary);
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
+                    .isEqualTo(WorkspaceMetricsSummaryResponse.builder().results(expectedMetricsSummary).build());
         }
 
         @Test
@@ -527,15 +527,19 @@ class WorkspacesResourceTest {
                             .build(),
                     apiKey, workspaceName);
 
-            assertThat(actualMetricsSummary.results())
-                    .usingRecursiveComparison()
-                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "current", "previous")
-                    .isEqualTo(prepareMetricsSummary(Map.of(), scores));
-            assertThat(actualMetrics.results())
+            assertThat(actualMetricsSummary)
                     .usingRecursiveComparison()
                     .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
-                    .isEqualTo(prepareMetricsDailyPerWorkspace(scores.values(), List.of(), name,
-                            WorkspacesResourceTest.this::getAvg));
+                    .isEqualTo(WorkspaceMetricsSummaryResponse.builder()
+                            .results(prepareMetricsSummary(Map.of(), scores))
+                            .build());
+            assertThat(actualMetrics)
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
+                    .isEqualTo(WorkspaceMetricResponse.builder()
+                            .results(prepareMetricsDailyPerWorkspace(scores.values(), List.of(), name,
+                                    WorkspacesResourceTest.this::getAvg))
+                            .build());
         }
     }
 
