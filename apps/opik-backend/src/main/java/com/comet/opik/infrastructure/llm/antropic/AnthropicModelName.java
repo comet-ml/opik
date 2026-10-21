@@ -38,7 +38,9 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     CLAUDE_MYTHOS_PREVIEW("claude-mythos-preview"),
     CLAUDE_OPUS_4_6_20260205("claude-opus-4-6-20260205"),
     CLAUDE_OPUS_4_7_20260416("claude-opus-4-7-20260416"),
-    CLAUDE_OPUS_5_5("claude-opus-5-5");
+    CLAUDE_OPUS_5_5("claude-opus-5-5"),
+    CLAUDE_HAIKU_5_5("claude-haiku-5-5"),
+    CLAUDE_SONNET_5_5("claude-sonnet-5-5");
 
     private final String value;
 
@@ -105,6 +107,8 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     // thinkingEffortOptions in the frontend's ANTHROPIC_MODEL_CAPABILITIES must offer a subset of these.
     private static final Map<String, List<String>> EFFORT_LEVELS_BY_MODEL_ID = Map.ofEntries(
             Map.entry(CLAUDE_OPUS_5_5.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_HAIKU_5_5.value, ALL_EFFORT_LEVELS),
+            Map.entry(CLAUDE_SONNET_5_5.value, ALL_EFFORT_LEVELS),
             Map.entry(CLAUDE_OPUS_5.value, ALL_EFFORT_LEVELS),
             Map.entry(CLAUDE_OPUS_4_8.value, ALL_EFFORT_LEVELS),
             Map.entry(CLAUDE_OPUS_4_7.value, ALL_EFFORT_LEVELS),
@@ -127,6 +131,16 @@ public enum AnthropicModelName implements StructuredOutputSupported {
             Map.entry(CLAUDE_SONNET_4_5.value, List.of()),
             Map.entry(CLAUDE_SONNET_4_5_20250929.value, List.of()));
 
+    // These take adaptive thinking but, unlike the newer models, run without any thinking when the request does not ask
+    // for it. Opus 4.5 is not here: it has no adaptive thinking, only a fixed budget.
+    private static final Set<String> THINKS_ONLY_WHEN_ASKED_MODEL_IDS = Set.of(
+            CLAUDE_SONNET_4_6.value,
+            CLAUDE_OPUS_4_6.value,
+            CLAUDE_OPUS_4_6_20260205.value,
+            CLAUDE_OPUS_4_7.value,
+            CLAUDE_OPUS_4_7_20260416.value,
+            CLAUDE_OPUS_4_8.value);
+
     private static final Set<String> ALL_MODEL_IDS = Arrays.stream(values())
             .map(AnthropicModelName::getValue)
             .collect(Collectors.toUnmodifiableSet());
@@ -146,6 +160,10 @@ public enum AnthropicModelName implements StructuredOutputSupported {
 
     static Optional<List<String>> effortLevels(String modelId) {
         return Optional.ofNullable(modelId).map(EFFORT_LEVELS_BY_MODEL_ID::get);
+    }
+
+    static boolean thinksOnlyWhenAsked(String modelId) {
+        return modelId != null && THINKS_ONLY_WHEN_ASKED_MODEL_IDS.contains(modelId);
     }
 
     @Override

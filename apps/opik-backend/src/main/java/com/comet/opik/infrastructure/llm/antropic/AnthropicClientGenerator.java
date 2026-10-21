@@ -88,12 +88,15 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
         }
 
         var customParameters = modelParameters.customParameters();
-        var thinking = parseThinking(customParameters);
+        var thinking = AnthropicEffort.impliesAdaptiveThinking(modelParameters.name(), customParameters)
+                ? ThinkingParams.ADAPTIVE
+                : parseThinking(customParameters);
 
         // Anthropic rejects temperature with a 400 in two cases: (1) adaptive-thinking models
         // (claude-sonnet-5, claude-opus-4-7/4-8) that report no sampling-param support, and (2) any model
-        // once extended thinking is enabled per-rule via custom_parameters. Gate on both server-side so
-        // API-created rules (which bypass the FE sanitizer) don't fail.
+        // once thinking is enabled per-rule via custom_parameters, or by the effort level on a model that
+        // thinks only when asked. Gate on both server-side so API-created rules (which bypass the FE
+        // sanitizer) don't fail.
         if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name()) && !thinking.enabled()) {
             Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         }
@@ -191,6 +194,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
 
     private record ThinkingParams(boolean enabled, String type, Integer budgetTokens) {
         private static final ThinkingParams ABSENT = new ThinkingParams(false, null, null);
+        private static final ThinkingParams ADAPTIVE = new ThinkingParams(true, AnthropicEffort.ADAPTIVE, null);
     }
 
     @Override

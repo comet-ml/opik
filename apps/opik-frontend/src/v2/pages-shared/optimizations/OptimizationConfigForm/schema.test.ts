@@ -638,7 +638,6 @@ describe("convertOptimizationStudioToFormData — re-run round trip", () => {
 
     expect(modelConfig.thinkingEffort).toBe("low");
     expect(sent).toEqual({
-      temperature: 0.6,
       max_completion_tokens: 4000,
       custom_parameters: { output_config: { effort: "low" } },
     });

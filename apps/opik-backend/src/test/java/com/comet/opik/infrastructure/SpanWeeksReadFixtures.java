@@ -150,10 +150,15 @@ class SpanWeeksReadFixtures {
      * to add up to, for reads whose result cannot be computed from the spans written.
      */
     FarFutureTrace createThisWeekCopy(FarFutureTrace source) {
+        return createThisWeekCopy(source, randomThreadId());
+    }
+
+    /** The copy of {@link #createThisWeekCopy(FarFutureTrace)}, in the given thread. */
+    FarFutureTrace createThisWeekCopy(FarFutureTrace source, String threadId) {
         var now = now();
         var trace = source.trace().toBuilder()
                 .id(ID_GENERATOR.getTimeOrderedEpoch(now.toEpochMilli()))
-                .threadId(randomThreadId())
+                .threadId(threadId)
                 .build();
         traceResourceClient.createTrace(trace, apiKey, workspaceName);
         var spans = source.spans().stream()

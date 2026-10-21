@@ -1,5 +1,6 @@
 import {
   ANTHROPIC_THINKING_EFFORT_VALUES,
+  AnthropicEffortLevel,
   AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
@@ -28,6 +29,7 @@ import {
 import isPlainObject from "lodash/isPlainObject";
 import isEmpty from "lodash/isEmpty";
 import omit from "lodash/omit";
+import sortBy from "lodash/sortBy";
 import {
   getLatestModelFlags,
   getLatestProviderModelsSnapshot,
@@ -127,12 +129,15 @@ const THINKING_LEVELS_BY_MODEL: ReadonlyMap<
   // — "the model automatically controls how much it thinks up to a maximum of 8,192 tokens" — and
   // without it, merely opening the control would pin a hard budget over that default.
   //
-  // Only Flash Lite gets "off": it is the one 2.5 model Google ships with thinking already off, and
-  // 2.5 Pro cannot disable thinking at all.
+  // 2.5 Pro gets no "off": it cannot disable thinking, and Google answers a zero budget with "Budget 0
+  // is invalid. This model only works in thinking mode." 2.5 Flash and Flash Lite both accept it.
   [PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, ["auto", ...LOW_TO_HIGH]],
   [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO, ["auto", ...LOW_TO_HIGH]],
-  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, ["auto", ...LOW_TO_HIGH]],
-  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH, ["auto", ...LOW_TO_HIGH]],
+  [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, ["auto", "off", ...LOW_TO_HIGH]],
+  [
+    PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+    ["auto", "off", ...LOW_TO_HIGH],
+  ],
   [PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE, ["auto", "off", ...LOW_TO_HIGH]],
   [
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
@@ -373,6 +378,7 @@ export const getThinkingLevelDescription = (
     : THINKING_LEVEL_DESCRIPTION;
 
 const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
+  off: "Off",
   low: "Low",
   medium: "Medium",
   high: "High",
@@ -451,8 +457,8 @@ const versionKey = (id: string): string =>
 
 /**
  * The newest known member of a family, which is what `claude-opus-latest` names. A floating alias has
- * to be read as the model it currently resolves to: `claude-haiku-latest` is Haiku 4.5, which does
- * take sampling params, and the same model under its own id already says so.
+ * to be read as the model it currently resolves to: while Haiku 4.5 was the newest Haiku,
+ * `claude-haiku-latest` took sampling params, and the same model under its own id already said so.
  */
 const newestInFamily = (familyPrefix: string): string | undefined =>
   KNOWN_ANTHROPIC_MODELS.filter((id) => id.startsWith(`${familyPrefix}-`)).sort(
@@ -571,11 +577,25 @@ export const knowsAnthropicEffortLevels = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean => !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE];
 
+export const thinksOnlyWhenAsked = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean =>
+  !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+    ?.thinksOnlyWhenAsked;
+
+export const hasEffortWithoutThinking = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean =>
+  !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+    ?.effortWithoutThinking;
+
+// Off for a model that thinks only when asked: that is how it runs when the request names no
+// effort, so a new prompt or rule does not start thinking until someone picks a level.
 export const getDefaultThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): AnthropicThinkingEffort =>
   ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-    ?.defaultThinkingEffort ?? "high";
+    ?.defaultThinkingEffort ?? (thinksOnlyWhenAsked(model) ? "off" : "high");
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   isPlainObject(value) ? (value as Record<string, unknown>) : {};
@@ -587,7 +607,7 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  */
 export const getNestedThinkingEffort = (
   customParameters: unknown,
-): AnthropicThinkingEffort | undefined => {
+): AnthropicEffortLevel | undefined => {
   const effort = asRecord(asRecord(customParameters).output_config).effort;
   return ANTHROPIC_THINKING_EFFORT_VALUES.find((level) => level === effort);
 };
@@ -604,7 +624,8 @@ export const withThinkingEffort = (
     return Object.keys(params).length > 0 ? params : undefined;
   }
   const outputConfig = omit(asRecord(params.output_config), "effort");
-  const nextOutputConfig = effort ? { ...outputConfig, effort } : outputConfig;
+  const nextOutputConfig =
+    effort && effort !== "off" ? { ...outputConfig, effort } : outputConfig;
   const next =
     Object.keys(nextOutputConfig).length > 0
       ? { ...omit(params, "output_config"), output_config: nextOutputConfig }
@@ -616,10 +637,11 @@ export const getAnthropicThinkingEffortOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): Array<{ label: string; value: AnthropicThinkingEffort }> =>
   supportsAnthropicThinkingEffort(model)
-    ? (
-        ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-          ?.thinkingEffortOptions ?? []
-      ).map((value) => ({ label: EFFORT_LABELS[value], value }))
+    ? [
+        ...(thinksOnlyWhenAsked(model) ? (["off"] as const) : []),
+        ...(ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+          ?.thinkingEffortOptions ?? []),
+      ].map((value) => ({ label: EFFORT_LABELS[value], value }))
     : [];
 
 const OPENAI_EFFORT_LABELS: Record<OpenAIReasoningEffort, string> = {
@@ -663,9 +685,58 @@ export const getOpenAIReasoningEffortOptions = (
   ].map((value) => ({ label: OPENAI_EFFORT_LABELS[value], value }));
 };
 
+// From least to most thinking. "none" and "off" switch thinking off rather than
+// being its smallest amount, so a level that thinks never lands on them:
+// Minimal on a model offering None and Low becomes Low. "auto" has no rank, it
+// leaves the amount to the model.
+const THINKING_AMOUNT_RANK: ReadonlyMap<string, number> = new Map([
+  ["none", 0],
+  ["off", 0],
+  ["minimal", 1],
+  ["low", 2],
+  ["medium", 3],
+  ["high", 4],
+  ["xhigh", 5],
+  ["max", 6],
+]);
+
+// Where a level picked on the previous model lands on a model that does not
+// offer it: the nearest offered level, a tie going to the lower, cheaper one. A
+// level the previous model did not offer either was never on screen (a Max on a
+// Chat Completions key shows as the model's default), so it gets none and falls
+// to the default.
+const getNearestOfferedLevel = <L extends string>(
+  level: L | undefined,
+  options: Array<{ value: L }>,
+  previousOptions: Array<{ value: L }>,
+): L | undefined => {
+  const rank =
+    level === undefined ? undefined : THINKING_AMOUNT_RANK.get(level);
+  if (rank === undefined || !previousOptions.some((o) => o.value === level)) {
+    return undefined;
+  }
+  const ranked = options.flatMap(({ value }) => {
+    const valueRank = THINKING_AMOUNT_RANK.get(value);
+    return valueRank === undefined || (valueRank === 0 && rank > 0)
+      ? []
+      : [{ value, valueRank }];
+  });
+  return sortBy(ranked, [
+    ({ valueRank }) => Math.abs(valueRank - rank),
+    ({ valueRank }) => valueRank,
+  ])[0]?.value;
+};
+
 // Single reconciler called by every model-change handler (playground, judge
 // dialog). Keeping the rules here means the form state stays valid even when
 // the user switches models without opening the config dropdown.
+// An effort or thinking level equal to previousModel's default was never picked
+// by the user, so the next model's own default replaces it: otherwise Sonnet
+// 4.6's high would override Opus 5.5's medium. A picked level the next model
+// does not offer moves to the nearest one it does, rather than to the default:
+// Minimal to Low on GPT 5.1, not High. Without previousModel (a loaded config
+// being normalised) a stored value the model offers is kept, and one it does
+// not offer becomes the model's default.
 export const updateProviderConfig = <
   T extends {
     temperature?: number;
@@ -680,6 +751,7 @@ export const updateProviderConfig = <
     model: PROVIDER_MODEL_TYPE | "";
     provider: COMPOSED_PROVIDER_TYPE;
     openAiPipelineMode?: OpenAiPipelineMode;
+    previousModel?: PROVIDER_MODEL_TYPE | "";
   },
 ): T | undefined => {
   if (!currentConfig) {
@@ -693,7 +765,8 @@ export const updateProviderConfig = <
     let changed = false;
 
     // reasoningEffort: drop it for models without an effort option list,
-    // coerce stale values to the model's default otherwise. Mirrors the Anthropic
+    // otherwise move a stale value to the nearest offered level on a switch,
+    // and to the model's default when normalising a loaded config. Mirrors the Anthropic
     // thinkingEffort handling below. Unlike resolveEffort, which only masks a
     // max the key cannot take, this writes the coerced value back on purpose:
     // a model change settles on a level the new model and mode offer, so a key
@@ -703,10 +776,19 @@ export const updateProviderConfig = <
     // API list, a superset of the Chat Completions one, so a stored max is
     // kept: assuming Chat Completions here would rewrite it to the model's
     // default for good.
-    const effortOptions = getOpenAIReasoningEffortOptions(
-      params.model,
-      params.openAiPipelineMode ?? "responses_api",
+    // The previous model's list is the one its panel showed, which reads an
+    // unknown mode as Chat Completions: a max shown there as the default
+    // follows the next model's default rather than moving to xhigh.
+    const mode = params.openAiPipelineMode ?? "responses_api";
+    const effortOptions = getOpenAIReasoningEffortOptions(params.model, mode);
+    const previousEffortOptions = getOpenAIReasoningEffortOptions(
+      params.previousModel,
+      params.openAiPipelineMode,
     );
+    const previousDefault =
+      previousEffortOptions.length > 0
+        ? getDefaultReasoningEffort(params.previousModel)
+        : undefined;
     if (effortOptions.length === 0) {
       if (next.reasoningEffort !== undefined) {
         next.reasoningEffort = undefined;
@@ -714,10 +796,21 @@ export const updateProviderConfig = <
       }
     } else if (
       next.reasoningEffort !== undefined &&
-      !effortOptions.some((o) => o.value === next.reasoningEffort)
+      (!effortOptions.some((o) => o.value === next.reasoningEffort) ||
+        next.reasoningEffort === previousDefault)
     ) {
-      next.reasoningEffort = getDefaultReasoningEffort(params.model);
-      changed = true;
+      const settled =
+        (next.reasoningEffort === previousDefault
+          ? undefined
+          : getNearestOfferedLevel(
+              next.reasoningEffort,
+              effortOptions,
+              previousEffortOptions,
+            )) ?? getDefaultReasoningEffort(params.model);
+      if (next.reasoningEffort !== settled) {
+        next.reasoningEffort = settled;
+        changed = true;
+      }
     }
 
     return changed ? next : currentConfig;
@@ -728,6 +821,13 @@ export const updateProviderConfig = <
     let changed = false;
 
     const effortOptions = getAnthropicThinkingEffortOptions(params.model);
+    const previousEffortOptions = getAnthropicThinkingEffortOptions(
+      params.previousModel,
+    );
+    const previousDefault =
+      previousEffortOptions.length > 0
+        ? getDefaultThinkingEffort(params.previousModel)
+        : undefined;
     if (effortOptions.length === 0) {
       if (next.thinkingEffort !== undefined) {
         next.thinkingEffort = undefined;
@@ -735,10 +835,21 @@ export const updateProviderConfig = <
       }
     } else if (
       next.thinkingEffort !== undefined &&
-      !effortOptions.some((o) => o.value === next.thinkingEffort)
+      (!effortOptions.some((o) => o.value === next.thinkingEffort) ||
+        next.thinkingEffort === previousDefault)
     ) {
-      next.thinkingEffort = getDefaultThinkingEffort(params.model);
-      changed = true;
+      const settled =
+        (next.thinkingEffort === previousDefault
+          ? undefined
+          : getNearestOfferedLevel(
+              next.thinkingEffort,
+              effortOptions,
+              previousEffortOptions,
+            )) ?? getDefaultThinkingEffort(params.model);
+      if (next.thinkingEffort !== settled) {
+        next.thinkingEffort = settled;
+        changed = true;
+      }
     }
 
     return changed ? next : currentConfig;
@@ -757,14 +868,32 @@ export const updateProviderConfig = <
     // the control honest: the dropdown falls back to the default for display, so leaving the config
     // empty would show a level that never gets sent. Mirrors the handling above.
     const levelOptions = getThinkingLevelOptions(params.model);
+    const previousLevelOptions = getThinkingLevelOptions(params.previousModel);
+    const previousDefault =
+      previousLevelOptions.length > 0
+        ? getDefaultThinkingLevel(params.previousModel)
+        : undefined;
     if (levelOptions.length === 0) {
       if (next.thinkingLevel !== undefined) {
         next.thinkingLevel = undefined;
         changed = true;
       }
-    } else if (!levelOptions.some((o) => o.value === next.thinkingLevel)) {
-      next.thinkingLevel = getDefaultThinkingLevel(params.model);
-      changed = true;
+    } else if (
+      !levelOptions.some((o) => o.value === next.thinkingLevel) ||
+      next.thinkingLevel === previousDefault
+    ) {
+      const settled =
+        (next.thinkingLevel === previousDefault
+          ? undefined
+          : getNearestOfferedLevel(
+              next.thinkingLevel,
+              levelOptions,
+              previousLevelOptions,
+            )) ?? getDefaultThinkingLevel(params.model);
+      if (next.thinkingLevel !== settled) {
+        next.thinkingLevel = settled;
+        changed = true;
+      }
     }
 
     return changed ? next : currentConfig;
@@ -887,7 +1016,7 @@ export const getOpenRouterReasoningEffortOptions = (
  */
 export const resolveSamplingParams = (
   model: PROVIDER_MODEL_TYPE | "",
-  configs: { temperature?: number | null; topP?: number | null },
+  configs: { temperature?: number | null; topP?: number | null } & EffortParams,
 ): SamplingParams => {
   let temperature = configs.temperature ?? undefined;
   let topP = configs.topP ?? undefined;
@@ -918,6 +1047,9 @@ export const resolveSamplingParams = (
   }
 
   if (provider === PROVIDER_TYPE.ANTHROPIC) {
+    if (isAnthropicThinkingRequested(model, configs)) {
+      return {};
+    }
     // Anthropic takes one of the pair, never both: temperature wins a config carrying both, and
     // takes over when neither is set so the panel can't offer two live sliders.
     if (temperature !== undefined) {
@@ -1097,6 +1229,31 @@ export const resolveMaxCompletionTokens = (
   return Math.min(Math.max(Math.floor(requested), min), max);
 };
 
+export const hasThinkingInCustomParameters = (configs: EffortParams): boolean =>
+  asRecord(configs.custom_parameters).thinking != null;
+
+// Mirrors the backend, which leaves the sampling pair out whenever thinking is on, since Anthropic
+// refuses it then: "temperature may only be set to 1 when thinking is enabled". A thinking block in
+// custom_parameters decides on its own, "disabled" included, even beside an effort level. Only
+// without one does a level on a model that thinks only when asked turn on adaptive thinking.
+export const isAnthropicThinkingRequested = (
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: EffortParams,
+): boolean => {
+  if (hasThinkingInCustomParameters(configs)) {
+    const type = asRecord(asRecord(configs.custom_parameters).thinking).type;
+    return (
+      typeof type === "string" &&
+      type.trim() !== "" &&
+      type.toLowerCase() !== "disabled"
+    );
+  }
+  return (
+    thinksOnlyWhenAsked(model) &&
+    resolveEffort(model, configs).thinkingEffort !== "off"
+  );
+};
+
 export const getOpenRouterDefaultMaxTokens = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): number => {
@@ -1138,7 +1295,10 @@ export const sanitizeConfigForRequest = (
   const sanitized: Record<string, unknown> = { ...configs };
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
-  const sampling = resolveSamplingParams(model, configs as SamplingParams);
+  const sampling = resolveSamplingParams(
+    model,
+    configs as SamplingParams & EffortParams,
+  );
   for (const key of ["temperature", "topP"] as const) {
     if (sampling[key] === undefined) {
       delete sanitized[key];

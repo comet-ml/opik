@@ -127,6 +127,8 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_OPUS_4_6_20260205 = "claude-opus-4-6-20260205",
   CLAUDE_OPUS_4_7_20260416 = "claude-opus-4-7-20260416",
   CLAUDE_OPUS_5_5 = "claude-opus-5-5",
+  CLAUDE_HAIKU_5_5 = "claude-haiku-5-5",
+  CLAUDE_SONNET_5_5 = "claude-sonnet-5-5",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -1096,8 +1098,12 @@ export const ANTHROPIC_THINKING_EFFORT_VALUES = [
   "max",
 ] as const;
 
-export type AnthropicThinkingEffort =
+export type AnthropicEffortLevel =
   (typeof ANTHROPIC_THINKING_EFFORT_VALUES)[number];
+
+// "off" is Opik's own choice for the models that think only when asked: it sends no effort, so the
+// model answers without thinking. It never reaches Anthropic as an effort.
+export type AnthropicThinkingEffort = AnthropicEffortLevel | "off";
 
 export interface LLMAnthropicConfigsType {
   temperature?: number;

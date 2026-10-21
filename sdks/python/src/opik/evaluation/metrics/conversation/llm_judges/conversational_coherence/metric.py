@@ -31,10 +31,11 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
     the final `assistant` message within each window is relevant and coherent in
     relation to the preceding conversational context.
 
-    Only windows that end with an `assistant` message are graded: a window whose last
-    message is from the `user` has no answer to assess, so it neither costs a model
-    call nor counts towards the score. A conversation with no assistant reply at all
-    therefore has nothing to grade, and raises rather than scoring it as incoherent.
+    Only windows that end with an `assistant` reply are graded: a window whose last
+    message is from the `user`, or is an assistant message carrying no text, has no
+    answer to assess, so it neither costs a model call nor counts towards the score.
+    A conversation with no assistant reply at all therefore has nothing to grade,
+    and raises rather than scoring it as incoherent.
 
     It supports both synchronous and asynchronous operations to
     accommodate the model's operation type. It returns a score between `0.0` and `1.0`,
@@ -349,15 +350,24 @@ def _score_from_verdicts(
 def _windows_to_grade(
     turns_windows: List[conversation_types.Conversation],
 ) -> List[conversation_types.Conversation]:
-    """Keeps only the windows that end with an assistant reply.
+    """Keeps only the windows that end with an assistant reply carrying text.
 
     The judge is asked whether the last `assistant` message of a window is relevant to
     the turns preceding it. A window that ends with a `user` message - a thread that
     was never answered, or a user message no assistant message answered - has no such
     message, so grading it would score the user's own words as the agent's answer and
-    would count as a window in the denominator of the score.
+    would count as a window in the denominator of the score. The same holds for an
+    assistant message that carries no text: a turn the agent answered with nothing -
+    an agent call that only issued tool calls, or an empty completion - is not an
+    answer to grade either, and grading it costs a judge call and scores the missing
+    answer as incoherent.
     """
-    graded = [window for window in turns_windows if window[-1]["role"] == "assistant"]
+    graded = [
+        window
+        for window in turns_windows
+        if window[-1]["role"] == "assistant"
+        and conversation_helpers.message_has_text(window[-1])
+    ]
     if not graded:
         raise ValueError("Conversation contains no assistant messages")
     return graded

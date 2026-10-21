@@ -287,3 +287,125 @@ describe("Anthropic sampling params", () => {
     expect(screen.getByTestId("temperature-input")).toHaveValue("0.4");
   });
 });
+
+describe("Anthropic thinking effort", () => {
+  const BOTH_OFF_NOTE =
+    "Temperature and Top P are off while Claude can think. Set Thinking effort to Off to use them.";
+  const TEMPERATURE_OFF_NOTE =
+    "Temperature is off while Claude can think. Set Thinking effort to Off to use it.";
+
+  it("puts a note where the sampling choice was while Sonnet 4.6 can think", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={{ ...ANTHROPIC_CONFIG, thinkingEffort: "low" }}
+        model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("radio", { name: "Temperature" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
+    const note = screen.getByText(BOTH_OFF_NOTE);
+    expect(
+      note.compareDocumentPosition(screen.getByText("Max output tokens")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("names only temperature where the surface cannot store a Top P", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={{ ...ANTHROPIC_CONFIG, thinkingEffort: "max" }}
+        model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6}
+        onChange={vi.fn()}
+        unsupportedParams={RULE_UNSUPPORTED_PARAMS}
+      />,
+    );
+
+    expect(screen.getByText(TEMPERATURE_OFF_NOTE)).toBeInTheDocument();
+  });
+
+  it("brings the stored temperature back at Off", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={{ ...ANTHROPIC_CONFIG, thinkingEffort: "off" }}
+        model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("temperature-input")).toHaveValue("0.4");
+    expect(screen.queryByText(BOTH_OFF_NOTE)).not.toBeInTheDocument();
+  });
+
+  it("names the custom parameters when their thinking block turns thinking on at Off", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={
+          {
+            ...ANTHROPIC_CONFIG,
+            thinkingEffort: "off",
+            custom_parameters: { thinking: { type: "adaptive" } },
+          } as LLMAnthropicConfigsType
+        }
+        model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Temperature and Top P are off because the custom parameters turn thinking on.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the temperature beside a level when the custom parameters disable thinking", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={
+          {
+            ...ANTHROPIC_CONFIG,
+            thinkingEffort: "high",
+            custom_parameters: { thinking: { type: "disabled" } },
+          } as LLMAnthropicConfigsType
+        }
+        model={PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("temperature-input")).toHaveValue("0.4");
+    expect(screen.queryByText(BOTH_OFF_NOTE)).not.toBeInTheDocument();
+  });
+
+  it("adds no note on Opus 4.7, which takes no sampling params at any effort", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={{ maxCompletionTokens: 4000, thinkingEffort: "high" }}
+        model={PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Thinking effort")).toBeInTheDocument();
+    expect(screen.queryByText(BOTH_OFF_NOTE)).not.toBeInTheDocument();
+  });
+
+  it("calls Opus 4.5's control Effort, since it never turns thinking on", () => {
+    renderPanel(
+      <AnthropicModelConfigs
+        configs={{ ...ANTHROPIC_CONFIG, thinkingEffort: "low" }}
+        model={PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Effort")).toBeInTheDocument();
+    expect(screen.queryByText("Thinking effort")).not.toBeInTheDocument();
+    expect(screen.getByTestId("temperature-input")).toHaveValue("0.4");
+  });
+});

@@ -139,6 +139,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Claude Opus 5.5",
     },
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5,
+      label: "Claude Sonnet 5.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5,
+      label: "Claude Haiku 5.5",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5,
       label: "Claude Opus 5",
     },

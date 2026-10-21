@@ -14,7 +14,6 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.anthropic.AnthropicChatModel;
 import dev.langchain4j.model.anthropic.AnthropicChatRequestParameters;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -55,8 +54,8 @@ class AnthropicClientGeneratorTest {
 
     private AnthropicChatRequestParameters generateChatParameters(LlmAsJudgeModelParameters modelParameters) {
         var config = LlmProviderClientApiConfig.builder().apiKey("test-key").build();
-        var model = (AnthropicChatModel) generator.generateChat(config, modelParameters);
-        return (AnthropicChatRequestParameters) model.defaultRequestParameters();
+        return (AnthropicChatRequestParameters) generator.generateChat(config, modelParameters)
+                .defaultRequestParameters();
     }
 
     @Nested
@@ -151,7 +150,8 @@ class AnthropicClientGeneratorTest {
 
         @ParameterizedTest
         @EnumSource(value = AnthropicModelName.class, names = {"CLAUDE_SONNET_5", "CLAUDE_OPUS_5", "CLAUDE_OPUS_5_5",
-                "CLAUDE_FABLE_5", "CLAUDE_FABLE_5_1", "CLAUDE_MYTHOS_5", "CLAUDE_MYTHOS_5_1"})
+                "CLAUDE_SONNET_5_5", "CLAUDE_HAIKU_5_5", "CLAUDE_FABLE_5", "CLAUDE_FABLE_5_1", "CLAUDE_MYTHOS_5",
+                "CLAUDE_MYTHOS_5_1"})
         void modelsThatThinkWhenTheRequestOmitsThinking(AnthropicModelName model) {
             assertThat(ModelCapabilities.thinksByDefault(model.getValue())).isTrue();
         }
@@ -167,7 +167,7 @@ class AnthropicClientGeneratorTest {
 
         @ParameterizedTest
         @CsvSource({
-                "claude-sonnet-5-5, true",
+                "claude-sonnet-6, true",
                 "claude-sonnet-5-20261001, true",
                 "us.anthropic.claude-opus-5-v1:0, true",
                 "claude-3-5-sonnet-20240620, false",
@@ -404,6 +404,43 @@ class AnthropicClientGeneratorTest {
             assertThat(parameters.maxOutputTokens()).isEqualTo(THINKING_MAX_TOKENS);
         }
 
+        @ParameterizedTest(name = "{0} at {1}")
+        @CsvSource({
+                "claude-sonnet-4-6, low",
+                "claude-opus-4-6-20260205, max",
+                "claude-opus-4-7, xhigh",
+                "claude-opus-4-8, high"})
+        void turnsOnAdaptiveThinkingForAnEffortOnAModelThatThinksOnlyWhenAsked(String model, String effort) {
+            var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
+                    .name(model)
+                    .temperature(0.7)
+                    .customParameters(JsonUtils.getJsonNodeFromString(
+                            "{\"output_config\": {\"effort\": \"%s\"}}".formatted(effort)))
+                    .build());
+
+            assertThat(parameters.thinkingType()).isEqualTo("adaptive");
+            assertThat(parameters.thinkingBudgetTokens()).isNull();
+            assertThat(parameters.temperature()).isNull();
+        }
+
+        @ParameterizedTest(name = "{0} with {1}")
+        @CsvSource(delimiter = '|', value = {
+                "claude-sonnet-4-6 | {\"max_tokens\": 2048} | | 0.7",
+                "claude-sonnet-4-6 | {\"output_config\": {\"effort\": \"low\"}, \"thinking\": {\"type\": \"disabled\"}} | disabled | 0.7",
+                "claude-sonnet-5 | {\"output_config\": {\"effort\": \"low\"}} | | ",
+                "claude-opus-4-5-20251101 | {\"output_config\": {\"effort\": \"high\"}} | | 0.7"})
+        void leavesThinkingToTheRuleOrTheModelOtherwise(String model, String customParameters,
+                String expectedThinkingType, Double expectedTemperature) {
+            var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
+                    .name(model)
+                    .temperature(0.7)
+                    .customParameters(JsonUtils.getJsonNodeFromString(customParameters))
+                    .build());
+
+            assertThat(parameters.thinkingType()).isEqualTo(expectedThinkingType);
+            assertThat(parameters.temperature()).isEqualTo(expectedTemperature);
+        }
+
         @Test
         void dropsBudgetWhenThinkingDisabled() {
             var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
@@ -471,6 +508,25 @@ class AnthropicClientGeneratorTest {
             var body = bodySentToAnthropic(model, customParameters);
 
             assertThat(body.path("max_tokens").asInt()).isEqualTo(expectedMaxTokens);
+        }
+
+        @Test
+        void sendsAdaptiveThinkingBesideTheEffortAndTheJudgeSchema() {
+            var chatModel = generator.generateChat(wireMockConfig(), LlmAsJudgeModelParameters.builder()
+                    .name("claude-sonnet-4-6")
+                    .temperature(0.0)
+                    .customParameters(JsonUtils.getJsonNodeFromString("{\"output_config\": {\"effort\": \"low\"}}"))
+                    .build());
+
+            chatModel.chat(judgeRequest());
+
+            var sent = wireMock.findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)));
+            assertThat(sent).hasSize(1);
+            var body = JsonUtils.getJsonNodeFromString(sent.getFirst().getBodyAsString());
+            assertThat(body.path("thinking")).isEqualTo(JsonUtils.getJsonNodeFromString("{\"type\": \"adaptive\"}"));
+            assertThat(body.path("output_config").path("effort").asText()).isEqualTo("low");
+            assertThat(body.path("output_config").path("format").path("type").asText()).isEqualTo("json_schema");
+            assertThat(body.has("temperature")).isFalse();
         }
 
         @Test
