@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.ModelCapabilities;
+import com.comet.opik.domain.llm.SamplingParamsNormalizer;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.AnthropicClientConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
@@ -91,7 +92,9 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
         }
 
         var customParameters = modelParameters.customParameters();
-        var thinking = parseThinking(customParameters);
+        var thinking = SamplingParamsNormalizer.effortTurnsOnThinking(modelParameters.name(), customParameters)
+                ? ThinkingParams.ADAPTIVE
+                : parseThinking(customParameters);
 
         // ParamResolver has already dropped a temperature the model or the rule's thinking refuses.
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
@@ -191,6 +194,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
 
     private record ThinkingParams(boolean enabled, String type, Integer budgetTokens) {
         private static final ThinkingParams ABSENT = new ThinkingParams(false, null, null);
+        private static final ThinkingParams ADAPTIVE = new ThinkingParams(true, AnthropicEffort.ADAPTIVE, null);
     }
 
     @Override

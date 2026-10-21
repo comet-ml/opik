@@ -8,7 +8,7 @@ og:title: Diagnostics - Opik
 title: Diagnostics
 ---
 
-Skimming traces for recurring failures doesn't scale once your agent is handling real traffic. Diagnostics scans your project's traces on a schedule, groups repeated failures into a single issue, and surfaces a root cause, a suggested fix, and the traces to prove it, so you catch problems before your users report them.
+Skimming traces for recurring failures doesn't scale once your agent is handling real traffic. Diagnostics scans your project's traces on demand or every day, groups repeated failures into a single issue, and surfaces a root cause, a suggested fix, and the traces to prove it, so you catch problems before your users report them.
 
 <Frame>
   <img src="/img/v2/observability/diagnostics-overview.png" alt="Diagnostics page showing a detected issue with summary and Ollie fix" />
@@ -20,22 +20,35 @@ Diagnostics is powered by Ollie, so it doesn't rely on fixed rules or thresholds
 traces the same way you would, looking for patterns like tool-call loops, malformed API calls,
 hallucinated outputs, or latency regressions.
 
-- **Daily scans:** once enabled, Opik automatically scans each project's traces from the last 24
-  hours every day at 00:05 UTC.
-- **On-demand scans:** click **Run diagnostic** at any time to analyze the last 24 hours
-  immediately, without waiting for the daily schedule.
+- **On-demand scans:** click **Run diagnostic** at any time to analyze the traces logged in the
+  last 24 hours.
+- **Daily scans:** when automatic daily diagnostics is on, Opik scans the previous day's traces
+  (midnight to midnight UTC) every day, at 00:05 UTC by default. Days with no new traces are
+  skipped.
+- **One window per scan:** each scan covers only its own window. A scan doesn't pick up from the
+  previous one, and days missed while daily scans were off aren't scanned later.
 - **Deduplicated issues:** matching failures across traces are grouped into a single issue rather
-  than reported one by one, so a bug that shows up in 40 traces still only needs one fix.
+  than reported one by one, so a bug that shows up in 40 traces still only needs one fix. When a
+  later scan finds a known issue again, it adds the new occurrences to that issue instead of
+  opening a new one.
 
 <Note>
   Diagnostics requires the Ollie AI assistant to be enabled for your workspace. Scans run on your
-  Ollie tokens, see the settings dialog for billing details.
+  organization's Ollie credits, which are shared with Ollie's other features. See
+  [Cost and credits](#cost-and-credits).
 </Note>
 
 ## Turning on diagnostics
 
-The first time you open a project's **Diagnostics** page, you'll be prompted to turn it on. Once
-enabled, a scan kicks off immediately, and then runs automatically every day.
+The first time you open a project's **Diagnostics** page, click **Run your first diagnostic** to
+scan the last 24 hours. This runs a single scan: it doesn't turn on daily scans.
+
+On Opik Cloud, some projects get their first scan automatically instead: the page then tells you
+that the first diagnostic runs for free once the project has logged 100 traces in the last 7 days.
+That first scan covers those 7 days and doesn't use your credits.
+
+To scan the project every day, open the settings icon next to **Run diagnostic** and switch on
+**Automatic daily diagnostics** (see [Settings](#settings)).
 
 ## Reviewing issues
 
@@ -72,6 +85,25 @@ scans are paused.
 <Frame>
   <img src="/img/v2/observability/diagnostics-settings.png" alt="Diagnostics settings dialog with daily scan toggle" />
 </Frame>
+
+## Cost and credits
+
+Scans you start with **Run diagnostic** and daily scans use Ollie credits, so a project with
+automatic daily diagnostics turned on uses credits every day it logs traces. An automatic first
+scan is free. Turn the daily scan off for projects you don't need watched, such as demo
+or test projects, and run a scan on demand when you want one.
+
+If your organization runs out of Ollie credits, the scan doesn't run and the page shows
+**Out of Ollie credits**. Automatic daily diagnostics is switched off for that project, so turn it
+back on once credits are added. Issues already found stay available.
+
+## Self-hosted deployments
+
+On self-hosted Opik, Diagnostics is available when Ollie is enabled. To turn Diagnostics off for the
+whole installation while keeping the Ollie chat, set `TOGGLE_AGENT_INSIGHTS_ENABLED=false` on
+`opik-backend`. This stops the daily scans and hides the Diagnostics page. To run the daily scan at
+a different time, set `AGENT_INSIGHTS_REPORT_SCHEDULE` to a Quartz cron expression (the default is
+`0 5 0 * * ?`, 00:05 UTC).
 
 ## Next steps
 

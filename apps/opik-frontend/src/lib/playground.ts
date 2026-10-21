@@ -14,6 +14,7 @@ import {
   DEFAULT_CUSTOM_CONFIGS,
 } from "@/constants/llm";
 import {
+  getDefaultReasoningEffort,
   getDefaultThinkingEffort,
   getDefaultThinkingLevel,
   getOpenRouterDefaultMaxTokens,
@@ -143,7 +144,7 @@ export const getDefaultConfigByProvider = (
     };
 
     if (supportsOpenAIReasoningEffort(model)) {
-      config.reasoningEffort = "high";
+      config.reasoningEffort = getDefaultReasoningEffort(model);
     }
 
     return config;
@@ -374,9 +375,15 @@ export const parseCompletionOutput = (run: RunStreamingReturn) => {
   );
 };
 
+const HTTP_BAD_REQUEST = 400;
+const HTTP_PAYMENT_REQUIRED = 402;
 const HTTP_NOT_FOUND = 404;
+const HTTP_TOO_MANY_REQUESTS = 429;
 
 export type RunFailureHint = {
+  // Set only when the status tells the cause. A hint guessed from the prompt has no title, so
+  // the provider's own error stays on the tag in case the guess is wrong.
+  title?: string;
   action: string;
 };
 
@@ -386,6 +393,8 @@ export type RunFailure = {
 };
 
 type RunFailureContext = {
+  canTuneRequestRate: boolean;
+  sentMessages: LLMMessage[];
   model: string;
 };
 
@@ -396,15 +405,32 @@ const mentionsModel = (text: string, modelName: string) =>
 
 const getRunFailureHint = (
   run: RunStreamingReturn,
-  { model }: RunFailureContext,
+  { canTuneRequestRate, sentMessages, model }: RunFailureContext,
 ): RunFailureHint | undefined => {
+  const { errorStatus } = run;
+  if (errorStatus === HTTP_TOO_MANY_REQUESTS) {
+    return {
+      title: "Rate limit reached",
+      action: canTuneRequestRate
+        ? "Wait a moment and run again. If it keeps happening, lower Max concurrent requests or raise Throttling in Model parameters."
+        : "Wait a moment and run again.",
+    };
+  }
+  // The backend reports OpenAI's insufficient_quota as 402, and OpenRouter sends 402 when credits run out.
+  if (errorStatus === HTTP_PAYMENT_REQUIRED) {
+    return {
+      title: "Out of credits",
+      action:
+        "Add credits or raise your quota with the provider, then run again.",
+    };
+  }
   const providerMessage =
     run.opikError || run.providerError || run.pythonProxyError;
   const modelName = last(model.split("/"));
   // Providers answer a model the key can't use with a 404 that names it. A 404 that doesn't name it
   // has another cause, such as a custom provider's wrong URL ("Not Found").
   if (
-    run.errorStatus === HTTP_NOT_FOUND &&
+    errorStatus === HTTP_NOT_FOUND &&
     modelName &&
     providerMessage &&
     mentionsModel(providerMessage, modelName)
@@ -412,6 +438,22 @@ const getRunFailureHint = (
     return {
       action:
         "This model isn't available for your API key. Pick another model, or check which models your provider account can use.",
+    };
+  }
+  if (errorStatus !== HTTP_BAD_REQUEST) return undefined;
+
+  // Which role mixes are rejected differs by provider and model, and each provider words its 400
+  // differently, so the cause is guessed from the prompt rather than read from the error text.
+  if (!sentMessages.some((message) => message.role === LLM_MESSAGE_ROLE.user)) {
+    return {
+      action:
+        "This model needs a User message. Add one with + Message, then run again.",
+    };
+  }
+  if (last(sentMessages)?.role === LLM_MESSAGE_ROLE.assistant) {
+    return {
+      action:
+        "This model needs the last message to be a User message. Add one at the end with + Message, or remove the last Assistant message, then run again.",
     };
   }
   return undefined;
@@ -423,7 +465,11 @@ export const describeRunFailure = (
 ): RunFailure => {
   const hint = getRunFailureHint(run, context);
   if (!hint) return { message: parseCompletionOutput(run) };
-  return { message: parseCompletionOutput(run), hint };
+  if (!hint.title) return { message: parseCompletionOutput(run), hint };
+
+  const providerMessage =
+    run.opikError || run.providerError || run.pythonProxyError;
+  return { message: providerMessage || hint.title, hint };
 };
 
 export class RunFailedError extends Error {

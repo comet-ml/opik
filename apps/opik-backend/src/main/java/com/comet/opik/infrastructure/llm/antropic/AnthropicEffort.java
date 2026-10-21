@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ModelParams;
+import com.comet.opik.domain.llm.SamplingParamsNormalizer;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -20,6 +21,8 @@ class AnthropicEffort {
     static final String OUTPUT_CONFIG = "output_config";
     static final String EFFORT = "effort";
     static final String FORMAT = "format";
+    static final String THINKING = "thinking";
+    static final String ADAPTIVE = "adaptive";
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
@@ -36,7 +39,9 @@ class AnthropicEffort {
     Optional<Map<String, Object>> toCustomParameters(String model, Map<String, Object> customParameters,
             LlmModelRegistryService registryService) {
         return toOutputConfig(model, customParameters, registryService)
-                .map(outputConfig -> Map.of(OUTPUT_CONFIG, outputConfig));
+                .map(outputConfig -> SamplingParamsNormalizer.effortTurnsOnThinking(model, customParameters)
+                        ? Map.of(OUTPUT_CONFIG, outputConfig, THINKING, Map.of("type", ADAPTIVE))
+                        : Map.of(OUTPUT_CONFIG, outputConfig));
     }
 
     private Optional<Map<?, ?>> toOutputConfig(String model, Map<String, Object> customParameters,

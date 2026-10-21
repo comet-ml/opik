@@ -54,7 +54,8 @@ public class ParamResolver {
         // Some Claude models refuse both outright rather than refusing them together, and extended thinking
         // refuses them on any Claude: "temperature may only be set to 1 when thinking is enabled", "top_p must be
         // greater than or equal to 0.95 or unset when thinking is enabled".
-        var thinkingEnabled = SamplingParamsNormalizer.thinkingEnabled(request);
+        var thinkingEnabled = SamplingParamsNormalizer.thinkingEnabled(request)
+                || SamplingParamsNormalizer.effortTurnsOnThinking(model, request.customParameters());
         var temperature = request.temperature();
         var topP = request.topP();
         if (temperature != null) {
@@ -125,7 +126,8 @@ public class ParamResolver {
         // Thinking costs a judge its temperature only on a Claude (the exclusive-sampling rule's loose match), unlike
         // the chat path: a judge on another provider's thinking model keeps the temperature it was saved with.
         var claudeThinks = ModelCapabilities.requiresExclusiveSamplingParams(model)
-                && SamplingParamsNormalizer.thinkingEnabled(parameters.customParameters());
+                && (SamplingParamsNormalizer.thinkingEnabled(parameters.customParameters())
+                        || SamplingParamsNormalizer.effortTurnsOnThinking(model, parameters.customParameters()));
         if (!refused && !claudeThinks) {
             return new Resolution<>(parameters, List.of());
         }

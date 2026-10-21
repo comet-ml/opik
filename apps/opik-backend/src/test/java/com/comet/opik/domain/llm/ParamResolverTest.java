@@ -9,10 +9,12 @@ import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
@@ -34,6 +36,8 @@ class ParamResolverTest {
             .temperature(REFUSED).topP(REFUSED).frequencyPenalty(REFUSED).presencePenalty(REFUSED).build();
 
     private static final ParamResolver RESOLVER = new ParamResolver(mock(LlmProviderFactory.class), bundledRegistry());
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
 
     private static ParamResolver resolverWithOpenAiParams(ModelParams params) {
         var factory = mock(LlmProviderFactory.class);
@@ -228,6 +232,43 @@ class ParamResolverTest {
 
         assertThat(normalized.topP()).isEqualTo(0.9);
         assertThat(normalized.temperature()).isNull();
+    }
+
+    /**
+     * On the models that think only when asked, an effort level makes the Anthropic mapper send adaptive thinking
+     * next to it, so it costs both like a thinking block does.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"claude-sonnet-4-6", "claude-opus-4-6-20260205"})
+    void dropsBothWhenAnEffortTurnsThinkingOn(String model) {
+        var resolution = RESOLVER.resolve(ChatCompletionRequest.builder()
+                .model(model)
+                .temperature(0.7)
+                .topP(0.9)
+                .customParameters(Map.of("output_config", Map.of("effort", "low")))
+                .build());
+
+        assertThat(resolution.request().temperature()).isNull();
+        assertThat(resolution.request().topP()).isNull();
+        assertThat(resolution.changes()).containsExactly(
+                new ParamChange("temperature", Reason.THINKING_ENABLED),
+                new ParamChange("top_p", Reason.THINKING_ENABLED));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "claude-sonnet-4-6 | {\"output_config\": {\"effort\": \"low\"}, \"thinking\": {\"type\": \"disabled\"}}",
+            "claude-sonnet-4-6 | {\"output_config\": {\"format\": {\"type\": \"json_schema\"}}}",
+            "claude-opus-4-5-20251101 | {\"output_config\": {\"effort\": \"high\"}}",
+            "anthropic/claude-sonnet-4.6 | {\"output_config\": {\"effort\": \"low\"}}"})
+    void keepsTemperatureWhenTheEffortLeavesThinkingOff(String model, String customParameters) {
+        var request = ChatCompletionRequest.builder()
+                .model(model)
+                .temperature(0.7)
+                .customParameters(JsonUtils.readValue(customParameters, MAP_TYPE))
+                .build();
+
+        assertThat(RESOLVER.resolve(request).request()).isSameAs(request);
     }
 
     private static ChatCompletionRequest thinkingRequest(String model, Double temperature, Double topP,
@@ -429,6 +470,25 @@ class ParamResolverTest {
 
         assertThat(resolution.request().temperature()).isNull();
         assertThat(resolution.changes()).containsExactly(new ParamChange("temperature", Reason.THINKING_ENABLED));
+    }
+
+    @Test
+    void dropsAJudgeTemperatureWhenAnEffortTurnsThinkingOn() {
+        var resolution = RESOLVER.resolve(judge("claude-sonnet-4-6", """
+                {"output_config": {"effort": "low"}}"""));
+
+        assertThat(resolution.request().temperature()).isNull();
+        assertThat(resolution.changes()).containsExactly(new ParamChange("temperature", Reason.THINKING_ENABLED));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "claude-sonnet-4-6 | {\"output_config\": {\"effort\": \"low\"}, \"thinking\": {\"type\": \"disabled\"}}",
+            "claude-opus-4-5-20251101 | {\"output_config\": {\"effort\": \"high\"}}"})
+    void keepsAJudgeTemperatureWhenTheEffortLeavesThinkingOff(String model, String customParameters) {
+        var parameters = judge(model, customParameters);
+
+        assertThat(RESOLVER.resolve(parameters).request()).isSameAs(parameters);
     }
 
     @Test

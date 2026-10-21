@@ -74,7 +74,7 @@ interface LlmProviderAnthropicMapper {
 
     // langchain4j's AnthropicOutputConfig has no effort field, so the whole output_config rides customParameters,
     // which AnthropicCreateMessageRequest flattens into the top level of the body. Mapping outputConfig as well
-    // would put a second output_config key on the wire.
+    // would put a second output_config key on the wire. The thinking an effort level turns on rides along with it.
     @Named("resolveCustomParameters")
     default Map<String, Object> resolveCustomParameters(@NonNull ChatCompletionRequest request,
             @Context LlmModelRegistryService registryService) {
@@ -98,7 +98,15 @@ interface LlmProviderAnthropicMapper {
         if (response.content == null || response.content.isEmpty()) {
             return List.of();
         }
-        return response.content.stream().map(content -> toChoice(content, response)).toList();
+        // A thinking block carries no text, and it comes first: as a choice of its own it would be the empty answer
+        // callers read from the first choice, ahead of the real one. When thinking used up max_tokens it is all there
+        // is, and one is kept so the choice still carries the finish reason.
+        var nonThinkingContent = response.content.stream()
+                .filter(content -> !StringUtils.equalsAny(content.type, "thinking", "redacted_thinking"))
+                .toList();
+        return (nonThinkingContent.isEmpty() ? response.content.subList(0, 1) : nonThinkingContent).stream()
+                .map(content -> toChoice(content, response))
+                .toList();
     }
 
     @Named("mapToUsage")

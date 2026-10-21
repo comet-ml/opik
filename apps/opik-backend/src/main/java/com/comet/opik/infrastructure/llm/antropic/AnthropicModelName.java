@@ -35,9 +35,22 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     CLAUDE_MYTHOS_PREVIEW("claude-mythos-preview"),
     CLAUDE_OPUS_4_6_20260205("claude-opus-4-6-20260205"),
     CLAUDE_OPUS_4_7_20260416("claude-opus-4-7-20260416"),
-    CLAUDE_OPUS_5_5("claude-opus-5-5");
+    CLAUDE_OPUS_5_5("claude-opus-5-5"),
+    CLAUDE_HAIKU_5_5("claude-haiku-5-5"),
+    CLAUDE_SONNET_5_5("claude-sonnet-5-5");
 
     private final String value;
+
+    // These take adaptive thinking but, unlike the newer models, run without any thinking when the request does not ask
+    // for it. Opus 4.5 is not here: it has no adaptive thinking, only a fixed budget. A list rather than catalog data
+    // because the catalog has no field yet that tells adaptive thinking from Opus 4.5's budget.
+    private static final Set<String> THINKS_ONLY_WHEN_ASKED_MODEL_IDS = Set.of(
+            CLAUDE_SONNET_4_6.value,
+            CLAUDE_OPUS_4_6.value,
+            CLAUDE_OPUS_4_6_20260205.value,
+            CLAUDE_OPUS_4_7.value,
+            CLAUDE_OPUS_4_7_20260416.value,
+            CLAUDE_OPUS_4_8.value);
 
     private static final Set<String> ALL_MODEL_IDS = Arrays.stream(values())
             .map(AnthropicModelName::getValue)
@@ -45,6 +58,10 @@ public enum AnthropicModelName implements StructuredOutputSupported {
 
     public static Set<String> allModelIds() {
         return ALL_MODEL_IDS;
+    }
+
+    public static boolean thinksOnlyWhenAsked(String modelId) {
+        return modelId != null && THINKS_ONLY_WHEN_ASKED_MODEL_IDS.contains(modelId);
     }
 
     @Override

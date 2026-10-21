@@ -339,11 +339,9 @@ models:
       thinksByDefault: false
       effort: {accepted: false}
   - id: claude-sonnet-5-5
-    awaitingSync: true
     params:
       maxOutputTokens: {max: 128000}
   - id: claude-haiku-5-5
-    awaitingSync: true
     params:
       maxOutputTokens: {max: 128000}
       effort:
