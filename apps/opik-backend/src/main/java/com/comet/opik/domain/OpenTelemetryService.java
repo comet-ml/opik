@@ -34,15 +34,17 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.util.Base64;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @ImplementedBy(OpenTelemetryServiceImpl.class)
 public interface OpenTelemetryService {
@@ -113,11 +115,6 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            log.info(
-                    "Storing OpenTelemetry spans in workspaceId '{}': {}. Spans without a valid '{}' go to project '{}'",
-                    workspaceId, describeProjects(spansByProjectName), GeneralMappingRules.OPIK_PROJECT_NAME_ATTR,
-                    fallbackProjectName);
-
             if (skippedProjectNames.spanCount() > 0) {
                 log.warn("Ignored '{}' on {} in workspaceId '{}' because the value is longer than {} characters: {}",
                         GeneralMappingRules.OPIK_PROJECT_NAME_ATTR, spans(skippedProjectNames.spanCount()),
@@ -127,7 +124,18 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
             return Flux.fromIterable(spansByProjectName.entrySet())
                     .flatMap(entry -> projectService.getOrCreate(entry.getKey())
-                            .flatMap(project -> storeProjectSpans(entry.getValue(), project, integrationName)))
+                            .map(project -> Map.entry(project, entry.getValue())))
+                    .collect(Collectors.toMap(entry -> entry.getKey().id(), Function.identity(),
+                            (left, right) -> Map.entry(left.getKey(),
+                                    Stream.concat(left.getValue().stream(), right.getValue().stream()).toList())))
+                    .flatMapMany(spansByProjectId -> {
+                        log.info(
+                                "Storing OpenTelemetry spans in workspaceId '{}': {}. Spans without a valid '{}' go to project '{}'",
+                                workspaceId, describeProjects(spansByProjectId.values()),
+                                GeneralMappingRules.OPIK_PROJECT_NAME_ATTR, fallbackProjectName);
+                        return Flux.fromIterable(spansByProjectId.values());
+                    })
+                    .flatMap(entry -> storeProjectSpans(entry.getValue(), entry.getKey(), integrationName))
                     .reduce(0L, Long::sum);
         }).subscribeOn(Schedulers.boundedElastic());
     }
@@ -145,13 +153,13 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         }
     }
 
-    private static String describeProjects(Map<String, List<Span>> spansByProjectName) {
-        var described = spansByProjectName.entrySet().stream()
+    private static String describeProjects(Collection<Map.Entry<Project, List<Span>>> spansByProject) {
+        var described = spansByProject.stream()
                 .sorted(Map.Entry.comparingByValue(Comparator.comparingInt(List<Span>::size).reversed()))
                 .limit(MAX_LOGGED_PROJECT_NAMES)
-                .map(entry -> spans(entry.getValue().size()) + " to project '" + entry.getKey() + "'")
+                .map(entry -> spans(entry.getValue().size()) + " to project '" + entry.getKey().name() + "'")
                 .collect(Collectors.joining(", "));
-        var hidden = spansByProjectName.size() - MAX_LOGGED_PROJECT_NAMES;
+        var hidden = spansByProject.size() - MAX_LOGGED_PROJECT_NAMES;
         return hidden > 0
                 ? described + " and " + hidden + " more " + (hidden == 1 ? "project" : "projects")
                 : described;
@@ -196,7 +204,6 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 })
                 .collect(Collectors.groupingBy(
                         Map.Entry::getKey,
-                        () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER),
                         Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
     }
 

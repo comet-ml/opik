@@ -1341,6 +1341,25 @@ class OpenTelemetryResourceTest {
         }
 
         @Test
+        @DisplayName("opik.project_name accent variants on the spans of one trace store the trace in one project")
+        void opikProjectNameAccentVariantsInOneTraceShareOneProject() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var suffix = UUID.randomUUID().toString();
+            var spans = rootAndChild();
+            var trace = List.of(
+                    spans.getFirst().toBuilder().addAttributes(projectNameAttribute("cafe-" + suffix)).build(),
+                    spans.getLast().toBuilder().addAttributes(projectNameAttribute("café-" + suffix)).build());
+
+            sendBatch(Entity.entity(exportRequest(trace).toByteArray(), "application/x-protobuf"),
+                    "application/x-protobuf", "header-project-" + suffix, workspaceName, okApikey, HttpStatus.SC_OK,
+                    null);
+
+            assertTraceStoredInProject(trace, "cafe-" + suffix, workspaceName);
+        }
+
+        @Test
         @DisplayName("opik.project_name on the root span only: the child falls back to the header project with its own trace id")
         void opikProjectNameOnRootSpanOnlySplitsRootAndChildAcrossProjects() {
             String workspaceName = UUID.randomUUID().toString();
