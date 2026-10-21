@@ -202,6 +202,34 @@ describe("message detection and combining", () => {
       code: JSON.stringify({ query: "weather" }, null, 2),
     });
   });
+
+  it.each([false, true])(
+    "does not repeat enveloped tools in the raw fallback (with remainder: %s)",
+    (withRemainder) => {
+      const tools = [{ name: "weather", description: "Look up weather" }];
+      const result = mapAndCombineMessages(
+        {
+          tools,
+          value: {
+            tools,
+            ...(withRemainder && { query: "Paris" }),
+          },
+          "llm.tools.0.tool.name": "weather",
+          "llm.tools.0.tool.description": "Look up weather",
+        },
+        undefined,
+        config,
+      );
+
+      expect(result.messages).toHaveLength(withRemainder ? 2 : 1);
+      expect(result.messages.at(-1)?.label).toBe("Available tools");
+      if (withRemainder) {
+        expect(result.messages[0].blocks[0].props).toMatchObject({
+          code: JSON.stringify({ query: "Paris" }, null, 2),
+        });
+      }
+    },
+  );
 });
 
 const textOf = (message: { blocks: { blockType: string }[] }) => {

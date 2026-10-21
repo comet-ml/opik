@@ -1,8 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { canShowLLMMessages, detectLLMMessages } from "../../detectLLMMessages";
+import {
+  canShowLLMMessages,
+  detectLLMMessagePair,
+  detectLLMMessages,
+} from "../../detectLLMMessages";
 import { detectOpenInferenceFormat } from "./detector";
 
 describe("detectOpenInferenceFormat", () => {
+  it("uses a sibling marker to detect a raw output", () => {
+    const { inputDetection, outputDetection } = detectLLMMessagePair(
+      { "openinference.span.kind": "LLM", value: "Question" },
+      { value: "Answer", mime_type: "text/plain" },
+      {},
+    );
+
+    expect(inputDetection).toMatchObject({
+      supported: true,
+      format: "openinference",
+    });
+    expect(outputDetection).toMatchObject({
+      supported: true,
+      format: "openinference",
+    });
+  });
+
+  it("keeps caller permission for raw fallback ahead of the inferred hint", () => {
+    const { outputDetection } = detectLLMMessagePair(
+      { "openinference.span.kind": "LLM" },
+      { value: "Answer", mime_type: "text/plain" },
+      { formatHintIsAuthoritative: false },
+    );
+
+    expect(outputDetection.supported).toBe(false);
+  });
+
   it("detects historical flattened attributes without a hint", () => {
     expect(
       detectOpenInferenceFormat(

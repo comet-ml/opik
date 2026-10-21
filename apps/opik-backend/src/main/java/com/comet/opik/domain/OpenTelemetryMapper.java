@@ -341,8 +341,7 @@ public class OpenTelemetryMapper {
         // on them (e.g. gen_ai.system_instructions) would otherwise type them as llm; force general.
         if ("invoke_agent".equals(metadata.path("gen_ai.operation.name").asText(null))) {
             spanBuilder.type(SpanType.general);
-        }
-        if (openInference != null) {
+        } else if (openInference != null) {
             spanBuilder.type(openInference.spanType());
         }
 

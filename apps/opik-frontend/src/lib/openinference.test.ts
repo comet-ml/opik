@@ -55,6 +55,48 @@ describe("OpenInference preview message selection", () => {
 });
 
 describe("parseOpenInferenceFields", () => {
+  it.each([0, false, "Raw prompt", ["raw", "values"]])(
+    "preserves the raw envelope fallback %j",
+    (value) => {
+      expect(
+        parseOpenInferenceFields({ value }, undefined).inputFallback,
+      ).toEqual(value);
+    },
+  );
+
+  it("filters structured fields from an object-valued raw envelope", () => {
+    const value = {
+      messages: [{ role: "user", content: "Question" }],
+      tools: [{ name: "weather" }],
+      prompts: [{ text: "Question" }],
+      choices: [{ text: "Answer" }],
+      "llm.tools.0.tool.name": "weather",
+      "llm.prompts.0.prompt.text": "Question",
+      "llm.function_call": '{"name":"weather"}',
+      query: "Paris",
+    };
+    const parsed = parseOpenInferenceFields(
+      { ...value, value },
+      { choices: [{ text: "Answer" }], value },
+    );
+
+    expect(parsed.inputFallback).toEqual({ query: "Paris" });
+    expect(parsed.outputFallback).toEqual({ query: "Paris" });
+    expect(value.tools).toEqual([{ name: "weather" }]);
+  });
+
+  it.each([
+    { tools: [{ name: "weather" }] },
+    { messages: [{ role: "user", content: "Question" }] },
+  ])(
+    "keeps envelope fields that have no structured representation: %j",
+    (value) => {
+      expect(
+        parseOpenInferenceFields({ value }, undefined).inputFallback,
+      ).toEqual(value);
+    },
+  );
+
   it.each([0, 2147483647])("accepts backend-compatible index %s", (index) => {
     const parsed = parseOpenInferenceFields(
       {

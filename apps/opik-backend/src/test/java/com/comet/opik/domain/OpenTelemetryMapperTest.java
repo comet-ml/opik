@@ -2380,6 +2380,17 @@ class OpenTelemetryMapperTest {
     class OpenInferenceNormalization {
 
         @ParameterizedTest
+        @CsvSource({"LLM", "AGENT", "TOOL"})
+        void invokeAgentTakesPrecedenceOverOpenInferenceKind(String kind) {
+            var span = enrich(List.of(
+                    str("openinference.span.kind", kind),
+                    str("gen_ai.operation.name", "invoke_agent"),
+                    str("gen_ai.system_instructions", "You are a helpful assistant")));
+
+            assertThat(span.type()).isEqualTo(SpanType.general);
+        }
+
+        @ParameterizedTest
         @CsvSource({"CHAIN", "AGENT"})
         void preservesRawValueAndCustomAttributeScoringPaths(String kind) {
             var span = enrich(List.of(

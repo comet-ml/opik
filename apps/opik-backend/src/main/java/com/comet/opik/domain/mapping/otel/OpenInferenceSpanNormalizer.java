@@ -555,6 +555,8 @@ public final class OpenInferenceSpanNormalizer {
 
     private static final class MessageBuilder {
 
+        private static final Set<String> STRING_FIELDS = Set.of("role", "content", "name", "tool_call_id");
+
         private final ObjectNode message = JsonUtils.createObjectNode();
         private final TreeMap<Integer, ContentBuilder> contents = new TreeMap<>();
         private final TreeMap<Integer, ToolCallBuilder> toolCalls = new TreeMap<>();
@@ -568,7 +570,7 @@ public final class OpenInferenceSpanNormalizer {
         }
 
         private boolean accept(String path, AnyValue value) {
-            if (Set.of("role", "content", "name", "tool_call_id").contains(path)) {
+            if (STRING_FIELDS.contains(path)) {
                 if (!value.hasStringValue()) {
                     return false;
                 }
@@ -642,15 +644,18 @@ public final class OpenInferenceSpanNormalizer {
 
     private static final class ContentBuilder {
 
+        private static final Set<String> STRING_FIELDS = Set.of(
+                "message_content.type", "message_content.text", "message_content.id",
+                "message_content.signature", "message_content.data", "message_content.encrypted_content");
+        private static final Set<String> AUDIO_FIELDS = Set.of("url", "mime_type", "transcript");
+
         private final ObjectNode content = JsonUtils.createObjectNode();
         private final ObjectNode image = JsonUtils.createObjectNode();
         private final ObjectNode audio = JsonUtils.createObjectNode();
         private final ToolCallBuilder toolCall = new ToolCallBuilder();
 
         private boolean accept(String path, AnyValue value) {
-            if (Set.of("message_content.type", "message_content.text", "message_content.id",
-                    "message_content.signature", "message_content.data", "message_content.encrypted_content")
-                    .contains(path)) {
+            if (STRING_FIELDS.contains(path)) {
                 if (!value.hasStringValue()) {
                     return false;
                 }
@@ -666,7 +671,7 @@ public final class OpenInferenceSpanNormalizer {
             }
             if (path.startsWith("message_content.audio.audio.")) {
                 String field = path.substring("message_content.audio.audio.".length());
-                if (!Set.of("url", "mime_type", "transcript").contains(field) || !value.hasStringValue()) {
+                if (!AUDIO_FIELDS.contains(field) || !value.hasStringValue()) {
                     return false;
                 }
                 audio.put(field, value.getStringValue());
