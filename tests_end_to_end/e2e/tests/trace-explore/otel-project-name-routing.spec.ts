@@ -57,6 +57,18 @@ import { randomBytes } from 'node:crypto';
 const ownTraceId = (): string => randomBytes(16).toString('hex');
 
 /**
+ * How long the Spans table gets to report its population, matching
+ * `spans-view-pagination.spec.ts`'s own constant and for its reason: the spans
+ * listing shares a per-workspace rate limit, and a squeezed fetch renders an
+ * empty table with no error a locator could see. `TracesSpansTab` refetches
+ * every 30s, so a budget spanning two of those intervals turns an
+ * infrastructure blip into a delay rather than a failure, while a real routing
+ * defect still fails — just later. Measured: a 30s budget here went flaky
+ * under four parallel workers, reading a `null` footer for the whole window.
+ */
+const TABLE_SETTLE_MS = 90_000;
+
+/**
  * `name` padded with ASCII to exactly `codePoints` code points.
  *
  * ASCII only, so one code point is one char and `length` IS the code-point
@@ -490,6 +502,10 @@ test.describe(
       'The auto-created project renders exactly the routed spans in its Logs view',
       { tag: ['@cap:traces.otel-project-routing'] },
       async ({ backendClient, project, testNamespace, registerProjectCleanup, page }) => {
+        // The 90s table budget below can outlast the 90s default test timeout,
+        // so this one needs the longer grant — same pairing as
+        // `spans-view-pagination.spec.ts`.
+        test.slow();
         // The UI half, and the reason this candidate is not API-only: "which
         // project holds the trace" is a claim about a page a user opens, and
         // the user-visible failure is an empty project. A span routed correctly
@@ -537,7 +553,7 @@ test.describe(
           // actually see. Both, because they fail apart.
           await expect
             .poll(() => logs.readPaginationTotal(), {
-              timeout: 30_000,
+              timeout: TABLE_SETTLE_MS,
               intervals: [500, 1_000, 2_000],
               message: 'the Spans view footer must report the routed population',
             })
