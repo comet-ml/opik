@@ -6,7 +6,7 @@ import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import org.redisson.api.RedissonClient;
-import org.redisson.api.redisnode.BaseRedisNodes;
+import org.redisson.api.redisnode.RedisNode;
 import org.redisson.api.redisnode.RedisNodes;
 import ru.vyarus.dropwizard.guice.module.installer.feature.health.NamedHealthCheck;
 
@@ -17,21 +17,18 @@ public class RedisHealthCheck extends NamedHealthCheck {
 
     private final RedissonClient redisClient;
     private final long healthCheckTimeoutMillis;
-    private final boolean sentinelEnabled;
 
     @Inject
     public RedisHealthCheck(@NonNull RedissonClient redisClient,
-            @NonNull @Named("redis_health_check_timeout") Duration healthCheckTimeout,
-            @Named("redis_sentinel_enabled") boolean sentinelEnabled) {
+            @NonNull @Named("redis_health_check_timeout") Duration healthCheckTimeout) {
         this.redisClient = redisClient;
         this.healthCheckTimeoutMillis = healthCheckTimeout.toMilliseconds();
-        this.sentinelEnabled = sentinelEnabled;
     }
 
     @Override
     protected Result check() {
         try {
-            if (redisNodes().pingAll(healthCheckTimeoutMillis, TimeUnit.MILLISECONDS)) {
+            if (master().ping(healthCheckTimeoutMillis, TimeUnit.MILLISECONDS)) {
                 return Result.healthy();
             }
         } catch (Exception ex) {
@@ -42,15 +39,14 @@ public class RedisHealthCheck extends NamedHealthCheck {
     }
 
     /**
-     * The requested node group must match the topology set in
-     * {@link com.comet.opik.infrastructure.RedisConfig#build()}, otherwise Redisson rejects the call with
-     * {@code IllegalArgumentException} and the health check reports unhealthy. In sentinel mode the group covers the
-     * master and its replicas as currently discovered through the sentinels, so the check follows a failover.
+     * The node group must match the client's topology or Redisson throws {@code IllegalArgumentException}. Only the
+     * master serves traffic, so a lost replica or sentinel keeps the backend ready; in sentinel mode this is the
+     * currently discovered master, so the check follows a failover.
      */
-    private BaseRedisNodes redisNodes() {
-        return sentinelEnabled
-                ? redisClient.getRedisNodes(RedisNodes.SENTINEL_MASTER_SLAVE)
-                : redisClient.getRedisNodes(RedisNodes.SINGLE);
+    private RedisNode master() {
+        return redisClient.getConfig().isSentinelConfig()
+                ? redisClient.getRedisNodes(RedisNodes.SENTINEL_MASTER_SLAVE).getMaster()
+                : redisClient.getRedisNodes(RedisNodes.SINGLE).getInstance();
     }
 
     @Override

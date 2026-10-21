@@ -115,16 +115,16 @@ Configure these environment variables on the Java backend service:
 | `REDIS_URL` | `redis://:opik@localhost:6379/0` | Direct Redis URL in single-node mode. In Sentinel mode, its host and port identify the initial Sentinel seed, while its credentials and database apply to Redis data nodes. |
 | `OPIK_REDIS_SENTINEL_ENABLED` | `false` | Enables Sentinel-based master discovery. |
 | `OPIK_REDIS_SENTINEL_MASTER_NAME` | Empty | Sentinel master set name. Required when Sentinel mode is enabled. |
-| `OPIK_REDIS_SENTINEL_NODES` | Empty | Comma-separated additional Sentinel seed addresses. Include the `redis://` or `rediss://` scheme for each address. |
+| `OPIK_REDIS_SENTINEL_NODES` | Empty | Comma-separated additional Sentinel seed addresses, each with a host and port and the same `redis://` or `rediss://` scheme as `REDIS_URL`. Do not embed credentials; use the Sentinel username and password variables. |
 | `OPIK_REDIS_SENTINEL_USERNAME` | Empty | Username used to authenticate to Sentinel nodes when Sentinel ACLs are enabled. |
 | `OPIK_REDIS_SENTINEL_PASSWORD` | Empty | Password used to authenticate to Sentinel nodes. |
-| `OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS` | `3` | Number of retry attempts for commands that fail during a topology change. |
+| `OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS` | `3` | Number of retry attempts for commands that fail during a topology change, between `0` and `20`. |
 | `OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST` | `true` | Requires Sentinel discovery to report at least two Sentinel nodes. Set to `false` only for single-Sentinel development environments. |
 | `OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT` | `10s` | Timeout for establishing Redis or Sentinel connections. |
 | `OPIK_REDIS_SENTINEL_TIMEOUT` | `5s` | Timeout for Redis command responses. |
 | `OPIK_REDIS_SENTINEL_SCAN_INTERVAL` | `2s` | Interval at which Redisson checks for Sentinel topology changes. |
 
-Duration values accept forms such as `500ms`, `5s`, and `1m`.
+Duration values accept forms such as `500ms`, `5s`, and `1m`, and must be between `100ms` and `5m`.
 
 ## TLS
 
@@ -153,25 +153,25 @@ For TLS deployments, make sure Sentinel announces hostnames or addresses that:
 Check the Java backend logs for:
 
 ```text
-Built redis sentinel config with master name 'mymaster'
+Built redis config with address 'redis://sentinel-1:26379', database '0', sentinel 'true'
 ```
 
 <Tabs>
   <Tab title="Docker Compose">
     ```bash
-    docker compose logs backend | grep "Built redis sentinel config"
+    docker compose logs backend | grep "Built redis config"
     ```
   </Tab>
 
   <Tab title="Kubernetes / Helm">
     ```bash
     kubectl logs -n opik deployment/opik-backend \
-      | grep "Built redis sentinel config"
+      | grep "Built redis config"
     ```
   </Tab>
 </Tabs>
 
-If the log reports `Built redis single node config`, Sentinel mode is not enabled in the Java backend process.
+If the log reports `sentinel 'false'`, Sentinel mode is not enabled in the Java backend process.
 
 ### Check Redis health
 
@@ -203,7 +203,7 @@ Query the backend health endpoint from inside the deployment or through a port-f
 A healthy Redis topology returns HTTP `200`.
 
 <Callout intent="info">
-  The Redis health check evaluates the Sentinel-discovered master and replica group. It can temporarily report unhealthy during failover, or while a discovered node remains unavailable, even if the active master can serve some application traffic.
+  The Redis health check pings the master currently discovered through Sentinel, the only node that serves Opik traffic. A lost replica or Sentinel keeps the backend ready; the check can briefly report unhealthy while Sentinel promotes a new master.
 </Callout>
 
 ### Validate failover
@@ -216,27 +216,33 @@ Keep the Opik Java backend running while performing this check.
 
 The commands below use `OPIK_REDIS_SENTINEL_USERNAME` and `OPIK_REDIS_SENTINEL_PASSWORD`. Set these variables in the shell running `redis-cli`. If the username is unset, the commands authenticate as the Redis `default` ACL user.
 
-1. Confirm that Sentinel reports the expected current master:
+<Steps>
+  <Step title="Confirm the current master">
+    ```bash
+    REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
+      --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
+      -h sentinel-1 -p 26379 \
+      SENTINEL GET-MASTER-ADDR-BY-NAME mymaster
+    ```
+  </Step>
+  <Step title="Trigger a controlled failover">
+    Or stop the current master according to your Redis operating procedure:
 
-   ```bash
-   REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
-     --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
-     -h sentinel-1 -p 26379 \
-     SENTINEL GET-MASTER-ADDR-BY-NAME mymaster
-   ```
-
-2. Trigger a controlled failover, or stop the current master according to your Redis operating procedure:
-
-   ```bash
-   REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
-     --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
-     -h sentinel-1 -p 26379 \
-     SENTINEL FAILOVER mymaster
-   ```
-
-3. Wait until `SENTINEL GET-MASTER-ADDR-BY-NAME` reports the promoted replica.
-4. Without restarting the Java backend, repeat a normal Opik operation that uses Redis and confirm it succeeds.
-5. Confirm that the Java backend process remained running throughout the failover.
+    ```bash
+    REDISCLI_AUTH="$OPIK_REDIS_SENTINEL_PASSWORD" redis-cli \
+      --user "${OPIK_REDIS_SENTINEL_USERNAME:-default}" \
+      -h sentinel-1 -p 26379 \
+      SENTINEL FAILOVER mymaster
+    ```
+  </Step>
+  <Step title="Wait for the promotion">
+    Repeat the first step until `SENTINEL GET-MASTER-ADDR-BY-NAME` reports the promoted replica.
+  </Step>
+  <Step title="Check Opik still works">
+    Without restarting the Java backend, repeat a normal Opik operation that uses Redis and confirm it succeeds, and
+    that the backend process stayed up throughout the failover.
+  </Step>
+</Steps>
 
 Requests may briefly fail or time out while Sentinel promotes a replica and Redisson reconnects. Tune the retry and timeout settings to match your Sentinel failure-detection and failover timing.
 

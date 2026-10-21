@@ -1035,6 +1035,9 @@ navigation:
           - page: Large CSV uploads
             path: ./docs-v2/self-host/configure/large_csv_uploads.mdx
             slug: large_csv_uploads
+          - page: Redis Sentinel
+            path: ./docs-v2/self-host/configure/redis-sentinel.mdx
+            slug: redis-sentinel
           - page: Dataset versioning migration
             path: ./docs-v2/self-host/configure/dataset_versioning_migration.mdx
             slug: dataset_versioning_migration
