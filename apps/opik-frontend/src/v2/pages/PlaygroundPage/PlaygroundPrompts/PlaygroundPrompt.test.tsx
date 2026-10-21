@@ -48,6 +48,7 @@ const PROVIDER_KEY_MODELS = mapValues(
 
 let prompt: PlaygroundPromptType;
 const updatePrompt = vi.fn();
+const updateOutput = vi.fn();
 
 vi.mock("@/store/PlaygroundStore", () => ({
   usePromptById: () => prompt,
@@ -57,7 +58,7 @@ vi.mock("@/store/PlaygroundStore", () => ({
   useProviderValidationTrigger: () => 0,
   useUpdatePrompt: () => updatePrompt,
   useDeletePrompt: () => vi.fn(),
-  useUpdateOutput: () => vi.fn(),
+  useUpdateOutput: () => updateOutput,
 }));
 
 vi.mock("@/api/llm/useLlmModels", () => ({
@@ -159,7 +160,10 @@ const USER_CONFIGS = {
   maxConcurrentRequests: 5,
 } as LLMPromptConfigsType;
 
-const renderPrompt = (model: string) => {
+const renderPrompt = (
+  model: string,
+  { modelResolver = vi.fn(), modelsLoaded = false } = {},
+) => {
   prompt = {
     id: "prompt-a",
     name: "Prompt",
@@ -175,13 +179,13 @@ const renderPrompt = (model: string) => {
       index={0}
       promptId="prompt-a"
       providerKeys={Object.values(PROVIDER_ROWS)}
-      hasLoadedProviderKeys={false}
-      hasRegistryModels={false}
+      hasLoadedProviderKeys={modelsLoaded}
+      hasRegistryModels={modelsLoaded}
       providerResolver={
         renderHook(() => useLLMProviderModelsData()).result.current
           .calculateModelProvider
       }
-      modelResolver={vi.fn()}
+      modelResolver={modelResolver}
     />,
   );
 };
@@ -193,6 +197,7 @@ const savedConfigs = () => updatePrompt.mock.lastCall?.[1].configs;
 
 beforeEach(() => {
   updatePrompt.mockClear();
+  updateOutput.mockClear();
 });
 
 describe("PlaygroundPrompt model switch", () => {
@@ -238,5 +243,21 @@ describe("PlaygroundPrompt model switch", () => {
         to as PROVIDER_MODEL_TYPE,
       ),
     );
+  });
+});
+
+describe("PlaygroundPrompt model check on load", () => {
+  it("clears the output, including a Stopped label, when the stored model's provider is gone", () => {
+    renderPrompt("custom-llm/mock/mock-model", {
+      modelResolver: vi.fn(() => "gpt-4o-mini"),
+      modelsLoaded: true,
+    });
+
+    expect(updateOutput).toHaveBeenCalledWith("prompt-a", "", {
+      value: null,
+      error: undefined,
+      errorHint: undefined,
+      stopped: false,
+    });
   });
 });

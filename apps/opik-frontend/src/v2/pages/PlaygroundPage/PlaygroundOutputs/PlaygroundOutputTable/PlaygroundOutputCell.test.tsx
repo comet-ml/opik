@@ -290,7 +290,7 @@ describe("PlaygroundOutputCell", () => {
       });
 
       expect(await screen.findByRole("tooltip")).toHaveTextContent(
-        "no token count",
+        "the answer may be cut off",
       );
     });
 

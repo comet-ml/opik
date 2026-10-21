@@ -321,6 +321,7 @@ const PlaygroundPrompt = ({
           value: null,
           error: undefined,
           errorHint: undefined,
+          stopped: false,
         });
       } else {
         const restored = restoreMissingProviderAndConfigKeys(

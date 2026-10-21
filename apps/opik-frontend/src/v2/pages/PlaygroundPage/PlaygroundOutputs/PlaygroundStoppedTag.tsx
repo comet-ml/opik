@@ -13,7 +13,7 @@ const PlaygroundStoppedTag: React.FC<PlaygroundStoppedTagProps> = ({
   stale = false,
   className,
 }) => (
-  <TooltipWrapper content="This run was stopped before the model finished. The answer may be cut off, and there is no token count.">
+  <TooltipWrapper content="This run was stopped before the model finished, so the answer may be cut off.">
     <Tag
       data-testid="playground-output-stopped"
       variant="gray"
