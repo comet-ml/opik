@@ -17,7 +17,8 @@ import {
   Video,
 } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
-import { EditorView } from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
+import { insertNewlineAndIndent } from "@codemirror/commands";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -64,6 +65,12 @@ import {
 } from "@/constants/codeMirrorPlugins";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 
+// @codemirror/view before 6.38 drops Chrome's own Shift+Enter line break.
+// Opt-in only: the Agent playground submits on Shift+Enter.
+const shiftEnterNewlineKeymap = keymap.of([
+  { key: "Shift-Enter", run: insertNewlineAndIndent },
+]);
+
 const MESSAGE_TYPE_OPTIONS = [
   {
     label: LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE.system],
@@ -102,6 +109,7 @@ interface LLMPromptMessageProps {
   jsonTreeData?: JsonObject | null;
   onJsonPathSelect?: (path: string, value: JsonValue) => void;
   compact?: boolean;
+  shiftEnterInsertsNewline?: boolean;
 }
 
 const LLMPromptMessage = forwardRef<
@@ -127,6 +135,7 @@ const LLMPromptMessage = forwardRef<
       jsonTreeData,
       onJsonPathSelect,
       compact = false,
+      shiftEnterInsertsNewline = false,
     },
     ref,
   ) => {
@@ -409,6 +418,9 @@ const LLMPromptMessage = forwardRef<
                       extensions={[
                         EditorView.lineWrapping,
                         mustachePlugin,
+                        ...(shiftEnterInsertsNewline
+                          ? [shiftEnterNewlineKeymap]
+                          : []),
                         ...(braceKeyExtension ? [braceKeyExtension] : []),
                         ...(hasJsonData
                           ? variableHintRef.current.getExtension()
