@@ -187,10 +187,11 @@ const PlaygroundHeader = ({
         canRunMessages(prompt.messages) &&
         !hasUnsupportedMedia(prompt) &&
         !(isExperimentMode && !datasetName) &&
+        !isDatasetEmpty &&
         !usePlaygroundStore.getState().isRunningMap[promptId]
       );
     },
-    [promptMap, isExperimentMode, datasetName],
+    [promptMap, isExperimentMode, datasetName, isDatasetEmpty],
   );
 
   usePlaygroundRunHotkey({
