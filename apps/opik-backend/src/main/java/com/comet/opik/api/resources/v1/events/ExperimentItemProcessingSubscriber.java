@@ -89,8 +89,8 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
     protected Mono<Void> processEvent(ExperimentItemToProcess message, StreamMessageId entryId) {
         return itemLedger.outcome(message.workspaceId(), message.experimentId(), entryId)
                 .doOnNext(outcome -> log.info(
-                        "Entry '{}' of experiment '{}' already ran with outcome '{}', not running it again",
-                        entryId, message.experimentId(), outcome))
+                        "Skipping a redelivered entry that already ran, outcome '{}', entryId '{}', experimentId '{}'",
+                        outcome, entryId, message.experimentId()))
                 .hasElement()
                 .flatMap(alreadyRan -> alreadyRan ? Mono.<Void>empty() : runAndRecord(message, entryId))
                 .then(Mono.defer(() -> finishIfDrained(message)))
@@ -135,8 +135,9 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                                 if (claimed) {
                                     // Its ending is already written, so this only records that the items
                                     // stopped, as a claim loser would, without reading every outcome first.
-                                    log.info("Experiment '{}' already has its ending claimed, recording the drain"
-                                            + " only", message.experimentId());
+                                    log.info(
+                                            "Recording only the drain, the ending is already claimed, experimentId '{}'",
+                                            message.experimentId());
                                     return stampFinished(message);
                                 }
                                 return settleDrained(message);
