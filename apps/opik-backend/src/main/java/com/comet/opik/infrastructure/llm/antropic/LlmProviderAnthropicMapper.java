@@ -1,10 +1,9 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.domain.llm.MessageContentNormalizer;
-import com.comet.opik.domain.llm.ModelCapabilities;
-import com.comet.opik.domain.llm.SamplingParamsNormalizer;
 import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
@@ -27,6 +26,7 @@ import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.mapstruct.Context;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
@@ -61,48 +61,25 @@ interface LlmProviderAnthropicMapper {
 
     @Mapping(expression = "java(request.model())", target = "model")
     @Mapping(expression = "java(Boolean.TRUE.equals(request.stream()))", target = "stream")
-    @Mapping(source = "request", target = "temperature", qualifiedByName = "resolveTemperature")
-    @Mapping(source = "request", target = "topP", qualifiedByName = "resolveTopP")
+    // ParamResolver has already dropped the sampling params the model or its thinking refuses.
+    @Mapping(expression = "java(request.temperature())", target = "temperature")
+    @Mapping(expression = "java(request.topP())", target = "topP")
     @Mapping(expression = "java(request.stop())", target = "stopSequences")
     @Mapping(source = "request", target = "maxTokens", qualifiedByName = "resolveMaxTokens")
     @Mapping(source = "request", target = "messages", qualifiedByName = "mapToMessages")
     @Mapping(source = "request", target = "system", qualifiedByName = "mapToSystemMessages")
     @Mapping(source = "request", target = "customParameters", qualifiedByName = "resolveCustomParameters")
-    AnthropicCreateMessageRequest toCreateMessageRequest(@NonNull ChatCompletionRequest request);
-
-    @Named("resolveTemperature")
-    default Double resolveTemperature(@NonNull ChatCompletionRequest request) {
-        return samplingParamsAllowed(request) ? request.temperature() : null;
-    }
-
-    @Named("resolveTopP")
-    default Double resolveTopP(@NonNull ChatCompletionRequest request) {
-        if (!samplingParamsAllowed(request)) {
-            return null;
-        }
-        // Anthropic recommends against sending temperature and top_p together; temperature wins when both are set.
-        return request.temperature() != null ? null : request.topP();
-    }
-
-    /**
-     * Anthropic rejects sampling params (temperature/top_p) with a 400 for adaptive-thinking models
-     * (claude-sonnet-5, claude-opus-4-7/4-8) and whenever extended thinking is enabled for the request,
-     * including the adaptive thinking an effort level turns on. Gate them server-side so API-created
-     * requests — which bypass the FE sanitizer from OPIK-6244 — don't fail. Mirrors the judge-path logic
-     * in {@code AnthropicClientGenerator}.
-     */
-    private boolean samplingParamsAllowed(ChatCompletionRequest request) {
-        return !ModelCapabilities.rejectsSamplingParams(request.model())
-                && !SamplingParamsNormalizer.thinkingEnabled(request)
-                && !AnthropicEffort.impliesAdaptiveThinking(request.model(), request.customParameters());
-    }
+    AnthropicCreateMessageRequest toCreateMessageRequest(@NonNull ChatCompletionRequest request,
+            @Context LlmModelRegistryService registryService);
 
     // langchain4j's AnthropicOutputConfig has no effort field, so the whole output_config rides customParameters,
     // which AnthropicCreateMessageRequest flattens into the top level of the body. Mapping outputConfig as well
     // would put a second output_config key on the wire. The thinking an effort level turns on rides along with it.
     @Named("resolveCustomParameters")
-    default Map<String, Object> resolveCustomParameters(@NonNull ChatCompletionRequest request) {
-        return AnthropicEffort.toCustomParameters(request.model(), request.customParameters()).orElse(null);
+    default Map<String, Object> resolveCustomParameters(@NonNull ChatCompletionRequest request,
+            @Context LlmModelRegistryService registryService) {
+        return AnthropicEffort.toCustomParameters(request.model(), request.customParameters(), registryService)
+                .orElse(null);
     }
 
     @Named("resolveMaxTokens")
