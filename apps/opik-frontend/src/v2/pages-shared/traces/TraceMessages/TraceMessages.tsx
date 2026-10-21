@@ -1,18 +1,22 @@
 import React, { useCallback } from "react";
 import { Trace } from "@/types/traces";
-import TraceMessage from "@/v2/pages-shared/traces/TraceMessages/TraceMessage";
+import TraceMessage, {
+  RenderMessageContent,
+} from "@/v2/pages-shared/traces/TraceMessages/TraceMessage";
 import isNumber from "lodash/isNumber";
 
 type TraceMessagesProps = {
   traces: Trace[];
   traceId?: string;
   handleOpenTrace: (id: string, filterToolCalls: boolean) => void;
+  renderContent?: RenderMessageContent;
 };
 
 const TraceMessages: React.FC<TraceMessagesProps> = ({
   traces,
   traceId,
   handleOpenTrace,
+  renderContent,
 }) => {
   const setRef = useCallback(
     (element: HTMLDivElement | null) => {
@@ -43,6 +47,7 @@ const TraceMessages: React.FC<TraceMessagesProps> = ({
             key={t.id}
             trace={t}
             handleOpenTrace={handleOpenTrace}
+            renderContent={renderContent}
           />
         ))}
       </div>

@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AnnotationQueue;
+import com.comet.opik.api.AnnotationQueueAnnotatorView;
 import com.comet.opik.api.AnnotationQueueAutomation;
 import com.comet.opik.api.AnnotationQueueItemSource;
 import com.comet.opik.api.AnnotationQueueReviewer;
@@ -418,6 +419,21 @@ class AnnotationQueuesResourceTest {
 
             annotationQueuesResourceClient.createAnnotationQueueBatch(
                     new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+        }
+
+        @Test
+        @DisplayName("should reject annotator view field without a path")
+        void createAnnotationQueueWhenAnnotatorViewFieldHasNoPathShouldReject() {
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .annotatorView(AnnotationQueueAnnotatorView.builder()
+                            .fields(List.of(AnnotationQueueAnnotatorView.AnnotatorField.builder()
+                                    .label("Source").path(" ").build()))
+                            .build())
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueue(annotationQueue,
+                    API_KEY, TEST_WORKSPACE, SC_UNPROCESSABLE_ENTITY);
         }
 
         @Test
@@ -1780,6 +1796,80 @@ class AnnotationQueuesResourceTest {
                     .ignoringFields(QUEUE_IGNORED_FIELDS)
                     .isEqualTo(expected);
         }
+
+        private Stream<Arguments> updateAnnotatorViewScenarios() {
+            return Stream.of(
+                    arguments(AnnotationQueueUpdate.builder()
+                            .annotatorView(AnnotationQueueAnnotatorView.builder()
+                                    .input("messages[-1].content")
+                                    .output("choices[0].message.content")
+                                    .build())
+                            .build(), "explicit change"),
+                    arguments(AnnotationQueueUpdate.builder()
+                            .annotatorView(AnnotationQueueAnnotatorView.builder()
+                                    .fields(List.of(
+                                            AnnotationQueueAnnotatorView.AnnotatorField.builder()
+                                                    .label("Source").path("input.text").halfWidth(true).build(),
+                                            AnnotationQueueAnnotatorView.AnnotatorField.builder()
+                                                    .label("Translation").path("output.text").halfWidth(true).build(),
+                                            AnnotationQueueAnnotatorView.AnnotatorField.builder()
+                                                    .label("Attachments").path("attachments").build()))
+                                    .build())
+                            .build(), "fields"),
+                    arguments(AnnotationQueueUpdate.builder().description("Updated description").build(),
+                            "preserve when not included"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("updateAnnotatorViewScenarios")
+        @DisplayName("should handle annotatorView on update:")
+        void updateAnnotatorView(AnnotationQueueUpdate updateRequest, String scenario) {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .annotatorView(AnnotationQueueAnnotatorView.builder().input("input.question").build())
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.updateAnnotationQueue(
+                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(updatedQueue)
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .isEqualTo(applyUpdate(updateRequest, annotationQueue));
+        }
+
+        @Test
+        @DisplayName("should return null annotatorView when omitted on create")
+        void createAnnotationQueueWithoutAnnotatorView() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .annotatorView(null)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var retrieved = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(retrieved.annotatorView()).isNull();
+        }
     }
 
     @Nested
@@ -2529,6 +2619,9 @@ class AnnotationQueuesResourceTest {
                 .automation(updateRequest.automation() != null
                         ? updateRequest.automation()
                         : existingQueue.automation())
+                .annotatorView(updateRequest.annotatorView() != null
+                        ? updateRequest.annotatorView()
+                        : existingQueue.annotatorView())
                 .build();
     }
 

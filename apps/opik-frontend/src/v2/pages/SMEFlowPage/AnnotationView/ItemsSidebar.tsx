@@ -11,21 +11,16 @@ import {
 } from "@/lib/annotation-queues";
 import { Trace, Thread } from "@/types/traces";
 import { isObjectThread } from "@/lib/traces";
-import { prettifyMessage } from "@/lib/traces";
 import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
-
-const getPreviewText = (
-  obj: object | undefined,
-  type: "input" | "output",
-): string => {
-  if (!obj) return "";
-  const result = prettifyMessage(obj, { type });
-  if (typeof result.message === "string") return result.message;
-  return JSON.stringify(obj).slice(0, 80);
-};
+import { AnnotationQueueAnnotatorView } from "@/types/annotation-queues";
+import {
+  EMPTY_ANNOTATOR_VIEW,
+  getMessagePreview,
+} from "@/v2/pages-shared/annotation-queues/AnnotatorViewTab/annotatorViewConfig";
 
 const getItemPreviews = (
   item: Trace | Thread,
+  view: AnnotationQueueAnnotatorView,
 ): { name: string; input: string; output: string } => {
   if (isObjectThread(item)) {
     const thread = item as Thread;
@@ -34,17 +29,17 @@ const getItemPreviews = (
       thread.id.slice(-12);
     return {
       name,
-      input: getPreviewText(thread.first_message, "input"),
+      input: getMessagePreview(thread.first_message, "input", view.input),
       output: thread.last_message
-        ? getPreviewText(thread.last_message, "output")
+        ? getMessagePreview(thread.last_message, "output", view.output)
         : "",
     };
   }
   const trace = item as Trace;
   return {
     name: trace.name || trace.id.slice(-12),
-    input: getPreviewText(trace.input, "input"),
-    output: getPreviewText(trace.output, "output"),
+    input: getMessagePreview(trace.input, "input", view.input),
+    output: getMessagePreview(trace.output, "output", view.output),
   };
 };
 
@@ -87,7 +82,11 @@ const ItemsSidebar: React.FunctionComponent = () => {
     activeRef.current?.scrollIntoView({ block: "nearest" });
   }, [currentIndex]);
 
-  const previews = useMemo(() => queueItems.map(getItemPreviews), [queueItems]);
+  const annotatorView = annotationQueue?.annotator_view ?? EMPTY_ANNOTATOR_VIEW;
+  const previews = useMemo(
+    () => queueItems.map((item) => getItemPreviews(item, annotatorView)),
+    [queueItems, annotatorView],
+  );
 
   // Recomputes only on item list poll or user change
   const entriesById = useMemo(() => {

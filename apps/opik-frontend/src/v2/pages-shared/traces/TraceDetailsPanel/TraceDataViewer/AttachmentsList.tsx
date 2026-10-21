@@ -9,9 +9,13 @@ import { ATTACHMENT_ORDER_MAP } from "@/constants/attachments";
 
 type AttachmentsListProps = {
   media: UnifiedMediaItem[];
+  title?: string;
 };
 
-const AttachmentsList: React.FC<AttachmentsListProps> = ({ media }) => {
+const AttachmentsList: React.FC<AttachmentsListProps> = ({
+  media,
+  title = "Attachments",
+}) => {
   const [previewData, setPreviewData] = useState<AttachmentPreviewData | null>(
     null,
   );
@@ -31,11 +35,7 @@ const AttachmentsList: React.FC<AttachmentsListProps> = ({ media }) => {
 
   const hasAttachments = previewDataArray.length > 0;
   return hasAttachments ? (
-    <CollapsibleSection
-      title="Attachments"
-      forceMount={false}
-      bodyClassName="p-3"
-    >
+    <CollapsibleSection title={title} forceMount={false} bodyClassName="p-3">
       <div className="flex flex-wrap gap-2">
         {previewDataArray.map((data) => (
           <AttachmentThumbnail

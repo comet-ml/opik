@@ -49,6 +49,18 @@ export interface AnnotationQueueAutomation {
   clear_max_items_in_queue?: boolean;
 }
 
+export interface AnnotatorViewField {
+  label: string;
+  path: string;
+  half_width?: boolean;
+}
+
+export interface AnnotationQueueAnnotatorView {
+  input?: string;
+  output?: string;
+  fields?: AnnotatorViewField[];
+}
+
 export interface AnnotationQueue {
   id: string;
   project_id: string;
@@ -62,6 +74,7 @@ export interface AnnotationQueue {
   lock_timeout_seconds?: number; // optional for opik v1 compat
   scope: ANNOTATION_QUEUE_SCOPE;
   automation?: AnnotationQueueAutomation;
+  annotator_view?: AnnotationQueueAnnotatorView;
   reviewers?: AnnotationQueueReviewer[];
   feedback_scores?: AggregatedFeedbackScore[];
   items_count: number;

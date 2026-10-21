@@ -7,6 +7,10 @@ import {
   getJSONPaths,
   buildJSONPath,
   JSON_PATH_FORMAT,
+  parseJSONPath,
+  getValueByJSONPath,
+  splitJSONPathByIndexes,
+  setJSONPathIndex,
 } from "./utils";
 
 describe("isStringMarkdown", () => {
@@ -521,5 +525,96 @@ describe("buildJSONPath", () => {
     expect(
       buildJSONPath([{ key: 'say "hi".x' }], JSON_PATH_FORMAT.bracket),
     ).toBe('["say \\"hi\\".x"]');
+  });
+});
+
+describe("parseJSONPath", () => {
+  it("parses dot keys, indexes and quoted keys", () => {
+    expect(
+      parseJSONPath(`input.messages[-1]["a.b"]['c "d"'].items[0]`),
+    ).toEqual([
+      { key: "input" },
+      { key: "messages" },
+      { index: -1 },
+      { key: "a.b" },
+      { key: 'c "d"' },
+      { key: "items" },
+      { index: 0 },
+    ]);
+  });
+
+  it.each([
+    [[{ key: "a" }, { index: 2 }, { key: "b" }], JSON_PATH_FORMAT.dot],
+    [
+      [{ key: "a.b" }, { index: 0 }, { key: 'say "hi"' }],
+      JSON_PATH_FORMAT.bracket,
+    ],
+  ])("reads back what buildJSONPath writes", (parts, format) => {
+    expect(parseJSONPath(buildJSONPath(parts, format))).toEqual(parts);
+  });
+});
+
+describe("getValueByJSONPath", () => {
+  const data = {
+    text: "<p>Hi</p>",
+    text_without_html: "Hi",
+    "thread.id": 42,
+    messages: [
+      { role: "system", content: "rules" },
+      { role: "user", content: '{"summary": "short", "items": [1, 2]}' },
+    ],
+  };
+
+  it.each([
+    ["text_without_html", "Hi"],
+    ['["thread.id"]', 42],
+    ["['thread.id']", 42],
+    ["messages[0].role", "system"],
+    ["messages[-1].role", "user"],
+    ["messages[-1].content.summary", "short"],
+    ["messages[-1].content.items[-1]", 2],
+    ["messages[5].role", undefined],
+    ["text.length", undefined],
+  ])("%s", (path, expected) => {
+    expect(getValueByJSONPath(data, path)).toEqual(expected);
+  });
+});
+
+describe("splitJSONPathByIndexes", () => {
+  it("splits text and indexes in order", () => {
+    expect(
+      splitJSONPathByIndexes('input.messages[3].content["a[2]"].items[-1]'),
+    ).toEqual([
+      { kind: "text", text: "input.messages" },
+      { kind: "index", index: 3, position: 0 },
+      { kind: "text", text: '.content["a[2]"].items' },
+      { kind: "index", index: -1, position: 1 },
+    ]);
+  });
+
+  it("returns the whole path as text when it has no indexes", () => {
+    expect(splitJSONPathByIndexes("output.text")).toEqual([
+      { kind: "text", text: "output.text" },
+    ]);
+  });
+});
+
+describe("setJSONPathIndex", () => {
+  it.each([
+    [0, -1, "messages[-1].content.items[1]"],
+    [1, 0, "messages[3].content.items[0]"],
+  ])("sets index %i to %i", (position, index, expected) => {
+    expect(
+      setJSONPathIndex("messages[3].content.items[1]", position, index),
+    ).toBe(expected);
+  });
+
+  it("leaves quoted keys untouched", () => {
+    expect(setJSONPathIndex('["a[2]"].list[2]', 0, -1)).toBe(
+      '["a[2]"].list[-1]',
+    );
+    expect(setJSONPathIndex("['a[2]'].list[2]", 0, -1)).toBe(
+      "['a[2]'].list[-1]",
+    );
   });
 });
