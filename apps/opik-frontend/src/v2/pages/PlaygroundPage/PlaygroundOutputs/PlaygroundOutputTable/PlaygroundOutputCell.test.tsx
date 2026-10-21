@@ -16,6 +16,7 @@ type Output = {
   isLoading: boolean;
   value: string | null;
   error?: string;
+  stopped?: boolean;
   stale: boolean;
   staleChanges?: PlaygroundRunInputChange[];
   traceId?: string;
@@ -241,6 +242,81 @@ describe("PlaygroundOutputCell", () => {
 
       expect(screen.getByText("No runs yet")).toBeInTheDocument();
       expect(screen.queryByTestId("assertion-status")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("a row the user stopped", () => {
+    const queryStoppedTag = () =>
+      screen.queryByTestId("playground-output-stopped");
+
+    it("should keep the partial answer and say it was stopped", () => {
+      output = {
+        isLoading: false,
+        value: "Once upon a",
+        stopped: true,
+        stale: false,
+        traceId: "trace-1",
+      };
+
+      renderCell();
+
+      expect(screen.getByTestId("markdown")).toHaveTextContent("Once upon a");
+      expect(queryStoppedTag()).toHaveTextContent("Stopped");
+      expect(
+        screen.queryByTestId("playground-output-error"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should say it was stopped rather than No runs yet when no text came back", () => {
+      output = { isLoading: false, value: null, stopped: true, stale: false };
+
+      renderCell();
+
+      expect(queryStoppedTag()).toBeInTheDocument();
+      expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
+    });
+
+    it("should explain the label in a tooltip", async () => {
+      output = {
+        isLoading: false,
+        value: "Once upon a",
+        stopped: true,
+        stale: false,
+      };
+
+      renderCell();
+      fireEvent.pointerMove(screen.getByTestId("playground-output-stopped"), {
+        pointerType: "mouse",
+      });
+
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        "no token count",
+      );
+    });
+
+    it("should drop the label once the row runs to the end", () => {
+      output = {
+        isLoading: false,
+        value: "Once upon a",
+        stopped: true,
+        stale: false,
+      };
+      const { rerender } = renderCell();
+      expect(queryStoppedTag()).toBeInTheDocument();
+
+      output = {
+        isLoading: false,
+        value: "Once upon a time",
+        stopped: false,
+        stale: false,
+      };
+      rerender(
+        <TooltipProvider delayDuration={0}>
+          <PlaygroundOutputCell {...makeContext()} />
+        </TooltipProvider>,
+      );
+
+      expect(queryStoppedTag()).not.toBeInTheDocument();
     });
   });
 });
