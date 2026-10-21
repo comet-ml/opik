@@ -104,6 +104,9 @@ const useActionButtonActions = ({
   const clearRunningMap = useClearRunningMap();
   const setPromptRunning = useSetPromptRunning();
   const isToStopRef = useRef(false);
+  // A stopped run's poll timer can still fire after Run is clicked again, when
+  // isToStopRef is already false; the run id tells that poll it is stale.
+  const runIdRef = useRef(0);
   const setCreatedExperiments = useSetCreatedExperiments();
   const clearCreatedExperiments = useClearCreatedExperiments();
   const promptIds = usePromptIds();
@@ -159,6 +162,7 @@ const useActionButtonActions = ({
   const resetProgress = useResetProgress();
 
   const resetState = useCallback(() => {
+    runIdRef.current += 1;
     resetOutputMap();
     abortControllersRef.current.clear();
     clearRunningMap();
@@ -329,9 +333,12 @@ const useActionButtonActions = ({
       const startTime = Date.now();
       const pollKey = `poll-assertion${scope?.pollKeySuffix ?? ""}`;
       const isScoped = !!scope?.scopedPromptIds;
+      const runId = runIdRef.current;
 
       const poll = async () => {
-        if (!isScoped && isToStopRef.current) return;
+        if (!isScoped && (isToStopRef.current || runId !== runIdRef.current)) {
+          return;
+        }
 
         if (Date.now() - startTime > MAX_POLL_DURATION_MS) {
           if (isScoped) {
@@ -456,9 +463,12 @@ const useActionButtonActions = ({
       const startTime = Date.now();
       const pollKey = `poll-experiment${scope?.pollKeySuffix ?? ""}`;
       const isScoped = !!scope?.scopedPromptIds;
+      const runId = runIdRef.current;
 
       const poll = async () => {
-        if (!isScoped && isToStopRef.current) return;
+        if (!isScoped && (isToStopRef.current || runId !== runIdRef.current)) {
+          return;
+        }
 
         if (Date.now() - startTime > MAX_POLL_DURATION_MS) {
           if (isScoped) {

@@ -86,7 +86,7 @@ const getProgress = () => {
   return { progressPhase, progressCompleted, progressTotal };
 };
 
-const startTestSuiteRun = async () => {
+const renderActions = () => {
   const queryClient = new QueryClient();
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -101,11 +101,15 @@ const startTestSuiteRun = async () => {
       }),
     { wrapper },
   );
+  return result;
+};
 
-  await act(async () => {
+const runAll = (result: ReturnType<typeof renderActions>) =>
+  act(async () => {
     await result.current.runAll();
   });
-};
+
+const startTestSuiteRun = () => runAll(renderActions());
 
 const nextPoll = (ms: number) =>
   act(async () => {
@@ -188,6 +192,34 @@ describe("useActionButtonActions test-suite progress", () => {
     expect(getProgress()).toMatchObject({
       progressPhase: "evaluating",
       progressCompleted: 3,
+    });
+  });
+
+  it("should ignore a stopped run's poll after Run is clicked again", async () => {
+    vi.mocked(getExperimentById).mockImplementation(
+      async (_, { experimentId }) =>
+        experimentId === EXPERIMENT_ID
+          ? runningExperiment(3)
+          : { ...runningExperiment(1), id: experimentId },
+    );
+    const result = renderActions();
+    await runAll(result);
+    act(() => result.current.stopAll());
+
+    mutateAsync.mockResolvedValueOnce({
+      experiments: [{ experiment_id: "experiment-2", prompt_index: 0 }],
+      total_items: 2,
+    });
+    await runAll(result);
+    await nextPoll(2000);
+
+    expect(getExperimentById).not.toHaveBeenCalledWith(expect.anything(), {
+      experimentId: EXPERIMENT_ID,
+    });
+    expect(getProgress()).toEqual({
+      progressPhase: "running",
+      progressCompleted: 1,
+      progressTotal: 2,
     });
   });
 });
