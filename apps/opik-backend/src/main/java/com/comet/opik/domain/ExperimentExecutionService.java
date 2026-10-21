@@ -504,7 +504,7 @@ public class ExperimentExecutionService {
             return Mono.empty();
         }
 
-        return experimentService.update(experimentId, ExperimentUpdate.builder().finished(true).build());
+        return experimentService.stampFinished(experimentId);
     }
 
     /**

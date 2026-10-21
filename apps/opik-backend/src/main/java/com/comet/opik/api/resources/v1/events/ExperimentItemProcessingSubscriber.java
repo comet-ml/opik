@@ -5,16 +5,17 @@ import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.domain.ExperimentCancellationService;
+import com.comet.opik.domain.ExperimentItemLedger;
+import com.comet.opik.domain.ExperimentItemLedger.Outcome;
 import com.comet.opik.domain.ExperimentItemProcessor;
 import com.comet.opik.domain.ExperimentService;
-import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RAtomicLongReactive;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.stream.StreamMessageId;
 import reactor.core.publisher.Mono;
 import reactor.util.context.Context;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
@@ -31,9 +32,8 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
 
     private final ExperimentItemProcessor itemProcessor;
     private final ExperimentService experimentService;
-    private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
     private final ExperimentCancellationService cancellationService;
-    private final RedissonReactiveClient redisClient;
+    private final ExperimentItemLedger itemLedger;
     private final ExperimentExecutionConfig config;
 
     @Inject
@@ -42,14 +42,13 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
             @NonNull RedissonReactiveClient redisson,
             @NonNull ExperimentItemProcessor itemProcessor,
             @NonNull ExperimentService experimentService,
-            @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService,
-            @NonNull ExperimentCancellationService cancellationService) {
+            @NonNull ExperimentCancellationService cancellationService,
+            @NonNull ExperimentItemLedger itemLedger) {
         super(config, redisson, ExperimentExecutionConfig.PAYLOAD_FIELD, SUBSCRIBER_NAMESPACE, METRICS_BASE_NAME);
         this.itemProcessor = itemProcessor;
         this.experimentService = experimentService;
-        this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
         this.cancellationService = cancellationService;
-        this.redisClient = redisson;
+        this.itemLedger = itemLedger;
         this.config = config;
     }
 
@@ -74,78 +73,117 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
         super.stop();
     }
 
+    /** Only the entry-aware overload is reached: the base subscriber always knows which entry it is handling. */
     @Override
     protected Mono<Void> processEvent(ExperimentItemToProcess message) {
-        return cancellationService.isCancelled(message.workspaceId(), message.experimentId())
-                .flatMap(cancelled -> {
-                    if (cancelled) {
-                        log.debug("Skipping item for cancelled experiment '{}'", message.experimentId());
-                        return decrementAndFinishIfComplete(message, true);
-                    }
-                    return itemProcessor.process(message)
-                            .thenReturn(true)
-                            .onErrorResume(e -> {
-                                log.error("Failed to process experiment item for experiment '{}', dataset item '{}'",
-                                        message.experimentId(), message.datasetItemId(), e);
-                                return Mono.just(false);
-                            })
-                            .flatMap(success -> decrementAndFinishIfComplete(message, success));
-                })
-                .contextWrite(buildReactorContext(message));
+        return Mono.error(new UnsupportedOperationException("Experiment items are processed by stream entry"));
     }
 
     /**
-     * Counts this item against its own experiment, not against the run. Per prompt variant, each
-     * settles on its own work and carries its own faults.
+     * Handles one delivery of an item, which may not be the first. Redis delivers a message again when its
+     * acknowledgement is lost, so an entry that already has an outcome ran on an earlier delivery: calling the
+     * provider again would pay for the same call twice and write a second trace. It goes straight to the drain
+     * check instead, which an earlier delivery may never have reached.
      */
-    private Mono<Void> decrementAndFinishIfComplete(ExperimentItemToProcess message, boolean success) {
-        RAtomicLongReactive counter = redisClient.getAtomicLong(
-                ExperimentExecutionConfig.itemCounterKey(message.workspaceId(), message.experimentId()));
-        RAtomicLongReactive failureCounter = redisClient.getAtomicLong(
-                ExperimentExecutionConfig.itemFailureCounterKey(message.workspaceId(), message.experimentId()));
-
-        Mono<Void> trackFailure = success
-                ? Mono.empty()
-                : failureCounter.incrementAndGet()
-                        .then(failureCounter.expire(config.getBatchCounterTtl().toJavaDuration()))
-                        .then(decrementAssertionCounter(message))
-                        .then();
-
-        return trackFailure.then(counter.decrementAndGet())
-                .flatMap(remaining -> {
-                    if (remaining <= 0) {
-                        return cancellationService
-                                .discardQueued(message.workspaceId(), message.experimentId())
-                                .then(failureCounter.get())
-                                .flatMap(failures -> {
-                                    if (failures > 0) {
-                                        log.warn("Experiment '{}' complete with '{}' failures, marking as FAILED",
-                                                message.experimentId(), failures);
-                                        return markExperimentFailed(message, buildReactorContext(message));
-                                    }
-                                    if (message.isTestSuite()) {
-                                        log.info("Experiment '{}' complete, waiting for assertions to finish",
-                                                message.experimentId());
-                                        // Stamped here, not with the assertions: a cancelled suite never
-                                        // reaches those, and would look forever like a run still going.
-                                        return stampFinished(message);
-                                    }
-                                    log.info("Experiment '{}' complete, finishing", message.experimentId());
-                                    return finishExperiment(message);
-                                });
-                    }
-                    log.debug("Experiment '{}' has '{}' remaining items", message.experimentId(), remaining);
-                    return Mono.empty();
-                })
-                .then();
+    @Override
+    protected Mono<Void> processEvent(ExperimentItemToProcess message, StreamMessageId entryId) {
+        return itemLedger.outcome(message.workspaceId(), message.experimentId(), entryId)
+                .doOnNext(outcome -> log.info(
+                        "Skipping a redelivered entry that already ran, outcome '{}', entryId '{}', experimentId '{}'",
+                        outcome, entryId, message.experimentId()))
+                .hasElement()
+                .flatMap(alreadyRan -> alreadyRan ? Mono.<Void>empty() : runAndRecord(message, entryId))
+                .then(Mono.defer(() -> finishIfDrained(message)))
+                .contextWrite(buildReactorContext(message));
     }
 
-    private Mono<Void> decrementAssertionCounter(ExperimentItemToProcess message) {
-        if (!message.isTestSuite()) {
-            return Mono.empty();
-        }
-        return testSuiteAssertionCounterService.decrementAndFinishIfComplete(
-                message.workspaceId(), message.experimentId());
+    private Mono<Void> runAndRecord(ExperimentItemToProcess message, StreamMessageId entryId) {
+        return cancellationService.isCancelled(message.workspaceId(), message.experimentId())
+                .flatMap(cancelled -> cancelled
+                        ? recordSkipped(message, entryId)
+                        // Failed items stay on the assertion counter: the drain fails the run, and a zeroed
+                        // counter would let the assertion path record COMPLETED first.
+                        : run(message).flatMap(outcome -> itemLedger.record(
+                                message.workspaceId(), message.experimentId(), entryId, outcome)));
+    }
+
+    private Mono<Outcome> run(ExperimentItemToProcess message) {
+        return itemProcessor.process(message)
+                .thenReturn(Outcome.OK)
+                .onErrorResume(e -> {
+                    log.error("Failed to process an experiment item, experimentId '{}', datasetItemId '{}'",
+                            message.experimentId(), message.datasetItemId(), e);
+                    return Mono.just(Outcome.FAILED);
+                });
+    }
+
+    /**
+     * Counts a stopped run's item as skipped, which is what lets the run drain. Not once its total is gone: an
+     * aborted launch discards the total together with the outcomes, and recording one would bring the outcomes
+     * back for a day with nothing left to read them.
+     */
+    private Mono<Void> recordSkipped(ExperimentItemToProcess message, StreamMessageId entryId) {
+        return itemLedger.hasTotal(message.workspaceId(), message.experimentId())
+                .flatMap(tracked -> {
+                    if (!tracked) {
+                        log.debug("Not recording a skip for an experiment no longer tracked, entryId '{}',"
+                                + " experimentId '{}'", entryId, message.experimentId());
+                        return Mono.empty();
+                    }
+                    log.debug("Skipping an item of a cancelled experiment, entryId '{}', experimentId '{}'",
+                            entryId, message.experimentId());
+                    return itemLedger.record(message.workspaceId(), message.experimentId(), entryId,
+                            Outcome.SKIPPED);
+                });
+    }
+
+    /**
+     * Settles the experiment once every item it queued has an outcome. Each variant of a run counts its own
+     * items, so it settles on its own work and carries its own faults. Any delivery that sees the drain comes
+     * through here, a repeated one included; the claim inside the finish keeps that to one ending.
+     */
+    private Mono<Void> finishIfDrained(ExperimentItemToProcess message) {
+        return itemLedger.remaining(message.workspaceId(), message.experimentId())
+                .flatMap(remaining -> {
+                    if (remaining > 0) {
+                        log.debug("Items still to come, remaining '{}', experimentId '{}'", remaining,
+                                message.experimentId());
+                        return Mono.empty();
+                    }
+                    return cancellationService.discardQueued(message.workspaceId(), message.experimentId())
+                            .then(cancellationService.isFinishClaimed(message.workspaceId(), message.experimentId()))
+                            .flatMap(claimed -> {
+                                if (claimed) {
+                                    // Its ending is already written, so this only records that the items
+                                    // stopped, as a claim loser would, without reading every outcome first.
+                                    log.info(
+                                            "Recording only the drain, the ending is already claimed, experimentId '{}'",
+                                            message.experimentId());
+                                    return stampFinished(message);
+                                }
+                                return settleDrained(message);
+                            });
+                });
+    }
+
+    private Mono<Void> settleDrained(ExperimentItemToProcess message) {
+        return itemLedger.failures(message.workspaceId(), message.experimentId())
+                .flatMap(failures -> {
+                    if (failures > 0) {
+                        log.warn("Marking a drained experiment FAILED, failures '{}', experimentId '{}'", failures,
+                                message.experimentId());
+                        return markExperimentFailed(message, buildReactorContext(message));
+                    }
+                    if (message.isTestSuite()) {
+                        log.info("Drained a test suite, waiting for its assertions, experimentId '{}'",
+                                message.experimentId());
+                        // Stamped here, not with the assertions: a cancelled suite never
+                        // reaches those, and would look forever like a run still going.
+                        return stampFinished(message);
+                    }
+                    log.info("Drained an experiment, finishing it, experimentId '{}'", message.experimentId());
+                    return finishExperiment(message);
+                });
     }
 
     private Context buildReactorContext(ExperimentItemToProcess message) {
@@ -174,6 +212,9 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                     return experimentService
                             .update(message.experimentId(),
                                     ExperimentUpdate.builder().status(earned).finished(true).build())
+                            // Handed back by the holder only. A caller that lost the claim releasing it would
+                            // let the next one write over the ending the holder already wrote.
+                            .onErrorResume(error -> releaseFinishClaim(message).then(Mono.error(error)))
                             .then(onWon);
                 });
     }
@@ -193,27 +234,19 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                             log.error("Failed to aggregate completed experiment '{}'", experimentId, error);
                             return Mono.empty();
                         })))
-                .contextWrite(reactorContext)
-                .onErrorResume(error -> {
-                    // Nothing was written about how this ended, so hand the finish back. Marking it
-                    // FAILED from inside the claim we hold writes nothing: setIfAbsent refuses it.
-                    log.error("Failed to finish experiment '{}'", experimentId, error);
-                    return releaseFinishClaim(message);
-                });
+                .contextWrite(reactorContext);
     }
 
     /** Records that the run has stopped producing items, leaving its status alone. */
     private Mono<Void> stampFinished(ExperimentItemToProcess message) {
-        return experimentService
-                .update(message.experimentId(), ExperimentUpdate.builder().finished(true).build())
-                .onErrorResume(error -> releaseFinishClaim(message).then(Mono.error(error)))
+        return experimentService.stampFinished(message.experimentId())
                 .contextWrite(buildReactorContext(message));
     }
 
     /**
-     * Hands the finish back when nothing could be written about how the run ended. There is no item
-     * left to drain and try again, so whoever holds this holds the only route to a terminal state —
-     * and while it is held a stop reads the run as already finished and leaves it where it is.
+     * Hands the finish back when its holder could not write how the run ended, so the redelivery that retries
+     * the finish can claim it again. Held, it would also keep a stop from reaching a run that has no ending:
+     * while it is held, a stop reads the run as already finished and leaves it where it is.
      */
     private Mono<Void> releaseFinishClaim(ExperimentItemToProcess message) {
         return cancellationService.releaseFinish(message.workspaceId(), message.experimentId())
@@ -229,11 +262,6 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
 
     private Mono<Void> markExperimentFailed(ExperimentItemToProcess message, Context reactorContext) {
         return settle(message, ExperimentStatus.FAILED, Mono.empty())
-                .onErrorResume(e -> {
-                    // The last writer of a terminal state: past here nothing records how this ended
-                    log.error("Failed to mark experiment '{}' as FAILED", message.experimentId(), e);
-                    return releaseFinishClaim(message);
-                })
                 .contextWrite(reactorContext);
     }
 }
