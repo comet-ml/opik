@@ -254,6 +254,26 @@ class CostServiceTest {
                 Arguments.of("above threshold uses tier rate", 300_000, "1.5225"));
     }
 
+    /**
+     * Above Claude Sonnet 4.5's 200K tier a one-hour cache write bills at the tier's one-hour rate. A manual test on
+     * staging found it billed at the base one-hour rate, below the tier's five-minute rate.
+     */
+    @Test
+    void calculateCostBillsOneHourCacheWritesAtTheTiersOneHourRate() {
+        // claude-sonnet-4-5 above 200K: input 6e-6, output 2.25e-5, five-minute write 7.5e-6, one-hour write 1.2e-5
+        Map<String, Integer> fiveMinuteWrites = Map.of("input_tokens", 200_000, "output_tokens", 1_000,
+                "cache_creation_input_tokens", 100_000, "cache_creation.ephemeral_5m_input_tokens", 100_000);
+        Map<String, Integer> oneHourWrites = Map.of("input_tokens", 200_000, "output_tokens", 1_000,
+                "cache_creation_input_tokens", 100_000, "cache_creation.ephemeral_1h_input_tokens", 100_000);
+
+        // 200,000 * 6e-6 + 100,000 * 7.5e-6 + 1,000 * 2.25e-5
+        assertThat(CostService.calculateCost("claude-sonnet-4-5", "anthropic", fiveMinuteWrites, null))
+                .isEqualByComparingTo("1.9725");
+        // 200,000 * 6e-6 + 100,000 * 1.2e-5 + 1,000 * 2.25e-5
+        assertThat(CostService.calculateCost("claude-sonnet-4-5", "anthropic", oneHourWrites, null))
+                .isEqualByComparingTo("2.4225");
+    }
+
     @Test
     void calculateCostUsesGoogleCacheCalculatorWhenCachePricesConfigured_issue6976() {
         Map<String, Integer> usage = Map.of(

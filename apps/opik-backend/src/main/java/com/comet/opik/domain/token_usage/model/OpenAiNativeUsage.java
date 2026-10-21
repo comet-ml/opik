@@ -11,6 +11,7 @@ import lombok.NonNull;
  *
  * @param cacheWriteTokens     the prompt tokens written to the cache, for the providers behind OpenAI-compatible APIs
  *                             that bill writes (Anthropic through OpenRouter). Part of the prompt, like the reads.
+ * @param cacheWrite1hTokens   the part of {@code cacheWriteTokens} written with a 1-hour TTL.
  * @param textPromptTokens     the text part of the prompt when the provider reports it (OpenAI Realtime), which is
  *                             more exact than subtracting the cached and audio tokens, as those can overlap.
  * @param textCompletionTokens the text part of the completion, when reported.
@@ -22,6 +23,7 @@ public record OpenAiNativeUsage(
         long promptTokens,
         long cachedTokens,
         long cacheWriteTokens,
+        long cacheWrite1hTokens,
         long audioPromptTokens,
         long completionTokens,
         long reasoningTokens,

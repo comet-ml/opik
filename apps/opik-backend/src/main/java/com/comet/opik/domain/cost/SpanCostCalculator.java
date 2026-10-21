@@ -36,8 +36,7 @@ class SpanCostCalculator {
         BigDecimal inputPrice = modelPrice.effectiveInputPrice(tierBasis);
         BigDecimal fiveMinuteWritePrice = orInputPrice(
                 modelPrice.effectiveCacheCreationInputTokenPrice(tierBasis), inputPrice);
-        BigDecimal oneHourWritePrice = orInputPrice(modelPrice.cacheCreationInputTokenPriceAbove1hr(),
-                fiveMinuteWritePrice);
+        BigDecimal oneHourWritePrice = oneHourWritePrice(modelPrice, tierBasis, fiveMinuteWritePrice);
         return cost(inputPrice, usage.inputTokens())
                 .add(cost(orInputPrice(modelPrice.effectiveCacheReadInputTokenPrice(tierBasis), inputPrice),
                         usage.cacheReadInputTokens()))
@@ -49,11 +48,14 @@ class SpanCostCalculator {
     private static BigDecimal bedrockCost(ModelPrice modelPrice, BedrockConverseNativeUsage usage) {
         int tierBasis = tierBasis(usage.toOpenAiLike().promptTokens());
         BigDecimal inputPrice = modelPrice.effectiveInputPrice(tierBasis);
+        BigDecimal fiveMinuteWritePrice = orInputPrice(
+                modelPrice.effectiveCacheCreationInputTokenPrice(tierBasis), inputPrice);
         return cost(inputPrice, usage.inputTokens())
                 .add(cost(orInputPrice(modelPrice.effectiveCacheReadInputTokenPrice(tierBasis), inputPrice),
                         usage.cacheReadInputTokens()))
-                .add(cost(orInputPrice(modelPrice.effectiveCacheCreationInputTokenPrice(tierBasis), inputPrice),
-                        usage.cacheWriteInputTokens()))
+                .add(cost(fiveMinuteWritePrice, usage.cacheWriteInputTokens() - usage.cacheWrite1hInputTokens()))
+                .add(cost(oneHourWritePrice(modelPrice, tierBasis, fiveMinuteWritePrice),
+                        usage.cacheWrite1hInputTokens()))
                 .add(cost(modelPrice.effectiveOutputPrice(tierBasis), usage.outputTokens()));
     }
 
@@ -91,12 +93,14 @@ class SpanCostCalculator {
                 ? Math.clamp(usage.reasoningTokens(), 0, textCompletionTokens)
                 : 0;
 
+        BigDecimal fiveMinuteWritePrice = orInputPrice(
+                modelPrice.effectiveCacheCreationInputTokenPrice(tierBasis), inputPrice);
         return cost(inputPrice, textPromptTokens)
                 .add(cost(modelPrice.inputAudioTokenPrice(), audioPromptTokens))
                 .add(cost(orInputPrice(modelPrice.effectiveCacheReadInputTokenPrice(tierBasis), inputPrice),
                         usage.cachedTokens()))
-                .add(cost(orInputPrice(modelPrice.effectiveCacheCreationInputTokenPrice(tierBasis), inputPrice),
-                        usage.cacheWriteTokens()))
+                .add(cost(fiveMinuteWritePrice, usage.cacheWriteTokens() - usage.cacheWrite1hTokens()))
+                .add(cost(oneHourWritePrice(modelPrice, tierBasis, fiveMinuteWritePrice), usage.cacheWrite1hTokens()))
                 .add(cost(outputPrice, textCompletionTokens - reasoningTokens))
                 .add(cost(modelPrice.outputAudioTokenPrice(), audioCompletionTokens))
                 .add(cost(modelPrice.outputReasoningTokenPrice(), reasoningTokens));
@@ -136,6 +140,12 @@ class SpanCostCalculator {
         return Optional.ofNullable(usage.original().keys().get(name))
                 .or(() -> Optional.ofNullable(usage.original().outerKeys().get(name)))
                 .orElse(0);
+    }
+
+    // Claude bills 1-hour cache writes at their own rate. One never bills below a 5-minute write, also above a tier
+    // without a 1-hour rate of its own, where LiteLLM keeps the base 1-hour rate.
+    private static BigDecimal oneHourWritePrice(ModelPrice modelPrice, int tierBasis, BigDecimal fiveMinuteWritePrice) {
+        return modelPrice.effectiveCacheCreationInputTokenPriceAbove1hr(tierBasis).max(fiveMinuteWritePrice);
     }
 
     // A provider that publishes no cache rate bills its cached tokens as plain input.
