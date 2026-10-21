@@ -103,6 +103,10 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 .orElse(null);
 
         var spansByProjectName = groupSpansByProjectName(traceRequest, fallbackProjectName);
+        log.info("Routing OpenTelemetry spans to projects '{}', fallback project '{}'",
+                spansByProjectName.entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().size())),
+                fallbackProjectName);
 
         var spansWithSkippedProjectName = countSpansWithSkippedProjectName(traceRequest);
 
