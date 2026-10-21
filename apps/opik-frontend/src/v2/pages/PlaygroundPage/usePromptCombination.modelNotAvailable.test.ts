@@ -5,7 +5,7 @@ import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming
 import { PlaygroundPromptType } from "@/types/playground";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
-import usePromptDatasetItemCombination from "./usePromptDatasetItemCombination";
+import usePromptCombination from "./usePromptCombination";
 
 const PROMPT_ID = "prompt-1";
 
@@ -23,9 +23,6 @@ vi.mock("@/store/PlaygroundStore", () => ({
 }));
 vi.mock("@/api/playground/useCompletionProxyStreaming", () => ({
   default: () => mocks.runStreaming,
-}));
-vi.mock("@/v2/pages/PlaygroundPage/useHydrateDatasetItemData", () => ({
-  useHydrateDatasetItemData: () => async () => ({}),
 }));
 vi.mock("@/v2/pages/PlaygroundPage/useHydratePromptMetadata", () => ({
   useHydratePromptMetadata: () => async () => undefined,
@@ -55,14 +52,12 @@ const notFoundRun: RunStreamingReturn = {
   actualProvider: PROVIDER_TYPE.ANTHROPIC,
 };
 
-describe("usePromptDatasetItemCombination on a model the API key can't use", () => {
+describe("usePromptCombination on a model the API key can't use", () => {
   it("stores the provider's error and the next step for the picked model", async () => {
     mocks.runStreaming.mockResolvedValue(notFoundRun);
     const { result } = renderHook(() =>
-      usePromptDatasetItemCombination({
-        datasetItems: [],
+      usePromptCombination({
         workspaceName: "workspace",
-        datasetName: null,
         selectedRuleIds: null,
         addAbortController: vi.fn(),
         deleteAbortController: vi.fn(),
@@ -75,7 +70,7 @@ describe("usePromptDatasetItemCombination on a model the API key can't use", () 
       { log: vi.fn(), finishLogging: vi.fn() },
     );
 
-    expect(mocks.updateOutput).toHaveBeenLastCalledWith(PROMPT_ID, "", {
+    expect(mocks.updateOutput).toHaveBeenLastCalledWith(PROMPT_ID, {
       isLoading: false,
       error: "model: claude-mythos-5",
       errorHint: {

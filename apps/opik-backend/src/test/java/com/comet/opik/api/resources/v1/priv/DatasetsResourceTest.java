@@ -10249,6 +10249,71 @@ class DatasetsResourceTest {
             TraceAssertions.assertStats(stats.stats(), expectedStats);
         }
 
+        // The stats query renders the same dataset-item filters as the items query, against a
+        // subquery of its own — so tags has to be projected there or the filter cannot resolve.
+        @Test
+        void getExperimentItemsStats__withTagsFilter() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .build();
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var taggedItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                    .tags(Set.of("rare"))
+                    .build();
+            var otherItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                    .tags(Set.of("common"))
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .items(List.of(taggedItem, otherItem))
+                            .datasetId(datasetId)
+                            .build(),
+                    workspaceName,
+                    apiKey);
+
+            var experimentItems = Stream.of(taggedItem, otherItem)
+                    .map(item -> {
+                        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                                .projectName(experiment.name())
+                                .build();
+                        traceResourceClient.createTrace(trace, apiKey, workspaceName);
+                        return ExperimentItem.builder()
+                                .experimentId(experiment.id())
+                                .datasetItemId(item.id())
+                                .traceId(trace.id())
+                                .output(JsonUtils.readTree(Map.of("result", "output")))
+                                .build();
+                    })
+                    .collect(Collectors.toSet());
+
+            DatasetsResourceTest.this.createAndAssert(new ExperimentItemsBatch(experimentItems), apiKey,
+                    workspaceName);
+
+            var stats = datasetResourceClient.getDatasetExperimentItemsStats(
+                    datasetId,
+                    List.of(experiment.id()),
+                    apiKey,
+                    workspaceName,
+                    List.of(new ExperimentsComparisonFilter("tags", FieldType.LIST, Operator.CONTAINS, null, "rare")));
+
+            assertThat(stats.stats())
+                    .filteredOn(stat -> StatsMapper.EXPERIMENT_ITEMS_COUNT.equals(stat.getName()))
+                    .singleElement()
+                    .extracting(ProjectStatItem::getValue)
+                    .isEqualTo(1L);
+        }
+
         @Test
         @DisplayName("Success: Get experiment items stats with output filter")
         void getExperimentItemsStats__withOutputFilter() {

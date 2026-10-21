@@ -5,7 +5,7 @@ import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming
 import { PlaygroundPromptType } from "@/types/playground";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
-import usePromptDatasetItemCombination from "./usePromptDatasetItemCombination";
+import usePromptCombination from "./usePromptCombination";
 
 const PROMPT_ID = "prompt-1";
 
@@ -65,10 +65,8 @@ const processRun = async (
   mocks.runStreaming.mockResolvedValue(run);
   const log = vi.fn();
   const { result } = renderHook(() =>
-    usePromptDatasetItemCombination({
-      datasetItems: [],
+    usePromptCombination({
       workspaceName: "workspace",
-      datasetName: null,
       selectedRuleIds: null,
       addAbortController: vi.fn(),
       deleteAbortController: vi.fn(),
@@ -84,7 +82,7 @@ const processRun = async (
   return log;
 };
 
-describe("usePromptDatasetItemCombination", () => {
+describe("usePromptCombination", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -106,7 +104,7 @@ describe("usePromptDatasetItemCombination", () => {
       expect(log).toHaveBeenCalledWith(
         expect.objectContaining({ errorStatus, opikError: message }),
       );
-      expect(mocks.updateOutput).toHaveBeenLastCalledWith(PROMPT_ID, "", {
+      expect(mocks.updateOutput).toHaveBeenLastCalledWith(PROMPT_ID, {
         isLoading: false,
         error: message,
         errorHint: expect.objectContaining({ title }),
@@ -136,7 +134,7 @@ describe("usePromptDatasetItemCombination", () => {
       systemOnlyPrompt,
     );
 
-    expect(mocks.updateOutput).toHaveBeenLastCalledWith(PROMPT_ID, "", {
+    expect(mocks.updateOutput).toHaveBeenLastCalledWith(PROMPT_ID, {
       isLoading: false,
       error: "messages: Field required",
       errorHint: {
@@ -152,7 +150,6 @@ describe("usePromptDatasetItemCombination", () => {
     expect(mocks.updateOutput).toHaveBeenNthCalledWith(
       1,
       PROMPT_ID,
-      "",
       expect.objectContaining({
         isLoading: true,
         error: undefined,
