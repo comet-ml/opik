@@ -28,6 +28,7 @@ vi.mock(
 
 describe("PromptTemplateEditor chat messages", () => {
   it("keeps the message editors at the default size", () => {
+    messagesProps.current = null;
     const editor = {
       isChatPrompt: true,
       chatViewMode: "pretty",

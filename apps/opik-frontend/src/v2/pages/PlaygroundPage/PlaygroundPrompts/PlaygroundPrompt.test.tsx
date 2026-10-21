@@ -200,6 +200,7 @@ const savedConfigs = () => updatePrompt.mock.lastCall?.[1].configs;
 
 beforeEach(() => {
   updatePrompt.mockClear();
+  messagesProps.current = null;
 });
 
 describe("PlaygroundPrompt model switch", () => {
