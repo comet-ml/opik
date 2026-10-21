@@ -427,7 +427,7 @@ class AnnotationQueuesResourceTest {
             var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .annotatorView(AnnotationQueueAnnotatorView.builder()
-                            .fields(List.of(AnnotationQueueAnnotatorView.Field.builder()
+                            .fields(List.of(AnnotationQueueAnnotatorView.AnnotatorField.builder()
                                     .label("Source").path(" ").build()))
                             .build())
                     .build();
@@ -1808,11 +1808,11 @@ class AnnotationQueuesResourceTest {
                     arguments(AnnotationQueueUpdate.builder()
                             .annotatorView(AnnotationQueueAnnotatorView.builder()
                                     .fields(List.of(
-                                            AnnotationQueueAnnotatorView.Field.builder()
+                                            AnnotationQueueAnnotatorView.AnnotatorField.builder()
                                                     .label("Source").path("input.text").halfWidth(true).build(),
-                                            AnnotationQueueAnnotatorView.Field.builder()
+                                            AnnotationQueueAnnotatorView.AnnotatorField.builder()
                                                     .label("Translation").path("output.text").halfWidth(true).build(),
-                                            AnnotationQueueAnnotatorView.Field.builder()
+                                            AnnotationQueueAnnotatorView.AnnotatorField.builder()
                                                     .label("Attachments").path("attachments").build()))
                                     .build())
                             .build(), "fields"),
