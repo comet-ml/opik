@@ -58,7 +58,7 @@ public class RedisSentinelConfig {
     private String password;
 
     @Valid @JsonProperty
-    @Min(0) @Max(20) private int retryAttempts;
+    @NotNull @Min(0) @Max(20) private Integer retryAttempts;
 
     // Full jitter: each retry waits a random time up to min(base * 2^attempt, cap), like the Python backend
     @Valid @JsonProperty
@@ -73,7 +73,7 @@ public class RedisSentinelConfig {
 
     // Redisson refuses to start unless the sentinels report at least two of them; single-sentinel dev setups turn it off
     @Valid @JsonProperty
-    private boolean checkSentinelsList;
+    @NotNull private Boolean checkSentinelsList;
 
     // Redisson takes these as int milliseconds
     @Valid @JsonProperty

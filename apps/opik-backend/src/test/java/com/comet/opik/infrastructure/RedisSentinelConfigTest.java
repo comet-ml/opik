@@ -17,11 +17,13 @@ import org.redisson.config.Config;
 import org.redisson.config.FullJitterDelay;
 import org.redisson.config.SentinelServersConfig;
 
+import java.io.ByteArrayInputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -139,6 +141,19 @@ class RedisSentinelConfigTest {
                 // Redisson's default resolver wraps username/password, which are compared on their own
                 .ignoringFieldsOfTypes(CompletableFuture.class)
                 .isEqualTo(expected);
+    }
+
+    @Test
+    void rejectsPartialSentinelBlockInsteadOfDisablingProtections() {
+        // Defaults live only in config.yml, so a hand-written block that omits a setting must fail, not run with 0/false
+        var yaml = "enabled: true\nmasterName: %s\n".formatted(masterName);
+        var factory = new YamlConfigurationFactory<>(RedisSentinelConfig.class, Validators.newValidator(),
+                Jackson.newObjectMapper(), "dw");
+
+        assertThatThrownBy(() -> factory.build(path -> new ByteArrayInputStream(yaml.getBytes(UTF_8)), "sentinel"))
+                .isInstanceOf(ConfigurationValidationException.class)
+                .hasMessageContainingAll("retryAttempts", "checkSentinelsList", "retryBackoffBase",
+                        "retryBackoffCap", "connectTimeout", "timeout", "scanInterval");
     }
 
     private static Stream<Arguments> invalidSettings() {
