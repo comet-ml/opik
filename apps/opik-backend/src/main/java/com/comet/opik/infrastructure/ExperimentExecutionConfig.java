@@ -7,6 +7,7 @@ import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -95,6 +96,11 @@ public class ExperimentExecutionConfig implements StreamConfiguration {
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     @MaxDuration(value = 10, unit = TimeUnit.MINUTES)
     private Duration publishLockWait = Duration.seconds(10);
+
+    @JsonIgnore
+    @AssertTrue(message = "publishLockWait must be below publishLockLease, so a launch already waiting cannot take the lock the moment a publish outlives its lease and publish beside it") public boolean isWaitBelowLease() {
+        return publishLockWait.toMilliseconds() < publishLockLease.toMilliseconds();
+    }
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)

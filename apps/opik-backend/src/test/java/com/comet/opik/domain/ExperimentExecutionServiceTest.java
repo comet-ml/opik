@@ -39,6 +39,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.redisson.client.RedisException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -867,6 +868,33 @@ class ExperimentExecutionServiceTest {
                     .hasMessageContaining("too busy");
 
             verify(experimentService, never()).create(any(Experiment.class));
+        }
+
+        // bestEffortLock answers every RedisException around the action with its fallback, so a
+        // publish that fails on Redis would otherwise be reported as a queue too busy to take the
+        // run — a 429 inviting a retry, for a run whose experiments are already marked failed.
+        @Test
+        void reportAPublishThatFailedOnRedisAsAFailure() {
+            when(itemPublisher.publish(any(), any()))
+                    .thenReturn(Mono.error(new RedisException("connection reset")));
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
+            stubExperimentCreate();
+            when(cancellationService.cancel(any(), any())).thenReturn(Mono.empty());
+            when(cancellationService.claimFinish(any(), any(UUID.class))).thenReturn(Mono.just(true));
+            when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+            when(itemPublisher.discardCounters(any(), any())).thenReturn(Mono.empty());
+
+            assertThatThrownBy(() -> executeRequest(ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(buildPrompt("gpt-4", "Hello")))
+                    .build()))
+                    .isInstanceOf(InternalServerErrorException.class)
+                    .hasMessageContaining("could not be queued");
+
+            // The run was still cleaned up on the way out
+            verify(itemPublisher).discardCounters(eq(WORKSPACE_ID), anyCollection());
         }
 
         // The check is a read and the publish that follows is not atomic with it, so both happen

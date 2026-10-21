@@ -36,6 +36,7 @@ import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.client.RedisException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -565,13 +566,20 @@ public class ExperimentExecutionService {
                                 .then(itemPublisher.publish(batchId, messages))
                                 .then(Mono.just(true))
                                 .onErrorResume(error -> abortRun(workspaceId, experimentIds)
-                                        .then(Mono.error(error)))),
+                                        .then(Mono.error(error))))
+                        .onErrorMap(RedisException.class, ExperimentExecutionService::publishFailed),
                 // Refused rather than queued: the endpoint holds a request thread while it waits,
                 // and those are shared with every other call.
                 Mono.error(anotherRunIsQueueing()),
                 experimentExecutionConfig.getPublishLockLease().toJavaDuration(),
                 experimentExecutionConfig.getPublishLockWait().toJavaDuration())
                 .then();
+    }
+
+    private static InternalServerErrorException publishFailed(Throwable error) {
+        log.error("Failed to queue a run", error);
+        return new InternalServerErrorException(
+                "The run could not be queued. Its experiments were marked failed — try again.");
     }
 
     private ClientErrorException anotherRunIsQueueing() {
