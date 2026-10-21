@@ -603,6 +603,7 @@ public class ExperimentsResource {
     @Path("/execute")
     @Operation(operationId = "executeExperiment", summary = "Create and execute experiment", description = "Creates experiments for each prompt variant and asynchronously processes all dataset items", responses = {
             @ApiResponse(responseCode = "202", description = "Experiments created and processing started", content = @Content(schema = @Schema(implementation = ExperimentExecutionResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
     public Response execute(@NotNull @Valid ExperimentExecutionRequest request) {
