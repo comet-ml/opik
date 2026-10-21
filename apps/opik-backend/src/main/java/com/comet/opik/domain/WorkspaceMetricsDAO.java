@@ -79,10 +79,13 @@ public interface WorkspaceMetricsDAO {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
-    // Scores live in both the legacy feedback_scores table and authored_feedback_scores (every write with an author,
-    // e.g. SDK, UI and online scoring). Both are read and deduped the same way as ProjectMetricsDAO's
-    // feedback_scores_deduped, then averaged per trace and score name before the window aggregate. A trace score's
-    // entity_id is the trace id, so the entity_id range bounds both scans to the traces in the window before the sort.
+    /**
+     * Scores live in both the legacy {@code feedback_scores} table and {@code authored_feedback_scores} (every write
+     * with an author, e.g. SDK, UI and online scoring). Both are read and deduped the same way as
+     * {@code ProjectMetricsDAO}'s {@code feedback_scores_deduped}, then averaged per trace and score name before the
+     * window aggregate. A trace score's {@code entity_id} is the trace id, so the {@code entity_id} range bounds both
+     * scans to the traces in the window before the sort.
+     */
     private static final String GET_FEEDBACK_SCORES_SUMMARY = """
             WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -167,7 +170,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     \\<= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)));
             """;
 
-    // Same score sources and dedup as GET_FEEDBACK_SCORES_SUMMARY.
+    /** Same score sources and dedup as {@link #GET_FEEDBACK_SCORES_SUMMARY}. */
     private static final String GET_FEEDBACK_SCORES_DAILY_BY_PROJECT = """
             WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -250,7 +253,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             ;
             """;
 
-    // Same score sources and dedup as GET_FEEDBACK_SCORES_SUMMARY.
+    /** Same score sources and dedup as {@link #GET_FEEDBACK_SCORES_SUMMARY}. */
     private static final String GET_FEEDBACK_SCORES_DAILY = """
             WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
