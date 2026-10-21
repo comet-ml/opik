@@ -1,11 +1,17 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
+import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.ModelParams;
+import com.comet.opik.domain.llm.SamplingParamsNormalizer;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.annotation.Nullable;
 import jakarta.ws.rs.BadRequestException;
 import lombok.experimental.UtilityClass;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -21,44 +27,25 @@ class AnthropicEffort {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
 
-    Optional<Map<?, ?>> toOutputConfig(String model, JsonNode customParameters) {
+    Optional<Map<?, ?>> toOutputConfig(String model, JsonNode customParameters,
+            LlmModelRegistryService registryService) {
         if (customParameters == null || !customParameters.isObject()) {
             return Optional.empty();
         }
-        return toOutputConfig(model, JsonUtils.getMapper().convertValue(customParameters, MAP_TYPE));
+        return toOutputConfig(model, JsonUtils.getMapper().convertValue(customParameters, MAP_TYPE),
+                registryService);
     }
 
-    Optional<Map<String, Object>> toCustomParameters(String model, Map<String, Object> customParameters) {
-        return toOutputConfig(model, customParameters).map(outputConfig -> impliesAdaptiveThinking(model,
-                customParameters, outputConfig)
+    Optional<Map<String, Object>> toCustomParameters(String model, Map<String, Object> customParameters,
+            LlmModelRegistryService registryService) {
+        return toOutputConfig(model, customParameters, registryService)
+                .map(outputConfig -> SamplingParamsNormalizer.effortTurnsOnThinking(model, customParameters)
                         ? Map.of(OUTPUT_CONFIG, outputConfig, THINKING, Map.of("type", ADAPTIVE))
                         : Map.of(OUTPUT_CONFIG, outputConfig));
     }
 
-    boolean impliesAdaptiveThinking(String model, JsonNode customParameters) {
-        if (customParameters == null || !customParameters.isObject()) {
-            return false;
-        }
-        return impliesAdaptiveThinking(model, JsonUtils.getMapper().convertValue(customParameters, MAP_TYPE));
-    }
-
-    boolean impliesAdaptiveThinking(String model, Map<String, Object> customParameters) {
-        return toOutputConfig(model, customParameters)
-                .map(outputConfig -> impliesAdaptiveThinking(model, customParameters, outputConfig))
-                .orElse(false);
-    }
-
-    // Opik calls the effort control "Thinking effort", but on these models a level alone only shortens or lengthens the
-    // answer: Anthropic runs a request that does not ask for thinking with none. A request that sets thinking itself,
-    // disabled included, is left as it is.
-    private boolean impliesAdaptiveThinking(String model, Map<String, Object> customParameters,
-            Map<?, ?> outputConfig) {
-        return AnthropicModelName.thinksOnlyWhenAsked(model)
-                && customParameters.get(THINKING) == null
-                && outputConfig.get(EFFORT) != null;
-    }
-
-    private Optional<Map<?, ?>> toOutputConfig(String model, Map<String, Object> customParameters) {
+    private Optional<Map<?, ?>> toOutputConfig(String model, Map<String, Object> customParameters,
+            LlmModelRegistryService registryService) {
         if (customParameters == null || customParameters.get(OUTPUT_CONFIG) == null) {
             return Optional.empty();
         }
@@ -66,11 +53,11 @@ class AnthropicEffort {
             throw new BadRequestException(
                     "custom_parameters.output_config must be an object, model '%s'".formatted(model));
         }
-        validateEffort(model, outputConfig.get(EFFORT));
+        validateEffort(model, outputConfig.get(EFFORT), registryService);
         return outputConfig.isEmpty() ? Optional.empty() : Optional.of(outputConfig);
     }
 
-    private void validateEffort(String model, Object effort) {
+    private void validateEffort(String model, Object effort, LlmModelRegistryService registryService) {
         if (effort == null) {
             return;
         }
@@ -79,9 +66,16 @@ class AnthropicEffort {
                     "custom_parameters.output_config.effort must be a string, model '%s', effort '%s'"
                             .formatted(model, effort));
         }
-        // A model without a row, such as one the model sync just added, is only checked for a known level name.
-        // Anthropic has the final word on it, so a stale table never blocks a new model.
-        var supported = AnthropicModelName.effortLevels(model).orElse(AnthropicModelName.ALL_EFFORT_LEVELS);
+        // Unlike the other rules, which only drop a param, this one fails the request, so it reads only the rules
+        // shipped with the release: a bad generated or CDN row would otherwise 400 every effort request for the
+        // model until the data is fixed. A model without a curated row, such as one the model sync just added, gets
+        // the provider profile, which names every level. Anthropic has the final word on it, so a stale catalog
+        // never blocks a new model; for the same reason an accepted effort that names no levels is left to
+        // Anthropic to check.
+        var supported = effortLevels(registryService.curatedParamsOf(LlmProvider.ANTHROPIC.getValue(), model));
+        if (supported == null) {
+            return;
+        }
         if (supported.isEmpty()) {
             throw new BadRequestException(
                     "The model does not support custom_parameters.output_config.effort, model '%s', effort '%s'"
@@ -92,5 +86,11 @@ class AnthropicEffort {
                     "Unsupported custom_parameters.output_config.effort for the model, model '%s', effort '%s', supported '%s'"
                             .formatted(model, level, supported));
         }
+    }
+
+    /** Null when the model takes effort at levels the catalog doesn't name. */
+    private @Nullable List<String> effortLevels(@Nullable ModelParams params) {
+        var effort = params == null ? null : params.effort();
+        return effort != null && Boolean.TRUE.equals(effort.accepted()) ? effort.levels() : List.of();
     }
 }
