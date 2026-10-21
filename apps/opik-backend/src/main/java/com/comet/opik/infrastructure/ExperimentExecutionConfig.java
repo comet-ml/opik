@@ -92,6 +92,11 @@ public class ExperimentExecutionConfig implements StreamConfiguration {
     private Duration publishLockLease = Duration.seconds(60);
 
     @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    @MaxDuration(value = 10, unit = TimeUnit.MINUTES)
+    private Duration publishLockWait = Duration.seconds(10);
+
+    @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
     private Duration pendingMessageDuration = Duration.minutes(10);
 

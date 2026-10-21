@@ -41,7 +41,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -59,8 +58,6 @@ public class ExperimentExecutionService {
 
     private static final int STREAM_PAGE_SIZE = 2000;
     private static final String PUBLISH_LOCK = "experiment-execution-publish";
-    // Well past a publish, so only a stalled holder turns into a refusal.
-    private static final Duration PUBLISH_LOCK_WAIT = Duration.ofSeconds(10);
 
     private final ExperimentService experimentService;
     private final ExperimentCancellationService cancellationService;
@@ -573,12 +570,13 @@ public class ExperimentExecutionService {
                 // and those are shared with every other call.
                 Mono.error(anotherRunIsQueueing()),
                 experimentExecutionConfig.getPublishLockLease().toJavaDuration(),
-                PUBLISH_LOCK_WAIT)
+                experimentExecutionConfig.getPublishLockWait().toJavaDuration())
                 .then();
     }
 
     private ClientErrorException anotherRunIsQueueing() {
-        log.warn("Refusing a run: another is being queued and did not finish within '{}'", PUBLISH_LOCK_WAIT);
+        log.warn("Refusing a run: another is being queued, waited '{}'",
+                experimentExecutionConfig.getPublishLockWait());
         return new ClientErrorException(
                 "Another run is being queued right now. Try again in a moment.",
                 Response.Status.TOO_MANY_REQUESTS);

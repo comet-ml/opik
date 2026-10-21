@@ -1205,6 +1205,9 @@ experimentExecution:
   # Default: 60s
   # Description: Lease on the lock that serialises launching a run, held from the queue-capacity check through publishing so the check cannot be overtaken. Must exceed the time to publish the largest run; a pod that dies holding it stalls launches until it expires
   publishLockLease: ${EXPERIMENT_EXECUTION_PUBLISH_LOCK_LEASE:-60s}
+  # Default: 10s
+  # Description: How long a run waits for the publish lock before being refused with 429. Several times the time to publish a run, so a queued launch waits rather than being turned away; under publishLockLease, so a pod that died holding the lock refuses quickly instead of holding the request
+  publishLockWait: ${EXPERIMENT_EXECUTION_PUBLISH_LOCK_WAIT:-10s}
 
 # Configuration for Dataset Export
 datasetExport:
