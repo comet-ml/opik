@@ -117,12 +117,12 @@ If Sentinel does not require authentication, omit the Sentinel username and pass
 
 ## Configuration reference
 
-Configure these environment variables, with the same values, on both the Java backend and the Python backend. Both read them the same way. Set to an empty value, `OPIK_REDIS_SENTINEL_ENABLED` means disabled and the nodes, username and password are treated as unset; any other variable makes the backend refuse to start:
+Configure these environment variables, with the same values, on both the Java backend and the Python backend. Both read them the same way, and both validate them at startup whenever Sentinel is enabled, refusing to start on an invalid value. Set to an empty value, `OPIK_REDIS_SENTINEL_ENABLED` means disabled and the nodes, username and password are treated as unset; any other empty variable is invalid. Boolean variables take `true` or `false`; `yes`/`no`, `on`/`off` and `1`/`0` are accepted too.
 
 | Environment variable | Default | Description |
 |---|---:|---|
 | `REDIS_URL` | `redis://:opik@localhost:6379/0` | Direct Redis URL in single-node mode. In Sentinel mode, its host and port identify the initial Sentinel seed, while its credentials and database apply to Redis data nodes. |
-| `OPIK_REDIS_SENTINEL_ENABLED` | `false` | Enables Sentinel-based master discovery. |
+| `OPIK_REDIS_SENTINEL_ENABLED` | `false` | Enables Sentinel-based master discovery when `true`. |
 | `OPIK_REDIS_SENTINEL_MASTER_NAME` | Empty | Sentinel master set name. Required when Sentinel mode is enabled. |
 | `OPIK_REDIS_SENTINEL_NODES` | Empty | Comma-separated additional Sentinel seed addresses, each with a host, a port and the same `redis://` or `rediss://` scheme as `REDIS_URL`. Do not embed credentials; use the Sentinel username and password variables. |
 | `OPIK_REDIS_SENTINEL_USERNAME` | Empty | Username used to authenticate to Sentinel nodes when Sentinel ACLs are enabled. |

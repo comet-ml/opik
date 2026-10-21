@@ -137,9 +137,11 @@ def test_applies_java_backend_defaults(sentinel_env):
     }
 
 
-def test_keeps_direct_client_when_sentinel_is_disabled(sentinel_env):
+# The same spellings the Java backend's YAML binding accepts
+@pytest.mark.parametrize("enabled", ["false", "FALSE", "no", "Off", "0", ""])
+def test_keeps_direct_client_when_sentinel_is_disabled(sentinel_env, enabled):
     monkeypatch, _ = sentinel_env
-    monkeypatch.setenv("OPIK_REDIS_SENTINEL_ENABLED", "false")
+    monkeypatch.setenv("OPIK_REDIS_SENTINEL_ENABLED", enabled)
 
     client = redis_utils._create_redis_client_from_env(decode_responses=False)
 
@@ -160,7 +162,7 @@ def test_keeps_direct_client_when_sentinel_is_disabled(sentinel_env):
         ("OPIK_REDIS_SENTINEL_TIMEOUT", "", "OPIK_REDIS_SENTINEL_TIMEOUT must not be empty"),
         ("OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS", "", "OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS must not be empty"),
         ("OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST", "", "OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST must not be empty"),
-        ("OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST", "yes", "OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST must be true or false"),
+        ("OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST", "y", "OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST must be true or false"),
         ("OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS", "three", "OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS must be an integer"),
         ("REDIS_URL", "redis://sentinel-1/0", "REDIS_URL must include the sentinel port"),
         ("REDIS_URL", "http://sentinel-1:26379/0", "REDIS_URL must use the redis or rediss scheme"),
@@ -171,6 +173,7 @@ def test_keeps_direct_client_when_sentinel_is_disabled(sentinel_env):
         ("OPIK_REDIS_SENTINEL_NODES", "redis://sentinel-2:65536", "must include a host and a port"),
         ("OPIK_REDIS_SENTINEL_NODES", "redis://:26379", "must include a host and a port"),
         ("REDIS_URL", "", "REDIS_URL must point at a sentinel"),
+        ("OPIK_REDIS_SENTINEL_ENABLED", "enabled", "OPIK_REDIS_SENTINEL_ENABLED must be true or false"),
     ],
 )
 def test_rejects_invalid_sentinel_settings(sentinel_env, variable, value, message):
@@ -183,12 +186,23 @@ def test_rejects_invalid_sentinel_settings(sentinel_env, variable, value, messag
     assert "secret" not in str(error.value)
 
 
-def test_invalid_sentinel_settings_stop_app_startup(sentinel_env):
+@pytest.mark.parametrize("rq_worker_enabled", ["true", "false"])
+def test_invalid_sentinel_settings_stop_app_startup(sentinel_env, rq_worker_enabled):
     monkeypatch, _ = sentinel_env
-    monkeypatch.setenv("RQ_WORKER_ENABLED", "true")
+    monkeypatch.setenv("RQ_WORKER_ENABLED", rq_worker_enabled)
     monkeypatch.setenv("OPIK_REDIS_SENTINEL_TIMEOUT", "")
     monkeypatch.setattr(redis_utils, "_redis_client", None)
 
     # Unlike an unreachable Redis, which startup only logs, a misconfiguration must not leave a pod running unready
     with pytest.raises(redis_utils.RedisSentinelConfigError, match="OPIK_REDIS_SENTINEL_TIMEOUT must not be empty"):
         create_app(should_init_executor=False)
+
+
+@pytest.mark.parametrize("enabled", ["true", "TRUE", "yes", "On", "1"])
+def test_enables_sentinel_for_the_values_java_accepts(sentinel_env, enabled):
+    monkeypatch, master_name = sentinel_env
+    monkeypatch.setenv("OPIK_REDIS_SENTINEL_ENABLED", enabled)
+
+    client = redis_utils._create_redis_client_from_env(decode_responses=False)
+
+    assert client.connection_pool.service_name == master_name
