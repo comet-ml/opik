@@ -3491,7 +3491,7 @@ describe("OpenRouter request contract", () => {
       request: { ...WITHOUT_MAX_TOKENS, maxTokens: 7372 },
     },
     {
-      model: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
+      model: PROVIDER_MODEL_TYPE.COHERE_COMMAND_A,
       maxTokens: 9000,
       request: { ...WITHOUT_MAX_TOKENS, maxTokens: 8192 },
     },

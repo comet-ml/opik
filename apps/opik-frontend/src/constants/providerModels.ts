@@ -190,14 +190,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1,
       label: "Claude Fable 5.1",
     },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5,
-      label: "Claude Mythos 5",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1,
-      label: "Claude Mythos 5.1",
-    },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
@@ -603,10 +595,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meta-llama/llama-4-scout",
     },
     {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_4_12B,
-      label: "meta-llama/llama-guard-4-12b",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.META_MUSE_GLIMMER_30B,
       label: "meta/muse-glimmer-30b",
     },
@@ -619,16 +607,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meta/muse-spark-1.2",
     },
     {
-      value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_2_CONTRIBUTOR,
-      label: "meta/muse-spark-1.2-contributor",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_3,
       label: "meta/muse-spark-1.3",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_3_CONTRIBUTOR,
-      label: "meta/muse-spark-1.3-contributor",
     },
     {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_4,
@@ -771,14 +751,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "moonshotai/kimi-k3",
     },
     {
-      value: PROVIDER_MODEL_TYPE.MORPH_MORPH_V3_FAST,
-      label: "morph/morph-v3-fast",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MORPH_MORPH_V3_LARGE,
-      label: "morph/morph-v3-large",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_5_MINI,
       label: "nex-agi/nex-n2.5-mini",
     },
@@ -808,24 +780,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nvidia/nemotron-3-super-120b-a12b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_SUPER_120B_A12B_FREE,
-      label: "nvidia/nemotron-3-super-120b-a12b:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_ULTRA_550B_A55B,
       label: "nvidia/nemotron-3-ultra-550b-a55b",
     },
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_ULTRA_550B_A55B_FREE,
       label: "nvidia/nemotron-3-ultra-550b-a55b:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY,
-      label: "nvidia/nemotron-3.5-content-safety",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
-      label: "nvidia/nemotron-3.5-content-safety:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_LIGHTNING,
@@ -1078,10 +1038,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_AUTO_BETA,
       label: "openrouter/auto-beta",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENROUTER_BODYBUILDER,
-      label: "openrouter/bodybuilder",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_FREE,
@@ -1641,10 +1597,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
       label: "Gemini 3.5 Flash Lite",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GEMINI_3_5_TRANSCRIBE,
-      label: "Gemini 3.5 Transcribe",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,

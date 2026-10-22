@@ -229,13 +229,11 @@ anthropic:
   - id: "claude-fable-5-1"
     label: "Claude Fable 5.1"
     structuredOutput: true
+  - id: "claude-3-7-sonnet-20250219"
   - id: "claude-mythos-5"
-    label: "Claude Mythos 5"
     structuredOutput: true
   - id: "claude-mythos-5-1"
-    label: "Claude Mythos 5.1"
     structuredOutput: true
-  - id: "claude-3-7-sonnet-20250219"
   - id: "claude-mythos-preview"
     structuredOutput: true
   - id: "claude-opus-4-1-20250805"
@@ -266,8 +264,6 @@ gemini:
   - id: "gemini-3.5-flash-lite"
     label: "Gemini 3.5 Flash Lite"
     structuredOutput: true
-  - id: "gemini-3.5-transcribe"
-    label: "Gemini 3.5 Transcribe"
   - id: "gemini-3.1-pro-preview"
     label: "Gemini 3.1 Pro Preview"
     structuredOutput: true
@@ -316,6 +312,7 @@ gemini:
   - id: "gemini-3.1-flash-lite-preview"
     structuredOutput: true
   - id: "gemini-3.1-flash-tts-preview"
+  - id: "gemini-3.5-transcribe"
   - id: "gemini-3.8-flash-lite-tts"
   - id: "gemini-3.8-flash-tts"
   - id: "gemini-flash-latest-high-res-exp"
@@ -431,8 +428,6 @@ openrouter:
     supportedParameters: [max_tokens, temperature, top_k, top_p]
   - id: "amazon/nova-micro-v1"
     label: "amazon/nova-micro-v1"
-    supportedParameters: [max_tokens, temperature, top_k, top_p]
-  - id: "amazon/nova-premier-v1"
     supportedParameters: [max_tokens, temperature, top_k, top_p]
   - id: "amazon/nova-pro-v1"
     label: "amazon/nova-pro-v1"
@@ -775,9 +770,6 @@ openrouter:
     label: "inclusionai/ling-3.0-flash"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "inclusionai/ling-3.0-flash-fin"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
   - id: "inclusionai/ling-3.0-flash-vl"
     label: "inclusionai/ling-3.0-flash-vl"
     structuredOutput: true
@@ -828,10 +820,6 @@ openrouter:
     label: "meta-llama/llama-4-scout"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "meta-llama/llama-guard-4-12b"
-    label: "meta-llama/llama-guard-4-12b"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
   - id: "meta/muse-glimmer-30b"
     label: "meta/muse-glimmer-30b"
     structuredOutput: true
@@ -847,18 +835,8 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [xhigh, high, medium, low, minimal]
-  - id: "meta/muse-spark-1.2-contributor"
-    label: "meta/muse-spark-1.2-contributor"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
-    reasoningEfforts: [xhigh, high, medium, low, minimal]
   - id: "meta/muse-spark-1.3"
     label: "meta/muse-spark-1.3"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
-    reasoningEfforts: [max, xhigh, high, medium, low, minimal]
-  - id: "meta/muse-spark-1.3-contributor"
-    label: "meta/muse-spark-1.3-contributor"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, xhigh, high, medium, low, minimal]
@@ -1002,13 +980,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
-  - id: "morph/morph-v3-fast"
-    label: "morph/morph-v3-fast"
-    supportedParameters: [max_tokens, temperature]
-  - id: "morph/morph-v3-large"
-    label: "morph/morph-v3-large"
-    structuredOutput: true
-    supportedParameters: [max_tokens, temperature]
   - id: "nex-agi/nex-n2.5-mini"
     label: "nex-agi/nex-n2.5-mini"
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_k, top_p]
@@ -1019,9 +990,6 @@ openrouter:
     reasoningEfforts: [high, medium, none]
   - id: "nousresearch/hermes-3-llama-3.1-405b"
     label: "nousresearch/hermes-3-llama-3.1-405b"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-  - id: "nousresearch/hermes-3-llama-3.1-70b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
   - id: "nousresearch/hermes-4-405b"
@@ -1040,11 +1008,6 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [medium, low]
-  - id: "nvidia/nemotron-3-super-120b-a12b:free"
-    label: "nvidia/nemotron-3-super-120b-a12b:free"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
-    reasoningEfforts: [medium, low]
   - id: "nvidia/nemotron-3-ultra-550b-a55b"
     label: "nvidia/nemotron-3-ultra-550b-a55b"
     structuredOutput: true
@@ -1054,13 +1017,6 @@ openrouter:
     label: "nvidia/nemotron-3-ultra-550b-a55b:free"
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium]
-  - id: "nvidia/nemotron-3.5-content-safety"
-    label: "nvidia/nemotron-3.5-content-safety"
-    structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-  - id: "nvidia/nemotron-3.5-content-safety:free"
-    label: "nvidia/nemotron-3.5-content-safety:free"
-    supportedParameters: [max_tokens, reasoning, temperature, top_p]
   - id: "nvidia/nemotron-3.5-lightning"
     label: "nvidia/nemotron-3.5-lightning"
     structuredOutput: true
@@ -1350,8 +1306,6 @@ openrouter:
   - id: "openrouter/auto-beta"
     label: "openrouter/auto-beta"
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_a, top_k, top_p]
-  - id: "openrouter/bodybuilder"
-    label: "openrouter/bodybuilder"
   - id: "openrouter/free"
     label: "openrouter/free"
     structuredOutput: true
@@ -1911,6 +1865,14 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
+  - id: "amazon/nova-premier-v1"
+    supportedParameters: [max_tokens, temperature, top_k, top_p]
+  - id: "inclusionai/ling-3.0-flash-fin"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
+  - id: "nousresearch/hermes-3-llama-3.1-70b"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
   - id: "ai21/jamba-large-1.7"
   - id: "ai21/jamba-mini-1.7"
   - id: "aion-labs/aion-1.0"
@@ -2173,9 +2135,20 @@ openrouter:
   - id: "meta-llama/llama-3.3-70b-instruct:free"
   - id: "meta-llama/llama-guard-2-8b"
   - id: "meta-llama/llama-guard-3-8b"
+  - id: "meta-llama/llama-guard-4-12b"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
   - id: "meta-llama/llama-guard-4-12b:free"
   - id: "meta/muse-glimmer-30b:batch"
     structuredOutput: true
+  - id: "meta/muse-spark-1.2-contributor"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    reasoningEfforts: [xhigh, high, medium, low, minimal]
+  - id: "meta/muse-spark-1.3-contributor"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    reasoningEfforts: [max, xhigh, high, medium, low, minimal]
   - id: "microsoft/mai-ds-r1"
   - id: "microsoft/mai-ds-r1:free"
   - id: "microsoft/phi-3-medium-128k-instruct"
@@ -2259,6 +2232,11 @@ openrouter:
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
   - id: "moonshotai/kimi-linear-48b-a3b-instruct"
+  - id: "morph/morph-v3-fast"
+    supportedParameters: [max_tokens, temperature]
+  - id: "morph/morph-v3-large"
+    structuredOutput: true
+    supportedParameters: [max_tokens, temperature]
   - id: "neversleep/llama-3.1-lumimaid-8b"
   - id: "neversleep/noromaid-20b"
   - id: "nex-agi/deepseek-v3.1-nex-n1"
@@ -2277,7 +2255,16 @@ openrouter:
   - id: "nvidia/llama-3.1-nemotron-ultra-253b-v1"
   - id: "nvidia/llama-3.3-nemotron-super-49b-v1.5"
   - id: "nvidia/nemotron-3-nano-30b-a3b:free"
+  - id: "nvidia/nemotron-3-super-120b-a12b:free"
+    structuredOutput: true
+    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [medium, low]
   - id: "nvidia/nemotron-3-ultra-550b-a55b:batch"
+  - id: "nvidia/nemotron-3.5-content-safety"
+    structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
+  - id: "nvidia/nemotron-3.5-content-safety:free"
+    supportedParameters: [max_tokens, reasoning, temperature, top_p]
   - id: "nvidia/nemotron-nano-12b-v2-vl"
   - id: "nvidia/nemotron-nano-12b-v2-vl:free"
   - id: "nvidia/nemotron-nano-9b-v2"
@@ -2470,6 +2457,7 @@ openrouter:
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning]
   - id: "opengvlab/internvl3-78b"
+  - id: "openrouter/bodybuilder"
   - id: "openrouter/elephant-alpha"
   - id: "openrouter/healer-alpha"
   - id: "openrouter/hunter-alpha"
