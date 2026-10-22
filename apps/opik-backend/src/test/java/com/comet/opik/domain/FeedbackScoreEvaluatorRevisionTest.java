@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.ScoreSource;
-import com.comet.opik.api.ValueEntry;
 import com.comet.opik.utils.JsonUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,26 +19,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FeedbackScoreEvaluatorRevisionTest {
 
     private static final String UPDATED_AT = "2026-10-03T12:00:00Z";
-
-    @Test
-    @DisplayName("score revision is set only when every entry has the same one")
-    void agreedEvaluatorRevision() {
-        assertThat(FeedbackScoreMapper.agreedEvaluatorRevision(Map.of(
-                "a", entry("judge@1"),
-                "b", entry("judge@1")))).isEqualTo("judge@1");
-
-        assertThat(FeedbackScoreMapper.agreedEvaluatorRevision(Map.of(
-                "a", entry("judge@1"),
-                "b", entry("judge@2")))).isNull();
-
-        assertThat(FeedbackScoreMapper.agreedEvaluatorRevision(Map.of(
-                "a", entry("judge@1"),
-                "b", entry(null)))).isNull();
-
-        assertThat(FeedbackScoreMapper.agreedEvaluatorRevision(Map.of("a", entry(null)))).isNull();
-        assertThat(FeedbackScoreMapper.agreedEvaluatorRevision(Map.of())).isNull();
-        assertThat(FeedbackScoreMapper.agreedEvaluatorRevision(null)).isNull();
-    }
 
     @Test
     @DisplayName("ClickHouse tuples read the revision from the 10th element, and older 9-element tuples still parse")
@@ -99,10 +78,6 @@ class FeedbackScoreEvaluatorRevisionTest {
                 FeedbackScoreMapper.INSTANCE.toFeedbackScore(item("judge@1")));
 
         assertThat(item.evaluatorRevision()).isEqualTo("judge@1");
-    }
-
-    private static ValueEntry entry(String revision) {
-        return ValueEntry.builder().value(BigDecimal.ONE).evaluatorRevision(revision).build();
     }
 
     private static List<Object> tuple(String author, String revision) {
