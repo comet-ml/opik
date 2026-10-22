@@ -607,7 +607,7 @@ print(json.dumps(result))
         assert_log_field(stdout_log, "attributes", expected_value={})
 
 
-def test_executor_when_child_exits_without_reading_stdin(mock_backend):
+def test_executor_when_child_exits_without_reading_stdin(mock_backend, caplog):
     """A child that never reads stdin must not turn a successful run into an error."""
     pytest.importorskip("requests")
 
@@ -638,13 +638,14 @@ print(json.dumps({"status": "ok"}))
             tmp.flush()
             # Larger than the OS pipe buffer, so the stdin write is guaranteed to
             # hit the closed pipe instead of depending on scheduling.
-            result = executor.execute(
-                file_path=tmp.name,
-                data={"blob": "x" * (1024 * 1024)},
-                env_vars={"OPIK_API_KEY": "pipe_key", "OPIK_WORKSPACE": "pipe_ws"},
-                optimization_id="opt_pipe",
-                job_id="job_pipe",
-            )
+            with caplog.at_level("WARNING", logger="opik_backend.executor_isolated"):
+                result = executor.execute(
+                    file_path=tmp.name,
+                    data={"blob": "x" * (1024 * 1024)},
+                    env_vars={"OPIK_API_KEY": "pipe_key", "OPIK_WORKSPACE": "pipe_ws"},
+                    optimization_id="opt_pipe",
+                    job_id="job_pipe",
+                )
         finally:
             try:
                 os.unlink(tmp.name)
@@ -652,3 +653,12 @@ print(json.dumps({"status": "ok"}))
                 pass
 
         assert result == {"status": "ok"}
+        warnings = [
+            r.getMessage()
+            for r in caplog.records
+            if "closed stdin before reading its input" in r.getMessage()
+        ]
+        assert len(warnings) == 1
+        assert "job_id=job_pipe" in warnings[0]
+        assert "optimization_id=opt_pipe" in warnings[0]
+        assert "pipe_key" not in warnings[0]
