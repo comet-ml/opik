@@ -7,10 +7,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.redisson.api.RBucketReactive;
 import org.redisson.api.RRateLimiterReactive;
 import org.redisson.api.RateType;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.client.RedisException;
+import org.redisson.client.codec.Codec;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -19,15 +21,17 @@ import java.time.Duration;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link RedisRateLimitService#isLimitExceeded} focused on the fail-open safety net:
- * when the underlying Redisson limiter errors (e.g. the 4.8.0 throttle-path "arithmetic on a nil value"
- * script desync), the service must treat the request as not limited rather than propagating the error,
- * which would surface as an HTTP 500 on ingestion. The normal allow/deny paths are asserted alongside it.
+ * Unit tests for {@link RedisRateLimitService}. Two concerns are covered: the acquire-path fail-open safety net
+ * (a Redisson limiter error, e.g. the 4.8.0 "arithmetic on a nil value" desync, must be treated as "not limited"
+ * rather than surfacing as an HTTP 500 on ingestion), and the header path being read-only — availableEvents must
+ * read the counter without invoking the mutating availablePermits script that strips the key's TTL (OPIK-8923).
  */
 @ExtendWith(MockitoExtension.class)
 class RedisRateLimitServiceTest {
@@ -41,12 +45,16 @@ class RedisRateLimitServiceTest {
     @Mock
     private RRateLimiterReactive rateLimiter;
 
+    @Mock
+    private RBucketReactive<Long> valueBucket;
+
     private RedisRateLimitService rateLimitService;
 
     @BeforeEach
     void setUp() {
-        when(redisClient.getRateLimiter(anyString())).thenReturn(rateLimiter);
-        when(rateLimiter.trySetRate(any(RateType.class), anyLong(), any(Duration.class), any(Duration.class)))
+        // Lenient: the acquire-path tests use the limiter, the read-only header-path tests use the bucket.
+        lenient().when(redisClient.getRateLimiter(anyString())).thenReturn(rateLimiter);
+        lenient().when(rateLimiter.trySetRate(any(RateType.class), anyLong(), any(Duration.class), any(Duration.class)))
                 .thenReturn(Mono.just(true));
         rateLimitService = new RedisRateLimitService(redisClient);
     }
@@ -109,9 +117,39 @@ class RedisRateLimitServiceTest {
     }
 
     @Test
+    void availableEventsReadsCounterWithoutWriting() {
+        // The header value is a plain read of the counter key: no SET/EXPIRE on it, and never the mutating
+        // availablePermits() that would strip its TTL (OPIK-8923).
+        when(redisClient.<Long>getBucket(anyString(), any(Codec.class))).thenReturn(valueBucket);
+        when(valueBucket.get()).thenReturn(Mono.just(7L));
+
+        StepVerifier.create(rateLimitService.availableEvents(bucketName(), limitConfig()))
+                .expectNext(7L)
+                .verifyComplete();
+
+        verify(valueBucket).get();
+        verifyNoMoreInteractions(valueBucket);
+        verify(rateLimiter, never()).availablePermits();
+        verify(redisClient, never()).getRateLimiter(anyString());
+    }
+
+    @Test
+    void availableEventsReturnsLimitWhenCounterAbsent() {
+        // Absent counter key = fresh/idle bucket → report the full configured limit.
+        when(redisClient.<Long>getBucket(anyString(), any(Codec.class))).thenReturn(valueBucket);
+        when(valueBucket.get()).thenReturn(Mono.empty());
+        LimitConfig config = limitConfig();
+
+        StepVerifier.create(rateLimitService.availableEvents(bucketName(), config))
+                .expectNext(config.limit())
+                .verifyComplete();
+    }
+
+    @Test
     void availableEventsFailsSafeWhenLimiterErrors() {
-        // Header metadata runs in the interceptor's finally; a limiter error must not escape as a 500.
-        when(rateLimiter.availablePermits()).thenReturn(Mono.error(new RedisException("boom")));
+        // Header metadata runs in the interceptor's finally; a read error must not escape as a 500.
+        when(redisClient.<Long>getBucket(anyString(), any(Codec.class))).thenReturn(valueBucket);
+        when(valueBucket.get()).thenReturn(Mono.error(new RedisException("boom")));
         LimitConfig config = limitConfig();
 
         StepVerifier.create(rateLimitService.availableEvents(bucketName(), config))
