@@ -682,6 +682,47 @@ export interface SpanReadPage {
 }
 
 /**
+ * One row of a PROJECT-level traces or spans list read.
+ *
+ * Separate from `SpanReadRef`, which is the trace-scoped span tree's shape: the
+ * fields here are the ones the Logs table sorts and truncates on, and `duration`
+ * is the one a sort order is asserted against.
+ *
+ * `input`/`output`/`metadata` are kept as the server sent them so a caller can
+ * measure what `truncate=true` did to each — the whole point of asking for the
+ * slim copies is that they are SHORTER, not that they are absent, and `null` and
+ * `''` are different answers about a payload the slim path blanked.
+ */
+export interface LogsRowRef {
+  id: string;
+  name: string;
+  /**
+   * Milliseconds, as the list reports it. Nullable because the API's own shape
+   * makes it so — a row still being written has no end time and so no duration —
+   * and a caller comparing a sort order has to assert it arrived rather than sort
+   * a column of nulls and call the result ordered.
+   */
+  duration: number | null;
+  input: unknown;
+  output: unknown;
+  metadata: unknown;
+}
+
+/**
+ * One page of a project-level `GET /v1/private/traces` or `GET /v1/private/spans`.
+ *
+ * `sortableBy` is the gate's only external signal. `ScopeMetadata.canUseDynamicSorting()`
+ * decides it from the project's size estimate, and opik#9149 rewrote the query
+ * behind that estimate — so an empty `sortable_by` on a small project is the
+ * regression, and it is invisible to any read that only collects rows.
+ */
+export interface LogsReadPage {
+  total: number;
+  sortableBy: string[];
+  rows: LogsRowRef[];
+}
+
+/**
  * One trace of a `POST /v1/private/traces/batch` write.
  *
  * `input`/`output` are the JSON sections the compare grid renders per
@@ -4257,6 +4298,82 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * One page of a PROJECT-level `GET /v1/private/traces` or `/v1/private/spans`,
+     * carrying `sortable_by` and whatever `sorting` and `truncate` were asked for.
+     *
+     * Through `rawFetch` rather than the pinned SDK for two reasons the generated
+     * client cannot serve: it drops `sortable_by` from the envelope entirely, and
+     * it has no `truncate` parameter at all — so the two signals this read exists
+     * to report would both be invisible.
+     *
+     * `sorting` travels as the grids serialise it (`[{"field":…,"direction":…}]`),
+     * which is the WIRE shape and deliberately not the TanStack `{id, desc}` shape
+     * the URL carries; a spec asserting both is asserting that the table and the
+     * API agree, so the two must be spelled separately.
+     */
+    async listLogsPage(args: {
+      entity: 'traces' | 'spans';
+      projectId: string;
+      sorting?: BackendSort[];
+      truncate?: boolean;
+      size?: number;
+    }): Promise<LogsReadPage> {
+      const query = new URLSearchParams({
+        project_id: args.projectId,
+        page: '1',
+        size: String(args.size ?? 100),
+      });
+      if (args.sorting?.length) query.set('sorting', JSON.stringify(args.sorting));
+      // Only when asked: the endpoint's default is false, and sending
+      // `truncate=false` explicitly is a different request from sending nothing.
+      if (args.truncate !== undefined) query.set('truncate', String(args.truncate));
+
+      const { status, message, json } = await rawFetch('GET', `/v1/private/${args.entity}`, {
+        query,
+      });
+      if (status !== 200) {
+        throw new Error(
+          `listLogsPage(${args.entity} of project ${args.projectId}): expected 200, ` +
+            `got ${status}: ${message}`,
+        );
+      }
+      const page = (json ?? {}) as {
+        total?: number;
+        sortable_by?: unknown;
+        content?: Array<Record<string, unknown>>;
+      };
+      if (typeof page.total !== 'number') {
+        throw new Error(
+          `listLogsPage(${args.entity}): 200 response carried no numeric 'total' — ` +
+            'the envelope is what a dropped row shows up in, so it cannot be assumed.',
+        );
+      }
+      // Asserted rather than defaulted to `[]`: "the gate withdrew sorting" and
+      // "the endpoint stopped reporting the field" are different findings, and
+      // coalescing them would retire the only signal the gate has.
+      if (!Array.isArray(page.sortable_by)) {
+        throw new Error(
+          `listLogsPage(${args.entity}): 200 response carried no 'sortable_by' array — ` +
+            'that field is the dynamic-sorting gate\'s only external signal.',
+        );
+      }
+      return {
+        total: page.total,
+        sortableBy: page.sortable_by.map(String),
+        rows: (page.content ?? []).map((r) => ({
+          id: String(r.id ?? ''),
+          name: String(r.name ?? ''),
+          duration: typeof r.duration === 'number' ? r.duration : null,
+          // Left exactly as sent, `undefined` included: a key the slim path
+          // omitted and one it blanked are different answers.
+          input: r.input,
+          output: r.output,
+          metadata: r.metadata,
+        })),
+      };
+    },
+
+    /**
      * One page of `GET /v1/private/spans` for a trace, envelope and all.
      *
      * Distinct from `listSpanRefs`, which pages the whole project through
@@ -4351,6 +4468,16 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * everything else is what a missed lookup destroys.
        */
       tags?: string[];
+      /**
+       * Metadata, for an update that has to carry a payload FIELD rather than
+       * only a tag.
+       *
+       * Needed by the update-before-create case (opik#9146): the merge there is
+       * only observable if the update and the create each contribute a field the
+       * other does not, so the update has to write something the create is
+       * silent about. A tags-only PATCH cannot show which side won a payload.
+       */
+      metadata?: Record<string, unknown>;
     }): Promise<RawApiResult> {
       const { status, message } = await rawFetch('PATCH', `/v1/private/spans/${args.spanId}`, {
         body: {
@@ -4359,6 +4486,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           ...(args.parentSpanId === undefined ? {} : { parent_span_id: args.parentSpanId }),
           ...(args.output === undefined ? {} : { output: args.output }),
           ...(args.tags === undefined ? {} : { tags: args.tags }),
+          ...(args.metadata === undefined ? {} : { metadata: args.metadata }),
         },
       });
       return { status, message };

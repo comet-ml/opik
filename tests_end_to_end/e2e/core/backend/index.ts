@@ -41,6 +41,8 @@ export {
   type TrackedSpanRef,
   type SpanReadRef,
   type SpanReadPage,
+  type LogsRowRef,
+  type LogsReadPage,
   type SpanBatchSeed,
   type OtelSpanSeed,
   type OtelExportSpanSeed,
