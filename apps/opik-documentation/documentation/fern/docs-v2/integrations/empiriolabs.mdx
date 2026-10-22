@@ -73,6 +73,29 @@ EmpirioLabs AI supports the following methods through the OpenAI SDK:
 - `client.chat.completions.parse()`: Works with models that support JSON Schema output, such as `qwen3-8-flash`
 - Each model's page in the [model catalog](https://docs.empiriolabs.ai/models-pricing) lists its structured output support
 
+Define the schema as a Pydantic model, pass it as `response_format`, and read the result from `message.parsed`:
+
+```python wordWrap
+from pydantic import BaseModel
+
+
+class City(BaseModel):
+    name: str
+    country: str
+
+
+completion = client.chat.completions.parse(
+    model="qwen3-8-flash",
+    messages=[
+        {"role": "user", "content": "Name one city in Japan."}
+    ],
+    response_format=City,
+)
+
+city = completion.choices[0].message.parsed
+print(city.name, city.country)
+```
+
 For detailed information about available methods and parameters, refer to the [EmpirioLabs AI documentation](https://docs.empiriolabs.ai).
 
 ## Advanced Usage
