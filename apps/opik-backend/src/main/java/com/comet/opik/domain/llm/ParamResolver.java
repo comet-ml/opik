@@ -147,7 +147,7 @@ public class ParamResolver {
         if (request.customParameters() != null
                 && request.customParameters().get(THINKING) instanceof Map<?, ?> thinking
                 && thinking.get(LEVEL) instanceof String level) {
-            offeredGeminiLevel(model, level).ifPresent(offered -> {
+            nearestOfferedThinkingLevel(model, level).ifPresent(offered -> {
                 var nextThinking = new LinkedHashMap<String, Object>();
                 thinking.forEach((key, value) -> nextThinking.put(String.valueOf(key), value));
                 nextThinking.put(LEVEL, offered);
@@ -174,7 +174,7 @@ public class ParamResolver {
         var resolved = parameters;
 
         var offeredLevel = judgeThinkingLevel(parameters.customParameters())
-                .flatMap(level -> offeredGeminiLevel(model, level));
+                .flatMap(level -> nearestOfferedThinkingLevel(model, level));
         if (offeredLevel.isPresent()) {
             var customParameters = (ObjectNode) parameters.customParameters().deepCopy();
             ((ObjectNode) customParameters.get(THINKING)).put(LEVEL, offeredLevel.get());
@@ -254,10 +254,10 @@ public class ParamResolver {
     // Gemini answers a level its model doesn't offer with a 400 ("minimal" on gemini-3.8-flash), so it moves to the
     // nearest offered one, the lower on a tie, as the frontend's model switch does: minimal becomes low, not the
     // model's default, which may think the most. Never to none, which turns thinking off instead.
-    private Optional<String> offeredGeminiLevel(String model, String level) {
+    private Optional<String> nearestOfferedThinkingLevel(String model, String level) {
         var requested = level.toLowerCase(Locale.ROOT);
         var rank = THINKING_LEVELS.indexOf(requested);
-        var offered = geminiLevels(model);
+        var offered = offeredThinkingLevels(model);
         if (rank < 0 || offered.isEmpty() || offered.contains(requested)) {
             return Optional.empty();
         }
@@ -268,7 +268,7 @@ public class ParamResolver {
     }
 
     // The catalog's effort levels are a Gemini model's thinking levels.
-    private List<String> geminiLevels(String model) {
+    private List<String> offeredThinkingLevels(String model) {
         if (model == null) {
             return List.of();
         }

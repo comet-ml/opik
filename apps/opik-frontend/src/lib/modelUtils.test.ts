@@ -12,6 +12,7 @@ import {
   getThinkingLevelOptions,
   isAnthropicThinkingRequested,
   isReasoningModel,
+  EffortParams,
   resolveEffort,
   resolveSamplingParams,
   resolveThinkingLevel,
@@ -1845,6 +1846,52 @@ describe("resolveEffort", () => {
     expect(
       resolveEffort(PROVIDER_MODEL_TYPE.GPT_5, { reasoningEffort: "minimal" }),
     ).toEqual({ reasoningEffort: "minimal" });
+  });
+
+  // The judge sends custom_parameters.reasoning_effort in place of the typed one.
+  it.each([
+    [{ custom_parameters: { reasoning_effort: "none" } }, "none"],
+    [
+      {
+        reasoningEffort: "low",
+        custom_parameters: { reasoning_effort: "none" },
+      },
+      "none",
+    ],
+    [
+      {
+        reasoningEffort: "low",
+        custom_parameters: { reasoning_effort: "extreme" },
+      },
+      "low",
+    ],
+    [
+      { reasoningEffort: "low", custom_parameters: { reasoning_effort: 1 } },
+      "low",
+    ],
+  ] as const)(
+    "reads an OpenAI effort saved under custom_parameters first (%o)",
+    (configs, effort) => {
+      expect(
+        resolveEffort(PROVIDER_MODEL_TYPE.GPT_6_LUNA, configs as EffortParams),
+      ).toEqual({ reasoningEffort: effort });
+    },
+  );
+
+  it("keeps the temperature of a reasoning model whose saved custom_parameters effort is none", () => {
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_6_LUNA, {
+        temperature: 0,
+        topP: 0.5,
+        custom_parameters: { reasoning_effort: "none" },
+      }),
+    ).toEqual({ temperature: 0, topP: 0.5 });
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_5_4, {
+        temperature: 0,
+        custom_parameters: { reasoning_effort: "low" },
+      }),
+    ).toEqual({});
   });
 
   it("falls back to the model's default for a reasoningEffort the model does not offer", () => {

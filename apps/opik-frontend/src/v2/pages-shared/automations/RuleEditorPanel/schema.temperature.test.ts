@@ -4,10 +4,14 @@ import { convertLLMJudgeDataToLLMJudgeObject } from "./schema";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { LLM_JUDGE } from "@/types/llm";
 
-const asFormData = (model: PROVIDER_MODEL_TYPE, temperature?: number) =>
+const asFormData = (
+  model: PROVIDER_MODEL_TYPE,
+  temperature?: number,
+  customParameters: Record<string, unknown> | null = null,
+) =>
   ({
     model,
-    config: { temperature, seed: null, custom_parameters: null },
+    config: { temperature, seed: null, custom_parameters: customParameters },
     template: LLM_JUDGE.custom,
     messages: [],
     variables: {},
@@ -54,6 +58,31 @@ describe("LLM judge temperature on save", () => {
   it("keeps the temperature for a Gemini thinking model, which does take one", () => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
       asFormData(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, 0.3),
+    );
+
+    expect(object.model.temperature).toBe(0.3);
+  });
+
+  // OpenAI: "When reasoning effort is not none, remove temperature, top_p, and top_logprobs".
+  it("keeps it for an OpenAI reasoning model whose saved effort is none, and only then", () => {
+    const atNone = convertLLMJudgeDataToLLMJudgeObject(
+      asFormData(PROVIDER_MODEL_TYPE.GPT_6_LUNA, 0, {
+        reasoning_effort: "none",
+      }),
+    );
+    const atLow = convertLLMJudgeDataToLLMJudgeObject(
+      asFormData(PROVIDER_MODEL_TYPE.GPT_5_4, 0, { reasoning_effort: "low" }),
+    );
+
+    expect(atNone.model.temperature).toBe(0);
+    expect(atLow.model.temperature).toBeUndefined();
+  });
+
+  it("keeps a Claude temperature in the rule while a saved effort makes it think", () => {
+    const object = convertLLMJudgeDataToLLMJudgeObject(
+      asFormData(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, 0.3, {
+        output_config: { effort: "high" },
+      }),
     );
 
     expect(object.model.temperature).toBe(0.3);

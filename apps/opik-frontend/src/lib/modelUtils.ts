@@ -27,6 +27,7 @@ import {
   isCustomProviderModel,
 } from "@/lib/modelCapabilities";
 import isPlainObject from "lodash/isPlainObject";
+import isString from "lodash/isString";
 import isEmpty from "lodash/isEmpty";
 import omit from "lodash/omit";
 import sortBy from "lodash/sortBy";
@@ -600,6 +601,15 @@ export const getDefaultThinkingEffort = (
 const asRecord = (value: unknown): Record<string, unknown> =>
   isPlainObject(value) ? (value as Record<string, unknown>) : {};
 
+// A judge rule saves an OpenAI effort under custom_parameters, and the backend sends that key in place
+// of the typed reasoning_effort, so it is the effort the judge runs at.
+const getCustomParametersReasoningEffort = (
+  customParameters: unknown,
+): string | undefined => {
+  const effort = asRecord(customParameters).reasoning_effort;
+  return isString(effort) ? effort : undefined;
+};
+
 /**
  * The effort a config holds under custom_parameters.output_config, which is where the request
  * carries it. Surfaces that store the request shape and load it back (a saved optimization run, an
@@ -1144,7 +1154,8 @@ export type EffortParams = {
  * Both defaults are the model's own (none on gpt-5.1 to gpt-5.4, medium on Opus 5.5). An Anthropic
  * effort under custom_parameters counts as stored too: the flat one wins when the model offers it,
  * else the nested one does, so a reloaded request shape shows the level it will send and a stale
- * flat value cannot override a valid nested one.
+ * flat value cannot override a valid nested one. An OpenAI one under custom_parameters wins over the
+ * flat one, as it does on the backend.
  */
 export const resolveEffort = (
   model: PROVIDER_MODEL_TYPE | "",
@@ -1162,11 +1173,13 @@ export const resolveEffort = (
     if (options.length === 0) {
       return {};
     }
-    return {
-      reasoningEffort: options.some((o) => o.value === configs.reasoningEffort)
-        ? configs.reasoningEffort
-        : getDefaultReasoningEffort(model),
-    };
+    const stored = [
+      getCustomParametersReasoningEffort(configs.custom_parameters),
+      configs.reasoningEffort,
+    ]
+      .map((effort) => options.find((o) => o.value === effort)?.value)
+      .find((effort) => effort !== undefined);
+    return { reasoningEffort: stored ?? getDefaultReasoningEffort(model) };
   }
 
   if (provider === PROVIDER_TYPE.ANTHROPIC) {

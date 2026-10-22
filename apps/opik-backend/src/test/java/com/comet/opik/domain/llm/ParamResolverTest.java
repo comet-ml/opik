@@ -574,7 +574,7 @@ class ParamResolverTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"low,none,true", "none,low,false"})
+    @CsvSource({"low,none,true", "none,low,false", "low,'  ',false", "none,'',true"})
     void readsTheEffortAnExtraBodyKeySendsInsteadOfTheTypedOne(String typed, String extraBody, boolean keeps) {
         var request = effortRequest("gpt-5.4", typed, Map.of("reasoning_effort", extraBody));
 
@@ -597,7 +597,8 @@ class ParamResolverTest {
     @ParameterizedTest
     @CsvSource(delimiter = '|', nullValues = "null", value = {
             "gpt-5.4 | null",
-            "gpt-6-luna | {\"reasoning_effort\": \"none\"}"})
+            "gpt-6-luna | {\"reasoning_effort\": \"none\"}",
+            "gpt-5.4 | {\"reasoning_effort\": \"  \"}"})
     void keepsAJudgeTemperatureWhenTheJudgeRunsAtEffortNone(String model, String customParameters) {
         var parameters = judge(model, 0.0, customParameters);
 
@@ -607,7 +608,8 @@ class ParamResolverTest {
     @ParameterizedTest
     @CsvSource(delimiter = '|', nullValues = "null", value = {
             "gpt-6-luna | null",
-            "gpt-5.4 | {\"reasoning_effort\": \"low\"}"})
+            "gpt-5.4 | {\"reasoning_effort\": \"low\"}",
+            "gpt-6-luna | {\"reasoning_effort\": \" \"}"})
     void dropsAJudgeTemperatureWhenTheJudgeReasons(String model, String customParameters) {
         assertThat(shippedOpenAiResolver(model).resolve(judge(model, 0.0, customParameters)))
                 .isEqualTo(resolution(judge(model, null, customParameters), TEMPERATURE_REFUSED));
