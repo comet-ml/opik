@@ -1414,6 +1414,8 @@ def thinking_models_without_effort(
     missing = []
     for provider_key in ("gemini", "vertexai"):
         yaml_key = _PROVIDER_TO_YAML_KEY[provider_key]
+        provider_profile = ((catalog.get("defaults") or {}).get(yaml_key) or {}).get("profile")
+        default_effort = (profiles.get(provider_profile) or {}).get("effort") or {}
         rows = {row.get("id"): row for row in (catalog.get("models") or {}).get(yaml_key) or []}
         for entry in dropdown_by_provider.get(provider_key, []):
             info = _litellm_info(prices, provider_key, entry.value)
@@ -1421,7 +1423,13 @@ def thinking_models_without_effort(
                 continue
             model_id = entry.value.removeprefix("vertex_ai/")
             row = rows.get(model_id) or {}
-            if "effort" in (row.get("params") or {}) or "effort" in (profiles.get(row.get("profile")) or {}):
+            own_effort = {
+                **((profiles.get(row.get("profile")) or {}).get("effort") or {}),
+                **((row.get("params") or {}).get("effort") or {}),
+            }
+            # The provider profile's {accepted: false} is only the fallback for a model nobody wrote levels for; a
+            # refusal in the model's own row or profile is a decision.
+            if {**default_effort, **own_effort}.get("levels") or own_effort.get("accepted") is False:
                 continue
             missing.append(f"{yaml_key}/{model_id}")
     return missing
