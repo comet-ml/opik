@@ -29,17 +29,20 @@ public class ExperimentItemPublisher {
     private final ExperimentExecutionConfig config;
     private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
     private final ExperimentCancellationService cancellationService;
+    private final ExperimentItemLedger itemLedger;
 
     @Inject
     public ExperimentItemPublisher(
             @NonNull RedissonReactiveClient redisClient,
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig config,
             @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService,
-            @NonNull ExperimentCancellationService cancellationService) {
+            @NonNull ExperimentCancellationService cancellationService,
+            @NonNull ExperimentItemLedger itemLedger) {
         this.redisClient = redisClient;
         this.config = config;
         this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
         this.cancellationService = cancellationService;
+        this.itemLedger = itemLedger;
     }
 
     /**
@@ -91,8 +94,7 @@ public class ExperimentItemPublisher {
      * those writes a status nothing will ever stamp finished, which reads as a run still going.
      */
     public Mono<Boolean> isTracked(@NonNull String workspaceId, @NonNull UUID experimentId) {
-        return redisClient.getAtomicLong(ExperimentExecutionConfig.itemCounterKey(workspaceId, experimentId))
-                .isExists();
+        return itemLedger.hasTotal(workspaceId, experimentId);
     }
 
     /**

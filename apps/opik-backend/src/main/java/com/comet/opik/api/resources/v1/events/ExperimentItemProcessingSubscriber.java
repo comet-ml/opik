@@ -97,6 +97,24 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                 .contextWrite(buildReactorContext(message));
     }
 
+    /**
+     * Counts an entry the stream gives up on as failed. Without an outcome it is never counted, so its run cannot
+     * drain; and an entry that has one may be the last, whose finish failed on every delivery. Recording keeps an
+     * outcome already there, then the finish is tried once more. Best effort: the base logs an error and removes
+     * the entry anyway.
+     */
+    @Override
+    protected Mono<Void> onRetired(ExperimentItemToProcess message, StreamMessageId entryId, Throwable error) {
+        log.warn("Recording a retired entry as failed, entryId '{}', experimentId '{}'", entryId,
+                message.experimentId(), error);
+        return itemLedger.hasTotal(message.workspaceId(), message.experimentId())
+                .filter(Boolean::booleanValue)
+                .flatMap(tracked -> itemLedger.record(message.workspaceId(), message.experimentId(), entryId,
+                        Outcome.FAILED))
+                .then(Mono.defer(() -> finishIfDrained(message)))
+                .contextWrite(buildReactorContext(message));
+    }
+
     private Mono<Void> runAndRecord(ExperimentItemToProcess message, StreamMessageId entryId) {
         return cancellationService.isCancelled(message.workspaceId(), message.experimentId())
                 .flatMap(cancelled -> cancelled

@@ -84,7 +84,7 @@ class ExperimentCancellationServiceTest {
         ledger = new ExperimentItemLedger(redissonClient, config);
         service = new ExperimentCancellationService(redissonClient, config, ledger);
         publisher = new ExperimentItemPublisher(redissonClient, config,
-                mock(TestSuiteAssertionCounterService.class), service);
+                mock(TestSuiteAssertionCounterService.class), service, ledger);
     }
 
     @Test

@@ -781,7 +781,7 @@ public class ExperimentService {
      * re-aggregates the experiment, so only the first one writes.
      */
     public Mono<Void> stampFinished(@NonNull UUID id) {
-        return experimentDAO.getById(id)
+        return experimentDAO.getMetadataById(id)
                 .filter(experiment -> experiment.finishedAt() == null)
                 .flatMap(unstamped -> update(id, ExperimentUpdate.builder().finished(true).build()));
     }

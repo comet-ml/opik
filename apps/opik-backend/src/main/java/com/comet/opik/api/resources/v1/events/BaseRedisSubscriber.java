@@ -755,7 +755,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private Mono<Void> notifyRetired(List<ProcessingResult> retired) {
         return Flux.fromIterable(retired)
                 .filter(failure -> failure.message() != null)
-                .flatMap(failure -> Mono.defer(() -> onRetired((M) failure.message(), failure.error()))
+                .flatMap(failure -> Mono.defer(
+                        () -> onRetired((M) failure.message(), failure.messageId(), failure.error()))
                         .subscribeOn(workersScheduler)
                         .onErrorResume(throwable -> {
                             log.error("Failed to handle retired messageId '{}'", failure.messageId(), throwable);
@@ -768,6 +769,14 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     // a terminal outcome for it. Best effort: an error here is logged and the message is removed anyway.
     protected Mono<Void> onRetired(M message, Throwable error) {
         return Mono.empty();
+    }
+
+    /**
+     * The same, for a subscriber that keys what it records on the stream entry, as
+     * {@link #processEvent(Object, StreamMessageId)} does.
+     */
+    protected Mono<Void> onRetired(M message, StreamMessageId messageId, Throwable error) {
+        return onRetired(message, error);
     }
 
     private boolean maxRetriesReached(ProcessingResult failure) {

@@ -473,4 +473,32 @@ class ExperimentItemProcessingSubscriberTest {
         verify(itemProcessor, never()).process(any());
         verify(itemLedger, never()).record(any(), any(), any(), any());
     }
+
+    // An entry the stream gives up on before its outcome landed was never counted, so its run could not drain
+    // and stayed RUNNING with no finish. Recording it as failed lets the drain settle the run.
+    @Test
+    @DisplayName("should record a retired entry as failed and settle the run it drains")
+    void retiredEntryIsRecordedFailedAndSettles() {
+        var experimentId = UUID.randomUUID();
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
+        when(itemLedger.failures(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(1L));
+        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+
+        subscriber.onRetired(buildMessage(experimentId), ENTRY, new IllegalStateException("redis")).block();
+
+        verify(itemLedger).record(WORKSPACE_ID, experimentId, ENTRY, Outcome.FAILED);
+        verify(experimentService).update(eq(experimentId), argThat(
+                update -> update.status() == ExperimentStatus.FAILED));
+    }
+
+    @Test
+    @DisplayName("should not record a retired entry of a run whose total is gone")
+    void retiredEntryOfAnAbortedRunIsNotRecorded() {
+        var experimentId = UUID.randomUUID();
+        when(itemLedger.hasTotal(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+
+        subscriber.onRetired(buildMessage(experimentId), ENTRY, new IllegalStateException("redis")).block();
+
+        verify(itemLedger, never()).record(any(), any(), any(), any());
+    }
 }

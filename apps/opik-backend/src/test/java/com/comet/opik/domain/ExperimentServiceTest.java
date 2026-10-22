@@ -147,6 +147,7 @@ class ExperimentServiceTest {
                     .id(experimentId)
                     .finishedAt(null)
                     .build();
+            when(experimentDAO.getMetadataById(experimentId)).thenReturn(Mono.just(unstamped));
             when(experimentDAO.getById(experimentId)).thenReturn(Mono.just(unstamped));
             when(experimentDAO.update(eq(experimentId), any(ExperimentUpdate.class))).thenReturn(Mono.empty());
 
@@ -169,7 +170,7 @@ class ExperimentServiceTest {
                     .id(experimentId)
                     .finishedAt(Instant.now())
                     .build();
-            when(experimentDAO.getById(experimentId)).thenReturn(Mono.just(stamped));
+            when(experimentDAO.getMetadataById(experimentId)).thenReturn(Mono.just(stamped));
 
             StepVerifier.create(experimentService.stampFinished(experimentId)
                     .contextWrite(ctx -> ctx
@@ -177,6 +178,7 @@ class ExperimentServiceTest {
                             .put(RequestContext.USER_NAME, TEST_USER_NAME)))
                     .verifyComplete();
 
+            verify(experimentDAO, never()).getById(any());
             verify(experimentDAO, never()).update(any(UUID.class), any(ExperimentUpdate.class));
             verify(eventBus, never()).post(any());
         }
