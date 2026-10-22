@@ -1042,7 +1042,11 @@ export const resolveSamplingParams = (
     }
     const native = getNativeModelBehindOpenRouter(model);
     if (native) {
-      return resolveSamplingParams(native, { temperature, topP });
+      return resolveSamplingParams(native, {
+        temperature,
+        topP,
+        reasoningEffort: configs.reasoningEffort,
+      });
     }
   }
 
@@ -1061,11 +1065,15 @@ export const resolveSamplingParams = (
     return { temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE };
   }
 
-  // Reasoning models take neither: top_p is rejected outright ("Unsupported parameter: 'top_p' is
-  // not supported with this model.") and temperature accepts only the provider's own default, so
-  // there is nothing to tune and omitting both is the one payload that always works.
+  // Reasoning models take neither while they reason: top_p is rejected outright ("Unsupported
+  // parameter: 'top_p' is not supported with this model.") and temperature accepts only the
+  // provider's own default. At effort none they take both, as a plain model does ("When reasoning
+  // effort is not none, remove temperature, top_p, and top_logprobs"), and that includes the models
+  // that run at none when no effort is sent at all, like GPT 5.4.
   if (provider === PROVIDER_TYPE.OPEN_AI && isReasoningModel(model)) {
-    return {};
+    return resolveEffort(model, configs).reasoningEffort === "none"
+      ? { temperature, topP }
+      : {};
   }
 
   if (!supportsGeminiSamplingParams(model)) {

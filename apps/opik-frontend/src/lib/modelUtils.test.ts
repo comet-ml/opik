@@ -694,6 +694,22 @@ describe("sanitizeConfigForRequest", () => {
     expect(result.topP).toBeUndefined();
   });
 
+  it("sends temperature and topP to a reasoning model at effort none and drops them once it reasons", () => {
+    const atNone = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_6_LUNA, {
+      temperature: 0.3,
+      topP: 0.9,
+      reasoningEffort: "none",
+    });
+    const atLow = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_6_LUNA, {
+      temperature: 0.3,
+      topP: 0.9,
+      reasoningEffort: "low",
+    });
+
+    expect([atNone.temperature, atNone.topP]).toEqual([0.3, 0.9]);
+    expect([atLow.temperature, atLow.topP]).toEqual([undefined, undefined]);
+  });
+
   it("returns the original object when model is empty", () => {
     const configs = { temperature: 0.5 };
     expect(sanitizeConfigForRequest("", configs)).toBe(configs);
@@ -1697,6 +1713,43 @@ describe("resolveSamplingParams", () => {
       }),
     ).toEqual({});
   });
+
+  // OpenAI: "When reasoning effort is not none, remove temperature, top_p, and top_logprobs". Probed
+  // 10-22: GPT 5.4 and GPT 6 Luna took both at none, and GPT 5.1/5.4 also with no effort sent.
+  it.each([
+    [PROVIDER_MODEL_TYPE.GPT_5_4, "none"],
+    [PROVIDER_MODEL_TYPE.GPT_6_LUNA, "none"],
+    [PROVIDER_MODEL_TYPE.GPT_5_1, undefined],
+    [PROVIDER_MODEL_TYPE.GPT_5_4, undefined],
+  ] as const)(
+    "keeps both for %s at effort %s, where the model runs without reasoning",
+    (model, reasoningEffort) => {
+      expect(
+        resolveSamplingParams(model, {
+          temperature: 0.3,
+          topP: 0.9,
+          reasoningEffort,
+        }),
+      ).toEqual({ temperature: 0.3, topP: 0.9 });
+    },
+  );
+
+  it.each([
+    [PROVIDER_MODEL_TYPE.GPT_5_4, "low"],
+    [PROVIDER_MODEL_TYPE.GPT_6_LUNA, undefined],
+    [PROVIDER_MODEL_TYPE.GPT_5, "none"],
+  ] as const)(
+    "omits both for %s at effort %s, where the model reasons",
+    (model, reasoningEffort) => {
+      expect(
+        resolveSamplingParams(model, {
+          temperature: 0.3,
+          topP: 0.9,
+          reasoningEffort,
+        }),
+      ).toEqual({});
+    },
+  );
 
   it("passes other providers' values through untouched", () => {
     expect(
