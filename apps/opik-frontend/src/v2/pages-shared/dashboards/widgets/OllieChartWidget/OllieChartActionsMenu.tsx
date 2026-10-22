@@ -97,7 +97,7 @@ const OllieChartActionsMenu: React.FunctionComponent<
             <MoreHorizontal className="size-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuItem
             onClick={run(() =>
               editInOllie
