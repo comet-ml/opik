@@ -83,6 +83,11 @@ interface PlaygroundPromptProps {
   onStop?: () => void;
 }
 
+const trimTextContent = (message: LLMMessage): LLMMessage =>
+  typeof message.content === "string"
+    ? { ...message, content: message.content.trim() }
+    : message;
+
 const PlaygroundPrompt = ({
   workspaceName,
   promptId,
@@ -190,7 +195,9 @@ const PlaygroundPrompt = ({
     [datasetVariables],
   );
 
-  const canSaveMessages = canRunMessages(messages);
+  // Stricter than Run on purpose: a message of only spaces would still be
+  // saved to the library as a version that looks empty.
+  const canSaveMessages = canRunMessages(messages.map(trimTextContent));
 
   const handleAddMessage = useCallback(() => {
     const newMessage = generateDefaultLLMPromptMessage();

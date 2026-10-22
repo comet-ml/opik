@@ -277,6 +277,13 @@ describe("PlaygroundPrompt save button", () => {
         message(LLM_MESSAGE_ROLE.user, ""),
       ],
     ],
+    [
+      "a message has only spaces",
+      [
+        message(LLM_MESSAGE_ROLE.system, "Be brief."),
+        message(LLM_MESSAGE_ROLE.user, "  \n\t "),
+      ],
+    ],
   ])("is shown but disabled when %s", (_label, messages) => {
     renderPrompt("gpt-4o-mini", messages);
 
