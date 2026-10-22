@@ -217,19 +217,26 @@ data:
         }
         {{- end }}
 
-        # The internal API must be unreachable from the edge. A literal `^~` prefix
-        # on the raw path was bypassable: a matrix param (`/internal;x/`), a
-        # percent-encoded separator (`/internal%3Bx/`, `/internal%2F..%2F`), or
-        # mixed case (`/Internal/`) all skipped it and fell through to
-        # `location /api/` -> backend. Match the NORMALIZED, case-folded `$uri`
-        # instead: nginx has already decoded `%3B`->`;`, `%69`->`i` and resolved
-        # dot-segments there, so one boundary check after `internal` closes the
-        # literal `/`, the matrix-param `;`, a bare `/api/v1/internal` (no trailing
-        # char, which the old trailing-slash prefix also missed), and -- for nginx
-        # builds that keep `%2F`/`%3B` encoded in `$uri` -- their raw `%2f`/`%3b`
-        # forms. A regex location outranks the `location /api/` prefix, so it wins.
-        # The regex is quoted because it contains `;`, which nginx otherwise reads
-        # as the directive terminator. See GHSA-jq6h.
+        # The internal API must be unreachable from the edge. Two layers, because
+        # nginx location priority is: longest `^~` prefix wins and stops; only if
+        # none match are regex locations tried, then plain prefixes. See GHSA-jq6h.
+        #
+        # 1) The canonical path kept as a `^~` prefix. It outranks any broader `^~`
+        #    throttle prefix an operator may add (e.g. `^~ {{ $rootPath }}/api/v1/`):
+        #    longest `^~` match wins, so the deny survives. A bare regex would lose
+        #    to such a prefix and route the request to `@api` -> backend.
+        location ^~ {{ $rootPath }}/api/v1/internal/ {
+          deny all;
+        }
+        # 2) The canonicalizing regex for the variants the literal prefix missed: a
+        #    matrix param (`/internal;x/`), a percent-encoded separator
+        #    (`/internal%3Bx/`, `/internal%2F..%2F`), mixed case (`/Internal/`), and
+        #    a bare `/api/v1/internal` (no trailing char). nginx has already decoded
+        #    `%3B`->`;`, `%69`->`i` and resolved dot-segments in `$uri`, so one
+        #    case-insensitive boundary check after `internal` closes them -- plus,
+        #    for nginx builds that keep `%2F`/`%3B` encoded in `$uri`, their raw
+        #    `%2f`/`%3b` forms. Quoted because the `;` would otherwise read as the
+        #    directive terminator.
         location ~* "^{{ $rootPath }}/api/v1/internal([/;]|%2f|%3b|$)" {
           deny all;
         }
