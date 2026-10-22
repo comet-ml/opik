@@ -3,7 +3,6 @@ import has from "lodash/has";
 import isString from "lodash/isString";
 import uniq from "lodash/uniq";
 import omit from "lodash/omit";
-import pick from "lodash/pick";
 import isEmpty from "lodash/isEmpty";
 import {
   LLMJudgeObject,
@@ -773,15 +772,12 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   // keeps a temperature the user set on another model, and the providers that take none reject it at
   // scoring time. The resolver answers whether this model takes one; the value stays the user's, so
   // a rule that never had a temperature does not gain the resolver's default.
-  // Asked without Claude's effort: the judge leaves the temperature out for as long as Claude thinks,
-  // and keeping it in the rule brings it back when the effort goes back to Off. An OpenAI effort is
-  // asked with, since an OpenAI reasoning model takes the temperature only at none.
+  // Asked as if the model did not reason: the judge leaves the temperature out for as long as Claude
+  // thinks or an OpenAI model runs above effort none, and keeping it in the rule brings it back when
+  // the effort goes back to Off or none. A model with no none level never takes one.
   const { temperature: resolvedTemperature } = resolveSamplingParams(
     data.model as PROVIDER_MODEL_TYPE,
-    {
-      temperature,
-      custom_parameters: pick(custom_parameters ?? {}, "reasoning_effort"),
-    },
+    { temperature, reasoningEffort: "none" },
   );
 
   if (temperature != null && resolvedTemperature != null) {
