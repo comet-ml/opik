@@ -2,21 +2,30 @@
 
 ``calculate_aggregated_statistics`` has never counted a metric's failed scores, so
 ``result.scores["m"].mean`` over 5 survivors was indistinguishable from a mean over
-10 scores. These tests pin the three things that fix it: ``failed_count`` on the
-aggregate, a named WARNING for the one case that still has no mean to attach the
-count to (a metric whose every score failed), and what each warning is about - the
-metric name, and the dataset item when one call aggregates a single item.
+10 scores. These tests pin the fix: ``failed_count`` on the aggregate, the count in
+the console statistics table, and one fixed WARNING per session for the case that
+has no mean to attach the count to (a metric whose every score failed).
 
 The survivor statistics themselves are deliberately unchanged: a failed score is
 not averaged in at the ``0.0`` the engine records for it, because that would make a
 crashed metric read as one that deliberately scored zero.
 """
 
+import io
+import logging
+import re
 from typing import List
 from unittest import mock
 
 import pytest
-from opik.evaluation import evaluation_result, score_statistics, test_case, test_result
+from opik import _logging
+from opik.evaluation import (
+    evaluation_result,
+    report,
+    score_statistics,
+    test_case,
+    test_result,
+)
 from opik.evaluation.metrics import score_result
 
 
@@ -63,6 +72,7 @@ def logger(monkeypatch: pytest.MonkeyPatch) -> mock.Mock:
     # the assertion fails on code that has no logger at all, rather than erroring.
     spy = mock.Mock()
     monkeypatch.setattr(score_statistics, "LOGGER", spy, raising=False)
+    monkeypatch.setattr(_logging, "LOG_ONCE_CACHE", set())
     return spy
 
 
@@ -78,10 +88,10 @@ def test_partial_failures_keep_the_survivor_mean_and_report_the_count(
     assert stats.values == [1.0] * 5
     assert stats.failed_count == 5
 
-    assert logger.warning.call_count == 1
-    message = logger.warning.call_args[0][0]
-    assert "Excluded 5 'hallucination'" in message
-    assert "5 remaining" in message
+    assert logger.log.call_count == 1
+    level, message = logger.log.call_args[0]
+    assert level == logging.WARNING
+    assert message == score_statistics.FAILED_SCORES_MESSAGE
 
 
 def test_the_reported_counts_add_up_to_the_score_records_the_metric_produced():
@@ -143,11 +153,10 @@ def test_a_metric_that_failed_on_every_trial_is_named_in_a_warning(logger: mock.
     statistics_by_name = score_statistics.calculate_aggregated_statistics(results)
 
     assert "judge" not in statistics_by_name  # no denominator to average over
-    assert logger.warning.call_count == 1
-    message = logger.warning.call_args[0][0]
-    assert "Excluded 4 'judge'" in message
-    assert "0 remaining" in message
-    assert "failed" in message
+    assert logger.log.call_count == 1
+    level, message = logger.log.call_args[0]
+    assert level == logging.WARNING
+    assert message == score_statistics.FAILED_SCORES_MESSAGE
 
 
 def test_no_failures_changes_no_survivor_statistic_and_logs_nothing(logger: mock.Mock):
@@ -165,7 +174,7 @@ def test_no_failures_changes_no_survivor_statistic_and_logs_nothing(logger: mock
     assert stats.values == [0.7, 0.8, 0.9]
     assert stats.std == pytest.approx(0.1, rel=1e-6)
     assert stats.failed_count == 0
-    assert logger.warning.call_count == 0
+    assert logger.log.call_count == 0
 
 
 def test_a_non_finite_value_on_a_successful_score_is_still_excluded_and_is_not_a_failure(
@@ -183,7 +192,7 @@ def test_a_non_finite_value_on_a_successful_score_is_still_excluded_and_is_not_a
     assert stats.values == [2.0]
     assert stats.mean == pytest.approx(2.0)
     assert stats.failed_count == 0
-    assert logger.warning.call_count == 0
+    assert logger.log.call_count == 0
 
 
 def test_the_count_reaches_the_aggregate_view_a_caller_reads():
@@ -225,62 +234,6 @@ def test_the_per_dataset_item_view_reports_its_own_counts_per_item():
     assert "m" not in item_results["item-2"].scores
 
 
-def test_an_aggregation_over_one_dataset_item_says_which_one(logger: mock.Mock):
-    """The grouped view calls this function once per item, so its warnings repeat.
-
-    Without the item each call is about, a thousand-item evaluation produces a
-    thousand byte-identical lines that cannot be told apart or searched for.
-    """
-    results = [
-        _result("item-1", 1, [_score("m", 1.0)]),
-        _result("item-1", 2, [_score("m", 0.0, scoring_failed=True)]),
-        _result("item-2", 1, [_score("m", 0.0, scoring_failed=True)]),
-        _result("item-2", 2, [_score("m", 0.0, scoring_failed=True)]),
-    ]
-    eval_result = evaluation_result.EvaluationResult(
-        experiment_id="exp1",
-        dataset_id="dataset1",
-        experiment_name="experiment",
-        test_results=results,
-        experiment_url="http://test.comet.com",
-        trial_count=4,
-    )
-
-    eval_result.group_by_dataset_item_view()
-
-    messages = [call[0][0] for call in logger.warning.call_args_list]
-    assert len(messages) == 2
-    assert len(set(messages)) == 2
-    assert "of dataset item 'item-1'" in messages[0]
-    assert "of dataset item 'item-2'" in messages[1]
-
-
-def test_an_aggregation_over_several_items_claims_no_single_item(logger: mock.Mock):
-    score_statistics.calculate_aggregated_statistics(_five_ok_five_failed())
-
-    message = logger.warning.call_args[0][0]
-    assert "dataset item" not in message
-
-
-def test_a_dataset_item_id_carrying_controls_cannot_forge_a_second_log_line(
-    logger: mock.Mock,
-):
-    newline, escape = chr(10), chr(27)
-    hostile_id = "id" + newline + "OPIK: every score passed" + escape + "[31mred"
-    results = [
-        _result(hostile_id, 1, [_score("m", 0.0, scoring_failed=True)]),
-        _result(hostile_id, 2, [_score("m", 0.0, scoring_failed=True)]),
-    ]
-
-    score_statistics.calculate_aggregated_statistics(results)
-
-    assert logger.warning.call_count == 1
-    message = logger.warning.call_args[0][0]
-    assert newline not in message
-    assert escape not in message
-    assert chr(92) + "n" in message
-
-
 def test_failed_count_defaults_to_zero_so_existing_construction_still_works():
     positional = score_statistics.ScoreStatistics(1.0, 1.0, 1.0, [1.0], None)
     keyword = score_statistics.ScoreStatistics(mean=1.0, max=1.0, min=1.0, values=[1.0])
@@ -289,44 +242,40 @@ def test_failed_count_defaults_to_zero_so_existing_construction_still_works():
     assert keyword == positional
 
 
-def test_a_metric_name_carrying_controls_cannot_forge_a_second_log_line(
-    logger: mock.Mock,
-):
-    newline, escape = chr(10), chr(27)
-    hostile = (
-        "evil"
-        + newline
-        + "OPIK: every score passed"
-        + newline
-        + "second line"
-        + escape
-        + "[31mred"
+def test_the_warning_is_fixed_and_fires_once_per_session(logger: mock.Mock):
+    """The message carries no metric name or item id, so log-once can deduplicate it."""
+    for _ in range(3):
+        score_statistics.calculate_aggregated_statistics(_five_ok_five_failed())
+
+    assert logger.log.call_args.args == (
+        logging.WARNING,
+        score_statistics.FAILED_SCORES_MESSAGE,
     )
-    results = [
-        _result(f"item-{i}", 1, [_score(hostile, 0.0, scoring_failed=True)])
-        for i in range(3)
+    assert [call.args[0] for call in logger.debug.call_args_list] == [
+        score_statistics.FAILED_SCORES_MESSAGE,
+        score_statistics.FAILED_SCORES_MESSAGE,
     ]
-
-    score_statistics.calculate_aggregated_statistics(results)
-
-    assert logger.warning.call_count == 1
-    message = logger.warning.call_args[0][0]
-    assert newline not in message
-    assert escape not in message
-    assert "evil" in message
-    # the controls survive only in escaped form, so the record stays one line
-    assert chr(92) + "n" in message
-    assert "x1b" in message
+    assert "hallucination" not in score_statistics.FAILED_SCORES_MESSAGE
 
 
-def test_an_oversized_metric_name_is_capped_in_the_log(logger: mock.Mock):
-    long_name = "m" * 500
-    results = [_result("item-0", 1, [_score(long_name, 0.0, scoring_failed=True)])]
+def test_the_console_table_shows_the_failed_count(monkeypatch: pytest.MonkeyPatch):
+    eval_result = evaluation_result.EvaluationResult(
+        experiment_id="exp1",
+        dataset_id="dataset1",
+        experiment_name="experiment",
+        test_results=_five_ok_five_failed(),
+        experiment_url="http://test.comet.com",
+        trial_count=10,
+    )
+    output = io.StringIO()
+    console = report.console.Console(file=output, width=200)
+    monkeypatch.setattr(report.console, "Console", lambda: console)
 
-    score_statistics.calculate_aggregated_statistics(results)
+    report.display_evaluation_scores_statistics("dataset", eval_result)
 
-    message = logger.warning.call_args[0][0]
-    assert "... (truncated)." in message
-    assert "m" * score_statistics.MAX_LOGGED_LABEL_LENGTH not in message
-    assert len(message) < 400
-    assert chr(10) not in message
+    rendered = output.getvalue()
+    assert "Failed" in rendered
+    row = next(line for line in rendered.splitlines() if "hallucination" in line)
+    cells = [cell.strip() for cell in re.split(r"[│┃]", row) if cell.strip()]
+    assert cells[0] == "hallucination"
+    assert cells[-1] == "5"
