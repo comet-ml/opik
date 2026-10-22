@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -121,6 +122,35 @@ public class AiLabelsTickService {
     record SweepObservation(long candidates, long workspaces, long bucketsReached) {
     }
 
+    // The open jobs (submitted, not yet loaded) as this pod last knew them: one immutable record, assigned whenever the
+    // tick changes the set (a poll, the loads it wrote, an accepted submit), so a scrape never pairs one moment's count
+    // with another's oldest. Null until the first poll, so the gauges report nothing on a pod that never ticked.
+    private volatile JobsObservation lastJobs;
+
+    /** The open jobs at one moment: how many, and when the oldest was submitted (null with none open). */
+    record JobsObservation(long open, Instant oldestSubmittedAt) {
+
+        static final JobsObservation NONE = new JobsObservation(0, null);
+
+        static JobsObservation of(List<AiLabelJob> open) {
+            return new JobsObservation(open.size(),
+                    open.stream().map(AiLabelJob::submittedAt).min(Instant::compareTo).orElse(null));
+        }
+
+        JobsObservation plus(Instant submittedAt) {
+            return new JobsObservation(open + 1,
+                    oldestSubmittedAt == null || submittedAt.isBefore(oldestSubmittedAt)
+                            ? submittedAt
+                            : oldestSubmittedAt);
+        }
+
+        /** The oldest open job's age at {@code now}, in seconds; 0 with none open. */
+        double oldestOpenSeconds(Instant now) {
+            return oldestSubmittedAt == null ? 0 : Duration.between(oldestSubmittedAt, now).toMillis() / 1_000.0;
+        }
+    }
+
+    private final LongCounter jobsSubmitted;
     private final LongCounter itemsSubmitted;
     private final LongCounter itemsDone;
     private final LongCounter itemsFailed;
@@ -192,6 +222,17 @@ public class AiLabelsTickService {
                 .setDescription(
                         "Buckets the latest sweep swept before its deadline; under ai_labels.sweep.buckets, it overran")
                 .buildWithCallback(measurement -> observed(measurement, SweepObservation::bucketsReached));
+        meter.gaugeBuilder("ai_labels.jobs.open").ofLongs()
+                .setDescription("Jobs submitted to opik-inference whose results are not yet loaded")
+                .buildWithCallback(measurement -> Optional.ofNullable(lastJobs)
+                        .ifPresent(jobs -> measurement.record(jobs.open())));
+        meter.gaugeBuilder("ai_labels.jobs.oldest_open_seconds").setUnit("s")
+                .setDescription("Age of the oldest open job, from its submit to now; 0 with none open")
+                .buildWithCallback(measurement -> Optional.ofNullable(lastJobs)
+                        .ifPresent(jobs -> measurement.record(jobs.oldestOpenSeconds(Instant.now()))));
+        this.jobsSubmitted = meter.counterBuilder("ai_labels.jobs.submitted")
+                .setDescription("Jobs opik-inference accepted")
+                .build();
         this.itemsSubmitted = meter.counterBuilder("ai_labels.items.submitted").build();
         this.itemsDone = meter.counterBuilder("ai_labels.items.done").build();
         this.itemsFailed = meter.counterBuilder("ai_labels.items.failed").build();
@@ -293,6 +334,8 @@ public class AiLabelsTickService {
      */
     void pollAndLoad(Instant deadline) {
         var jobs = template.inTransaction(READ_ONLY, handle -> handle.attach(AiLabelJobDAO.class).submitted());
+        // Before loading, so a status call that fails still reports them; write() publishes what is left after.
+        lastJobs = JobsObservation.of(jobs);
         if (jobs.isEmpty()) {
             return;
         }
@@ -333,13 +376,14 @@ public class AiLabelsTickService {
                         }), config.getLoadConcurrency())
                 .collectList()
                 .block());
-        write(loaded);
+        write(jobs, loaded);
     }
 
     private record LoadedJob(AiLabelJob job, List<AiLabel> labels, List<AiLabelStatus> statuses) {
     }
 
-    private void write(List<LoadedJob> loaded) {
+    /** Writes the loaded jobs' rows and marks them loaded; {@code open} is every job the poll found. */
+    private void write(List<AiLabelJob> open, List<LoadedJob> loaded) {
         if (loaded.isEmpty()) {
             return;
         }
@@ -360,6 +404,8 @@ public class AiLabelsTickService {
             dao.deleteItems(jobIds);
             return null;
         });
+        var loadedIds = Set.copyOf(jobIds);
+        lastJobs = JobsObservation.of(open.stream().filter(job -> !loadedIds.contains(job.jobId())).toList());
         for (var result : loaded) {
             countOutcomes(result.job().endpoint(), result.statuses());
             inFlightBytes.addAndGet(-result.job().bytes());
@@ -501,6 +547,11 @@ public class AiLabelsTickService {
     /** The latest sweep on this pod, or null before the first. */
     SweepObservation lastSweep() {
         return lastSweep;
+    }
+
+    /** The open jobs as this pod last knew them, or null before its first poll. */
+    JobsObservation lastJobs() {
+        return lastJobs;
     }
 
     // --- 3. Submit ---
@@ -881,8 +932,11 @@ public class AiLabelsTickService {
             dao.insertItems(jobItems);
             return null;
         });
-        itemsSubmitted.add(items.size(), Attributes.of(stringKey("endpoint"), jobKey.endpoint().getValue()));
+        var endpoint = Attributes.of(stringKey("endpoint"), jobKey.endpoint().getValue());
+        jobsSubmitted.add(1, endpoint);
+        itemsSubmitted.add(items.size(), endpoint);
         inFlightBytes.addAndGet(buffer.cost);
+        lastJobs = Objects.requireNonNullElse(lastJobs, JobsObservation.NONE).plus(job.submittedAt());
         return SubmitOutcome.ACCEPTED;
     }
 
