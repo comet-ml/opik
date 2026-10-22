@@ -41,6 +41,14 @@ public class CostService {
     private static final AttributeKey<String> WARNING_TYPE_KEY = AttributeKey.stringKey("type");
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
+    /**
+     * OpenRouter's models in the format of {@link #MODEL_PRICES_FILE}, generated daily from OpenRouter's model list by
+     * {@code scripts/update_openrouter_model_prices.py}, as LiteLLM's price file no longer lists them.
+     */
+    public static final String MODEL_PRICES_OPENROUTER_FILE = "model_prices_openrouter.json";
+    /** The rows of a price file, keyed by model name. */
+    public static final TypeReference<Map<String, ModelCostData>> MODEL_COSTS_TYPE_REFERENCE = new TypeReference<>() {
+    };
     private static final String BEDROCK_PROVIDER = "bedrock";
     // The price file's sample_spec entry documents its fields instead of pricing a model.
     private static final String SAMPLE_SPEC_ENTRY = "sample_spec";
@@ -53,12 +61,7 @@ public class CostService {
     private static final String VERSION_SUFFIX_PATTERN = ":\\d+$";
 
     static {
-        try {
-            modelProviderPrices = Collections.unmodifiableMap(parseModelPrices());
-        } catch (IOException e) {
-            log.error("Failed to load model prices", e);
-            throw new UncheckedIOException(e);
-        }
+        modelProviderPrices = Collections.unmodifiableMap(parseModelPrices());
     }
 
     private static final ModelPrice DEFAULT_COST = ModelPrice.empty();
@@ -306,14 +309,8 @@ public class CostService {
                 .orElse(BigDecimal.ZERO);
     }
 
-    private static Map<String, ModelPrice> parseModelPrices() throws IOException {
-        Map<String, ModelCostData> modelCosts = new LinkedHashMap<>(JsonUtils.readJsonFile(MODEL_PRICES_FILE,
-                new TypeReference<Map<String, ModelCostData>>() {
-                }));
-        if (modelCosts.isEmpty()) {
-            throw new UncheckedIOException(new IOException("Failed to load model prices"));
-        }
-        modelCosts.remove(SAMPLE_SPEC_ENTRY);
+    private static Map<String, ModelPrice> parseModelPrices() {
+        Map<String, ModelCostData> modelCosts = readModelCosts();
 
         Map<String, ModelPrice> parsedModelPrices = new HashMap<>();
         modelCosts.forEach((modelName, modelCost) -> {
@@ -336,14 +333,37 @@ public class CostService {
     }
 
     /**
+     * The rows of {@link #MODEL_PRICES_FILE} and {@link #MODEL_PRICES_OPENROUTER_FILE}, keyed by model name, without
+     * the {@code sample_spec} entry. Opik's overrides are not applied.
+     */
+    public static Map<String, ModelCostData> readModelCosts() {
+        Map<String, ModelCostData> modelCosts = new LinkedHashMap<>(readPriceFile(MODEL_PRICES_FILE));
+        modelCosts.remove(SAMPLE_SPEC_ENTRY);
+        modelCosts.putAll(readPriceFile(MODEL_PRICES_OPENROUTER_FILE));
+        return modelCosts;
+    }
+
+    /** Both files are bundled, so one that can't be read or holds no model is a broken build, not a state to run in. */
+    private static Map<String, ModelCostData> readPriceFile(String file) {
+        try {
+            var modelCosts = JsonUtils.readJsonFile(file, MODEL_COSTS_TYPE_REFERENCE);
+            if (modelCosts.isEmpty()) {
+                throw new IllegalStateException("No entries found in model prices file '%s'".formatted(file));
+            }
+            return modelCosts;
+        } catch (IOException exception) {
+            throw new UncheckedIOException("Failed to read model prices file '%s'".formatted(file), exception);
+        }
+    }
+
+    /**
      * Loads {@link #MODEL_PRICES_OVERRIDES_FILE} if present. Missing or malformed overrides files
      * are tolerated with a log message.
      */
     private static Map<String, ModelCostData> readOverrides() {
         try {
             Map<String, ModelCostData> overrides = JsonUtils.readJsonFile(MODEL_PRICES_OVERRIDES_FILE,
-                    new TypeReference<>() {
-                    });
+                    MODEL_COSTS_TYPE_REFERENCE);
             return overrides == null ? Map.of() : overrides;
         } catch (IOException | NullPointerException e) {
             log.warn("No model price overrides loaded ('{}'): '{}'", MODEL_PRICES_OVERRIDES_FILE, e.getMessage());
