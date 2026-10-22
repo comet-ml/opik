@@ -68,6 +68,11 @@ class LlmModelCatalogTest {
                 effort: {accepted: false}
             """);
 
+    private static final ModelParams ANTHROPIC_PROFILE = params("""
+            temperature: {accepted: false}
+            effort: {accepted: true, levels: [low, medium, high], default: high}
+            """);
+
     private static final ModelParams CLAUDE_SONNET_4_6 = params("""
             temperature: {accepted: true, min: 0, max: 1, default: 0}
             effort: {accepted: true, levels: [low, medium, high, max], default: high}
@@ -251,13 +256,10 @@ class LlmModelCatalogTest {
         @Test
         void theProfilesAreWhatAnUnlistedIdOfEachProviderGets() {
             var service = service(null);
-            var profiles = service.getProfiles();
 
-            assertThat(profiles).containsKeys("openai", "anthropic").doesNotContainKey("openrouter");
-            assertThat(profiles.get("anthropic").effort().levels()).containsExactly("low", "medium", "high");
-            profiles.forEach((provider, params) -> assertThat(params)
-                    .as(provider)
-                    .isEqualTo(service.paramsOf(provider, "an-id-no-layer-lists")));
+            assertThat(service.getProfiles())
+                    .isEqualTo(Map.of("openai", OPENAI_PROFILE, "anthropic", ANTHROPIC_PROFILE));
+            assertThat(service.paramsOf("anthropic", "an-id-no-layer-lists")).isEqualTo(ANTHROPIC_PROFILE);
         }
 
         @Test
