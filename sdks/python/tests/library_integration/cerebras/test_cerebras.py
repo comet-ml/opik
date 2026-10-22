@@ -1,8 +1,11 @@
 import asyncio
+import json
 from types import SimpleNamespace
 
 import cerebras.cloud.sdk as cerebras
+import httpx
 import pytest
+import respx
 from cerebras.cloud.sdk.types.chat.chat_completion import (
     ChatChunkResponse,
     ChatCompletionResponse,
@@ -25,6 +28,8 @@ from ...testlib import (
 )
 
 MODEL = "llama-3.3-70b"
+BASE_URL = "https://api.cerebras.ai"
+COMPLETIONS_ROUTE = "/v1/chat/completions"
 
 
 def _mock_completion(
@@ -212,6 +217,98 @@ def test_aggregate__streamed_tool_call__kept_in_message():
     )
 
     assert aggregated.choices[0] == {
+        "index": 0,
+        "finish_reason": "tool_calls",
+        "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "arguments": '{"city": "Paris"}',
+                    },
+                }
+            ],
+        },
+    }
+
+
+def _sse(*chunks: dict) -> bytes:
+    """Encode chunks as the ``text/event-stream`` body Cerebras sends."""
+    body = "".join(f"data: {json.dumps(c)}\n\n" for c in chunks)
+    return (body + "data: [DONE]\n\n").encode()
+
+
+@respx.mock(base_url=BASE_URL)
+def test_cerebras_chat_completions_create__stream_with_tool_call__tool_call_in_span_output(
+    respx_mock, fake_backend
+):
+    """A streamed tool call goes through the real SSE parser and into the span output."""
+
+    def chunk(delta: dict, finish_reason=None) -> dict:
+        return {
+            "id": "c1",
+            "object": "chat.completion.chunk",
+            "created": 0,
+            "model": MODEL,
+            "system_fingerprint": "fp_test",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+        }
+
+    respx_mock.post(COMPLETIONS_ROUTE).mock(
+        return_value=httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            content=_sse(
+                chunk({"role": "assistant"}),
+                chunk(
+                    {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "get_weather",
+                                    "arguments": '{"city": ',
+                                },
+                            }
+                        ]
+                    }
+                ),
+                chunk(
+                    {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "type": "function",
+                                "function": {"arguments": '"Paris"}'},
+                            }
+                        ]
+                    }
+                ),
+                chunk({}, finish_reason="tool_calls"),
+            ),
+        )
+    )
+    client = cerebras.Cerebras(api_key="fake-api-key")
+    tracked = track_cerebras(client)
+
+    stream = tracked.chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "user", "content": "Weather in Paris?"}],
+        stream=True,
+    )
+    list(stream)
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    span = fake_backend.trace_trees[0].spans[0]
+    assert span.provider == "cerebras"
+    assert span.output["choices"][0] == {
         "index": 0,
         "finish_reason": "tool_calls",
         "message": {
