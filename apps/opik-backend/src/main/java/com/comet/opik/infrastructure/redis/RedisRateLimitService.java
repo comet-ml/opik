@@ -28,7 +28,18 @@ class RedisRateLimitService implements RateLimitService {
 
         return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit)
                 .then(Mono.defer(() -> rateLimit.tryAcquire(events).retryWhen(configureRetry(limitConfig, rateLimit))))
-                .map(Boolean.FALSE::equals);
+                .map(Boolean.FALSE::equals)
+                // Fail open: once the retries above are exhausted, a limiter/Lua script failure must not take
+                // down ingestion. Redisson 4.8.0's throttle branch can error with "arithmetic on a nil value"
+                // when the permit counter and the permits sorted-set desync; treating that as "not limited"
+                // keeps writes flowing. The error surfaces here as a RetryExhaustedException wrapping the
+                // RedisException, so catch broadly rather than by type. The desync root cause (atomic Lua /
+                // Redisson bump) is tracked as a follow-up in OPIK-8923.
+                .onErrorResume(error -> {
+                    log.warn("Rate limiter errored for bucket '{}', failing open (request allowed): {}", bucketName,
+                            error.getMessage());
+                    return Mono.just(false);
+                });
     }
 
     private Retry configureRetry(LimitConfig limitConfig, RRateLimiterReactive rateLimit) {
