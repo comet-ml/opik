@@ -128,10 +128,6 @@ const DecisionModelPromptField: React.FC<DecisionModelPromptFieldProps> = ({
     datasetColumnNames,
   );
 
-  const errorMessages = decisionModelErrors.map((message) => (
-    <FormErrorSkeleton key={message}>{message}</FormErrorSkeleton>
-  ));
-
   if (showStartCards) {
     const startError = get(form.formState.errors, [
       "llmJudgeDetails",
@@ -151,7 +147,6 @@ const DecisionModelPromptField: React.FC<DecisionModelPromptFieldProps> = ({
           onSelect={startWithTemplate}
         />
         {startError && <FormErrorSkeleton>{startError}</FormErrorSkeleton>}
-        {errorMessages}
       </div>
     );
   }
@@ -179,7 +174,9 @@ const DecisionModelPromptField: React.FC<DecisionModelPromptFieldProps> = ({
           </RuleEditorCard>
           <PromptVariableHint scope={scope} />
           <FormMessage />
-          {errorMessages}
+          {decisionModelErrors.map((message) => (
+            <FormErrorSkeleton key={message}>{message}</FormErrorSkeleton>
+          ))}
         </FormItem>
       )}
     />
