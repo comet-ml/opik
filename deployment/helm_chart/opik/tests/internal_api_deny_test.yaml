@@ -1,0 +1,58 @@
+suite: internal API edge deny (frontend nginx)
+
+# Guards the /api/v1/internal edge deny rendered into the frontend nginx
+# ConfigMap (templates/configmap-frontend-nginx.yaml). The internal API must be
+# unreachable from the edge; see GHSA-jq6h. Two layers must survive any later
+# change to the regex or the rootPath templating:
+#   1) a `^~ <rootPath>/api/v1/internal/` prefix deny that outranks broader `^~`
+#      throttle prefixes, and
+#   2) a quoted, case-insensitive regex deny covering the matrix-param,
+#      percent-encoded-separator, mixed-case and bare-path bypass variants.
+templates:
+  - templates/configmap-frontend-nginx.yaml
+
+documentSelector: &nginx
+  path: metadata.name
+  value: opik-frontend-nginx
+
+tests:
+  - it: denies the internal API under the rootPath when opik is not standalone
+    set:
+      standalone: false
+    documentSelector: *nginx
+    asserts:
+      # Layer 1: literal prefix deny (beats broader ^~ throttle prefixes).
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: 'location \^~ /opik/api/v1/internal/ \{'
+      # Layer 2: canonicalizing regex deny for the bypass variants.
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: 'location ~\* "\^/opik/api/v1/internal\(\[/;\]\|%2f\|%3b\|\$\)" \{'
+
+  - it: denies the internal API at the root when opik is standalone
+    set:
+      standalone: true
+    documentSelector: *nginx
+    asserts:
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: 'location \^~ /api/v1/internal/ \{'
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: 'location ~\* "\^/api/v1/internal\(\[/;\]\|%2f\|%3b\|\$\)" \{'
+      # The rootPath is empty, so no /opik-prefixed internal deny should render.
+      - notMatchRegex:
+          path: data["default.conf.template"]
+          pattern: '/opik/api/v1/internal'
+
+  - it: covers every bypass class in the regex boundary (case, matrix, encoded, bare)
+    set:
+      standalone: false
+    documentSelector: *nginx
+    asserts:
+      # ~* is case-insensitive (covers /Internal/); the alternation covers the
+      # matrix param `;`, the raw-encoded `%2f`/`%3b`, and `$` the bare path.
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: 'internal\(\[/;\]\|%2f\|%3b\|\$\)'
