@@ -313,10 +313,14 @@ def test_bleu__non_positive_n_grams__raises_value_error(metric_cls, n_grams):
 
 @pytest.mark.parametrize("metric_cls", [SentenceBLEU, CorpusBLEU])
 @pytest.mark.parametrize("smoothing_method", ["method999", "methodX", "mETHOD1"])
-def test_bleu__invalid_smoothing_method__raises_value_error(metric_cls, smoothing_method):
+def test_bleu__invalid_smoothing_method__raises_value_error(
+    metric_cls, smoothing_method
+):
     # An unknown smoothing method used to fall through to `method0` silently,
     # producing a plausible-looking but wrong BLEU score. It must raise instead.
-    with pytest.raises(ValueError, match="Invalid smoothing_method"):
+    with pytest.raises(
+        ValueError, match=rf"Invalid smoothing_method {smoothing_method!r}"
+    ):
         metric_cls(smoothing_method=smoothing_method, track=False)
 
 
