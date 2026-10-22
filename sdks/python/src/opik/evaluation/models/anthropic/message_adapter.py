@@ -249,6 +249,29 @@ def filter_unsupported_params(
     return filtered
 
 
+def drop_refused_sampling_params(
+    params: Dict[str, Any],
+    model_name: str,
+    already_warned: Set[str],
+) -> None:
+    from ..litellm import util as litellm_util
+
+    present = [param for param in litellm_util.SAMPLING_PARAMS if param in params]
+    # Anthropic SDKs from 1.7.0 no longer take these, so they are usually gone
+    # already. Checked first because importing LiteLLM fetches its model map.
+    if not present or not litellm_util.rejects_sampling_params(model_name):
+        return
+    for param in present:
+        params.pop(param)
+        if param not in already_warned:
+            LOGGER.debug(
+                "Dropping '%s': model %s does not accept sampling parameters.",
+                param,
+                model_name,
+            )
+            already_warned.add(param)
+
+
 # OpenAI accepts `tool_choice` as a bare string ("auto" / "none" /
 # "required") or as an object naming a specific function; Anthropic
 # requires the object form in all cases and uses different keys. The

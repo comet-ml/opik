@@ -12,6 +12,7 @@ from opik.evaluation.models import models_factory
 from opik.evaluation.models import base_model
 from opik.evaluation.models.anthropic import anthropic_chat_model
 from opik.evaluation.models.anthropic import message_adapter, response_parser
+from opik.evaluation.models.litellm import util as litellm_util
 
 from ....testlib import patch_submodule
 
@@ -72,6 +73,19 @@ def _clear_model_cache():
     models_factory._MODEL_CACHE.clear()
     yield
     models_factory._MODEL_CACHE.clear()
+
+
+SAMPLING_REFUSING_MODELS = {"claude-sonnet-5-5"}
+
+
+@pytest.fixture(autouse=True)
+def _fake_model_map(monkeypatch):
+    # The real lookup imports LiteLLM, which fetches its model map over the network.
+    monkeypatch.setattr(
+        litellm_util,
+        "rejects_sampling_params",
+        lambda model_name: model_name in SAMPLING_REFUSING_MODELS,
+    )
 
 
 class TestResponseParser:
@@ -895,6 +909,37 @@ class TestParamFiltering:
         assert call_kwargs["temperature"] == 0.7
         assert "logprobs" not in call_kwargs
         assert "top_logprobs" not in call_kwargs
+
+    def test_sampling_params__model_refuses_them__not_sent(self, monkeypatch):
+        _, mock_client, _ = _install_anthropic_stub(monkeypatch)
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-5-5", track=False, temperature=0.0
+        )
+        model.generate_provider_response(
+            [{"role": "user", "content": "hi"}], top_p=0.9, top_k=5, max_tokens=10
+        )
+
+        call_kwargs = mock_client.messages.create.call_args.kwargs
+        assert "temperature" not in call_kwargs
+        assert "top_p" not in call_kwargs
+        assert "top_k" not in call_kwargs
+        assert call_kwargs["max_tokens"] == 10
+
+    def test_sampling_params__model_accepts_them__sent(self, monkeypatch):
+        _, mock_client, _ = _install_anthropic_stub(monkeypatch)
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-4-6", track=False, temperature=0.0
+        )
+        model.generate_provider_response([{"role": "user", "content": "hi"}])
+
+        call_kwargs = mock_client.messages.create.call_args.kwargs
+        assert call_kwargs["temperature"] == 0.0
 
     def test_keeps_all_valid_anthropic_params(self, monkeypatch):
         _, mock_client, _ = _install_anthropic_stub(monkeypatch)

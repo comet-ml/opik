@@ -211,6 +211,107 @@ def test_litellm_chat_model_drops_temperature_for_provider_prefixed_gpt5(
     assert not caplog.records
 
 
+@pytest.mark.parametrize("model_name", ["gpt-6-luna", "openai/gpt-6.1-sol"])
+def test_litellm_chat_model__gpt6__drops_temperature_and_logprobs(
+    monkeypatch, model_name
+):
+    stub = _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name=model_name)
+    model.generate_string("hello", temperature=0.0, logprobs=True, top_logprobs=20)
+
+    _, _, kwargs = stub._calls[-1]
+    assert "temperature" not in kwargs
+    assert "logprobs" not in kwargs
+    assert "top_logprobs" not in kwargs
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "claude-sonnet-5-5",
+        "anthropic/claude-sonnet-5-5",
+        "bedrock/us.anthropic.claude-sonnet-5-5",
+    ],
+)
+def test_litellm_chat_model__model_map_refuses_sampling__sampling_params_dropped(
+    monkeypatch, model_name
+):
+    stub = _install_litellm_stub(monkeypatch)
+    stub.model_cost = {
+        "claude-sonnet-5-5": {"supports_sampling_params": False},
+        "us.anthropic.claude-sonnet-5-5": {"supports_sampling_params": False},
+    }
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name=model_name, temperature=0.0)
+    model.generate_string("hello", top_p=0.9, top_k=5, max_tokens=10)
+
+    _, _, kwargs = stub._calls[-1]
+    assert "temperature" not in kwargs
+    assert "top_p" not in kwargs
+    assert "top_k" not in kwargs
+    assert kwargs["max_tokens"] == 10
+
+
+def test_litellm_chat_model__model_map_has_no_sampling_flag__sampling_params_kept(
+    monkeypatch,
+):
+    stub = _install_litellm_stub(monkeypatch)
+    stub.model_cost = {"claude-sonnet-4-6": {"litellm_provider": "anthropic"}}
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-sonnet-4-6", temperature=0.0
+    )
+    model.generate_string("hello", top_p=0.9)
+
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs["temperature"] == 0.0
+    assert kwargs["top_p"] == 0.9
+
+
+_READ_TOOL = {
+    "type": "function",
+    "function": {"name": "read", "parameters": {"type": "object"}},
+}
+
+
+@pytest.mark.parametrize(
+    "model_name, call_kwargs, litellm_version, warns",
+    [
+        ("gpt-6-luna", {}, "1.100.0", True),
+        ("openai/gpt-5.4-mini", {"reasoning_effort": "low"}, "1.96.0", True),
+        ("gpt-6-luna", {}, "1.103.0", False),
+        ("gpt-6-luna", {"reasoning_effort": "none"}, "1.100.0", False),
+        ("gpt-5.1", {}, "1.100.0", False),
+        ("gpt-5-mini", {}, "1.100.0", False),
+    ],
+)
+def test_litellm_chat_model__gpt_5_4_plus_tools__warns_only_when_litellm_cannot_route(
+    monkeypatch, caplog, model_name, call_kwargs, litellm_version, warns
+):
+    _install_litellm_stub(monkeypatch, supported_params=["reasoning_effort"])
+    monkeypatch.setattr(
+        litellm_chat_model.importlib.metadata, "version", lambda _: litellm_version
+    )
+    caplog.set_level(logging.WARNING)
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name=model_name)
+    for _ in range(2):
+        model.generate_chat_completion(
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[_READ_TOOL],
+            **call_kwargs,
+        )
+
+    warnings_logged = [
+        record
+        for record in caplog.records
+        if record.name == litellm_chat_model.LOGGER.name
+        and "Responses API" in record.message
+    ]
+    assert len(warnings_logged) == (1 if warns else 0)
+
+
 def test_litellm_stub_survives_the_real_integration_having_been_imported(
     monkeypatch, caplog
 ):
