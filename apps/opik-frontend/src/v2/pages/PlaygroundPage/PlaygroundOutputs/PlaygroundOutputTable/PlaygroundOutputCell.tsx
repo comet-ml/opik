@@ -127,10 +127,9 @@ const PlaygroundOutputCell: React.FunctionComponent<
     window.open(url, "_blank");
   };
 
-  // Results read back from a run carry no stale styling, so once the prompt is edited its cells show
-  // No runs yet rather than output that no longer answers the prompt in front of you.
+  // A run read back from the server keeps its results once the prompt is edited, dimmed
   const hasOutput = isBackendRun
-    ? !stale
+    ? true
     : value !== null || Boolean(error) || isLoading;
   const promptColor =
     PLAYGROUND_PROMPT_COLORS[
@@ -155,15 +154,13 @@ const PlaygroundOutputCell: React.FunctionComponent<
           </p>
         );
       }
-      return <PlaygroundExperimentItemOutput item={experimentItem} />;
+      return (
+        <PlaygroundExperimentItemOutput item={experimentItem} stale={stale} />
+      );
     }
 
     return (
-      <MarkdownPreview
-        className={cn({
-          "text-muted-gray dark:text-foreground": stale,
-        })}
-      >
+      <MarkdownPreview className={cn(stale && "opacity-50")}>
         {value}
       </MarkdownPreview>
     );
@@ -193,7 +190,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
             <PlaygroundStaleOutputNote
               changes={output?.staleChanges}
               compact
-              className="mb-1"
+              className="mb-3"
             />
           )}
           <div className="mb-2 min-h-[var(--cell-top-height)]">

@@ -203,7 +203,7 @@ describe("PlaygroundOutputCell", () => {
 
       const markdown = screen.getByTestId("markdown");
       expect(markdown).toHaveTextContent("the answer");
-      expect(markdown).toHaveClass("text-muted-gray");
+      expect(markdown).toHaveClass("opacity-50");
       expect(screen.getByTestId("metric-chips")).toBeInTheDocument();
       expect(queryStaleNote()).toHaveTextContent("Prompt changed");
       expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
@@ -259,15 +259,59 @@ describe("PlaygroundOutputCell", () => {
       expect(queryStaleNote()).toHaveTextContent("Prompt changed");
     });
 
-    it("should still show No runs yet for a test suite", () => {
+    // A test suite reads its results back the same way, so it keeps them on the same terms.
+    it("should keep a test suite's results too", () => {
       datasetType = DATASET_TYPE.TEST_SUITE;
       experimentId = "experiment-1";
       output = { isLoading: false, value: null, stale: true };
+      experimentItem = {
+        ...noExperimentItem,
+        hasItem: true,
+        output: "the answer",
+      };
 
       renderCell();
 
-      expect(screen.getByText("No runs yet")).toBeInTheDocument();
-      expect(screen.queryByTestId("assertion-status")).not.toBeInTheDocument();
+      expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
+      expect(screen.getByTestId("assertion-status")).toBeInTheDocument();
+    });
+
+    // Editing a prompt mid-run must not empty the rows the run is still filling: the progress bar
+    // is counting them, so No runs yet would contradict what the page is showing.
+    it("should keep the rows of a run that is still going", () => {
+      experimentId = "experiment-1";
+      output = { isLoading: false, value: null, stale: true };
+      experimentItem = {
+        ...noExperimentItem,
+        hasItem: true,
+        output: "the answer",
+      };
+
+      renderCell();
+
+      expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
+      expect(screen.getByTestId("markdown")).toHaveTextContent("the answer");
+      expect(queryStaleNote()).toHaveTextContent("Prompt changed");
+    });
+
+    // The results outlive the run that made them. They are the only record of what it produced,
+    // and the note plus the dimming already say they answer an older prompt.
+    it("should keep them dimmed once that run has ended", () => {
+      experimentId = "experiment-1";
+      output = { isLoading: false, value: null, stale: true };
+      experimentItem = {
+        ...noExperimentItem,
+        hasItem: true,
+        output: "the answer",
+      };
+
+      renderCell();
+
+      expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
+      const markdown = screen.getByTestId("markdown");
+      expect(markdown).toHaveTextContent("the answer");
+      expect(markdown).toHaveClass("opacity-50");
+      expect(queryStaleNote()).toHaveTextContent("Prompt changed");
     });
   });
 

@@ -1,15 +1,17 @@
 import React from "react";
 
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
+import { cn } from "@/lib/utils";
 import { PlaygroundExperimentItem } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/usePlaygroundExperimentItem";
 
 interface PlaygroundExperimentItemOutputProps {
   item: PlaygroundExperimentItem;
+  stale?: boolean;
 }
 
 const PlaygroundExperimentItemOutput: React.FunctionComponent<
   PlaygroundExperimentItemOutputProps
-> = ({ item }) => {
+> = ({ item, stale }) => {
   if (item.output === null) {
     return null;
   }
@@ -19,7 +21,9 @@ const PlaygroundExperimentItemOutput: React.FunctionComponent<
       {item.runCount > 1 && (
         <span className="comet-body-s text-muted-gray">Output (last run):</span>
       )}
-      <MarkdownPreview>{item.output}</MarkdownPreview>
+      <MarkdownPreview className={cn(stale && "opacity-50")}>
+        {item.output}
+      </MarkdownPreview>
     </div>
   );
 };

@@ -6,6 +6,8 @@ import useCancelExperimentExecution from "@/api/playground/useCancelExperimentEx
 import usePlaygroundStore, {
   getRunningPromptIds,
   useSetIsRunInFlight,
+  useSetPromptRunning,
+  useResetProgress,
   useQueueStopPending,
   useClearAllStopPending,
 } from "@/store/PlaygroundStore";
@@ -23,6 +25,8 @@ import usePlaygroundStore, {
 export default function useBackendRunCancellation(isBackendRun: boolean) {
   const queryClient = useQueryClient();
   const setIsRunInFlight = useSetIsRunInFlight();
+  const setPromptRunning = useSetPromptRunning();
+  const resetProgress = useResetProgress();
   const queueStopPending = useQueueStopPending();
   const clearAllStopPending = useClearAllStopPending();
 
@@ -67,11 +71,23 @@ export default function useBackendRunCancellation(isBackendRun: boolean) {
 
       if (named.length === 0) return;
 
-      releaseRunInFlight();
-      cancelExperimentRun({
-        experimentIds: named.map((promptId) => experimentByPromptId[promptId]),
-      });
-      refreshRunViews();
+      // Settled when the server answers, not when the button is pressed. The call writes the
+      // cancelled status and purges the queue. Items a consumer already holds still finish.
+      cancelExperimentRun(
+        {
+          experimentIds: named.map(
+            (promptId) => experimentByPromptId[promptId],
+          ),
+        },
+        {
+          onSettled: () => {
+            named.forEach((promptId) => setPromptRunning(promptId, false));
+            if (getRunningPromptIds().length === 0) resetProgress();
+            releaseRunInFlight();
+            refreshRunViews();
+          },
+        },
+      );
     },
     [
       isBackendRun,
@@ -79,6 +95,8 @@ export default function useBackendRunCancellation(isBackendRun: boolean) {
       releaseRunInFlight,
       refreshRunViews,
       queueStopPending,
+      setPromptRunning,
+      resetProgress,
     ],
   );
 

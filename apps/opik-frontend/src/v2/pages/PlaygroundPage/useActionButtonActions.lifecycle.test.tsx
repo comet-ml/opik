@@ -9,9 +9,21 @@ import usePlaygroundStore from "@/store/PlaygroundStore";
 import useActionButtonActions from "./useActionButtonActions";
 
 const cancelExperimentRun = vi.fn();
+// The cancel settles the page from its own onSettled, so the mock has to hand that callback back
+// rather than swallow it: `answerCancel()` stands in for the server replying.
+let settleCancel: (() => void) | null = null;
+const answerCancel = () => {
+  settleCancel?.();
+  settleCancel = null;
+};
 
 vi.mock("@/api/playground/useCancelExperimentExecution", () => ({
-  default: () => ({ mutate: cancelExperimentRun }),
+  default: () => ({
+    mutate: (variables: unknown, options?: { onSettled?: () => void }) => {
+      settleCancel = options?.onSettled ?? null;
+      cancelExperimentRun(variables);
+    },
+  }),
 }));
 
 const runExperimentExecution = vi.fn();
@@ -89,6 +101,7 @@ const startBackendRun = () =>
 
 beforeEach(() => {
   cancelExperimentRun.mockClear();
+  settleCancel = null;
   usePlaygroundStore.setState({
     promptIds: [],
     promptMap: {},
@@ -304,14 +317,33 @@ describe("useActionButtonActions lifecycle", () => {
       });
     });
 
-    it("should settle the run rather than leave it watched", () => {
+    it("should hold the run as running until the server has accepted the stop", () => {
       startBackendRun();
       const { result } = renderActions("dataset-1");
 
       act(() => result.current.stopAll());
 
+      expect(usePlaygroundStore.getState().isRunInFlight).toBe(true);
+      expect(usePlaygroundStore.getState().isRunningMap).toEqual({
+        [PROMPT_A]: true,
+        [PROMPT_B]: true,
+      });
+
+      act(() => answerCancel());
+
       expect(usePlaygroundStore.getState().isRunInFlight).toBe(false);
       expect(usePlaygroundStore.getState().isRunningMap).toEqual({});
+    });
+
+    // A stop we cannot confirm must not leave the button saying Stopping for ever.
+    it("should settle even when the cancel call fails", () => {
+      startBackendRun();
+      const { result } = renderActions("dataset-1");
+
+      act(() => result.current.stopAll());
+      act(() => answerCancel());
+
+      expect(usePlaygroundStore.getState().isRunInFlight).toBe(false);
     });
 
     it("should not reach the server for a run executing in the browser", () => {
@@ -341,13 +373,15 @@ describe("useActionButtonActions lifecycle", () => {
       });
     });
 
-    it("should leave its sibling running", () => {
+    // Neither prompt leaves the running map until the server has taken the stop.
+    it("should leave both running until the stop is accepted", () => {
       startBackendRun();
       const { result } = renderActions("dataset-1");
 
       act(() => result.current.stopSingle(PROMPT_A));
 
       expect(usePlaygroundStore.getState().isRunningMap).toEqual({
+        [PROMPT_A]: true,
         [PROMPT_B]: true,
       });
     });
@@ -363,14 +397,23 @@ describe("useActionButtonActions lifecycle", () => {
       expect(usePlaygroundStore.getState().isRunInFlight).toBe(true);
     });
 
-    it("should settle once the last running prompt is cancelled", () => {
+    it("should settle once the last stopped prompt has been accepted", () => {
       startBackendRun();
       const { result } = renderActions("dataset-1");
 
       act(() => result.current.stopSingle(PROMPT_A));
+      act(() => answerCancel());
+
+      expect(usePlaygroundStore.getState().isRunInFlight).toBe(true);
+      expect(usePlaygroundStore.getState().isRunningMap).toEqual({
+        [PROMPT_B]: true,
+      });
+
       act(() => result.current.stopSingle(PROMPT_B));
+      act(() => answerCancel());
 
       expect(usePlaygroundStore.getState().isRunInFlight).toBe(false);
+      expect(usePlaygroundStore.getState().isRunningMap).toEqual({});
     });
   });
 

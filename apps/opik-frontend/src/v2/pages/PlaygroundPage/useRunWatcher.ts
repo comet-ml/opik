@@ -432,16 +432,14 @@ export default function useRunWatcher({
     const covered = [...new Set([...getRunningPromptIds(), ...stopPending])];
 
     scopedAnnounceRef.current.clear();
-    settleRun();
-    isToStopRef.current = true;
     stopPolling();
+    isToStopRef.current = true;
     cancelBackendRun(covered);
-  }, [settleRun, stopPolling, cancelBackendRun]);
+  }, [stopPolling, cancelBackendRun]);
 
   const stopSingle = useCallback(
     (promptId: string) => {
       scopedAnnounceRef.current.delete(promptId);
-      setPromptRunning(promptId, false);
       clearWatchLapsed([promptId]);
       for (const [key, entry] of abortControllersRef.current.entries()) {
         if (entry.promptId === promptId) {
@@ -451,7 +449,7 @@ export default function useRunWatcher({
       }
       cancelBackendRun([promptId]);
     },
-    [setPromptRunning, clearWatchLapsed, cancelBackendRun],
+    [clearWatchLapsed, cancelBackendRun],
   );
 
   return {

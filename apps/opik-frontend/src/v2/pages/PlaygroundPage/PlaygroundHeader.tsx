@@ -255,6 +255,15 @@ const PlaygroundHeader = ({
   };
 
   const renderRunButton = () => {
+    if (isStopPending) {
+      return (
+        <Button size="2xs" variant="outline" disabled>
+          <Loader2 className="mr-1 size-3.5 animate-spin" />
+          Stopping...
+        </Button>
+      );
+    }
+
     if (isRunning) {
       return (
         <TooltipWrapper content="Stop running prompts">
@@ -263,15 +272,6 @@ const PlaygroundHeader = ({
             Stop all
           </Button>
         </TooltipWrapper>
-      );
-    }
-
-    if (isStopPending) {
-      return (
-        <Button size="2xs" variant="outline" disabled>
-          <Loader2 className="mr-1 size-3.5 animate-spin" />
-          Stopping...
-        </Button>
       );
     }
 

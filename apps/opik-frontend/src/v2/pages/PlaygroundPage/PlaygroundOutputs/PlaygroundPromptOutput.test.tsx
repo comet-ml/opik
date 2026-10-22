@@ -208,7 +208,7 @@ describe("PlaygroundPromptOutput", () => {
 
     const markdown = screen.getByTestId("markdown");
     expect(markdown).toHaveTextContent("the answer");
-    expect(markdown).toHaveClass("text-muted-gray");
+    expect(markdown).toHaveClass("opacity-50");
     expect(screen.getByText("Output A")).toHaveClass("text-muted-gray");
     expect(queryStaleNote()).toHaveTextContent(STALE_NOTE);
     expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
@@ -242,7 +242,7 @@ describe("PlaygroundPromptOutput", () => {
     rerender(outputView());
     const markdown = screen.getByTestId("markdown");
     expect(markdown).toHaveTextContent("the new answer");
-    expect(markdown).not.toHaveClass("text-muted-gray");
+    expect(markdown).not.toHaveClass("opacity-50");
     expect(screen.getByText("Output A")).not.toHaveClass("text-muted-gray");
     expect(queryStaleNote()).not.toBeInTheDocument();
   });

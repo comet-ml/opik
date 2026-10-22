@@ -36,21 +36,24 @@ const PlaygroundProgressIndicator: React.FC<
   const watchLapsed = useIsAnyWatchLapsed();
   const hasRunProgress = useHasRunProgress();
 
-  if (!hasRunProgress) {
-    return null;
-  }
+  // The run is dispatched before its size is known: /execute pages the whole dataset before it
+  // answers with a total, which on a large one is seconds. Rendering nothing until then left the
+  // bar's padded row on the page as empty space, so the wait reads as a glitch rather than as a
+  // run starting. The bar is shown from the press instead, without a figure it does not have yet.
+  const isAwaitingTotal = !hasRunProgress;
 
-  const progressPercentage = Math.round(
-    (progressCompleted / progressTotal) * 100,
-  );
+  const progressPercentage = isAwaitingTotal
+    ? 0
+    : Math.round((progressCompleted / progressTotal) * 100);
 
   const phaseLabels =
     datasetType === DATASET_TYPE.TEST_SUITE
       ? TEST_SUITE_PHASE_LABELS
       : DATASET_PHASE_LABELS;
 
-  const phaseLabel =
-    (progressPhase && phaseLabels[progressPhase]) || "Progress";
+  const phaseLabel = isAwaitingTotal
+    ? "Starting run"
+    : (progressPhase && phaseLabels[progressPhase]) || "Progress";
 
   return (
     <div className="flex items-center gap-3">
@@ -62,6 +65,8 @@ const PlaygroundProgressIndicator: React.FC<
           <span className="comet-body-s text-light-slate">
             {watchLapsed ? (
               STILL_RUNNING_REFRESH_MESSAGE
+            ) : isAwaitingTotal ? (
+              "Preparing dataset items..."
             ) : (
               <>
                 {progressCompleted}/{progressTotal} completed (
@@ -74,9 +79,11 @@ const PlaygroundProgressIndicator: React.FC<
           <div
             className={cn(
               "h-2 rounded-full bg-primary transition-all duration-300",
-              watchLapsed && "motion-safe:animate-pulse",
+              (watchLapsed || isAwaitingTotal) && "motion-safe:animate-pulse",
             )}
-            style={{ width: `${progressPercentage}%` }}
+            style={{
+              width: isAwaitingTotal ? "100%" : `${progressPercentage}%`,
+            }}
           />
         </div>
       </div>
