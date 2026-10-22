@@ -30,7 +30,7 @@ const StartCard: React.FC<StartCardProps> = ({
       onClick();
     }}
     className={cn(
-      "flex flex-col items-start gap-1 rounded-md border border-border bg-background p-2 text-left hover:border-primary hover:bg-primary-foreground",
+      "flex flex-col items-start gap-1 rounded-md border border-border bg-background p-2 text-left hover:border-primary hover:bg-primary-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
       className,
     )}
   >
