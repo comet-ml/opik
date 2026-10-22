@@ -93,6 +93,11 @@ export class TracePanelPage {
     return this.root.getByTestId(`trace-tree-node-${name}`);
   }
 
+  /** A node of the agent graph drawn from the trace's `_opik_graph_definition`. */
+  agentGraphNode(name: string): Locator {
+    return this.root.locator('[data-panel-id="agent-graph"]').getByTestId(`mermaid-node-${name}`);
+  }
+
   /** The expand/collapse toggle within a given tree node. */
   spanTreeToggle(name: string): Locator {
     return this.spanTreeNode(name).getByRole('button', { name: 'Expand or collapse span' });
