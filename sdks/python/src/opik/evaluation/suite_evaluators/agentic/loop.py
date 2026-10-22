@@ -54,8 +54,8 @@ _DEDUP_HINT_TEMPLATE = (
 )
 
 
-# "Function calling with a response mime type: 'application/json' is unsupported" on Google AI Studio and
-# Vertex AI; Gemini 3 takes both.
+# "Function calling with a response mime type: 'application/json' is unsupported"
+# on Google AI Studio and Vertex AI; Gemini 3 takes both.
 _JSON_FORMAT_WITH_TOOLS_REFUSED = re.compile(r"^gemini-[12](?:[.-]|$)")
 
 

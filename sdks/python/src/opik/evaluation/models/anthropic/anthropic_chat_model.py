@@ -249,7 +249,7 @@ class AnthropicChatModel(base_model.OpikBaseModel):
             **self._completion_kwargs,
             **filtered_extra,
         }
-        message_adapter.drop_refused_sampling_params(
+        message_adapter.drop_unsupported_sampling_params(
             call_kwargs, self._api_model_name, self._unsupported_warned
         )
         call_kwargs["model"] = self._api_model_name

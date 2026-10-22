@@ -9,9 +9,9 @@ SAMPLING_PARAMS = ("temperature", "top_p", "top_k")
 
 _OPENAI_GPT_VERSION = re.compile(r"^gpt-(\d+)(?:\.(\d+))?(?![\d.])")
 
-# Routes that forward OpenAI's own model names. Kept out of _normalize_model_name on purpose:
-# is_openai_gpt_5_4_plus must not match them, because LiteLLM's Responses bridge for tool calls
-# exists only on the direct OpenAI route.
+# Routes that forward OpenAI's own model names. Kept out of _normalize_model_name
+# on purpose: is_openai_gpt_5_4_plus must not match them, because LiteLLM's
+# Responses bridge for tool calls exists only on the direct OpenAI route.
 _ROUTING_PREFIXES = ("openrouter/", "azure/")
 
 
@@ -69,8 +69,8 @@ def apply_model_specific_filters(
     Currently handles:
     - Models LiteLLM's model map marks with ``supports_sampling_params: false``
       (Claude Opus 4.7+, Claude 5.x): temperature, top_p and top_k are dropped.
-    - GPT-5 / GPT-6, also behind OpenRouter or Azure: only honour temperature=1 and do not
-      return log probabilities.
+    - GPT-5 / GPT-6, also behind OpenRouter or Azure: only honour temperature=1
+      and do not return log probabilities.
     - Bedrock GPT-5.x / GPT-6: same as GPT-5, and temperature is dropped even at 1
     - DashScope Qwen: enforces constraints for logprobs / top_logprobs
     """
@@ -105,12 +105,14 @@ def rejects_sampling_params(model_name: str) -> bool:
     import litellm
 
     model_cost = getattr(litellm, "model_cost", None) or {}
-    # The map keys Anthropic models by bare id and Bedrock ones without the
-    # `bedrock/` route, so the name is also tried without its provider prefix.
-    for candidate in (model_name, model_name.split("/", 1)[-1]):
-        info = model_cost.get(candidate)
-        if isinstance(info, dict) and info.get("supports_sampling_params") is False:
-            return True
+    # The map keys most routed names without their route (bare Anthropic ids,
+    # Bedrock ids without `bedrock/converse/`), so the most specific suffix of
+    # the name that the map knows decides.
+    parts = model_name.split("/")
+    for start in range(len(parts)):
+        info = model_cost.get("/".join(parts[start:]))
+        if isinstance(info, dict):
+            return info.get("supports_sampling_params") is False
     return False
 
 

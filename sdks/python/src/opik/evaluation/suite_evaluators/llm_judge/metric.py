@@ -237,7 +237,8 @@ class LLMJudge(base.BaseSuiteEvaluator):
             self._model_name == other._model_name
             and self._temperature == other._temperature
             and self._seed == other._seed
-            and self._reasoning_effort == other._reasoning_effort
+            and self._effective_reasoning_effort()
+            == other._effective_reasoning_effort()
             and self.track == other.track
             and self._scoring_tool_strategy_input == other._scoring_tool_strategy_input
         )
@@ -284,19 +285,22 @@ class LLMJudge(base.BaseSuiteEvaluator):
             model_kwargs["temperature"] = self._temperature
         if self._seed is not None:
             model_kwargs["seed"] = self._seed
-        reasoning_effort = self._reasoning_effort
-        # A model that can't reason rejects any effort (Ollama turns it into `think`), so the
-        # default only goes to the models that take one.
-        if reasoning_effort is None and litellm_util.takes_reasoning_effort(
-            self._model_name
-        ):
-            reasoning_effort = llm_judge_config.DEFAULT_REASONING_EFFORT
+        reasoning_effort = self._effective_reasoning_effort()
         if reasoning_effort is not None:
             model_kwargs["reasoning_effort"] = reasoning_effort
 
         self._model = models_factory.get(
             model_name=self._model_name, track=self.track, **model_kwargs
         )
+
+    def _effective_reasoning_effort(self) -> Optional[str]:
+        if self._reasoning_effort is not None:
+            return self._reasoning_effort
+        # A model that can't reason rejects any effort (Ollama turns it into
+        # `think`), so the default only goes to the models that take one.
+        if litellm_util.takes_reasoning_effort(self._model_name):
+            return llm_judge_config.DEFAULT_REASONING_EFFORT
+        return None
 
     def score(
         self,
@@ -444,8 +448,9 @@ class LLMJudge(base.BaseSuiteEvaluator):
             name=None,
             temperature=self._temperature,
             seed=self._seed,
-            # The backend scores with a judge model of its own choosing, so only an effort the
-            # caller picked is stored: the local default could be refused by that model.
+            # The backend scores with a judge model of its own choosing, so only an
+            # effort the caller picked is stored: the local default could be
+            # refused by that model.
             custom_parameters=(
                 {"reasoning_effort": self._reasoning_effort}
                 if self._reasoning_effort is not None

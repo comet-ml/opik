@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 import types
 from contextlib import asynccontextmanager, contextmanager
@@ -256,7 +257,7 @@ class TestMessageAdapter:
     def test_filter_unsupported_params__sdk_dropped_sampling_params__removed(
         self, monkeypatch
     ):
-        # anthropic>=1.7.0 removed temperature/top_p/top_k from create().
+        # anthropic>=1.0.0 removed temperature/top_p/top_k from create().
         monkeypatch.setattr(
             message_adapter,
             "_sdk_accepted_params",
@@ -927,6 +928,31 @@ class TestParamFiltering:
         assert "top_p" not in call_kwargs
         assert "top_k" not in call_kwargs
         assert call_kwargs["max_tokens"] == 10
+
+    def test_sampling_params__model_refuses_them__warned_once_per_param(
+        self, monkeypatch, caplog
+    ):
+        _, mock_client, _ = _install_anthropic_stub(monkeypatch)
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+        caplog.set_level(logging.WARNING, logger=message_adapter.LOGGER.name)
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-5-5", track=False, temperature=0.0
+        )
+        for _ in range(2):
+            model.generate_provider_response(
+                [{"role": "user", "content": "hi"}], top_p=0.9, max_tokens=10
+            )
+
+        assert [
+            record.getMessage()
+            for record in caplog.records
+            if record.name == message_adapter.LOGGER.name
+        ] == [
+            "Model claude-sonnet-5-5 does not accept temperature. Dropping temperature=0.0.",
+            "Model claude-sonnet-5-5 does not accept top_p. Dropping top_p=0.9.",
+        ]
 
     def test_sampling_params__model_accepts_them__sent(self, monkeypatch):
         _, mock_client, _ = _install_anthropic_stub(monkeypatch)
