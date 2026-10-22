@@ -276,10 +276,10 @@ def _run_code_metric(code: str, data: dict) -> dict:
                 "Created DockerExecutor for code metrics (multi-tenant isolation)"
             )
         # Studio treats an empty or `scoring_failed` score list as a normal result.
-        # The evaluator endpoint owns that policy, so do not count this caller's
-        # responses as rejected executions.
+        # The evaluator endpoint owns that policy, so this caller only opts out of
+        # the rejection check; successes and crashes are still counted.
         return _code_metric_executor.run_scoring(
-            code, data, record_outcome=False
+            code, data, apply_rejection_policy=False
         )
 
     else:

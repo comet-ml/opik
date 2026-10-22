@@ -431,7 +431,7 @@ class DockerExecutor(CodeExecutorBase):
         code: str,
         data: dict,
         payload_type: Optional[str] = None,
-        record_outcome: bool = True,
+        apply_rejection_policy: bool = True,
     ) -> dict:
         if self.stop_event.is_set():
             return {"code": 503, "error": SHUTDOWN_ERROR}
@@ -492,39 +492,40 @@ class DockerExecutor(CodeExecutorBase):
                 # Parse result and track outcome
                 parsed_result = self.parse_execution_result(exec_result)
 
-                # The optimization studio calls this same method and treats an empty or
-                # `scoring_failed` score list as a normal result, so its runs must not be
-                # counted as rejected executions. The HTTP evaluator leaves this on.
-                if record_outcome:
-                    # Key telemetry on the response the caller receives, not on the exit code:
-                    # a metric can exit 0 and still fail to produce a usable result line, which
-                    # parse_execution_result reports as a 4xx. A non-zero exit comes first so a
-                    # crashing metric is not reported as if it had printed its own error payload.
-                    reason = (
-                        "nonzero_exit"
-                        if exec_result.exit_code != 0
-                        else rejection_reason(parsed_result)
+                # Key telemetry on the response the caller receives, not on the exit code:
+                # a metric can exit 0 and still fail to produce a usable result line, which
+                # parse_execution_result reports as a 4xx. A non-zero exit comes first so a
+                # crashing metric is not reported as if it had printed its own error payload.
+                # The optimization studio accepts an empty or `scoring_failed` score list as
+                # a normal result, so it opts out of the rejection policy only; the outcome is
+                # still recorded, keeping studio successes and crashes in the counter.
+                reason = (
+                    "nonzero_exit"
+                    if exec_result.exit_code != 0
+                    else rejection_reason(parsed_result)
+                    if apply_rejection_policy
+                    else None
+                )
+                result_code = parsed_result.get("code") if isinstance(parsed_result, dict) else None
+                # `code` is response-controlled: keep the value bounded. Numbers pass
+                # through, strings are truncated, anything else is shown by type.
+                result_code_summary = self._summarize_result_code(result_code)
+                if reason is None:
+                    outcome_status = "success"
+                else:
+                    outcome_status = "invalid_code"
+                    status_message = (
+                        f"Execution failed with exit_code={exec_result.exit_code}, "
+                        f"result_code={result_code_summary}, reason={reason}"
                     )
-                    result_code = parsed_result.get("code") if isinstance(parsed_result, dict) else None
-                    # `code` is response-controlled: keep the value bounded. Numbers pass
-                    # through, strings are truncated, anything else is shown by type.
-                    result_code_summary = self._summarize_result_code(result_code)
-                    if reason is None:
-                        outcome_status = "success"
-                    else:
-                        outcome_status = "invalid_code"
-                        status_message = (
-                            f"Execution failed with exit_code={exec_result.exit_code}, "
-                            f"result_code={result_code_summary}, reason={reason}"
-                        )
-                        span.set_status(Status(StatusCode.ERROR, status_message))
-                        span.set_attribute("error.type", "invalid_code")
-                        span.set_attribute("error.reason", reason)
-                        span.set_attribute("error.exit_code", exec_result.exit_code)
-                        if result_code_summary is not None:
-                            span.set_attribute("error.result_code", result_code_summary)
+                    span.set_status(Status(StatusCode.ERROR, status_message))
+                    span.set_attribute("error.type", "invalid_code")
+                    span.set_attribute("error.reason", reason)
+                    span.set_attribute("error.exit_code", exec_result.exit_code)
+                    if result_code_summary is not None:
+                        span.set_attribute("error.result_code", result_code_summary)
 
-                    self._record_execution_outcome(outcome_status, payload_type)
+                self._record_execution_outcome(outcome_status, payload_type)
                 return parsed_result
             except concurrent.futures.TimeoutError as e:
                 self._record_execution_outcome("timeout", payload_type)

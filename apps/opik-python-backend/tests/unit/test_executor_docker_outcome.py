@@ -33,14 +33,16 @@ def executor():
         instance.stop_event.set()
 
 
-def run_with_result(executor, exit_code, output: bytes, record_outcome=True):
+def run_with_result(executor, exit_code, output: bytes, apply_rejection_policy=True):
     """Run scoring against a container returning a canned exec result."""
     container = MagicMock()
     container.exec_run.return_value = MagicMock(exit_code=exit_code, output=output)
     with patch.object(executor, "get_container", return_value=container):
         with patch.object(executor, "_record_execution_outcome") as record:
             response = executor.run_scoring(
-                code="<unused>", data=DATA, record_outcome=record_outcome
+                code="<unused>",
+                data=DATA,
+                apply_rejection_policy=apply_rejection_policy,
             )
     return response, [call.args[0] for call in record.call_args_list]
 
@@ -241,16 +243,55 @@ def test_nonzero_exit_is_recorded_as_the_reason(executor):
     assert "reason=nonzero_exit" in status.description
 
 
-def test_studio_caller_can_skip_the_endpoint_outcome(executor):
-    # The optimization studio accepts an empty score list as a normal result, so it
-    # must not be counted as a rejection (nor have its span marked as an error).
+def test_studio_caller_opts_out_of_the_rejection_policy(executor):
+    # The optimization studio accepts an empty score list as a normal result, so its
+    # responses must not be counted as rejections (nor have the span marked as an
+    # error). The outcome is still recorded, so studio runs stay in the counter.
     span = recording_span(executor)
     body = {"scores": []}
 
     response, outcomes = run_with_result(
-        executor, 0, json.dumps(body).encode("utf-8"), record_outcome=False
+        executor, 0, json.dumps(body).encode("utf-8"), apply_rejection_policy=False
     )
 
     assert response == body
-    assert outcomes == []
+    assert outcomes == ["success"]
     span.set_status.assert_not_called()
+
+
+def test_studio_caller_still_counts_a_crash(executor):
+    # Opting out of the rejection policy must not hide a non-zero exit: crashes are
+    # recorded exactly as they are for the evaluator endpoint.
+    span = recording_span(executor)
+
+    response, outcomes = run_with_result(
+        executor,
+        1,
+        json.dumps({"error": "bad metric"}).encode("utf-8"),
+        apply_rejection_policy=False,
+    )
+
+    assert response == {"code": 400, "error": "bad metric"}
+    assert outcomes == ["invalid_code"]
+    attributes = {call.args[0]: call.args[1] for call in span.set_attribute.call_args_list}
+    assert attributes["error.reason"] == "nonzero_exit"
+
+
+def test_studio_code_metric_forwards_the_rejection_policy_opt_out():
+    # Pin the wiring: dropping the kwarg here would silently start counting studio
+    # empty/all-failed scores as rejections without any other test failing.
+    from opik_backend.studio import metrics as studio_metrics
+
+    fake_executor = MagicMock()
+    fake_executor.run_scoring.return_value = {"scores": []}
+
+    with (
+        patch.object(studio_metrics, "EXECUTION_STRATEGY", "docker"),
+        patch.object(studio_metrics, "_code_metric_executor", fake_executor),
+    ):
+        result = studio_metrics._run_code_metric("<code>", {"output": "x"})
+
+    assert result == {"scores": []}
+    fake_executor.run_scoring.assert_called_once_with(
+        "<code>", {"output": "x"}, apply_rejection_policy=False
+    )
