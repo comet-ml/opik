@@ -121,10 +121,12 @@ class RedisRateLimitServiceTest {
 
     @Test
     void getRemainingTtlFailsSafeWhenLimiterErrors() {
+        // Fallback reports the full window (ms), not 0, so the interceptor doesn't advertise a 1s reset.
         when(rateLimiter.remainTimeToLive()).thenReturn(Mono.error(new RedisException("boom")));
+        LimitConfig config = limitConfig();
 
-        StepVerifier.create(rateLimitService.getRemainingTTL(bucketName(), limitConfig()))
-                .expectNext(0L)
+        StepVerifier.create(rateLimitService.getRemainingTTL(bucketName(), config))
+                .expectNext(Duration.ofSeconds(config.durationInSeconds()).toMillis())
                 .verifyComplete();
     }
 }

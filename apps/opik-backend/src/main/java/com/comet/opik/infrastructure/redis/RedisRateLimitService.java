@@ -84,8 +84,10 @@ class RedisRateLimitService implements RateLimitService {
         return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit)
                 .then(Mono.defer(rateLimit::remainTimeToLive).retryWhen(configureRetry(limitConfig, rateLimit)))
                 .onErrorResume(error -> {
-                    log.warn("Rate limiter TTL lookup failed, reporting 0", error);
-                    return Mono.just(0L);
+                    // Report the full window, not 0: the interceptor turns 0 into a RateLimit-Reset of 1s,
+                    // which would make a rejected client retry after a second and spin on 429s.
+                    log.warn("Rate limiter TTL lookup failed, reporting the configured window", error);
+                    return Mono.just(Duration.ofSeconds(limitConfig.durationInSeconds()).toMillis());
                 });
     }
 
