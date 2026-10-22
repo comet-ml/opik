@@ -37,7 +37,8 @@ describe("PlaygroundProgressIndicator", () => {
     beforeEach(() => {
       hasRunProgress = false;
       progressTotal = 0;
-      progressPhase = null;
+      // A whole-run launch sets its phase at the press; the total follows when /execute answers.
+      progressPhase = "running";
     });
 
     it("should show the bar rather than an empty space", () => {
@@ -54,6 +55,18 @@ describe("PlaygroundProgressIndicator", () => {
 
       expect(screen.queryByText(/completed/)).not.toBeInTheDocument();
       expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+    });
+
+    // A single-prompt run reports itself per cell and never sets a total, so this bar is not its
+    // to show. Keyed on the total alone it sat on "Starting run" for the whole run.
+    it("should show nothing for a run that sets no phase, such as a scoped one", () => {
+      progressPhase = null;
+
+      const { container } = render(
+        <PlaygroundProgressIndicator onCheckAgain={onCheckAgain} />,
+      );
+
+      expect(container).toBeEmptyDOMElement();
     });
   });
 

@@ -20,7 +20,7 @@ let datasetItemsTotal: number | null = null;
 
 let isResumingRun = false;
 let isPromptRunning = false;
-let isStopPending = false;
+let isStopping = false;
 let isWatchLapsed = false;
 let hasRunProgress = false;
 
@@ -28,7 +28,7 @@ vi.mock("@/store/PlaygroundStore", () => ({
   usePromptById: () => prompt,
   useIsPromptRunning: () => isPromptRunning,
   useIsResumingRun: () => isResumingRun,
-  useIsStopPending: () => isStopPending,
+  useIsStopping: () => isStopping,
   useIsWatchLapsed: () => isWatchLapsed,
   useHasRunProgress: () => hasRunProgress,
   useDatasetType: () => datasetType,
@@ -91,7 +91,7 @@ beforeEach(() => {
   datasetItemsTotal = null;
   isResumingRun = false;
   isPromptRunning = false;
-  isStopPending = false;
+  isStopping = false;
   isWatchLapsed = false;
   hasRunProgress = false;
 });
@@ -293,7 +293,7 @@ describe("PlaygroundRunButton stop state", () => {
   it("says Stopping... and refuses a second press while the stop waits for ids", () => {
     prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4O, "Hello");
     isPromptRunning = true;
-    isStopPending = true;
+    isStopping = true;
     renderButton();
 
     const button = screen.getByRole("button", { name: "Stopping..." });

@@ -8,8 +8,10 @@ import usePlaygroundStore, {
   useSetIsRunInFlight,
   useSetPromptRunning,
   useResetProgress,
-  useQueueStopPending,
-  useClearAllStopPending,
+  useQueueStopAwaitingRun,
+  useClearAllStopsAwaitingRun,
+  useMarkCancelInFlight,
+  useClearCancelInFlight,
 } from "@/store/PlaygroundStore";
 
 /**
@@ -27,12 +29,14 @@ export default function useBackendRunCancellation(isBackendRun: boolean) {
   const setIsRunInFlight = useSetIsRunInFlight();
   const setPromptRunning = useSetPromptRunning();
   const resetProgress = useResetProgress();
-  const queueStopPending = useQueueStopPending();
-  const clearAllStopPending = useClearAllStopPending();
+  const queueStopAwaitingRun = useQueueStopAwaitingRun();
+  const clearAllStopsAwaitingRun = useClearAllStopsAwaitingRun();
+  const markCancelInFlight = useMarkCancelInFlight();
+  const clearCancelInFlight = useClearCancelInFlight();
 
-  // Only `mutate` is stable; useMutation's object is new every render. stopAll ends up in an
-  // unmount cleanup, which an unstable identity re-runs every render, stopping the run it began.
-  const { mutate: cancelExperimentRun } = useCancelExperimentExecution();
+  // Destructured because useMutation's object is new every render. mutateAsync, not mutate: a
+  // per-call onSettled only fires for the latest call, so overlapping stops lost one's settle.
+  const { mutateAsync: cancelExperimentRun } = useCancelExperimentExecution();
 
   const refreshRunViews = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["experiment"] });
@@ -67,34 +71,34 @@ export default function useBackendRunCancellation(isBackendRun: boolean) {
 
       // The run exists on the server but this tab cannot name it. Remember those and replay them
       // when the ids arrive, keeping any stop already waiting so a second one does not drop it.
-      queueStopPending(unnamed);
+      queueStopAwaitingRun(unnamed);
 
       if (named.length === 0) return;
 
       // Settled when the server answers, not when the button is pressed. The call writes the
       // cancelled status and purges the queue. Items a consumer already holds still finish.
-      cancelExperimentRun(
-        {
-          experimentIds: named.map(
-            (promptId) => experimentByPromptId[promptId],
-          ),
-        },
-        {
-          onSettled: () => {
-            named.forEach((promptId) => setPromptRunning(promptId, false));
-            if (getRunningPromptIds().length === 0) resetProgress();
-            releaseRunInFlight();
-            refreshRunViews();
-          },
-        },
-      );
+      // Marked stopping meanwhile, so no button offers a Stop whose cancel is already on its way.
+      markCancelInFlight(named);
+      cancelExperimentRun({
+        experimentIds: named.map((promptId) => experimentByPromptId[promptId]),
+      })
+        .catch(() => {})
+        .finally(() => {
+          named.forEach((promptId) => setPromptRunning(promptId, false));
+          clearCancelInFlight(named);
+          if (getRunningPromptIds().length === 0) resetProgress();
+          releaseRunInFlight();
+          refreshRunViews();
+        });
     },
     [
       isBackendRun,
       cancelExperimentRun,
       releaseRunInFlight,
       refreshRunViews,
-      queueStopPending,
+      queueStopAwaitingRun,
+      markCancelInFlight,
+      clearCancelInFlight,
       setPromptRunning,
       resetProgress,
     ],
@@ -107,17 +111,17 @@ export default function useBackendRunCancellation(isBackendRun: boolean) {
    */
   const applyQueuedStop = useCallback(
     (launched: string[]) => {
-      const queued = usePlaygroundStore.getState().stopPending;
+      const queued = usePlaygroundStore.getState().stopsAwaitingRun;
       if (queued.size === 0) return false;
 
-      clearAllStopPending();
+      clearAllStopsAwaitingRun();
       cancelBackendRun([...queued]);
 
       // Only a launch whose every prompt was stopped is over. A stop aimed at one of several
       // leaves its siblings running on the server, and they still need watching.
       return launched.every((promptId) => queued.has(promptId));
     },
-    [cancelBackendRun, clearAllStopPending],
+    [cancelBackendRun, clearAllStopsAwaitingRun],
   );
 
   return {

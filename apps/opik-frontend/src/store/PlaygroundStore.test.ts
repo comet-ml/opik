@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { renderHook } from "@testing-library/react";
 
-import usePlaygroundStore from "@/store/PlaygroundStore";
+import usePlaygroundStore, { useIsStoppingAll } from "@/store/PlaygroundStore";
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { PlaygroundPromptType } from "@/types/playground";
 import {
@@ -168,5 +169,50 @@ describe("PlaygroundStore staleChanges", () => {
     updatePrompt({ configs: { ...CONFIGS, temperature: 1 } });
 
     expect(getStaleChanges()).toEqual(["parameters"]);
+  });
+});
+
+// The run-wide Stop button may only say "Stopping..." once there is nothing left for it to stop.
+// Reading it as "any prompt is stopping" disabled Stop all as soon as one prompt was stopped on
+// its own, leaving its siblings running with no way to stop them from the header.
+describe("PlaygroundStore useIsStoppingAll", () => {
+  beforeEach(() => {
+    usePlaygroundStore.setState({
+      isRunningMap: { "prompt-a": true, "prompt-b": true },
+      stopsAwaitingRun: new Set<string>(),
+      cancelsInFlight: new Set<string>(),
+    });
+  });
+
+  const isStoppingAll = () =>
+    renderHook(() => useIsStoppingAll()).result.current;
+
+  it("should be false while nothing is stopping", () => {
+    expect(isStoppingAll()).toBe(false);
+  });
+
+  it("should be false while only one of several prompts is stopping", () => {
+    usePlaygroundStore.setState({
+      cancelsInFlight: new Set(["prompt-a"]),
+    });
+
+    expect(isStoppingAll()).toBe(false);
+  });
+
+  it("should be true once every running prompt is stopping", () => {
+    usePlaygroundStore.setState({
+      cancelsInFlight: new Set(["prompt-a", "prompt-b"]),
+    });
+
+    expect(isStoppingAll()).toBe(true);
+  });
+
+  it("should count a stop still waiting for its run alongside one already sent", () => {
+    usePlaygroundStore.setState({
+      cancelsInFlight: new Set(["prompt-a"]),
+      stopsAwaitingRun: new Set(["prompt-b"]),
+    });
+
+    expect(isStoppingAll()).toBe(true);
   });
 });

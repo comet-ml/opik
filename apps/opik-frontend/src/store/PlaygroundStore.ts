@@ -155,7 +155,8 @@ export type PlaygroundStore = {
   // what let an empty stop queue read as a stop still pending. Safe to hold a Set only because
   // partialize strips both: neither survives JSON, and neither should outlive the tab.
   watchLapsed: Set<string>;
-  stopPending: Set<string>;
+  stopsAwaitingRun: Set<string>;
+  cancelsInFlight: Set<string>;
   experimentName: string | null;
   lastSuggestedExperimentName: string | null;
   datasetType: DATASET_TYPE | null;
@@ -180,6 +181,7 @@ export type PlaygroundStore = {
   addPrompt: (prompt: PlaygroundPromptType, position?: number) => void;
   deletePrompt: (promptId: string) => void;
   resetOutputMap: () => void;
+  clearPromptOutputStale: (promptId: string) => void;
   updateOutput: (promptId: string, changes: Partial<PlaygroundOutput>) => void;
   updateOutputTraceId: (promptId: string, traceId: string) => void;
   setDatasetVariables: (variables: string[]) => void;
@@ -209,9 +211,11 @@ export type PlaygroundStore = {
   markWatchLapsed: (promptIds: string[]) => void;
   clearWatchLapsed: (promptIds: string[]) => void;
   clearAllWatchLapsed: () => void;
-  queueStopPending: (promptIds: string[]) => void;
-  clearStopPending: (promptIds: string[]) => void;
-  clearAllStopPending: () => void;
+  queueStopAwaitingRun: (promptIds: string[]) => void;
+  clearStopAwaitingRun: (promptIds: string[]) => void;
+  clearAllStopsAwaitingRun: () => void;
+  markCancelInFlight: (promptIds: string[]) => void;
+  clearCancelInFlight: (promptIds: string[]) => void;
   setLastActiveProjectId: (projectId: string | null) => void;
   setDatasetType: (type: DATASET_TYPE | null) => void;
   setExperimentByPromptId: (map: Record<string, string>) => void;
@@ -240,7 +244,8 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       progressCompleted: 0,
       progressPhase: null,
       watchLapsed: new Set<string>(),
-      stopPending: new Set<string>(),
+      stopsAwaitingRun: new Set<string>(),
+      cancelsInFlight: new Set<string>(),
       experimentName: null,
       lastSuggestedExperimentName: null,
       datasetType: null,
@@ -314,6 +319,20 @@ const usePlaygroundStore = create<PlaygroundStore>()(
             promptIds: newPromptIds,
             promptMap: newPromptMap,
             outputMap: pick(state.outputMap, newPromptIds),
+          };
+        });
+      },
+      clearPromptOutputStale: (promptId) => {
+        set((state) => {
+          const output = state.outputMap[promptId];
+          if (!output?.stale) return state;
+
+          return {
+            ...state,
+            outputMap: {
+              ...state.outputMap,
+              [promptId]: { ...output, stale: false, staleChanges: undefined },
+            },
           };
         });
       },
@@ -452,7 +471,8 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           isRunInFlight: false,
           isResumingRun: false,
           watchLapsed: new Set<string>(),
-          stopPending: new Set<string>(),
+          stopsAwaitingRun: new Set<string>(),
+          cancelsInFlight: new Set<string>(),
         }));
       },
       setIsResumingRun: (value) => {
@@ -544,21 +564,34 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       clearAllWatchLapsed: () => {
         set((state) => ({ ...state, watchLapsed: new Set<string>() }));
       },
-      queueStopPending: (promptIds) => {
+      queueStopAwaitingRun: (promptIds) => {
         set((state) => ({
           ...state,
-          stopPending: new Set([...state.stopPending, ...promptIds]),
+          stopsAwaitingRun: new Set([...state.stopsAwaitingRun, ...promptIds]),
         }));
       },
-      clearStopPending: (promptIds) => {
+      clearStopAwaitingRun: (promptIds) => {
         set((state) => {
-          const stopPending = new Set(state.stopPending);
-          promptIds.forEach((promptId) => stopPending.delete(promptId));
-          return { ...state, stopPending };
+          const stopsAwaitingRun = new Set(state.stopsAwaitingRun);
+          promptIds.forEach((promptId) => stopsAwaitingRun.delete(promptId));
+          return { ...state, stopsAwaitingRun };
         });
       },
-      clearAllStopPending: () => {
-        set((state) => ({ ...state, stopPending: new Set<string>() }));
+      clearAllStopsAwaitingRun: () => {
+        set((state) => ({ ...state, stopsAwaitingRun: new Set<string>() }));
+      },
+      markCancelInFlight: (promptIds) => {
+        set((state) => ({
+          ...state,
+          cancelsInFlight: new Set([...state.cancelsInFlight, ...promptIds]),
+        }));
+      },
+      clearCancelInFlight: (promptIds) => {
+        set((state) => {
+          const cancelsInFlight = new Set(state.cancelsInFlight);
+          promptIds.forEach((promptId) => cancelsInFlight.delete(promptId));
+          return { ...state, cancelsInFlight };
+        });
       },
       setLastActiveProjectId: (projectId) => {
         set((state) => ({ ...state, lastActiveProjectId: projectId }));
@@ -654,7 +687,8 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           isRunningMap,
           isResumingRun,
           watchLapsed,
-          stopPending,
+          stopsAwaitingRun,
+          cancelsInFlight,
           ...rest
         } = state;
         /* eslint-enable @typescript-eslint/no-unused-vars */
@@ -707,6 +741,9 @@ export const useDeletePrompt = () =>
 
 export const useResetOutputMap = () =>
   usePlaygroundStore((state) => state.resetOutputMap);
+
+export const useClearPromptOutputStale = () =>
+  usePlaygroundStore((state) => state.clearPromptOutputStale);
 
 export const useUpdateOutput = () =>
   usePlaygroundStore((state) => state.updateOutput);
@@ -866,24 +903,47 @@ export const useClearWatchLapsed = () =>
 export const useIsWatchLapsed = (promptId: string) =>
   usePlaygroundStore((state) => state.watchLapsed.has(promptId));
 
-export const useClearAllStopPending = () =>
-  usePlaygroundStore((state) => state.clearAllStopPending);
+export const useClearAllStopsAwaitingRun = () =>
+  usePlaygroundStore((state) => state.clearAllStopsAwaitingRun);
 
-export const useQueueStopPending = () =>
-  usePlaygroundStore((state) => state.queueStopPending);
+export const useQueueStopAwaitingRun = () =>
+  usePlaygroundStore((state) => state.queueStopAwaitingRun);
 
-export const useClearStopPending = () =>
-  usePlaygroundStore((state) => state.clearStopPending);
+export const useClearStopAwaitingRun = () =>
+  usePlaygroundStore((state) => state.clearStopAwaitingRun);
 
 export const useForgetExperimentForPrompt = () =>
   usePlaygroundStore((state) => state.forgetExperimentForPrompt);
 
-export const useIsStopPending = (promptId?: string) =>
-  usePlaygroundStore((state) =>
-    promptId === undefined
-      ? state.stopPending.size > 0
-      : state.stopPending.has(promptId),
+/**
+ * Both waits read as Stopping to the user: `stopsAwaitingRun` is waiting for the run to be named,
+ * `cancelsInFlight` for the cancel to answer. They are kept apart because only the first may be
+ * replayed against a later launch — replaying the second would cancel a run that just started.
+ */
+export const useIsStopping = (promptId: string) =>
+  usePlaygroundStore(
+    (state) =>
+      state.stopsAwaitingRun.has(promptId) ||
+      state.cancelsInFlight.has(promptId),
   );
+
+export const useIsStoppingAll = () =>
+  usePlaygroundStore((state) => {
+    if (state.stopsAwaitingRun.size === 0 && state.cancelsInFlight.size === 0) {
+      return false;
+    }
+    return Object.keys(state.isRunningMap).every(
+      (promptId) =>
+        state.stopsAwaitingRun.has(promptId) ||
+        state.cancelsInFlight.has(promptId),
+    );
+  });
+
+export const useMarkCancelInFlight = () =>
+  usePlaygroundStore((state) => state.markCancelInFlight);
+
+export const useClearCancelInFlight = () =>
+  usePlaygroundStore((state) => state.clearCancelInFlight);
 
 export const useResetProgress = () =>
   usePlaygroundStore((state) => state.resetProgress);

@@ -9,7 +9,7 @@ import {
   useIsResumingRun,
   usePromptById,
   useDatasetItemsTotal,
-  useIsStopPending,
+  useIsStopping,
   useIsWatchLapsed,
   useHasRunProgress,
 } from "@/store/PlaygroundStore";
@@ -36,7 +36,7 @@ const PlaygroundRunButton = ({
   const prompt = usePromptById(promptId);
   const isPromptRunning = useIsPromptRunning(promptId);
   const isResumingRun = useIsResumingRun();
-  const isStopPending = useIsStopPending(promptId);
+  const isStopping = useIsStopping(promptId);
   const isWatchLapsed = useIsWatchLapsed(promptId);
   const hasRunProgress = useHasRunProgress();
 
@@ -98,7 +98,7 @@ const PlaygroundRunButton = ({
           </Button>
         </>
       )}
-      {isStopPending ? (
+      {isStopping ? (
         <Button size="2xs" variant="outline" disabled>
           <Loader2 className="mr-1 size-3.5 animate-spin" />
           Stopping...

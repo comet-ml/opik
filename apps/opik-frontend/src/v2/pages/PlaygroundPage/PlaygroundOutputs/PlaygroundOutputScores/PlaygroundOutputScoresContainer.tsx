@@ -22,20 +22,13 @@ const scoreNamesOf = (rules: EvaluatorsRule[]) =>
 interface PlaygroundOutputScoresContainerProps {
   traceId: string | null;
   selectedRuleIds: string[] | null | undefined;
-  stale?: boolean;
   notRun?: boolean;
   className?: string;
 }
 
 const PlaygroundOutputScoresContainer: React.FC<
   PlaygroundOutputScoresContainerProps
-> = ({
-  traceId,
-  selectedRuleIds,
-  stale = false,
-  notRun = false,
-  className,
-}) => {
+> = ({ traceId, selectedRuleIds, notRun = false, className }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const pollingStartTimeRef = useRef<number | null>(null);
@@ -163,7 +156,6 @@ const PlaygroundOutputScoresContainer: React.FC<
     <PlaygroundOutputScores
       metricNames={allMetricNames}
       metricScores={metricScores}
-      stale={stale}
       notRun={notRun}
       className={className}
     />

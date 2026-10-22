@@ -36,11 +36,14 @@ const PlaygroundProgressIndicator: React.FC<
   const watchLapsed = useIsAnyWatchLapsed();
   const hasRunProgress = useHasRunProgress();
 
-  // The run is dispatched before its size is known: /execute pages the whole dataset before it
-  // answers with a total, which on a large one is seconds. Rendering nothing until then left the
-  // bar's padded row on the page as empty space, so the wait reads as a glitch rather than as a
-  // run starting. The bar is shown from the press instead, without a figure it does not have yet.
-  const isAwaitingTotal = !hasRunProgress;
+  // /execute answers with a total only after paging the whole dataset, so the bar shows from the
+  // press without a count. Keyed on the phase, which only a whole-run launch sets: a scoped run
+  // reports itself per cell and has no bar to show.
+  const isAwaitingTotal = progressPhase !== null && !hasRunProgress;
+
+  if (!hasRunProgress && !isAwaitingTotal) {
+    return null;
+  }
 
   const progressPercentage = isAwaitingTotal
     ? 0
@@ -79,11 +82,9 @@ const PlaygroundProgressIndicator: React.FC<
           <div
             className={cn(
               "h-2 rounded-full bg-primary transition-all duration-300",
-              (watchLapsed || isAwaitingTotal) && "motion-safe:animate-pulse",
+              watchLapsed && "motion-safe:animate-pulse",
             )}
-            style={{
-              width: isAwaitingTotal ? "100%" : `${progressPercentage}%`,
-            }}
+            style={{ width: `${progressPercentage}%` }}
           />
         </div>
       </div>

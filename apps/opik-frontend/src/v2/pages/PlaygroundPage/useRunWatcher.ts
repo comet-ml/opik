@@ -23,6 +23,7 @@ import usePlaygroundStore, {
   useSetPromptRunning,
   useMarkWatchLapsed,
   useClearWatchLapsed,
+  useClearAllWatchLapsed,
   useSettleRun,
 } from "@/store/PlaygroundStore";
 import { useToast } from "@/ui/use-toast";
@@ -82,6 +83,7 @@ export default function useRunWatcher({
   const resetProgress = useResetProgress();
   const markWatchLapsed = useMarkWatchLapsed();
   const clearWatchLapsed = useClearWatchLapsed();
+  const clearAllWatchLapsed = useClearAllWatchLapsed();
   const announceRunComplete = useRunCompletionToast(datasetId);
 
   const isToStopRef = useRef(false);
@@ -425,17 +427,33 @@ export default function useRunWatcher({
   }, [stopPolling, settleRun, isBackendRun]);
 
   const stopAll = useCallback(() => {
-    // Read before settling, which empties both: these are the prompts the stop covers, and a
-    // stop that has to wait for ids needs to name them. A prompt stopped on its own is already
-    // out of the running map with its stop still queued, so carry that across or it is lost.
-    const { stopPending } = usePlaygroundStore.getState();
-    const covered = [...new Set([...getRunningPromptIds(), ...stopPending])];
+    // Read first: these are the prompts the stop covers, and a stop that has to wait for ids
+    // needs to name them. A prompt stopped on its own keeps its stop queued, so carry that
+    // across or it is lost.
+    const { stopsAwaitingRun } = usePlaygroundStore.getState();
+    const covered = [
+      ...new Set([...getRunningPromptIds(), ...stopsAwaitingRun]),
+    ];
 
     scopedAnnounceRef.current.clear();
     stopPolling();
     isToStopRef.current = true;
+    clearAllWatchLapsed();
+
+    // Nothing answers for a browser-side run, and combinations still queued read isRunningMap to
+    // decide whether to start — left set, they open new streams after the stop.
+    if (!isBackendRun) {
+      settleRun();
+    }
+
     cancelBackendRun(covered);
-  }, [stopPolling, cancelBackendRun]);
+  }, [
+    stopPolling,
+    clearAllWatchLapsed,
+    settleRun,
+    isBackendRun,
+    cancelBackendRun,
+  ]);
 
   const stopSingle = useCallback(
     (promptId: string) => {
@@ -447,9 +465,21 @@ export default function useRunWatcher({
           abortControllersRef.current.delete(key);
         }
       }
+      // Same as above, for the one prompt: nothing answers for a browser-side run.
+      if (!isBackendRun) {
+        setPromptRunning(promptId, false);
+        releaseRunInFlight();
+      }
+
       cancelBackendRun([promptId]);
     },
-    [clearWatchLapsed, cancelBackendRun],
+    [
+      clearWatchLapsed,
+      isBackendRun,
+      setPromptRunning,
+      releaseRunInFlight,
+      cancelBackendRun,
+    ],
   );
 
   return {
