@@ -30,7 +30,6 @@ import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.TraceUpdate;
-import com.comet.opik.api.ValueEntry;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.attachment.Attachment;
@@ -159,6 +158,8 @@ import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertCom
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpdatedComment;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
+import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScores;
+import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.expectedFeedbackScore;
 import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
@@ -1922,7 +1923,7 @@ class TracesResourceTest {
                     .projectName(projectName)
                     .projectId(null)
                     .name("with_revision")
-                    .evaluatorRevision("judge@3f9c2a1")
+                    .evaluatorRevision(RandomStringUtils.secure().nextAlphanumeric(10))
                     .build();
             var withoutRevision = initThreadFeedbackItem()
                     .threadId(threadId)
@@ -1933,18 +1934,12 @@ class TracesResourceTest {
                     .build();
             traceResourceClient.threadFeedbackScores(List.of(withRevision, withoutRevision), apiKey, workspaceName);
 
-            var scores = traceResourceClient.getTraceThread(threadId, projectId, apiKey, workspaceName)
-                    .feedbackScores().stream()
-                    .collect(Collectors.toMap(FeedbackScore::name, score -> score));
+            var actualScores = traceResourceClient.getTraceThread(threadId, projectId, apiKey, workspaceName)
+                    .feedbackScores();
 
-            assertThat(scores.get("with_revision").evaluatorRevision()).isEqualTo("judge@3f9c2a1");
-            assertThat(scores.get("with_revision").valueByAuthor().values())
-                    .extracting(ValueEntry::evaluatorRevision)
-                    .containsOnly("judge@3f9c2a1");
-            assertThat(scores.get("without_revision").evaluatorRevision()).isNull();
-            assertThat(scores.get("without_revision").valueByAuthor().values())
-                    .extracting(ValueEntry::evaluatorRevision)
-                    .containsOnlyNulls();
+            assertFeedbackScores(actualScores, Stream.of(withRevision, withoutRevision)
+                    .map(item -> expectedFeedbackScore(item, USER))
+                    .toList());
         }
 
         @ParameterizedTest
@@ -5466,7 +5461,7 @@ class TracesResourceTest {
                     .id(id)
                     .projectName(DEFAULT_PROJECT)
                     .name("with_revision")
-                    .evaluatorRevision("judge@3f9c2a1")
+                    .evaluatorRevision(RandomStringUtils.secure().nextAlphanumeric(10))
                     .build();
             var withoutRevision = initFeedbackScoreItem()
                     .id(id)
@@ -5474,28 +5469,20 @@ class TracesResourceTest {
                     .name("without_revision")
                     .evaluatorRevision(null)
                     .build();
-            var maxLengthRevision = "r".repeat(256);
             var withMaxLengthRevision = initFeedbackScoreItem()
                     .id(id)
                     .projectName(DEFAULT_PROJECT)
                     .name("with_max_length_revision")
-                    .evaluatorRevision(maxLengthRevision)
+                    .evaluatorRevision(RandomStringUtils.secure().nextAlphanumeric(256))
                     .build();
             traceResourceClient.feedbackScores(List.of(withRevision, withoutRevision, withMaxLengthRevision),
                     API_KEY, TEST_WORKSPACE);
 
-            var scores = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY).feedbackScores().stream()
-                    .collect(Collectors.toMap(FeedbackScore::name, score -> score));
+            var actualScores = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY).feedbackScores();
 
-            assertThat(scores.get("with_max_length_revision").evaluatorRevision()).isEqualTo(maxLengthRevision);
-            assertThat(scores.get("with_revision").evaluatorRevision()).isEqualTo("judge@3f9c2a1");
-            assertThat(scores.get("with_revision").valueByAuthor().values())
-                    .extracting(ValueEntry::evaluatorRevision)
-                    .containsOnly("judge@3f9c2a1");
-            assertThat(scores.get("without_revision").evaluatorRevision()).isNull();
-            assertThat(scores.get("without_revision").valueByAuthor().values())
-                    .extracting(ValueEntry::evaluatorRevision)
-                    .containsOnlyNulls();
+            assertFeedbackScores(actualScores, Stream.of(withRevision, withoutRevision, withMaxLengthRevision)
+                    .map(item -> expectedFeedbackScore(item, USER))
+                    .toList());
         }
 
         @Test

@@ -2,11 +2,9 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.ExperimentItem;
-import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.ValueEntry;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -24,6 +22,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -42,9 +41,11 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScores;
+import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.expectedFeedbackScore;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -148,7 +149,7 @@ class DatasetItemsWithoutVersioningResourceTest {
                 .name("with_revision")
                 .value(BigDecimal.ONE)
                 .source(ScoreSource.SDK)
-                .evaluatorRevision("judge@3f9c2a1")
+                .evaluatorRevision(RandomStringUtils.secure().nextAlphanumeric(10))
                 .build();
         var withoutRevision = withRevision.toBuilder()
                 .name("without_revision")
@@ -160,15 +161,9 @@ class DatasetItemsWithoutVersioningResourceTest {
                 API_KEY, TEST_WORKSPACE);
 
         assertThat(page.content()).extracting(DatasetItem::id).containsExactly(datasetItem.id());
-        var scores = page.content().getFirst().experimentItems().getFirst().feedbackScores().stream()
-                .collect(Collectors.toMap(FeedbackScore::name, score -> score));
-        assertThat(scores.get("with_revision").evaluatorRevision()).isEqualTo("judge@3f9c2a1");
-        assertThat(scores.get("with_revision").valueByAuthor().values())
-                .extracting(ValueEntry::evaluatorRevision)
-                .containsOnly("judge@3f9c2a1");
-        assertThat(scores.get("without_revision").evaluatorRevision()).isNull();
-        assertThat(scores.get("without_revision").valueByAuthor().values())
-                .extracting(ValueEntry::evaluatorRevision)
-                .containsOnlyNulls();
+        assertFeedbackScores(page.content().getFirst().experimentItems().getFirst().feedbackScores(),
+                Stream.of(withRevision, withoutRevision)
+                        .map(item -> expectedFeedbackScore(item, USER))
+                        .toList());
     }
 }

@@ -37,7 +37,6 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.ValueEntry;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
@@ -165,6 +164,8 @@ import static com.comet.opik.api.grouping.GroupingFactory.TAGS;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.ExperimentsTestUtils.getQuantities;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
+import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScores;
+import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.expectedFeedbackScore;
 import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -5957,7 +5958,7 @@ class ExperimentsResourceTest {
                     .name("with_revision")
                     .value(BigDecimal.ONE)
                     .source(ScoreSource.SDK)
-                    .evaluatorRevision("judge@3f9c2a1")
+                    .evaluatorRevision(RandomStringUtils.secure().nextAlphanumeric(10))
                     .build();
             var withoutRevision = withRevision.toBuilder()
                     .name("without_revision")
@@ -5969,16 +5970,9 @@ class ExperimentsResourceTest {
             var streamedItems = getExperimentItems(experiment.name(), apiKey, workspaceName);
             assertThat(streamedItems).hasSize(1);
 
-            var scores = streamedItems.getFirst().feedbackScores().stream()
-                    .collect(Collectors.toMap(FeedbackScore::name, score -> score));
-            assertThat(scores.get("with_revision").evaluatorRevision()).isEqualTo("judge@3f9c2a1");
-            assertThat(scores.get("with_revision").valueByAuthor().values())
-                    .extracting(ValueEntry::evaluatorRevision)
-                    .containsOnly("judge@3f9c2a1");
-            assertThat(scores.get("without_revision").evaluatorRevision()).isNull();
-            assertThat(scores.get("without_revision").valueByAuthor().values())
-                    .extracting(ValueEntry::evaluatorRevision)
-                    .containsOnlyNulls();
+            assertFeedbackScores(streamedItems.getFirst().feedbackScores(), Stream.of(withRevision, withoutRevision)
+                    .map(score -> expectedFeedbackScore(score, USER))
+                    .toList());
         }
 
     }

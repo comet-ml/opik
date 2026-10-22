@@ -18,7 +18,6 @@ import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.ValueEntry;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.EntityType;
@@ -144,6 +143,8 @@ import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertCom
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpdatedComment;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
+import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScores;
+import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.expectedFeedbackScore;
 import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
@@ -3862,7 +3863,7 @@ class SpansResourceTest {
                     .id(id)
                     .projectName(DEFAULT_PROJECT)
                     .name("with_revision")
-                    .evaluatorRevision("judge@3f9c2a1")
+                    .evaluatorRevision(RandomStringUtils.secure().nextAlphanumeric(10))
                     .build();
             var withoutRevision = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(id)
@@ -3872,17 +3873,11 @@ class SpansResourceTest {
                     .build();
             spanResourceClient.feedbackScores(List.of(withRevision, withoutRevision), API_KEY, TEST_WORKSPACE);
 
-            var scores = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY).feedbackScores().stream()
-                    .collect(Collectors.toMap(FeedbackScore::name, score -> score));
+            var actualScores = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY).feedbackScores();
 
-            assertThat(scores.get("with_revision").evaluatorRevision()).isEqualTo("judge@3f9c2a1");
-            assertThat(scores.get("with_revision").valueByAuthor().values())
-                    .extracting(ValueEntry::evaluatorRevision)
-                    .containsOnly("judge@3f9c2a1");
-            assertThat(scores.get("without_revision").evaluatorRevision()).isNull();
-            assertThat(scores.get("without_revision").valueByAuthor().values())
-                    .extracting(ValueEntry::evaluatorRevision)
-                    .containsOnlyNulls();
+            assertFeedbackScores(actualScores, Stream.of(withRevision, withoutRevision)
+                    .map(item -> expectedFeedbackScore(item, USER))
+                    .toList());
         }
 
         @Test
