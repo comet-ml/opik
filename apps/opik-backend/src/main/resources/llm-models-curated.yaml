@@ -139,24 +139,29 @@ models:
         accepted: true
         levels: [low, medium, high, xhigh]
         default: medium
+  # OpenAI: "Starting with GPT-5.4, Chat Completions does not support tool calling with reasoning_effort values
+  # other than none", and GPT-6 Astra and GPT-6.1 Sol take no tools there at all. Responses takes them at any effort.
   - id: gpt-5.4
     params:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
         default: none
+      tools: {chatCompletions: effortNoneOnly}
   - id: gpt-5.4-mini
     params:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
         default: none
+      tools: {chatCompletions: effortNoneOnly}
   - id: gpt-5.4-nano
     params:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
         default: none
+      tools: {chatCompletions: effortNoneOnly}
   - id: gpt-5.4-pro
     params:
       effort:
@@ -169,6 +174,7 @@ models:
         accepted: true
         levels: [none, low, medium, high, xhigh]
         default: medium
+      tools: {chatCompletions: effortNoneOnly}
   - id: gpt-5.5-pro
     params:
       effort:
@@ -181,6 +187,7 @@ models:
         accepted: true
         levels: [none, low, medium, high, xhigh]
         default: medium
+      tools: {chatCompletions: effortNoneOnly}
       routes:
         responses_api:
           effort:
@@ -191,6 +198,7 @@ models:
         accepted: true
         levels: [none, low, medium, high, xhigh]
         default: medium
+      tools: {chatCompletions: effortNoneOnly}
       routes:
         responses_api:
           effort:
@@ -201,6 +209,7 @@ models:
         accepted: true
         levels: [none, low, medium, high, xhigh]
         default: medium
+      tools: {chatCompletions: effortNoneOnly}
       routes:
         responses_api:
           effort:
@@ -211,6 +220,7 @@ models:
         accepted: true
         levels: [low, medium, high, xhigh]
         default: high
+      tools: {chatCompletions: refused}
       routes:
         responses_api:
           effort:
@@ -221,6 +231,7 @@ models:
         accepted: true
         levels: [none, low, medium, high, xhigh]
         default: medium
+      tools: {chatCompletions: effortNoneOnly}
       routes:
         responses_api:
           effort:
@@ -231,6 +242,7 @@ models:
         accepted: true
         levels: [none, low, medium, high, xhigh]
         default: medium
+      tools: {chatCompletions: effortNoneOnly}
       routes:
         responses_api:
           effort:
@@ -241,6 +253,7 @@ models:
         accepted: true
         levels: [low, medium, high, xhigh]
         default: medium
+      tools: {chatCompletions: refused}
       routes:
         responses_api:
           effort:
