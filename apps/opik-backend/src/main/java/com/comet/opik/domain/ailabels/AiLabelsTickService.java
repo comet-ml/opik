@@ -108,14 +108,14 @@ public class AiLabelsTickService {
     private final Map<String, Instant> throttledUntil = new ConcurrentHashMap<>();
     private final AtomicLong inFlightBytes = new AtomicLong();
     private long sweeps;
-    // What the latest tick that swept saw, for its dashboard: one immutable record, assigned once per sweep after all
-    // of it is known, so a scrape never mixes two ticks. Null until the first sweep, so its gauges report nothing
-    // rather than a sweep of 0 buckets that never happened. A tick that skips the sweep (budget full, or not due on
-    // this pod) leaves it alone: the record describes the latest sweep, and all three values are that sweep's.
-    private volatile TickObservation lastTick;
+    // What the latest sweep saw, for the tick's dashboard: one immutable record, assigned once per sweep after all of
+    // it is known, so a scrape never mixes two sweeps. Null until the first sweep, so its gauges report nothing rather
+    // than a sweep of 0 buckets that never happened. A tick that skips the sweep (budget full, or not due on this pod)
+    // leaves it alone, so the gauges describe the latest sweep, and all three values are that sweep's.
+    private volatile SweepObservation lastSweep;
 
-    /** What one tick's sweep found: its candidates, the workspaces they span, and the buckets swept before its deadline. */
-    record TickObservation(long candidates, long workspaces, long bucketsReached) {
+    /** What one sweep found: its candidates, the workspaces they span, and the buckets swept before its deadline. */
+    record SweepObservation(long candidates, long workspaces, long bucketsReached) {
     }
 
     private final LongCounter itemsSubmitted;
@@ -169,15 +169,15 @@ public class AiLabelsTickService {
                                 .formatted(LOAD_SHARE * 100, SWEEP_SHARE * 100))
                 .buildWithCallback(measurement -> measurement.record(config.getTickBudget().toMilliseconds() / 1e3));
         meter.gaugeBuilder("ai_labels.tick.workspaces").ofLongs()
-                .setDescription("Workspaces with candidates in the latest tick that swept")
-                .buildWithCallback(measurement -> observed(measurement, TickObservation::workspaces));
+                .setDescription("Workspaces with candidates in the latest sweep")
+                .buildWithCallback(measurement -> observed(measurement, SweepObservation::workspaces));
         meter.gaugeBuilder("ai_labels.sweep.candidates").ofLongs()
                 .setDescription("Traces the latest sweep found to label")
-                .buildWithCallback(measurement -> observed(measurement, TickObservation::candidates));
+                .buildWithCallback(measurement -> observed(measurement, SweepObservation::candidates));
         meter.gaugeBuilder("ai_labels.sweep.buckets_reached").ofLongs()
                 .setDescription(
                         "Buckets the latest sweep swept before its deadline; under ai_labels.sweep.buckets, it overran")
-                .buildWithCallback(measurement -> observed(measurement, TickObservation::bucketsReached));
+                .buildWithCallback(measurement -> observed(measurement, SweepObservation::bucketsReached));
         this.itemsSubmitted = meter.counterBuilder("ai_labels.items.submitted").build();
         this.itemsDone = meter.counterBuilder("ai_labels.items.done").build();
         this.itemsFailed = meter.counterBuilder("ai_labels.items.failed").build();
@@ -471,22 +471,22 @@ public class AiLabelsTickService {
             candidates.addAll(sweepService.sweep(buckets.get(index), index, tasks).collectList().block());
             swept++;
         }
-        lastTick = new TickObservation(candidates.size(),
+        lastSweep = new SweepObservation(candidates.size(),
                 candidates.stream().map(Candidate::workspaceId).distinct().count(), swept);
         return candidates;
     }
 
-    /** Records one value of the latest tick that swept, or nothing before the first. */
-    private void observed(ObservableLongMeasurement measurement, ToLongFunction<TickObservation> value) {
-        var tick = lastTick;
-        if (tick != null) {
-            measurement.record(value.applyAsLong(tick));
+    /** Records one value of the latest sweep, or nothing before the first. */
+    private void observed(ObservableLongMeasurement measurement, ToLongFunction<SweepObservation> value) {
+        var sweep = lastSweep;
+        if (sweep != null) {
+            measurement.record(value.applyAsLong(sweep));
         }
     }
 
-    /** The latest tick that swept on this pod, or null before the first. */
-    TickObservation lastTick() {
-        return lastTick;
+    /** The latest sweep on this pod, or null before the first. */
+    SweepObservation lastSweep() {
+        return lastSweep;
     }
 
     // --- 3. Submit ---

@@ -500,8 +500,8 @@ class AiLabelsTickTest {
 
         assertThat(sweeps).hasValue(1);
         assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
-        // A tick that skips the sweep leaves the gauges describing the last tick that swept.
-        assertThat(service.lastTick()).isEqualTo(new AiLabelsTickService.TickObservation(1, 1, 1));
+        // A tick that skips the sweep leaves the gauges describing the last sweep.
+        assertThat(service.lastSweep()).isEqualTo(new AiLabelsTickService.SweepObservation(1, 1, 1));
 
         completeJobs(workspaceId);
         tick(service);
@@ -632,7 +632,7 @@ class AiLabelsTickTest {
         assertThat(inFlight(tripped)).isEmpty();
         assertThat(submits(DECIDE_PATH, tripped)).isEmpty();
         // One candidate in one workspace; the tripped bucket was still reached: its query ran, the guard stopped it.
-        assertThat(service.lastTick()).isEqualTo(new AiLabelsTickService.TickObservation(1, 1, 2));
+        assertThat(service.lastSweep()).isEqualTo(new AiLabelsTickService.SweepObservation(1, 1, 2));
 
         tick(service);
 
