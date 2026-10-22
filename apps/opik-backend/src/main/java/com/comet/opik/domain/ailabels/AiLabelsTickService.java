@@ -231,7 +231,7 @@ public class AiLabelsTickService {
                 .buildWithCallback(measurement -> Optional.ofNullable(lastJobs)
                         .ifPresent(jobs -> measurement.record(jobs.oldestOpenSeconds(Instant.now()))));
         this.jobsSubmitted = meter.counterBuilder("ai_labels.jobs.submitted")
-                .setDescription("Jobs opik-inference accepted")
+                .setDescription("Jobs opik-inference accepted and the tick recorded as open")
                 .build();
         this.itemsSubmitted = meter.counterBuilder("ai_labels.items.submitted").build();
         this.itemsDone = meter.counterBuilder("ai_labels.items.done").build();
@@ -382,8 +382,11 @@ public class AiLabelsTickService {
     private record LoadedJob(AiLabelJob job, List<AiLabel> labels, List<AiLabelStatus> statuses) {
     }
 
-    /** Writes the loaded jobs' rows and marks them loaded; {@code open} is every job the poll found. */
-    private void write(List<AiLabelJob> open, List<LoadedJob> loaded) {
+    /**
+     * Writes the loaded jobs' rows and marks them loaded, then publishes the jobs still open: {@code polled}, every job
+     * the poll found, less the ones marked.
+     */
+    private void write(List<AiLabelJob> polled, List<LoadedJob> loaded) {
         if (loaded.isEmpty()) {
             return;
         }
@@ -405,7 +408,7 @@ public class AiLabelsTickService {
             return null;
         });
         var loadedIds = Set.copyOf(jobIds);
-        lastJobs = JobsObservation.of(open.stream().filter(job -> !loadedIds.contains(job.jobId())).toList());
+        lastJobs = JobsObservation.of(polled.stream().filter(job -> !loadedIds.contains(job.jobId())).toList());
         for (var result : loaded) {
             countOutcomes(result.job().endpoint(), result.statuses());
             inFlightBytes.addAndGet(-result.job().bytes());
