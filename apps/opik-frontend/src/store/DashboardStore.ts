@@ -564,8 +564,6 @@ export const selectUpdatePreviewWidget = (state: DashboardStore) =>
   state.updatePreviewWidget;
 
 export const selectReadOnly = (state: DashboardStore) => state.readOnly;
-export const selectOnAddWidgetToTemplate = (state: DashboardStore) =>
-  state.onAddWidgetToTemplate;
 export const selectSetOnAddWidgetToTemplate = (state: DashboardStore) =>
   state.setOnAddWidgetToTemplate;
 export const selectSetReadOnly = (state: DashboardStore) => state.setReadOnly;
