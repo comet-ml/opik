@@ -199,6 +199,34 @@ class ExperimentItemLedgerTest {
                 .isLessThanOrEqualTo(config.getBatchCounterTtl().toJavaDuration());
     }
 
+    // Once drained, theoutcomes only have to outlast the gap to the next redelivery, which sets
+    // the window again.
+    @Test
+    @DisplayName("should keep a drained run's outcomes only for a few redelivery periods")
+    void drainShortensTheOutcomes() {
+        var experimentId = UUID.randomUUID();
+        ledger.record(WORKSPACE_ID, experimentId, entry(), Outcome.OK).block();
+
+        ledger.expireAfterDrain(WORKSPACE_ID, experimentId).block();
+
+        assertThat(ttl(experimentId))
+                .isPositive()
+                .isLessThanOrEqualTo(config.getPendingMessageDuration().toJavaDuration().multipliedBy(6));
+    }
+
+    @Test
+    @DisplayName("should not stretch a drained run's outcomes back to a day when a late item is recorded")
+    void lateRecordKeepsTheShortenedExpiry() {
+        var experimentId = UUID.randomUUID();
+        ledger.record(WORKSPACE_ID, experimentId, entry(), Outcome.OK).block();
+        ledger.expireAfterDrain(WORKSPACE_ID, experimentId).block();
+
+        ledger.record(WORKSPACE_ID, experimentId, entry(), Outcome.OK).block();
+
+        assertThat(ttl(experimentId))
+                .isLessThanOrEqualTo(config.getPendingMessageDuration().toJavaDuration().multipliedBy(6));
+    }
+
     private StreamMessageId entry() {
         return new StreamMessageId(System.currentTimeMillis(), nextEntry.getAndIncrement());
     }

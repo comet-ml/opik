@@ -36,6 +36,8 @@ import java.util.UUID;
 public class ExperimentItemLedger {
 
     private static final int RECORD_CHUNK_SIZE = 500;
+    // How many redelivery idle periods a drained run's outcomes outlive the last delivery that saw the drain
+    private static final int DRAINED_RETENTION_PERIODS = 6;
 
     public enum Outcome {
         OK,
@@ -56,9 +58,8 @@ public class ExperimentItemLedger {
     /**
      * Records how the entry ended, unless an earlier delivery already did.
      *
-     * The outcome is kept for the full TTL, not cut short when the run drains: an entry that succeeded but lost
-     * its acknowledgement is redelivered with no bound from maxRetries, which only retires failures, and a late
-     * redelivery that finds no outcome runs the item again.
+     * The outcome is kept for the full TTL while the run is going, and for a shorter window once it drains (see
+     * {@link #expireAfterDrain}): a redelivery that finds no outcome runs the item again.
      */
     public Mono<Void> record(@NonNull String workspaceId, @NonNull UUID experimentId, @NonNull StreamMessageId entryId,
             @NonNull Outcome outcome) {
@@ -95,6 +96,22 @@ public class ExperimentItemLedger {
             entries.expireIfNotSet(config.getBatchCounterTtl().toJavaDuration());
             return batch.execute().then();
         });
+    }
+
+    /**
+     * Keeps a drained run's outcomes for a few redelivery periods instead of a day. Every delivery that sees the
+     * drain sets this again, so an entry whose acknowledgement keeps failing still finds its outcome on return.
+     */
+    public Mono<Void> expireAfterDrain(@NonNull String workspaceId, @NonNull UUID experimentId) {
+        return entries(workspaceId, experimentId)
+                .expire(config.getPendingMessageDuration().toJavaDuration().multipliedBy(DRAINED_RETENTION_PERIODS))
+                .onErrorResume(error -> {
+                    // The full TTL still clears them; the run has drained either way
+                    log.warn("Failed to shorten the outcomes of a drained experiment, experimentId '{}'",
+                            experimentId, error);
+                    return Mono.just(false);
+                })
+                .then();
     }
 
     /** Whether the run's total still exists. It is gone once a failed launch discards it, or once it expires. */

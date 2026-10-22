@@ -79,6 +79,7 @@ class ExperimentItemProcessingSubscriberTest {
         // these tests and they describe the skip alone.
         lenient().when(itemLedger.remaining(anyString(), any(UUID.class))).thenReturn(Mono.just(5L));
         lenient().when(itemLedger.hasTotal(anyString(), any(UUID.class))).thenReturn(Mono.just(true));
+        lenient().when(itemLedger.expireAfterDrain(anyString(), any(UUID.class))).thenReturn(Mono.empty());
         lenient().when(itemLedger.failures(anyString(), any(UUID.class))).thenReturn(Mono.just(0L));
         // The drain hands the finish to one caller; these tests are always that caller.
         lenient().when(cancellationService.claimFinish(anyString(), any(UUID.class)))
@@ -406,7 +407,7 @@ class ExperimentItemProcessingSubscriberTest {
 
         verify(itemProcessor, never()).process(any());
         verify(experimentService).update(eq(experimentId), argThat(
-                update -> update.status() == ExperimentStatus.COMPLETED));
+                update -> update.status() == ExperimentStatus.COMPLETED && Boolean.TRUE.equals(update.finished())));
     }
 
     @Test
@@ -500,5 +501,32 @@ class ExperimentItemProcessingSubscriberTest {
         subscriber.onRetired(buildMessage(experimentId), ENTRY, new IllegalStateException("redis")).block();
 
         verify(itemLedger, never()).record(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("should shorten the outcomes of a run once it has drained")
+    void expireOutcomesOnDrain() {
+        var experimentId = UUID.randomUUID();
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(any())).thenReturn(Mono.empty());
+        when(itemLedger.remaining(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(0L));
+        when(experimentService.update(any(UUID.class), any())).thenReturn(Mono.empty());
+        when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
+
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
+
+        verify(itemLedger).expireAfterDrain(WORKSPACE_ID, experimentId);
+    }
+
+    @Test
+    @DisplayName("should keep the outcomes while the run still has items to come")
+    void keepOutcomesWhileItemsRemain() {
+        var experimentId = UUID.randomUUID();
+        when(cancellationService.isCancelled(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        when(itemProcessor.process(any())).thenReturn(Mono.empty());
+
+        subscriber.processEvent(buildMessage(experimentId), ENTRY).block();
+
+        verify(itemLedger, never()).expireAfterDrain(any(), any());
     }
 }

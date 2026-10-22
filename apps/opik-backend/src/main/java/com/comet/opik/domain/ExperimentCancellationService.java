@@ -191,7 +191,9 @@ public class ExperimentCancellationService {
                 .doOnNext(
                         remaining -> log.info("Counted the purge off an experiment, remaining '{}', experimentId '{}'",
                                 remaining, experimentId))
-                .map(remaining -> remaining <= 0);
+                .flatMap(remaining -> remaining <= 0
+                        ? itemLedger.expireAfterDrain(workspaceId, experimentId).thenReturn(true)
+                        : Mono.just(false));
     }
 
     /**

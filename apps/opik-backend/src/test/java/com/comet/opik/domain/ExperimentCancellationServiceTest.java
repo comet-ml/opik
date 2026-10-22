@@ -278,6 +278,22 @@ class ExperimentCancellationServiceTest {
                 .containsExactlyElementsOf(queued);
     }
 
+    @Test
+    @DisplayName("should shorten the outcomes of a run its purge drains")
+    void purgeThatDrainsShortensTheOutcomes() {
+        var experimentId = UUID.randomUUID();
+        publish(messages(experimentId, 3));
+
+        var drained = service.purgeQueued(WORKSPACE_ID, experimentId).block();
+
+        assertThat(drained).isTrue();
+        var ttl = redissonClient.getMap(ExperimentExecutionConfig.itemEntriesKey(WORKSPACE_ID, experimentId))
+                .remainTimeToLive().block();
+        assertThat(ttl)
+                .isPositive()
+                .isLessThanOrEqualTo(config.getPendingMessageDuration().toJavaDuration().multipliedBy(6).toMillis());
+    }
+
     // A launch that failed partway discards what its run was counting against. Left behind, the
     // outcomes would hold one field per item for a day, for a run that will never use them.
     @Test
