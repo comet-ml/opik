@@ -24,6 +24,16 @@ test.describe(
   'Thread Messages — URL-selected internal trace',
   { tag: ['@t2-cuj', '@area:threads'] },
   () => {
+    // The budget has to cover the `internalTraceThreads` fixture, not just the
+    // body: it seeds several nested traces through the SDK bridge and then waits
+    // on thread aggregation, which is eventually consistent and polled for up to
+    // 30s twice. That does not fit the 90s default once the rest of the branch
+    // is running beside it — observed on staging as "Test timeout of 90000ms
+    // exceeded while setting up internalTraceThreads", before the test body had
+    // run at all. `describe.configure` and not `test.setTimeout`, which is
+    // called from the body and so comes too late to cover fixture setup.
+    test.describe.configure({ timeout: 300_000 });
+
     test(
       'keeps the selected internal trace listed and badged, and out of the toggle count',
       { tag: ['@cap:threads.turn-order-io', '@cap:threads.thread-message-count'] },

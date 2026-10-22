@@ -148,6 +148,27 @@ test.describe(
         });
 
         await test.step('The truncated list read returns slim copies — shorter, and not blank', async () => {
+          // Waited for first: the list read is a different index from the by-id
+          // read polled above, so the span can be readable by id and not yet
+          // listed. The hard assertions below then run on a settled read.
+          await expect
+            .poll(
+              async () =>
+                (
+                  await backendClient.listLogsPage({
+                    entity: 'spans',
+                    projectId: project.id,
+                    truncate: true,
+                  })
+                ).rows.some((r) => r.id === spanId),
+              {
+                message: 'the span appears in the truncated list read',
+                timeout: 120_000,
+                intervals: [1_000, 2_000, 5_000],
+              },
+            )
+            .toBe(true);
+
           const truncated = await backendClient.listLogsPage({
             entity: 'spans',
             projectId: project.id,
@@ -207,20 +228,37 @@ test.describe(
         });
 
         await test.step('The truncated read still returns slim copies after the update', async () => {
-          const truncated = await backendClient.listLogsPage({
-            entity: 'spans',
-            projectId: project.id,
-            truncate: true,
-          });
-          const row = truncated.rows.find((r) => r.id === spanId);
-          expect(row, 'the span is still in the truncated list read').toBeDefined();
-          for (const key of ['input', 'output'] as const) {
-            const slim = JSON.stringify(row![key] ?? null);
-            // The update's own slim-copy write is the half that would blank
-            // these while the full payload above stayed correct.
-            expect(slim, `the truncated ${key} was not blanked by the update`).not.toBe('null');
-            expect(slim.length, `the truncated ${key} still carries something`).toBeGreaterThan(0);
-          }
+          // Polled, not read once. The slim copies are rewritten by the update
+          // on the same eventually-consistent path as the payload itself — the
+          // by-id read above already needed polling for the tag — so a single
+          // read here times the assertion against ingestion rather than against
+          // the behaviour. A permanently blanked slim copy still fails: the poll
+          // runs out and reports exactly that.
+          await expect
+            .poll(
+              async () => {
+                const truncated = await backendClient.listLogsPage({
+                  entity: 'spans',
+                  projectId: project.id,
+                  truncate: true,
+                });
+                const row = truncated.rows.find((r) => r.id === spanId);
+                if (!row) return null;
+                return (['input', 'output'] as const).every((key) => {
+                  const slim = JSON.stringify(row[key] ?? null);
+                  return slim !== 'null' && slim.length > 0;
+                });
+              },
+              {
+                message:
+                  'the truncated input and output were not blanked by the update — ' +
+                  'the update writes its own slim copies, which is the half that ' +
+                  'can go wrong while the full payload stays correct',
+                timeout: 120_000,
+                intervals: [1_000, 2_000, 5_000],
+              },
+            )
+            .toBe(true);
         });
 
         await test.step('The trace panel renders each section with its own marker', async () => {
