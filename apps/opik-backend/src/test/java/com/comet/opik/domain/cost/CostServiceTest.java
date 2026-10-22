@@ -1422,7 +1422,7 @@ class CostServiceTest {
     }
 
     private static Stream<Arguments> provideTokenPricedProviders() {
-        var modelCosts = CostService.readModelCosts();
+        var modelCosts = ModelPriceTable.readModelCosts();
         Map<String, Map<String, ModelCostData>> rowsByModelByProvider = modelCosts.entrySet().stream()
                 .filter(entry -> StringUtils.isNotBlank(entry.getValue().litellmProvider()))
                 .filter(entry -> price(entry.getValue().inputCostPerToken()).signum() > 0

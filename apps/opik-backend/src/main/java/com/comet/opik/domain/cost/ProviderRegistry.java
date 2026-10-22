@@ -84,8 +84,11 @@ public class ProviderRegistry {
      * carry it ({@code fireworks_ai}, {@code xai}), then on its own.
      */
     private Optional<String> providerOfApiHost(String provider) {
+        if (!provider.contains(".")) {
+            return Optional.empty();
+        }
         String host = StringUtils.removeEnd(PORT_SUFFIX.matcher(provider).replaceFirst(""), ".");
-        if (!host.contains(".") || !InternetDomainName.isValid(host)) {
+        if (!InternetDomainName.isValid(host)) {
             return Optional.empty();
         }
         InternetDomainName domain = InternetDomainName.from(host);
@@ -101,7 +104,7 @@ public class ProviderRegistry {
         String suffix = registered.registrySuffix().toString();
         return Stream.of(name + "_" + suffix, name + suffix, name)
                 .map(ProviderRegistry::toLiteLlmName)
-                .filter(CostService::isPricedProvider)
+                .filter(ModelPriceTable::isPricedProvider)
                 .findFirst();
     }
 
