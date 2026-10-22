@@ -40,6 +40,8 @@ export interface ConversationStartOptions {
   origin?: ConversationOrigin;
   // Id of the click, so BI matches it to the session it opens.
   entryId?: string;
+  // The section the Add widget dialog was opened from, so Ollie adds the widget there.
+  section?: string;
 }
 
 export interface ChartEditRequest {
@@ -53,6 +55,8 @@ export interface ChartEditRequest {
   rows?: Record<string, unknown>[] | null;
   // Id of the click, so BI matches it to the session it opens.
   entryId?: string;
+  // "Duplicate": the chat refines a copy, which is added as a new widget and never replaces this one.
+  duplicate?: boolean;
 }
 
 export interface BridgeDashboard {
@@ -125,12 +129,14 @@ export interface ExplainButtonProps {
  * capability in `console:ready`.
  * 4 = `origin` and `entryId` on `conversation:start`, and `entryId` on
  * `chart:edit`, so BI can match a host click to the session it opens.
+ * 5 = widget mode: `section` on `conversation:start` and `duplicate` on
+ * `chart:edit`.
  *
  * ⚠️ MUST move in lockstep with `ollie-console/src/bridge.ts`; the console's
  * VER-4 assertions guard the event-shape contract. Bump here AND there together
  * whenever a bridge event is added/removed/reshaped.
  */
-export const BRIDGE_PROTOCOL_VERSION = 4;
+export const BRIDGE_PROTOCOL_VERSION = 5;
 
 /** Host → Sidebar events */
 export interface HostEventMap {

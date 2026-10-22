@@ -45,6 +45,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
 
   const widgetResolver = useDashboardStore(selectWidgetResolver);
   const getWidgetById = useDashboardStore((state) => state.getWidgetById);
+  const getSectionById = useDashboardStore((state) => state.getSectionById);
   const previewWidget = useDashboardStore((state) => state.previewWidget);
   const setPreviewWidget = useDashboardStore(selectSetPreviewWidget);
   const runtimeConfig = useDashboardStore(selectRuntimeConfig);
@@ -137,7 +138,11 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
     onOpenChange(false);
     window.opikBridge?.startConversation(
       "I want to add a custom widget to this dashboard. Ask me what it should show.",
-      { origin: "describe_widget", entryId },
+      {
+        origin: "describe_widget",
+        entryId,
+        section: getSectionById(sectionId)?.title,
+      },
     );
   };
 
