@@ -162,6 +162,17 @@ const OllieChartWidget: React.FunctionComponent<
 
   // `live` also covers the moment before the dashboard id arrives (skeleton); only `canQuery` may hit the endpoint.
   const canQuery = Boolean(query?.id && dashboardId && queryWidgetId);
+  const { data: previousRows } = useDashboardWidgetQuery(
+    {
+      dashboardId: dashboardId ?? "",
+      scope: dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE,
+      widgetId: queryWidgetId ?? "",
+      queryId: query?.id ?? "",
+      intervalStart: previousWindow?.intervalStart,
+      intervalEnd: previousWindow?.intervalEnd,
+    },
+    { enabled: canQuery && Boolean(previousWindow), retryNotFound: false },
+  );
   const {
     data: rows,
     isPending,
@@ -182,17 +193,6 @@ const OllieChartWidget: React.FunctionComponent<
     { enabled: canQuery, retryNotFound },
   );
   const live = Boolean(query?.id && queryWidgetId);
-  const { data: previousRows } = useDashboardWidgetQuery(
-    {
-      dashboardId: dashboardId ?? "",
-      scope: dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE,
-      widgetId: queryWidgetId ?? "",
-      queryId: query?.id ?? "",
-      intervalStart: previousWindow?.intervalStart,
-      intervalEnd: previousWindow?.intervalEnd,
-    },
-    { enabled: canQuery && Boolean(previousWindow), retryNotFound: false },
-  );
 
   // An autosave slower than the 404 retries saves the widget after its query already gave up; run it once more then.
   const wasSavedRef = useRef(!retryNotFound);
