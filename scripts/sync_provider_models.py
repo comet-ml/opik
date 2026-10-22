@@ -1133,18 +1133,22 @@ def _litellm_info(prices: dict, provider_key: str, entry_value: str) -> dict | N
     candidates = {
         "openai": [entry_value],
         "anthropic": [entry_value, f"anthropic/{entry_value}"],
-        "gemini": [f"gemini/{entry_value}", entry_value],
+        "gemini": [f"gemini/{entry_value}"],
         "vertexai": [entry_value],
     }.get(provider_key, [])
     for key in candidates:
         info = prices.get(key)
         if isinstance(info, dict):
             return info
-    # LiteLLM files some Vertex AI rows under the bare id (litellm_provider vertex_ai-language-models). Its provider
-    # is checked so a Gemini API row under the same id is never taken for the Vertex AI model.
-    if provider_key == "vertexai":
+    # A bare id can be a Gemini API row or a Vertex AI one (litellm_provider vertex_ai-language-models), so its
+    # provider is checked: a model never takes the other provider's facts.
+    owns_bare_row = {
+        "gemini": lambda provider: provider == "gemini",
+        "vertexai": lambda provider: provider.startswith("vertex_ai"),
+    }.get(provider_key)
+    if owns_bare_row:
         info = prices.get(entry_value.removeprefix("vertex_ai/"))
-        if isinstance(info, dict) and str(info.get("litellm_provider", "")).startswith("vertex_ai"):
+        if isinstance(info, dict) and owns_bare_row(str(info.get("litellm_provider", ""))):
             return info
     return None
 
