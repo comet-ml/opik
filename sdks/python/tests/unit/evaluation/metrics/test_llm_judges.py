@@ -2,6 +2,9 @@ from typing import Any, List
 
 import pytest
 
+from opik import exceptions
+from opik.evaluation.metrics.conversation.llm_judges import g_eval_wrappers
+from opik.evaluation.metrics.heuristics import contains
 from opik.evaluation.metrics.llm_judges.llm_juries.metric import (
     LLMJuriesJudge,
 )
@@ -124,3 +127,44 @@ def test_distinct_score_names_keep_their_keys():
     result = jury.score("dummy output")
 
     assert result.metadata["judge_scores"] == {"usefulness": 0.2, "safety": 0.8}
+
+
+@pytest.mark.parametrize("include_valid_judge", [False, True])
+@pytest.mark.parametrize("precompute_scores", [False, True])
+def test_llm_juries_judge__failed_score__raises(
+    include_valid_judge: bool, precompute_scores: bool
+) -> None:
+    conversation = [{"role": "assistant", "content": "safe answer"}]
+    failed_judge = g_eval_wrappers.GEvalConversationMetric(
+        judge=contains.Contains(reference="", track=False), name="failed_judge"
+    )
+    judges = [failed_judge]
+    if include_valid_judge:
+        valid_judge = g_eval_wrappers.GEvalConversationMetric(
+            judge=contains.Contains(reference="safe", track=False), name="valid_judge"
+        )
+        judges.insert(0, valid_judge)
+
+    precomputed = (
+        {judge: judge.score(conversation=conversation) for judge in judges}
+        if precompute_scores
+        else None
+    )
+    jury = LLMJuriesJudge(judges=judges, track=False)
+
+    with pytest.raises(
+        exceptions.MetricComputationError, match="failed_judge.*failed score"
+    ):
+        jury.score(conversation=conversation, precomputed=precomputed)
+
+
+def test_llm_juries_judge__valid_zero_score__included_in_average() -> None:
+    jury = LLMJuriesJudge(
+        judges=[NamedJudge(0.0, "zero"), NamedJudge(1.0, "one")], track=False
+    )
+
+    result = jury.score("dummy output")
+
+    assert result.value == pytest.approx(0.5)
+    assert not result.scoring_failed
+    assert result.metadata["judge_scores"] == {"zero": 0.0, "one": 1.0}

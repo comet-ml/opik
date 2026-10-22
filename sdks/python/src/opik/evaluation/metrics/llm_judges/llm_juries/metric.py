@@ -67,6 +67,11 @@ class LLMJuriesJudge(BaseMetric):
         Returns:
             A ``ScoreResult`` whose ``metadata["judge_scores"]`` holds one entry
             per vote that contributed to the average.
+
+        Raises:
+            MetricComputationError: If a judge returns a failed score, an
+                unsupported result type, or an out-of-range value, or no scores
+                are produced. Failed scores are not valid votes in the average.
         """
         precomputed: Optional[Dict[BaseMetric, ScoreResult]] = kwargs.pop(
             "precomputed", None
@@ -83,6 +88,10 @@ class LLMJuriesJudge(BaseMetric):
                 if not isinstance(result, ScoreResult):
                     raise exceptions.MetricComputationError(
                         f"Judge {judge.name} returned unexpected result type {type(result)!r}"
+                    )
+                if result.scoring_failed:
+                    raise exceptions.MetricComputationError(
+                        f"Judge {judge.name} returned a failed score '{result.name}'"
                     )
                 if result.value < 0 or result.value > 1:
                     raise exceptions.MetricComputationError(
