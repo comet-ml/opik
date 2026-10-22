@@ -1428,8 +1428,12 @@ def thinking_models_without_effort(
                 **((row.get("params") or {}).get("effort") or {}),
             }
             # The provider profile's {accepted: false} is only the fallback for a model nobody wrote levels for; a
-            # refusal in the model's own row or profile is a decision.
-            if {**default_effort, **own_effort}.get("levels") or own_effort.get("accepted") is False:
+            # refusal or an empty levels list ("takes none") in the model's own row or profile is a decision.
+            if (
+                {**default_effort, **own_effort}.get("levels")
+                or "levels" in own_effort
+                or own_effort.get("accepted") is False
+            ):
                 continue
             missing.append(f"{yaml_key}/{model_id}")
     return missing
