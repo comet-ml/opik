@@ -7,16 +7,15 @@ from urllib.parse import ParseResult, unquote, urlparse
 
 SCHEMES = ("redis", "rediss")
 MAX_RETRY_ATTEMPTS = 20
-# Same format as the Java backend's Dropwizard durations, e.g. 500ms, 5s, 1m
-# ASCII digits only: \d and str.isdigit() also accept digits int() rejects, such as "²"
+# ASCII digits only: \d and str.isdigit() also accept non-ASCII digits such as "١" or "²"
 _DURATION = re.compile(r"^([0-9]+)\s*([a-z]+)$")
 _DATABASE = re.compile(r"^[0-9]+$")
+# The variables are shared with the Java backend, whose values are Dropwizard durations, so Python reads the same
+# notation. Hours and days are left out: the 5m ceiling rejects any value written in them.
 _DURATION_UNITS = {
     "ms": 0.001, "millisecond": 0.001, "milliseconds": 0.001,
     "s": 1, "second": 1, "seconds": 1,
     "m": 60, "min": 60, "mins": 60, "minute": 60, "minutes": 60,
-    "h": 3600, "hour": 3600, "hours": 3600,
-    "d": 86400, "day": 86400, "days": 86400,
 }
 _MAX_DURATION_SECONDS = 300
 
