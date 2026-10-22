@@ -57,6 +57,7 @@ export {
   type JudgeMessageWrite,
   type JudgeMessageContentPartWrite,
   type LlmJudgeModelRef,
+  type LlmJudgeRuleBodyRef,
   type JudgeOutputSchemaType,
   type TraceJsonSection,
   type AnnotationQueueDetail,

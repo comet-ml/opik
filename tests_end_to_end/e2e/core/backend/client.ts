@@ -865,6 +865,33 @@ export interface LlmJudgeModelRef {
   customParameters: Record<string, unknown> | null;
 }
 
+/**
+ * One `llm_as_judge` rule's whole stored body — the top-level fields the editor
+ * can change, plus `code` exactly as `GET /automations/evaluators/{id}` answers
+ * it.
+ *
+ * A sibling of the narrow readers above rather than a replacement for them: a
+ * caller asking "did the model block survive" wants `getLlmJudgeModel`'s
+ * validated shape, while a caller comparing two rules wants everything, and
+ * wants it un-normalised. `code` is therefore a bare record and is NOT mapped
+ * into camelCase: the clone spec's question is whether the frontend rebuilt the
+ * body faithfully, and any normalisation here would hide a difference in a key
+ * this suite does not happen to model (`seed`, `custom_parameters`, a score
+ * entry's `unsaved` flag). Absent keys stay absent for the same reason —
+ * `max_cost_usd` is dropped from the response entirely once cleared, which is a
+ * different answer from the explicit `null` the form sends.
+ */
+export interface LlmJudgeRuleBodyRef {
+  id: string;
+  name: string;
+  enabled: boolean;
+  /** Fraction in [0, 1] — the backend's own units, not the panel's percentage. */
+  samplingRate: number;
+  /** `production` | `experiment` | `both`. */
+  triggerScope: string;
+  code: Record<string, unknown>;
+}
+
 /** One line of a rule's user-facing log stream. */
 export interface AutomationRuleLogRef {
   level: string;
@@ -4608,6 +4635,14 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        */
       schema?: Array<{ name: string; type: JudgeOutputSchemaType; description: string }>;
       enabled?: boolean;
+      /**
+       * Per-evaluation spending cap in USD, the panel's "Cost limit (USD)".
+       * Omitted from the request when not given rather than sent as `null`: the
+       * server drops the key from the read-back of a rule with no limit, so
+       * "never set" and "explicitly cleared" are the same stored state and a
+       * seed must be able to produce either side of it.
+       */
+      maxCostUsd?: number;
     }): Promise<string> {
       const scoreName = args.scoreName ?? 'Accuracy';
       const { status, message, location } = await rawFetch(
@@ -4642,6 +4677,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
                   description: 'Score assigned by the judge.',
                 },
               ],
+              ...(args.maxCostUsd === undefined ? {} : { max_cost_usd: args.maxCostUsd }),
             },
           },
         },
@@ -4939,6 +4975,69 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             })) ?? null,
         };
       });
+    },
+
+    /**
+     * The whole stored body of one `llm_as_judge` rule, `code` verbatim.
+     *
+     * For the questions that are about the body as a WHOLE rather than about
+     * one field of it — chiefly "is this clone the same evaluator as its
+     * source". Comparing two of these catches a key the frontend forgot to
+     * carry over even when no spec thought to name that key, which is the
+     * failure a field-by-field assertion is structurally unable to see.
+     *
+     * The rule type is checked rather than assumed: a python rule also answers
+     * 200 here and also has a `code`, and deep-comparing two of THOSE would
+     * pass while asserting nothing about the judge body this exists to read.
+     */
+    async getLlmJudgeRuleBody(ruleId: string): Promise<LlmJudgeRuleBodyRef> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getLlmJudgeRuleBody: ${ruleId} answered ${status}: ${message}`);
+      }
+      const rule = json as {
+        id?: string;
+        name?: string;
+        enabled?: boolean;
+        sampling_rate?: number;
+        trigger_scope?: string;
+        type?: string;
+        code?: unknown;
+      };
+      if (rule.type !== 'llm_as_judge') {
+        throw new Error(
+          `getLlmJudgeRuleBody: ${ruleId} is type '${rule.type}', not 'llm_as_judge'`,
+        );
+      }
+      // Same reasoning as `getAutomationRule`: defaulting an absent rate or
+      // scope would present as the server's own default, which is the value a
+      // caller here is trying to prove was carried over rather than re-derived.
+      if (typeof rule.sampling_rate !== 'number' || Number.isNaN(rule.sampling_rate)) {
+        throw new Error(`getLlmJudgeRuleBody: ${ruleId} returned no sampling_rate`);
+      }
+      if (typeof rule.trigger_scope !== 'string') {
+        throw new Error(`getLlmJudgeRuleBody: ${ruleId} returned no trigger_scope`);
+      }
+      if (typeof rule.name !== 'string') {
+        throw new Error(`getLlmJudgeRuleBody: ${ruleId} returned no name`);
+      }
+      if (!rule.code || typeof rule.code !== 'object' || Array.isArray(rule.code)) {
+        throw new Error(
+          `getLlmJudgeRuleBody: ${ruleId} returned code as ` +
+            `${Array.isArray(rule.code) ? 'an array' : typeof rule.code}, not an object`,
+        );
+      }
+      return {
+        id: String(rule.id ?? ruleId),
+        name: rule.name,
+        enabled: rule.enabled ?? true,
+        samplingRate: rule.sampling_rate,
+        triggerScope: rule.trigger_scope,
+        code: rule.code as Record<string, unknown>,
+      };
     },
 
     /**

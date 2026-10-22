@@ -91,6 +91,23 @@ export class OnlineEvaluationPage {
     });
   }
 
+  async cloneRuleByName(name: string): Promise<void> {
+    return test.step(`clone rule "${name}" via row actions`, async () => {
+      const row = this.ruleRow(name);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Clone' }).click();
+      await this.waitForPanelOpen();
+      // The clone panel is pre-named after its source, and that name is how the
+      // test tells the two rules apart afterwards — so a panel that opened on
+      // the wrong rule (or in edit mode on this one) fails here rather than
+      // creating a rule nothing expected.
+      await expect(this.nameInput, 'the clone is pre-named after its source').toHaveValue(
+        `${name} (Copy)`,
+      );
+    });
+  }
+
   async deleteRuleByName(name: string): Promise<void> {
     return test.step(`delete rule "${name}" via row actions`, async () => {
       const row = this.ruleRow(name);
@@ -164,6 +181,36 @@ export class OnlineEvaluationPage {
     return test.step('submit the rule editor', async () => {
       await this.submitButton.click();
       await this.waitForPanelClosed();
+    });
+  }
+
+  /**
+   * Submit a CREATE (or a clone) and return the new rule's id, taken from the
+   * `Location` header of the POST the panel issues.
+   *
+   * The header and not a name lookup, for the reason `createLlmJudgeRule`
+   * gives and one more that only bites here: the backend silently suffixes a
+   * clashing rule name with `-1`, so looking the rule up by the name just typed
+   * can return an OLDER rule and read as a save that lost every field.
+   *
+   * The subscription is armed before the click because the request is in flight
+   * the moment the form submits.
+   */
+  async submitPanelAndCaptureRuleId(): Promise<string> {
+    return test.step('submit the rule editor and capture the created id', async () => {
+      const created = this.page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).pathname.endsWith('/v1/private/automations/evaluators'),
+      );
+      await this.submitButton.click();
+      const response = await created;
+      expect(response.status(), `the rule was created (got ${response.status()})`).toBe(201);
+      const location = response.headers()['location'] ?? '';
+      const id = location.split('/').filter(Boolean).pop() ?? '';
+      expect(id, `the 201 carried a usable Location header (got '${location}')`).not.toBe('');
+      await this.waitForPanelClosed();
+      return id;
     });
   }
 
@@ -416,6 +463,56 @@ export class OnlineEvaluationPage {
     return this.panel.getByText('Cost limit (USD)', { exact: true });
   }
 
+  /**
+   * The Cost limit box itself. Free text with a decimal filter, not a number
+   * input.
+   *
+   * Addressed by its placeholder because it has no other name: `CostLimitField`
+   * wraps a local `CostInput` in `FormControl`, and `CostInput` does not spread
+   * the props it is cloned with, so the `id` that `FormLabel`'s `htmlFor`
+   * points at never reaches the `<input>`. The accessible name is therefore the
+   * placeholder, and `getByLabel('Cost limit (USD)')` matches nothing.
+   *
+   * The right fix is a `data-testid` on that input (or forwarding the id),
+   * added in the same change — the estate's conventions say so. This branch
+   * cannot carry it: the QA harvest branch may only touch `tests_end_to_end/`,
+   * and a change under `apps/opik-frontend/` would stop it being pushed at all.
+   * Flagged here so it is picked up with the FE change rather than lost.
+   */
+  get costLimitInput(): Locator {
+    return this.panel.getByPlaceholder('No limit');
+  }
+
+  /**
+   * Type a cost limit. `fill` rather than `clear` + type: the control rejects
+   * any keystroke that would leave a non-decimal string, so a partial value is
+   * never committed and the assertion below is on what the form actually took.
+   */
+  async setCostLimit(value: string): Promise<void> {
+    return test.step(`set the cost limit to ${value}`, async () => {
+      const input = this.costLimitInput;
+      await input.fill(value);
+      await expect(input, 'the cost limit box').toHaveValue(value);
+    });
+  }
+
+  /** Empty the Cost limit box, which is what sends `max_cost_usd: null`. */
+  async clearCostLimit(): Promise<void> {
+    return test.step('clear the cost limit', async () => {
+      const input = this.costLimitInput;
+      await input.fill('');
+      await expect(input, 'the cost limit box').toHaveValue('');
+    });
+  }
+
+  async readCostLimit(): Promise<string> {
+    return test.step('read the cost limit out of the panel', async () => {
+      const input = this.costLimitInput;
+      await expect(input, 'the cost limit box').toBeVisible();
+      return input.inputValue();
+    });
+  }
+
   /** Replaces the prompt and scores, and (when creating) sets the name to the template label. */
   async applyJudgeTemplate(label: CreateRuleLLMJudgeFields['template']): Promise<void> {
     return test.step(`apply the "${label}" judge template`, async () => {
@@ -463,16 +560,35 @@ export class OnlineEvaluationPage {
     return this.panel.getByPlaceholder('For example: Does the output fully answer the input?').first();
   }
 
+  /**
+   * Replace the judge prompt.
+   *
+   * The same editor `replaceCode` drives, and the same reason for inserting in
+   * one go rather than typing: the prompt editor opens a variable-picker
+   * popover on the SECOND `{` keystroke, so a typed `{{input.question}}` would
+   * be racing an autocomplete list. `insertText` is a single input event and
+   * reaches none of the keymap handlers.
+   */
+  async replacePromptText(prompt: string): Promise<void> {
+    return test.step('replace the judge prompt', async () => {
+      await this.replaceEditorContent(prompt);
+    });
+  }
+
   // --- Code evaluator ---
 
   /** Inserted in one go: typed line by line, CodeMirror's auto-indent would re-indent it. */
   async replaceCode(code: string): Promise<void> {
     return test.step('replace the evaluator code', async () => {
-      await this.editor.click();
-      await this.page.keyboard.press('ControlOrMeta+A');
-      await this.page.keyboard.press('Delete');
-      await this.page.keyboard.insertText(code);
+      await this.replaceEditorContent(code);
     });
+  }
+
+  private async replaceEditorContent(text: string): Promise<void> {
+    await this.editor.click();
+    await this.page.keyboard.press('ControlOrMeta+A');
+    await this.page.keyboard.press('Delete');
+    await this.page.keyboard.insertText(text);
   }
 
   // --- Whole create flows ---
@@ -492,7 +608,10 @@ export class OnlineEvaluationPage {
     });
   }
 
-  async fillAndSubmitCreateRulePythonEquals(fields: CreateRulePythonEqualsFields): Promise<void> {
+  /** Returns the new rule's id, for a caller that needs to address it by id. */
+  async fillAndSubmitCreateRulePythonEquals(
+    fields: CreateRulePythonEqualsFields,
+  ): Promise<string> {
     return test.step(`create code evaluator rule "${fields.name}"`, async () => {
       await this.openCreateRulePanel('Code evaluator');
       await this.nameInput.fill(fields.name);
@@ -500,7 +619,7 @@ export class OnlineEvaluationPage {
       if (fields.samplingRatePercent !== undefined) {
         await this.setSamplingRatePercent(fields.samplingRatePercent);
       }
-      await this.submitPanel();
+      return this.submitPanelAndCaptureRuleId();
     });
   }
 }
