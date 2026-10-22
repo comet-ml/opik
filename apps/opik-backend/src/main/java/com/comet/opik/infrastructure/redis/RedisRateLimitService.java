@@ -65,7 +65,9 @@ class RedisRateLimitService implements RateLimitService {
 
     // availableEvents and getRemainingTTL feed the rate-limit response headers, which the interceptor sets
     // from a finally block. A limiter error here must stay best-effort and never replace the request's real
-    // outcome with a 500, so both fall back to a safe value rather than propagating (OPIK-8923).
+    // outcome with a 500, so both fall back to a safe value rather than propagating (OPIK-8923). They run on
+    // every request, so the fallback logs at debug without the stack trace: during a Redis outage a warn with
+    // a full trace per request would amplify the incident. The acquire-path fail-open keeps its full trace.
 
     @Override
     public Mono<Long> availableEvents(@NonNull String bucketName, @NonNull LimitConfig limitConfig) {
@@ -73,7 +75,8 @@ class RedisRateLimitService implements RateLimitService {
         return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit)
                 .then(Mono.defer(rateLimit::availablePermits).retryWhen(configureRetry(limitConfig, rateLimit)))
                 .onErrorResume(error -> {
-                    log.warn("Rate limiter available-events lookup failed, reporting the configured limit", error);
+                    log.debug("Rate limiter available-events lookup failed, reporting the configured limit: {}",
+                            error.getMessage());
                     return Mono.just(limitConfig.limit());
                 });
     }
@@ -86,7 +89,8 @@ class RedisRateLimitService implements RateLimitService {
                 .onErrorResume(error -> {
                     // Report the full window, not 0: the interceptor turns 0 into a RateLimit-Reset of 1s,
                     // which would make a rejected client retry after a second and spin on 429s.
-                    log.warn("Rate limiter TTL lookup failed, reporting the configured window", error);
+                    log.debug("Rate limiter TTL lookup failed, reporting the configured window: {}",
+                            error.getMessage());
                     return Mono.just(Duration.ofSeconds(limitConfig.durationInSeconds()).toMillis());
                 });
     }
