@@ -117,6 +117,17 @@ class ExperimentAggregateEventListenerTest {
         }
 
         @Test
+        void publishWhenStatusIsFailed() {
+            when(config.isEnabled()).thenReturn(true);
+            var experimentId = UUID.randomUUID();
+
+            listener.onExperimentUpdated(
+                    new ExperimentUpdated(experimentId, ExperimentStatus.FAILED, WORKSPACE_ID, USER_NAME));
+
+            verify(publisher).publish(Set.of(experimentId), WORKSPACE_ID, USER_NAME);
+        }
+
+        @Test
         void doesNotPublishWhenStatusIsRunning() {
             when(config.isEnabled()).thenReturn(true);
 
