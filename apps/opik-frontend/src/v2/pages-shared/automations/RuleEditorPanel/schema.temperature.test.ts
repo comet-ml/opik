@@ -39,9 +39,9 @@ describe("LLM judge temperature on save", () => {
     expect(object.model.temperature).toBeUndefined();
   });
 
-  it("drops it for an OpenAI reasoning model, which only accepts its own default", () => {
+  it("drops it for an OpenAI reasoning model with no none level, which never takes one", () => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
-      asFormData(PROVIDER_MODEL_TYPE.GPT_5_5, 0.3),
+      asFormData(PROVIDER_MODEL_TYPE.GPT_O3, 0.3),
     );
 
     expect(object.model.temperature).toBeUndefined();
@@ -63,20 +63,23 @@ describe("LLM judge temperature on save", () => {
     expect(object.model.temperature).toBe(0.3);
   });
 
-  // OpenAI: "When reasoning effort is not none, remove temperature, top_p, and top_logprobs".
-  it("keeps it for an OpenAI reasoning model whose saved effort is none, and only then", () => {
-    const atNone = convertLLMJudgeDataToLLMJudgeObject(
-      asFormData(PROVIDER_MODEL_TYPE.GPT_6_LUNA, 0, {
-        reasoning_effort: "none",
-      }),
-    );
-    const atLow = convertLLMJudgeDataToLLMJudgeObject(
-      asFormData(PROVIDER_MODEL_TYPE.GPT_5_4, 0, { reasoning_effort: "low" }),
-    );
+  // OpenAI: "When reasoning effort is not none, remove temperature, top_p, and top_logprobs". The
+  // judge does that per request, so the rule keeps the value for when the effort goes back to none.
+  it.each([
+    [PROVIDER_MODEL_TYPE.GPT_6_LUNA, { reasoning_effort: "none" }],
+    [PROVIDER_MODEL_TYPE.GPT_6_LUNA, { reasoning_effort: "medium" }],
+    [PROVIDER_MODEL_TYPE.GPT_5_4, { reasoning_effort: "low" }],
+    [PROVIDER_MODEL_TYPE.GPT_5_5, null],
+  ])(
+    "keeps it for %s, which takes one at effort none, whatever effort the rule saved",
+    (model, customParameters) => {
+      const object = convertLLMJudgeDataToLLMJudgeObject(
+        asFormData(model, 0, customParameters),
+      );
 
-    expect(atNone.model.temperature).toBe(0);
-    expect(atLow.model.temperature).toBeUndefined();
-  });
+      expect(object.model.temperature).toBe(0);
+    },
+  );
 
   it("keeps a Claude temperature in the rule while a saved effort makes it think", () => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
