@@ -56,6 +56,7 @@ class RedisRateLimitServiceTest {
         lenient().when(redisClient.getRateLimiter(anyString())).thenReturn(rateLimiter);
         lenient().when(rateLimiter.trySetRate(any(RateType.class), anyLong(), any(Duration.class), any(Duration.class)))
                 .thenReturn(Mono.just(true));
+        lenient().when(rateLimiter.expireIfNotSet(any(Duration.class))).thenReturn(Mono.just(true));
         rateLimitService = new RedisRateLimitService(redisClient);
     }
 
@@ -100,10 +101,9 @@ class RedisRateLimitServiceTest {
     }
 
     @Test
-    void setLimitUsesKeepAliveTimeSoBucketKeysShareOneTtl() {
-        // Root-cause fix: keepAliveTime (== the rate interval) is handed to Redisson so the config hash,
-        // the permit counter and the permits sorted-set are pexpired together inside the acquire script;
-        // the out-of-band expireIfNotSet that let them diverge (OPIK-8923) is gone.
+    void setLimitUsesKeepAliveTimeAndExpireIfNotSetSoBucketKeysAlwaysExpire() {
+        // keepAliveTime (== the rate interval) keeps the limiter keys on one TTL inside the acquire script;
+        // expireIfNotSet puts a TTL on any key that lost it, so a bucket the acquire script can't fix expires.
         when(rateLimiter.tryAcquire(EVENTS)).thenReturn(Mono.just(true));
         LimitConfig config = limitConfig();
         Duration interval = Duration.ofSeconds(config.durationInSeconds());
@@ -113,7 +113,7 @@ class RedisRateLimitServiceTest {
                 .verifyComplete();
 
         verify(rateLimiter).trySetRate(RateType.OVERALL, config.limit(), interval, interval);
-        verify(rateLimiter, never()).expireIfNotSet(any(Duration.class));
+        verify(rateLimiter).expireIfNotSet(interval);
     }
 
     @Test

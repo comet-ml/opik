@@ -59,14 +59,16 @@ class RedisRateLimitService implements RateLimitService {
     private Mono<Boolean> setLimitIfNecessary(long limit, long limitDurationInSeconds, RRateLimiterReactive rateLimit) {
         // keepAliveTime makes Redisson pexpire the config hash, the permit counter and the permits
         // sorted-set to the same TTL inside the atomic acquire script, so they can no longer expire
-        // independently on the acquire path. The previous out-of-band expireIfNotSet only put a TTL on the
-        // config hash and let the value/permits keys diverge, producing the empty-permits/exhausted-counter
-        // state that makes the throttle branch error with "arithmetic on a nil value" (OPIK-8923). It equals
-        // the rate interval, so idle buckets are still reclaimed after one interval of inactivity. The header
-        // path used to reopen this by calling the mutating availablePermits; availableEvents now reads the
-        // counter read-only instead, so no path strips the counter's TTL.
+        // independently on the acquire path. It equals the rate interval, so idle buckets are still reclaimed
+        // after one interval of inactivity.
+        // expireIfNotSet is the self-heal: RRateLimiter applies it (PEXPIRE NX) to every limiter key, not just
+        // the hash. The acquire script errors with "arithmetic on a nil value" before its own pexpire when the
+        // counter is low and the permits sorted-set is empty, so a counter left without a TTL (e.g. by the
+        // previous availablePermits header path) would otherwise never expire and the bucket would fail
+        // forever (OPIK-8923). NX leaves keys that already carry the keepAliveTime TTL untouched.
         Duration interval = Duration.ofSeconds(limitDurationInSeconds);
-        return rateLimit.trySetRate(RateType.OVERALL, limit, interval, interval);
+        return rateLimit.trySetRate(RateType.OVERALL, limit, interval, interval)
+                .flatMap(__ -> rateLimit.expireIfNotSet(interval));
     }
 
     // availableEvents and getRemainingTTL feed the rate-limit response headers, which the interceptor sets
