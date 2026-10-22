@@ -163,7 +163,9 @@ test.describe(
                 ).rows.some((r) => r.id === spanId),
               {
                 message: 'the span appears in the truncated list read',
-                timeout: 120_000,
+                // Generous because `listLogsPage` may stand off for ~2 minutes
+                // of its own on a rate limit before it even answers once.
+                timeout: 300_000,
                 intervals: [1_000, 2_000, 5_000],
               },
             )
@@ -254,7 +256,9 @@ test.describe(
                   'the truncated input and output were not blanked by the update — ' +
                   'the update writes its own slim copies, which is the half that ' +
                   'can go wrong while the full payload stays correct',
-                timeout: 120_000,
+                // Generous for the same reason as the read above: `listLogsPage`
+                // may stand off ~2 minutes on a rate limit before answering.
+                timeout: 300_000,
                 intervals: [1_000, 2_000, 5_000],
               },
             )

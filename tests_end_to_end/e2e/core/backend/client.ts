@@ -4330,20 +4330,29 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
 
       // `withRateLimitRetry`, for the reason `listSpanCosts` and
       // `listTrackedSpans` take it: the traces and spans listings are limited
-      // per workspace, and a sorting spec necessarily issues a burst — the
+      // per workspace, and the specs here necessarily issue a burst — an
       // ingestion poll, then one read per direction per entity. Observed on
       // staging: this method answering 429 on all three attempts of a 4-worker
       // run of the whole branch, which reads exactly like the sort being broken.
-      const { json } = await withRateLimitRetry(async () => {
-        const result = await rawFetch('GET', `/v1/private/${args.entity}`, { query });
-        if (result.status !== 200) {
-          throw new Error(
-            `listLogsPage(${args.entity} of project ${args.projectId}): expected 200, ` +
-              `got ${result.status}: ${result.message}`,
-          );
-        }
-        return result;
-      });
+      //
+      // A longer ladder than the default because every caller reads inside an
+      // `expect.poll`, which does not swallow a throw: a 429 outlasting the
+      // ladder escapes and fails the test rather than being polled again. ~2
+      // minutes of stand-off covers a whole-branch run; past that it is not a
+      // burst and the error should surface.
+      const { json } = await withRateLimitRetry(
+        async () => {
+          const result = await rawFetch('GET', `/v1/private/${args.entity}`, { query });
+          if (result.status !== 200) {
+            throw new Error(
+              `listLogsPage(${args.entity} of project ${args.projectId}): expected 200, ` +
+                `got ${result.status}: ${result.message}`,
+            );
+          }
+          return result;
+        },
+        [2_000, 5_000, 10_000, 20_000, 30_000, 30_000, 30_000],
+      );
       const page = (json ?? {}) as {
         total?: number;
         sortable_by?: unknown;
@@ -7236,8 +7245,16 @@ export function isRateLimitedError(err: unknown): boolean {
  * surface immediately; a rate limit that outlasts the whole backoff still
  * throws, because at that point it is not a burst.
  */
-async function withRateLimitRetry<T>(read: () => Promise<T>): Promise<T> {
-  const backoffMs = [2_000, 5_000, 10_000, 20_000];
+async function withRateLimitRetry<T>(
+  read: () => Promise<T>,
+  /**
+   * The stand-off ladder. The default suits a single spec's own burst; a caller
+   * whose reads run inside an `expect.poll` wants a longer one, because
+   * `expect.poll` does NOT swallow a throw — a 429 that outlasts the ladder
+   * escapes and fails the test on the spot instead of being polled again.
+   */
+  backoffMs: number[] = [2_000, 5_000, 10_000, 20_000],
+): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
       return await read();

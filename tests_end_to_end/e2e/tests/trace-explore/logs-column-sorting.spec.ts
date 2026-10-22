@@ -99,7 +99,10 @@ test.describe('Logs column sorting — CUJ', { tag: ['@t2-cuj', '@area:traces'] 
                 (await backendClient.listLogsPage({ entity, projectId: project.id })).total,
               {
                 message: `all ${SEED_COUNT} ${entity} are ingested`,
-                timeout: 180_000,
+                // Generous because `listLogsPage` may stand off for ~2 minutes
+                // of its own on a rate limit before it answers once, and
+                // `expect.poll` does not swallow the throw if it gives up.
+                timeout: 300_000,
                 intervals: [1_000, 2_000, 5_000],
               },
             )
