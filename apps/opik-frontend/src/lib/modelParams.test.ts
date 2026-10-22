@@ -75,9 +75,16 @@ describe("getModelParams", () => {
   });
 
   it("answers an unlisted model with its provider's profile", () => {
+    setLatestModelParams(new Map([["acme", new Map()]]));
     setLatestProviderProfiles({ acme: PROFILE });
 
     expect(getModelParams("acme", "acme-unlisted")).toBe(PROFILE);
+  });
+
+  it("answers nothing until the model list has loaded, profile or not", () => {
+    setLatestProviderProfiles({ acme: PROFILE });
+
+    expect(getModelParams("acme", "acme-1")).toBeUndefined();
   });
 
   it("answers nothing for a provider without a profile", () => {
@@ -321,6 +328,25 @@ describe("adjustConfigForModel", () => {
         BINDING,
       ),
     ).toEqual({ thinkingEffort: "medium" });
+  });
+
+  it("moves the previous model's default to the next model's default", () => {
+    expect(
+      adjustConfigForModel(
+        { thinkingEffort: "high" },
+        NO_SAMPLING_MODEL,
+        BINDING,
+        SAMPLING_MODEL,
+      ),
+    ).toEqual({ thinkingEffort: "medium" });
+  });
+
+  it("keeps a level the user picked over the previous model's default", () => {
+    const config = { thinkingEffort: "low" };
+
+    expect(
+      adjustConfigForModel(config, NO_SAMPLING_MODEL, BINDING, SAMPLING_MODEL),
+    ).toBe(config);
   });
 
   it("drops the effort for a model that takes none", () => {

@@ -867,6 +867,13 @@ export const updateProviderConfig = <
         currentConfig,
         modelParams,
         OPENAI_PARAM_BINDING,
+        params.previousModel
+          ? getModelParams(
+              PROVIDER_TYPE.OPEN_AI,
+              params.previousModel,
+              toParamsRoute(params.openAiPipelineMode ?? "responses_api"),
+            )
+          : undefined,
       );
     }
 

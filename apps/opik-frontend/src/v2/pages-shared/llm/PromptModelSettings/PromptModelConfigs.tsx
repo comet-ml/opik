@@ -32,9 +32,11 @@ import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/provid
 import GenericModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GenericModelConfigs";
 import {
   ANTHROPIC_PANEL,
+  GenericPanelPresentation,
   OPENAI_PANEL,
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/genericPanels";
 import { getModelParams, toParamsRoute } from "@/lib/modelParams";
+import { ModelParams } from "@/types/modelParams";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import {
   isOpenAICompatibleProvider,
@@ -75,6 +77,19 @@ const PromptModelConfigs = ({
   const provider: PROVIDER_TYPE =
     parseComposedProviderType(composedProviderType);
 
+  const renderCatalogPanel = (
+    params: ModelParams,
+    presentation: GenericPanelPresentation,
+  ) => (
+    <GenericModelConfigs
+      params={params}
+      presentation={presentation}
+      configs={configs as Record<string, unknown>}
+      unsupportedParams={unsupportedParams}
+      onChange={onChange}
+    />
+  );
+
   const getProviderForm = () => {
     if (provider === PROVIDER_TYPE.OPEN_AI) {
       const params = getModelParams(
@@ -83,15 +98,7 @@ const PromptModelConfigs = ({
         toParamsRoute(openAiPipelineMode),
       );
       if (params) {
-        return (
-          <GenericModelConfigs
-            params={params}
-            presentation={OPENAI_PANEL}
-            configs={configs as Record<string, unknown>}
-            unsupportedParams={unsupportedParams}
-            onChange={onChange}
-          />
-        );
+        return renderCatalogPanel(params, OPENAI_PANEL);
       }
       return (
         <OpenAIModelConfigs
@@ -107,15 +114,7 @@ const PromptModelConfigs = ({
     if (provider === PROVIDER_TYPE.ANTHROPIC) {
       const params = getModelParams(PROVIDER_TYPE.ANTHROPIC, model);
       if (params) {
-        return (
-          <GenericModelConfigs
-            params={params}
-            presentation={ANTHROPIC_PANEL}
-            configs={configs as Record<string, unknown>}
-            unsupportedParams={unsupportedParams}
-            onChange={onChange}
-          />
-        );
+        return renderCatalogPanel(params, ANTHROPIC_PANEL);
       }
       return (
         <AnthropicModelConfigs

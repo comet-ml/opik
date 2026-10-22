@@ -1,6 +1,7 @@
 import {
   getLatestListedModelParams,
   getLatestProviderProfile,
+  hasLatestModelList,
 } from "@/lib/modelRegistryStore";
 import { EffortParam, ModelParams, NumberParam } from "@/types/modelParams";
 import { OpenAiPipelineMode } from "@/types/providers";
@@ -17,6 +18,10 @@ export const getModelParams = (
   model?: string | null,
   route?: string,
 ): ModelParams | undefined => {
+  // Without the model list every model would read as unlisted and get the profile meant for new ids.
+  if (!hasLatestModelList(provider)) {
+    return undefined;
+  }
   const params =
     getLatestListedModelParams(provider, model) ??
     getLatestProviderProfile(provider);
@@ -266,6 +271,7 @@ export const adjustConfigForModel = <T extends object>(
   config: T,
   params: ModelParams,
   binding: ParamBinding,
+  previousParams?: ModelParams,
 ): T => {
   const effortKey = binding.effort;
   if (!effortKey) {
@@ -276,10 +282,16 @@ export const adjustConfigForModel = <T extends object>(
     return config;
   }
   const levels = getEffortLevels(params.effort);
+  const previousLevels = getEffortLevels(previousParams?.effort);
+  // A value that is just the previous model's default was never picked, so it follows the next model's default.
+  const keptDefault =
+    previousLevels.length > 0 &&
+    current === getDefaultEffortLevel(previousParams?.effort, previousLevels);
   let next: string | undefined;
   if (levels.length > 0) {
-    next =
-      typeof current === "string" && levels.includes(current)
+    next = keptDefault
+      ? getDefaultEffortLevel(params.effort, levels)
+      : typeof current === "string" && levels.includes(current)
         ? current
         : (typeof current === "string"
             ? getNearestEffortLevel(levels, current)

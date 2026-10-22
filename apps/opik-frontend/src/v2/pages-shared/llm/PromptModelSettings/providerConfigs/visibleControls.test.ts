@@ -27,6 +27,7 @@ import {
 import {
   resetModelRegistryStoreForTesting,
   setLatestModelFlags,
+  setLatestModelParams,
   setLatestProviderProfiles,
 } from "@/lib/modelRegistryStore";
 
@@ -589,6 +590,7 @@ describe("hasVisibleControls on the catalog panel", () => {
   });
 
   it("hides the settings button on a rule when the model's params leave nothing to set", () => {
+    setLatestModelParams(new Map([[PROVIDER_TYPE.ANTHROPIC, new Map()]]));
     setLatestProviderProfiles({ [PROVIDER_TYPE.ANTHROPIC]: REFUSES_ALL });
 
     expect(
@@ -602,6 +604,7 @@ describe("hasVisibleControls on the catalog panel", () => {
   });
 
   it("shows it once the model takes an effort", () => {
+    setLatestModelParams(new Map([[PROVIDER_TYPE.ANTHROPIC, new Map()]]));
     setLatestProviderProfiles({
       [PROVIDER_TYPE.ANTHROPIC]: {
         ...REFUSES_ALL,

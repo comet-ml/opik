@@ -76,6 +76,9 @@ export const getLatestListedModelParams = (
   return latestParams.get(provider)?.get(model);
 };
 
+export const hasLatestModelList = (provider: string): boolean =>
+  latestParams.has(provider);
+
 export const getLatestProviderProfile = (
   provider: string,
 ): ModelParams | undefined => latestProfiles[provider];
