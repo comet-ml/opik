@@ -18,6 +18,7 @@ vi.mock("@/store/PlaygroundStore", () => ({
   useDatasetType: () => datasetType,
   useIsAnyWatchLapsed: () => watchLapsed,
   useHasRunProgress: () => hasRunProgress,
+  useShowsRunProgress: () => hasRunProgress || progressPhase !== null,
 }));
 
 describe("PlaygroundProgressIndicator", () => {

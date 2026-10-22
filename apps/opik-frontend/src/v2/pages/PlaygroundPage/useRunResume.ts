@@ -8,6 +8,7 @@ import usePlaygroundStore, {
   useSetIsRunInFlight,
   useSetProgress,
   useSetProgressPhase,
+  useResetProgress,
   useSetPromptRunning,
   useClearAllWatchLapsed,
   useSettleRun,
@@ -48,6 +49,7 @@ export default function useRunResume({
   const setIsRunInFlight = useSetIsRunInFlight();
   const setProgress = useSetProgress();
   const setProgressPhase = useSetProgressPhase();
+  const resetProgress = useResetProgress();
   const clearAllWatchLapsed = useClearAllWatchLapsed();
 
   const pickUpRunningExperiments = useCallback(async () => {
@@ -98,6 +100,7 @@ export default function useRunResume({
           // survives navigating back, so without this the page returns offering Stop for a run that
           // has already finished.
           settleRun();
+          resetProgress();
           return;
         }
 
@@ -108,6 +111,7 @@ export default function useRunResume({
         );
         if (resumableTotal === 0) {
           settleRun();
+          resetProgress();
           return;
         }
 
@@ -133,6 +137,7 @@ export default function useRunResume({
         // Settled rather than simply left alone: isRunInFlight is persisted, so giving up without
         // clearing it strands the sidebar watcher polling for a status that never arrives.
         settleRun();
+        resetProgress();
       } finally {
         setIsResumingRun(false);
       }
@@ -145,6 +150,7 @@ export default function useRunResume({
     setPromptRunning,
     setProgress,
     setProgressPhase,
+    resetProgress,
     pollExperimentCompletion,
     setIsRunInFlight,
   ]);

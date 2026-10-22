@@ -679,7 +679,6 @@ const usePlaygroundStore = create<PlaygroundStore>()(
         /* eslint-disable @typescript-eslint/no-unused-vars */
         const {
           datasetSampleData,
-          progressPhase,
           progressTotal,
           progressCompleted,
           datasetItemsTotal,
@@ -872,6 +871,11 @@ export const useResetDatasetFilters = () =>
 
 export const useProgressTotal = () =>
   usePlaygroundStore((state) => state.progressTotal);
+
+export const useShowsRunProgress = () =>
+  usePlaygroundStore(
+    (state) => state.progressTotal > 0 || state.progressPhase !== null,
+  );
 
 export const useHasRunProgress = () =>
   usePlaygroundStore((state) => state.progressTotal > 0);

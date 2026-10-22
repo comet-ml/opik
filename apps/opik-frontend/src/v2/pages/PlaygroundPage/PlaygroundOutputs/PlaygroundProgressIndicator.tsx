@@ -8,6 +8,7 @@ import {
   useProgressPhase,
   useProgressTotal,
   useHasRunProgress,
+  useShowsRunProgress,
   useIsAnyWatchLapsed,
 } from "@/store/PlaygroundStore";
 import { DATASET_TYPE } from "@/types/datasets";
@@ -35,13 +36,14 @@ const PlaygroundProgressIndicator: React.FC<
   const datasetType = useDatasetType();
   const watchLapsed = useIsAnyWatchLapsed();
   const hasRunProgress = useHasRunProgress();
+  const showsRunProgress = useShowsRunProgress();
 
   // /execute answers with a total only after paging the whole dataset, so the bar shows from the
   // press without a count. Keyed on the phase, which only a whole-run launch sets: a scoped run
   // reports itself per cell and has no bar to show.
-  const isAwaitingTotal = progressPhase !== null && !hasRunProgress;
+  const isAwaitingTotal = showsRunProgress && !hasRunProgress;
 
-  if (!hasRunProgress && !isAwaitingTotal) {
+  if (!showsRunProgress) {
     return null;
   }
 
