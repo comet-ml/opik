@@ -241,6 +241,9 @@ OPENROUTER_DROPDOWN_EXCLUDE = [
     r"^amazon/nova-premier-v1$",           # retired on Bedrock: 400 "This model version has reached the end of its life"
     r"^inclusionai/ling-3\.0-flash-fin$",  # no provider serves it: 404 "No endpoints found"
     r"^nousresearch/hermes-3-llama-3\.1-70b$",  # streams the same junk sentence until the output limit
+    r"llama-guard",                        # safety classifier: answers "safe" or "unsafe", not a chat model
+    r"content-safety",                     # safety classifier: answers "safe" or "unsafe", not a chat model
+    r"^openrouter/bodybuilder$",           # turns a request into OpenRouter API JSON, not a chat model
 ]
 
 
@@ -1137,6 +1140,12 @@ def _litellm_info(prices: dict, provider_key: str, entry_value: str) -> dict | N
         info = prices.get(key)
         if isinstance(info, dict):
             return info
+    # LiteLLM files some Vertex AI rows under the bare id (litellm_provider vertex_ai-language-models). Its provider
+    # is checked so a Gemini API row under the same id is never taken for the Vertex AI model.
+    if provider_key == "vertexai":
+        info = prices.get(entry_value.removeprefix("vertex_ai/"))
+        if isinstance(info, dict) and str(info.get("litellm_provider", "")).startswith("vertex_ai"):
+            return info
     return None
 
 
@@ -1390,6 +1399,28 @@ def curated_drift(
             if different:
                 disagree.append(f"{yaml_key}/{model_id}: {'; '.join(different)}")
     return agree, disagree, arrived
+
+
+# LiteLLM says whether a Gemini model thinks but not which levels it takes, and a level it doesn't take is a 400, so
+# the sync can't write Gemini levels: a picker model that thinks needs a curated row to get an effort control.
+def thinking_models_without_effort(
+    dropdown_by_provider: dict[str, list[ModelEntry]], prices: dict, catalog: dict,
+) -> list[str]:
+    profiles = catalog.get("profiles") or {}
+    missing = []
+    for provider_key in ("gemini", "vertexai"):
+        yaml_key = _PROVIDER_TO_YAML_KEY[provider_key]
+        rows = {row.get("id"): row for row in (catalog.get("models") or {}).get(yaml_key) or []}
+        for entry in dropdown_by_provider.get(provider_key, []):
+            info = _litellm_info(prices, provider_key, entry.value)
+            if not (info and info.get("supports_reasoning")):
+                continue
+            model_id = entry.value.removeprefix("vertex_ai/")
+            row = rows.get(model_id) or {}
+            if "effort" in (row.get("params") or {}) or "effort" in (profiles.get(row.get("profile")) or {}):
+                continue
+            missing.append(f"{yaml_key}/{model_id}")
+    return missing
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2015,6 +2046,17 @@ def main():
         for note in drift_agree:
             print(f"  = {note}")
     if drift_agree or drift_disagree or drift_arrived:
+        print()
+
+    thinking_without_levels = thinking_models_without_effort(dropdown_by_provider, prices, curated_catalog)
+    if thinking_without_levels:
+        print("### Thinking levels")
+        print(
+            f"- {len(thinking_without_levels)} picker model(s) think but have no curated effort levels; "
+            "add them to llm-models-curated.yaml:"
+        )
+        for model_id in thinking_without_levels:
+            print(f"  ? {model_id}")
         print()
 
     if not _should_write_files(
