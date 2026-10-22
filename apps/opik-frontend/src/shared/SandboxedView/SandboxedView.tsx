@@ -14,6 +14,7 @@ const CSP =
 
 const RUNTIME = `(() => {
   let data;
+  let seq = 0;
   let port;
   const queue = [];
   const handlers = [];
@@ -24,10 +25,10 @@ const RUNTIME = `(() => {
       if (data !== undefined) handler(data);
     },
     rendered() {
-      post({ type: "opik:rendered" });
+      post({ type: "opik:rendered", seq });
     },
     error(message) {
-      post({ type: "opik:error", message: String(message) });
+      post({ type: "opik:error", message: String(message), seq });
     },
     action(name, payload) {
       post({ type: "opik:action", name: String(name), payload });
@@ -49,6 +50,7 @@ const RUNTIME = `(() => {
         document.documentElement.dataset.theme = message.data.mode;
       }
       if (message.data?.type === "opik:data") {
+        seq = message.data.seq;
         data = message.data.payload;
         handlers.forEach((handler) => handler(data));
       }
@@ -113,6 +115,7 @@ const SandboxedView: React.FC<SandboxedViewProps> = ({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const portRef = useRef<MessagePort>();
   const renderTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const dataSeqRef = useRef(0);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
   const onActionRef = useRef(onAction);
@@ -145,9 +148,11 @@ const SandboxedView: React.FC<SandboxedViewProps> = ({
   }, []);
 
   const sendData = useCallback(() => {
+    dataSeqRef.current += 1;
     portRef.current?.postMessage({
       type: "opik:data",
       payload: dataRef.current,
+      seq: dataSeqRef.current,
     });
     clearTimeout(renderTimeoutRef.current);
     renderTimeoutRef.current = setTimeout(
@@ -158,6 +163,10 @@ const SandboxedView: React.FC<SandboxedViewProps> = ({
 
   useEffect(() => {
     const handlePortMessage = (event: MessageEvent) => {
+      const seq = event.data?.seq;
+      if (typeof seq === "number" && seq !== 0 && seq !== dataSeqRef.current) {
+        return;
+      }
       if (event.data?.type === "opik:rendered") {
         clearTimeout(renderTimeoutRef.current);
       }

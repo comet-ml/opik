@@ -14,12 +14,14 @@ type AnnotatorViewCardProps = {
   editor: AnnotatorViewEditor;
   onPreview: () => void;
   onStartOllie: () => void;
+  isVisible: boolean;
 };
 
 const AnnotatorViewCard: React.FC<AnnotatorViewCardProps> = ({
   editor,
   onPreview,
   onStartOllie,
+  isVisible,
 }) => {
   const note = getAnnotatorViewNote(editor);
 
@@ -33,7 +35,7 @@ const AnnotatorViewCard: React.FC<AnnotatorViewCardProps> = ({
         <AnnotatorViewStatusTag editor={editor} />
       </div>
       <div className="flex items-start gap-3.5 p-3">
-        <AnnotatorViewThumbnail editor={editor} />
+        {isVisible && <AnnotatorViewThumbnail editor={editor} />}
         <div className="flex min-w-0 flex-1 flex-col gap-2.5 self-stretch">
           <p className="comet-body-s text-muted-slate">
             {getAnnotatorViewDescription(editor)}

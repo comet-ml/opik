@@ -3,8 +3,7 @@ import useTracesList from "@/api/traces/useTracesList";
 import { COLUMN_TYPE } from "@/types/shared";
 import { Filter } from "@/types/filters";
 import { Trace } from "@/types/traces";
-
-export const PREVIEW_SAMPLE_SIZE = 3;
+import { PREVIEW_SAMPLE_SIZE } from "./annotatorViewData";
 
 const NO_TRACES: Trace[] = [];
 

@@ -816,6 +816,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                 editor={annotatorViewEditor}
                 onPreview={() => setPage("preview")}
                 onStartOllie={startAnnotatorViewOllie}
+                isVisible={page === "form"}
               />
             </form>
           </Form>

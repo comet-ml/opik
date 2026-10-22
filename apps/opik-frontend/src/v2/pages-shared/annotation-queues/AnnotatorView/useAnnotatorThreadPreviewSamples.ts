@@ -4,7 +4,7 @@ import useTracesList from "@/api/traces/useTracesList";
 import { COLUMN_TYPE } from "@/types/shared";
 import { Thread } from "@/types/traces";
 import { useVisibleTraces } from "@/v2/pages-shared/traces/hiddenSpans";
-import { PREVIEW_SAMPLE_SIZE } from "./useAnnotatorTracePreviewSamples";
+import { PREVIEW_SAMPLE_SIZE } from "./annotatorViewData";
 
 const MAX_THREAD_TRACES = 1000;
 

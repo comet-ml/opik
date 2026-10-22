@@ -33,6 +33,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
+import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -768,7 +769,8 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         .orElse(DEFAULT_MIN_ANNOTATORS_PER_ITEM))
                 .lockTimeoutSeconds(Optional.ofNullable(row.get("lock_timeout_seconds", Integer.class))
                         .orElse(DEFAULT_LOCK_TIMEOUT_SECONDS))
-                .annotatorView(deserializeAnnotatorView(row.get("annotator_view", String.class)))
+                .annotatorView(deserializeAnnotatorView(row.get("id", UUID.class),
+                        row.get("annotator_view", String.class)))
                 .scope(AnnotationQueue.AnnotationScope.fromString(row.get("scope", String.class)))
                 .itemsCount(row.get("items_count", Long.class))
                 .reviewers(mapReviewers(row))
@@ -915,10 +917,16 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
         return annotatorView != null ? JsonUtils.writeValueAsString(annotatorView) : "";
     }
 
-    private AnnotationQueueAnnotatorView deserializeAnnotatorView(String json) {
-        return StringUtils.isNotBlank(json)
-                ? JsonUtils.readValue(json, AnnotationQueueAnnotatorView.class)
-                : null;
+    private AnnotationQueueAnnotatorView deserializeAnnotatorView(UUID queueId, String json) {
+        if (StringUtils.isBlank(json)) {
+            return null;
+        }
+        try {
+            return JsonUtils.readValue(json, AnnotationQueueAnnotatorView.class);
+        } catch (UncheckedIOException e) {
+            log.error("Failed to deserialize annotator_view for annotation queue: '{}'", queueId, e);
+            return null;
+        }
     }
 
     @Override

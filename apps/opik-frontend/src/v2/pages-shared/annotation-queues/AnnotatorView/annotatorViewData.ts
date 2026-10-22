@@ -2,6 +2,8 @@ import pick from "lodash/pick";
 import { Thread, Trace } from "@/types/traces";
 import { KitPack } from "@/shared/SandboxedView/kit/loadKit";
 
+export const PREVIEW_SAMPLE_SIZE = 3;
+
 const TRACE_KEYS: (keyof Trace)[] = [
   "id",
   "name",

@@ -57,7 +57,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -422,45 +421,33 @@ class AnnotationQueuesResourceTest {
                     new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
         }
 
-        @Test
-        @DisplayName("should reject annotator view html over the size limit")
-        void createAnnotationQueueWhenAnnotatorViewHtmlTooLongShouldReject() {
-            var annotationQueue = newAnnotationQueue()
-                    .toBuilder()
-                    .annotatorView(AnnotationQueueAnnotatorView.builder()
+        private Stream<Arguments> invalidAnnotatorViews() {
+            return Stream.of(
+                    arguments(AnnotationQueueAnnotatorView.builder()
                             .html("a".repeat(500_001))
-                            .build())
-                    .build();
-
-            annotationQueuesResourceClient.createAnnotationQueue(annotationQueue,
-                    API_KEY, TEST_WORKSPACE, SC_UNPROCESSABLE_ENTITY);
-        }
-
-        @Test
-        @DisplayName("should reject an annotator view summary over the size limit")
-        void createAnnotationQueueWhenAnnotatorViewSummaryTooLongShouldReject() {
-            var annotationQueue = newAnnotationQueue()
-                    .toBuilder()
-                    .annotatorView(AnnotationQueueAnnotatorView.builder()
+                            .build(), "html over the size limit"),
+                    arguments(AnnotationQueueAnnotatorView.builder()
                             .html("<div></div>")
                             .summary("a".repeat(1001))
-                            .build())
-                    .build();
-
-            annotationQueuesResourceClient.createAnnotationQueue(annotationQueue,
-                    API_KEY, TEST_WORKSPACE, SC_UNPROCESSABLE_ENTITY);
+                            .build(), "summary over the size limit"),
+                    arguments(AnnotationQueueAnnotatorView.builder()
+                            .html("<div></div>")
+                            .kitVersion(0)
+                            .build(), "kit version below 1"),
+                    arguments(AnnotationQueueAnnotatorView.builder()
+                            .html("<div></div>")
+                            .kitVersion(AnnotationQueueAnnotatorView.LATEST_KIT_VERSION + 1)
+                            .build(), "kit version above the latest"));
         }
 
         @ParameterizedTest
-        @ValueSource(ints = {0, AnnotationQueueAnnotatorView.LATEST_KIT_VERSION + 1})
-        @DisplayName("should reject an unknown annotator view kit version")
-        void createAnnotationQueueWhenAnnotatorViewKitVersionUnknownShouldReject(int kitVersion) {
+        @MethodSource("invalidAnnotatorViews")
+        @DisplayName("should reject an invalid annotator view:")
+        void createAnnotationQueueWithInvalidAnnotatorViewShouldReject(
+                AnnotationQueueAnnotatorView annotatorView, String label) {
             var annotationQueue = newAnnotationQueue()
                     .toBuilder()
-                    .annotatorView(AnnotationQueueAnnotatorView.builder()
-                            .html("<div></div>")
-                            .kitVersion(kitVersion)
-                            .build())
+                    .annotatorView(annotatorView)
                     .build();
 
             annotationQueuesResourceClient.createAnnotationQueue(annotationQueue,
