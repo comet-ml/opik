@@ -222,7 +222,11 @@ export type PlaygroundStore = {
   setLastActiveProjectId: (projectId: string | null) => void;
   setDatasetType: (type: DATASET_TYPE | null) => void;
   setExperimentByPromptId: (map: Record<string, string>) => void;
-  setPromptExperiment: (promptId: string, experimentId: string) => void;
+  setPromptExperiment: (
+    promptId: string,
+    experimentId: string,
+    ranPrompt: PlaygroundPromptType,
+  ) => void;
   setScoresForDataset: (datasetId: string, ruleIds: string[] | null) => void;
 };
 
@@ -541,11 +545,15 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
-      setPromptExperiment: (promptId, experimentId) => {
+      setPromptExperiment: (promptId, experimentId, ranPrompt) => {
         set((state) => {
           // The other prompts stay ranked within the run they were scored in,
           // so a prompt that runs on its own never recolors them.
           const currentRunIds = Object.values(state.experimentByPromptId);
+          const changesSinceRun = getRunInputChanges(
+            ranPrompt,
+            state.promptMap[promptId] ?? ranPrompt,
+          );
           return {
             ...state,
             experimentByPromptId: {
@@ -561,10 +569,17 @@ const usePlaygroundStore = create<PlaygroundStore>()(
               [promptId]: [experimentId],
             },
             // Test-suite outputs live on the BE; this entry only carries the
-            // stale flag, which the new run makes current again.
+            // stale flag. Edits made while the run was starting keep it stale.
             outputMap: {
               ...state.outputMap,
-              [promptId]: { isLoading: false, value: null, stale: false },
+              [promptId]: {
+                isLoading: false,
+                value: null,
+                stale: changesSinceRun.length > 0,
+                staleChanges: changesSinceRun.length
+                  ? changesSinceRun
+                  : undefined,
+              },
             },
           };
         });

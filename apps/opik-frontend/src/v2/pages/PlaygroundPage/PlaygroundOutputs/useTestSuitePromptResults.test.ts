@@ -2,6 +2,7 @@ import { createElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AxiosError, AxiosResponse } from "axios";
 import useTestSuitePromptResults, {
   areAllRowItemsScored,
 } from "./useTestSuitePromptResults";
@@ -16,6 +17,7 @@ import {
 } from "@/types/datasets";
 import { MetricType } from "@/types/test-suites";
 import { DATASET_ITEM_SOURCE } from "@/types/datasets";
+import { PlaygroundPromptType } from "@/types/playground";
 
 vi.mock("@/api/datasets/useExperimentById", async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -198,6 +200,29 @@ describe("useTestSuitePromptResults", () => {
   const PROMPT_B = "prompt-b";
 
   let experiments: Record<string, Partial<Experiment>>;
+  let errorStatuses: Record<string, number>;
+
+  const httpError = (status: number) =>
+    new AxiosError("failed", String(status), undefined, undefined, {
+      status,
+    } as AxiosResponse);
+
+  const rerun = (promptId: string, experimentId: string) =>
+    act(() => {
+      usePlaygroundStore
+        .getState()
+        .setPromptExperiment(promptId, experimentId, {
+          id: promptId,
+          messages: [],
+          configs: {},
+        } as unknown as PlaygroundPromptType);
+    });
+
+  const experimentRequests = (experimentId: string) =>
+    vi
+      .mocked(getExperimentById)
+      .mock.calls.filter(([, params]) => params.experimentId === experimentId)
+      .length;
 
   const completed = (id: string, passRate: number) => ({
     id,
@@ -231,9 +256,13 @@ describe("useTestSuitePromptResults", () => {
       "experiment-a1": completed("experiment-a1", 0.5),
       "experiment-b1": completed("experiment-b1", 0.8),
     };
+    errorStatuses = {};
     vi.mocked(getExperimentById).mockImplementation(
       async (_, { experimentId }) => {
-        if (!experiments[experimentId]) throw new Error("Not found");
+        if (errorStatuses[experimentId]) {
+          throw httpError(errorStatuses[experimentId]);
+        }
+        if (!experiments[experimentId]) throw httpError(404);
         return experiments[experimentId];
       },
     );
@@ -251,8 +280,23 @@ describe("useTestSuitePromptResults", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.mocked(getExperimentById).mockReset();
   });
+
+  const setOlderRunForA = () => {
+    experiments["experiment-b2"] = completed("experiment-b2", 0.3);
+    usePlaygroundStore.setState({
+      experimentByPromptId: {
+        [PROMPT_A]: "experiment-a1",
+        [PROMPT_B]: "experiment-b2",
+      },
+      runExperimentIdsByPromptId: {
+        [PROMPT_A]: ["experiment-a1", "experiment-b1"],
+        [PROMPT_B]: ["experiment-b2"],
+      },
+    });
+  };
 
   it("should keep the result of a variant that did not re-run while another variant runs", async () => {
     const { result: hook, queryClient } = renderResults();
@@ -267,11 +311,7 @@ describe("useTestSuitePromptResults", () => {
       id: "experiment-b2",
       status: EXPERIMENT_STATUS.RUNNING,
     };
-    act(() => {
-      usePlaygroundStore
-        .getState()
-        .setPromptExperiment(PROMPT_B, "experiment-b2");
-    });
+    rerun(PROMPT_B, "experiment-b2");
 
     await waitFor(() =>
       expect(
@@ -292,11 +332,7 @@ describe("useTestSuitePromptResults", () => {
       id: "experiment-b2",
       status: EXPERIMENT_STATUS.RUNNING,
     };
-    act(() => {
-      usePlaygroundStore
-        .getState()
-        .setPromptExperiment(PROMPT_B, "experiment-b2");
-    });
+    rerun(PROMPT_B, "experiment-b2");
     await waitFor(() =>
       expect(
         queryClient.getQueryData([
@@ -318,19 +354,9 @@ describe("useTestSuitePromptResults", () => {
     );
   });
 
-  it("should still rank a variant when an experiment from its older run can no longer be read", async () => {
-    experiments["experiment-b2"] = completed("experiment-b2", 0.3);
+  it("should still rank a variant when an experiment from its older run was deleted", async () => {
+    setOlderRunForA();
     delete experiments["experiment-b1"];
-    usePlaygroundStore.setState({
-      experimentByPromptId: {
-        [PROMPT_A]: "experiment-a1",
-        [PROMPT_B]: "experiment-b2",
-      },
-      runExperimentIdsByPromptId: {
-        [PROMPT_A]: ["experiment-a1", "experiment-b1"],
-        [PROMPT_B]: ["experiment-b2"],
-      },
-    });
 
     const { result: hook } = renderResults();
 
@@ -340,5 +366,37 @@ describe("useTestSuitePromptResults", () => {
         [PROMPT_B]: result(0.3, true),
       }),
     );
+  });
+
+  it("should not rank a variant while an experiment from its older run fails to load", async () => {
+    setOlderRunForA();
+    errorStatuses["experiment-b1"] = 500;
+
+    const { result: hook, queryClient } = renderResults();
+
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryState([
+          "experiment",
+          { experimentId: "experiment-b1" },
+        ])?.status,
+      ).toBe("error"),
+    );
+    await waitFor(() => expect(hook.current?.[PROMPT_B]).toBeDefined());
+    expect(hook.current?.[PROMPT_A]).toBeUndefined();
+  });
+
+  it("should stop polling a deleted experiment", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    setOlderRunForA();
+    delete experiments["experiment-b1"];
+
+    const { result: hook } = renderResults();
+    await waitFor(() => expect(hook.current?.[PROMPT_A]).toBeDefined());
+    const requestsAfterLoad = experimentRequests("experiment-b1");
+
+    await act(() => vi.advanceTimersByTimeAsync(12000));
+
+    expect(experimentRequests("experiment-b1")).toBe(requestsAfterLoad);
   });
 });

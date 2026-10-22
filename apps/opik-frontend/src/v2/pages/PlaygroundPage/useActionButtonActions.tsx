@@ -827,7 +827,7 @@ const useActionButtonActions = ({
           return;
         }
 
-        setPromptExperiment(promptId, experiment.experiment_id);
+        setPromptExperiment(promptId, experiment.experiment_id, prompt);
 
         queryClient.invalidateQueries({ queryKey: ["experiments"] });
 

@@ -192,6 +192,12 @@ describe("PlaygroundStore setPromptExperiment", () => {
   const PROMPT_B = "prompt-b";
 
   const getState = () => usePlaygroundStore.getState();
+  const runPrompt = (promptId: string, experimentId: string) =>
+    getState().setPromptExperiment(
+      promptId,
+      experimentId,
+      getState().promptMap[promptId],
+    );
 
   beforeEach(() => {
     getState().clearCreatedExperiments();
@@ -207,7 +213,7 @@ describe("PlaygroundStore setPromptExperiment", () => {
   });
 
   it("should keep the other prompts on the run they were scored in", () => {
-    getState().setPromptExperiment(PROMPT_B, "experiment-b2");
+    runPrompt(PROMPT_B, "experiment-b2");
 
     expect(getState().experimentByPromptId).toEqual({
       [PROMPT_A]: "experiment-a1",
@@ -218,7 +224,7 @@ describe("PlaygroundStore setPromptExperiment", () => {
       [PROMPT_B]: ["experiment-b2"],
     });
 
-    getState().setPromptExperiment(PROMPT_A, "experiment-a2");
+    runPrompt(PROMPT_A, "experiment-a2");
 
     expect(getState().runExperimentIdsByPromptId).toEqual({
       [PROMPT_A]: ["experiment-a2"],
@@ -230,14 +236,26 @@ describe("PlaygroundStore setPromptExperiment", () => {
     getState().updatePrompt(PROMPT_A, { model: PROVIDER_MODEL_TYPE.GPT_4O });
     getState().updatePrompt(PROMPT_B, { model: PROVIDER_MODEL_TYPE.GPT_4O });
 
-    getState().setPromptExperiment(PROMPT_B, "experiment-b2");
+    runPrompt(PROMPT_B, "experiment-b2");
 
     expect(getState().outputMap[PROMPT_A]).toMatchObject({ stale: true });
     expect(getState().outputMap[PROMPT_B]).toMatchObject({ stale: false });
   });
 
+  it("should keep the re-run prompt stale when it was edited while its run was starting", () => {
+    const ranPrompt = getState().promptMap[PROMPT_B];
+    getState().updatePrompt(PROMPT_B, { model: PROVIDER_MODEL_TYPE.GPT_4O });
+
+    getState().setPromptExperiment(PROMPT_B, "experiment-b2", ranPrompt);
+
+    expect(getState().outputMap[PROMPT_B]).toMatchObject({
+      stale: true,
+      staleChanges: ["model"],
+    });
+  });
+
   it("should rank every prompt together again after a full run", () => {
-    getState().setPromptExperiment(PROMPT_B, "experiment-b2");
+    runPrompt(PROMPT_B, "experiment-b2");
 
     getState().setExperimentByPromptId({
       [PROMPT_A]: "experiment-a3",

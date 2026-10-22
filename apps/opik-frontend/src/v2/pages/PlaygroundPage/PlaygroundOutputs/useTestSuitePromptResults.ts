@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { QueryFunctionContext, useQueries } from "@tanstack/react-query";
+import { AxiosError, HttpStatusCode } from "axios";
 import uniq from "lodash/uniq";
 import { getExperimentById } from "@/api/datasets/useExperimentById";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
@@ -24,6 +25,9 @@ import { MetricType } from "@/types/test-suites";
 import { isExperimentTerminal } from "@/lib/experiments";
 
 const REFETCH_INTERVAL = 5000;
+
+const isNotFound = (error: unknown) =>
+  (error as AxiosError | null)?.response?.status === HttpStatusCode.NotFound;
 
 export const isItemScored = (ei: { status?: string | null }): boolean => {
   return ei.status != null;
@@ -116,7 +120,10 @@ export default function useTestSuitePromptResults(): Record<
       queryFn: (context: QueryFunctionContext) =>
         getExperimentById(context, { experimentId }),
       enabled: isTestSuite && !!experimentId,
-      refetchInterval: (query: { state: { data: unknown } }) => {
+      refetchInterval: (query: {
+        state: { data: unknown; error: unknown };
+      }) => {
+        if (isNotFound(query.state.error)) return false;
         const data = query.state.data as Experiment | undefined;
         if (
           isExperimentTerminal(data?.status as EXPERIMENT_STATUS | undefined)
@@ -139,11 +146,11 @@ export default function useTestSuitePromptResults(): Record<
     [fetchedExperimentIds, experimentStatusResults],
   );
 
-  const failedExperimentIds = useMemo(
+  const missingExperimentIds = useMemo(
     () =>
       new Set(
-        fetchedExperimentIds.filter(
-          (_, i) => experimentStatusResults[i]?.isError,
+        fetchedExperimentIds.filter((_, i) =>
+          isNotFound(experimentStatusResults[i]?.error),
         ),
       ),
     [fetchedExperimentIds, experimentStatusResults],
@@ -202,10 +209,10 @@ export default function useTestSuitePromptResults(): Record<
 
     return Object.fromEntries(
       entries.flatMap(([promptId, experimentId]) => {
-        // An older run's experiment that can no longer be read (for example,
-        // deleted) must not keep this prompt uncolored forever.
+        // A deleted experiment from an older run must not keep this prompt
+        // uncolored forever.
         const runIds = runIdsByPromptId[promptId].filter(
-          (id) => id === experimentId || !failedExperimentIds.has(id),
+          (id) => id === experimentId || !missingExperimentIds.has(id),
         );
         if (!runIds.every((id) => scoredExperimentIds.has(id))) return [];
 
@@ -236,7 +243,7 @@ export default function useTestSuitePromptResults(): Record<
     isTestSuite,
     entries,
     runIdsByPromptId,
-    failedExperimentIds,
+    missingExperimentIds,
     scoredExperimentIds,
     experimentById,
   ]);
