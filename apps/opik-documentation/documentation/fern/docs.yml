@@ -523,6 +523,12 @@ navigation:
             skip-slug: true
             collapsed: true
             contents:
+              - page: Defining and evaluating custom LLM-as-a-judge metrics
+                path: ./docs-v2/evaluation/custom_llm_judge_metrics.mdx
+                slug: custom_llm_judge_metrics
+              - page: Aligning judge metrics with human scores
+                path: ./docs-v2/evaluation/judge_alignment.mdx
+                slug: judge_alignment
               - page: Best practices for evaluating agents
                 path: ./docs-v2/evaluation/evaluate_agents.mdx
                 slug: evaluate_agents
@@ -535,12 +541,6 @@ navigation:
               - page: Cookbook - Evaluate moderation metric
                 path: ./docs-v2/evaluation/evaluate_moderation_metric.mdx
                 slug: evaluate_moderation_metric
-              - page: Defining and evaluating custom LLM-as-a-judge metrics
-                path: ./docs-v2/evaluation/custom_llm_judge_metrics.mdx
-                slug: custom_llm_judge_metrics
-              - page: Aligning judge metrics with human scores
-                path: ./docs-v2/evaluation/judge_alignment.mdx
-                slug: judge_alignment
       - section: Guardrails
         slug: /guardrails
         contents:
