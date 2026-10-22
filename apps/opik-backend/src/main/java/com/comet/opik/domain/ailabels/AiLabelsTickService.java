@@ -166,6 +166,7 @@ public class AiLabelsTickService {
     private final LongHistogram historyBytes;
     private final DoubleHistogram jobAge;
     private final DoubleHistogram phaseDuration;
+    private final DoubleHistogram renderDuration;
 
     @Inject
     public AiLabelsTickService(@NonNull @Config("aiLabels") AiLabelsConfig config,
@@ -261,6 +262,9 @@ public class AiLabelsTickService {
         this.jobAge = meter.histogramBuilder("ai_labels.jobs.age_seconds").setUnit("s").build();
         this.phaseDuration = meter.histogramBuilder("ai_labels.tick.phase_seconds").setUnit("s")
                 .setDescription("Duration of each tick phase: load, sweep, submit")
+                .build();
+        this.renderDuration = meter.histogramBuilder("ai_labels.render.duration_seconds").setUnit("s")
+                .setDescription("Wall time to read and render one chunk, by outcome: ok or one_at_a_time")
                 .build();
     }
 
@@ -748,8 +752,11 @@ public class AiLabelsTickService {
         var tasks = refs.stream()
                 .flatMap(ref -> missingTasks(byTrace.get(ref.traceId()), tasksByName).stream())
                 .collect(Collectors.toSet());
+        long start = System.nanoTime();
         try {
-            return renderer.render(workspaceId, refs, tasks).collectList().block();
+            var outcomes = renderer.render(workspaceId, refs, tasks).collectList().block();
+            recordRenderDuration(start, "ok");
+            return outcomes;
         } catch (RuntimeException chunkError) {
             log.warn("ai-labels failed to render a chunk, workspace '{}', traces '{}'; rendering one at a time",
                     workspaceId, refs.size(), chunkError);
@@ -771,7 +778,12 @@ public class AiLabelsTickService {
                 failures.addAll(failedStatuses(workspaceId, candidate, missing, RENDER_ERROR, true, ""));
             }
         }
+        recordRenderDuration(start, "one_at_a_time");
         return outcomes;
+    }
+
+    private void recordRenderDuration(long startNanos, String outcome) {
+        renderDuration.record((System.nanoTime() - startNanos) / 1e9, Attributes.of(stringKey("outcome"), outcome));
     }
 
     /** One open job: its items, their traces' candidates (for the attempts), its request size and its cost. */
