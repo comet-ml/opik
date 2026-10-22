@@ -55,7 +55,7 @@ const ProjectDashboardsContent: React.FunctionComponent<
   const {
     permissions: { canCreateDashboards, canEditDashboards },
   } = usePermissions();
-  const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
 
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
     localStorageKey: `${DASHBOARD_LOCAL_STORAGE_KEY_PREFIX}-${workspaceName}-${projectId}`,
@@ -134,7 +134,14 @@ const ProjectDashboardsContent: React.FunctionComponent<
     [setDashboardId],
   );
 
-  const handleOpenRename = useCallback(() => setIsRenameOpen(true), []);
+  // The toast can outlive the view it is about, so Rename opens that copy before its dialog.
+  const handleOpenRename = useCallback(
+    (copyId: string) => {
+      setDashboardId(copyId);
+      setRenameTargetId(copyId);
+    },
+    [setDashboardId],
+  );
 
   useCustomizeTemplate({
     projectId,
@@ -196,8 +203,8 @@ const ProjectDashboardsContent: React.FunctionComponent<
           key={dashboard.id}
           mode="edit"
           dashboard={dashboard}
-          open={isRenameOpen}
-          setOpen={setIsRenameOpen}
+          open={renameTargetId === dashboard.id}
+          setOpen={(open) => !open && setRenameTargetId(null)}
         />
       )}
     </PageBodyScrollContainer>

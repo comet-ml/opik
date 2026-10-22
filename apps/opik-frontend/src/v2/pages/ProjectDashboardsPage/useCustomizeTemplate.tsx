@@ -33,13 +33,9 @@ const getCopyName = (templateName: string, takenNames: Set<string>) => {
 // The copy is created with the new widget already in it, so a failed create leaves nothing behind.
 const buildCopyConfig = (
   templateConfig: DashboardState,
-  sectionId: string,
+  targetIndex: number,
   widget: DashboardWidget,
 ): DashboardState => {
-  const targetIndex = Math.max(
-    templateConfig.sections.findIndex((section) => section.id === sectionId),
-    0,
-  );
   const config = regenerateAllIds(templateConfig);
   const newWidget = { ...widget, id: uniqid() };
 
@@ -62,7 +58,7 @@ type UseCustomizeTemplateParams = {
   dashboardId: string | null;
   enabled: boolean;
   onCopyCreated: (dashboardId: string) => void;
-  onRename: () => void;
+  onRename: (dashboardId: string) => void;
 };
 
 const useCustomizeTemplate = ({
@@ -98,6 +94,18 @@ const useCustomizeTemplate = ({
     (sectionId: string, widget: DashboardWidget) => {
       if (!template) return;
 
+      const targetIndex = template.config.sections.findIndex(
+        (section) => section.id === sectionId,
+      );
+      if (targetIndex === -1) {
+        toast({
+          title: "Could not add the widget",
+          description: "The section was not found in this view.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const name = getCopyName(
         template.name,
         new Set((viewsData?.content ?? []).map((view) => view.name)),
@@ -108,15 +116,16 @@ const useCustomizeTemplate = ({
           dashboard: {
             name,
             description: template.description,
-            config: buildCopyConfig(template.config, sectionId, widget),
+            config: buildCopyConfig(template.config, targetIndex, widget),
             type: DASHBOARD_TYPE.MULTI_PROJECT,
             project_id: projectId,
           },
         },
         {
           onSuccess: (data) => {
-            if (!data?.id) return;
-            onCopyCreated(data.id);
+            const copyId = data?.id;
+            if (!copyId) return;
+            onCopyCreated(copyId);
             toast({
               title: `Saved as "${name}"`,
               description:
@@ -128,7 +137,7 @@ const useCustomizeTemplate = ({
                   size="sm"
                   className="px-0"
                   altText="Rename"
-                  onClick={onRename}
+                  onClick={() => onRename(copyId)}
                 >
                   <Pencil className="mr-1.5 size-3.5" />
                   Rename
