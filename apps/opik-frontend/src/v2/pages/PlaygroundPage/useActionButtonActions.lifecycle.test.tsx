@@ -119,6 +119,10 @@ beforeEach(() => {
     experimentByPromptId: {},
     runTotalItemsByPromptId: {},
     watchLapsed: new Set<string>(),
+    // A test whose cancel never answers leaves its prompt marked, and the next test then reads
+    // that prompt as already stopping and issues no cancel of its own.
+    stopsAwaitingRun: new Set<string>(),
+    cancelsInFlight: new Set<string>(),
   });
 });
 
@@ -391,6 +395,55 @@ describe("useActionButtonActions lifecycle", () => {
 
       expect(usePlaygroundStore.getState().isRunningMap).toEqual({});
       expect(usePlaygroundStore.getState().isRunInFlight).toBe(false);
+    });
+
+    // Stop all covers everything still running, which includes a prompt stopped a moment earlier
+    // whose cancel has not answered. Sending a second one duplicates the request, and its reply
+    // settles whatever holds that prompt by the time it lands — possibly a run started since.
+    it("should not cancel a prompt whose cancel is already in flight", async () => {
+      startBackendRun();
+      const { result } = renderActions("dataset-1");
+      await act(async () => {});
+      startBackendRun();
+
+      act(() => result.current.stopSingle(PROMPT_A));
+      expect(cancelExperimentRun).toHaveBeenCalledWith({
+        experimentIds: [EXPERIMENT_A],
+      });
+
+      cancelExperimentRun.mockClear();
+      act(() => result.current.stopAll());
+
+      expect(cancelExperimentRun).toHaveBeenCalledTimes(1);
+      expect(cancelExperimentRun).toHaveBeenCalledWith({
+        experimentIds: [EXPERIMENT_B],
+      });
+    });
+
+    // The settle lands long after the press. If the prompt has started a new run since, stopping
+    // it here stops the page watching a run the server is still working on: the poll never
+    // begins, the page reads idle, and the run finishes unnoticed.
+    it("should not settle a prompt that has since started another run", async () => {
+      startBackendRun();
+      const { result } = renderActions("dataset-1");
+      await act(async () => {});
+      startBackendRun();
+
+      act(() => result.current.stopSingle(PROMPT_A));
+
+      // The prompt moves on to a different run while the cancel is still in flight.
+      usePlaygroundStore.setState({
+        experimentByPromptId: {
+          [PROMPT_A]: "experiment-newer",
+          [PROMPT_B]: EXPERIMENT_B,
+        },
+        isRunningMap: { [PROMPT_A]: true, [PROMPT_B]: true },
+      });
+
+      await act(async () => answerCancel());
+
+      expect(usePlaygroundStore.getState().isRunningMap[PROMPT_A]).toBe(true);
+      expect(usePlaygroundStore.getState().cancelsInFlight.size).toBe(0);
     });
 
     it("should settle only the stopped prompt of a browser-side run", () => {

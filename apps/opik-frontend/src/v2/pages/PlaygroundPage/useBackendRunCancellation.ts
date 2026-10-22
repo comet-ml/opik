@@ -56,16 +56,21 @@ export default function useBackendRunCancellation(isBackendRun: boolean) {
     (promptIds: string[]) => {
       if (!isBackendRun) return;
 
-      const experimentByPromptId =
-        usePlaygroundStore.getState().experimentByPromptId ?? {};
+      const { experimentByPromptId = {}, cancelsInFlight } =
+        usePlaygroundStore.getState();
+
+      // A prompt whose cancel is already out needs no second one
+      const toCancel = promptIds.filter(
+        (promptId) => !cancelsInFlight.has(promptId),
+      );
 
       // Split rather than all-or-nothing: a stop can cover prompts whose ids have arrived and
       // prompts whose /execute has not answered yet, and taking the first branch for the whole
       // set would drop the unnamed ones — their runs carry on with nothing left to cancel them.
-      const named = promptIds.filter(
+      const named = toCancel.filter(
         (promptId) => experimentByPromptId[promptId],
       );
-      const unnamed = promptIds.filter(
+      const unnamed = toCancel.filter(
         (promptId) => !experimentByPromptId[promptId],
       );
 
@@ -78,13 +83,29 @@ export default function useBackendRunCancellation(isBackendRun: boolean) {
       // Settled when the server answers, not when the button is pressed. The call writes the
       // cancelled status and purges the queue. Items a consumer already holds still finish.
       // Marked stopping meanwhile, so no button offers a Stop whose cancel is already on its way.
+      // Paired with their ids: the settle lands later, and by then a prompt may hold a run this
+      // cancel never covered. Settling that one would stop a page watching a run still going.
+      const cancelled = named.map((promptId) => ({
+        promptId,
+        experimentId: experimentByPromptId[promptId],
+      }));
+
       markCancelInFlight(named);
       cancelExperimentRun({
-        experimentIds: named.map((promptId) => experimentByPromptId[promptId]),
+        experimentIds: cancelled.map(({ experimentId }) => experimentId),
       })
         .catch(() => {})
         .finally(() => {
-          named.forEach((promptId) => setPromptRunning(promptId, false));
+          const current =
+            usePlaygroundStore.getState().experimentByPromptId ?? {};
+          cancelled
+            .filter(
+              ({ promptId, experimentId }) =>
+                current[promptId] === experimentId,
+            )
+            .forEach(({ promptId }) => setPromptRunning(promptId, false));
+          // Unconditional: the mark is this call's, so a prompt that moved on would keep it for
+          // ever. A newer cancel sets its own, and clears it from its own settle.
           clearCancelInFlight(named);
           if (getRunningPromptIds().length === 0) resetProgress();
           releaseRunInFlight();
