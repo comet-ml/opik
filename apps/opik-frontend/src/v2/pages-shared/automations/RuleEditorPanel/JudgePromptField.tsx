@@ -2,8 +2,6 @@ import React, { useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
 import get from "lodash/get";
 
-import { Description } from "@/ui/description";
-import { Tag } from "@/ui/tag";
 import { FormErrorSkeleton, FormField, FormItem, FormMessage } from "@/ui/form";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 import RuleEditorCard from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorCard";
@@ -15,14 +13,17 @@ import {
   getRecordErrorKeys,
   PromptMergeInfo,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/helpers";
-import { SCOPE_ENTITY_LABEL } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
+import PromptVariableHint from "@/v2/pages-shared/automations/RuleEditorPanel/PromptVariableHint";
 import RuleEditorNotice from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorNotice";
+import TemplateEmptyState from "@/v2/pages-shared/automations/RuleEditorPanel/TemplateEmptyState";
+import { getJudgeTemplateOptions } from "@/v2/pages-shared/automations/RuleEditorPanel/judgeTemplates";
+import useTemplateStart from "@/v2/pages-shared/automations/RuleEditorPanel/useTemplateStart";
 import { LLMPromptTemplate } from "@/types/llm";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 
 type JudgePromptFieldProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
-  onSelectTemplate?: (template: LLMPromptTemplate, label: string) => void;
+  onSelectTemplate: (template: LLMPromptTemplate, label: string) => void;
   mergeInfo?: PromptMergeInfo | null;
   datasetColumnNames?: string[];
 };
@@ -57,13 +58,45 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
 }) => {
   const editorRef = useRef<PromptVariableEditorHandle>(null);
   const scope = form.watch("scope");
+  const { showStartCards, startBlank, startWithTemplate } = useTemplateStart(
+    form,
+    editorRef,
+    onSelectTemplate,
+  );
   const judgeErrors = getJudgeErrors(form);
+  const judgeErrorMessages = judgeErrors.map((message) => (
+    <FormErrorSkeleton key={message}>{message}</FormErrorSkeleton>
+  ));
   const sampleData = useRuleSampleData(
     form.watch("projectIds")[0] ?? "",
     scope,
     false,
     datasetColumnNames,
   );
+
+  if (showStartCards) {
+    const startError = get(form.formState.errors, [
+      "llmJudgeDetails",
+      "messages",
+      0,
+      "content",
+      "message",
+    ]);
+    return (
+      <div className="flex flex-1 flex-col gap-1">
+        <TemplateEmptyState
+          label="Prompt"
+          options={getJudgeTemplateOptions(scope)}
+          blankLabel="Type your prompt"
+          blankDescription="Write your own judge prompt from scratch."
+          onStartBlank={startBlank}
+          onSelect={startWithTemplate}
+        />
+        {startError && <FormErrorSkeleton>{startError}</FormErrorSkeleton>}
+        {judgeErrorMessages}
+      </div>
+    );
+  }
 
   return (
     <FormField
@@ -99,21 +132,9 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
               showMedia={scope !== EVALUATORS_RULE_SCOPE.thread}
             />
           </RuleEditorCard>
-          {sampleData && (
-            <Description className="px-0.5">
-              Use{" "}
-              <Tag variant="green" className="px-1 align-top font-mono">
-                {"{{"}
-              </Tag>{" "}
-              <span>
-                {`to insert variables, which will automatically pull data from ${SCOPE_ENTITY_LABEL[scope]} when the evaluator runs.`}
-              </span>
-            </Description>
-          )}
+          {sampleData && <PromptVariableHint scope={scope} />}
           <FormMessage />
-          {judgeErrors.map((message) => (
-            <FormErrorSkeleton key={message}>{message}</FormErrorSkeleton>
-          ))}
+          {judgeErrorMessages}
         </FormItem>
       )}
     />
