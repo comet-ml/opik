@@ -97,6 +97,8 @@ def test_process__feedback_scores_batch__evaluator_revision_reaches_request_body
         name="hallucination",
         value=0.25,
         source="sdk",
+        category_name="factuality",
+        reason="cites a source that is not in the context",
         evaluator_revision=evaluator_revision,
     )
 
@@ -105,9 +107,15 @@ def test_process__feedback_scores_batch__evaluator_revision_reaches_request_body
     assert len(transport.requests) == 1
     request = transport.requests[0]
     assert request.url.path == path
-    (score,) = json.loads(request.content)["scores"]
-    assert score[id_key] == "entity-id"
-    if evaluator_revision is None:
-        assert "evaluator_revision" not in score
-    else:
-        assert score["evaluator_revision"] == evaluator_revision
+    expected_score = {
+        id_key: "entity-id",
+        "project_name": "project",
+        "name": "hallucination",
+        "value": 0.25,
+        "source": "sdk",
+        "category_name": "factuality",
+        "reason": "cites a source that is not in the context",
+    }
+    if evaluator_revision is not None:
+        expected_score["evaluator_revision"] = evaluator_revision
+    assert json.loads(request.content)["scores"] == [expected_score]
