@@ -107,4 +107,24 @@ class RedisRateLimitServiceTest {
         verify(rateLimiter).trySetRate(RateType.OVERALL, config.limit(), interval, interval);
         verify(rateLimiter, never()).expireIfNotSet(any(Duration.class));
     }
+
+    @Test
+    void availableEventsFailsSafeWhenLimiterErrors() {
+        // Header metadata runs in the interceptor's finally; a limiter error must not escape as a 500.
+        when(rateLimiter.availablePermits()).thenReturn(Mono.error(new RedisException("boom")));
+        LimitConfig config = limitConfig();
+
+        StepVerifier.create(rateLimitService.availableEvents(bucketName(), config))
+                .expectNext(config.limit())
+                .verifyComplete();
+    }
+
+    @Test
+    void getRemainingTtlFailsSafeWhenLimiterErrors() {
+        when(rateLimiter.remainTimeToLive()).thenReturn(Mono.error(new RedisException("boom")));
+
+        StepVerifier.create(rateLimitService.getRemainingTTL(bucketName(), limitConfig()))
+                .expectNext(0L)
+                .verifyComplete();
+    }
 }

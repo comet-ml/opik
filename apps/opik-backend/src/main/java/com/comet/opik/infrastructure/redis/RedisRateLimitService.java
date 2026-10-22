@@ -36,8 +36,9 @@ class RedisRateLimitService implements RateLimitService {
                 // RedisException, so catch broadly rather than by type. The desync root cause (atomic Lua /
                 // Redisson bump) is tracked as a follow-up in OPIK-8923.
                 .onErrorResume(error -> {
-                    log.warn("Rate limiter errored for bucket '{}', failing open (request allowed): {}", bucketName,
-                            error.getMessage());
+                    // Don't log bucketName: for the general and custom buckets it embeds the caller's API
+                    // key. Pass error as the throwable so the full stack trace is kept, not just its message.
+                    log.warn("Rate limiter errored, failing open (request allowed)", error);
                     return Mono.just(false);
                 });
     }
@@ -62,18 +63,30 @@ class RedisRateLimitService implements RateLimitService {
         return rateLimit.trySetRate(RateType.OVERALL, limit, interval, interval);
     }
 
+    // availableEvents and getRemainingTTL feed the rate-limit response headers, which the interceptor sets
+    // from a finally block. A limiter error here must stay best-effort and never replace the request's real
+    // outcome with a 500, so both fall back to a safe value rather than propagating (OPIK-8923).
+
     @Override
     public Mono<Long> availableEvents(@NonNull String bucketName, @NonNull LimitConfig limitConfig) {
         RRateLimiterReactive rateLimit = redisClient.getRateLimiter(bucketName);
         return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit)
-                .then(Mono.defer(rateLimit::availablePermits).retryWhen(configureRetry(limitConfig, rateLimit)));
+                .then(Mono.defer(rateLimit::availablePermits).retryWhen(configureRetry(limitConfig, rateLimit)))
+                .onErrorResume(error -> {
+                    log.warn("Rate limiter available-events lookup failed, reporting the configured limit", error);
+                    return Mono.just(limitConfig.limit());
+                });
     }
 
     @Override
     public Mono<Long> getRemainingTTL(@NonNull String bucketName, @NonNull LimitConfig limitConfig) {
         RRateLimiterReactive rateLimit = redisClient.getRateLimiter(bucketName);
         return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit)
-                .then(Mono.defer(rateLimit::remainTimeToLive).retryWhen(configureRetry(limitConfig, rateLimit)));
+                .then(Mono.defer(rateLimit::remainTimeToLive).retryWhen(configureRetry(limitConfig, rateLimit)))
+                .onErrorResume(error -> {
+                    log.warn("Rate limiter TTL lookup failed, reporting 0", error);
+                    return Mono.just(0L);
+                });
     }
 
 }
