@@ -541,4 +541,46 @@ class ParamResolverTest {
 
         assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
     }
+
+    private static ParamResolver shippedOpenAiResolver(String model) {
+        return resolverWithOpenAiParams(bundledRegistry().paramsOf("openai", model));
+    }
+
+    @Test
+    void dropsAJudgeEffortTheModelRefusesAndKeepsTheOtherCustomParameters() {
+        var parameters = judge("gpt-4o-mini", 0.7, """
+                {"reasoning_effort": "low", "max_completion_tokens": 400}""");
+
+        assertThat(shippedOpenAiResolver("gpt-4o-mini").resolve(parameters)).isEqualTo(resolution(
+                judge("gpt-4o-mini", 0.7, """
+                        {"max_completion_tokens": 400}"""),
+                new ParamChange("reasoning_effort", Reason.REFUSED_BY_MODEL)));
+    }
+
+    @Test
+    void dropsTheCustomParametersWhenTheRefusedEffortWasAllTheyHeld() {
+        var parameters = judge("gpt-4o-mini", null, """
+                {"reasoning_effort": "low"}""");
+
+        assertThat(shippedOpenAiResolver("gpt-4o-mini").resolve(parameters)).isEqualTo(resolution(
+                judge("gpt-4o-mini", null, null), new ParamChange("reasoning_effort", Reason.REFUSED_BY_MODEL)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"gpt-5.4-mini", "o3", "gpt-6-luna"})
+    void keepsAJudgeEffortTheModelTakes(String model) {
+        var parameters = judge(model, null, """
+                {"reasoning_effort": "low"}""");
+
+        assertThat(shippedOpenAiResolver(model).resolve(parameters)).isEqualTo(resolution(parameters));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"openai/gpt-4o-mini", "custom-llm/gw/gpt-4o-mini", "claude-haiku-4-5-20251001"})
+    void keepsAJudgeEffortOnModelsTheOpenAiCatalogDoesNotPlace(String model) {
+        var parameters = judge(model, null, """
+                {"reasoning_effort": "low"}""");
+
+        assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
+    }
 }

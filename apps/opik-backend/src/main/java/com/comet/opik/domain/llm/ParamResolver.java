@@ -2,10 +2,12 @@ package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ModelParams;
+import com.comet.opik.api.ModelParams.EffortParam;
 import com.comet.opik.api.ModelParams.FlagParam;
 import com.comet.opik.api.ModelParams.NumberParam;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
@@ -47,6 +49,7 @@ public class ParamResolver {
 
     private static final String TEMPERATURE = "temperature";
     private static final String TOP_P = "top_p";
+    private static final String REASONING_EFFORT = "reasoning_effort";
 
     private final @NonNull LlmProviderFactory llmProviderFactory;
     private final @NonNull LlmModelRegistryService registryService;
@@ -133,27 +136,43 @@ public class ParamResolver {
     }
 
     /**
-     * Of these settings a judge sends only temperature. Saved judge rules keep the temperature they were created
-     * with, and the frontend strips it only on save, so a rule saved before a model stopped taking it still sends it.
+     * Of these settings a judge sends only temperature, plus whatever its custom parameters carry. Saved judge rules
+     * keep the temperature they were created with, and the frontend strips it only on save, so a rule saved before a
+     * model stopped taking it still sends it.
      */
     public Resolution<LlmAsJudgeModelParameters> resolve(@NonNull LlmAsJudgeModelParameters parameters) {
-        if (parameters.temperature() == null) {
-            return new Resolution<>(parameters, List.of());
-        }
+        var changes = new ArrayList<ParamChange>();
+        var builder = parameters.toBuilder();
         var model = parameters.name();
-        var refused = ModelCapabilities.rejectsTemperature(model, registryService)
-                || openAiParams(model, null).map(ModelParams::temperature).filter(this::isRefused).isPresent();
-        // Thinking costs a judge its temperature only on a Claude (the exclusive-sampling rule's loose match), unlike
-        // the chat path: a judge on another provider's thinking model keeps the temperature it was saved with.
-        var claudeThinks = ModelCapabilities.requiresExclusiveSamplingParams(model)
-                && (SamplingParamsNormalizer.thinkingEnabled(parameters.customParameters())
-                        || SamplingParamsNormalizer.effortTurnsOnThinking(model, parameters.customParameters()));
-        if (!refused && !claudeThinks) {
-            return new Resolution<>(parameters, List.of());
+        var catalogParams = openAiParams(model, null);
+        if (parameters.temperature() != null) {
+            var refused = ModelCapabilities.rejectsTemperature(model, registryService)
+                    || catalogParams.map(ModelParams::temperature).filter(this::isRefused).isPresent();
+            // Thinking costs a judge its temperature only on a Claude (the exclusive-sampling rule's loose match),
+            // unlike the chat path: a judge on another provider's thinking model keeps the temperature it was saved
+            // with.
+            var claudeThinks = ModelCapabilities.requiresExclusiveSamplingParams(model)
+                    && (SamplingParamsNormalizer.thinkingEnabled(parameters.customParameters())
+                            || SamplingParamsNormalizer.effortTurnsOnThinking(model, parameters.customParameters()));
+            if (refused || claudeThinks) {
+                builder.temperature(null);
+                changes.add(new ParamChange(TEMPERATURE,
+                        refused ? ParamChange.Reason.REFUSED_BY_MODEL : ParamChange.Reason.THINKING_ENABLED));
+            }
         }
-        var reason = refused ? ParamChange.Reason.REFUSED_BY_MODEL : ParamChange.Reason.THINKING_ENABLED;
-        return new Resolution<>(parameters.toBuilder().temperature(null).build(),
-                List.of(new ParamChange(TEMPERATURE, reason)));
+        // Test-suite judge configs the Python SDK saved carry reasoning_effort "low" whichever model the backend later
+        // picks for them, and gpt-4o-mini answers "Unrecognized request argument supplied: reasoning_effort".
+        if (parameters.customParameters() instanceof ObjectNode customParameters
+                && customParameters.has(REASONING_EFFORT)
+                && catalogParams.map(ModelParams::effort).filter(this::isRefused).isPresent()) {
+            var kept = customParameters.deepCopy();
+            kept.remove(REASONING_EFFORT);
+            builder.customParameters(kept.isEmpty() ? null : kept);
+            changes.add(new ParamChange(REASONING_EFFORT, ParamChange.Reason.REFUSED_BY_MODEL));
+        }
+        return changes.isEmpty()
+                ? new Resolution<>(parameters, List.of())
+                : new Resolution<>(builder.build(), List.copyOf(changes));
     }
 
     // Only OpenAI keys have a route, so an id the registry doesn't list still gets the OpenAI profile there.
@@ -178,6 +197,10 @@ public class ParamResolver {
     }
 
     private boolean isRefused(FlagParam param) {
+        return param != null && Boolean.FALSE.equals(param.accepted());
+    }
+
+    private boolean isRefused(EffortParam param) {
         return param != null && Boolean.FALSE.equals(param.accepted());
     }
 }
