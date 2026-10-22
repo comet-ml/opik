@@ -1290,6 +1290,38 @@ areas:
       ollie-surface: { covered: false, state: default }
       ollie-sidebar: { covered: false, state: default }
 
+  # The browser screen an AI host's MCP OAuth flow lands on, and deliberately
+  # NOT filed under `ollie` above: that area is cloud_only because it needs the
+  # AssistantSidebar plugin, which this surface does not. The route is mounted
+  # unconditionally in router.tsx; what gates the flow is the BACKEND's
+  # MCP_OAUTH_ENABLED (off by default self-hosted, on in Cloud — docs
+  # /self-host/configure/mcp-oauth). A config flag a self-hosted deployment can
+  # turn on is not a cloud-only surface, so no cloud_only here.
+  #
+  # Reached by redirect, never from the nav: the backend's GET /oauth/authorize
+  # 302s here with the OAuth request parameters preserved, before any workspace
+  # is resolved. So the area has no nav entry, `nav_group` is a formality, and
+  # surface.py cannot see the route at all — it is built by
+  # createOAuthConsentRoute(rootRoute), not a createRoute({...}) literal.
+  #
+  # Scoped to what only an e2e can see. helpers.test.ts and
+  # OAuthConsentPage.test.tsx already unit-test param parsing, the deny
+  # redirect's scheme gate and the workspace preselection, but against a MOCKED
+  # authorize context and a MOCKED consent mutation — so every key below names
+  # the full-stack half those cannot reach: that a real grant is issued and
+  # scoped. No `visual:` block on purpose: nothing intends to picture this page.
+  mcp-oauth:
+    label: MCP OAuth
+    nav_group: MCP
+    routes: ["/oauth/consent"]
+    specs: []
+    capabilities:
+      consent-screen-mounts:   { covered: false, note: "OAuthConsentPage at /oauth/consent rendering the real GET /oauth/authorize/context — the requesting client's name and logo, and the user's own eligible workspaces. The half the unit tests mock away: that the backend's 302 actually lands here and that the context endpoint answers for a registered client" }
+      grant-consent:           { covered: false, note: "Allow posts the consent with the context's csrf_token and leaves to the backend-built redirect_to carrying an authorization code. OAuthConsentPage.test.tsx asserts the request SHAPE against a mocked mutation; what needs a stack is that a code is really issued and that the AI host can reach the granted workspace afterwards" }
+      deny-consent:            { covered: false, note: "Deny leaves to the raw redirect_uri with error=access_denied and the state preserved, and — the half only a stack can show — creates no grant, so a retry from the host starts a fresh authorization rather than resuming one" }
+      workspace-scope-select:  { covered: false, note: "Approving a workspace OTHER than the preselected default grants that workspace and not the default. The preselection itself is unit-tested (opik#8085); this key is the grant's actual SCOPE — the picked workspace reachable through the token afterwards and the unpicked one not" }
+      invalid-request-refused: { covered: false, note: "The two terminal cards and the disabled Allow: 'Invalid authorization request' on a missing required OAuth param, 'Authorization unavailable' when the context read fails, and 'No eligible workspaces' with Allow unclickable. Unit-tested against mocked failures; the e2e half is that the BACKEND refuses the right requests — an unregistered client_id, a redirect_uri that does not match the registered one" }
+
   # ===================== PLATFORM / WORKSPACE =====================
 
   projects:
