@@ -13,6 +13,7 @@ import org.redisson.api.RateType;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.client.RedisException;
 import org.redisson.client.codec.Codec;
+import org.redisson.client.codec.LongCodec;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -120,13 +121,16 @@ class RedisRateLimitServiceTest {
     void availableEventsReadsCounterWithoutWriting() {
         // The header value is a plain read of the counter key: no SET/EXPIRE on it, and never the mutating
         // availablePermits() that would strip its TTL (OPIK-8923).
+        String bucket = bucketName();
         when(redisClient.<Long>getBucket(anyString(), any(Codec.class))).thenReturn(valueBucket);
         when(valueBucket.get()).thenReturn(Mono.just(7L));
 
-        StepVerifier.create(rateLimitService.availableEvents(bucketName(), limitConfig()))
+        StepVerifier.create(rateLimitService.availableEvents(bucket, limitConfig()))
                 .expectNext(7L)
                 .verifyComplete();
 
+        // Read the exact Redisson value-key for this bucket (with the codec), not just "some string".
+        verify(redisClient).getBucket("{" + bucket + "}:value", LongCodec.INSTANCE);
         verify(valueBucket).get();
         verifyNoMoreInteractions(valueBucket);
         verify(rateLimiter, never()).availablePermits();
