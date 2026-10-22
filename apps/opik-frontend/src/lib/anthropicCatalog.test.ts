@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+// What GET /v1/private/llm/models and /profiles serve for the bundled registry: regenerate it from the backend, never by hand.
 import FIXTURE from "@/lib/anthropicCatalog.fixture.json";
 import { buildParamsIndex } from "@/hooks/useLLMProviderModelsData";
 import {
