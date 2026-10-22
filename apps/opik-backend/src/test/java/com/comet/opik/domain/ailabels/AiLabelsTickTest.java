@@ -152,10 +152,6 @@ class AiLabelsTickTest {
     // tick took it. The gap runs from the tick's end, with room for the lock's own latency.
     private static final Duration SWEEP_INTERVAL = Duration.ofMillis(200);
     private static final Duration TICK_GAP = Duration.ofMillis(500);
-    // The tick asserting "not yet retried" follows the failure within a second; wide enough for a slow runner.
-    private static final Duration RETRY_DELAY = Duration.ofSeconds(4);
-    // ClickHouse stamps updated_at with its own clock, which can drift from ours.
-    private static final Duration CLOCK_MARGIN = Duration.ofSeconds(1);
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     // Not reused: the poller, the budget and the opt-in read whole tables, and the traces cutover is destructive.
@@ -198,7 +194,9 @@ class AiLabelsTickTest {
                         new CustomConfig("aiLabels.sweepInterval", SWEEP_INTERVAL.toMillis() + "ms"),
                         new CustomConfig("aiLabels.healthInterval", "1h"),
                         new CustomConfig("aiLabels.quietPeriod", "0s"),
-                        new CustomConfig("aiLabels.retry.delay", RETRY_DELAY.toSeconds() + "s"),
+                        // D is zero, so a retryable failure comes back on the next tick: AiLabelSweepDAOTest covers
+                        // the inside-D case against rows at explicit timestamps.
+                        new CustomConfig("aiLabels.retry.delay", "0s"),
                         new CustomConfig("aiLabels.sweep.buckets", "1")))
                 .build());
     }
@@ -650,7 +648,7 @@ class AiLabelsTickTest {
     class Failures {
 
         @Test
-        @DisplayName("a retryable item failure comes back after D, up to X attempts; a non-retryable one is terminal")
+        @DisplayName("a retryable item failure is resubmitted once loaded, up to X attempts; a non-retryable one is terminal")
         void itemFailures() {
             var workspaceId = enabledWorkspace();
             var projectId = UUID.randomUUID();
@@ -662,7 +660,6 @@ class AiLabelsTickTest {
             tick();
             completeJobs(workspaceId, failGenerate);
             tick();
-            var firstFailureAt = Instant.now();
 
             assertThat(statuses(workspaceId, List.of(retried, terminal)))
                     .extracting(AiLabelStatus::traceId, AiLabelStatus::task, AiLabelStatus::status,
@@ -675,11 +672,6 @@ class AiLabelsTickTest {
 
             tick();
 
-            assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(1);
-
-            pauseUntil(firstFailureAt.plus(RETRY_DELAY).plus(CLOCK_MARGIN));
-            tick();
-
             assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(2).last()
                     .satisfies(body -> assertThat(itemIds(body)).containsExactly(retried + ":" + GENERATE_TASK));
             assertThat(submits(DECIDE_PATH, workspaceId)).hasSize(1);
@@ -688,20 +680,18 @@ class AiLabelsTickTest {
 
             completeJobs(workspaceId, failGenerate);
             tick();
-            var secondFailureAt = Instant.now();
 
             assertThat(status(workspaceId, retried, GENERATE_TASK))
                     .extracting(AiLabelStatus::status, AiLabelStatus::retryable, AiLabelStatus::attempt)
                     .containsExactly(AiLabelStatus.Status.FAILED, true, 2);
 
-            pauseUntil(secondFailureAt.plus(RETRY_DELAY).plus(CLOCK_MARGIN));
             tick();
 
             assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(2);
         }
 
         @Test
-        @DisplayName("left out of the status call: the job's items become retryable job_lost, and come back after D")
+        @DisplayName("left out of the status call: the job's items become retryable job_lost, and are resubmitted")
         void jobLost() {
             var workspaceId = enabledWorkspace();
             var traceId = trace(workspaceId, UUID.randomUUID(), 0);
@@ -709,17 +699,11 @@ class AiLabelsTickTest {
             tick();
             jobs(workspaceId).forEach(job -> lostJobs.add(job.jobId()));
             tick();
-            var lostAt = Instant.now();
 
-            assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
             assertThat(statuses(workspaceId, List.of(traceId)))
                     .extracting(AiLabelStatus::status, AiLabelStatus::retryable, AiLabelStatus::attempt,
                             AiLabelStatus::errorCode)
                     .containsOnly(tuple(AiLabelStatus.Status.FAILED, true, 1, AiLabelsTickService.JOB_LOST));
-
-            pauseUntil(lostAt.plus(RETRY_DELAY).plus(CLOCK_MARGIN));
-            tick();
-
             assertThat(inFlight(workspaceId)).extracting(AiLabelJobItem::attempt).containsOnly(2).hasSize(2);
             assertThat(jobs(workspaceId)).extracting(JobRow::status)
                     .containsExactlyInAnyOrder("loaded", "loaded", "submitted", "submitted");
@@ -736,7 +720,6 @@ class AiLabelsTickTest {
                     .willReturn(error(400, "invalid_request")));
 
             tick();
-            var rejectedAt = Instant.now();
 
             assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(1);
             assertThat(jobs(workspaceId)).extracting(JobRow::endpoint).containsExactly("decide");
@@ -748,7 +731,6 @@ class AiLabelsTickTest {
                             tuple(GENERATE_TASK, AiLabelStatus.Status.FAILED, false, 1, "invalid_request"),
                             tuple(GENERATE_TASK, AiLabelStatus.Status.FAILED, false, 1, "invalid_request"));
 
-            pauseUntil(rejectedAt.plus(RETRY_DELAY).plus(CLOCK_MARGIN));
             tick();
 
             assertThat(submits(GENERATE_PATH, workspaceId)).hasSize(1);
@@ -904,7 +886,10 @@ class AiLabelsTickTest {
                     List.of(List.of(generateResult(reported), generateResult(unreported))));
             tick();
 
-            assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
+            assertThat(jobs(workspaceId)).extracting(JobRow::status)
+                    .containsExactlyInAnyOrder("loaded", "loaded", "submitted");
+            assertThat(inFlight(workspaceId)).extracting(AiLabelJobItem::traceId, AiLabelJobItem::task,
+                    AiLabelJobItem::attempt).containsExactly(tuple(unreported, DECIDE_TASK, 2));
             assertThat(status(workspaceId, reported, DECIDE_TASK).status()).isEqualTo(AiLabelStatus.Status.DONE);
             assertThat(status(workspaceId, unreported, DECIDE_TASK))
                     .extracting(AiLabelStatus::status, AiLabelStatus::retryable, AiLabelStatus::attempt,
