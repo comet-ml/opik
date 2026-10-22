@@ -193,7 +193,7 @@ OPENAI_DROPDOWN_EXCLUDE = [
 # Retired, 404 "model: ...". The deprecated filter hid them only while the prices JSON listed them with a
 # deprecation_date; LiteLLM later drops a retired model's entry, and the next sync would show it again.
 ANTHROPIC_DROPDOWN_EXCLUDE = [
-    r"^claude-mythos-preview$",
+    r"^claude-mythos-",          # Project Glasswing access only: 404 "model: claude-mythos-5" on other keys
     r"^claude-3-7-sonnet-",
     r"^claude-opus-4-1-",
     r"^claude-(opus|sonnet)-4-2025",
@@ -225,6 +225,7 @@ GEMINI_DROPDOWN_EXCLUDE = [
     r"^gemini-gemma-",
     r"^gemini-omni",             # video generation, 400 "only supports Interactions API" on generateContent
     r"^lyria-",                  # music generation, answers with audio the playground cannot show
+    r"-transcribe",              # speech to text: 400 "Developer instruction is not enabled" with a system message, empty text without
 ]
 
 VERTEXAI_DROPDOWN_EXCLUDE = [
@@ -247,6 +248,9 @@ OPENROUTER_DROPDOWN_EXCLUDE = [
     r"llama-guard",                        # safety classifier: answers "safe" or "unsafe", not a chat model
     r"content-safety",                     # safety classifier: answers "safe" or "unsafe", not a chat model
     r"^openrouter/bodybuilder$",           # turns a request into OpenRouter API JSON, not a chat model
+    r"^morph/morph-v3-",                   # code-apply models: 400 "Multi-turn conversations are not supported" with a system message
+    r"^meta/muse-spark-.*-contributor$",   # 404 "No endpoints found matching your data policy" on the default data policy
+    r"^nvidia/nemotron-3-super-120b-a12b:free$",      # 404 from the free endpoint; the paid one works
 ]
 
 
