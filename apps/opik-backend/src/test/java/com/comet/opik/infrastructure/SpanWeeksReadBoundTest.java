@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
@@ -48,6 +49,8 @@ import com.comet.opik.api.resources.v1.events.SpanWeeksListener;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.api.sorting.SpanSortingFactory;
+import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanType;
@@ -63,6 +66,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
@@ -96,6 +100,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -128,6 +133,13 @@ class SpanWeeksReadBoundTest {
     private static final String[] OPTIMIZATION_IGNORED_FIELDS = {"datasetId", "createdAt", "lastUpdatedAt",
             "createdBy", "lastUpdatedBy", "studioConfig", "datasetName", "baselineObjectiveScore",
             "bestObjectiveScore", "baselineDuration", "bestDuration", "experimentScores", "projectName"};
+
+    /**
+     * The project size estimate is in GB rounded to two decimals, so a span shows in it only from 0.005 GB: with this
+     * input, about 0.006 GB, the project is estimated at 0.01 GB, over the sorting limit of 0 GB this suite sets, and at
+     * 0 without it. Short words, as a long run of base64 characters would be stripped as an attachment.
+     */
+    private static final String LARGE_INPUT = "opik ".repeat(1_200_000);
 
     private final Network network = Network.newNetwork();
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer(false,
@@ -164,6 +176,8 @@ class SpanWeeksReadBoundTest {
                                 // The successor's columns are non-nullable, as the cutover flips this with it.
                                 new CustomConfig("databaseAnalyticsDataModel.spanColumnsNonNullable", "true"),
                                 new CustomConfig("databaseAnalyticsDataModel.spanWeeksReadEnabled", "true"),
+                                // Dynamic sorting only for projects estimated at 0 GB: all but the large-input one.
+                                new CustomConfig("workspaceSettings.maxProjectSizeToAllowSorting", "0"),
                                 // Finished experiments aggregate after this delay; its bucket lives twice as long, so
                                 // the job's 5s tick always finds it.
                                 new CustomConfig("experimentDenormalization.debounceDelay", "5s")))
@@ -738,6 +752,56 @@ class SpanWeeksReadBoundTest {
 
         var expectedSpanIds = trace.spans().stream().map(Span::id).toList();
         assertThat(actualSpanIds).containsExactlyInAnyOrderElementsOf(expectedSpanIds);
+    }
+
+    /**
+     * The project size estimate, read by the traces and spans lists to gate dynamic sorting: a far-future span with the
+     * large input puts the project over the limit, which empties both pages' sortable fields, and with a small input
+     * the project stays under it.
+     */
+    private Stream<Arguments> projectSizeCountsAFarFutureSpan() {
+        var largeInput = JsonNodeFactory.instance.objectNode().put("text", LARGE_INPUT);
+        return Stream.of(
+                arguments(Named.of("over the sorting limit", (UnaryOperator<Span>) span -> span.toBuilder()
+                        .input(largeInput)
+                        .build()), List.of(), List.of()),
+                arguments(Named.of("under the sorting limit", UnaryOperator.<Span>identity()),
+                        new SpanSortingFactory().getSortableFields(), new TraceSortingFactory().getSortableFields()));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void projectSizeCountsAFarFutureSpan(UnaryOperator<Span> farFutureSpan, List<String> expectedSpansSortableBy,
+            List<String> expectedTracesSortableBy) {
+        var trace = fixtures.createFarFutureTrace(farFutureSpan);
+
+        var actualSpansPage = findProjectSpans(trace, null, null, null, null, null);
+        var actualTracesPage = traceResourceClient.getTraces(trace.projectName(), null, API_KEY, WORKSPACE_NAME, null,
+                null, 10, Map.of());
+
+        var expectedSpans = fixtures.expectedSpans(trace.spans());
+        SpanAssertions.assertPage(actualSpansPage, 1, expectedSpans.size(), expectedSpans.size());
+        SpanAssertions.assertSpan(actualSpansPage.content(), expectedSpans, USER);
+        assertThat(actualSpansPage.sortableBy()).isEqualTo(expectedSpansSortableBy);
+        TraceAssertions.assertPage(actualTracesPage, 1, 1, 1);
+        TraceAssertions.assertTraces(actualTracesPage.content(), List.of(expectedTrace(trace)), USER);
+        assertThat(actualTracesPage.sortableBy()).isEqualTo(expectedTracesSortableBy);
+    }
+
+    @Test
+    void spanFeedbackScoreNamesOfATypeIncludeANameScoredOnlyOnAFarFutureSpan() {
+        var trace = fixtures.createFarFutureTrace();
+        var farFutureSpan = trace.spans().getLast();
+        var score = factory.manufacturePojo(FeedbackScore.class);
+        spanResourceClient.feedbackScore(farFutureSpan.id(), score, WORKSPACE_NAME, API_KEY);
+
+        var actualNames = spanResourceClient.getFeedbackScoreNames(trace.projectId(), farFutureSpan.type(), API_KEY,
+                WORKSPACE_NAME);
+
+        var expectedNames = FeedbackScoreNames.builder()
+                .scores(List.of(FeedbackScoreNames.ScoreName.builder().name(score.name()).build()))
+                .build();
+        assertThat(actualNames).isEqualTo(expectedNames);
     }
 
     /**

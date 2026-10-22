@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.resources;
 
 import jakarta.ws.rs.core.GenericType;
 import lombok.Builder;
+import lombok.RequiredArgsConstructor;
 import org.apache.hc.core5.http.HttpStatus;
 import org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -11,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@RequiredArgsConstructor
 public class HealthCheckResourceClient {
 
     private static final String RESOURCE_PATH = "%s/health-check?name=%s";
@@ -19,11 +21,6 @@ public class HealthCheckResourceClient {
 
     private final ClientSupport client;
     private final String baseURI;
-
-    public HealthCheckResourceClient(ClientSupport client, String baseURI) {
-        this.client = client;
-        this.baseURI = baseURI;
-    }
 
     @Builder(toBuilder = true)
     public record HealthCheckResponse(String name, boolean healthy, boolean critical, String type) {

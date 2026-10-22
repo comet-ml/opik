@@ -10,8 +10,6 @@ import lombok.Builder;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ScopeMetadata(
         double sizeGb,
-        double totalTableSizeGb,
-        double percentageOfTable,
         double limitSizeGb) {
 
     public boolean canUseDynamicSorting() {
