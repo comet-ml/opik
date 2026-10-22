@@ -138,13 +138,31 @@ export class OnlineEvaluationPage {
     await this.nameInput.waitFor({ state: 'detached' });
   }
 
-  async openCreateRulePanel(type: EvaluatorType = 'LLM-as-a-Judge'): Promise<void> {
+  /**
+   * Opens the create panel. A new judge or decision model starts on cards, so
+   * this also picks one: the given template, or the card to write your own.
+   */
+  async openCreateRulePanel(type: EvaluatorType = 'LLM-as-a-Judge', startCard?: string): Promise<void> {
     return test.step(`open the create panel for a ${type} evaluator`, async () => {
       await this.page.getByTestId('online-evaluation-create-rule-button').click();
       await this.page.getByRole('menuitem', { name: new RegExp(`^${type}`) }).click();
       // The Evaluator menu animates out over the panel; clicks land on it until it is gone.
       await expect(this.page.getByRole('menu')).toHaveCount(0);
       await this.waitForPanelOpen();
+      if (type !== 'Code evaluator') {
+        await this.chooseStartCard(startCard ?? (type === 'Decision model' ? 'Write your own' : 'Type your prompt'));
+      }
+    });
+  }
+
+  get startCards(): Locator {
+    return this.panel.getByTestId('rule-editor-start-cards');
+  }
+
+  async chooseStartCard(label: string): Promise<void> {
+    return test.step(`start from the "${label}" card`, async () => {
+      await this.startCards.getByRole('button', { name: new RegExp(`^${label}`) }).click();
+      await expect(this.startCards).toHaveCount(0);
     });
   }
 
@@ -416,15 +434,6 @@ export class OnlineEvaluationPage {
     return this.panel.getByText('Cost limit (USD)', { exact: true });
   }
 
-  /** Replaces the prompt and scores, and (when creating) sets the name to the template label. */
-  async applyJudgeTemplate(label: CreateRuleLLMJudgeFields['template']): Promise<void> {
-    return test.step(`apply the "${label}" judge template`, async () => {
-      await this.panel.getByRole('button', { name: 'Templates' }).click();
-      await this.page.getByRole('menuitem', { name: new RegExp(`^${label}`) }).click();
-      await expect(this.page.getByRole('menu')).toHaveCount(0);
-    });
-  }
-
   /** The panel's one CodeMirror editor: the prompt, or the code of a code evaluator. */
   get editor(): Locator {
     return this.panel.locator('.cm-content');
@@ -484,8 +493,7 @@ export class OnlineEvaluationPage {
    */
   async fillAndSubmitCreateRuleLLMJudge(fields: CreateRuleLLMJudgeFields): Promise<void> {
     return test.step(`create LLM-as-a-Judge rule "${fields.name}"`, async () => {
-      await this.openCreateRulePanel('LLM-as-a-Judge');
-      await this.applyJudgeTemplate(fields.template);
+      await this.openCreateRulePanel('LLM-as-a-Judge', fields.template);
       await this.nameInput.fill(fields.name);
       await this.selectJudgeModel(fields.modelDisplayName);
       await this.submitPanel();

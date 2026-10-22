@@ -1,4 +1,5 @@
 import {
+  CircleCheck,
   Frown,
   MessagesSquare,
   ShieldAlert,
@@ -11,6 +12,7 @@ import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { LLM_JUDGE, LLMPromptTemplate } from "@/types/llm";
 import { LLM_PROMPT_TEMPLATES } from "@/constants/llm";
 import { MenuOption } from "@/v2/pages-shared/CreateMenuButton/MenuOptionItems";
+import { TASK_COMPLETION_DATA } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 
 type JudgeTemplateDisplay = Omit<MenuOption<LLM_JUDGE>, "value">;
 
@@ -60,10 +62,36 @@ export type JudgeTemplateOption = MenuOption<LLM_JUDGE> & {
   template: LLMPromptTemplate;
 };
 
+export const TASK_COMPLETION_DISPLAY: JudgeTemplateDisplay = {
+  label: "Task completion",
+  description: "Checks if the agent completed the task the user asked for.",
+  icon: CircleCheck,
+  iconClassName: "bg-[var(--judge-template-task-completion)]",
+};
+
+const getTaskCompletionOption = (
+  scope: EVALUATORS_RULE_SCOPE,
+): JudgeTemplateOption => {
+  const { messages, variables, schema } = TASK_COMPLETION_DATA[scope];
+  return {
+    ...TASK_COMPLETION_DISPLAY,
+    value: LLM_JUDGE.custom,
+    template: {
+      value: LLM_JUDGE.custom,
+      label: TASK_COMPLETION_DISPLAY.label,
+      messages,
+      variables,
+      schema,
+    },
+  };
+};
+
 export const getJudgeTemplateOptions = (
   scope: EVALUATORS_RULE_SCOPE,
-): JudgeTemplateOption[] =>
-  LLM_PROMPT_TEMPLATES[scope].flatMap((template) => {
+): JudgeTemplateOption[] => [
+  getTaskCompletionOption(scope),
+  ...LLM_PROMPT_TEMPLATES[scope].flatMap((template) => {
     const display = JUDGE_TEMPLATE_DISPLAY[template.value];
     return display ? [{ ...display, value: template.value, template }] : [];
-  });
+  }),
+];
