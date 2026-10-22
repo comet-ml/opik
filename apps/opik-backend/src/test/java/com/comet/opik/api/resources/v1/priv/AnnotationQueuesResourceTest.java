@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AnnotationQueue;
+import com.comet.opik.api.AnnotationQueueAnnotatorView;
 import com.comet.opik.api.AnnotationQueueAutomation;
 import com.comet.opik.api.AnnotationQueueItemSource;
 import com.comet.opik.api.AnnotationQueueReviewer;
@@ -56,6 +57,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -418,6 +420,51 @@ class AnnotationQueuesResourceTest {
 
             annotationQueuesResourceClient.createAnnotationQueueBatch(
                     new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+        }
+
+        @Test
+        @DisplayName("should reject annotator view html over the size limit")
+        void createAnnotationQueueWhenAnnotatorViewHtmlTooLongShouldReject() {
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .annotatorView(AnnotationQueueAnnotatorView.builder()
+                            .html("a".repeat(500_001))
+                            .build())
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueue(annotationQueue,
+                    API_KEY, TEST_WORKSPACE, SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @Test
+        @DisplayName("should reject an annotator view summary over the size limit")
+        void createAnnotationQueueWhenAnnotatorViewSummaryTooLongShouldReject() {
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .annotatorView(AnnotationQueueAnnotatorView.builder()
+                            .html("<div></div>")
+                            .summary("a".repeat(1001))
+                            .build())
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueue(annotationQueue,
+                    API_KEY, TEST_WORKSPACE, SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @ParameterizedTest
+        @ValueSource(ints = {0, AnnotationQueueAnnotatorView.LATEST_KIT_VERSION + 1})
+        @DisplayName("should reject an unknown annotator view kit version")
+        void createAnnotationQueueWhenAnnotatorViewKitVersionUnknownShouldReject(int kitVersion) {
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .annotatorView(AnnotationQueueAnnotatorView.builder()
+                            .html("<div></div>")
+                            .kitVersion(kitVersion)
+                            .build())
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueue(annotationQueue,
+                    API_KEY, TEST_WORKSPACE, SC_UNPROCESSABLE_ENTITY);
         }
 
         @Test
@@ -1780,6 +1827,97 @@ class AnnotationQueuesResourceTest {
                     .ignoringFields(QUEUE_IGNORED_FIELDS)
                     .isEqualTo(expected);
         }
+
+        private Stream<Arguments> updateAnnotatorViewScenarios() {
+            return Stream.of(
+                    arguments(AnnotationQueueUpdate.builder()
+                            .annotatorView(AnnotationQueueAnnotatorView.builder()
+                                    .html("<div id=\"view\"></div>")
+                                    .kitVersion(AnnotationQueueAnnotatorView.LATEST_KIT_VERSION)
+                                    .build())
+                            .build(), "explicit change"),
+                    arguments(AnnotationQueueUpdate.builder().description("Updated description").build(),
+                            "preserve when not included"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("updateAnnotatorViewScenarios")
+        @DisplayName("should handle annotatorView on update:")
+        void updateAnnotatorView(AnnotationQueueUpdate updateRequest, String scenario) {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .annotatorView(AnnotationQueueAnnotatorView.builder().html("<div></div>").build())
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.updateAnnotationQueue(
+                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(updatedQueue)
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .isEqualTo(applyUpdate(updateRequest, annotationQueue));
+        }
+
+        @Test
+        @DisplayName("should return null annotatorView when omitted on create")
+        void createAnnotationQueueWithoutAnnotatorView() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .annotatorView(null)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var retrieved = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(retrieved.annotatorView()).isNull();
+        }
+
+        @Test
+        @DisplayName("should store annotatorView on a thread queue")
+        void createThreadAnnotationQueueWithAnnotatorView() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+            var annotatorView = AnnotationQueueAnnotatorView.builder()
+                    .html("<div id=\"thread\"></div>")
+                    .kitVersion(AnnotationQueueAnnotatorView.LATEST_KIT_VERSION)
+                    .summary("Annotators see the conversation as chat turns.")
+                    .build();
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .scope(AnnotationQueue.AnnotationScope.THREAD)
+                    .annotatorView(annotatorView)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var retrieved = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(retrieved.annotatorView()).isEqualTo(annotatorView);
+        }
     }
 
     @Nested
@@ -2529,6 +2667,9 @@ class AnnotationQueuesResourceTest {
                 .automation(updateRequest.automation() != null
                         ? updateRequest.automation()
                         : existingQueue.automation())
+                .annotatorView(updateRequest.annotatorView() != null
+                        ? updateRequest.annotatorView()
+                        : existingQueue.annotatorView())
                 .build();
     }
 
