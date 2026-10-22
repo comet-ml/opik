@@ -38,6 +38,7 @@ ARG RDS_CERT_SHA256=90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2
 # hadolint ignore=DL3064
 ARG STORE_PASSWORD=changeit
 COPY install_rds_cert.sh /tmp/install_rds_cert.sh
+COPY distrust/ /etc/pki/ca-trust/source/blocklist/
 # perl is intentionally not installed: it pulls in perl-Archive-Tar, which is
 # affected by CVE-2026-9538 (ALAS2023-2026-1805) and has no patched AL2023 RPM.
 # install_rds_cert.sh uses sed/openssl instead of perl to extract the cert CN.
@@ -50,6 +51,7 @@ RUN yum update -y && \
     yum install -y --allowerasing shadow ca-certificates openssl dos2unix curl && \
     yum clean all && \
     rm -rf /var/cache/yum && \
+    update-ca-trust extract && \
     mkdir -p /tmp/certs && \
     curl -fsSL -o /tmp/certs/global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem && \
     echo "${RDS_CERT_SHA256}  /tmp/certs/global-bundle.pem" | sha256sum -c - && \
