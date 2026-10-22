@@ -264,9 +264,9 @@ public class SpanDAO {
                     :type as type,
                     parseDateTime64BestEffort(:start_time, 9) as start_time,
                     parseDateTime64BestEffort(:end_time, 9) as end_time,
-                    :input as input,
-                    :output as output,
-                    :metadata as metadata,
+                    p.input as input,
+                    p.output as output,
+                    p.metadata as metadata,
                     :model as model,
                     :provider as provider,
                     toDecimal128(:total_estimated_cost, 12) as total_estimated_cost,
@@ -278,26 +278,29 @@ public class SpanDAO {
                     :user_name as created_by,
                     :user_name as last_updated_by,
                     :truncation_threshold as truncation_threshold,
-                    :input_slim as input_slim,
-                    :output_slim as output_slim,
+                    p.input_slim as input_slim,
+                    p.output_slim as output_slim,
                     :ttft as ttft,
                     :source as source,
                     :environment as environment
-            ) as new_span
-            LEFT JOIN (
-                SELECT
-                    *, truncated_input, truncated_output
-                FROM spans
-                WHERE workspace_id = :workspace_id
-                AND id = :id
-                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
-                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-                LIMIT 1
-            ) as old_span
-            ON new_span.id = old_span.id
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
+                """
+            + StreamedPayload.FROM
+            + """
+                    ) as new_span
+                    LEFT JOIN (
+                        SELECT
+                            *, truncated_input, truncated_output
+                        FROM spans
+                        WHERE workspace_id = :workspace_id
+                        AND id = :id
+                        <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+                        ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                        LIMIT 1
+                    ) as old_span
+                    ON new_span.id = old_span.id
+                    SETTINGS log_comment = '<log_comment>'
+                    """
+            + StreamedPayload.VALUES;
 
     /***
      * Handles the update of a span when the span already exists in the database.
@@ -336,43 +339,49 @@ public class SpanDAO {
             	environment
             )
             SELECT
-            	id,
-            	project_id,
-            	workspace_id,
-            	trace_id,
-            	parent_span_id,
-                <if(name)> :name <else> name <endif> as name,
-            	<if(type)> :type <else> type <endif> as type,
-            	start_time,
-            	<if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> end_time <endif> as end_time,
-            	<if(input)> :input <else> input <endif> as input,
-            	<if(output)> :output <else> output <endif> as output,
-            	<if(metadata)> :metadata <else> metadata <endif> as metadata,
-            	<if(model)> :model <else> model <endif> as model,
-            	<if(provider)> :provider <else> provider <endif> as provider,
-            	<if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> total_estimated_cost <endif> as total_estimated_cost,
-            	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> total_estimated_cost_version <endif> as total_estimated_cost_version,
-            	<if(tags)> :tags <else> tags <endif> as tags,
-            	<if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else> usage <endif> as usage,
-            	<if(error_info)> :error_info <else> error_info <endif> as error_info,
-            	created_at,
-            	created_by,
+            	s.id,
+            	s.project_id,
+            	s.workspace_id,
+            	s.trace_id,
+            	s.parent_span_id,
+                <if(name)> :name <else> s.name <endif> as name,
+            	<if(type)> :type <else> s.type <endif> as type,
+            	s.start_time,
+            	<if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> s.end_time <endif> as end_time,
+            	<if(input)> p.input <else> s.input <endif> as input,
+            	<if(output)> p.output <else> s.output <endif> as output,
+            	<if(metadata)> p.metadata <else> s.metadata <endif> as metadata,
+            	<if(model)> :model <else> s.model <endif> as model,
+            	<if(provider)> :provider <else> s.provider <endif> as provider,
+            	<if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> s.total_estimated_cost <endif> as total_estimated_cost,
+            	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> s.total_estimated_cost_version <endif> as total_estimated_cost_version,
+            	<if(tags)> :tags <else> s.tags <endif> as tags,
+            	<if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else> s.usage <endif> as usage,
+            	<if(error_info)> :error_info <else> s.error_info <endif> as error_info,
+            	s.created_at,
+            	s.created_by,
                 :user_name as last_updated_by,
                 :truncation_threshold,
-                <if(input)> :input_slim <else> input_slim <endif> as input_slim,
-                <if(output)> :output_slim <else> output_slim <endif> as output_slim,
-                <if(ttft)> :ttft <else> ttft <endif> as ttft,
-                <if(source)> :source <else> source <endif> as source,
-                <if(environment)> :environment <else> environment <endif> as environment
-            FROM spans
-            WHERE id = :id
-            AND workspace_id = :workspace_id
-            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
-            ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-            LIMIT 1
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
+                <if(input)> p.input_slim <else> s.input_slim <endif> as input_slim,
+                <if(output)> p.output_slim <else> s.output_slim <endif> as output_slim,
+                <if(ttft)> :ttft <else> s.ttft <endif> as ttft,
+                <if(source)> :source <else> s.source <endif> as source,
+                <if(environment)> :environment <else> s.environment <endif> as environment
+            """
+            + StreamedPayload.FROM
+            + """
+                    CROSS JOIN (
+                        SELECT *
+                        FROM spans
+                        WHERE id = :id
+                        AND workspace_id = :workspace_id
+                        <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+                        ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                        LIMIT 1
+                    ) AS s
+                    SETTINGS log_comment = '<log_comment>'
+                    """
+            + StreamedPayload.VALUES;
 
     /**
      * This query is used when updates are processed before inserts, and the span does not exist in the database.
@@ -522,9 +531,9 @@ public class SpanDAO {
                     <if(type)> :type <else> 'unknown' <endif> as type,
                     toDateTime64('1970-01-01 00:00:00.000', 9) as start_time,
                     parseDateTime64BestEffort(:end_time, 9) as end_time,
-                    <if(input)> :input <else> '' <endif> as input,
-                    <if(output)> :output <else> '' <endif> as output,
-                    <if(metadata)> :metadata <else> '' <endif> as metadata,
+                    <if(input)> p.input <else> '' <endif> as input,
+                    <if(output)> p.output <else> '' <endif> as output,
+                    <if(metadata)> p.metadata <else> '' <endif> as metadata,
                     <if(model)> :model <else> '' <endif> as model,
                     <if(provider)> :provider <else> '' <endif> as provider,
                     <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> toDecimal128(0, 12) <endif> as total_estimated_cost,
@@ -536,26 +545,29 @@ public class SpanDAO {
                     :user_name as created_by,
                     :user_name as last_updated_by,
                     :truncation_threshold as truncation_threshold,
-                    <if(input)> :input_slim <else> '' <endif> as input_slim,
-                    <if(output)> :output_slim <else> '' <endif> as output_slim,
+                    <if(input)> p.input_slim <else> '' <endif> as input_slim,
+                    <if(output)> p.output_slim <else> '' <endif> as output_slim,
                     :ttft as ttft,
                     :source as source,
                     <if(environment)> :environment <else> '' <endif> as environment
-            ) as new_span
-            LEFT JOIN (
-                SELECT
-                    *, truncated_input, truncated_output
-                FROM spans
-                WHERE id = :id
-                AND workspace_id = :workspace_id
-                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
-                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-                LIMIT 1
-            ) as old_span
-            ON new_span.id = old_span.id
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
+                """
+            + StreamedPayload.FROM
+            + """
+                    ) as new_span
+                    LEFT JOIN (
+                        SELECT
+                            *, truncated_input, truncated_output
+                        FROM spans
+                        WHERE id = :id
+                        AND workspace_id = :workspace_id
+                        <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+                        ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                        LIMIT 1
+                    ) as old_span
+                    ON new_span.id = old_span.id
+                    SETTINGS log_comment = '<log_comment>'
+                    """
+            + StreamedPayload.VALUES;
 
     /**
      * Query to get target project_ids from spans (executed separately to reduce table scans).
@@ -2066,9 +2078,9 @@ public class SpanDAO {
                 <if(type)> :type <else> s.type <endif> as type,
                 s.start_time,
                 <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> s.end_time <endif> as end_time,
-                <if(input)> :input <else> s.input <endif> as input,
-                <if(output)> :output <else> s.output <endif> as output,
-                <if(metadata)> :metadata <else> s.metadata <endif> as metadata,
+                <if(input)> p.input <else> s.input <endif> as input,
+                <if(output)> p.output <else> s.output <endif> as output,
+                <if(metadata)> p.metadata <else> s.metadata <endif> as metadata,
                 <if(model)> :model <else> s.model <endif> as model,
                 <if(provider)> :provider <else> s.provider <endif> as provider,
                 <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> s.total_estimated_cost <endif> as total_estimated_cost,
@@ -2083,19 +2095,25 @@ public class SpanDAO {
                         s.created_by,
                         :user_name as last_updated_by,
                         :truncation_threshold,
-                        <if(input)> :input_slim <else> s.input_slim <endif> as input_slim,
-                        <if(output)> :output_slim <else> s.output_slim <endif> as output_slim,
+                        <if(input)> p.input_slim <else> s.input_slim <endif> as input_slim,
+                        <if(output)> p.output_slim <else> s.output_slim <endif> as output_slim,
                         <if(ttft)> :ttft <else> s.ttft <endif> as ttft,
                         s.source,
                         <if(environment)> :environment <else> s.environment <endif> as environment
-                    FROM spans s
-                    WHERE s.id IN :ids AND s.workspace_id = :workspace_id
-                    <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
-                    ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.id) DESC, s.last_updated_at DESC
-                    LIMIT 1 BY s.id
+                    """
+            + StreamedPayload.FROM
+            + """
+                    CROSS JOIN (
+                        SELECT *
+                        FROM spans
+                        WHERE id IN :ids AND workspace_id = :workspace_id
+                        <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+                        ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) AS s
                     SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable'
-                    ;
-                    """;
+                    """
+            + StreamedPayload.VALUES;
 
     // ESTIMATED COST CHANGE
     // 1.1 - Added cached tokens for OpenAI
@@ -2170,8 +2188,6 @@ public class SpanDAO {
             var template = newInsertTemplate(workspaceId, userName);
             var idWeeks = idWeeks(Set.of(span.id()));
             idWeeks.ifPresent(_ -> template.add("id_weeks", true));
-            String inputValue = TruncationUtils.toJsonString(span.input());
-            String outputValue = TruncationUtils.toJsonString(span.output());
             var statement = connection.createStatement(template.render())
                     .bind("id", span.id())
                     .bind("project_id", span.projectId())
@@ -2179,13 +2195,12 @@ public class SpanDAO {
                     .bind("name", StringUtils.defaultIfBlank(span.name(), ""))
                     .bind("type", Objects.toString(span.type(), SpanType.UNKNOWN_VALUE))
                     .bind("start_time", span.startTime().toString())
-                    .bind("input", inputValue)
-                    .bind("output", outputValue)
-                    .bind("metadata", Objects.toString(span.metadata(), ""))
                     .bind("model", StringUtils.defaultIfBlank(span.model(), ""))
-                    .bind("provider", StringUtils.defaultIfBlank(span.provider(), ""))
-                    .bind("input_slim", TruncationUtils.createSlimJsonString(inputValue))
-                    .bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
+                    .bind("provider", StringUtils.defaultIfBlank(span.provider(), ""));
+            StreamedPayload.bind(statement,
+                    TruncationUtils.toJsonString(span.input()),
+                    TruncationUtils.toJsonString(span.output()),
+                    Objects.toString(span.metadata(), ""));
             if (span.parentSpanId() != null) {
                 statement.bind("parent_span_id", span.parentSpanId());
             } else {
@@ -2424,26 +2439,13 @@ public class SpanDAO {
         }
         Optional.ofNullable(spanUpdate.type())
                 .ifPresent(type -> statement.bind("type", type.toString()));
-        Optional.ofNullable(spanUpdate.input())
-                .ifPresent(input -> {
-                    String inputValue = input.toString();
-                    statement.bind("input", inputValue);
-                    statement.bind("input_slim", TruncationUtils.createSlimJsonString(inputValue));
-                });
-        Optional.ofNullable(spanUpdate.output())
-                .ifPresent(output -> {
-                    String outputValue = output.toString();
-                    statement.bind("output", outputValue);
-                    statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
-                });
+        bindStreamedPayload(spanUpdate, statement);
         Optional.ofNullable(spanUpdate.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
         Optional.ofNullable(spanUpdate.usage())
                 .ifPresent(usage -> bindUsage(statement, usage));
         Optional.ofNullable(spanUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
-        Optional.ofNullable(spanUpdate.metadata())
-                .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
         if (StringUtils.isNotBlank(spanUpdate.model())) {
             statement.bind("model", spanUpdate.model());
         }
@@ -2476,6 +2478,13 @@ public class SpanDAO {
 
         Optional.ofNullable(spanUpdate.environment())
                 .ifPresent(environment -> statement.bind("environment", environment));
+    }
+
+    private static void bindStreamedPayload(SpanUpdate spanUpdate, Statement statement) {
+        StreamedPayload.bind(statement,
+                Objects.toString(spanUpdate.input(), null),
+                Objects.toString(spanUpdate.output(), null),
+                Objects.toString(spanUpdate.metadata(), null));
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist, String queryName,
@@ -3590,18 +3599,7 @@ public class SpanDAO {
         }
         Optional.ofNullable(spanUpdate.type())
                 .ifPresent(type -> statement.bind("type", type.toString()));
-        Optional.ofNullable(spanUpdate.input())
-                .ifPresent(input -> {
-                    String inputValue = input.toString();
-                    statement.bind("input", inputValue);
-                    statement.bind("input_slim", TruncationUtils.createSlimJsonString(inputValue));
-                });
-        Optional.ofNullable(spanUpdate.output())
-                .ifPresent(output -> {
-                    String outputValue = output.toString();
-                    statement.bind("output", outputValue);
-                    statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
-                });
+        bindStreamedPayload(spanUpdate, statement);
 
         TagOperations.bindTagParams(statement, spanUpdate);
 
@@ -3609,8 +3607,6 @@ public class SpanDAO {
                 .ifPresent(usage -> bindUsage(statement, usage));
         Optional.ofNullable(spanUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
-        Optional.ofNullable(spanUpdate.metadata())
-                .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
         if (StringUtils.isNotBlank(spanUpdate.model())) {
             statement.bind("model", spanUpdate.model());
         }
