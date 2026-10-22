@@ -208,7 +208,7 @@ const refineDecisionModelRule = (
   ctx: z.RefinementCtx,
   scope: EVALUATORS_RULE_SCOPE,
 ) => {
-  if (!isDecisionModel(data.model)) {
+  if (!isDecisionModel(data.model) || !data.messages.length) {
     return;
   }
 
