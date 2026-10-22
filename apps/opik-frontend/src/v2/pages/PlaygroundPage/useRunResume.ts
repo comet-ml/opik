@@ -159,12 +159,16 @@ export default function useRunResume({
   useEffect(() => {
     if (hasResumedRef.current || !datasetId) return;
 
-    const { experimentByPromptId } = usePlaygroundStore.getState();
-    if (Object.keys(experimentByPromptId ?? {}).length === 0) return;
+    const { experimentByPromptId, isRunningMap } =
+      usePlaygroundStore.getState();
+    if (Object.keys(experimentByPromptId ?? {}).length === 0) {
+      if (Object.keys(isRunningMap).length === 0) resetProgress();
+      return;
+    }
 
     hasResumedRef.current = true;
     pickUpRunningExperiments();
-  }, [datasetId, pickUpRunningExperiments]);
+  }, [datasetId, pickUpRunningExperiments, resetProgress]);
 
   // Statuses are read fresh, anything still polling is dropped, so one poll covers every prompt
   // still running

@@ -1372,3 +1372,157 @@ describe("re-running one prompt after editing it", () => {
     expect(usePlaygroundStore.getState().outputMap[PROMPT_A].stale).toBe(true);
   });
 });
+
+// The phase outlives a reload, which is what tells a resumed whole-run launch from a scoped one.
+// That only holds if every path where resuming gives up clears it: a phase describing a run that
+// no longer exists puts a "Starting run" bar above every later run on the page.
+describe("progress left behind by a run that cannot be resumed", () => {
+  const STALE_PROGRESS = {
+    progressPhase: "running" as const,
+    progressTotal: 0,
+    progressCompleted: 0,
+  };
+
+  const mountAndSettle = async () => {
+    await act(async () => {
+      renderActions("dataset-1");
+    });
+    await act(async () => {});
+  };
+
+  beforeEach(() => {
+    getExperimentById.mockReset();
+    usePlaygroundStore.setState({
+      promptIds: [PROMPT_A],
+      ...STALE_PROGRESS,
+    });
+  });
+
+  // The launch reloaded before /execute named its run, so there is nothing to resume and nothing
+  // running. Without this the phase survives every further reload.
+  it("should clear it when there is no run to pick up", async () => {
+    usePlaygroundStore.setState({ experimentByPromptId: {}, isRunningMap: {} });
+
+    await mountAndSettle();
+
+    expect(usePlaygroundStore.getState().progressPhase).toBeNull();
+  });
+
+  // A live launch still paging its dataset has no experiment ids yet either, and its phase is
+  // current. The running map does not survive a reload, so it tells the two apart.
+  it("should keep it while a launch is still under way", async () => {
+    usePlaygroundStore.setState({
+      experimentByPromptId: {},
+      isRunningMap: { [PROMPT_A]: true },
+    });
+
+    await mountAndSettle();
+
+    expect(usePlaygroundStore.getState().progressPhase).toBe("running");
+  });
+
+  it("should clear it when every experiment has already finished", async () => {
+    usePlaygroundStore.setState({
+      experimentByPromptId: { [PROMPT_A]: EXPERIMENT_A },
+      runTotalItemsByPromptId: { [PROMPT_A]: 10 },
+    });
+    getExperimentById.mockResolvedValue({
+      status: EXPERIMENT_STATUS.COMPLETED,
+      trace_count: 10,
+    });
+
+    await mountAndSettle();
+
+    expect(usePlaygroundStore.getState().progressPhase).toBeNull();
+  });
+
+  it("should clear it when the run is resumable but has no items to count", async () => {
+    usePlaygroundStore.setState({
+      experimentByPromptId: { [PROMPT_A]: EXPERIMENT_A },
+      runTotalItemsByPromptId: {},
+    });
+    getExperimentById.mockResolvedValue({
+      status: EXPERIMENT_STATUS.RUNNING,
+      trace_count: 0,
+    });
+
+    await mountAndSettle();
+
+    expect(usePlaygroundStore.getState().progressPhase).toBeNull();
+  });
+
+  it("should clear it when the statuses cannot be read", async () => {
+    usePlaygroundStore.setState({
+      experimentByPromptId: { [PROMPT_A]: EXPERIMENT_A },
+      runTotalItemsByPromptId: { [PROMPT_A]: 10 },
+    });
+    getExperimentById.mockRejectedValue(new Error("unreadable"));
+
+    await mountAndSettle();
+
+    expect(usePlaygroundStore.getState().progressPhase).toBeNull();
+  });
+});
+
+// A finished run leaves its bar at 100% for a few seconds before the row goes back to the
+// pagination. Starting another run inside that window used to let the old timer clear the new
+// run's progress: its bar emptied and the row swapped to the pagination while it was still going.
+describe("a run started while the last one's bar is still up", () => {
+  const PAST_THE_LINGER = 4000;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    runExperimentExecution.mockReset();
+    runExperimentExecution.mockResolvedValue({
+      experiments: [
+        { experiment_id: EXPERIMENT_A, prompt_index: 0, total_items: 10 },
+      ],
+      total_items: 10,
+    });
+    getExperimentById.mockReset();
+    usePlaygroundStore.setState({
+      promptIds: [PROMPT_A],
+      promptMap: {
+        [PROMPT_A]: { id: PROMPT_A, name: "A", messages: [], configs: {} },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("should leave the new run's progress alone when the old timer fires", async () => {
+    const { result } = renderActions("dataset-1");
+
+    // First run, polled through to completion so its linger timer is armed.
+    getExperimentById.mockResolvedValue({
+      status: EXPERIMENT_STATUS.COMPLETED,
+      trace_count: 10,
+    });
+    await act(async () => {
+      await result.current.runAll();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(EXPERIMENT_POLL_INTERVAL_MS);
+    });
+    expect(usePlaygroundStore.getState().progressTotal).toBe(10);
+
+    // Second run starts inside the window the first one's timer is counting down.
+    getExperimentById.mockResolvedValue({
+      status: EXPERIMENT_STATUS.RUNNING,
+      trace_count: 0,
+    });
+    await act(async () => {
+      await result.current.runAll();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PAST_THE_LINGER);
+    });
+
+    expect(usePlaygroundStore.getState().progressPhase).toBe("running");
+    expect(usePlaygroundStore.getState().progressTotal).toBe(10);
+  });
+});

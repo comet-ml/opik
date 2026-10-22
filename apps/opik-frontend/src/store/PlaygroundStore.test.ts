@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { renderHook } from "@testing-library/react";
 
-import usePlaygroundStore, { useIsStoppingAll } from "@/store/PlaygroundStore";
+import usePlaygroundStore, {
+  useIsStoppingAll,
+  useShowsRunProgress,
+} from "@/store/PlaygroundStore";
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { PlaygroundPromptType } from "@/types/playground";
 import {
@@ -214,5 +217,43 @@ describe("PlaygroundStore useIsStoppingAll", () => {
     });
 
     expect(isStoppingAll()).toBe(true);
+  });
+});
+
+// Both components that read this mock the store, so a regression here passes their suites. The
+// rule itself: only a whole-run launch sets a phase, and only it has a total, so a single-prompt
+// run has neither and shows no run-wide bar.
+describe("PlaygroundStore useShowsRunProgress", () => {
+  const showsRunProgress = () =>
+    renderHook(() => useShowsRunProgress()).result.current;
+
+  beforeEach(() => {
+    usePlaygroundStore.setState({ progressTotal: 0, progressPhase: null });
+  });
+
+  it("should be false for a run that sets neither, such as a scoped one", () => {
+    expect(showsRunProgress()).toBe(false);
+  });
+
+  it("should be true from the press, before the total is known", () => {
+    usePlaygroundStore.setState({ progressPhase: "running" });
+
+    expect(showsRunProgress()).toBe(true);
+  });
+
+  it("should be true once the run has a total", () => {
+    usePlaygroundStore.setState({ progressTotal: 120 });
+
+    expect(showsRunProgress()).toBe(true);
+  });
+
+  it("should be false again once the progress is reset", () => {
+    usePlaygroundStore.setState({
+      progressPhase: "running",
+      progressTotal: 120,
+    });
+    usePlaygroundStore.getState().resetProgress();
+
+    expect(showsRunProgress()).toBe(false);
   });
 });

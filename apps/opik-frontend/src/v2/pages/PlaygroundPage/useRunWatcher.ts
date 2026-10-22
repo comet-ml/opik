@@ -30,6 +30,8 @@ import { useToast } from "@/ui/use-toast";
 import useRunCompletionToast from "@/v2/pages/PlaygroundPage/useRunCompletionToast";
 
 const MAX_POLL_DURATION_MS = 5 * 60 * 1000;
+// How long a finished run's bar stays at 100% before the row goes back to the pagination.
+const COMPLETED_PROGRESS_LINGER_MS = 3000;
 const MAX_POLL_DURATION_LABEL = "5 minutes";
 
 const STILL_RUNNING_DESCRIPTION =
@@ -259,7 +261,12 @@ export default function useRunWatcher({
           if (experimentsFinished) {
             if (!isScoped) {
               setProgress(totalExperimentItems, totalExperimentItems);
-              setTimeout(() => resetProgress(), 3000);
+              // Guarded: a run started inside this window moves the generation, and clearing
+              // its progress would empty the new bar and swap the row for the pagination.
+              setTimeout(() => {
+                if (generation !== pollGenerationRef.current) return;
+                resetProgress();
+              }, COMPLETED_PROGRESS_LINGER_MS);
             }
             finishPollScope(scope);
             const scopedId = scope?.scopedPromptIds?.[0];
@@ -358,7 +365,12 @@ export default function useRunWatcher({
             // Assertions already done — skip Step 2, finish immediately
             if (!isScoped) {
               setProgress(totalItems, totalItems);
-              setTimeout(() => resetProgress(), 3000);
+              // Guarded: a run started inside this window moves the generation, and clearing
+              // its progress would empty the new bar and swap the row for the pagination.
+              setTimeout(() => {
+                if (generation !== pollGenerationRef.current) return;
+                resetProgress();
+              }, COMPLETED_PROGRESS_LINGER_MS);
             }
             finishPollScope(scope);
             const scopedId = scope?.scopedPromptIds?.[0];
