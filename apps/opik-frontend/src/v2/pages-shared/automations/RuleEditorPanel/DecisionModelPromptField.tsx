@@ -37,9 +37,6 @@ const getDecisionModelErrors = (
         | string
         | undefined) ?? `Unknown variable {{${variable}}}.`,
   );
-  if (form.getValues("llmJudgeDetails.parsingVariablesError")) {
-    messages.push("The text has a variable that is not written correctly.");
-  }
   return messages;
 };
 

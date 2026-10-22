@@ -174,14 +174,19 @@ const isTextOnlyMessage = (message: LLMMessage) =>
   isString(message.content) ||
   message.content.every((part) => part.type === "text");
 
-const requireStart = (
-  data: { messages: LLMMessage[] },
+const requirePrompt = (
+  data: { messages: LLMMessage[]; parsingVariablesError?: boolean },
   ctx: z.RefinementCtx,
 ) => {
-  if (data.messages.length) return;
+  const message = !data.messages.length
+    ? "Select a template or write your own prompt"
+    : data.parsingVariablesError
+      ? "A variable is not written correctly, use {{name}}"
+      : null;
+  if (!message) return;
   ctx.addIssue({
     code: z.ZodIssueCode.custom,
-    message: "Select a template or write your own prompt",
+    message,
     path: ["messages", 0, "content"],
   });
 };
@@ -358,7 +363,7 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
       }),
   ),
 }).superRefine((data, ctx) => {
-  requireStart(data, ctx);
+  requirePrompt(data, ctx);
   refineDecisionModelRule(data, ctx, EVALUATORS_RULE_SCOPE.trace);
   requirePromptVariable(data, ctx);
 
@@ -413,7 +418,7 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
       }),
   ),
 }).superRefine((data, ctx) => {
-  requireStart(data, ctx);
+  requirePrompt(data, ctx);
   refineDecisionModelRule(data, ctx, EVALUATORS_RULE_SCOPE.span);
   requirePromptVariable(data, ctx);
 
@@ -460,7 +465,7 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),
 }).superRefine((data, ctx) => {
-  requireStart(data, ctx);
+  requirePrompt(data, ctx);
   if (isDecisionModel(data.model)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

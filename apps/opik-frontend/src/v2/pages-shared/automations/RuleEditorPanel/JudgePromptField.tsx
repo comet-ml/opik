@@ -43,10 +43,6 @@ const getJudgeErrors = (form: UseFormReturn<EvaluationRuleFormType>) => {
     },
   );
 
-  if (form.getValues("llmJudgeDetails.parsingVariablesError")) {
-    messages.push("The prompt has a variable that is not written correctly.");
-  }
-
   return messages;
 };
 
