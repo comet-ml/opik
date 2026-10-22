@@ -253,6 +253,12 @@ class FeedbackScoreMessage(BaseMessage):
 
     message_type = "FeedbackScoreMessage"
 
+    def as_payload_dict(self) -> Dict[str, Any]:
+        data = super().as_payload_dict()
+        if data.get("evaluator_revision") is None:
+            data.pop("evaluator_revision", None)
+        return data
+
 
 @dataclasses.dataclass
 class AddFeedbackScoresBatchMessage(BaseMessage):
