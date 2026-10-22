@@ -203,8 +203,8 @@ public class ParamResolver {
             }
         }
 
-        // Test-suite judge configs the Python SDK saved carry reasoning_effort "low" whichever model the backend later
-        // picks for them, and gpt-4o-mini answers "Unrecognized request argument supplied: reasoning_effort".
+        // A rule made through the API can carry an effort its model has no levels for, and gpt-4o-mini answers
+        // "Unrecognized request argument supplied: reasoning_effort". The rule editor never offers one there.
         if (resolved.customParameters() instanceof ObjectNode customParameters
                 && customParameters.has(REASONING_EFFORT)
                 && catalogParams.map(ModelParams::effort).filter(this::isRefused).isPresent()) {
