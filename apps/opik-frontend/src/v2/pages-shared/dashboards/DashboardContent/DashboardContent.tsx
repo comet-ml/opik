@@ -5,6 +5,7 @@ import {
   selectAddWidget,
   selectUpdateWidget,
   selectReadOnly,
+  selectOnAddWidgetToTemplate,
 } from "@/store/DashboardStore";
 import DashboardSectionsContainer from "@/shared/Dashboard/Dashboard";
 import AddSectionButton from "@/shared/Dashboard/DashboardSection/AddSectionButton";
@@ -20,6 +21,7 @@ const DashboardContent: React.FunctionComponent = () => {
   const addSection = useDashboardStore((state) => state.addSection);
   const addWidget = useDashboardStore(selectAddWidget);
   const updateWidget = useDashboardStore(selectUpdateWidget);
+  const onAddWidgetToTemplate = useDashboardStore(selectOnAddWidgetToTemplate);
 
   useEffect(() => {
     useDashboardStore
@@ -41,11 +43,19 @@ const DashboardContent: React.FunctionComponent = () => {
 
       if (targetWidgetId) {
         updateWidget(targetSectionId, targetWidgetId, widgetData);
+      } else if (onAddWidgetToTemplate) {
+        onAddWidgetToTemplate(targetSectionId, widgetData);
       } else {
         addWidget(targetSectionId, widgetData);
       }
     },
-    [targetSectionId, targetWidgetId, addWidget, updateWidget],
+    [
+      targetSectionId,
+      targetWidgetId,
+      addWidget,
+      updateWidget,
+      onAddWidgetToTemplate,
+    ],
   );
 
   return (

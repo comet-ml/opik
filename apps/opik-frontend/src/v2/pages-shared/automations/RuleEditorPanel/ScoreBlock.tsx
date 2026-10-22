@@ -2,7 +2,7 @@ import React from "react";
 import { BrainCircuit, LucideIcon, Trash } from "lucide-react";
 
 import { Button } from "@/ui/button";
-import IconTag from "@/v2/pages-shared/IconTag/IconTag";
+import IconTag from "@/shared/IconTag/IconTag";
 
 type ScoreBlockProps = {
   title: string;

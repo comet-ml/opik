@@ -3,7 +3,7 @@ import { ChevronDown, LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import IconTag from "@/v2/pages-shared/IconTag/IconTag";
+import IconTag from "@/shared/IconTag/IconTag";
 
 type RuleSettingsCardProps = {
   icon: LucideIcon;

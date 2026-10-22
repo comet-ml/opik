@@ -1,14 +1,14 @@
 import React from "react";
-import { ChevronDown, LayoutGrid, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "@/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
-import OllieIcon from "@/icons/ollie-owl.svg?react";
+import MenuOptionItems from "@/shared/MenuOptionItems/MenuOptionItems";
 import useAskOllieForWidget from "@/shared/Dashboard/useAskOllieForWidget";
+import { ADD_WIDGET_OPTIONS } from "./addWidgetOptions";
 
 interface AddWidgetButtonProps {
   onAddWidget: () => void;
@@ -49,38 +49,19 @@ const AddWidgetButton: React.FC<AddWidgetButtonProps> = ({
         >
           <Plus className="size-3.5" />
           Add widget
-          <ChevronDown className="size-3.5 text-light-slate" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-72"
+        className="w-60 p-1.5"
         onClick={(e) => e.stopPropagation()}
       >
-        <DropdownMenuItem
-          className="items-start gap-2.5 py-2.5"
-          onSelect={onAddWidget}
-        >
-          <LayoutGrid className="mt-0.5 size-4 shrink-0 text-light-slate" />
-          <div className="flex flex-1 flex-col gap-0.5">
-            <span className="comet-body-s-accented">Add widget</span>
-            <span className="comet-body-xs text-light-slate">
-              Pick a built-in chart
-            </span>
-          </div>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className="items-start gap-2.5 py-2.5"
-          onSelect={() => askOllie("add_widget_menu")}
-        >
-          <OllieIcon className="mt-0.5 size-4 shrink-0 text-[var(--color-ollie)]" />
-          <div className="flex flex-1 flex-col gap-0.5">
-            <span className="comet-body-s-accented">Describe a widget</span>
-            <span className="comet-body-xs text-light-slate">
-              Ollie builds a custom chart for you
-            </span>
-          </div>
-        </DropdownMenuItem>
+        <MenuOptionItems
+          options={ADD_WIDGET_OPTIONS}
+          onSelect={(value) =>
+            value === "add" ? onAddWidget() : askOllie("add_widget_menu")
+          }
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );

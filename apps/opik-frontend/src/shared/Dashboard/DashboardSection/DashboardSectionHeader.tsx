@@ -52,6 +52,10 @@ const DashboardSectionHeader: React.FunctionComponent<
   const onAddEditWidgetCallback = useDashboardStore(
     (state) => state.onAddEditWidgetCallback,
   );
+  // A built-in template stays read-only, but adding a widget to it makes an editable copy.
+  const canAddToTemplate = useDashboardStore((state) =>
+    Boolean(state.onAddWidgetToTemplate),
+  );
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -81,81 +85,85 @@ const DashboardSectionHeader: React.FunctionComponent<
       </div>
 
       {readOnly ? (
-        <span className="truncate text-sm font-medium">{title}</span>
+        <span className="flex-1 truncate text-sm font-medium">{title}</span>
       ) : (
         <DashboardSectionTitle title={title} onChange={onUpdateTitle} />
       )}
 
+      {(!readOnly || canAddToTemplate) && (
+        <div
+          className={cn(
+            "flex items-center gap-2",
+            !expanded && !menuOpen && "hidden group-hover:flex",
+          )}
+        >
+          <AddWidgetButton
+            onAddWidget={handleAddWidget}
+            onMenuOpenChange={setMenuOpen}
+          />
+
+          {!readOnly && (
+            <>
+              <DropdownMenu onOpenChange={setMenuOpen}>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreHorizontal />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAddSectionAbove();
+                    }}
+                  >
+                    <ArrowUp className="mr-2 size-4" />
+                    Insert section above
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAddSectionBelow();
+                    }}
+                  >
+                    <ArrowDown className="mr-2 size-4" />
+                    Insert section below
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleDeleteClick}
+                    disabled={isLastSection}
+                    variant="destructive"
+                  >
+                    <Trash className="mr-2 size-4" />
+                    Delete section
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <div className="flex h-full items-center px-1">
+                <div className="h-6 w-px bg-muted" />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {!readOnly && (
-        <>
-          <div
-            className={cn(
-              "flex items-center gap-2",
-              !expanded && !menuOpen && "hidden group-hover:flex",
-            )}
-          >
-            <AddWidgetButton
-              onAddWidget={handleAddWidget}
-              onMenuOpenChange={setMenuOpen}
-            />
-
-            <DropdownMenu onOpenChange={setMenuOpen}>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <MoreHorizontal />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAddSectionAbove();
-                  }}
-                >
-                  <ArrowUp className="mr-2 size-4" />
-                  Insert section above
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAddSectionBelow();
-                  }}
-                >
-                  <ArrowDown className="mr-2 size-4" />
-                  Insert section below
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={handleDeleteClick}
-                  disabled={isLastSection}
-                  variant="destructive"
-                >
-                  <Trash className="mr-2 size-4" />
-                  Delete section
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <div className="flex h-full items-center px-1">
-              <div className="h-6 w-px bg-muted" />
-            </div>
-          </div>
-
-          <div
-            {...dragHandleProps}
-            onClick={(e) => e.stopPropagation()}
-            className={cn(
-              "cursor-grab text-light-slate active:cursor-grabbing",
-              !expanded && !menuOpen && "hidden group-hover:flex",
-            )}
-          >
-            <GripHorizontal className="size-4" />
-          </div>
-        </>
+        <div
+          {...dragHandleProps}
+          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            "cursor-grab text-light-slate active:cursor-grabbing",
+            !expanded && !menuOpen && "hidden group-hover:flex",
+          )}
+        >
+          <GripHorizontal className="size-4" />
+        </div>
       )}
 
       <ConfirmDialog

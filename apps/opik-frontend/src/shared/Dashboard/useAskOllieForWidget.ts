@@ -5,6 +5,7 @@ import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import usePluginsStore from "@/store/PluginsStore";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
+import { isTemplateId } from "@/lib/dashboard/utils";
 
 // Where the user asked Ollie for a widget, reported to BI to compare the entry points.
 export type AskOllieForWidgetSource =
@@ -14,6 +15,9 @@ export type AskOllieForWidgetSource =
 
 const DESCRIBE_WIDGET_MESSAGE =
   "I want to add a custom widget to this dashboard. Ask me what it should show.";
+// Ollie cannot write to a built-in view, so the chart goes to one of the project's own dashboards.
+const DESCRIBE_TEMPLATE_WIDGET_MESSAGE =
+  "I want to add a custom widget to this project. The dashboard I have open is a built-in view that can't be edited, so add the chart to a new or existing project dashboard. Ask me what it should show.";
 
 const useAskOllieForWidget = () => {
   const runtimeConfig = useDashboardStore(selectRuntimeConfig);
@@ -43,10 +47,12 @@ const useAskOllieForWidget = () => {
         dashboard_scope: runtimeConfig.dashboardScope,
         project_id: runtimeConfig.projectIds?.[0],
       });
-      window.opikBridge?.startConversation(DESCRIBE_WIDGET_MESSAGE, {
-        origin: "describe_widget",
-        entryId,
-      });
+      window.opikBridge?.startConversation(
+        isTemplateId(runtimeConfig.dashboardId ?? null)
+          ? DESCRIBE_TEMPLATE_WIDGET_MESSAGE
+          : DESCRIBE_WIDGET_MESSAGE,
+        { origin: "describe_widget", entryId },
+      );
     },
     [runtimeConfig],
   );
