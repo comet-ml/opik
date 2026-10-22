@@ -50,19 +50,30 @@ describe("THREAD_FILTER_COLUMNS", () => {
     ]);
   });
 
-  it("should round-trip a message-count filter through the rule payload", () => {
-    const result = buildRuleFilters([
+  it("should keep a message-count filter through the edit-then-save cycle", () => {
+    // The full cycle a persisted rule goes through: the API returns filters
+    // with no type, the edit path resolves the type from the column list, and
+    // the save path builds the payload from the resolved filter. Without the
+    // column entry the type resolution degrades to a string row and the
+    // operator/value the user configured are lost.
+    const saved = [
       {
         id: "1",
         field: "number_of_messages",
-        type: COLUMN_TYPE.number,
+        type: "",
         operator: ">=",
         value: "5",
         key: "",
       },
-    ]);
+    ] as Parameters<typeof normalizeFilters>[0];
 
-    expect(result).toEqual([
+    const reopened = normalizeFilters(
+      saved,
+      THREAD_FILTER_COLUMNS as Parameters<typeof normalizeFilters>[1],
+    );
+    const resaved = buildRuleFilters(reopened);
+
+    expect(resaved).toEqual([
       {
         id: "1",
         field: "number_of_messages",
