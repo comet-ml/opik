@@ -25,6 +25,8 @@ type OllieChartActionsMenuProps = {
   widgetTitle: string;
   // Edit in Ollie; without it (Ollie off, or a console without chart editing) the item opens the widget editor.
   onEditInOllie?: () => void;
+  // "Duplicate in Ollie": a copy refined in chat, added as a new widget. Offered beside the plain duplicate.
+  onDuplicateInOllie?: () => void;
   // Absent until the widget's query can run.
   onRefresh?: () => void;
   onOpenChange?: (open: boolean) => void;
@@ -37,6 +39,7 @@ const OllieChartActionsMenu: React.FunctionComponent<
   widgetId,
   widgetTitle,
   onEditInOllie,
+  onDuplicateInOllie,
   onRefresh,
   onOpenChange,
 }) => {
@@ -72,9 +75,9 @@ const OllieChartActionsMenu: React.FunctionComponent<
   );
 
   // Read on every render, so opening the menu sees whether the console has announced chart editing yet.
-  const editInOllie = window.opikBridge?.canEditChart?.()
-    ? onEditInOllie
-    : undefined;
+  const canEditChart = window.opikBridge?.canEditChart?.();
+  const editInOllie = canEditChart ? onEditInOllie : undefined;
+  const duplicateInOllie = canEditChart ? onDuplicateInOllie : undefined;
 
   const run = (action: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -117,6 +120,12 @@ const OllieChartActionsMenu: React.FunctionComponent<
             <Copy className="mr-2 size-4" />
             Duplicate
           </DropdownMenuItem>
+          {duplicateInOllie && (
+            <DropdownMenuItem onClick={run(duplicateInOllie)}>
+              <Copy className="mr-2 size-4" />
+              Duplicate in Ollie
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"

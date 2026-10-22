@@ -10,6 +10,7 @@ import ChartSkeleton from "@/shared/VegaChart/ChartSkeleton";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import OllieChartActionsMenu from "./OllieChartActionsMenu";
+import OllieKpi, { parseKpiSpec } from "./OllieKpi";
 import {
   useDashboardStore,
   selectRuntimeConfig,
@@ -30,6 +31,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 const MINUTE = 60_000;
+const DAY = 24 * 60 * MINUTE;
 
 // The statuses the widget query endpoint uses on purpose; anything else shows the backend's message.
 const QUERY_ERRORS: Record<number, { title: string; message: string }> = {
@@ -135,6 +137,7 @@ const OllieChartWidget: React.FunctionComponent<
 
   const config = (widget?.config ?? {}) as OllieChartWidgetType["config"];
   const { spec, query, rows: snapshotRows } = config;
+  const kpi = parseKpiSpec(spec);
 
   const { intervalStart, intervalEnd } = useMemo(
     () =>
@@ -143,6 +146,19 @@ const OllieChartWidget: React.FunctionComponent<
         : { intervalStart: undefined, intervalEnd: undefined },
     [dateRange, hasDateRange],
   );
+
+  // A KPI on a date range compares with the window of the same length just before it.
+  const previousWindow = useMemo(() => {
+    if (!kpi?.window_days || !intervalStart || !intervalEnd) return null;
+    const start = new Date(intervalStart).getTime();
+    const length = new Date(intervalEnd).getTime() - start;
+    if (!Number.isFinite(length) || length <= 0) return null;
+    return {
+      intervalStart: new Date(start - length).toISOString(),
+      intervalEnd: intervalStart,
+      days: Math.max(1, Math.round(length / DAY)),
+    };
+  }, [kpi?.window_days, intervalStart, intervalEnd]);
 
   // `live` also covers the moment before the dashboard id arrives (skeleton); only `canQuery` may hit the endpoint.
   const canQuery = Boolean(query?.id && dashboardId && queryWidgetId);
@@ -166,6 +182,17 @@ const OllieChartWidget: React.FunctionComponent<
     { enabled: canQuery, retryNotFound },
   );
   const live = Boolean(query?.id && queryWidgetId);
+  const { data: previousRows } = useDashboardWidgetQuery(
+    {
+      dashboardId: dashboardId ?? "",
+      scope: dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE,
+      widgetId: queryWidgetId ?? "",
+      queryId: query?.id ?? "",
+      intervalStart: previousWindow?.intervalStart,
+      intervalEnd: previousWindow?.intervalEnd,
+    },
+    { enabled: canQuery && Boolean(previousWindow), retryNotFound: false },
+  );
 
   // An autosave slower than the 404 retries saves the widget after its query already gave up; run it once more then.
   const wasSavedRef = useRef(!retryNotFound);
@@ -239,6 +266,23 @@ const OllieChartWidget: React.FunctionComponent<
         }
       : undefined;
 
+  // A copy refined with Ollie and added as a new widget; this one stays as it is.
+  const duplicateInOllie =
+    ollieEnabled && spec && query?.id
+      ? () => {
+          window.opikBridge?.editChart?.({
+            widgetId: widget.id,
+            title,
+            description: config.description,
+            spec,
+            query: { id: query.id },
+            rows: live ? rows : snapshotRows,
+            entryId: uuidv4(),
+            duplicate: true,
+          });
+        }
+      : undefined;
+
   const renderContent = () => {
     if (!spec) {
       return (
@@ -267,6 +311,19 @@ const OllieChartWidget: React.FunctionComponent<
       );
     }
 
+    if (kpi) {
+      return (
+        <OllieKpi
+          kpi={kpi}
+          rows={chartRows}
+          previousRows={live && previousWindow ? previousRows : null}
+          comparedWith={
+            previousWindow ? `previous ${previousWindow.days} days` : undefined
+          }
+        />
+      );
+    }
+
     return (
       <div className="size-full p-2">
         <VegaChart spec={spec} rows={chartRows} />
@@ -281,7 +338,8 @@ const OllieChartWidget: React.FunctionComponent<
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}
-          subtitle={widget.subtitle}
+          // Ollie writes the chart's scope as its description; an editor's own subtitle wins.
+          subtitle={widget.subtitle || config.description || undefined}
           readOnly={readOnly}
           titleAdornment={<OllieBadge />}
           meta={
@@ -308,6 +366,7 @@ const OllieChartWidget: React.FunctionComponent<
               widgetId={widgetId!}
               widgetTitle={title}
               onEditInOllie={editInOllie}
+              onDuplicateInOllie={duplicateInOllie}
               onRefresh={canQuery ? () => refetch() : undefined}
             />
           }
