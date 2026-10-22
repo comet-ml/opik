@@ -1,6 +1,8 @@
 import React from "react";
 import { Plus, LineChart } from "lucide-react";
 import { Button } from "@/ui/button";
+import OllieIcon from "@/icons/ollie-owl.svg?react";
+import useAskOllieForWidget from "@/shared/Dashboard/useAskOllieForWidget";
 
 interface DashboardWidgetGridEmptyProps {
   onAddWidget: () => void;
@@ -10,6 +12,8 @@ interface DashboardWidgetGridEmptyProps {
 const DashboardWidgetGridEmpty: React.FunctionComponent<
   DashboardWidgetGridEmptyProps
 > = ({ onAddWidget, readOnly }) => {
+  const { isOllieAvailable, askOllie } = useAskOllieForWidget();
+
   return (
     <div className="grid grid-cols-3 gap-4">
       <div className="flex min-h-[317px] items-center justify-center rounded-md border border-dashed border-border bg-background">
@@ -22,15 +26,31 @@ const DashboardWidgetGridEmpty: React.FunctionComponent<
             Add widgets to monitor key metrics.
           </p>
           {!readOnly && (
-            <Button
-              variant="link"
-              size="sm"
-              onClick={() => onAddWidget()}
-              className="gap-1"
-            >
-              <Plus className="size-3.5" />
-              Add widget
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="link"
+                size="sm"
+                onClick={() => onAddWidget()}
+                className="gap-1"
+              >
+                <Plus className="size-3.5" />
+                Add widget
+              </Button>
+              {isOllieAvailable && (
+                <>
+                  <span className="comet-body-s text-light-slate">or</span>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    onClick={() => askOllie("empty_state")}
+                    className="gap-1"
+                  >
+                    <OllieIcon className="size-3.5 text-[var(--color-ollie)]" />
+                    Describe a widget
+                  </Button>
+                </>
+              )}
+            </div>
           )}
         </div>
       </div>

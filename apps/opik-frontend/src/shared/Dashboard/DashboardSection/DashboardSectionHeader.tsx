@@ -7,7 +7,6 @@ import {
   ArrowDown,
   ChevronDown,
   ChevronRight,
-  Plus,
 } from "lucide-react";
 
 import { Button } from "@/ui/button";
@@ -20,6 +19,7 @@ import {
 } from "@/ui/dropdown-menu";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import DashboardSectionTitle from "./DashboardSectionTitle";
+import AddWidgetButton from "./AddWidgetButton";
 import { useDashboardStore, selectReadOnly } from "@/store/DashboardStore";
 import { cn } from "@/lib/utils";
 
@@ -56,13 +56,9 @@ const DashboardSectionHeader: React.FunctionComponent<
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const handleAddWidget = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      onAddEditWidgetCallback?.({ sectionId });
-    },
-    [onAddEditWidgetCallback, sectionId],
-  );
+  const handleAddWidget = useCallback(() => {
+    onAddEditWidgetCallback?.({ sectionId });
+  }, [onAddEditWidgetCallback, sectionId]);
 
   const handleDeleteClick = useCallback(
     (e: React.MouseEvent) => {
@@ -98,18 +94,10 @@ const DashboardSectionHeader: React.FunctionComponent<
               !expanded && !menuOpen && "hidden group-hover:flex",
             )}
           >
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleAddWidget(e);
-              }}
-              className="gap-1.5"
-            >
-              <Plus className="size-3.5" />
-              Add widget
-            </Button>
+            <AddWidgetButton
+              onAddWidget={handleAddWidget}
+              onMenuOpenChange={setMenuOpen}
+            />
 
             <DropdownMenu onOpenChange={setMenuOpen}>
               <DropdownMenuTrigger asChild>
