@@ -25,12 +25,18 @@ export type MermaidNodeStateOptions = {
 const nodeVariable = (index: number, property: string) =>
   `--mermaid-node-${index}-${property}`;
 
-const toMermaidNode = (element: Element): MermaidNode | null => {
+const toMermaidNode = (
+  element: Element,
+  diagramId: string,
+): MermaidNode | null => {
   const isSubgraph = element.classList.contains("cluster");
   const rawId = isSubgraph
     ? element.id
     : element.getAttribute("data-id") ?? element.id;
-  const id = rawId.match(FLOWCHART_NODE_ID_REGEX)?.[1] ?? rawId;
+  const domId = rawId.startsWith(`${diagramId}-`)
+    ? rawId.slice(diagramId.length + 1)
+    : rawId;
+  const id = domId.match(FLOWCHART_NODE_ID_REGEX)?.[1] ?? domId;
 
   return id ? { id, isSubgraph } : null;
 };
@@ -53,7 +59,7 @@ export const indexMermaidNodes = (
 ): MermaidNode[] => {
   const nodes: MermaidNode[] = [];
   svgElement.querySelectorAll(NODE_SELECTOR).forEach((element) => {
-    const node = toMermaidNode(element);
+    const node = toMermaidNode(element, diagramId);
     if (!node) return;
     element.setAttribute(NODE_INDEX_ATTRIBUTE, String(nodes.length));
     nodes.push(node);

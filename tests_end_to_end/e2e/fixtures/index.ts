@@ -1,4 +1,4 @@
-export { test, expect } from './openai-responses-stub.fixture';
+export { test, expect } from './agent-graph-trace.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
