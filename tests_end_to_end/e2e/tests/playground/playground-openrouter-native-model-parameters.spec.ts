@@ -191,26 +191,34 @@ test.describe(
       'an OpenRouter OpenAI reasoning model drops all four while the ids OpenRouter alone serves keep them',
       { tag: ['@cap:playground.configure-model-settings'] },
       async ({ openRouterNativeModels, project, page }) => {
-        // QA: failing on staging for 2.2.116. Not the gate — the gate is doing
-        // exactly what this deployment's catalogue tells it to. The OpenRouter
-        // rows in GET /v1/private/llm/models on staging advertise FEWER
-        // supported_parameters than the build this spec was harvested on, and
-        // the panel mounts controls from that list:
+        // QA: failing on staging for 2.2.116, and the cause is on this very
+        // branch. This spec was harvested for opik#8830, which hid the sampling
+        // params "OpenRouter ignores for OpenAI reasoning and Gemini 3 models"
+        // — a per-model rule, which is why the expectations below are a
+        // hardcoded table of models. opik#8850 (OPIK-8636, the same ticket) then
+        // REPLACED that with a panel based on each model's own
+        // supported_parameters, and its specs
+        // (playground-openrouter-reasoning-effort.spec.ts,
+        // playground-openrouter-effort-native-fallback.spec.ts) are on this
+        // branch too and pass. So the panel is doing what the newer change says,
+        // and this table is the older rule.
+        //
+        // Measured on staging, which is consistent with #8850 and not with the
+        // table: the OpenRouter rows in GET /v1/private/llm/models advertise
         //   openai/gpt-4o-mini  -> [frequency_penalty, max_completion_tokens,
         //                           max_tokens, presence_penalty, temperature, top_p]
         //   openai/o3           -> [max_tokens, reasoning]
         //   google/gemini-3-flash-preview
         //                       -> [max_tokens, reasoning, reasoning_effort,
         //                           temperature, top_p]
-        // So topK / repetitionPenalty / minP / topA are mounted for nothing
-        // (expected 4, received 0), and Gemini 3 withdraws BOTH penalties
-        // rather than keeping them. The OpenRouter catalogue is re-synced from
-        // OpenRouter's live API by sync_provider_models.yml, so a table of
-        // per-model expectations written against one snapshot drifts by
-        // construction. The assertions are left stating the author's intent;
-        // the fix is a human call — re-pin the model table, or derive the
-        // expected controls from each row's own supported_parameters, which is
-        // the invariant the change actually implements.
+        // so topK / repetitionPenalty / minP / topA are mounted for nothing
+        // (expected 4, received 0) and Gemini 3 withdraws BOTH penalties rather
+        // than keeping them. A per-model table also drifts by construction here:
+        // sync_provider_models.yml re-syncs this catalogue from OpenRouter's
+        // live API.
+        //
+        // Assertions left stating the author's intent. Which spec gives way is a
+        // human call — most likely this one is now redundant against #8850's two.
         // Remove test.fail() once this passes; Playwright reports it when it does.
         test.fail();
         test.setTimeout(240_000);
@@ -248,26 +256,34 @@ test.describe(
       'an OpenRouter Gemini 3 model drops the sampling pair and keeps both penalties',
       { tag: ['@cap:playground.configure-model-settings'] },
       async ({ openRouterNativeModels, project, page }) => {
-        // QA: failing on staging for 2.2.116. Not the gate — the gate is doing
-        // exactly what this deployment's catalogue tells it to. The OpenRouter
-        // rows in GET /v1/private/llm/models on staging advertise FEWER
-        // supported_parameters than the build this spec was harvested on, and
-        // the panel mounts controls from that list:
+        // QA: failing on staging for 2.2.116, and the cause is on this very
+        // branch. This spec was harvested for opik#8830, which hid the sampling
+        // params "OpenRouter ignores for OpenAI reasoning and Gemini 3 models"
+        // — a per-model rule, which is why the expectations below are a
+        // hardcoded table of models. opik#8850 (OPIK-8636, the same ticket) then
+        // REPLACED that with a panel based on each model's own
+        // supported_parameters, and its specs
+        // (playground-openrouter-reasoning-effort.spec.ts,
+        // playground-openrouter-effort-native-fallback.spec.ts) are on this
+        // branch too and pass. So the panel is doing what the newer change says,
+        // and this table is the older rule.
+        //
+        // Measured on staging, which is consistent with #8850 and not with the
+        // table: the OpenRouter rows in GET /v1/private/llm/models advertise
         //   openai/gpt-4o-mini  -> [frequency_penalty, max_completion_tokens,
         //                           max_tokens, presence_penalty, temperature, top_p]
         //   openai/o3           -> [max_tokens, reasoning]
         //   google/gemini-3-flash-preview
         //                       -> [max_tokens, reasoning, reasoning_effort,
         //                           temperature, top_p]
-        // So topK / repetitionPenalty / minP / topA are mounted for nothing
-        // (expected 4, received 0), and Gemini 3 withdraws BOTH penalties
-        // rather than keeping them. The OpenRouter catalogue is re-synced from
-        // OpenRouter's live API by sync_provider_models.yml, so a table of
-        // per-model expectations written against one snapshot drifts by
-        // construction. The assertions are left stating the author's intent;
-        // the fix is a human call — re-pin the model table, or derive the
-        // expected controls from each row's own supported_parameters, which is
-        // the invariant the change actually implements.
+        // so topK / repetitionPenalty / minP / topA are mounted for nothing
+        // (expected 4, received 0) and Gemini 3 withdraws BOTH penalties rather
+        // than keeping them. A per-model table also drifts by construction here:
+        // sync_provider_models.yml re-syncs this catalogue from OpenRouter's
+        // live API.
+        //
+        // Assertions left stating the author's intent. Which spec gives way is a
+        // human call — most likely this one is now redundant against #8850's two.
         // Remove test.fail() once this passes; Playwright reports it when it does.
         test.fail();
         test.setTimeout(180_000);
@@ -290,26 +306,34 @@ test.describe(
       'the gate keys off the native model list, not the registry’s reasoning flag',
       { tag: ['@cap:playground.configure-model-settings'] },
       async ({ openRouterNativeModels, project, page }) => {
-        // QA: failing on staging for 2.2.116. Not the gate — the gate is doing
-        // exactly what this deployment's catalogue tells it to. The OpenRouter
-        // rows in GET /v1/private/llm/models on staging advertise FEWER
-        // supported_parameters than the build this spec was harvested on, and
-        // the panel mounts controls from that list:
+        // QA: failing on staging for 2.2.116, and the cause is on this very
+        // branch. This spec was harvested for opik#8830, which hid the sampling
+        // params "OpenRouter ignores for OpenAI reasoning and Gemini 3 models"
+        // — a per-model rule, which is why the expectations below are a
+        // hardcoded table of models. opik#8850 (OPIK-8636, the same ticket) then
+        // REPLACED that with a panel based on each model's own
+        // supported_parameters, and its specs
+        // (playground-openrouter-reasoning-effort.spec.ts,
+        // playground-openrouter-effort-native-fallback.spec.ts) are on this
+        // branch too and pass. So the panel is doing what the newer change says,
+        // and this table is the older rule.
+        //
+        // Measured on staging, which is consistent with #8850 and not with the
+        // table: the OpenRouter rows in GET /v1/private/llm/models advertise
         //   openai/gpt-4o-mini  -> [frequency_penalty, max_completion_tokens,
         //                           max_tokens, presence_penalty, temperature, top_p]
         //   openai/o3           -> [max_tokens, reasoning]
         //   google/gemini-3-flash-preview
         //                       -> [max_tokens, reasoning, reasoning_effort,
         //                           temperature, top_p]
-        // So topK / repetitionPenalty / minP / topA are mounted for nothing
-        // (expected 4, received 0), and Gemini 3 withdraws BOTH penalties
-        // rather than keeping them. The OpenRouter catalogue is re-synced from
-        // OpenRouter's live API by sync_provider_models.yml, so a table of
-        // per-model expectations written against one snapshot drifts by
-        // construction. The assertions are left stating the author's intent;
-        // the fix is a human call — re-pin the model table, or derive the
-        // expected controls from each row's own supported_parameters, which is
-        // the invariant the change actually implements.
+        // so topK / repetitionPenalty / minP / topA are mounted for nothing
+        // (expected 4, received 0) and Gemini 3 withdraws BOTH penalties rather
+        // than keeping them. A per-model table also drifts by construction here:
+        // sync_provider_models.yml re-syncs this catalogue from OpenRouter's
+        // live API.
+        //
+        // Assertions left stating the author's intent. Which spec gives way is a
+        // human call — most likely this one is now redundant against #8850's two.
         // Remove test.fail() once this passes; Playwright reports it when it does.
         test.fail();
         test.setTimeout(240_000);
