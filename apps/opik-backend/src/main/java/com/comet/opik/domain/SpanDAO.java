@@ -283,24 +283,22 @@ public class SpanDAO {
                     :ttft as ttft,
                     :source as source,
                     :environment as environment
-                """
-            + StreamedPayload.FROM
-            + """
-                    ) as new_span
-                    LEFT JOIN (
-                        SELECT
-                            *, truncated_input, truncated_output
-                        FROM spans
-                        WHERE workspace_id = :workspace_id
-                        AND id = :id
-                        <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
-                        ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-                        LIMIT 1
-                    ) as old_span
-                    ON new_span.id = old_span.id
-                    SETTINGS log_comment = '<log_comment>'
-                    """
-            + StreamedPayload.VALUES;
+                FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
+            ) as new_span
+            LEFT JOIN (
+                SELECT
+                    *, truncated_input, truncated_output
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND id = :id
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1
+            ) as old_span
+            ON new_span.id = old_span.id
+            SETTINGS log_comment = '<log_comment>'
+            FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
+            """;
 
     /***
      * Handles the update of a span when the span already exists in the database.
@@ -367,21 +365,19 @@ public class SpanDAO {
                 <if(ttft)> :ttft <else> stored_span.ttft <endif> as ttft,
                 <if(source)> :source <else> stored_span.source <endif> as source,
                 <if(environment)> :environment <else> stored_span.environment <endif> as environment
-            """
-            + StreamedPayload.FROM
-            + """
-                    CROSS JOIN (
-                        SELECT *
-                        FROM spans
-                        WHERE id = :id
-                        AND workspace_id = :workspace_id
-                        <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
-                        ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-                        LIMIT 1
-                    ) AS stored_span
-                    SETTINGS log_comment = '<log_comment>'
-                    """
-            + StreamedPayload.VALUES;
+            FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
+            CROSS JOIN (
+                SELECT *
+                FROM spans
+                WHERE id = :id
+                AND workspace_id = :workspace_id
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1
+            ) AS stored_span
+            SETTINGS log_comment = '<log_comment>'
+            FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
+            """;
 
     /**
      * This query is used when updates are processed before inserts, and the span does not exist in the database.
@@ -550,24 +546,22 @@ public class SpanDAO {
                     :ttft as ttft,
                     :source as source,
                     <if(environment)> :environment <else> '' <endif> as environment
-                """
-            + StreamedPayload.FROM
-            + """
-                    ) as new_span
-                    LEFT JOIN (
-                        SELECT
-                            *, truncated_input, truncated_output
-                        FROM spans
-                        WHERE id = :id
-                        AND workspace_id = :workspace_id
-                        <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
-                        ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-                        LIMIT 1
-                    ) as old_span
-                    ON new_span.id = old_span.id
-                    SETTINGS log_comment = '<log_comment>'
-                    """
-            + StreamedPayload.VALUES;
+                FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
+            ) as new_span
+            LEFT JOIN (
+                SELECT
+                    *, truncated_input, truncated_output
+                FROM spans
+                WHERE id = :id
+                AND workspace_id = :workspace_id
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1
+            ) as old_span
+            ON new_span.id = old_span.id
+            SETTINGS log_comment = '<log_comment>'
+            FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
+            """;
 
     /**
      * Query to get target project_ids from spans (executed separately to reduce table scans).
@@ -2100,9 +2094,7 @@ public class SpanDAO {
                         <if(ttft)> :ttft <else> stored_span.ttft <endif> as ttft,
                         stored_span.source,
                         <if(environment)> :environment <else> stored_span.environment <endif> as environment
-                    """
-            + StreamedPayload.FROM
-            + """
+                    FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
                     CROSS JOIN (
                         SELECT *
                         FROM spans
@@ -2112,8 +2104,8 @@ public class SpanDAO {
                         LIMIT 1 BY id
                     ) AS stored_span
                     SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable'
-                    """
-            + StreamedPayload.VALUES;
+                    FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
+                    """;
 
     // ESTIMATED COST CHANGE
     // 1.1 - Added cached tokens for OpenAI

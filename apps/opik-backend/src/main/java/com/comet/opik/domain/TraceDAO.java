@@ -381,23 +381,21 @@ class TraceDAOImpl implements TraceDAO {
                     :ttft as ttft,
                     :source as source,
                     :environment as environment
-                """
-            + StreamedPayload.FROM
-            + """
-                    ) as new_trace
-                    LEFT JOIN (
-                        SELECT
-                            *, truncated_input, truncated_output
-                        FROM traces
-                        WHERE id = :id
-                        AND workspace_id = :workspace_id
-                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                        LIMIT 1
-                    ) as old_trace
-                    ON new_trace.id = old_trace.id
-                    SETTINGS log_comment = '<log_comment>'
-                    """
-            + StreamedPayload.VALUES;
+                FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
+            ) as new_trace
+            LEFT JOIN (
+                SELECT
+                    *, truncated_input, truncated_output
+                FROM traces
+                WHERE id = :id
+                AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1
+            ) as old_trace
+            ON new_trace.id = old_trace.id
+            SETTINGS log_comment = '<log_comment>'
+            FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
+            """;
 
     /***
      * Handles the update of a trace when the trace already exists in the database.
@@ -429,20 +427,18 @@ class TraceDAOImpl implements TraceDAO {
                 <if(ttft)> :ttft <else> stored_trace.ttft <endif> as ttft,
                 <if(source)> :source <else> stored_trace.source <endif> as source,
                 <if(environment)> :environment <else> stored_trace.environment <endif> as environment
-            """
-            + StreamedPayload.FROM
-            + """
-                    CROSS JOIN (
-                        SELECT *
-                        FROM traces
-                        WHERE id = :id
-                        AND workspace_id = :workspace_id
-                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                        LIMIT 1
-                    ) AS stored_trace
-                    SETTINGS log_comment = '<log_comment>'
-                    """
-            + StreamedPayload.VALUES;
+            FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
+            CROSS JOIN (
+                SELECT *
+                FROM traces
+                WHERE id = :id
+                AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1
+            ) AS stored_trace
+            SETTINGS log_comment = '<log_comment>'
+            FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
+            """;
 
     /** The sources an SDK logs under: {@link Source#isLoggingSource} as a bound list, legacy rows included. */
     private static final String[] LOGGING_SOURCES = {Source.SDK.getValue(), Source.UNKNOWN_VALUE};
@@ -2453,23 +2449,21 @@ class TraceDAOImpl implements TraceDAO {
                     :ttft as ttft,
                     :source as source,
                     <if(environment)> :environment <else> '' <endif> as environment
-                """
-            + StreamedPayload.FROM
-            + """
-                    ) as new_trace
-                    LEFT JOIN (
-                        SELECT
-                            *, truncated_input, truncated_output
-                        FROM traces
-                        WHERE id = :id
-                        AND workspace_id = :workspace_id
-                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                        LIMIT 1
-                    ) as old_trace
-                    ON new_trace.id = old_trace.id
-                    SETTINGS log_comment = '<log_comment>'
-                    """
-            + StreamedPayload.VALUES;
+                FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
+            ) as new_trace
+            LEFT JOIN (
+                SELECT
+                    *, truncated_input, truncated_output
+                FROM traces
+                WHERE id = :id
+                AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1
+            ) as old_trace
+            ON new_trace.id = old_trace.id
+            SETTINGS log_comment = '<log_comment>'
+            FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
+            """;
 
     private static final String SELECT_PARTIAL_BY_ID = """
             SELECT
@@ -3652,19 +3646,17 @@ class TraceDAOImpl implements TraceDAO {
                 <if(ttft)> :ttft <else> stored_trace.ttft <endif> as ttft,
                 stored_trace.source,
                 <if(environment)> :environment <else> stored_trace.environment <endif> as environment
-            """
-            + StreamedPayload.FROM
-            + """
-                    CROSS JOIN (
-                        SELECT *
-                        FROM traces
-                        WHERE id IN :ids AND workspace_id = :workspace_id
-                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
-                    ) AS stored_trace
-                    SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable'
-                    """
-            + StreamedPayload.VALUES;
+            FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
+            CROSS JOIN (
+                SELECT *
+                FROM traces
+                WHERE id IN :ids AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS stored_trace
+            SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable'
+            FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
+            """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
