@@ -37,4 +37,14 @@ public class LlmModelsResource {
                 .entity(registryService.getRegistry())
                 .build();
     }
+
+    @GET
+    @Path("/profiles")
+    @Operation(operationId = "getLlmModelProfiles", summary = "Get LLM model profiles", description = "Get the params each provider's unlisted models take, keyed by provider", responses = {
+            @ApiResponse(responseCode = "200", description = "Params by provider", content = @Content(schema = @Schema(implementation = Map.class)))})
+    public Response getProfiles() {
+        return Response.ok()
+                .entity(registryService.getProfiles())
+                .build();
+    }
 }

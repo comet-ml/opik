@@ -249,6 +249,18 @@ class LlmModelCatalogTest {
         }
 
         @Test
+        void theProfilesAreWhatAnUnlistedIdOfEachProviderGets() {
+            var service = service(null);
+            var profiles = service.getProfiles();
+
+            assertThat(profiles).containsKeys("openai", "anthropic").doesNotContainKey("openrouter");
+            assertThat(profiles.get("anthropic").effort().levels()).containsExactly("low", "medium", "high");
+            profiles.forEach((provider, params) -> assertThat(params)
+                    .as(provider)
+                    .isEqualTo(service.paramsOf(provider, "an-id-no-layer-lists")));
+        }
+
+        @Test
         void aLocalOverrideWinsOverTheCuratedRowOnlyWhereItSetsAField(@TempDir Path tempDir) throws IOException {
             var override = tempDir.resolve("override.yaml");
             Files.writeString(override, """
