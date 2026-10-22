@@ -8,6 +8,11 @@ models:
   reasoning:
     - gpt-5-nano
     - o3-mini
+  # Reasoning models with a none level: they take sampling params at none, so the reasoning rows, which expect them
+  # dropped, don't run on them. gpt-5.4 runs at none by default, gpt-6-luna at medium.
+  reasoning-none-level:
+    - gpt-5.4
+    - gpt-6-luna
   non-reasoning:
     - gpt-4.1
     - gpt-3.5-turbo
@@ -87,6 +92,23 @@ rows:
     request: {custom_parameters: {temperature: 0.3}}
     # The reasoning rule clears the typed fields only; custom_parameters keys are added to the body as given.
     body: {temperature: 0.3}
+  # OpenAI: "When reasoning effort is not none, remove temperature, top_p, and top_logprobs". gpt-5.4 runs at none when
+  # no effort is sent; gpt-6-luna defaults to medium.
+  - name: sampling params reach a reasoning model at effort none, penalties stay dropped
+    models: [gpt-5.4, gpt-6-luna]
+    request: {reasoning_effort: none, temperature: 0.3, top_p: 0.9, frequency_penalty: 0.5}
+    body: {reasoning_effort: none, temperature: 0.3, top_p: 0.9}
+  - name: sampling params reach a reasoning model whose own default effort is none
+    model: gpt-5.4
+    request: {temperature: 0.3, top_p: 0.9}
+    body: {temperature: 0.3, top_p: 0.9}
+  - name: sampling params are dropped for a reasoning model at another effort
+    model: gpt-5.4
+    request: {reasoning_effort: low, temperature: 0.3, top_p: 0.9}
+    body: {reasoning_effort: low}
+  - name: sampling params are dropped when a reasoning model's default effort is not none
+    model: gpt-6-luna
+    request: {temperature: 0.3, top_p: 0.9}
   - name: seed is sent, also to a reasoning model
     models: [gpt-4.1, gpt-5-nano]
     request: {seed: 42}
@@ -148,6 +170,21 @@ rows:
     path: judge
     models: [gpt-5-nano, registry-only]
     request: {temperature: 0.3}
+  - name: a judge keeps temperature on a reasoning model that runs at effort none
+    path: judge
+    model: gpt-5.4
+    request: {temperature: 0.3}
+    body: {temperature: 0.3}
+  - name: a judge keeps temperature when the rule sets effort none
+    path: judge
+    model: gpt-6-luna
+    request: {temperature: 0.3, custom_parameters: {reasoning_effort: none}}
+    body: {temperature: 0.3, reasoning_effort: none}
+  - name: a judge drops temperature when the rule's effort is not none
+    path: judge
+    model: gpt-5.4
+    request: {temperature: 0.3, custom_parameters: {reasoning_effort: low}}
+    body: {reasoning_effort: low}
   - name: a judge on a model without structured output puts the output format in the prompt
     path: judge
     models: [gpt-3.5-turbo, o3-mini]
