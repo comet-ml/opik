@@ -60,7 +60,7 @@ models:
       effort:
         accepted: true
         levels: [low, medium, high]
-        default: high
+        default: medium
   - id: o1-2024-12-17
     params:
       effort:
@@ -72,37 +72,37 @@ models:
       effort:
         accepted: true
         levels: [low, medium, high]
-        default: high
+        default: medium
   - id: o3-mini
     params:
       effort:
         accepted: true
         levels: [low, medium, high]
-        default: high
+        default: medium
   - id: o4-mini
     params:
       effort:
         accepted: true
         levels: [low, medium, high]
-        default: high
+        default: medium
   - id: gpt-5
     params:
       effort:
         accepted: true
         levels: [minimal, low, medium, high]
-        default: high
+        default: medium
   - id: gpt-5-mini
     params:
       effort:
         accepted: true
         levels: [minimal, low, medium, high]
-        default: high
+        default: medium
   - id: gpt-5-nano
     params:
       effort:
         accepted: true
         levels: [minimal, low, medium, high]
-        default: high
+        default: medium
   - id: gpt-5-pro
     params:
       effort:
@@ -114,13 +114,13 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high]
-        default: high
+        default: none
   - id: gpt-5.2
     params:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: none
   - id: gpt-5.2-pro
     params:
       effort:
@@ -144,19 +144,19 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: none
   - id: gpt-5.4-mini
     params:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: none
   - id: gpt-5.4-nano
     params:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: none
   - id: gpt-5.4-pro
     params:
       effort:
@@ -168,7 +168,7 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: medium
   - id: gpt-5.5-pro
     params:
       effort:
@@ -180,7 +180,7 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: medium
       routes:
         responses_api:
           effort:
@@ -190,7 +190,7 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: medium
       routes:
         responses_api:
           effort:
@@ -200,7 +200,7 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: medium
       routes:
         responses_api:
           effort:
@@ -210,7 +210,7 @@ models:
       effort:
         accepted: true
         levels: [low, medium, high, xhigh]
-        default: high
+        default: medium
       routes:
         responses_api:
           effort:
@@ -220,7 +220,7 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: medium
       routes:
         responses_api:
           effort:
@@ -230,7 +230,7 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: medium
       routes:
         responses_api:
           effort:
@@ -240,7 +240,7 @@ models:
       effort:
         accepted: true
         levels: [low, medium, high, xhigh]
-        default: high
+        default: medium
   # Reasoning models served without an effort control: o1-mini and o1-preview refuse reasoning_effort, and
   # OpenAI's model pages list no effort levels for the others, so a level we guessed could get a 400.
   - id: o1-mini
