@@ -285,11 +285,14 @@ models:
   - id: gpt-5.1-codex-mini
     params: {effort: {accepted: false}}
   anthropic:
+  # claude-opus-5-5, claude-sonnet-5-5 and claude-fable-5-1 answer a forced tool_choice (any or tool) with
+  # "not supported for this model"; auto works on every listed Claude.
   - id: claude-opus-5-5
     params:
       effort:
         levels: [low, medium, high, xhigh, max]
         default: medium
+      tools: {forcedChoice: {accepted: false}}
   - id: claude-opus-4-8
     params: {thinksByDefault: false}
   - id: claude-opus-4-7
@@ -362,12 +365,16 @@ models:
   - id: claude-sonnet-5-5
     params:
       maxOutputTokens: {max: 128000}
+      tools: {forcedChoice: {accepted: false}}
   - id: claude-haiku-5-5
     params:
       maxOutputTokens: {max: 128000}
       effort:
         levels: [low, medium, high, xhigh, max]
         default: medium
+  - id: claude-fable-5-1
+    params:
+      tools: {forcedChoice: {accepted: false}}
   gemini:
   - id: gemini-3.8-flash
     profile: gemini-no-sampling
