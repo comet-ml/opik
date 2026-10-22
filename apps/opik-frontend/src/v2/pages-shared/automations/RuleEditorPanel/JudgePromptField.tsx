@@ -60,9 +60,6 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
     onSelectTemplate,
   );
   const judgeErrors = getJudgeErrors(form);
-  const judgeErrorMessages = judgeErrors.map((message) => (
-    <FormErrorSkeleton key={message}>{message}</FormErrorSkeleton>
-  ));
   const sampleData = useRuleSampleData(
     form.watch("projectIds")[0] ?? "",
     scope,
@@ -89,7 +86,6 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
           onSelect={startWithTemplate}
         />
         {startError && <FormErrorSkeleton>{startError}</FormErrorSkeleton>}
-        {judgeErrorMessages}
       </div>
     );
   }
@@ -130,7 +126,9 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
           </RuleEditorCard>
           {sampleData && <PromptVariableHint scope={scope} />}
           <FormMessage />
-          {judgeErrorMessages}
+          {judgeErrors.map((message) => (
+            <FormErrorSkeleton key={message}>{message}</FormErrorSkeleton>
+          ))}
         </FormItem>
       )}
     />
