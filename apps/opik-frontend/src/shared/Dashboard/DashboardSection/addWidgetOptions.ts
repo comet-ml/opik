@@ -16,7 +16,7 @@ export const ADD_WIDGET_OPTIONS: MenuOption<AddWidgetOptionValue>[] = [
   {
     value: "describe",
     label: "Describe a widget",
-    description: "Tell Ollie what to show and it builds a custom chart.",
+    description: "Ask Ollie to build your custom chart.",
     icon: OllieIcon,
     iconClassName: "bg-[color-mix(in_srgb,var(--color-ollie)_12%,transparent)]",
     iconColorClassName: "text-[var(--color-ollie)]",
