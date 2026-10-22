@@ -202,7 +202,7 @@ GEMINI_DROPDOWN_EXCLUDE = [
     r"^gemini-pro-vision$",
     r"^gemini-1\.0-",
     r"-latest$",
-    r"^nano-banana",
+    r"nano-banana",              # unanchored: also gemini-nano-banana-*, image models that 500 on chat requests
     r"-image",
     r"-tts",
     r"-exp$",                    # experimental, removed without a deprecation date
