@@ -85,8 +85,10 @@ class RedisRateLimitService implements RateLimitService {
         return permitCounter(bucketName).get()
                 .defaultIfEmpty(limitConfig.limit())
                 .onErrorResume(error -> {
-                    log.debug("Rate limiter available-events lookup failed, reporting the configured limit: {}",
-                            error.getMessage());
+                    // Log only the exception type, not the raw Redis message, to keep this per-request debug
+                    // line fixed-size and free of unbounded server text.
+                    log.debug("Rate limiter available-events lookup failed ({}), reporting the configured limit",
+                            error.getClass().getSimpleName());
                     return Mono.just(limitConfig.limit());
                 });
     }
@@ -102,9 +104,10 @@ class RedisRateLimitService implements RateLimitService {
                 .then(Mono.defer(rateLimit::remainTimeToLive).retryWhen(configureRetry(limitConfig, rateLimit)))
                 .onErrorResume(error -> {
                     // Report the full window, not 0: the interceptor turns 0 into a RateLimit-Reset of 1s,
-                    // which would make a rejected client retry after a second and spin on 429s.
-                    log.debug("Rate limiter TTL lookup failed, reporting the configured window: {}",
-                            error.getMessage());
+                    // which would make a rejected client retry after a second and spin on 429s. Log only the
+                    // exception type, not the raw Redis message, to keep this debug line fixed-size.
+                    log.debug("Rate limiter TTL lookup failed ({}), reporting the configured window",
+                            error.getClass().getSimpleName());
                     return Mono.just(Duration.ofSeconds(limitConfig.durationInSeconds()).toMillis());
                 });
     }
