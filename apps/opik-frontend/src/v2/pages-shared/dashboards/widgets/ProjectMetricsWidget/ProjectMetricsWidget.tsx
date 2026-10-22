@@ -506,12 +506,18 @@ const ProjectMetricsWidget: React.FunctionComponent<
     );
   };
 
+  const tagCostInfo =
+    isCostMetric && effectiveBreakdown?.field === BREAKDOWN_FIELD.TAGS
+      ? TAG_COST_BREAKDOWN_DESCRIPTION
+      : undefined;
+
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader />
+        <DashboardWidget.PreviewHeader infoMessage={tagCostInfo} />
       ) : (
         <DashboardWidget.Header
+          infoMessage={tagCostInfo}
           title={widget.title || widget.generatedTitle || ""}
           subtitle={widget.subtitle}
           readOnly={readOnly}
@@ -525,17 +531,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           dragHandle={<DashboardWidget.DragHandle />}
         />
       )}
-      <DashboardWidget.Content>
-        <div className="flex h-full flex-col">
-          {isCostMetric &&
-            effectiveBreakdown?.field === BREAKDOWN_FIELD.TAGS && (
-              <p className="comet-body-s mb-2 text-light-slate">
-                {TAG_COST_BREAKDOWN_DESCRIPTION}
-              </p>
-            )}
-          <div className="min-h-0 flex-1">{renderChartContent()}</div>
-        </div>
-      </DashboardWidget.Content>
+      <DashboardWidget.Content>{renderChartContent()}</DashboardWidget.Content>
     </DashboardWidget>
   );
 };

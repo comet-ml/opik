@@ -11,6 +11,7 @@ import {
 } from "@/ui/accordion";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import { Label } from "@/ui/label";
+import { Description } from "@/ui/description";
 
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
@@ -28,6 +29,7 @@ import {
 } from "./breakdown";
 import { ProjectMetricsWidgetFormData } from "./schema";
 import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
+import { isCostMetricType } from "./helpers";
 
 interface ProjectMetricsBreakdownSectionProps {
   control: Control<ProjectMetricsWidgetFormData>;
@@ -280,12 +282,9 @@ const ProjectMetricsBreakdownSection: React.FC<
               </ToggleGroup>
             </div>
           </div>
-          {(metricType === METRIC_NAME_TYPE.SPAN_COST ||
-            metricType === METRIC_NAME_TYPE.COST) &&
+          {isCostMetricType(metricType as METRIC_NAME_TYPE) &&
             breakdown.field === BREAKDOWN_FIELD.TAGS && (
-              <p className="comet-body-s text-light-slate">
-                {TAG_COST_BREAKDOWN_DESCRIPTION}
-              </p>
+              <Description>{TAG_COST_BREAKDOWN_DESCRIPTION}</Description>
             )}
         </AccordionContent>
       </AccordionItem>
