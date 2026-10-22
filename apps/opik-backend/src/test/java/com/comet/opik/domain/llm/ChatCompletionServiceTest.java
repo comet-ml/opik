@@ -1601,39 +1601,51 @@ class ChatCompletionServiceTest {
                 .arguments("{}")
                 .build();
 
-        private static Stream<Arguments> judgeRequests() {
-            var question = UserMessage.from("score this");
+        private static final UserMessage QUESTION = UserMessage.from("score this");
+        private static final LlmAsJudgeModelParameters JUDGE = LlmAsJudgeModelParameters.builder()
+                .name("gpt-6-luna")
+                .build();
+
+        private static Stream<Arguments> toolLoopRounds() {
             return Stream.of(
-                    arguments("a plain judge call", ChatRequest.builder().messages(question).build(), false),
                     arguments("a call carrying tool specs",
-                            ChatRequest.builder().messages(question).toolSpecifications(READ_TOOL).build(), true),
+                            ChatRequest.builder().messages(QUESTION).toolSpecifications(READ_TOOL).build()),
                     arguments("the wrap-up replaying the tool calls without specs",
                             ChatRequest.builder()
-                                    .messages(question, AiMessage.from(READ_CALL),
+                                    .messages(QUESTION, AiMessage.from(READ_CALL),
                                             ToolExecutionResultMessage.from(READ_CALL, "{}"),
                                             UserMessage.from("respond with the JSON"))
-                                    .build(),
-                            true));
+                                    .build()));
         }
 
         @ParameterizedTest(name = "{0}")
-        @MethodSource("judgeRequests")
-        @DisplayName("scoreTrace builds the tool-calling model for every round of a tool loop, and only then")
-        void scoreTrace__picksTheToolCallingModelForAToolLoop(String name, ChatRequest request, boolean usesTools) {
-            var modelParameters = LlmAsJudgeModelParameters.builder().name("gpt-6-luna").build();
-            if (usesTools) {
-                when(llmProviderFactory.getToolCallingLanguageModel(anyString(), any())).thenReturn(chatModel);
-            } else {
-                when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
-            }
+        @MethodSource("toolLoopRounds")
+        @DisplayName("scoreTrace builds the tool-calling model for every round of a tool loop")
+        void scoreTrace__picksTheToolCallingModelForAToolLoop(String name, ChatRequest request) {
+            when(llmProviderFactory.getToolCallingLanguageModel(anyString(), any())).thenReturn(chatModel);
             when(chatModel.chat(any(ChatRequest.class))).thenReturn(ChatResponse.builder()
                     .aiMessage(AiMessage.from("{}"))
                     .build());
 
-            chatCompletionService.scoreTrace(request, modelParameters, "test-workspace-id");
+            chatCompletionService.scoreTrace(request, JUDGE, "test-workspace-id");
 
-            verify(llmProviderFactory, times(usesTools ? 1 : 0)).getToolCallingLanguageModel(anyString(), any());
-            verify(llmProviderFactory, times(usesTools ? 0 : 1)).getLanguageModel(anyString(), any());
+            verify(chatModel).chat(request);
+            verify(llmProviderFactory, never()).getLanguageModel(anyString(), any());
+        }
+
+        @Test
+        @DisplayName("scoreTrace keeps the plain model for a judge call without tools")
+        void scoreTrace__keepsThePlainModelWithoutTools() {
+            var request = ChatRequest.builder().messages(QUESTION).build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
+            when(chatModel.chat(any(ChatRequest.class))).thenReturn(ChatResponse.builder()
+                    .aiMessage(AiMessage.from("{}"))
+                    .build());
+
+            chatCompletionService.scoreTrace(request, JUDGE, "test-workspace-id");
+
+            verify(chatModel).chat(request);
+            verify(llmProviderFactory, never()).getToolCallingLanguageModel(anyString(), any());
         }
     }
 }

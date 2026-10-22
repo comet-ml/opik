@@ -460,7 +460,7 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
     public ToolChoice firstRoundToolChoice(@NonNull LlmProvider provider,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         if (ModelCapabilities.refusesForcedToolChoice(modelParameters.name(), registryService)
-                || thinksOnABudget(modelParameters.customParameters())) {
+                || hasExplicitThinkingEnabled(modelParameters.customParameters())) {
             return ToolChoice.AUTO;
         }
         return switch (provider) {
@@ -475,7 +475,7 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
 
     // Anthropic answers "Thinking may not be enabled when tool_choice forces tool use" to a thinking budget, while
     // adaptive thinking takes a forced choice.
-    private boolean thinksOnABudget(JsonNode customParameters) {
+    private boolean hasExplicitThinkingEnabled(JsonNode customParameters) {
         return customParameters != null
                 && "enabled".equalsIgnoreCase(customParameters.path("thinking").path("type").asText());
     }
