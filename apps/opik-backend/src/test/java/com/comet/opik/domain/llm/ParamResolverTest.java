@@ -546,24 +546,14 @@ class ParamResolverTest {
         return resolverWithOpenAiParams(bundledRegistry().paramsOf("openai", model));
     }
 
-    @Test
-    void dropsAJudgeEffortTheModelRefusesAndKeepsTheOtherCustomParameters() {
-        var parameters = judge("gpt-4o-mini", 0.7, """
-                {"reasoning_effort": "low", "max_completion_tokens": 400}""");
-
-        assertThat(shippedOpenAiResolver("gpt-4o-mini").resolve(parameters)).isEqualTo(resolution(
-                judge("gpt-4o-mini", 0.7, """
-                        {"max_completion_tokens": 400}"""),
-                new ParamChange("reasoning_effort", Reason.REFUSED_BY_MODEL)));
-    }
-
-    @Test
-    void dropsTheCustomParametersWhenTheRefusedEffortWasAllTheyHeld() {
-        var parameters = judge("gpt-4o-mini", null, """
-                {"reasoning_effort": "low"}""");
-
-        assertThat(shippedOpenAiResolver("gpt-4o-mini").resolve(parameters)).isEqualTo(resolution(
-                judge("gpt-4o-mini", null, null), new ParamChange("reasoning_effort", Reason.REFUSED_BY_MODEL)));
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', nullValues = "null", value = {
+            "0.7  | {\"reasoning_effort\": \"low\", \"max_completion_tokens\": 400} | {\"max_completion_tokens\": 400}",
+            "null | {\"reasoning_effort\": \"low\"}                                 | null"})
+    void dropsAJudgeEffortTheModelRefusesAndKeepsTheRest(Double temperature, String saved, String kept) {
+        assertThat(shippedOpenAiResolver("gpt-4o-mini").resolve(judge("gpt-4o-mini", temperature, saved)))
+                .isEqualTo(resolution(judge("gpt-4o-mini", temperature, kept),
+                        new ParamChange("reasoning_effort", Reason.REFUSED_BY_MODEL)));
     }
 
     @ParameterizedTest
