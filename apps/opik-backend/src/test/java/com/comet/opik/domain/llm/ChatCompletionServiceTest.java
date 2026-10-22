@@ -9,6 +9,10 @@ import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.google.api.gax.rpc.ApiException;
 import com.google.api.gax.rpc.StatusCode;
 import com.openai.errors.OpenAIServiceException;
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.agent.tool.ToolSpecification;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.exception.AuthenticationException;
 import dev.langchain4j.exception.HttpException;
@@ -61,6 +65,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atLeast;
@@ -1579,6 +1584,56 @@ class ChatCompletionServiceTest {
 
             verify(llmProviderService).generateStream(captor.capture(), anyString(), any(), any(), any());
             assertThat(captor.getValue()).isEqualTo(withoutWhatTheResponsesRouteRefuses());
+        }
+    }
+
+    @Nested
+    @DisplayName("Tool-calling judges:")
+    class ToolCallingJudges {
+
+        private static final ToolSpecification READ_TOOL = ToolSpecification.builder()
+                .name("read")
+                .description("Read the trace")
+                .build();
+        private static final ToolExecutionRequest READ_CALL = ToolExecutionRequest.builder()
+                .id("call-1")
+                .name("read")
+                .arguments("{}")
+                .build();
+
+        private static Stream<Arguments> judgeRequests() {
+            var question = UserMessage.from("score this");
+            return Stream.of(
+                    arguments("a plain judge call", ChatRequest.builder().messages(question).build(), false),
+                    arguments("a call carrying tool specs",
+                            ChatRequest.builder().messages(question).toolSpecifications(READ_TOOL).build(), true),
+                    arguments("the wrap-up replaying the tool calls without specs",
+                            ChatRequest.builder()
+                                    .messages(question, AiMessage.from(READ_CALL),
+                                            ToolExecutionResultMessage.from(READ_CALL, "{}"),
+                                            UserMessage.from("respond with the JSON"))
+                                    .build(),
+                            true));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("judgeRequests")
+        @DisplayName("scoreTrace builds the tool-calling model for every round of a tool loop, and only then")
+        void scoreTrace__picksTheToolCallingModelForAToolLoop(String name, ChatRequest request, boolean usesTools) {
+            var modelParameters = LlmAsJudgeModelParameters.builder().name("gpt-6-luna").build();
+            if (usesTools) {
+                when(llmProviderFactory.getToolCallingLanguageModel(anyString(), any())).thenReturn(chatModel);
+            } else {
+                when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
+            }
+            when(chatModel.chat(any(ChatRequest.class))).thenReturn(ChatResponse.builder()
+                    .aiMessage(AiMessage.from("{}"))
+                    .build());
+
+            chatCompletionService.scoreTrace(request, modelParameters, "test-workspace-id");
+
+            verify(llmProviderFactory, times(usesTools ? 1 : 0)).getToolCallingLanguageModel(anyString(), any());
+            verify(llmProviderFactory, times(usesTools ? 0 : 1)).getLanguageModel(anyString(), any());
         }
     }
 }

@@ -108,6 +108,27 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                         String.format(ERROR_MODEL_NOT_SUPPORTED, modelParameters.name())));
     }
 
+    public ChatModel getToolCallingLanguageModel(@NonNull String workspaceId,
+            @NonNull LlmAsJudgeModelParameters modelParameters) {
+        var llmProvider = getLlmProvider(modelParameters.name());
+        var providerConfig = getProviderApiKey(workspaceId, llmProvider, modelParameters.name());
+        var config = buildConfig(providerConfig, workspaceId);
+        var tools = toolsOf(modelParameters.name());
+
+        return Optional.ofNullable(services.get(llmProvider))
+                .map(provider -> provider.getToolCallingLanguageModel(config, modelParameters, tools))
+                .orElseThrow(() -> new BadRequestException(
+                        String.format(ERROR_MODEL_NOT_SUPPORTED, modelParameters.name())));
+    }
+
+    private ModelParams.ToolsParam toolsOf(String model) {
+        return registryService.findModel(model)
+                .map(result -> ObjectUtils.getIfNull(result.model().params(),
+                        () -> registryService.paramsOf(result.provider().getValue(), result.model().id())))
+                .map(ModelParams::tools)
+                .orElse(null);
+    }
+
     /**
      * The agreed requirement is to resolve the LLM provider and its API key based on the model.
      */
