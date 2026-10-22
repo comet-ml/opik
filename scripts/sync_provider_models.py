@@ -1402,7 +1402,7 @@ def curated_drift(
 
 
 # LiteLLM says whether a Gemini model thinks but not which levels it takes, and a level it doesn't take is a 400, so
-# the sync can't write Gemini levels: a picker model that thinks needs a curated row to get an effort control.
+# the sync can't write Gemini levels: a picker model that thinks needs them written by hand.
 def thinking_models_without_effort(
     dropdown_by_provider: dict[str, list[ModelEntry]], prices: dict, catalog: dict,
 ) -> list[str]:
@@ -2052,8 +2052,9 @@ def main():
     if thinking_without_levels:
         print("### Thinking levels")
         print(
-            f"- {len(thinking_without_levels)} picker model(s) think but have no curated effort levels; "
-            "add them to llm-models-curated.yaml:"
+            f"- {len(thinking_without_levels)} picker model(s) think but have no curated effort levels; add them to "
+            "llm-models-curated.yaml, and to THINKING_LEVELS_BY_MODEL in modelUtils.ts until the Gemini panel reads "
+            "the catalog:"
         )
         for model_id in thinking_without_levels:
             print(f"  ? {model_id}")
