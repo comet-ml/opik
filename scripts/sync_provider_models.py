@@ -989,11 +989,15 @@ def sync_simple_provider(
             continue
         used_enum_names.add(enum_name)
 
+        # LiteLLM often lists a new model before it knows its capabilities, so its "no" means "not known yet":
+        # keeping the first answer froze those models without structured output for good. A 1-arg enum stores
+        # no flag, so the YAML is what remembers it for that provider.
+        so = (
+            current_so_by_value.get(value, False)
+            or source_dict.get(value, False)
+            or value in yaml_structured_output_ids
+        )
         if java_format == "2arg":
-            if value in current_so_by_value:
-                so = current_so_by_value[value]
-            else:
-                so = source_dict.get(value, False)
             entries.append((enum_name, value, so))
         else:
             entries.append((enum_name, value))
@@ -1002,10 +1006,7 @@ def sync_simple_provider(
         model_entries.append(ModelEntry(
             enum_name=enum_name,
             value=value,
-            # A 1-arg enum stores no flag, so a kept model that left the source would otherwise lose the one the YAML has.
-            structured_output=current_so_by_value.get(
-                value, source_dict.get(value, value in yaml_structured_output_ids)
-            ),
+            structured_output=so,
             label=label,
         ))
 
@@ -1058,10 +1059,7 @@ def sync_vertexai(
                 continue
             used_enum_names.add(enum_name)
 
-        if qualified in current_so_by_qualified:
-            so = current_so_by_qualified[qualified]
-        else:
-            so = source_dict.get(qualified, False)
+        so = current_so_by_qualified.get(qualified, False) or source_dict.get(qualified, False)
 
         entries.append((enum_name, qualified, value, so))
         label = label_overrides.get(value) or generate_gemini_label(value)

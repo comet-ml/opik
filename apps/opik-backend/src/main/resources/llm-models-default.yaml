@@ -1,24 +1,31 @@
 openai:
   - id: "gpt-6.1-sol"
     label: "GPT 6.1 Sol"
+    structuredOutput: true
     reasoning: true
   - id: "gpt-6-astra"
     label: "GPT 6 Astra"
+    structuredOutput: true
     reasoning: true
   - id: "gpt-6-luna"
     label: "GPT 6 Luna"
+    structuredOutput: true
     reasoning: true
   - id: "gpt-6-sol"
     label: "GPT 6 Sol"
+    structuredOutput: true
     reasoning: true
   - id: "gpt-5.6-luna"
     label: "GPT 5.6 Luna"
+    structuredOutput: true
     reasoning: true
   - id: "gpt-5.6-sol"
     label: "GPT 5.6 Sol"
+    structuredOutput: true
     reasoning: true
   - id: "gpt-5.6-terra"
     label: "GPT 5.6 Terra"
+    structuredOutput: true
     reasoning: true
   - id: "gpt-5.5"
     label: "GPT 5.5"
@@ -30,9 +37,11 @@ openai:
     reasoning: true
   - id: "gpt-5.4-mini"
     label: "GPT 5.4 Mini"
+    structuredOutput: true
     reasoning: true
   - id: "gpt-5.4-nano"
     label: "GPT 5.4 Nano"
+    structuredOutput: true
     reasoning: true
   - id: "gpt-5.2"
     label: "GPT 5.2"
@@ -83,9 +92,11 @@ openai:
     reasoning: true
   - id: "o3-mini"
     label: "GPT o3 Mini"
+    structuredOutput: true
     reasoning: true
   - id: "o1"
     label: "GPT o1"
+    structuredOutput: true
     reasoning: true
   - id: "chatgpt-4o-latest"
     structuredOutput: true
@@ -110,6 +121,7 @@ openai:
     structuredOutput: true
   - id: "gpt-4o-transcribe-diarize"
   - id: "gpt-5-chat-latest"
+    structuredOutput: true
   - id: "gpt-5-codex"
     structuredOutput: true
     reasoning: true
@@ -128,6 +140,7 @@ openai:
     structuredOutput: true
     reasoning: true
   - id: "gpt-5.2-chat-latest"
+    structuredOutput: true
   - id: "gpt-5.2-codex"
     structuredOutput: true
     reasoning: true
@@ -151,6 +164,7 @@ openai:
   - id: "gpt-image-2.5-sunburst"
   - id: "gpt-live-1"
   - id: "o1-2024-12-17"
+    structuredOutput: true
     reasoning: true
   - id: "o1-mini"
     reasoning: true
@@ -239,14 +253,19 @@ anthropic:
 gemini:
   - id: "gemini-3.8-flash"
     label: "Gemini 3.8 Flash"
+    structuredOutput: true
   - id: "gemini-3.7-flash"
     label: "Gemini 3.7 Flash"
+    structuredOutput: true
   - id: "gemini-3.6-flash"
     label: "Gemini 3.6 Flash"
+    structuredOutput: true
   - id: "gemini-3.5-flash"
     label: "Gemini 3.5 Flash"
+    structuredOutput: true
   - id: "gemini-3.5-flash-lite"
     label: "Gemini 3.5 Flash Lite"
+    structuredOutput: true
   - id: "gemini-3.5-transcribe"
     label: "Gemini 3.5 Transcribe"
   - id: "gemini-3.1-pro-preview"
@@ -254,6 +273,7 @@ gemini:
     structuredOutput: true
   - id: "gemini-3.1-flash-lite"
     label: "Gemini 3.1 Flash Lite"
+    structuredOutput: true
   - id: "gemini-3-flash-preview"
     label: "Gemini 3 Flash Preview"
     structuredOutput: true
@@ -268,8 +288,10 @@ gemini:
     structuredOutput: true
   - id: "gemma-4-26b-a4b-it"
     label: "Gemma 4 26B A4B IT"
+    structuredOutput: true
   - id: "gemma-4-31b-it"
     label: "Gemma 4 31B IT"
+    structuredOutput: true
   - id: "aqa"
   - id: "gemini-1.0-pro"
   - id: "gemini-1.5-flash-latest"
@@ -304,6 +326,7 @@ gemini:
   - id: "lyria-3-pro-preview"
   - id: "lyria-3.5"
   - id: "nano-banana-pro-preview"
+    structuredOutput: true
   - id: "text-embedding-004"
 vertex-ai:
   - id: "gemini-3.8-flash"
