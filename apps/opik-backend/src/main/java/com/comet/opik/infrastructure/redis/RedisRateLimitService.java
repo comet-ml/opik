@@ -52,8 +52,14 @@ class RedisRateLimitService implements RateLimitService {
     }
 
     private Mono<Boolean> setLimitIfNecessary(long limit, long limitDurationInSeconds, RRateLimiterReactive rateLimit) {
-        return rateLimit.trySetRate(RateType.OVERALL, limit, Duration.ofSeconds(limitDurationInSeconds))
-                .flatMap(__ -> rateLimit.expireIfNotSet(Duration.ofSeconds(limitDurationInSeconds)));
+        // keepAliveTime makes Redisson pexpire the config hash, the permit counter and the permits
+        // sorted-set to the same TTL inside one atomic acquire script, so they can no longer expire
+        // independently. The previous out-of-band expireIfNotSet only put a TTL on the config hash and
+        // let the value/permits keys diverge, producing the empty-permits/exhausted-counter state that
+        // made the throttle branch error with "arithmetic on a nil value" (OPIK-8923). It equals the
+        // rate interval, so idle buckets are still reclaimed after one interval of inactivity.
+        Duration interval = Duration.ofSeconds(limitDurationInSeconds);
+        return rateLimit.trySetRate(RateType.OVERALL, limit, interval, interval);
     }
 
     @Override

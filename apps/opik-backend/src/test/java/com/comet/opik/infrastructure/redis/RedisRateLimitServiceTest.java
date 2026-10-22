@@ -19,6 +19,8 @@ import java.time.Duration;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -44,9 +46,8 @@ class RedisRateLimitServiceTest {
     @BeforeEach
     void setUp() {
         when(redisClient.getRateLimiter(anyString())).thenReturn(rateLimiter);
-        when(rateLimiter.trySetRate(any(RateType.class), anyLong(), any(Duration.class)))
+        when(rateLimiter.trySetRate(any(RateType.class), anyLong(), any(Duration.class), any(Duration.class)))
                 .thenReturn(Mono.just(true));
-        when(rateLimiter.expireIfNotSet(any(Duration.class))).thenReturn(Mono.just(true));
         rateLimitService = new RedisRateLimitService(redisClient);
     }
 
@@ -88,5 +89,22 @@ class RedisRateLimitServiceTest {
         StepVerifier.create(rateLimitService.isLimitExceeded(EVENTS, bucketName(), limitConfig()))
                 .expectNext(true)
                 .verifyComplete();
+    }
+
+    @Test
+    void setLimitUsesKeepAliveTimeSoBucketKeysShareOneTtl() {
+        // Root-cause fix: keepAliveTime (== the rate interval) is handed to Redisson so the config hash,
+        // the permit counter and the permits sorted-set are pexpired together inside the acquire script;
+        // the out-of-band expireIfNotSet that let them diverge (OPIK-8923) is gone.
+        when(rateLimiter.tryAcquire(EVENTS)).thenReturn(Mono.just(true));
+        LimitConfig config = limitConfig();
+        Duration interval = Duration.ofSeconds(config.durationInSeconds());
+
+        StepVerifier.create(rateLimitService.isLimitExceeded(EVENTS, bucketName(), config))
+                .expectNext(false)
+                .verifyComplete();
+
+        verify(rateLimiter).trySetRate(RateType.OVERALL, config.limit(), interval, interval);
+        verify(rateLimiter, never()).expireIfNotSet(any(Duration.class));
     }
 }
