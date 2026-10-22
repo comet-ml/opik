@@ -380,7 +380,7 @@ test.describe(
     );
 
     test(
-      'CONTROL — an unedited save keeps the stored effort, so the strip is conditional on the switch',
+      'CONTROL — a save with no model switch keeps the stored effort, so the strip is conditional on the switch',
       { tag: ['@cap:online-evaluation.edit-rule'] },
       async ({
         modelRegistryProviders,
@@ -401,16 +401,23 @@ test.describe(
           'the Anthropic registry is selectable',
         ).toContain('anthropic');
 
-        const ruleName = `${testNamespace}-unedited`;
+        const ruleName = `${testNamespace}-unswitched`;
         const onlineEval = new OnlineEvaluationPage(page);
         const ruleId = await seedEffortRule({ backendClient, project, ruleName });
 
-        const update = await test.step('Open the rule and press Update with no edits', async () => {
+        const update = await test.step('Open the rule and save it without switching the model', async () => {
           await openEditPanelOn(onlineEval, project.id, ruleName);
           expect(
             await onlineEval.readModelPickerText(),
             'the rule editor panel hydrated onto the seeded rule',
           ).toContain(SEEDED_MODEL_NAME);
+          // The editor keeps Save disabled until something changes, so a
+          // literally unedited save is no longer a gesture the product offers.
+          // The Enabled switch is the estate's idiom for the smallest edit that
+          // is not the field under test, and it keeps this control's role
+          // intact: what has to be shown is that an edit which is NOT a model
+          // switch leaves the effort alone, which is exactly what this is.
+          await onlineEval.toggleEnabled();
           return submitAndCaptureUpdate(page, onlineEval, ruleId);
         });
 
@@ -423,7 +430,7 @@ test.describe(
 
         await test.step('And the rule still holds it, on the model it started on', async () => {
           const model = await backendClient.getLlmJudgeModel(ruleId);
-          expect(model.name, 'the unedited save did not move the model').toBe(SEEDED_MODEL_ID);
+          expect(model.name, 'the save did not move the model').toBe(SEEDED_MODEL_ID);
           expect(
             model.customParameters,
             'the effort survives a save that changed nothing',

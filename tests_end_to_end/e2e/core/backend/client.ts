@@ -4328,15 +4328,22 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       // `truncate=false` explicitly is a different request from sending nothing.
       if (args.truncate !== undefined) query.set('truncate', String(args.truncate));
 
-      const { status, message, json } = await rawFetch('GET', `/v1/private/${args.entity}`, {
-        query,
+      // `withRateLimitRetry`, for the reason `listSpanCosts` and
+      // `listTrackedSpans` take it: the traces and spans listings are limited
+      // per workspace, and a sorting spec necessarily issues a burst — the
+      // ingestion poll, then one read per direction per entity. Observed on
+      // staging: this method answering 429 on all three attempts of a 4-worker
+      // run of the whole branch, which reads exactly like the sort being broken.
+      const { json } = await withRateLimitRetry(async () => {
+        const result = await rawFetch('GET', `/v1/private/${args.entity}`, { query });
+        if (result.status !== 200) {
+          throw new Error(
+            `listLogsPage(${args.entity} of project ${args.projectId}): expected 200, ` +
+              `got ${result.status}: ${result.message}`,
+          );
+        }
+        return result;
       });
-      if (status !== 200) {
-        throw new Error(
-          `listLogsPage(${args.entity} of project ${args.projectId}): expected 200, ` +
-            `got ${status}: ${message}`,
-        );
-      }
       const page = (json ?? {}) as {
         total?: number;
         sortable_by?: unknown;

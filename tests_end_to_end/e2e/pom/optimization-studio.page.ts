@@ -621,9 +621,19 @@ export class OptimizationStudioPage {
    * rather than a panel that silently reads empty.
    */
   private modelParametersTrigger(): Locator {
-    return this.newRunPanel().locator(
-      'button[role="combobox"]:has(> [data-testid="select-a-llm-model"]) + button[aria-haspopup="menu"]',
-    );
+    // By its ICON rather than as the picker's adjacent sibling. The gear is no
+    // longer adjacent to the combobox: `OptimizationsNewPromptSection` wraps the
+    // picker in a `FormControl` and renders `PromptModelConfigs` as a sibling of
+    // THAT, so `combobox + button[aria-haspopup="menu"]` matches nothing — which
+    // presented as the gear being absent (measured on staging 2.2.116: one
+    // combobox, three `aria-haspopup="menu"` buttons in the panel, and zero
+    // adjacent matches).
+    //
+    // `svg.lucide-settings2` is the same handle `OnlineEvaluationPage`'s
+    // `judgeModelParametersTrigger` uses for the identical component, and it is
+    // what separates the gear from the panel's other menu buttons (every message
+    // row's role selector is one). Asserted unique by the callers.
+    return this.newRunPanel().locator('button:has(svg.lucide-settings2)');
   }
 
   /**

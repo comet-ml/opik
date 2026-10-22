@@ -171,6 +171,14 @@ test.describe(
             (response) =>
               response.request().method() === 'PATCH' && isRuleUpdate(response.url(), ruleId),
           );
+          // The editor keeps Save disabled until something actually changes, so
+          // a deliberate save has to carry an edit. The Enabled switch is the
+          // estate's idiom for the smallest one that is not the field under
+          // test — see `online-evaluation-edit-rule-preserves-model-parameters`.
+          // It also keeps this control honest about the sampling rate: the write
+          // it provokes is not a rate write, so the stored rate assertion above
+          // stays the only claim about the rate.
+          await onlineEval.toggleEnabled();
           await onlineEval.submitPanel();
           expect((await answered).ok(), 'the deliberate save was accepted').toBe(true);
 

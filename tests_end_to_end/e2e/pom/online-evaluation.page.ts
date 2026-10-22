@@ -567,24 +567,43 @@ export class OnlineEvaluationPage {
   }
 
   /**
-   * Close the judge parameters panel with ONE Escape, then wait for it to go.
+   * Close the judge parameters menu by toggling its own gear, and prove the
+   * EDITOR survived.
    *
-   * Exactly one press, deliberately — the opposite of
-   * `PlaygroundPage.closeModelParameters`, which presses until the panel goes.
-   * Here the parameters menu sits inside the rule editor panel: its close is
-   * animated, so it still reports visible for a beat, and a second press lands
-   * on the EDITOR and dismisses the whole form (which presents as Cancel
-   * detaching mid-click). One press and a wait is enough because every caller
-   * has just clicked an interactive child, so focus is already inside the menu.
+   * Explicitly NOT Escape, which is what the old modal edit dialog took: in the
+   * rule editor side panel a single Escape closes the parameters menu AND
+   * dismisses the whole editor with it. Measured on staging 2.2.116 — after one
+   * press the menu, the name input and the model picker are all gone from the
+   * DOM — so an Escape here surfaces much later and misleadingly, as the next
+   * control on the form never opening. Clicking the gear again closes only the
+   * menu, which is what every caller actually wants.
    *
-   * Needed by any spec that reads the panel and then goes back to the form —
-   * changing the model, naming the rule, saving. A spec that only reads the
-   * panel and stops should open a fresh editor instead.
+   * The editor is asserted still open rather than assumed, because that is the
+   * postcondition the callers depend on and the one that regressed.
+   *
+   * Needed by any spec that reads the parameters and then goes back to the form
+   * — changing the model, naming the rule, saving. A spec that only reads them
+   * and stops should open a fresh editor instead.
    */
   async closeJudgeModelParameters(): Promise<void> {
     return test.step('close the judge model parameters', async () => {
-      await this.page.keyboard.press('Escape');
-      await this.judgeModelParametersPanel.waitFor({ state: 'hidden' });
+      // `force`, which is load-bearing rather than a shortcut: the menu is a
+      // MODAL Radix dropdown, so while it is open everything outside it —
+      // including its own gear — is `pointer-events: none` and an ordinary click
+      // waits for a hit target it will never get. The press still reaches
+      // Radix's dismiss layer, which is what closes the menu. Checked against
+      // the alternatives on staging: a forced click on the name input and a
+      // raw `mouse.click` at its coordinates both leave the menu open.
+      await this.judgeModelParametersTrigger.click({ force: true });
+      // Gone from the DOM, not merely hidden — the same wait
+      // `openCreateRulePanel` makes on the Evaluator menu, and for the same
+      // reason it gives: the menu animates out OVER the editor, and clicks land
+      // on it until it is really gone.
+      await expect(this.judgeModelParametersPanel).toHaveCount(0);
+      await expect(
+        this.nameInput,
+        'closing the parameters menu left the rule editor open',
+      ).toBeVisible();
     });
   }
 
@@ -649,11 +668,29 @@ export class OnlineEvaluationPage {
    */
   async judgeEffortOptions(): Promise<string[]> {
     return test.step('read the offered judge effort levels', async () => {
+      const current = ((await this.judgeEffortTrigger.textContent()) ?? '').trim();
       const listbox = await this.openJudgeEffortListbox();
-      const options = await listbox.getByRole('option').allTextContents();
-      await this.page.keyboard.press('Escape');
-      await expect(listbox).toBeHidden();
-      return options.map((o) => o.trim());
+      const options = (await listbox.getByRole('option').allTextContents()).map((o) => o.trim());
+
+      // Closed by re-picking the level already in force, which is a no-op for
+      // the rule and the only dismissal that leaves the form standing. Not
+      // Escape, for the reason `closeJudgeModelParameters` spells out — in the
+      // editor side panel it takes the parameters menu and the editor with it,
+      // so a caller that then read the effort found no control to read. Not the
+      // trigger either: while a Radix Select is open its trigger is not a hit
+      // target at all, and even a forced click waits for one that never comes.
+      const same = listbox.getByRole('option', { name: current, exact: true });
+      await expect(
+        same,
+        `the displayed level "${current}" is one of the levels offered`,
+      ).toHaveCount(1);
+      await same.click();
+      await expect(listbox).toHaveCount(0);
+      await expect(
+        this.judgeModelParametersPanel,
+        'reading the offered levels left the parameters menu open',
+      ).toHaveCount(1);
+      return options;
     });
   }
 
@@ -828,13 +865,19 @@ export class OnlineEvaluationPage {
    */
   async fillAndSubmitCreateRuleLLMJudge(fields: CreateRuleLLMJudgeFields): Promise<void> {
     return test.step(`create LLM-as-a-Judge rule "${fields.name}"`, async () => {
+      await this.openCreateRulePanel('LLM-as-a-Judge');
       await this.fillCreateRuleLLMJudge(fields);
       await this.submitPanel();
     });
   }
 
   /**
-   * The same fill, stopping short of the submit.
+   * Fill the ALREADY-OPEN create form, stopping short of the submit.
+   *
+   * Deliberately does NOT open the panel — its caller does, and a caller that
+   * has opened it cannot un-open it: the editor covers the create button, so a
+   * second `openCreateRulePanel` waits on a target that is never hit-testable
+   * again and reports as the create button "never visible, enabled and stable".
    *
    * For a spec that has to touch the form between filling it and saving —
    * setting a model parameter through the gear, say. The order matters and is
@@ -845,7 +888,7 @@ export class OnlineEvaluationPage {
    */
   async fillCreateRuleLLMJudge(fields: CreateRuleLLMJudgeFields): Promise<void> {
     return test.step(`fill the LLM-as-a-Judge form for "${fields.name}"`, async () => {
-      await this.openCreateRulePanel('LLM-as-a-Judge');
+      await this.waitForPanelOpen();
       await this.applyJudgeTemplate(fields.template);
       await this.nameInput.fill(fields.name);
       await this.selectJudgeModel(fields.modelDisplayName);

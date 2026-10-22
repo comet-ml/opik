@@ -230,6 +230,16 @@ test.describe(
 
           const panel = await logs.openTraceById(traceId);
           await panel.waitForFullyLoaded();
+          // Waited for explicitly, and generously, before selecting it: this
+          // trace carries ~3 MiB across its span's three payload fields, and the
+          // panel fetches and renders that on open. The default 15s action
+          // timeout is enough when the suite runs this spec alone and not when
+          // the whole branch runs beside it — observed as the tree node never
+          // appearing on a 4-worker run.
+          await expect(
+            panel.spanTreeNode(spanName),
+            'the span appears in the trace tree',
+          ).toBeVisible({ timeout: 120_000 });
           await panel.selectSpan(spanName);
 
           // Per SECTION, not anywhere in the panel: a payload that landed in
@@ -242,7 +252,7 @@ test.describe(
             await expect(
               panel.sectionText(section, marker),
               `the ${section} section renders its own marker`,
-            ).toBeVisible();
+            ).toBeVisible({ timeout: 60_000 });
           }
         });
       },

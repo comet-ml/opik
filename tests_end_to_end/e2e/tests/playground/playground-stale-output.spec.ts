@@ -165,6 +165,27 @@ test.describe(
         registerPromptCleanup,
         testNamespace,
       }) => {
+        // QA: failing on staging for 2.2.116, and the cause is inside this very
+        // release. This test waits for a RELOAD to re-apply the loaded library
+        // version over the composer — `settledMessageIdsAfter(idsBeforeLibrary,
+        // 'the reload that re-applied the library prompt')` settles only once
+        // the message ids have been rebuilt. opik#8780 deliberately stopped
+        // that: a card pinned to a library version keeps what is in its editors
+        // across a reload, which is the whole point of the capability this
+        // branch adds as playground.keep-unsaved-prompt-edits, and
+        // playground-library-prompt-edits.spec.ts and
+        // playground-prompt-state-hydration.spec.ts both assert it and both
+        // pass here. So two harvested specs on this branch now contradict each
+        // other on one gesture, and the newer one is the intended behaviour.
+        //
+        // Left asserting what its author meant rather than loosened, because
+        // which spec gives way is a human call: this one's REAL subject is that
+        // a library load leaves a finished output undimmed, and it used the
+        // id-rebuild only as proof the load did something — so it likely needs a
+        // different proof rather than deletion.
+        // Remove test.fail() once this passes; Playwright reports it when it does.
+        test.fail();
+
         // Four page loads and a library round-trip on top of the usual preamble.
         test.setTimeout(180_000);
 
