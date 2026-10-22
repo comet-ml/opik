@@ -174,7 +174,7 @@ const renderPrompt = (model: string, messages: LLMMessage[] = []) => {
   } as unknown as PlaygroundPromptType;
 
   render(
-    <TooltipProvider>
+    <TooltipProvider delayDuration={0}>
       <PlaygroundPrompt
         workspaceName="default"
         index={0}
@@ -284,10 +284,14 @@ describe("PlaygroundPrompt save button", () => {
         message(LLM_MESSAGE_ROLE.user, "  \n\t "),
       ],
     ],
-  ])("is shown but disabled when %s", (_label, messages) => {
+  ])("is shown but disabled when %s", async (_label, messages) => {
     renderPrompt("gpt-4o-mini", messages);
+    fireEvent.pointerMove(saveButton(), { pointerType: "mouse" });
 
     expect(saveButton()).toBeDisabled();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Message is empty. Please add some text to save",
+    );
   });
 
   it.each([
