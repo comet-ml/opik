@@ -10,7 +10,7 @@ import {
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { LLM_JUDGE, LLMPromptTemplate } from "@/types/llm";
 import { LLM_PROMPT_TEMPLATES } from "@/constants/llm";
-import { MenuOption } from "@/v2/pages-shared/CreateMenuButton/MenuOptionItems";
+import { MenuOption } from "@/shared/MenuOptionItems/MenuOptionItems";
 
 type JudgeTemplateDisplay = Omit<MenuOption<LLM_JUDGE>, "value">;
 
