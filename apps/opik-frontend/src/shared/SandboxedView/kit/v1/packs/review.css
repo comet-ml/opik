@@ -1,0 +1,135 @@
+:root {
+  --kit-clamp: 320px;
+}
+
+.kit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--kit-border);
+  border-radius: var(--kit-radius-sm);
+  background: var(--kit-bg);
+  color: var(--kit-text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.kit-chip-label {
+  color: var(--kit-muted);
+}
+
+.kit-chip.kit-primary {
+  border-color: transparent;
+  background: var(--kit-primary-soft);
+  color: var(--kit-primary);
+  font-weight: 500;
+}
+
+.kit-clamp {
+  position: relative;
+  max-height: var(--kit-clamp);
+  overflow: hidden;
+}
+
+.kit-clamp::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 48px;
+  background: linear-gradient(transparent, var(--kit-surface));
+  pointer-events: none;
+}
+
+.kit-stars {
+  color: var(--kit-amber);
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.kit-stars .kit-off {
+  color: var(--kit-off);
+}
+
+.kit-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--kit-fill);
+  overflow: hidden;
+}
+
+.kit-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--kit-amber);
+}
+
+.kit-segmented {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--kit-radius);
+  background: var(--kit-fill);
+}
+
+.kit-segmented button {
+  height: 20px;
+  border: 0;
+  background: transparent;
+  color: var(--kit-muted);
+}
+
+.kit-segmented button[aria-pressed="true"] {
+  background: var(--kit-bg);
+  color: var(--kit-text);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+}
+
+.kit-email {
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  border: 0;
+  border-radius: var(--kit-radius-sm);
+  background: #ffffff;
+}
+
+.kit-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 85%;
+  min-width: 0;
+}
+
+.kit-turn-user {
+  align-self: flex-end;
+}
+
+.kit-turn-assistant {
+  align-self: flex-start;
+}
+
+.kit-turn-title {
+  color: var(--kit-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.kit-turn-user .kit-turn-title {
+  text-align: right;
+}
+
+.kit-turn-body {
+  padding: 8px 12px;
+  border: 1px solid var(--kit-border);
+  border-radius: var(--kit-radius);
+  background: var(--kit-surface);
+  white-space: pre-wrap;
+}
+
+.kit-turn-user .kit-turn-body {
+  border-color: transparent;
+  background: var(--kit-primary-soft);
+}

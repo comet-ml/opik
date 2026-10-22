@@ -37,7 +37,10 @@ import {
 } from "@/v2/pages-shared/feedback-score-conditions/constants";
 import { ScoreSource } from "@/v2/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 import { Switch } from "@/ui/switch";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, ChevronRight } from "lucide-react";
+import AnnotatorViewCard from "./AnnotatorView/AnnotatorViewCard";
+import AnnotatorViewPreviewPage from "./AnnotatorView/AnnotatorViewPreviewPage";
+import useAnnotatorViewEditor from "./AnnotatorView/useAnnotatorViewEditor";
 
 import {
   AnnotationQueueAutomation,
@@ -269,6 +272,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   } = usePermissions();
 
   const [isNestedDialogOpen, setIsNestedDialogOpen] = useState(false);
+  const [page, setPage] = useState<"form" | "preview">("form");
 
   const isAutomationEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED,
@@ -329,6 +333,21 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   // Automation matches on the scores of whatever the queue collects, so the score options and the copy
   // follow the scope: thread scores are a different set of names from trace scores.
   const isThreadScope = form.watch("scope") === ANNOTATION_QUEUE_SCOPE.THREAD;
+  const annotatorViewEditor = useAnnotatorViewEditor({
+    open,
+    view: defaultQueue?.annotator_view,
+    projectId: form.watch("project_id"),
+    queueId: defaultQueue?.id,
+    queueName: form.watch("name"),
+    instructions: form.watch("instructions") ?? "",
+    feedbackDefinitionNames: form.watch("feedback_definition_names"),
+    isThreadScope,
+  });
+  const { annotatorView } = annotatorViewEditor;
+  const startAnnotatorViewOllie = () => {
+    setPage("preview");
+    annotatorViewEditor.startOllie();
+  };
   const automationGroupsError = get(
     form.formState.errors,
     ["automation_groups", "message"],
@@ -363,8 +382,11 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
         maxItems: automation_max_items,
         groups: automation_groups,
       }),
+      ...(defaultQueue || annotatorView.html
+        ? { annotator_view: annotatorView }
+        : {}),
     };
-  }, [defaultQueue, form, isAutomationEnabled]);
+  }, [defaultQueue, form, isAutomationEnabled, annotatorView]);
 
   const onQueueCreatedEdited = useCallback(
     (queue: Partial<AnnotationQueue>) => {
@@ -411,6 +433,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     [isEdit, editQueue, createQueue],
   );
 
+  const handleSubmit = form.handleSubmit(onSubmit, () => setPage("form"));
+
   return (
     <Sheet
       open={
@@ -424,9 +448,32 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
         // A select or nested dialog opened from inside the form must not be treated as an outside
         // click, or configuring a field would close the whole form.
         // A form with edits closes only through X or Cancel, never by a stray click on the overlay.
-        blockOverlayClose={isNestedDialogOpen || form.formState.isDirty}
+        blockOverlayClose={
+          isNestedDialogOpen ||
+          form.formState.isDirty ||
+          annotatorViewEditor.isUnsaved
+        }
         header={
-          <SheetTopBar variant="form" title={title}>
+          <SheetTopBar
+            variant="form"
+            title={
+              page === "preview" ? (
+                <span className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    className="text-muted-slate hover:text-foreground"
+                    onClick={() => setPage("form")}
+                  >
+                    {title}
+                  </button>
+                  <ChevronRight className="size-3.5 text-light-slate" />
+                  Annotator view
+                </span>
+              ) : (
+                title
+              )
+            }
+          >
             <Button
               variant="outline"
               size="2xs"
@@ -441,12 +488,22 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
           </SheetTopBar>
         }
       >
-        <div className="min-h-0 flex-1 overflow-y-auto py-3 pl-[19px] pr-5">
+        {page === "preview" && (
+          <div className="min-h-0 flex-1 overflow-y-auto py-3 pl-[19px] pr-5">
+            <AnnotatorViewPreviewPage
+              editor={annotatorViewEditor}
+              onBack={() => setPage("form")}
+            />
+          </div>
+        )}
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto py-3 pl-[19px] pr-5",
+            page !== "form" && "hidden",
+          )}
+        >
           <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(onSubmit)}
-              className="flex flex-col gap-4"
-            >
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <FormField
                 control={form.control}
                 name="name"
@@ -755,6 +812,12 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                   </div>
                 </>
               )}
+              <AnnotatorViewCard
+                editor={annotatorViewEditor}
+                onPreview={() => setPage("preview")}
+                onStartOllie={startAnnotatorViewOllie}
+                isVisible={page === "form"}
+              />
             </form>
           </Form>
         </div>
@@ -780,7 +843,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
             size="sm"
             disabled={isSubmitting}
             className="min-w-[115px]"
-            onClick={form.handleSubmit(onSubmit)}
+            onClick={handleSubmit}
           >
             {submitText}
           </Button>
