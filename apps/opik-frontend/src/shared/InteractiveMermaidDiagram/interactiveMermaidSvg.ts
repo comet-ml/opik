@@ -62,6 +62,7 @@ export const indexMermaidNodes = (
     const node = toMermaidNode(element, diagramId);
     if (!node) return;
     element.setAttribute(NODE_INDEX_ATTRIBUTE, String(nodes.length));
+    element.setAttribute("data-testid", `mermaid-node-${node.id}`);
     nodes.push(node);
   });
 
