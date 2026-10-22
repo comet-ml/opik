@@ -1,11 +1,11 @@
 package com.comet.opik.domain.cost;
 
+import com.comet.opik.domain.token_usage.model.SpanUsage;
 import lombok.Builder;
 import lombok.NonNull;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -16,12 +16,13 @@ public record ModelPrice(
         @NonNull BigDecimal outputPrice,
         @NonNull BigDecimal cacheCreationInputTokenPrice,
         @NonNull BigDecimal cacheReadInputTokenPrice,
+        @NonNull BigDecimal cacheCreationInputTokenPriceAbove1hr,
         @NonNull BigDecimal videoOutputPrice,
         @NonNull BigDecimal audioInputCharacterPrice,
         @NonNull BigDecimal inputAudioTokenPrice,
         @NonNull BigDecimal outputAudioTokenPrice,
         @NonNull BigDecimal outputReasoningTokenPrice,
-        @NonNull BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator,
+        @NonNull BiFunction<ModelPrice, SpanUsage, BigDecimal> calculator,
         @NonNull List<PromptTier> promptTiers) {
 
     /**
@@ -64,6 +65,7 @@ public record ModelPrice(
                 .outputPrice(BigDecimal.ZERO)
                 .cacheCreationInputTokenPrice(BigDecimal.ZERO)
                 .cacheReadInputTokenPrice(BigDecimal.ZERO)
+                .cacheCreationInputTokenPriceAbove1hr(BigDecimal.ZERO)
                 .videoOutputPrice(BigDecimal.ZERO)
                 .audioInputCharacterPrice(BigDecimal.ZERO)
                 .inputAudioTokenPrice(BigDecimal.ZERO)

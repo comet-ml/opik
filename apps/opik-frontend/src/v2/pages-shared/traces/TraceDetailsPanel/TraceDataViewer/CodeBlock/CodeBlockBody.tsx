@@ -5,10 +5,10 @@ import { EditorState } from "@codemirror/state";
 import { LRLanguage } from "@codemirror/language";
 import { hyperLink } from "@uiw/codemirror-extensions-hyper-link";
 import ReactMarkdown from "react-markdown";
-import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { isNull } from "lodash";
+import { MARKDOWN_REHYPE_PLUGINS } from "@/lib/markdown";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useSearchPanelTheme } from "@/shared/SyntaxHighlighter/hooks/useSearchPanelTheme";
 import { useCodeMirrorSearch } from "@/shared/SyntaxHighlighter/hooks/useCodeMirrorSearch";
@@ -63,7 +63,7 @@ const MarkdownBody: React.FC<CodeBlockBodyProps> = ({ code, searchValue }) => {
         <ReactMarkdown
           className={cn("prose dark:prose-invert comet-markdown")}
           remarkPlugins={[remarkBreaks, remarkGfm, searchPlugin]}
-          rehypePlugins={[rehypeRaw]}
+          rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
         >
           {code.message}
         </ReactMarkdown>

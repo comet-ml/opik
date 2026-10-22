@@ -1,6 +1,8 @@
 package com.comet.opik.domain;
 
 import com.google.inject.ImplementedBy;
+import lombok.Builder;
+import lombok.NonNull;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -14,6 +16,15 @@ import java.util.UUID;
 @ImplementedBy(PlatformAgentInsightsReportClient.class)
 public interface AgentInsightsReportClient {
 
-    void triggerAgentInsights(String reportId, UUID projectId, String workspaceId,
-            Instant periodStart, Instant periodEnd, String triggerSource);
+    void triggerAgentInsights(Trigger trigger);
+
+    /**
+     * @param triggerSource "manual", "scheduled" or "auto_first_run", forwarded so Ollie can tag its BI events.
+     * @param guidance      the project guidance, or null when there is none or guidance is not active.
+     */
+    @Builder(toBuilder = true)
+    record Trigger(@NonNull String reportId, @NonNull UUID projectId, @NonNull String workspaceId,
+            @NonNull Instant periodStart, @NonNull Instant periodEnd, @NonNull String triggerSource,
+            String guidance) {
+    }
 }

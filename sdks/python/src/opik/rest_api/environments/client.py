@@ -29,7 +29,7 @@ class EnvironmentsClient:
 
     def find_environments(self, *, request_options: typing.Optional[RequestOptions] = None) -> EnvironmentPagePublic:
         """
-        Find environments for the workspace. Capped at the workspace limit (default 20).
+        Find environments for the workspace. Capped at the workspace limit (default 100).
 
         Parameters
         ----------
@@ -209,7 +209,7 @@ class AsyncEnvironmentsClient:
         self, *, request_options: typing.Optional[RequestOptions] = None
     ) -> EnvironmentPagePublic:
         """
-        Find environments for the workspace. Capped at the workspace limit (default 20).
+        Find environments for the workspace. Capped at the workspace limit (default 100).
 
         Parameters
         ----------

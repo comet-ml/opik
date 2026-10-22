@@ -1151,7 +1151,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * table is a {@code ReplicatedReplacingMergeTree} ordered by
      * {@code (workspace_id, dataset_id, dataset_version_id, id)} with {@code last_updated_at}
      * as the version column. The upsert flow (PUT {@code /datasets/items} →
-     * {@code BATCH_INSERT_ITEMS}) re-INSERTs the same {@code (ws, ds, dvid, id)} tuple when a
+     * {@link #insertItemsJsonEachRow}) re-INSERTs the same {@code (ws, ds, dvid, id)} tuple when a
      * client PUTs the same item ids twice with changed {@code data} / {@code description} /
      * {@code tags} / {@code evaluators} / {@code execution_policy} (the endpoint contract
      * says: "Each item's id is the stable identifier and upsert key"). Pre-merge duplicates
@@ -1979,6 +1979,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         WHERE workspace_id = :workspace_id
                         <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                         AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                        <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id <if(has_target_projects)>AND project_id IN :target_project_ids<endif> AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope))<endif>
                         GROUP BY workspace_id, project_id, trace_id
                     ) s ON t.id = s.trace_id
                     GROUP BY
@@ -2036,60 +2037,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             <if(!push_top_limit && !push_top_limit_raw)>OFFSET :offset<endif>
             SETTINGS log_comment = '<log_comment>', output_format_json_named_tuples_as_objects = 1
             ;
-            """;
-
-    // Batch insert items
-    private static final String BATCH_INSERT_ITEMS = """
-            INSERT INTO dataset_item_versions (
-                id,
-                dataset_item_id,
-                dataset_id,
-                dataset_version_id,
-                data,
-                description,
-                metadata,
-                source,
-                trace_id,
-                span_id,
-                tags,
-                evaluators,
-                execution_policy,
-                item_created_at,
-                item_last_updated_at,
-                item_created_by,
-                item_last_updated_by,
-                created_at,
-                last_updated_at,
-                created_by,
-                last_updated_by,
-                workspace_id
-            ) VALUES
-                <items:{item |
-                    (
-                        :id<item.index>,
-                        :dataset_item_id<item.index>,
-                        :dataset_id,
-                        :dataset_version_id,
-                        :data<item.index>,
-                        :description<item.index>,
-                        :metadata<item.index>,
-                        :source<item.index>,
-                        :trace_id<item.index>,
-                        :span_id<item.index>,
-                        :tags<item.index>,
-                        :evaluators<item.index>,
-                        :execution_policy<item.index>,
-                        :item_created_at<item.index>,
-                        :item_last_updated_at<item.index>,
-                        :item_created_by<item.index>,
-                        :item_last_updated_by<item.index>,
-                        now64(9),
-                        now64(9),
-                        :created_by,
-                        :last_updated_by,
-                        :workspace_id
-                    )<if(item.hasNext)>,<endif>
-                }>
             """;
 
     // Batch update items using INSERT ... SELECT with conditional field updates
@@ -2753,6 +2700,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     WHERE workspace_id = :workspace_id
                     <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                     AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                    <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id <if(has_target_projects)>AND project_id IN :target_project_ids<endif> AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope))<endif>
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON eif.trace_id = s.trace_id
             ), feedback_scores_raw_agg AS (
@@ -3184,6 +3132,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                             criteria.datasetId(), versionId,
                                             CollectionUtils.size(criteria.experimentIds()), page, size));
                             addTracesPartitionedFlag(template);
+                            addSpanWeeksBound(template);
 
                             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
                             template.add("truncationSize",
@@ -3342,6 +3291,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private void addTracesPartitionedFlag(ST template) {
         if (config.getDatabaseAnalyticsDataModel().traceColumnsNonNullable()) {
             template.add("traces_partitioned", true);
+        }
+    }
+
+    private void addSpanWeeksBound(ST template) {
+        if (config.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
         }
     }
 
@@ -3955,66 +3910,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .distinct()
                 .count();
 
-        if (config.getBulkInsert().v2ClientEnabled()) {
-            return insertItemsJsonEachRow(datasetId, newVersionId, items, workspaceId, userName)
-                    // itemCount, not the server's row count: the R2DBC path deliberately returns the
-                    // DISTINCT dataset_item_id count (OPIK-7891) because reads collapse a repeated
-                    // stable id via LIMIT 1 BY, so every version total derived from the raw row count
-                    // would be inflated. Both paths must answer the same number.
-                    .thenReturn(itemCount);
-        }
-
-        return asyncTemplate.nonTransaction(connection -> {
-            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
-
-            // Build batch insert query using template
-            List<TemplateUtils.QueryItem> queryItems = TemplateUtils.getQueryItemPlaceHolder(items.size());
-            var template = TemplateUtils.newST(BATCH_INSERT_ITEMS)
-                    .add("items", queryItems);
-
-            var statement = connection.createStatement(template.render())
-                    .bind("dataset_id", datasetId.toString())
-                    .bind("dataset_version_id", newVersionId.toString())
-                    .bind("created_by", userName)
-                    .bind("last_updated_by", userName)
-                    .bind("workspace_id", workspaceId);
-
-            // Bind all item-specific parameters
-            int i = 0;
-            for (DatasetItem item : items) {
-                UUID stableItemId = item.datasetItemId();
-                Map<String, String> dataAsStrings = DatasetItemResultMapper.getOrDefault(item.data());
-
-                statement
-                        .bind("id" + i, item.id().toString())
-                        .bind("dataset_item_id" + i, stableItemId.toString())
-                        .bind("data" + i, dataAsStrings)
-                        .bind("description" + i, item.description() != null ? item.description() : "")
-                        .bind("metadata" + i, "")
-                        .bind("source" + i, item.source() != null ? item.source().getValue() : "sdk")
-                        .bind("trace_id" + i, DatasetItemResultMapper.getOrDefault(item.traceId()))
-                        .bind("span_id" + i, DatasetItemResultMapper.getOrDefault(item.spanId()))
-                        .bind("tags" + i, item.tags() != null ? item.tags().toArray(new String[0]) : new String[0])
-                        .bind("evaluators" + i, serializeEvaluators(item.evaluators()))
-                        .bind("execution_policy" + i, serializeExecutionPolicy(item.executionPolicy()))
-                        .bind("item_created_at" + i, formatTimestamp(item.createdAt()))
-                        .bind("item_last_updated_at" + i, formatTimestamp(item.lastUpdatedAt()))
-                        .bind("item_created_by" + i, item.createdBy() != null ? item.createdBy() : userName)
-                        .bind("item_last_updated_by" + i,
-                                item.lastUpdatedBy() != null ? item.lastUpdatedBy() : userName);
-
-                i++;
-            }
-
-            return Flux.from(statement.execute())
-                    .flatMap(Result::getRowsUpdated)
-                    .reduce(0L, Long::sum)
-                    .map(results -> itemCount) // Return item count instead of sum of results
-                    .doOnSuccess(count -> log.debug("Inserted '{}' items in batch", count))
-                    .doOnError(e -> log.error("Batch insert items failed for dataset '{}', version '{}'",
-                            datasetId, newVersionId, e))
-                    .doFinally(signalType -> endSegment(segment));
-        });
+        return insertItemsJsonEachRow(datasetId, newVersionId, items, workspaceId, userName)
+                // itemCount, not the server's row count: reads collapse a repeated stable id via
+                // LIMIT 1 BY (OPIK-7891), so a version total derived from the raw row count would be
+                // inflated. The DISTINCT dataset_item_id count is the number callers expect.
+                .thenReturn(itemCount);
     }
 
     @Override
@@ -4228,9 +4128,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     /**
-     * Same rows as {@link #BATCH_INSERT_ITEMS}, streamed as JSONEachRow instead of bound as 17 named
+     * Dataset item version rows streamed as JSONEachRow. Replaced an R2DBC insert that bound 17 named
      * parameters per row plus 5 shared ones. See {@link DatasetItemVersionJsonRowMapper} for the
-     * per-column parity notes.
+     * per-column notes.
      *
      * <p>The R2DBC template carries no {@code log_comment}; one is supplied here because the helper
      * requires it, which also makes the two paths comparable in {@code system.query_log}.
@@ -4578,6 +4478,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 "dataset_id=%s, version_id=%s, experiment_ids=%s, filters=%s".formatted(datasetId,
                                         versionId, experimentIds.size(), CollectionUtils.size(filters)));
                         addTracesPartitionedFlag(template);
+                        addSpanWeeksBound(template);
 
                         if (CollectionUtils.isNotEmpty(experimentIds)) {
                             template.add("experiment_ids", true);

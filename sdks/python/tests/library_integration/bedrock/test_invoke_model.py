@@ -4,6 +4,7 @@ import pytest
 
 import opik
 from opik.integrations.bedrock import track_bedrock
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -15,13 +16,6 @@ from ...testlib import (
 from .constants import (
     EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT,
 )
-
-# Test models for each subprovider (using inference profiles for accessibility)
-ANTHROPIC_MODEL = "us.anthropic.claude-sonnet-4-20250514-v1:0"  # Claude format (latest)
-AMAZON_MODEL = "us.amazon.nova-pro-v1:0"  # Nova format
-META_MODEL = "us.meta.llama3-1-8b-instruct-v1:0"  # Llama format
-MISTRAL_MODEL = "us.mistral.pixtral-large-2502-v1:0"  # Mistral format
-OPENAI_MODEL = "openai.gpt-oss-20b-1:0"  # OpenAI chat completion format
 
 pytestmark = pytest.mark.usefixtures("ensure_aws_bedrock_configured")
 
@@ -49,7 +43,7 @@ def test_bedrock_invoke_model__anthropic___happyflow(
     }
 
     response = tracked_client.invoke_model(
-        modelId=ANTHROPIC_MODEL,
+        modelId=llm_constants.BEDROCK_CLAUDE_SONNET,
         body=json.dumps(request_body),
         contentType="application/json",
         accept="application/json",
@@ -60,7 +54,7 @@ def test_bedrock_invoke_model__anthropic___happyflow(
     expected_trace = TraceModel(
         id=ANY_BUT_NONE,
         name="bedrock_invoke_model",
-        input={"body": request_body, "modelId": ANTHROPIC_MODEL},
+        input={"body": request_body, "modelId": llm_constants.BEDROCK_CLAUDE_SONNET},
         output={"body": response_body},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -73,14 +67,17 @@ def test_bedrock_invoke_model__anthropic___happyflow(
                 id=ANY_BUT_NONE,
                 name="bedrock_invoke_model",
                 type="llm",
-                input={"body": request_body, "modelId": ANTHROPIC_MODEL},
+                input={
+                    "body": request_body,
+                    "modelId": llm_constants.BEDROCK_CLAUDE_SONNET,
+                },
                 output={"body": response_body},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 tags=["bedrock", "invoke_model"],
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
-                model=ANTHROPIC_MODEL,
+                model=llm_constants.BEDROCK_CLAUDE_SONNET,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
@@ -185,7 +182,7 @@ def test_bedrock_invoke_model__anthropic___invoke_model_call_made_in_another_tra
         }
 
         response = tracked_client.invoke_model(
-            modelId=ANTHROPIC_MODEL,
+            modelId=llm_constants.BEDROCK_CLAUDE_SONNET,
             body=json.dumps(request_body),
             contentType="application/json",
             accept="application/json",
@@ -227,7 +224,7 @@ def test_bedrock_invoke_model__anthropic___invoke_model_call_made_in_another_tra
                                     {"role": "user", "content": "What is 2+2?"}
                                 ],
                             },
-                            "modelId": ANTHROPIC_MODEL,
+                            "modelId": llm_constants.BEDROCK_CLAUDE_SONNET,
                         },
                         output={"body": ANY_DICT},
                         start_time=ANY_BUT_NONE,
@@ -235,7 +232,7 @@ def test_bedrock_invoke_model__anthropic___invoke_model_call_made_in_another_tra
                         tags=["bedrock", "invoke_model"],
                         metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                         last_updated_at=ANY_BUT_NONE,
-                        model=ANTHROPIC_MODEL,
+                        model=llm_constants.BEDROCK_CLAUDE_SONNET,
                         usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                         provider="bedrock",
                         spans=[],
@@ -268,7 +265,7 @@ def test_bedrock_invoke_model__anthropic___streaming__happyflow(fake_backend):
     }
 
     response = tracked_client.invoke_model_with_response_stream(
-        modelId=ANTHROPIC_MODEL,
+        modelId=llm_constants.BEDROCK_CLAUDE_SONNET,
         body=json.dumps(request_body),
         contentType="application/json",
         accept="application/json",
@@ -283,7 +280,7 @@ def test_bedrock_invoke_model__anthropic___streaming__happyflow(fake_backend):
     expected_trace = TraceModel(
         id=ANY_BUT_NONE,
         name="bedrock_invoke_model_stream",
-        input={"body": request_body, "modelId": ANTHROPIC_MODEL},
+        input={"body": request_body, "modelId": llm_constants.BEDROCK_CLAUDE_SONNET},
         output={"body": ANY_DICT},  # Contains native Claude format
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -295,14 +292,17 @@ def test_bedrock_invoke_model__anthropic___streaming__happyflow(fake_backend):
                 id=ANY_BUT_NONE,
                 name="bedrock_invoke_model_stream",
                 type="llm",
-                input={"body": request_body, "modelId": ANTHROPIC_MODEL},
+                input={
+                    "body": request_body,
+                    "modelId": llm_constants.BEDROCK_CLAUDE_SONNET,
+                },
                 output={"body": ANY_DICT},  # Contains native Claude format
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 tags=["bedrock", "invoke_model"],
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
-                model=ANTHROPIC_MODEL,
+                model=llm_constants.BEDROCK_CLAUDE_SONNET,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
@@ -326,7 +326,7 @@ def test_bedrock_invoke_model__amazon_nova___non_streaming__happyflow(fake_backe
     }
 
     response = tracked_client.invoke_model(
-        modelId=AMAZON_MODEL,
+        modelId=llm_constants.BEDROCK_AMAZON_NOVA,
         body=json.dumps(request_body),
         contentType="application/json",
         accept="application/json",
@@ -337,7 +337,7 @@ def test_bedrock_invoke_model__amazon_nova___non_streaming__happyflow(fake_backe
     expected_trace = TraceModel(
         id=ANY_BUT_NONE,
         name="bedrock_invoke_model",
-        input={"body": request_body, "modelId": AMAZON_MODEL},
+        input={"body": request_body, "modelId": llm_constants.BEDROCK_AMAZON_NOVA},
         output={"body": response_body},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -349,14 +349,17 @@ def test_bedrock_invoke_model__amazon_nova___non_streaming__happyflow(fake_backe
                 id=ANY_BUT_NONE,
                 name="bedrock_invoke_model",
                 type="llm",
-                input={"body": request_body, "modelId": AMAZON_MODEL},
+                input={
+                    "body": request_body,
+                    "modelId": llm_constants.BEDROCK_AMAZON_NOVA,
+                },
                 output={"body": response_body},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 tags=["bedrock", "invoke_model"],
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
-                model=AMAZON_MODEL,
+                model=llm_constants.BEDROCK_AMAZON_NOVA,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
@@ -380,7 +383,7 @@ def test_bedrock_invoke_model__amazon_nova___streaming__happyflow(fake_backend):
     }
 
     response = tracked_client.invoke_model_with_response_stream(
-        modelId=AMAZON_MODEL,
+        modelId=llm_constants.BEDROCK_AMAZON_NOVA,
         body=json.dumps(request_body),
         contentType="application/json",
         accept="application/json",
@@ -395,7 +398,7 @@ def test_bedrock_invoke_model__amazon_nova___streaming__happyflow(fake_backend):
     expected_trace = TraceModel(
         id=ANY_BUT_NONE,
         name="bedrock_invoke_model_stream",
-        input={"body": request_body, "modelId": AMAZON_MODEL},
+        input={"body": request_body, "modelId": llm_constants.BEDROCK_AMAZON_NOVA},
         output={"body": ANY_DICT},  # Contains native Nova format
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -407,14 +410,17 @@ def test_bedrock_invoke_model__amazon_nova___streaming__happyflow(fake_backend):
                 id=ANY_BUT_NONE,
                 name="bedrock_invoke_model_stream",
                 type="llm",
-                input={"body": request_body, "modelId": AMAZON_MODEL},
+                input={
+                    "body": request_body,
+                    "modelId": llm_constants.BEDROCK_AMAZON_NOVA,
+                },
                 output={"body": ANY_DICT},  # Contains native Nova format
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 tags=["bedrock", "invoke_model"],
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
-                model=AMAZON_MODEL,
+                model=llm_constants.BEDROCK_AMAZON_NOVA,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
@@ -438,7 +444,7 @@ def test_bedrock_invoke_model__meta_llama___non_streaming__happyflow(fake_backen
     }
 
     response = tracked_client.invoke_model(
-        modelId=META_MODEL,
+        modelId=llm_constants.BEDROCK_META_LLAMA,
         body=json.dumps(request_body),
         contentType="application/json",
         accept="application/json",
@@ -449,7 +455,7 @@ def test_bedrock_invoke_model__meta_llama___non_streaming__happyflow(fake_backen
     expected_trace = TraceModel(
         id=ANY_BUT_NONE,
         name="bedrock_invoke_model",
-        input={"body": request_body, "modelId": META_MODEL},
+        input={"body": request_body, "modelId": llm_constants.BEDROCK_META_LLAMA},
         output={"body": response_body},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -461,14 +467,17 @@ def test_bedrock_invoke_model__meta_llama___non_streaming__happyflow(fake_backen
                 id=ANY_BUT_NONE,
                 name="bedrock_invoke_model",
                 type="llm",
-                input={"body": request_body, "modelId": META_MODEL},
+                input={
+                    "body": request_body,
+                    "modelId": llm_constants.BEDROCK_META_LLAMA,
+                },
                 output={"body": response_body},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 tags=["bedrock", "invoke_model"],
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
-                model=META_MODEL,
+                model=llm_constants.BEDROCK_META_LLAMA,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
@@ -492,7 +501,7 @@ def test_bedrock_invoke_model__meta_llama___streaming__happyflow(fake_backend):
     }
 
     response = tracked_client.invoke_model_with_response_stream(
-        modelId=META_MODEL,
+        modelId=llm_constants.BEDROCK_META_LLAMA,
         body=json.dumps(request_body),
         contentType="application/json",
         accept="application/json",
@@ -507,7 +516,7 @@ def test_bedrock_invoke_model__meta_llama___streaming__happyflow(fake_backend):
     expected_trace = TraceModel(
         id=ANY_BUT_NONE,
         name="bedrock_invoke_model_stream",
-        input={"body": request_body, "modelId": META_MODEL},
+        input={"body": request_body, "modelId": llm_constants.BEDROCK_META_LLAMA},
         output={"body": ANY_DICT},  # Contains native Llama format
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -519,14 +528,17 @@ def test_bedrock_invoke_model__meta_llama___streaming__happyflow(fake_backend):
                 id=ANY_BUT_NONE,
                 name="bedrock_invoke_model_stream",
                 type="llm",
-                input={"body": request_body, "modelId": META_MODEL},
+                input={
+                    "body": request_body,
+                    "modelId": llm_constants.BEDROCK_META_LLAMA,
+                },
                 output={"body": ANY_DICT},  # Contains native Llama format
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 tags=["bedrock", "invoke_model"],
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
-                model=META_MODEL,
+                model=llm_constants.BEDROCK_META_LLAMA,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
@@ -550,7 +562,7 @@ def test_bedrock_invoke_model__mistral___non_streaming__happyflow(fake_backend):
     }
 
     response = tracked_client.invoke_model(
-        modelId=MISTRAL_MODEL,
+        modelId=llm_constants.BEDROCK_MISTRAL_PIXTRAL,
         body=json.dumps(request_body),
         contentType="application/json",
         accept="application/json",
@@ -561,7 +573,7 @@ def test_bedrock_invoke_model__mistral___non_streaming__happyflow(fake_backend):
     expected_trace = TraceModel(
         id=ANY_BUT_NONE,
         name="bedrock_invoke_model",
-        input={"body": request_body, "modelId": MISTRAL_MODEL},
+        input={"body": request_body, "modelId": llm_constants.BEDROCK_MISTRAL_PIXTRAL},
         output={"body": response_body},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -573,14 +585,17 @@ def test_bedrock_invoke_model__mistral___non_streaming__happyflow(fake_backend):
                 id=ANY_BUT_NONE,
                 name="bedrock_invoke_model",
                 type="llm",
-                input={"body": request_body, "modelId": MISTRAL_MODEL},
+                input={
+                    "body": request_body,
+                    "modelId": llm_constants.BEDROCK_MISTRAL_PIXTRAL,
+                },
                 output={"body": response_body},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 tags=["bedrock", "invoke_model"],
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
-                model=MISTRAL_MODEL,
+                model=llm_constants.BEDROCK_MISTRAL_PIXTRAL,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
@@ -604,7 +619,7 @@ def test_bedrock_invoke_model__mistral___streaming__happyflow(fake_backend):
     }
 
     response = tracked_client.invoke_model_with_response_stream(
-        modelId=MISTRAL_MODEL,
+        modelId=llm_constants.BEDROCK_MISTRAL_PIXTRAL,
         body=json.dumps(request_body),
         contentType="application/json",
         accept="application/json",
@@ -619,7 +634,7 @@ def test_bedrock_invoke_model__mistral___streaming__happyflow(fake_backend):
     expected_trace = TraceModel(
         id=ANY_BUT_NONE,
         name="bedrock_invoke_model_stream",
-        input={"body": request_body, "modelId": MISTRAL_MODEL},
+        input={"body": request_body, "modelId": llm_constants.BEDROCK_MISTRAL_PIXTRAL},
         output={"body": ANY_DICT},  # Contains native Mistral format
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -631,14 +646,17 @@ def test_bedrock_invoke_model__mistral___streaming__happyflow(fake_backend):
                 id=ANY_BUT_NONE,
                 name="bedrock_invoke_model_stream",
                 type="llm",
-                input={"body": request_body, "modelId": MISTRAL_MODEL},
+                input={
+                    "body": request_body,
+                    "modelId": llm_constants.BEDROCK_MISTRAL_PIXTRAL,
+                },
                 output={"body": ANY_DICT},  # Contains native Mistral format
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 tags=["bedrock", "invoke_model"],
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
-                model=MISTRAL_MODEL,
+                model=llm_constants.BEDROCK_MISTRAL_PIXTRAL,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
@@ -662,7 +680,7 @@ def test_bedrock_invoke_model__openai___streaming__happyflow(fake_backend):
     }
 
     response = tracked_client.invoke_model_with_response_stream(
-        modelId=OPENAI_MODEL,
+        modelId=llm_constants.BEDROCK_OPENAI_GPT_OSS,
         body=json.dumps(request_body),
         contentType="application/json",
         accept="application/json",
@@ -693,7 +711,7 @@ def test_bedrock_invoke_model__openai___streaming__happyflow(fake_backend):
     expected_trace = TraceModel(
         id=ANY_BUT_NONE,
         name="bedrock_invoke_model_stream",
-        input={"body": request_body, "modelId": OPENAI_MODEL},
+        input={"body": request_body, "modelId": llm_constants.BEDROCK_OPENAI_GPT_OSS},
         output=expected_output,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -705,14 +723,17 @@ def test_bedrock_invoke_model__openai___streaming__happyflow(fake_backend):
                 id=ANY_BUT_NONE,
                 name="bedrock_invoke_model_stream",
                 type="llm",
-                input={"body": request_body, "modelId": OPENAI_MODEL},
+                input={
+                    "body": request_body,
+                    "modelId": llm_constants.BEDROCK_OPENAI_GPT_OSS,
+                },
                 output=expected_output,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 tags=["bedrock", "invoke_model"],
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
-                model=OPENAI_MODEL,
+                model=llm_constants.BEDROCK_OPENAI_GPT_OSS,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
@@ -752,7 +773,7 @@ def test_bedrock_invoke_model__untracked_client_read_after_tracked_call__payload
         boto3.client("bedrock-runtime", region_name="us-east-1")
     )
     tracked_response = tracked_client.invoke_model(
-        modelId=ANTHROPIC_MODEL,
+        modelId=llm_constants.BEDROCK_CLAUDE_SONNET,
         body=json.dumps(request_body),
         contentType="application/json",
         accept="application/json",
@@ -761,7 +782,7 @@ def test_bedrock_invoke_model__untracked_client_read_after_tracked_call__payload
 
     untracked_client = boto3.client("bedrock-runtime", region_name="us-east-1")
     untracked_response = untracked_client.invoke_model(
-        modelId=ANTHROPIC_MODEL,
+        modelId=llm_constants.BEDROCK_CLAUDE_SONNET,
         body=json.dumps(request_body),
         contentType="application/json",
         accept="application/json",

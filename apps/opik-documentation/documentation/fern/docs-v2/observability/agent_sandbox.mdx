@@ -11,9 +11,9 @@ The Agent Playground lets you run agents on your local machine while connected t
 execution is fully traced — you get LLM calls, latencies, token usage, and the complete execution
 graph, all visible in the Opik UI.
 
-Beyond running your agent, the playground lets you tweak prompts and parameters from the
+Beyond running your agent, the playground lets you edit the prompts your agent loads from the
 [Prompt Library](/development/prompt-library/overview) without changing your code. Once
-you're happy with the results, save the new configuration and your agent picks it up automatically.
+you're happy with the results, save the edit as a new prompt version for your agent to use.
 
 <video
   src="/img/v2/observability/agent-sandbox-demo.mp4"
@@ -31,20 +31,64 @@ you're happy with the results, save the new configuration and your agent picks i
 <Steps>
   <Step title="Mark your agent as an entrypoint">
     Mark your agent's main function as an entrypoint. Opik automatically detects the function
-    signature and registers it as a runnable agent.
+    signature and registers it as a runnable agent. Load your prompts from the Prompt Library
+    inside the entrypoint, so that you can edit them from the playground.
 
     <CodeBlocks>
-      ```python title="Python"
+      ```python title="Python" wordWrap
+      import threading
+
       import opik
+
+      client = opik.Opik()
+
+      # Create the prompt in the Prompt Library if it does not exist yet
+      if client.get_chat_prompt("my-agent-prompt", project_name="my-agent") is None:
+          client.create_chat_prompt(
+              name="my-agent-prompt",
+              messages=[
+                  {"role": "system", "content": "You are a helpful assistant."},
+                  {"role": "user", "content": "{{query}}"},
+              ],
+              project_name="my-agent",
+          )
 
       @opik.track(entrypoint=True, project_name="my-agent")
       def my_agent(query: str, max_results: int = 5) -> str:
+          prompt = client.get_chat_prompt("my-agent-prompt", project_name="my-agent")
+          messages = prompt.format(variables={"query": query})
           # Your agent logic here
           return result
+
+      if __name__ == "__main__":
+          # Keep the process alive so the runner can pick up jobs
+          threading.Event().wait()
       ```
 
-      ```ts title="TypeScript"
-      import { track } from "opik";
+      ```ts title="TypeScript" wordWrap
+      import { Opik, track } from "opik";
+
+      const client = new Opik();
+
+      async function createPromptIfMissing() {
+        const existing = await client.getChatPrompt({
+          name: "my-agent-prompt",
+          projectName: "my-agent",
+        });
+        if (!existing) {
+          await client.createChatPrompt({
+            name: "my-agent-prompt",
+            messages: [
+              { role: "system", content: "You are a helpful assistant." },
+              { role: "user", content: "{{query}}" },
+            ],
+            projectName: "my-agent",
+          });
+        }
+      }
+
+      // Create the prompt in the Prompt Library if it does not exist yet
+      const promptReady = createPromptIfMissing();
 
       const myAgent = track(
         {
@@ -56,6 +100,12 @@ you're happy with the results, save the new configuration and your agent picks i
           ],
         },
         async (query: string, maxResults: number = 5): Promise<string> => {
+          await promptReady;
+          const prompt = await client.getChatPrompt({
+            name: "my-agent-prompt",
+            projectName: "my-agent",
+          });
+          const messages = prompt!.format({ query });
           // Your agent logic here
           return result;
         }
@@ -65,11 +115,24 @@ you're happy with the results, save the new configuration and your agent picks i
 
     Parameter types are displayed as input fields in the UI. In Python they are inferred from
     type hints; in TypeScript, provide them explicitly via the `params` option.
+
+    The example creates the prompt only when it is not in the Prompt Library. If you restart
+    your agent, the code does not replace the prompt versions that you saved from the playground.
+
+    The process must keep running so the runner can pick up jobs. If your agent is not already
+    served by a web framework (for example FastAPI, Flask, Express, or Fastify), block the main
+    thread as shown in the Python example.
   </Step>
   <Step title="Start the playground">
-    ```bash
-    opik endpoint --project my-agent -- python3 my_agent.py
-    ```
+    <CodeBlocks>
+      ```bash title="Python" wordWrap
+      opik endpoint --project my-agent -- python3 my_agent.py
+      ```
+
+      ```bash title="TypeScript" wordWrap
+      opik endpoint --project my-agent -- npx tsx my_agent.ts
+      ```
+    </CodeBlocks>
 
     The CLI validates that an entrypoint exists, opens a browser-based pairing flow, registers
     your agents, and begins polling for jobs.
@@ -80,30 +143,40 @@ you're happy with the results, save the new configuration and your agent picks i
     </Tip>
   </Step>
   <Step title="Talk to your agent">
-    Once connected, the UI shows your runner and its registered agents. Select an agent, fill in
-    the input parameters, and click **Run**. The agent executes locally on your machine, and the
-    results — along with the full trace — appear in the UI.
+    Once connected, the Agent Playground page shows a **Connected** badge and an input field for
+    each of your agent's parameters in the **Test input** panel. Fill in the inputs and click
+    **Run** (or press **Shift+Enter**). The agent executes locally on your machine, and its
+    output appears in the **Result** panel. Click **View trace** to open the full trace of the run.
   </Step>
-  <Step title="Iterate on prompts and parameters">
-    Switch to the **Configuration** tab in the Agent Playground page to adjust prompts, model
-    parameters, or tool definitions — without leaving the playground and without changing your code.
+  <Step title="Iterate on prompts">
+    The **Prompts** panel, next to **Test input**, shows each prompt in your project's Prompt
+    Library. Edit a prompt's messages, or pick a different version from the version selector
+    next to the prompt name. You don't need to leave the playground or change your code.
 
-    Your changes aren't saved yet. Run your agent again and the playground uses the unsaved
-    configuration, so you can see the impact immediately. Try different prompts, compare results
-    across runs, and only save the configuration once you're satisfied. Your agent picks up the
-    new settings automatically.
+    Edits are not saved right away: the prompt shows **Unsaved changes**. Click **Run** again and
+    your agent uses the edited prompt for that run, so you can see the impact immediately. Try
+    different wordings and compare results across runs. When you're satisfied, click the save
+    icon next to **Unsaved changes** to save the edit as a new prompt version. Later runs in the
+    playground use the saved version.
+
+    <Note>
+      The SDK caches prompts. If your agent runs in another process, it can take up to the cache
+      lifetime for that process to load the new version. The cache lifetime is 300 seconds by
+      default. Set `OPIK_PROMPT_CACHE_TTL_SECONDS` to change it.
+    </Note>
   </Step>
 </Steps>
 
 ## What happens in the playground
 
 <Frame>
-  <img src="/img/v2/observability/agent-sandbox.png" alt="Agent Playground UI showing a connected runner with input fields and execution results" />
+  <img src="/img/v2/observability/agent-sandbox.png" alt="Agent Playground with the Test input, Prompts, and Result panels after a run that used an unsaved prompt edit" />
 </Frame>
 
 Every run in the playground produces a full trace — every LLM call, tool invocation, and sub-step is
-captured as spans with inputs, outputs, latencies, and token costs. Logs from your running agent
-stream to the UI in real time, so you can watch execution as it happens.
+captured as spans with inputs, outputs, latencies, and token costs. While a run is in progress,
+click **View trajectory live** in the **Result** panel to watch the trace build up. Output that
+your agent prints goes to the terminal where `opik endpoint` runs.
 
 The playground monitors your runner with a heartbeat and updates its status automatically if it
 disconnects. When `--watch` is enabled, file changes are detected and your agents are

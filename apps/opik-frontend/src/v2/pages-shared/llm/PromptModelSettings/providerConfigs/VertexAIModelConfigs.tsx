@@ -9,6 +9,10 @@ import {
 import { DEFAULT_VERTEX_AI_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import {
+  NO_OUTPUT_LIMIT_TOOLTIP,
+  getNoOutputLimitHint,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/noOutputLimit";
+import {
   createSupports,
   getVertexAIVisibleControls,
   isAnyControlVisible,
@@ -17,9 +21,10 @@ import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import {
-  getDefaultThinkingLevel,
+  getThinkingLevelDescription,
   getThinkingLevelOptions,
   resolveSamplingParams,
+  resolveThinkingLevel,
 } from "@/lib/modelUtils";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 
@@ -37,7 +42,6 @@ const VertexAIModelConfigs = ({
   unsupportedParams,
 }: VertexAIModelConfigsProps) => {
   const thinkingLevelOptions = getThinkingLevelOptions(model);
-  const defaultThinkingLevel = getDefaultThinkingLevel(model);
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const visible = getVertexAIVisibleControls({
     model,
@@ -73,10 +77,14 @@ const VertexAIModelConfigs = ({
           min={0}
           max={65535}
           step={1}
+          integer
+          hint={getNoOutputLimitHint(configs.maxCompletionTokens)}
           defaultValue={DEFAULT_VERTEX_AI_CONFIGS.MAX_COMPLETION_TOKENS}
           label="Max output tokens"
           tooltip={
-            <PromptModelConfigsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
+            <PromptModelConfigsTooltipContent
+              text={`The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On thinking models, thinking tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. ${NO_OUTPUT_LIMIT_TOOLTIP} (One token is roughly 4 characters for standard English text).`}
+            />
           }
         />
       )}
@@ -103,11 +111,13 @@ const VertexAIModelConfigs = ({
             <Label htmlFor="thinkingLevel" className="text-sm font-medium">
               Thinking level
             </Label>
-            <ExplainerIcon description="Controls the depth of reasoning the model performs before responding. Higher thinking level may result in more thorough but slower responses." />
+            <ExplainerIcon
+              description={getThinkingLevelDescription(model ?? "")}
+            />
           </div>
           <SelectBox
             id="thinkingLevel"
-            value={configs.thinkingLevel || defaultThinkingLevel}
+            value={resolveThinkingLevel(model ?? "", configs)}
             onChange={(value: GeminiThinkingLevel) =>
               onChange({ thinkingLevel: value })
             }

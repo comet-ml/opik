@@ -6071,6 +6071,43 @@ class ExperimentsResourceTest {
             }
         }
 
+        // The workspace checks query the database and the id checks do not, so only an item failing
+        // both says which runs first. Without it the ordering is free to invert unnoticed: an id
+        // check reporting first reads as a malformed request rather than one aimed elsewhere.
+        @Test
+        void insertInvalidExperimentWorkspaceAndInvalidId() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            UUID experimentId = createAndAssert(generateExperiment(), API_KEY, TEST_WORKSPACE);
+
+            var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .id(UUID.randomUUID())
+                    .build();
+
+            var request = podamFactory.manufacturePojo(ExperimentItemsBatch.class).toBuilder()
+                    .experimentItems(Set.of(experimentItem))
+                    .build();
+
+            var expectedError = new ErrorMessage(HttpStatus.SC_CONFLICT,
+                    "Upserting experiment item with 'experiment_id' not belonging to the workspace");
+
+            try (var actualResponse = client.target(getExperimentItemsPath())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(request))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
         private UUID createDatasetItem(String workspaceName, String apiKey) {
             var item = DatasetResourceClient.buildDatasetItem(podamFactory);
 

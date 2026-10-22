@@ -56,23 +56,27 @@ public class ChatCompletionService {
 
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final LlmProviderFactory llmProviderFactory;
+    private final ParamResolver paramResolver;
     private final RetryUtils.RetryPolicy retryPolicy;
 
     @Inject
     public ChatCompletionService(
             @NonNull @Config LlmProviderClientConfig llmProviderClientConfig,
-            @NonNull LlmProviderFactory llmProviderFactory) {
+            @NonNull LlmProviderFactory llmProviderFactory,
+            @NonNull ParamResolver paramResolver) {
         this.llmProviderClientConfig = llmProviderClientConfig;
         this.llmProviderFactory = llmProviderFactory;
+        this.paramResolver = paramResolver;
         this.retryPolicy = newRetryPolicy();
     }
 
     public ChatCompletionResponse create(@NonNull ChatCompletionRequest rawRequest, @NonNull String workspaceId) {
-        // must be final or effectively final for lambda
-        var request = SamplingParamsNormalizer.normalizeRequest(MessageContentNormalizer.normalizeRequest(rawRequest));
-        rejectDecisionModel(request.model());
+        var normalized = MessageContentNormalizer.normalizeRequest(rawRequest);
+        rejectDecisionModel(normalized.model());
 
-        var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
+        var llmProviderClient = llmProviderFactory.getService(workspaceId, normalized.model());
+        // must be final or effectively final for lambda
+        var request = resolve(normalized, llmProviderClient);
         llmProviderClient.validateRequest(request);
 
         ChatCompletionResponse chatCompletionResponse;
@@ -102,12 +106,14 @@ public class ChatCompletionService {
             @NonNull ChatCompletionRequest rawRequest,
             @NonNull String workspaceId,
             @NonNull ChunkedOutputHandlers handlers) {
-        var request = SamplingParamsNormalizer.normalizeRequest(MessageContentNormalizer.normalizeRequest(rawRequest));
-        rejectDecisionModel(request.model());
+        var normalized = MessageContentNormalizer.normalizeRequest(rawRequest);
+        rejectDecisionModel(normalized.model());
 
-        log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
+        log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId,
+                normalized.model());
 
-        var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
+        var llmProviderClient = llmProviderFactory.getService(workspaceId, normalized.model());
+        var request = resolve(normalized, llmProviderClient);
         var errorHandler = getErrorHandler(handlers, llmProviderClient);
 
         try {
@@ -137,7 +143,9 @@ public class ChatCompletionService {
     public ChatResponse scoreTrace(@NonNull ChatRequest chatRequest,
             @NonNull LlmAsJudgeModelParameters modelParameters,
             @NonNull String workspaceId) {
-        var languageModelClient = llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
+        var resolved = paramResolver.resolve(modelParameters);
+        logChanges(resolved.request().name(), resolved.changes());
+        var languageModelClient = llmProviderFactory.getLanguageModel(workspaceId, resolved.request());
 
         ChatResponse chatResponse;
         try {
@@ -249,6 +257,19 @@ public class ChatCompletionService {
                 throw new NonRetriableException(runtimeException);
             }
             throw runtimeException;
+        }
+    }
+
+    // After the key lookup, because the key decides the route, and a route can refuse what the model takes.
+    private ChatCompletionRequest resolve(ChatCompletionRequest request, LlmProviderService llmProviderClient) {
+        var resolved = paramResolver.resolve(request, llmProviderClient.paramsRoute());
+        logChanges(resolved.request().model(), resolved.changes());
+        return resolved.request();
+    }
+
+    private void logChanges(String model, List<ParamResolver.ParamChange> changes) {
+        if (!changes.isEmpty()) {
+            log.debug("Request to model '{}' changed: {}", model, changes);
         }
     }
 

@@ -200,7 +200,7 @@ Framework execution → Fires events → Callback methods
 **Files**:
 - `opik_tracer.py` - Implements `BaseTracer`
 - `langgraph_tracer_injector.py` - Graph configuration injection for LangGraph
-- `langgraph_async_context_bridge.py` - Context propagation for async LangGraph nodes
+- `langgraph_async_context_bridge.py` - Explicit trace context propagation for LangGraph nodes via distributed headers (optional)
 - `provider_usage_extractors/` - Provider-specific usage extraction
 - `helpers.py` - Utility functions
 - `base_llm_patcher.py` - Adds `base_url` to LLM dict (for provider ID)
@@ -272,7 +272,7 @@ The integration provides enhanced support for LangGraph through:
 
 2. **Automatic Graph Visualization**: Extracts and stores Mermaid graph structure in trace metadata via `OpikTracer.set_graph()` method.
 
-3. **Async Context Bridge**: `extract_current_langgraph_span_data()` helper for propagating trace context to `@track`-decorated functions in async LangGraph nodes.
+3. **Explicit Context Propagation**: `extract_current_langgraph_span_data()` helper for propagating trace context to `@track`-decorated functions via distributed headers. Not required since `OpikTracer` sets `run_inline = True`, which keeps the tracer's context in async LangGraph nodes; kept for compatibility.
 
 **Usage Pattern**:
 ```python
@@ -296,7 +296,7 @@ result = app.invoke({"message": "Hello"})
 
 **Implementation Details**:
 - `langgraph_tracer_injector.py` - Injects `OpikTracer` into graph's default config
-- `langgraph_async_context_bridge.py` - Extracts span data from LangGraph config for async context propagation
+- `langgraph_async_context_bridge.py` - Extracts the current span data from a LangGraph node config for explicit propagation; not required since `OpikTracer` sets `run_inline = True`
 - `OpikTracer.set_graph()` - Stores graph visualization in `_trace_default_metadata["_opik_graph_definition"]`
 
 ### LlamaIndex Integration

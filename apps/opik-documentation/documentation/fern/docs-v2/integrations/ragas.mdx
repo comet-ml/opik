@@ -32,7 +32,7 @@ There are two main ways to use Ragas with Opik:
 
 You will first need to install the `opik` and `ragas` packages:
 
-```bash
+```bash wordWrap
 pip install opik ragas
 ```
 
@@ -51,13 +51,13 @@ In order to use Ragas, you will need to configure your LLM provider API keys. Fo
 
 You can set them as environment variables:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
 Or set them programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -71,7 +71,7 @@ Ragas provides a set of metrics that can be used to evaluate the quality of a RA
 
 You can use the `RagasMetricWrapper` to easily integrate Ragas metrics with Opik tracking:
 
-```python
+```python wordWrap
 # Import the required dependencies
 from ragas.metrics import AnswerRelevancy
 from langchain_openai.chat_models import ChatOpenAI
@@ -94,7 +94,7 @@ answer_relevancy_metric = RagasMetricWrapper(
 
 Once the metric wrapper is set up, you can use it to score traces or spans:
 
-```python
+```python wordWrap
 from opik import track
 from opik.opik_context import update_current_trace
 
@@ -143,7 +143,7 @@ For more advanced use cases, you can evaluate entire datasets using Ragas metric
 
 ### 1. Create a Dataset
 
-```python
+```python wordWrap
 from datasets import load_dataset
 import opik
 
@@ -167,7 +167,7 @@ dataset.insert(dataset_items)
 
 ### 2. Define Evaluation Task
 
-```python
+```python wordWrap
 # Create an evaluation task
 def evaluation_task(x):
     return {
@@ -179,7 +179,7 @@ def evaluation_task(x):
 
 ### 3. Run Evaluation
 
-```python
+```python wordWrap
 # Use the RagasMetricWrapper directly with Opik's evaluate function
 opik.evaluation.evaluate(
     dataset,
@@ -193,7 +193,7 @@ opik.evaluation.evaluate(
 
 You can also use Ragas' native evaluation function with Opik tracing:
 
-```python
+```python wordWrap
 from datasets import load_dataset
 from opik.integrations.langchain import OpikTracer
 from ragas.metrics import context_precision, answer_relevancy, faithfulness
@@ -231,7 +231,7 @@ The `RagasMetricWrapper` can also be used directly within the Opik evaluation pl
 
 We will start by defining the Ragas metric, in this example we will use `AnswerRelevancy`:
 
-```python
+```python wordWrap
 from ragas.metrics import AnswerRelevancy
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_openai.embeddings import OpenAIEmbeddings
@@ -250,7 +250,7 @@ ragas_answer_relevancy = AnswerRelevancy(llm=llm, embeddings=emb)
 
 Simply wrap the Ragas metric with `RagasMetricWrapper`:
 
-```python
+```python wordWrap
 # Create the answer relevancy scoring metric
 answer_relevancy = RagasMetricWrapper(
     ragas_answer_relevancy,
@@ -262,7 +262,7 @@ answer_relevancy = RagasMetricWrapper(
 
 If you are running within a Jupyter notebook, you will need to add the following line to the top of your notebook:
 
-```python
+```python wordWrap
 import nest_asyncio
 nest_asyncio.apply()
 ```
@@ -273,7 +273,7 @@ nest_asyncio.apply()
 
 You can now use the metric wrapper directly within the Opik evaluation platform:
 
-```python
+```python wordWrap
 from opik.evaluation import evaluate
 
 evaluation_task = evaluate(

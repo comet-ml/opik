@@ -1,14 +1,17 @@
 package com.comet.opik.infrastructure;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.client.JerseyClientConfiguration;
 import io.dropwizard.db.DataSourceFactory;
 import io.dropwizard.jobs.JobConfiguration;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
+import org.apache.commons.lang3.StringUtils;
 
 @Getter
 @Setter
@@ -34,10 +37,10 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormExtendedSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty
-    private BulkInsertConfig bulkInsert = BulkInsertConfig.builder().build();
+    private CustomChartsConfig customCharts = new CustomChartsConfig();
 
     @Valid @NotNull @JsonProperty
-    private CustomChartsConfig customCharts = new CustomChartsConfig();
+    private FreeFormSqlPostRunCheckConfig freeFormSqlPostRunCheck = new FreeFormSqlPostRunCheckConfig();
 
     @Valid @NotNull @JsonProperty
     private UuidValidationConfig uuidValidation = UuidValidationConfig.builder().build();
@@ -139,6 +142,9 @@ public class OpikConfiguration extends JobConfiguration {
     @Valid @NotNull @JsonProperty
     private WebhookConfig webhook = new WebhookConfig();
 
+    @Valid @NotNull @JsonProperty
+    private AlertsEventBridgeConfig alertsEventBridge = new AlertsEventBridgeConfig();
+
     @Valid @JsonProperty
     private QueuesConfig queues = new QueuesConfig();
 
@@ -163,6 +169,12 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private PartitionMetricsConfig partitionMetrics = new PartitionMetricsConfig();
+
+    @Valid @NotNull @JsonProperty
+    private SpanWeeksBackfillConfig spanWeeksBackfill = SpanWeeksBackfillConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
+    private SpanWeeksRegistrationConfig spanWeeksRegistration = SpanWeeksRegistrationConfig.builder().build();
 
     @Valid @NotNull @JsonProperty
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
@@ -208,4 +220,20 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private RedactionConfig redaction = new RedactionConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AiLabelsConfig aiLabels = new AiLabelsConfig();
+
+    @JsonIgnore
+    @AssertTrue(message = "alertsEventBridge.eventBus (ALERTS_EVENTBRIDGE_EVENT_BUS) must be set when serviceToggles.eventBridgeAlertsEnabled (ALERTS_EVENTBRIDGE_ENABLED) is true")
+    public boolean isAlertsEventBridgeBusConfigured() {
+        return !serviceToggles.isEventBridgeAlertsEnabled() || StringUtils.isNotBlank(alertsEventBridge.getEventBus());
+    }
+
+    // ai-labels reads traces only in their post-cutover layout; spans it reads in either (it runs before that cutover).
+    @JsonIgnore
+    @AssertTrue(message = "aiLabels.enabled (AI_LABELS_ENABLED) requires databaseAnalyticsDataModel.traceColumnsNonNullable (ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE): ai-labels reads only the cut-over traces table")
+    public boolean isAiLabelsDataModelSupported() {
+        return !aiLabels.isEnabled() || databaseAnalyticsDataModel.traceColumnsNonNullable();
+    }
 }

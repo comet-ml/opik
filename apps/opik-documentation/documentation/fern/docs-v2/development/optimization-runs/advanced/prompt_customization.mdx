@@ -15,7 +15,7 @@ The Opik Optimizer uses a **PromptLibrary** system that lets you customize the i
 
 Every optimizer accepts a `prompt_overrides` parameter:
 
-```python
+```python wordWrap
 from opik_optimizer import MetaPromptOptimizer
 
 # Simple dict override
@@ -61,7 +61,7 @@ flowchart LR
   <Accordion title="Dict Override (Simple Replacement)">
     Best when you know exactly which prompt to replace with a static string:
 
-    ```python
+    ```python wordWrap
     from opik_optimizer import EvolutionaryOptimizer
 
     optimizer = EvolutionaryOptimizer(
@@ -77,7 +77,7 @@ flowchart LR
   <Accordion title="Callable Override (Dynamic Modification)">
     Best when you need to modify existing prompts, apply conditional logic, or update multiple prompts:
 
-    ```python
+    ```python wordWrap
     from opik_optimizer import MetaPromptOptimizer
     from opik_optimizer.utils.prompt_library import PromptLibrary
 
@@ -108,7 +108,7 @@ flowchart LR
 
 Each optimizer has different prompt keys. Use `list_prompts()` to discover them:
 
-```python
+```python wordWrap
 from opik_optimizer import MetaPromptOptimizer
 
 optimizer = MetaPromptOptimizer(model="gpt-4o")
@@ -130,7 +130,7 @@ for key in optimizer.list_prompts():
 
 After creating an optimizer, you can inspect the current prompts:
 
-```python
+```python wordWrap
 optimizer = MetaPromptOptimizer(
     model="gpt-4o",
     prompt_overrides={"reasoning_system": "Custom prompt here..."}
@@ -149,7 +149,7 @@ print(default)
 
 Some prompts contain placeholders that get filled at runtime using Python's `{variable}` format. When overriding prompts with placeholders, **keep the same placeholders**:
 
-```python
+```python wordWrap
 # Original: "Generate {num_prompts} variations of the prompt."
 # Your override should keep {num_prompts}:
 prompt_overrides = {
@@ -161,7 +161,7 @@ prompt_overrides = {
 
 <AccordionGroup>
   <Accordion title="Adding Domain Constraints">
-    ```python
+    ```python wordWrap
     def add_legal_constraints(prompts: PromptLibrary) -> None:
         for key in prompts.keys():
             original = prompts.get(key)
@@ -177,7 +177,7 @@ prompt_overrides = {
   </Accordion>
 
   <Accordion title="Enforcing Output Format">
-    ```python
+    ```python wordWrap
     optimizer = EvolutionaryOptimizer(
         model="gpt-4o",
         prompt_overrides={
@@ -195,7 +195,7 @@ prompt_overrides = {
   </Accordion>
 
   <Accordion title="Adding Safety Guardrails">
-    ```python
+    ```python wordWrap
     def add_safety_layer(prompts: PromptLibrary) -> None:
         safety_prefix = """
     SAFETY REQUIREMENTS:
@@ -220,7 +220,7 @@ prompt_overrides = {
 
 The PromptLibrary validates keys to catch typos early:
 
-```python
+```python wordWrap
 # This will raise KeyError - "reasoing_system" is misspelled
 optimizer = MetaPromptOptimizer(
     model="gpt-4o",
@@ -246,7 +246,7 @@ optimizer = MetaPromptOptimizer(
 
 ## Full Example
 
-```python
+```python wordWrap
 from opik_optimizer import MetaPromptOptimizer
 from opik_optimizer.utils.prompt_library import PromptLibrary
 

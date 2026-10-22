@@ -80,6 +80,23 @@ class GeminiVideoSupportTest {
         }
 
         @Test
+        @DisplayName("Should convert a base64 data URI VIDEO_URL to inline ImageContent for Gemini")
+        void shouldConvertBase64VideoUrlToInlineImageContentForGemini() {
+            var base64Data = "AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAACKBtZGF0";
+            var videoContent = OpikContent.builder()
+                    .type(OpikContentType.VIDEO_URL)
+                    .videoUrl(VideoUrl.builder().url("data:video/mp4;base64," + base64Data).build())
+                    .build();
+            var opikMessage = OpikUserMessage.builder()
+                    .content(List.of(videoContent))
+                    .build();
+
+            ChatMessage result = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(opikMessage);
+
+            assertThat(result).isEqualTo(UserMessage.from(ImageContent.from(base64Data, "video/mp4")));
+        }
+
+        @Test
         @DisplayName("Should convert TEXT content normally for Gemini")
         void shouldConvertTextContentNormallyForGemini() {
             // Given: OpikUserMessage with TEXT content

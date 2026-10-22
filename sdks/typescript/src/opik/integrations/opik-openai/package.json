@@ -1,7 +1,7 @@
 {
   "name": "opik-openai",
   "description": "Opik TypeScript and JavaScript SDK integration with OpenAI",
-  "version": "2.2.88",
+  "version": "2.2.116",
   "engines": {
     "node": ">=18"
   },
@@ -57,7 +57,7 @@
     "README.md"
   ],
   "peerDependencies": {
-    "openai": "^6.0.1",
+    "openai": "^6.0.1 || ^7.0.0",
     "opik": "^1.8.61"
   },
   "devDependencies": {

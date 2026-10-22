@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       force_regen:
-        description: 'Regenerate and re-upload YAML even if no new models were found'
+        description: 'Regenerate the files and open a PR even if no new models were found'
         type: boolean
         required: false
         default: false
@@ -14,6 +14,12 @@ on:
 permissions:
   contents: write
   pull-requests: write
+env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
 
 jobs:
   sync-models:
@@ -32,10 +38,10 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@v10.3.0
 
       - name: Install dependencies
-        run: uv pip install --system requests
+        run: uv pip install --system requests pyyaml==6.0.3
 
       - name: Set branch name
         run: |
@@ -89,7 +95,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check for changes
-        if: steps.sync.outputs.exit_code == '0'
+        if: steps.sync.outputs.exit_code == '0' || steps.sync.outputs.exit_code == '3'
         id: check_changes
         run: |
           if git diff --quiet; then
@@ -112,31 +118,6 @@ jobs:
           git add apps/opik-backend/src/main/resources/llm-models-default.yaml
           git commit -m "[NA] [BE][FE] chore: sync provider model definitions"
 
-      - name: Configure AWS credentials
-        if: steps.sync.outputs.exit_code == '0'
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          aws-access-key-id: ${{ secrets.AWS_OPIK_CDN_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_OPIK_CDN_SECRET }}
-          aws-region: us-east-1
-          role-to-assume: ${{ vars.AWS_OPIK_CDN_ROLE }}
-          role-session-name: sync-provider-models
-
-      - name: Upload YAML to S3
-        if: steps.sync.outputs.exit_code == '0'
-        run: |
-          aws s3 cp \
-            apps/opik-backend/src/main/resources/llm-models-default.yaml \
-            ${{ vars.AWS_OPIK_CDN_BUCKET }}/llm-models-default.yaml \
-            --cache-control "max-age=300"
-
-      - name: Invalidate CloudFront distribution
-        if: steps.sync.outputs.exit_code == '0'
-        run: |
-          aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.AWS_OPIK_CDN_DISTRIBUTION }} \
-            --paths "/opik/llm-models-default.yaml"
-
       - name: Create Pull Request
         if: steps.check_changes.outputs.has_changes == 'true'
         uses: peter-evans/create-pull-request@v8
@@ -148,6 +129,8 @@ jobs:
             ## Details
 
             Automated sync of LLM provider model definitions from source APIs and prices JSON.
+
+            ${{ steps.sync.outputs.exit_code == '3' && format('**Some provider API calls failed in this run, so those providers kept their current models ([run log]({0}/{1}/actions/runs/{2})).**', github.server_url, github.repository, github.run_id) || '' }}
 
             **Sync summary:**
             ```
@@ -181,3 +164,15 @@ jobs:
 
             N/A
           base: main
+
+      - name: Fail if a provider API call failed
+        if: steps.sync.outputs.exit_code != '0' && steps.sync.outputs.exit_code != '1'
+        env:
+          EXIT_CODE: ${{ steps.sync.outputs.exit_code }}
+        run: |
+          case "$EXIT_CODE" in
+            3) echo "::error::A provider API call failed: its models were kept unchanged and the other providers were synced." ;;
+            4) echo "::error::A provider API call failed and the other providers had nothing new." ;;
+            *) echo "::error::The sync script exited with code $EXIT_CODE." ;;
+          esac
+          exit 1

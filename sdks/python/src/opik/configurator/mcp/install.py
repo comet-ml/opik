@@ -64,6 +64,8 @@ class InstallReport(NamedTuple):
     #: Ctrl-C or Escape at the picker: "stop", so the skill pack must not follow.
     #: Last rather than beside `declined`, to keep positional reads stable.
     cancelled: bool = False
+    #: What is left in each registered client, for a run without a terminal.
+    next_steps: Tuple[str, ...] = ()
 
 
 NOTHING_INSTALLED = InstallReport(registered=())
@@ -316,6 +318,12 @@ def setup_mcp_server(
         transport=connection_mode.value,
         sign_in=sign_in,
         stale_tool=stale_tool,
+        next_steps=tuple(
+            mcp_view.next_steps(
+                isinstance(server_spec, mcp_spec.RemoteServerSpec),
+                [pair for pair in zip(selected_targets, results) if pair[1].succeeded],
+            )
+        ),
     )
 
 

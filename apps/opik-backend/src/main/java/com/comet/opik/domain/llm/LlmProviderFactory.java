@@ -1,11 +1,14 @@
 package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import dev.langchain4j.model.chat.ChatModel;
+
+import java.util.Optional;
 
 public interface LlmProviderFactory {
 
@@ -26,6 +29,9 @@ public interface LlmProviderFactory {
     LlmProvider getLlmProvider(String model);
 
     StructuredOutputStrategy getStructuredOutputStrategy(String model);
+
+    /** The catalog params of a model the registry lists under OpenAI, or empty for any other model. */
+    Optional<ModelParams> openAiParams(String model);
 
     /**
      * Returns the resolved model info for the given model name.

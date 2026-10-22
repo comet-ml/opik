@@ -126,6 +126,9 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_MYTHOS_PREVIEW = "claude-mythos-preview",
   CLAUDE_OPUS_4_6_20260205 = "claude-opus-4-6-20260205",
   CLAUDE_OPUS_4_7_20260416 = "claude-opus-4-7-20260416",
+  CLAUDE_OPUS_5_5 = "claude-opus-5-5",
+  CLAUDE_HAIKU_5_5 = "claude-haiku-5-5",
+  CLAUDE_SONNET_5_5 = "claude-sonnet-5-5",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -1067,24 +1070,40 @@ export type ReasoningEffort =
   | "high"
   | "xhigh";
 
+// Kept out of ReasoningEffort so a Chat Completions option list cannot hold
+// max: OpenAI accepts it only on the Responses API.
+export type ResponsesApiOnlyReasoningEffort = "max";
+
+export type OpenAIReasoningEffort =
+  | ReasoningEffort
+  | ResponsesApiOnlyReasoningEffort;
+
 export interface LLMOpenAIConfigsType {
   temperature: number;
   maxCompletionTokens: number;
   topP: number;
   frequencyPenalty: number;
   presencePenalty: number;
-  reasoningEffort?: ReasoningEffort;
+  reasoningEffort?: OpenAIReasoningEffort;
   seed?: number | null;
   throttling?: number;
   maxConcurrentRequests?: number;
 }
 
-export type AnthropicThinkingEffort =
-  | "low"
-  | "medium"
-  | "high"
-  | "xhigh"
-  | "max";
+export const ANTHROPIC_THINKING_EFFORT_VALUES = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
+
+export type AnthropicEffortLevel =
+  (typeof ANTHROPIC_THINKING_EFFORT_VALUES)[number];
+
+// "off" is Opik's own choice for the models that think only when asked: it sends no effort, so the
+// model answers without thinking. It never reaches Anthropic as an effort.
+export type AnthropicThinkingEffort = AnthropicEffortLevel | "off";
 
 export interface LLMAnthropicConfigsType {
   temperature?: number;
@@ -1106,21 +1125,19 @@ export interface LLMOpenRouterConfigsType {
   repetitionPenalty: number;
   minP: number;
   topA: number;
+  reasoningEffort?: OpenAIReasoningEffort;
   seed?: number | null;
   throttling?: number;
   maxConcurrentRequests?: number;
 }
 
-// "auto", "none" and "off" are Opik's own, not Google levels. All three describe what we send
-// rather than a value the API accepts:
+// "auto" and "off" are Opik's own, not Google levels. Both describe what we send rather than a value
+// the API accepts:
 //   auto — send no thinkingConfig, so a thinking-by-default model applies its own dynamic budget
-//   none — send no thinkingConfig, on a model that does not think by default (so nothing is added)
-//   off  — send an explicit zero budget, for a pre-Gemini-3 model that thinks unless told not to
-// auto and none are the same wire behaviour under two labels, because "let the model decide" and
-// "no thinking" are the same request but a very different promise to the user.
+//   off  — send an explicit zero budget, for a pre-Gemini-3 model that thinks unless told not to; on
+//          Gemini 3 and later, which cannot turn thinking off, send nothing (the Flash Lite models)
 export type GeminiThinkingLevel =
   | "auto"
-  | "none"
   | "off"
   | "minimal"
   | "low"

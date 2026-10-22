@@ -22,7 +22,7 @@ The recommended approach to configuring the Python SDK is to use the `opik confi
 
 If you are using the Cloud version of the platform, you can configure the SDK by running:
 
-```python
+```python wordWrap
 import opik
 
 opik.configure(use_local=False)
@@ -30,7 +30,7 @@ opik.configure(use_local=False)
 
 You can also configure the SDK by calling [`configure`](https://www.comet.com/docs/opik/python-sdk-reference/cli.html) from the Command line:
 
-```bash
+```bash wordWrap
 opik configure
 ```
 
@@ -39,7 +39,7 @@ opik configure
 
 If you are self-hosting the platform, you can configure the SDK by running:
 
-```python
+```python wordWrap
 import opik
 
 opik.configure(use_local=True)
@@ -47,7 +47,7 @@ opik.configure(use_local=True)
 
 or from the Command line:
 
-```bash
+```bash wordWrap
 opik configure --use_local
 ```
 
@@ -57,7 +57,7 @@ opik configure --use_local
 
 The `configure` methods will prompt you for the necessary information and save it to a configuration file (`~/.opik.config`). When using the command line version, you can use the `-y` or `--yes` flag to automatically approve any confirmation prompts:
 
-```bash
+```bash wordWrap
 opik configure --yes
 ```
 
@@ -71,7 +71,7 @@ from the chat.
 
 Pass `--install-mcp` to skip the prompt and register it:
 
-```bash
+```bash wordWrap
 opik configure --install-mcp
 ```
 
@@ -79,7 +79,7 @@ opik configure --install-mcp
 how to instrument code, run test suites, and use `opik connect`.
 `--install-skills` installs it without the prompt:
 
-```bash
+```bash wordWrap
 opik configure --install-mcp --install-skills
 ```
 
@@ -87,7 +87,7 @@ opik configure --install-mcp --install-skills
 **These flags are what make the step work without a terminal**, which is how a
 coding agent asked to "set Opik up" runs it:
 
-```bash
+```bash wordWrap
 opik configure --install-mcp --install-skills
 ```
 
@@ -113,7 +113,7 @@ For the TypeScript SDK, configuration is done through environment variables, con
 
 **Installation:**
 
-```bash
+```bash wordWrap
 npm install opik
 ```
 
@@ -121,7 +121,7 @@ npm install opik
 
 You can configure the Opik client using environment variables in a `.env` file:
 
-```bash
+```bash wordWrap
 OPIK_API_KEY="your-api-key"
 OPIK_URL_OVERRIDE="https://www.comet.com/opik/api"
 OPIK_PROJECT_NAME="your-project-name"
@@ -130,7 +130,7 @@ OPIK_WORKSPACE="your-workspace-name"
 
 Or pass configuration directly to the constructor:
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 const client = new Opik({
@@ -183,7 +183,7 @@ Both SDKs support `.env` files for managing environment variables. This is a goo
 
 **For Python projects**, install `python-dotenv`:
 
-```shell
+```shell wordWrap
 pip install python-dotenv
 ```
 
@@ -191,7 +191,7 @@ pip install python-dotenv
 
 Create a `.env` file in your project's root directory:
 
-```dotenv
+```dotenv wordWrap
 # Opik Configuration
 OPIK_API_KEY="YOUR_OPIK_API_KEY"
 OPIK_URL_OVERRIDE="https://www.comet.com/opik/api"
@@ -210,7 +210,7 @@ OPIK_LOG_LEVEL="DEBUG"                # TypeScript: Control log level
 
 **Python usage with .env file:**
 
-```python
+```python wordWrap
 from dotenv import load_dotenv
 
 load_dotenv()  # Load before importing opik
@@ -224,7 +224,7 @@ import opik
 
 The TypeScript SDK automatically loads `.env` files, so no additional setup is required:
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 // Configuration is automatically loaded from .env
@@ -242,7 +242,7 @@ The Python SDK uses the [TOML](https://github.com/toml-lang/toml) format. The `c
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
 
-```toml
+```toml wordWrap
 [opik]
 url_override = https://www.comet.com/opik/api
 api_key = <API Key>
@@ -253,7 +253,7 @@ project_name = <Project Name>
     </Tab>
     <Tab value="Self-hosting" title="Self-hosting">
 
-```toml
+```toml wordWrap
 [opik]
 url_override = http://localhost:5173/api
 workspace = default
@@ -271,7 +271,7 @@ The TypeScript SDK also supports the same `~/.opik.config` file format as the Py
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
 
-```ini
+```ini wordWrap
 [opik]
 url_override = https://www.comet.com/opik/api
 api_key = <API Key>
@@ -282,7 +282,7 @@ project_name = <Project Name>
     </Tab>
     <Tab value="Self-hosting" title="Self-hosting">
 
-```ini
+```ini wordWrap
 [opik]
 url_override = http://localhost:5173/api
 workspace = default
@@ -315,7 +315,7 @@ Both channels support the following log levels: `DEBUG`, `INFO` (default), `WARN
 
 To control the console log level, set the `OPIK_CONSOLE_LOGGING_LEVEL` environment variable _before_ importing `opik`:
 
-```shell
+```shell wordWrap
 # Reduce console output to warnings and errors only
 export OPIK_CONSOLE_LOGGING_LEVEL="WARNING"
 ```
@@ -330,7 +330,7 @@ export OPIK_CONSOLE_LOGGING_LEVEL="WARNING"
 
 **Using with .env file:**
 
-```dotenv
+```dotenv wordWrap
 # Console Logging (reduce noise)
 OPIK_CONSOLE_LOGGING_LEVEL="WARNING"
 ```
@@ -343,14 +343,14 @@ OPIK_CONSOLE_LOGGING_LEVEL="WARNING"
 
 To enable debug mode with file logging, set these environment variables _before_ importing `opik`:
 
-```shell
+```shell wordWrap
 export OPIK_FILE_LOGGING_LEVEL="DEBUG"
 export OPIK_LOGGING_FILE=".tmp/opik-debug-$(date +%Y%m%d).log"
 ```
 
 **Using with .env file:**
 
-```dotenv
+```dotenv wordWrap
 # File Logging (for debug)
 OPIK_FILE_LOGGING_LEVEL="DEBUG"
 OPIK_LOGGING_FILE=".tmp/opik-debug.log"
@@ -358,7 +358,7 @@ OPIK_LOGGING_FILE=".tmp/opik-debug.log"
 
 **Example combining both console and file logging:**
 
-```dotenv
+```dotenv wordWrap
 # Opik Logging Configuration
 
 # Console: Show only warnings and errors
@@ -371,7 +371,7 @@ OPIK_LOGGING_FILE=".tmp/opik-debug.log"
 
 Then in your Python script:
 
-```python
+```python wordWrap
 from dotenv import load_dotenv
 
 load_dotenv()  # Load before importing opik
@@ -389,19 +389,19 @@ The TypeScript SDK uses structured logging with configurable levels:
 
 **Enable debug logging:**
 
-```bash
+```bash wordWrap
 export OPIK_LOG_LEVEL="DEBUG"
 ```
 
 **Or in .env file:**
 
-```dotenv
+```dotenv wordWrap
 OPIK_LOG_LEVEL="DEBUG"
 ```
 
 **Programmatic control:**
 
-```typescript
+```typescript wordWrap
 import { setLoggerLevel, disableLogger } from "opik";
 
 // Set log level
@@ -421,7 +421,7 @@ The Opik Python SDK uses the [httpx](https://www.python-httpx.org/) library to m
 The default configuration applied to the HTTP client is suitable for most use cases, but you can customize
 it by registering a custom httpx client hook as in following example:
 
-```python
+```python wordWrap
 import opik.hooks
 
 def custom_auth_client_hook(client: httpx.Client) -> None:
@@ -445,7 +445,7 @@ opik.hooks.add_httpx_client_hook(hook)
 
 The TypeScript SDK uses batching for optimal performance. You can configure batching behavior:
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 const client = new Opik({
@@ -467,7 +467,7 @@ await client.flush();
 
 #### Global Flush Control
 
-```typescript
+```typescript wordWrap
 import { flushAll } from "opik";
 
 // Flush all instantiated clients
@@ -497,7 +497,7 @@ backend already report through.
 
 To turn it off:
 
-```bash
+```bash wordWrap
 export OPIK_ANALYTICS_ENABLE=false
 ```
 
@@ -528,7 +528,7 @@ export OPIK_ANALYTICS_ENABLE=false
 
 | Configuration Name | Environment Variable    | Description                                                          |
 | ------------------ | ----------------------- | -------------------------------------------------------------------- |
-| apiUrl             | `OPIK_URL_OVERRIDE`     | The URL of the Opik server - Defaults to `http://localhost:5173/api` |
+| apiUrl             | `OPIK_URL_OVERRIDE`     | The URL of the Opik server - Defaults to `https://www.comet.com/opik/api`. Set it to `http://localhost:5173/api` for a local deployment |
 | apiKey             | `OPIK_API_KEY`          | The API key - Required for Opik Cloud                                |
 | workspaceName      | `OPIK_WORKSPACE`        | The workspace name - Optional                                        |
 | projectName        | `OPIK_PROJECT_NAME`     | The project name - Defaults to `Default Project`                     |
@@ -560,7 +560,7 @@ You can resolve it by either:
 
 If you are experiencing problems with the Python SDK, such as receiving 400 or 500 errors from the backend, or being unable to connect at all, run the health check command:
 
-```bash
+```bash wordWrap
 opik healthcheck
 ```
 
@@ -586,19 +586,19 @@ The TypeScript SDK validates configuration at startup. Common errors:
 
 Enable debug logging to troubleshoot issues:
 
-```bash
+```bash wordWrap
 export OPIK_LOG_LEVEL="DEBUG"
 ```
 
 If you are using the Opik Optimizer SDK, you can also enable optimizer-side debug logs:
 
-```bash
+```bash wordWrap
 export OPIK_OPTIMIZER_LOG_LEVEL="DEBUG"
 ```
 
 Or programmatically:
 
-```typescript
+```typescript wordWrap
 import { setLoggerLevel } from "opik";
 setLoggerLevel("DEBUG");
 ```

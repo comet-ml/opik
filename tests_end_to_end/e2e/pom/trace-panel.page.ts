@@ -10,6 +10,9 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
  */
 const PANEL_POINTER_PARK = { x: 4, y: 300 } as const;
 
+const escapeForRegExp = (literal: string): string =>
+  literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export class TracePanelPage {
   constructor(
     private readonly page: Page,
@@ -90,6 +93,11 @@ export class TracePanelPage {
     return this.root.getByTestId(`trace-tree-node-${name}`);
   }
 
+  /** A node of the agent graph drawn from the trace's `_opik_graph_definition`. */
+  agentGraphNode(name: string): Locator {
+    return this.root.locator('[data-panel-id="agent-graph"]').getByTestId(`mermaid-node-${name}`);
+  }
+
   /** The expand/collapse toggle within a given tree node. */
   spanTreeToggle(name: string): Locator {
     return this.spanTreeNode(name).getByRole('button', { name: 'Expand or collapse span' });
@@ -114,6 +122,125 @@ export class TracePanelPage {
     return test.step(`Select span "${name}"`, async () => {
       await this.spanTreeNode(name).click();
       await this.page.waitForURL((url) => (url.searchParams.get('span') ?? '') !== '');
+    });
+  }
+
+  // --- Span tree shape: depth, and the hidden-spans mode ---
+
+  /**
+   * Every rendered span-tree node, as `name -> depth`.
+   *
+   * Depth is read from the node's inner `div.flex.items-center` `paddingLeft`,
+   * divided by `VirtualizedTreeViewer`'s `INDENT_PX` (24). That inner element is
+   * the ONLY place the tree expresses depth geometrically: the row element
+   * itself is `absolute left-0`, so every node — root, child, grandchild —
+   * reports the identical bounding-box `x`, and a spec that measured position
+   * would find every node at depth 0 and pass against any tree shape whatsoever.
+   *
+   * Returned as a map over the whole tree rather than one node at a time so a
+   * caller can assert the shape by EXHAUSTION. Checking "the orphan is at the
+   * root" alone would pass equally well against a build that had flattened every
+   * span to the root, which is the opposite bug.
+   *
+   * The padding is read as the computed style rather than the inline one, and
+   * each value is required to be a whole multiple of the indent: a node whose
+   * padding came from somewhere other than its depth would otherwise be
+   * silently rounded into a plausible-looking answer.
+   *
+   * The tree is virtualized, so this reports the nodes currently MOUNTED. Every
+   * caller asserts the map whole, which includes its size, so a tree taller than
+   * the panel fails loudly here instead of being read as a short tree.
+   */
+  async spanTreeDepths(): Promise<Record<string, number>> {
+    return test.step('Read the depth of every rendered span-tree node', async () => {
+      await this.root.locator('[data-testid^="trace-tree-node-"]').first().waitFor();
+      // Evaluated against the panel element rather than `document`: the callers
+      // compare the depth map WHOLE, so a stale tree still mounted outside this
+      // panel would add entries — or overwrite same-named ones — and turn an
+      // exact tree-shape assertion into a shape about two trees.
+      return this.root.evaluate((root) => {
+        // `INDENT_PX` in VirtualizedTreeViewer.tsx.
+        const INDENT = 24;
+        const depths: Record<string, number> = {};
+        const nodes = root.querySelectorAll('[data-testid^="trace-tree-node-"]');
+        for (const node of Array.from(nodes)) {
+          const name = (node.getAttribute('data-testid') ?? '').replace('trace-tree-node-', '');
+          // The node also renders a details pane and a duration timeline whose
+          // own paddingLeft is `depth + 1` indents, so the lookup is pinned to
+          // exactly one element rather than taking the first that matched: a
+          // wrapper acquiring these classes would otherwise shift every depth
+          // this method reports by one, plausibly and silently.
+          const indented = node.querySelectorAll(':scope > div.flex.items-center');
+          if (indented.length !== 1) {
+            throw new Error(
+              `span-tree node '${name}' has ${indented.length} indented rows, expected 1 — ` +
+                'that row is where depth is expressed, so there is nothing unambiguous to measure',
+            );
+          }
+          const padding = parseFloat(window.getComputedStyle(indented[0]).paddingLeft || '0');
+          if (!Number.isInteger(padding / INDENT)) {
+            throw new Error(
+              `span-tree node '${name}' has paddingLeft ${padding}px, which is not a whole ` +
+                `multiple of the ${INDENT}px indent — its padding is not coming from its depth`,
+            );
+          }
+          depths[name] = padding / INDENT;
+        }
+        return depths;
+      });
+    });
+  }
+
+  /**
+   * The eye toggle that switches between hiding and showing the spans the SDK
+   * marked internal (`HiddenSpansToggle`).
+   *
+   * Rendered only while the trace actually HAS such a span, which is itself
+   * worth asserting — its absence is how "the internal span was never written"
+   * looks from the panel.
+   *
+   * Addressed by the lucide class of the icon it is currently showing, scoped to
+   * the panel. The button is icon-only and its tooltip gives it no accessible
+   * name, so there is no role/label handle and no `data-testid`; adding one to
+   * `HiddenSpansToggle` would be the better answer, but a spec verified against
+   * a deployed build cannot depend on an attribute that build does not have. The
+   * icon is not an arbitrary structural hook either — `EyeOff` versus `Eye` IS
+   * the control's rendered state, so this locator says which mode the panel is
+   * in. The estate addresses other icon-only buttons the same way
+   * (`compare-experiments.page.ts`, `logs.page.ts`).
+   */
+  hiddenSpansToggle(state: 'hiding' | 'showing-all'): Locator {
+    const icon = state === 'hiding' ? 'lucide-eye-off' : 'lucide-eye';
+    return this.root.locator(`button:has(svg.${icon})`);
+  }
+
+  /**
+   * Click the eye toggle and wait for it to report the mode it was asked for.
+   *
+   * Gated on the icon flipping rather than on the tree repainting: what the tree
+   * then shows is the assertion, and a POM that waited for a particular node
+   * count would be deciding the answer before the spec got to it.
+   *
+   * Asserts the starting state first, so a spec that believed it was in one mode
+   * and was in the other fails here rather than inverting every assertion that
+   * follows. `lucide-eye-off` is a strict substring of nothing else the panel
+   * renders, but the lookup is still pinned to exactly one match: a second
+   * icon-only button acquiring an eye would otherwise be clicked at random.
+   */
+  async setHiddenSpansMode(target: 'hiding' | 'showing-all'): Promise<void> {
+    return test.step(`Switch the span tree to ${target}`, async () => {
+      const from = target === 'hiding' ? 'showing-all' : 'hiding';
+      const trigger = this.hiddenSpansToggle(from);
+      await expect(
+        trigger,
+        `exactly one hidden-spans toggle, currently ${from} — the control only renders ` +
+          'while the trace carries a span the SDK marked internal',
+      ).toHaveCount(1);
+      await trigger.click();
+      await expect(
+        this.hiddenSpansToggle(target),
+        `the toggle reports ${target} after the click`,
+      ).toHaveCount(1);
     });
   }
 
@@ -150,6 +277,73 @@ export class TracePanelPage {
    */
   estimatedCost(formatted: string): Locator {
     return this.dataViewer.getByText(formatted, { exact: true });
+  }
+
+  // --- Quick attribute filters (Details tab) ---
+
+  /**
+   * A collapsible `CodeBlock` in the data viewer — "Input", "Output",
+   * "Metadata", "Token usage" — addressed through its own header button.
+   *
+   * The block renders no `data-testid`, and its header button is the only
+   * labelled thing in it, so the block is reached by walking up from that
+   * button to the nearest ancestor that holds CodeMirror's rendered lines.
+   * Addressed by that predicate rather than by depth (`ancestor::div[2]`, the
+   * button's grandparent today) so a wrapper added or removed between the
+   * header row and the block does not silently retarget every attribute
+   * lookup below — the same shape `compare-experiments.page.ts` uses to reach
+   * a cell's enclosing table. Scoped to the data viewer rather than the page
+   * because the Logs chip bar also carries a button called "Metadata", and an
+   * unscoped lookup would filter lines inside a chip popover.
+   */
+  private codeBlock(title: string): Locator {
+    return this.dataViewer
+      .getByRole('button', { name: title, exact: true })
+      .locator('xpath=ancestor::div[.//*[contains(@class, "cm-line")]][1]');
+  }
+
+  /**
+   * One rendered attribute line inside a `CodeBlock`.
+   *
+   * Metadata renders as YAML (no `prettifyConfig`, so the mode defaults to
+   * yaml and is not persisted), which makes a leaf line read `key: value`. The
+   * key is anchored to the start of the line so `provider:` cannot be matched
+   * by a line for `providers:` or by one whose VALUE happens to contain the
+   * word — the distinction between those two keys is exactly what the filter
+   * resolver turns on.
+   */
+  attributeLine(blockTitle: string, key: string): Locator {
+    return this.codeBlock(blockTitle)
+      .locator('.cm-line')
+      .filter({ hasText: new RegExp(`^\\s*${escapeForRegExp(key)}:`) });
+  }
+
+  /**
+   * The quick-filter icon on an attribute line, if the attribute has one.
+   *
+   * Rendered by a CodeMirror widget as a `role="button"` span whose
+   * `aria-label` is the action's current label — which is the point: the label
+   * changes to "Filter in Spans table" when the filter would be applied to a
+   * table other than the one on screen, so it is both the handle and a thing
+   * worth asserting. Absent entirely when the attribute cannot be filtered.
+   */
+  quickFilterButton(blockTitle: string, key: string): Locator {
+    return this.attributeLine(blockTitle, key).getByRole('button');
+  }
+
+  /**
+   * Click an attribute's quick-filter icon.
+   *
+   * The widget acts on `mousedown` (it must, to beat CodeMirror's own
+   * selection handling), which Playwright's `click()` dispatches — so this is
+   * an ordinary click and not a dispatched event.
+   */
+  async applyQuickFilter(blockTitle: string, key: string): Promise<void> {
+    return test.step(`Quick-filter on the "${key}" attribute of ${blockTitle}`, async () => {
+      const button = this.quickFilterButton(blockTitle, key);
+      await expect(button, `quick-filter icon for "${key}"`).toHaveCount(1);
+      await button.click();
+    });
   }
 
   // --- Attachments ---
@@ -639,6 +833,62 @@ export class TracePanelPage {
       }
       return reached;
     });
+  }
+
+  // --- Messages tab ---
+
+  /**
+   * The Messages tab trigger.
+   *
+   * Rendered only when `detectLLMMessages` claims the selected node's input or
+   * output and rejects neither, so its presence is an assertion in its own
+   * right and not just a step on the way to the panel.
+   */
+  get messagesTab(): Locator {
+    return this.root.getByRole('tab', { name: 'Messages' });
+  }
+
+  /**
+   * The Messages tab's panel.
+   *
+   * Radix mounts only the selected tab's content, so scoping to this keeps an
+   * assertion off the raw JSON the Details tab renders for the same fields —
+   * which would match every text marker whether or not the Messages tab ever
+   * rendered them.
+   */
+  get messagesTabPanel(): Locator {
+    return this.root.getByRole('tabpanel', { name: 'Messages' });
+  }
+
+  /** The header of one rendered conversation turn, by role. */
+  messageRole(role: 'System' | 'User' | 'Assistant'): Locator {
+    return this.messagesTabPanel.getByRole('heading', { name: role, exact: true });
+  }
+
+  /**
+   * The body of one rendered conversation turn, by role.
+   *
+   * The accordion content Radix labels from its trigger, whose accessible name
+   * is just the role for every message the OpenAI mapper produces — only a
+   * `tool` turn carries a second label, and that one is not addressed here.
+   */
+  messageBody(role: 'System' | 'User' | 'Assistant'): Locator {
+    return this.messagesTabPanel.getByRole('region', { name: role, exact: true });
+  }
+
+  /**
+   * The rendered markdown container inside a turn's body.
+   *
+   * `comet-markdown` is a class rather than a testid because `MarkdownPreview`
+   * stamps it on *both* branches it can take — the `ReactMarkdown` one and the
+   * plain `<div class="comet-markdown whitespace-pre-wrap">` it falls back to
+   * when `isStringMarkdown` says no. Matching the class is therefore the one
+   * handle that resolves whichever branch rendered, which is what lets a spec
+   * assert *which* branch it got; the same reason `compare-experiments.page.ts`
+   * and `playground.page.ts` address it this way.
+   */
+  messageMarkdown(role: 'System' | 'User' | 'Assistant'): Locator {
+    return this.messageBody(role).locator('.comet-markdown');
   }
 
   /** Locator for the Feedback scores tab inside the panel. */

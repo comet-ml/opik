@@ -7,12 +7,13 @@ import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 
 import java.util.Arrays;
-import java.util.Optional;
+import java.util.List;
 import java.util.Set;
 
 /**
  * Supported providers for test suite LLM-as-judge assertions, ordered by priority.
- * First connected provider wins.
+ * The first connected provider judges. When it rejects the request (for example an invalid key),
+ * the scorer falls back to the next connected one, in this order.
  *
  * <p><strong>Order rationale (validated, OPIK-5745):</strong> the test-suite judge runs
  * with a prompt-driven agentic tool loop ({@code get_trace_spans}, {@code read}, {@code jq},
@@ -87,14 +88,10 @@ enum SupportedJudgeProvider {
         this.model = model;
     }
 
-    /**
-     * Resolves the LLM model for test suite assertions based on connected providers.
-     * Returns the model for the highest-priority connected provider, or empty if none match.
-     */
-    static Optional<String> resolveModel(Set<LlmProvider> connectedProviders) {
+    static List<String> resolveModels(Set<LlmProvider> connectedProviders) {
         return Arrays.stream(values())
                 .filter(judge -> connectedProviders.contains(judge.provider))
-                .findFirst()
-                .map(judge -> judge.model);
+                .map(judge -> judge.model)
+                .toList();
     }
 }

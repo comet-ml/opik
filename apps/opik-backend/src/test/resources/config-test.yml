@@ -84,6 +84,20 @@ databaseAnalytics:
   #   async-insert flush; same override semantics as asyncInsertBusyTimeoutMaxMs above. Larger values yield fewer,
   #   larger parts at the cost of more buffer memory.
   asyncInsertMaxDataSize: # Empty - ClickHouse/server-side value applies
+  #  Default: 3000
+  #  Description: Cadence (ms) for http_headers_progress_interval_ms, applied to custom_http_params like the overrides
+  #   above, but only on the R2DBC connection and not on the v2 client (the read-only free-form SQL user runs under
+  #   readonly=1 and rejects per-query setting changes; its factory is built without queryParameters). That is about
+  #   this setting - a cadence written directly into custom_http_params below is still forwarded to both clients like
+  #   every other entry there. clickhouse-r2dbc turns send_progress_in_http_headers on for every HTTP statement and the
+  #   v1 Apache transport caps a response at 100 headers with no way to raise it, so at ClickHouse's 100ms default
+  #   cadence a query running past ~10s overflows the cap and its response fails to parse. Accepted range is 1 .. 10000.
+  #   The ceiling keeps a 3x margin under the driver's 30s socket_timeout, since the progress headers are what keep the
+  #   socket alive during a long query; the 100-header budget is reached at interval x 90, so 3000 covers a 270s query
+  #   against the 106.7s worst case seen during the incident. Supplying nothing leaves the primitive at 0, which is out
+  #   of range and fails startup rather than silently reinstating the bug - which is why the docker-compose passthrough
+  #   carries the literal instead of ':-'.
+  httpHeadersProgressIntervalMs: 3000
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: 1s
@@ -158,13 +172,62 @@ databaseAnalyticsDataModel:
   #   direction and the backend fails readiness at startup with a message naming the flag and the observed engine,
   #   rather than serving traffic whose span deletes are guaranteed to fail.
   spansDistributedWrapEnabled: false
+  #  Default: false
+  #  Description: Register each written span's weekly partition in the span_weeks index (OPIK-8706). Leave false at
+  #   deploy time; turn true before the span weeks backfill starts, so every span written after its snapshot is
+  #   indexed. Off writes nothing.
+  spanWeeksWriteEnabled: false
+  #  Default: false
+  #  Description: Schedule the span weeks backfill job (tuned under spanWeeksBackfill), which fills span_weeks from the
+  #   spans already written, one range of weeks at a time. Turn true only once spanWeeksWriteEnabled is live on every
+  #   instance: the backfill covers the spans written until its first run, live registration the rest.
+  spanWeeksBackfillEnabled: false
+  #  Default: false
+  #  Description: Bound the spans reads keyed by traces or by a project to the weeks the span_weeks index holds for
+  #   them. Effective only while spanColumnsNonNullable is also true (the legacy spans id_at wraps far-future ids). New
+  #   spans are indexed by span_weeks_mv in their insert, older ones by the span weeks backfill: turn true once the
+  #   backfill logs that it is complete, as spans it has not indexed yet would be skipped.
+  spanWeeksReadEnabled: false
 
-bulkInsert:
-  # false: the R2DBC bulk path (one named parameter per column per row). true: rows streamed as
-  # JSONEachRow through the ClickHouse Java client v2, with no parameter binding. Both write identical
-  # cells, so this is safe to flip either way on a running install. Default false so an upgrade does not
-  # silently change the write path.
-  v2ClientEnabled: false
+# Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
+# switched on by databaseAnalyticsDataModel.spanWeeksWriteEnabled.
+spanWeeksRegistration:
+  #  Default: 3
+  #  Description: Retries after the first attempt; a repeat registration collapses in span_weeks
+  maxRetries: 3
+  #  Default: 200ms
+  #  Description: First backoff; it doubles on each retry, with jitter, up to maxBackoff
+  minBackoff: 200ms
+  #  Default: 2s
+  #  Description: Upper bound of the exponential backoff
+  maxBackoff: 2s
+
+# Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
+# It tiles the span ids into ranges of weeks, from the install week (the first project's created_at) to the plan's own
+# week, open at both ends, and backfills one range per run. Progress is kept in the span_weeks_backfill_chunks state
+# table, so it resumes across restarts.
+spanWeeksBackfill:
+  #  Default: 5m
+  #  Description: How often a run starts, and how long it holds the job lock: at most one chunk per interval across
+  #   the cluster, however many instances tick. Must exceed queryTimeout, so a run ends inside its lease
+  interval: 5m
+  #  Default: 4
+  #  Description: Weeks of span ids one run backfills, between the install week and the plan's own week
+  weeksPerChunk: 4
+  #  Default: 4
+  #  Description: ClickHouse threads one run may use (prod replicas have 48 vCPUs); memory is left to the server
+  #   profile's GROUP BY spill
+  maxThreads: 4
+  #  Default: 4m
+  #  Description: ClickHouse max_execution_time for one chunk; must stay under interval. Keep it under
+  #   ~90 x httpHeadersProgressIntervalMs (270s at the default 3s): past that the R2DBC driver runs out of progress
+  #   headers and fails the statement as a connection error. A 4-week range is estimated at 1-3 minutes on prod at
+  #   4 threads (OPIK-8706); if ranges time out, lower weeksPerChunk
+  queryTimeout: 4m
+  #  Default: 1s
+  #  Description: How long a run waits for the job lock before skipping its tick, so a brief Redis hiccup does not
+  #   cost a whole interval
+  lockWaitTime: 1s
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -205,6 +268,24 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
   username: comet_readonly_freeform_extended_sql_user
   password: opik
   socketTimeout: 200s
+
+# Description: the free-form SQL post-run check, defense in depth on top of the row policies. It verifies from each
+#   query's system.query_log entries and plan that every table it read was read under a row policy.
+freeFormSqlPostRunCheck:
+  #  Default: audit
+  #  Description: off, audit or enforce. audit: scalar subqueries reading a table are reported, not rejected, and
+  #   the check runs after the response and only reports (logs, opik.free_form_sql.post_run_check). Nothing it
+  #   finds or fails on affects the request. enforce: scalar subqueries reading a table are rejected (400) and
+  #   results are withheld unless the check passes, which adds at least logReadDelay to every response.
+  # Quoted: YAML reads a bare off as the boolean false.
+  mode: audit
+  #  Default: 10s
+  #  Description: Wait before each read of the query's log entries. Longer than ClickHouse's query_log flush
+  #   interval (7.5s by default), so every entry is written without forcing a flush. 0 to 60s.
+  logReadDelay: 10s
+  #  Default: 3
+  #  Description: Reads of the query's log entries before the check reports them missing (1 to 10)
+  maxLogReadAttempts: 3
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -300,6 +381,48 @@ redis:
   #  Default: 1s
   #  Description: Timeout for the Redis health check ping
   healthCheckTimeout: 1s
+  # Redis Sentinel configuration (optional)
+  # When enabled, singleNodeUrl is the seed sentinel, with its port (usually 26379), instead of a Redis data node: its
+  # scheme selects TLS for every sentinel, and its credentials and database number apply to the master data nodes.
+  # Redisson discovers the master through the sentinels and follows it on failover. The Python backend reads the same
+  # variables. Cannot be combined with awsIamAuth: ElastiCache and MemoryDB offer no Sentinel.
+  sentinel:
+    # Default: false
+    # Description: Enable Redis Sentinel master discovery
+    enabled: false
+    # Description: Name of the master group monitored by the sentinels. Required when enabled
+    masterName: ''
+    # Description: Comma separated extra seed sentinels, e.g. redis://sentinel-1:26379,redis://sentinel-2:26379. They
+    # must use the scheme of singleNodeUrl, include a port and carry no credentials. The seed from singleNodeUrl is
+    # always included
+    nodes: ''
+    # Description: Username for the sentinel nodes themselves, if they enforce ACLs
+    username: ''
+    # Description: Password for the sentinel nodes themselves, if they require auth
+    password: ''
+    # Default: 3
+    # Description: Times a failed command is retried, e.g. while a failover is in progress. Between 0 and 20
+    retryAttempts: 3
+    # Default: 500ms
+    # Description: Base of the full-jitter backoff between retries: each waits a random time up to
+    # min(base * 2^attempt, cap). At least 1ms
+    retryBackoffBase: 500ms
+    # Default: 2s
+    # Description: Longest wait between retries. At least retryBackoffBase and at most 5m
+    retryBackoffCap: 2s
+    # Default: true
+    # Description: Require the sentinels to report at least two of them, as a production quorum needs. Set to false to
+    # allow a single sentinel, e.g. in development setups
+    checkSentinelsList: true
+    # Default: 10s
+    # Description: Timeout for establishing connections. Between 100ms and 5m
+    connectTimeout: 10s
+    # Default: 5s
+    # Description: Timeout for command responses. Between 100ms and 5m
+    timeout: 5s
+    # Default: 2s
+    # Description: How often the sentinels are polled for topology changes. Between 100ms and 5m
+    scanInterval: 2s
 
 openTelemetry:
   # Default: 3h
@@ -925,6 +1048,9 @@ serviceToggles:
   # Default: true
   # Description: Kill switch for Agent Insights, effective only while ollieEnabled is on.
   agentInsightsEnabled: "true"
+  # Default: false
+  # Description: Whether Agent Insights project guidance is enabled, effective only while Agent Insights is active.
+  agentInsightsGuidanceEnabled: "false"
   # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
   onlineScoringTracingEnabled: "true"
@@ -937,6 +1063,9 @@ serviceToggles:
   #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
   #   automation controls on annotation queues.
   annotationQueueAutomationEnabled: "true"
+  # Default: false
+  # Description: Whether every triggered alert is also published to the deployment's AWS EventBridge bus
+  eventBridgeAlertsEnabled: "false"
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.

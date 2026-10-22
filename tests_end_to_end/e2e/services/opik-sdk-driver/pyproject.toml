@@ -15,6 +15,11 @@ dependencies = [
     # so the readability spec asserts locale SEPARATION and error type, never
     # absolute Flesch numbers, which drift with textstat/pyphen releases.
     "textstat",
+    # The third-party client `opik.integrations.ollama` wraps. Needed to
+    # import the integration at all, and the only integration dependency
+    # here: the tracker is driven against a mock /api/chat served by this
+    # app, so no model and no running Ollama are involved.
+    "ollama>=0.4.0",
 ]
 
 # Resolve `opik` from this repo rather than PyPI. The bridge exists so SDK

@@ -8,7 +8,7 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import RunExperimentControl from "@/v2/pages/PlaygroundPage/RunExperimentControl";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { hasUnsupportedMedia } from "@/lib/playground";
+import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
 import { LOGS_SOURCE } from "@/types/traces";
 import { useActiveProjectId } from "@/store/AppStore";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
@@ -41,6 +41,7 @@ interface PlaygroundHeaderProps {
   datasetId: string | null;
   datasetName: string | null;
   versionName?: string;
+  versionItemsTotal?: number;
   onChangeDatasetId: (id: string | null) => void;
   onReset: () => void;
   onRunAll: () => void;
@@ -54,6 +55,7 @@ const PlaygroundHeader = ({
   datasetId,
   datasetName,
   versionName,
+  versionItemsTotal,
   onChangeDatasetId,
   onReset,
   onRunAll,
@@ -136,36 +138,42 @@ const PlaygroundHeader = ({
     [promptMap],
   );
 
-  const allMessagesNotEmpty = useMemo(
-    () =>
-      Object.values(promptMap).every((p) =>
-        p.messages.every((m) => m.content?.length > 0),
-      ),
+  const allMessagesRunnable = useMemo(
+    () => Object.values(promptMap).every((p) => canRunMessages(p.messages)),
     [promptMap],
   );
 
+  const isDatasetEmpty = isExperimentMode && versionItemsTotal === 0;
+  const experimentTarget =
+    currentDatasetType === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
+
   const isRunDisabled =
     !allPromptsHaveModels ||
-    !allMessagesNotEmpty ||
+    !allMessagesRunnable ||
     hasMediaCompatibilityIssues ||
-    (isExperimentMode && !datasetName);
+    (isExperimentMode && !datasetName) ||
+    isDatasetEmpty;
 
   const runDisabledReason = useMemo(() => {
     if (!allPromptsHaveModels)
       return "Please select an LLM model for your prompts";
-    if (!allMessagesNotEmpty)
+    if (!allMessagesRunnable)
       return "Some messages are empty. Please add some text to proceed";
     if (hasMediaCompatibilityIssues)
       return "Some prompts contain media but the selected model doesn't support media input";
     if (isExperimentMode && !datasetName)
       return "Your dataset has been removed. Select another one";
+    if (isDatasetEmpty)
+      return `This ${experimentTarget} version has no items. Add items or select another version to run an experiment`;
     return null;
   }, [
     allPromptsHaveModels,
-    allMessagesNotEmpty,
+    allMessagesRunnable,
     hasMediaCompatibilityIssues,
     isExperimentMode,
     datasetName,
+    isDatasetEmpty,
+    experimentTarget,
   ]);
 
   // Keyboard shortcut: Shift+Enter to run all
@@ -247,8 +255,6 @@ const PlaygroundHeader = ({
 
     const hasRunExperiment = isExperimentMode && createdExperiments.length > 0;
     const label = hasRunExperiment ? "Re-run" : "Run";
-    const experimentTarget =
-      currentDatasetType === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
     const tooltip =
       runDisabledReason ??
       (isExperimentMode

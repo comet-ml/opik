@@ -9,6 +9,7 @@ import {
   LLMPromptConfigsType,
   LLMVertexAIConfigsType,
   LLMCustomConfigsType,
+  OpenAiPipelineMode,
   PROVIDER_TYPE,
   PROVIDER_MODEL_TYPE,
   COMPOSED_PROVIDER_TYPE,
@@ -28,9 +29,11 @@ import OpenRouterModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/pr
 import GeminiModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiModelConfigs";
 import VertexAIModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
 import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
-import { parseComposedProviderType } from "@/lib/provider";
+import {
+  isOpenAICompatibleProvider,
+  parseComposedProviderType,
+} from "@/lib/provider";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import { hasVisibleControls } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 
@@ -44,6 +47,12 @@ interface PromptModelConfigsProps {
   disabled?: boolean;
   /** Defaults to every parameter supported, which is the playground. */
   unsupportedParams?: ReadonlySet<ModelConfigParam>;
+  /**
+   * Pass only where the request goes through Opik's OpenAI pipeline, which honours the key's mode.
+   * The optimizer calls OpenAI through LiteLLM on Chat Completions whatever the key says, so it must
+   * leave this out and keep the Chat Completions effort values.
+   */
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 const PromptModelConfigs = ({
@@ -55,6 +64,7 @@ const PromptModelConfigs = ({
   onChange,
   disabled: disabledProp = false,
   unsupportedParams,
+  openAiPipelineMode,
 }: PromptModelConfigsProps) => {
   const provider: PROVIDER_TYPE =
     parseComposedProviderType(composedProviderType);
@@ -67,6 +77,7 @@ const PromptModelConfigs = ({
           unsupportedParams={unsupportedParams}
           model={model}
           onChange={onChange}
+          openAiPipelineMode={openAiPipelineMode}
         />
       );
     }
@@ -115,11 +126,12 @@ const PromptModelConfigs = ({
       );
     }
 
-    if (provider === PROVIDER_TYPE.CUSTOM) {
+    if (isOpenAICompatibleProvider(provider)) {
       return (
         <CustomModelConfigs
           configs={configs as LLMCustomConfigsType}
           model={model}
+          provider={provider}
           unsupportedParams={unsupportedParams}
           onChange={onChange}
         />
@@ -136,7 +148,13 @@ const PromptModelConfigs = ({
   // provider yet keeps the disabled button, so it still hints at settings once a model is picked.
   if (
     composedProviderType &&
-    !hasVisibleControls(provider, model ?? "", configs, unsupportedParams)
+    !hasVisibleControls(
+      provider,
+      model ?? "",
+      configs,
+      unsupportedParams,
+      openAiPipelineMode,
+    )
   ) {
     return null;
   }
@@ -159,10 +177,17 @@ const PromptModelConfigs = ({
         align="end"
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        <ExplainerDescription
-          className="mb-5 w-72"
-          {...EXPLAINERS_MAP[EXPLAINER_ID.whats_these_configuration_things]}
-        />
+        <div className="mb-5 w-72">
+          <h5 className="comet-body-s-accented text-foreground">
+            Model parameters
+          </h5>
+          <p className="comet-body-xs mt-1 text-light-slate">
+            {
+              EXPLAINERS_MAP[EXPLAINER_ID.whats_these_configuration_things]
+                .description
+            }
+          </p>
+        </div>
         {providerForm}
       </DropdownMenuContent>
     </DropdownMenu>

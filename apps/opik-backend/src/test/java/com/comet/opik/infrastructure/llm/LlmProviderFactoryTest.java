@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.TestConfigUtils;
+import com.comet.opik.api.LlmModelDefinition;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.domain.LlmProviderApiKeyService;
@@ -10,6 +11,7 @@ import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.FreeModelConfig;
+import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicClientGenerator;
@@ -27,6 +29,7 @@ import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
+import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIClientGenerator;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
@@ -38,12 +41,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -110,8 +115,9 @@ class LlmProviderFactoryTest {
         OpenRouterModule openRouterModule = new OpenRouterModule();
         VertexAIModule vertexAIModule = new VertexAIModule();
 
-        AnthropicClientGenerator anthropicClientGenerator = anthropicModule.clientGenerator(llmProviderClientConfig);
-        anthropicModule.llmServiceProvider(llmProviderFactory, anthropicClientGenerator);
+        AnthropicClientGenerator anthropicClientGenerator = anthropicModule.clientGenerator(llmProviderClientConfig,
+                registryService);
+        anthropicModule.llmServiceProvider(llmProviderFactory, anthropicClientGenerator, registryService);
 
         GeminiClientGenerator geminiClientGenerator = geminiModule.clientGenerator(llmProviderClientConfig);
         geminiModule.llmServiceProvider(llmProviderFactory, geminiClientGenerator);
@@ -122,7 +128,8 @@ class LlmProviderFactoryTest {
         OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig);
         openRouterModule.llmServiceProvider(llmProviderFactory, openRouterClientGenerator);
 
-        VertexAIClientGenerator vertexAIClientGenerator = vertexAIModule.clientGenerator(llmProviderClientConfig);
+        VertexAIClientGenerator vertexAIClientGenerator = vertexAIModule.clientGenerator(llmProviderClientConfig,
+                registryService);
         vertexAIModule.llmServiceProvider(llmProviderFactory, vertexAIClientGenerator);
 
         LlmProviderService actual = llmProviderFactory.getService(workspaceId, model);
@@ -133,7 +140,7 @@ class LlmProviderFactoryTest {
 
     private static Stream<Arguments> testGetService() {
         var openAiModels = EnumUtils.getEnumList(OpenaiModelName.class).stream()
-                .map(model -> arguments(model.toString(), LlmProvider.OPEN_AI, "LlmProviderOpenAi"));
+                .map(model -> arguments(model.toString(), LlmProvider.OPEN_AI, "LlmProviderOpenAiChatCompletions"));
         var anthropicModels = EnumUtils.getEnumList(AnthropicModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.ANTHROPIC, "LlmProviderAnthropic"));
         var geminiModels = EnumUtils.getEnumList(GeminiModelName.class).stream()
@@ -441,6 +448,28 @@ class LlmProviderFactoryTest {
         assertThat(clientConfig.workspaceId()).isEqualTo(workspaceId);
     }
 
+    @ParameterizedTest
+    @EnumSource(value = LlmProvider.class, names = {"CUSTOM_LLM", "BEDROCK", "OLLAMA"})
+    @DisplayName("getClientApiConfig carries the key's own provider type for custom-llm/ models")
+    void testGetClientApiConfig_carriesTheKeysProviderType(LlmProvider keyProvider) {
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        String workspaceId = UUID.randomUUID().toString();
+        String model = "custom-llm/my-provider/llama3.2";
+        when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet()))
+                .thenReturn(List.of(ProviderApiKey.builder()
+                        .provider(keyProvider)
+                        .providerName("my-provider")
+                        .apiKey(EncryptionUtils.encrypt(UUID.randomUUID().toString()))
+                        .baseUrl("http://localhost:11434/v1")
+                        .configuration(Map.of("models", model))
+                        .build()));
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+
+        assertThat(llmProviderFactory.getLlmProvider(model)).isEqualTo(LlmProvider.CUSTOM_LLM);
+        assertThat(llmProviderFactory.getClientApiConfig(workspaceId, model).provider()).isEqualTo(keyProvider);
+    }
+
     // ========== Structured Output Strategy Tests ==========
 
     @Test
@@ -467,5 +496,77 @@ class LlmProviderFactoryTest {
         var strategy = llmProviderFactory.getStructuredOutputStrategy("claude-sonnet-4-6");
 
         assertThat(strategy).isInstanceOf(InstructionStrategy.class);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"o3, true", "gpt-4o, false", "claude-sonnet-4-6, false", "unknown-model, false"})
+    @DisplayName("openAiParams refuse temperature for the models the registry flags as reasoning")
+    void openAiParamsRefuseTemperatureForRegistryReasoningModels(String model, boolean expected) {
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
+                registryService);
+
+        assertThat(llmProviderFactory.openAiParams(model)
+                .map(params -> Boolean.FALSE.equals(params.temperature().accepted()))
+                .orElse(false))
+                .isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("getService serves a Vertex AI model that only the registry knows")
+    void getServiceServesRegistryOnlyVertexAiModel() {
+        var model = "vertex_ai/gemini-9.9-flash";
+        assertThat(VertexAIModelName.byQualifiedName(model)).isEmpty();
+
+        var registry = mock(LlmModelRegistryService.class);
+        when(registry.findModel(model)).thenReturn(Optional.of(
+                new LlmModelRegistryService.ModelLookupResult(LlmProvider.VERTEX_AI,
+                        LlmModelDefinition.builder().id("gemini-9.9-flash").qualifiedName(model).build())));
+        var llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        var workspaceId = UUID.randomUUID().toString();
+        when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet()))
+                .thenReturn(List.of(ProviderApiKey.builder()
+                        .provider(LlmProvider.VERTEX_AI)
+                        .apiKey(EncryptionUtils.encrypt(UUID.randomUUID().toString()))
+                        .build()));
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registry);
+        var vertexAIModule = new VertexAIModule();
+        vertexAIModule.llmServiceProvider(llmProviderFactory,
+                vertexAIModule.clientGenerator(llmProviderClientConfig, registry));
+
+        assertThat(llmProviderFactory.getService(workspaceId, model)).isInstanceOf(LlmProviderVertexAI.class);
+    }
+
+    @Test
+    @DisplayName("openAiParams keep a reasoning model's drops when the curated layer is turned off")
+    void openAiParamsKeepTheShippedRulesWithoutACuratedLayer() {
+        var registryConfig = new LlmModelRegistryConfig();
+        registryConfig.setDefaultResource("llm-models-test.yaml");
+        registryConfig.setCuratedResource("");
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
+                new LlmModelRegistryService(registryConfig));
+
+        assertThat(llmProviderFactory.openAiParams("o3")).hasValueSatisfying(params -> {
+            assertThat(params.temperature().accepted()).isFalse();
+            assertThat(params.topP().accepted()).isFalse();
+            assertThat(params.frequencyPenalty().accepted()).isFalse();
+            assertThat(params.presencePenalty().accepted()).isFalse();
+        });
+    }
+
+    @Test
+    @DisplayName("openAiParams ignores another provider's model")
+    void openAiParamsIgnoresOtherProviders() {
+        var registry = mock(LlmModelRegistryService.class);
+        when(registry.findModel("openai/gpt-5-mini")).thenReturn(Optional.of(
+                new LlmModelRegistryService.ModelLookupResult(LlmProvider.OPEN_ROUTER,
+                        LlmModelDefinition.builder().id("openai/gpt-5-mini").reasoning(true).build())));
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
+                registry);
+
+        assertThat(llmProviderFactory.openAiParams("openai/gpt-5-mini")).isEmpty();
     }
 }

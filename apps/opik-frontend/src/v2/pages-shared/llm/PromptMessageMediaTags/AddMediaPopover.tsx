@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { Input } from "@/ui/input";
@@ -15,6 +15,7 @@ export interface AddMediaPopoverProps {
   align?: "start" | "end";
   onOpenChange?: (open: boolean) => void;
   promptVariables?: string[];
+  note?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -52,12 +53,12 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
   align = "start",
   onOpenChange,
   promptVariables = [],
+  note,
   children,
 }) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [newItem, setNewItem] = useState<string>("");
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const resolvedMaxItems = maxItems ?? DEFAULT_MAX_ITEMS[type];
 
@@ -90,14 +91,8 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
     }
   };
 
-  const handleVariableClick = (variable: string) => {
-    const variableText = `{{${variable}}}`;
-    setNewItem(variableText);
-    inputRef.current?.focus();
-  };
-
-  const handleAddItem = () => {
-    const trimmed = newItem.trim();
+  const handleAddItem = (value: string) => {
+    const trimmed = value.trim();
     if (!trimmed) return;
 
     if (items.length >= resolvedMaxItems) {
@@ -135,6 +130,10 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
     handleOpenChange(false);
   };
 
+  const handleVariableClick = (variable: string) => {
+    handleAddItem(`{{${variable}}}`);
+  };
+
   return (
     <Popover onOpenChange={handleOpenChange} open={open}>
       <PopoverTrigger asChild>
@@ -146,19 +145,22 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Input
-                ref={inputRef}
                 placeholder={placeholder}
                 value={newItem}
                 onChange={(e) => setNewItem(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
-                    handleAddItem();
+                    handleAddItem(newItem);
                   }
                 }}
               />
             </div>
-            <Button type="button" variant="default" onClick={handleAddItem}>
+            <Button
+              type="button"
+              variant="default"
+              onClick={() => handleAddItem(newItem)}
+            >
               Add
             </Button>
           </div>
@@ -168,9 +170,11 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
               <PromptVariablesList
                 variables={promptVariables}
                 onVariableClick={handleVariableClick}
+                tooltipContent="Click to add"
               />
             </p>
           )}
+          {note && <p className="comet-body-xs text-light-slate">{note}</p>}
         </div>
       </PopoverContent>
     </Popover>

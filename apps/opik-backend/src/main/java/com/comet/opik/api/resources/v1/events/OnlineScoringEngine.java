@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
+import com.comet.opik.infrastructure.llm.MediaContentUtils;
 import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
@@ -26,13 +27,10 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.google.common.annotations.VisibleForTesting;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.PathNotFoundException;
-import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.AllArgsConstructor;
@@ -86,6 +84,11 @@ public class OnlineScoringEngine {
     private static final int MAX_REPORTED_FIELD_NAMES = 10;
     private static final int MAX_LOGGED_VALUE_CHARS = 100;
     private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
+    // Values trail so the leading sentence is a fixed prefix to grep on; the entity label is one of them
+    // because it differs per scorer and would otherwise split that prefix in two.
+    private static final String UNRESOLVED_ARGUMENTS_LOG = "None of the metric's declared arguments resolved,"
+            + " so there is no data to evaluate. Check the declared paths against the input, output and"
+            + " metadata present on the entity. {} '{}', rule '{}', unresolved arguments: {}";
 
     private static final Map<String, Boolean> PASS_FAIL_SCORES = Map.of(
             "pass", true, "passed", true, "fail", false, "failed", false);
@@ -845,19 +848,19 @@ public class OnlineScoringEngine {
                 case "image_url" -> {
                     if (part.imageUrl() != null && part.imageUrl().url() != null) {
                         var url = TemplateParseUtils.render(part.imageUrl().url(), replacements, promptType);
-                        builder.addContent(ImageContent.from(url));
+                        builder.addContent(MediaContentUtils.toImageContent(url));
                     }
                 }
                 case "video_url" -> {
                     if (part.videoUrl() != null && part.videoUrl().url() != null) {
                         var url = TemplateParseUtils.render(part.videoUrl().url(), replacements, promptType);
-                        builder.addContent(VideoContent.from(url));
+                        builder.addContent(MediaContentUtils.toVideoContent(url));
                     }
                 }
                 case "audio_url" -> {
                     if (part.audioUrl() != null && part.audioUrl().url() != null) {
                         var url = TemplateParseUtils.render(part.audioUrl().url(), replacements, promptType);
-                        builder.addContent(AudioContent.from(url));
+                        builder.addContent(MediaContentUtils.toAudioContent(url));
                     }
                 }
                 default -> log.warn("Unknown content type: {}", part.type());
@@ -1518,6 +1521,40 @@ public class OnlineScoringEngine {
             TraceSection traceSection, String variableName, String jsonPath, String valueToReplace) {
     }
 
+    // Paths and names are rule configuration the user controls, so they are sanitized like judge-supplied
+    // text: a newline must not forge an entry in the persisted log, nor one rule decide how much it carries.
+    public static void logUnresolvedEvaluatorArguments(
+            @NonNull Logger userFacingLogger,
+            @NonNull Logger internalLogger,
+            @NonNull Map<String, String> mdc,
+            @NonNull String entityLabel,
+            @NonNull Object entityId,
+            String ruleName,
+            @NonNull Map<String, String> declaredArguments) {
+        // Each half capped separately so a long name cannot crowd out the path, the actionable half.
+        var reported = declaredArguments.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .limit(MAX_REPORTED_FIELD_NAMES)
+                .map(argument -> "'%s' -> '%s'".formatted(sanitize(argument.getKey()), sanitize(argument.getValue())))
+                .toList();
+        var omitted = declaredArguments.size() - reported.size();
+        var renderedArguments = reported.isEmpty()
+                ? "(none declared)"
+                : renderPairs(reported, omitted);
+        var safeRuleName = sanitize(String.valueOf(ruleName));
+        // Only the user-facing logger needs the scope: the ClickHouse appender fills its columns from the MDC.
+        try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
+            userFacingLogger.warn(UNRESOLVED_ARGUMENTS_LOG, entityLabel, entityId, safeRuleName, renderedArguments);
+        }
+        internalLogger.warn(UNRESOLVED_ARGUMENTS_LOG, entityLabel, entityId, safeRuleName, renderedArguments);
+    }
+
+    /** Mirrors {@link #renderNames}' "and N more" shape for entries that carry their own quoting. */
+    private static String renderPairs(List<String> pairs, int omitted) {
+        var shown = String.join(", ", pairs);
+        return omitted == 0 ? shown : "%s and %,d more".formatted(shown, omitted);
+    }
+
     /**
      * Shared "evaluate → prepare → log" wrapper used by the trace and span Python scorers.
      * Eliminates the boilerplate that duplicated the MDC scope, the "Evaluating X 'id' sampled
@@ -1543,7 +1580,9 @@ public class OnlineScoringEngine {
             userFacingLogger.info("Evaluating {} '{}' sampled by rule '{}'", entityLabel, entityId, ruleName);
             try {
                 Map<String, Object> data = dataSupplier.get();
-                if (userFacingLogger.isInfoEnabled()) {
+                // Both callers fail an empty map instead of calling the evaluator, so claiming a send
+                // here would contradict the warning that follows it in the same sink.
+                if (!data.isEmpty() && userFacingLogger.isInfoEnabled()) {
                     userFacingLogger.info("Sending {} '{}' to Python evaluator: '{}'",
                             entityLabel, entityId, summarizeEvaluatorInput(data));
                 }

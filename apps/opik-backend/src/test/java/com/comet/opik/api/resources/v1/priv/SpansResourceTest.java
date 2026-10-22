@@ -65,6 +65,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -2412,7 +2413,7 @@ class SpansResourceTest {
             long illegalArgBefore = readClickHouseErrorCount(templateAsync, 43);
             long parseQuotedBefore = readClickHouseErrorCount(templateAsync, 26);
 
-            // Cover every null/non-null branch of the fields this PR touches in BULK_INSERT:
+            // Cover every null/non-null branch of the fields this PR touches in the span bulk insert:
             // - endTime: null (row A) + non-null (row B)
             // - lastUpdatedAt: null (row A) + non-null (row B)
             // - usage: null (row A) + non-empty Map (row B)
@@ -2433,8 +2434,9 @@ class SpansResourceTest {
 
             spanResourceClient.batchCreateSpans(List.of(rowA, rowB), API_KEY, workspaceName);
 
-            // After the fix, the spans BULK_INSERT must not increment any of the FORMAT Values
-            // fast-path counters. See OPIK-5694.
+            // The spans batch path writes JSONEachRow and so cannot reach the FORMAT Values
+            // fast-path at all. These counters stay as a guard against it regressing back to a
+            // Values-bound insert, which is what tripped them. See OPIK-5694.
             assertThat(readClickHouseErrorCount(templateAsync, 70) - convertTypeBefore)
                     .as("CANNOT_CONVERT_TYPE (70): NULL bound to non-nullable last_updated_at")
                     .isZero();
@@ -4484,6 +4486,157 @@ class SpansResourceTest {
     @DisplayName("Large Payload Tests")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class LargePayloadTests {
+
+        @Test
+        @DisplayName("a span whose row exceeds the parallel-parsing chunk size is still written")
+        void oversizedSpanRowIsWritten() {
+            // Regression: JSONEachRow rows are split across chunk boundaries by ClickHouse's parallel
+            // parser, which cannot carry one row across them and rejects the whole batch with code 117
+            // ("Size of JSON object at position N is extremely large") and written_rows = 0. Spans carry
+            // user-supplied input, so a row that large is an ordinary thing for a customer to send, and in
+            // production it silently dropped batches.
+            //
+            // The guard fires at 10x min_chunk_bytes_for_parallel_parsing, so 100 MiB at the 10 MiB
+            // default -- NOT at 10 MiB, which is what the error message's "Expected not greater than
+            // 10485760 bytes" misleadingly implies. Bisected on this suite's server image: 99 MiB is
+            // accepted, 100 MiB is not. The payload has to clear that, so it cannot be trimmed to
+            // something cheaper without the test quietly ceasing to test anything -- an earlier 12 MiB
+            // version of it passed with and without the fix.
+            //
+            // Split across two columns rather than one huge string, because one huge string is a shape
+            // production cannot produce: maxStringLength caps a single JSON string at 100 MiB there, so a
+            // row only reaches the ClickHouse cliff by summing several large columns -- which is what the
+            // rows rejected in production (~104.9 MB each) must have been. Each half here stays well under
+            // that cap while the row as a whole clears 100 MiB.
+            var projectName = "v2-oversized-" + RandomStringUtils.secure().nextAlphanumeric(12);
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .errorInfo(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+
+            var inputHalf = "x".repeat(60 * 1024 * 1024);
+            var outputHalf = "y".repeat(60 * 1024 * 1024);
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .comments(null)
+                    .errorInfo(null)
+                    .input(TextNode.valueOf(inputHalf))
+                    .output(TextNode.valueOf(outputHalf))
+                    .build();
+
+            spanResourceClient.batchCreateSpans(List.of(span), API_KEY, TEST_WORKSPACE);
+
+            // The whole span, via the shared helper, rather than the two payload columns: splicing a row
+            // across a chunk boundary would not necessarily disturb the payloads themselves, so the small
+            // columns either side of them are where that would show. Without the fix this test fails at
+            // the POST above rather than here -- the rejection propagates on this synchronous path and
+            // the endpoint answers 500.
+            var actual = spanResourceClient.getById(span.id(), TEST_WORKSPACE, API_KEY);
+
+            SpanAssertions.assertSpan(List.of(actual), List.of(span), USER);
+        }
+
+        // The single-row writes below (create, update, update-before-create, batch update) used to inline input and
+        // output as SQL literals, so the whole statement had to fit in max_query_size: 100,000,000 bytes, set in
+        // config-test.yml as in production. A payload a batch create accepts then failed with code 62 ("Max query
+        // size exceeded"). Two halves of ~57.7 MB clear that limit together while each stays under the 100 MiB
+        // maxStringLength cap on a single JSON string.
+        private TextNode oversizedHalf() {
+            return TextNode.valueOf(RandomStringUtils.secure().nextAlphanumeric(1024).repeat(55 * 1024));
+        }
+
+        @Test
+        @DisplayName("a single span create whose payload exceeds max_query_size is written")
+        void oversizedSingleSpanCreateIsWritten() {
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(null)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .input(oversizedHalf())
+                    .output(oversizedHalf())
+                    .build();
+
+            spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(expectedSpan.toBuilder().projectName(DEFAULT_PROJECT).build(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("a span update whose payload exceeds max_query_size is written")
+        void oversizedSpanUpdateIsWritten() {
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(null)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+            var spanUpdate = SpanUpdate.builder()
+                    .projectName(expectedSpan.projectName())
+                    .traceId(expectedSpan.traceId())
+                    .parentSpanId(expectedSpan.parentSpanId())
+                    .input(oversizedHalf())
+                    .output(oversizedHalf())
+                    .build();
+            spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+
+            var expectedSpanBuilder = expectedSpan.toBuilder().projectName(DEFAULT_PROJECT);
+            SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, spanUpdate);
+            getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("a span update arriving before its create, whose payload exceeds max_query_size, is written")
+        void oversizedSpanUpdateBeforeCreateIsWritten() {
+            var id = generator.generate();
+            var expectedSpanBuilder = Span.builder().id(id).startTime(Instant.EPOCH).createdAt(Instant.now());
+            var spanUpdate = podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
+                    .projectId(null)
+                    .name(null)
+                    .type(null)
+                    .input(oversizedHalf())
+                    .output(oversizedHalf())
+                    .build();
+
+            spanResourceClient.updateSpan(id, spanUpdate, API_KEY, TEST_WORKSPACE);
+
+            var projectId = projectResourceClient.getByName(spanUpdate.projectName(), API_KEY, TEST_WORKSPACE).id();
+            SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, spanUpdate);
+            getAndAssert(expectedSpanBuilder.name(null).type(null).build(), projectId, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("a span batch update whose payload exceeds max_query_size is written")
+        void oversizedSpanBatchUpdateIsWritten() {
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(null)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+            var spanUpdate = SpanUpdate.builder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(expectedSpan.traceId())
+                    .input(oversizedHalf())
+                    .output(oversizedHalf())
+                    .build();
+            spanResourceClient.batchUpdateSpans(
+                    SpanBatchUpdate.builder().ids(Set.of(expectedSpan.id())).update(spanUpdate).build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(expectedSpan.toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(spanUpdate.input())
+                    .output(spanUpdate.output())
+                    .build(), API_KEY, TEST_WORKSPACE);
+        }
 
         @Test
         @DisplayName("Create span with two 35MB base64 encoded videos - should succeed with attachment stripping")
