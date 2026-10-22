@@ -27,6 +27,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -103,6 +104,8 @@ public class AiLabelsTickService {
     private final AiLabelStatusDAO statusDAO;
     private final AiLabelsDAO labelsDAO;
 
+    // Only the throttle reads the clock: the tick's deadlines are measured from its own start.
+    private final Clock clock;
     private final Map<String, Instant> throttledUntil = new ConcurrentHashMap<>();
     private final AtomicLong inFlightBytes = new AtomicLong();
     private long sweeps;
@@ -130,6 +133,16 @@ public class AiLabelsTickService {
             @NonNull AiLabelTaskRegistry registry, @NonNull AiLabelRenderer renderer,
             @NonNull AiLabelItemBuilder itemBuilder, @NonNull AiLabelResultMapper resultMapper,
             @NonNull AiLabelStatusDAO statusDAO, @NonNull AiLabelsDAO labelsDAO) {
+        this(config, template, client, lockService, sweepService, registry, renderer, itemBuilder, resultMapper,
+                statusDAO, labelsDAO, Clock.systemUTC());
+    }
+
+    AiLabelsTickService(@NonNull AiLabelsConfig config, @NonNull TransactionTemplate template,
+            @NonNull InferenceClient client, @NonNull LockService lockService,
+            @NonNull AiLabelSweepService sweepService, @NonNull AiLabelTaskRegistry registry,
+            @NonNull AiLabelRenderer renderer, @NonNull AiLabelItemBuilder itemBuilder,
+            @NonNull AiLabelResultMapper resultMapper, @NonNull AiLabelStatusDAO statusDAO,
+            @NonNull AiLabelsDAO labelsDAO, @NonNull Clock clock) {
         this.config = config;
         this.template = template;
         this.client = client;
@@ -141,6 +154,7 @@ public class AiLabelsTickService {
         this.resultMapper = resultMapper;
         this.statusDAO = statusDAO;
         this.labelsDAO = labelsDAO;
+        this.clock = clock;
 
         var meter = GlobalOpenTelemetry.get().getMeter("opik.ai_labels");
         meter.gaugeBuilder("ai_labels.budget.in_flight").ofLongs().setUnit("By")
@@ -836,7 +850,7 @@ public class AiLabelsTickService {
             InferenceException exception, List<AiLabelStatus> failures) {
         if (exception.isQuotaExceeded()) {
             var backoff = Optional.ofNullable(exception.getRetryAfter()).orElse(DEFAULT_THROTTLE_BACKOFF);
-            throttledUntil.put(workspaceId, Instant.now().plus(backoff));
+            throttledUntil.put(workspaceId, clock.instant().plus(backoff));
             throttled.add(1, Attributes.of(stringKey("workspace_id"), workspaceId));
             log.info("ai-labels submit throttled, workspace '{}', backing off '{}'", workspaceId, backoff);
             return SubmitOutcome.THROTTLED;
@@ -872,7 +886,7 @@ public class AiLabelsTickService {
         if (until == null) {
             return false;
         }
-        if (Instant.now().isBefore(until)) {
+        if (clock.instant().isBefore(until)) {
             return true;
         }
         throttledUntil.remove(workspaceId, until);
