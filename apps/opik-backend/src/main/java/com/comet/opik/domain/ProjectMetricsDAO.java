@@ -1334,13 +1334,14 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<List<Entry>> getTraceCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        return fetchSingleMetricWithBreakdown(projectId, request, GET_TRACE_COUNT, GET_TRACE_COUNT_WITH_BREAKDOWN,
+        return fetchSingleMetricSupportingBreakdown(projectId, request, GET_TRACE_COUNT, GET_TRACE_COUNT_WITH_BREAKDOWN,
                 "traceCount", row -> NAME_TRACES, row -> row.get("count", Integer.class));
     }
 
     @Override
     public Mono<List<Entry>> getThreadCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        return fetchSingleMetricWithBreakdown(projectId, request, GET_THREAD_COUNT, GET_THREAD_COUNT_WITH_BREAKDOWN,
+        return fetchSingleMetricSupportingBreakdown(projectId, request, GET_THREAD_COUNT,
+                GET_THREAD_COUNT_WITH_BREAKDOWN,
                 "threadCount", row -> NAME_THREADS, row -> row.get("count", Integer.class));
     }
 
@@ -1404,13 +1405,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        return fetchSingleMetricWithBreakdown(projectId, request, GET_COST, GET_COST_WITH_BREAKDOWN,
+        return fetchSingleMetricSupportingBreakdown(projectId, request, GET_COST, GET_COST_WITH_BREAKDOWN,
                 "cost", row -> NAME_COST, row -> row.get("value", BigDecimal.class));
     }
 
     @Override
     public Mono<List<Entry>> getGuardrailsFailedCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        return fetchSingleMetricWithBreakdown(projectId, request, GET_GUARDRAILS_FAILED_COUNT,
+        return fetchSingleMetricSupportingBreakdown(projectId, request, GET_GUARDRAILS_FAILED_COUNT,
                 GET_GUARDRAILS_FAILED_COUNT_WITH_BREAKDOWN,
                 "guardrailsFailedCount", row -> NAME_GUARDRAILS_FAILED_COUNT,
                 row -> row.get("failed_cnt", Integer.class));
@@ -1502,7 +1503,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<List<Entry>> getSpanCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        return fetchSingleMetricWithBreakdown(projectId, request, GET_SPAN_COUNT, GET_SPAN_COUNT_WITH_BREAKDOWN,
+        return fetchSingleMetricSupportingBreakdown(projectId, request, GET_SPAN_COUNT, GET_SPAN_COUNT_WITH_BREAKDOWN,
                 "spanCount", row -> "spans", row -> row.get("count", Integer.class));
     }
 
@@ -1558,7 +1559,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .collectList());
     }
 
-    private Mono<List<Entry>> fetchSingleMetricWithBreakdown(@NonNull UUID projectId,
+    private Mono<List<Entry>> fetchSingleMetricSupportingBreakdown(@NonNull UUID projectId,
             @NonNull ProjectMetricRequest request, @NonNull String query, @NonNull String breakdownQuery,
             @NonNull String segmentName, @NonNull Function<Row, String> nameSupplier,
             @NonNull Function<Row, ? extends Number> valueExtractor) {
@@ -1591,7 +1592,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     @Override
     public Mono<List<Entry>> getSpanCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
-        return fetchSingleMetricWithBreakdown(projectId, request, GET_SPAN_COST, GET_SPAN_COST_WITH_BREAKDOWN,
+        return fetchSingleMetricSupportingBreakdown(projectId, request, GET_SPAN_COST, GET_SPAN_COST_WITH_BREAKDOWN,
                 "spanCost", row -> NAME_SPAN_COST, row -> row.get("value", BigDecimal.class));
     }
 

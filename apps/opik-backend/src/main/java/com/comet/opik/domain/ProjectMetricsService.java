@@ -158,8 +158,11 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 // Cost is additive. Keep one exact decimal sum per bucket, ordered by time.
                 // Other metrics (for example quantiles and feedback averages) need their own aggregation rules.
                 Map<Instant, BigDecimal> costsByTime = new TreeMap<>();
-                othersEntries.forEach(entry -> costsByTime.merge(entry.time(),
-                        entry.value() == null ? BigDecimal.ZERO : new BigDecimal(entry.value().toString()),
+                othersEntries.forEach(entry -> costsByTime.merge(entry.time(), switch (entry.value()) {
+                    case null -> BigDecimal.ZERO;
+                    case BigDecimal decimal -> decimal;
+                    default -> new BigDecimal(entry.value().toString());
+                },
                         BigDecimal::add));
                 String name = othersEntries.getFirst().name();
                 othersEntries = costsByTime.entrySet().stream()
