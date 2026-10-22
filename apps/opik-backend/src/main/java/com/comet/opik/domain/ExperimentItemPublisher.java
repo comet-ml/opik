@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Singleton
 @Slf4j
@@ -28,22 +29,25 @@ public class ExperimentItemPublisher {
     private final ExperimentExecutionConfig config;
     private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
     private final ExperimentCancellationService cancellationService;
+    private final ExperimentItemLedger itemLedger;
 
     @Inject
     public ExperimentItemPublisher(
             @NonNull RedissonReactiveClient redisClient,
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig config,
             @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService,
-            @NonNull ExperimentCancellationService cancellationService) {
+            @NonNull ExperimentCancellationService cancellationService,
+            @NonNull ExperimentItemLedger itemLedger) {
         this.redisClient = redisClient;
         this.config = config;
         this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
         this.cancellationService = cancellationService;
+        this.itemLedger = itemLedger;
     }
 
     /**
-     * Starts counting a run down, before anything of it is published or made visible. A stop reaches
-     * only what this service is counting down, and the experiments become stoppable the moment they
+     * Starts tracking a run, before anything of it is published or made visible. A stop reaches
+     * only what this service is tracking, and the experiments become stoppable the moment they
      * are persisted — so a run tracked any later than this has a window where a stop finds nothing to
      * stop, returns as though it had, and the run goes on to queue every item.
      */
@@ -90,21 +94,25 @@ public class ExperimentItemPublisher {
      * those writes a status nothing will ever stamp finished, which reads as a run still going.
      */
     public Mono<Boolean> isTracked(@NonNull String workspaceId, @NonNull UUID experimentId) {
-        return redisClient.getAtomicLong(ExperimentExecutionConfig.itemCounterKey(workspaceId, experimentId))
-                .isExists();
+        return itemLedger.hasTotal(workspaceId, experimentId);
     }
 
     /**
-     * Removes what a run was counting itself down against. A launch that failed partway leaves its
-     * counters holding a total no one will ever reach, and an item that arrives late then decrements
-     * one that should not exist.
+     * Removes a run's item totals and recorded outcomes. A launch that failed partway leaves totals no one
+     * will ever reach, and outcomes nothing will read, holding one field per item until the TTL.
      */
     public Mono<Void> discardCounters(@NonNull String workspaceId, @NonNull Collection<UUID> experimentIds) {
-        return Flux.fromIterable(experimentIds)
-                .flatMap(experimentId -> Flux.just(
+        if (CollectionUtils.isEmpty(experimentIds)) {
+            return Mono.empty();
+        }
+
+        var keys = experimentIds.stream()
+                .flatMap(experimentId -> Stream.of(
                         ExperimentExecutionConfig.itemCounterKey(workspaceId, experimentId),
-                        ExperimentExecutionConfig.itemFailureCounterKey(workspaceId, experimentId))
-                        .flatMap(key -> redisClient.getAtomicLong(key).delete()))
+                        ExperimentExecutionConfig.itemEntriesKey(workspaceId, experimentId)))
+                .toArray(String[]::new);
+
+        return redisClient.getKeys().delete(keys)
                 .then()
                 .onErrorResume(error -> {
                     // The TTL still clears them; failing the abort over it would lose the status write
@@ -114,8 +122,8 @@ public class ExperimentItemPublisher {
     }
 
     /**
-     * One counter per prompt variant, all set before the first message is published so a fast
-     * consumer cannot drain a variant before its own counter exists.
+     * One total per prompt variant, all set before the first message is published so a fast
+     * consumer cannot drain a variant before its own total exists.
      */
     private Mono<Void> setItemCounters(List<ExperimentItemToProcess> messages) {
         var workspaceId = messages.getFirst().workspaceId();
