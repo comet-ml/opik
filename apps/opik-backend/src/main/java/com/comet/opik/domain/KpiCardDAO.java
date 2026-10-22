@@ -257,21 +257,21 @@ class KpiCardDAOImpl implements KpiCardDAO {
             FROM trace_costs tc
             <else>
             SELECT
-                COUNTIf(tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) AS current_count,
-                COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_count,
-                if(COUNTIf(tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) = 0,
+                COUNTIf(filtered_traces.id >= :id_current_start<if(uuid_to_time)> AND filtered_traces.id \\<= :id_end<endif>) AS current_count,
+                COUNTIf(filtered_traces.id >= :id_prior_start AND filtered_traces.id \\< :id_current_start) AS previous_count,
+                if(COUNTIf(filtered_traces.id >= :id_current_start<if(uuid_to_time)> AND filtered_traces.id \\<= :id_end<endif>) = 0,
                     0,
-                    COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) * 100.0
-                    / COUNTIf(tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>)) AS current_error_rate,
-                if(COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start) = 0,
+                    COUNTIf(length(filtered_traces.error_info) > 0 AND filtered_traces.id >= :id_current_start<if(uuid_to_time)> AND filtered_traces.id \\<= :id_end<endif>) * 100.0
+                    / COUNTIf(filtered_traces.id >= :id_current_start<if(uuid_to_time)> AND filtered_traces.id \\<= :id_end<endif>)) AS current_error_rate,
+                if(COUNTIf(filtered_traces.id >= :id_prior_start AND filtered_traces.id \\< :id_current_start) = 0,
                     0,
-                    COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_prior_start AND tf.id \\< :id_current_start) * 100.0
-                    / COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start)) AS previous_error_rate,
-                AVGIf(tf.duration, tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) AS current_avg_duration,
-                AVGIf(tf.duration, tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_avg_duration,
+                    COUNTIf(length(filtered_traces.error_info) > 0 AND filtered_traces.id >= :id_prior_start AND filtered_traces.id \\< :id_current_start) * 100.0
+                    / COUNTIf(filtered_traces.id >= :id_prior_start AND filtered_traces.id \\< :id_current_start)) AS previous_error_rate,
+                AVGIf(filtered_traces.duration, filtered_traces.id >= :id_current_start<if(uuid_to_time)> AND filtered_traces.id \\<= :id_end<endif>) AS current_avg_duration,
+                AVGIf(filtered_traces.duration, filtered_traces.id >= :id_prior_start AND filtered_traces.id \\< :id_current_start) AS previous_avg_duration,
                 any(tc.current_total_cost) AS current_total_cost,
                 any(tc.previous_total_cost) AS previous_total_cost
-            FROM traces_filtered tf
+            FROM traces_filtered filtered_traces
             CROSS JOIN trace_costs tc
             <endif>
             SETTINGS log_comment = '<log_comment>';
