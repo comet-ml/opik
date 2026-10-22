@@ -1,10 +1,8 @@
 import React, {
-  useEffect,
   useRef,
   useState,
   useImperativeHandle,
   forwardRef,
-  useCallback,
 } from "react";
 import {
   Braces,
@@ -16,9 +14,6 @@ import {
   Trash,
   Video,
 } from "lucide-react";
-import CodeMirror from "@uiw/react-codemirror";
-import { EditorView, keymap } from "@codemirror/view";
-import { insertNewlineAndIndent } from "@codemirror/commands";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -36,12 +31,14 @@ import {
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import Loader from "@/shared/Loader/Loader";
 import { JsonObject, JsonValue } from "@/types/shared";
-import JsonTreePopover from "@/shared/JsonTreePopover/JsonTreePopover";
 import LLMPromptMessageActions, {
   ImprovePromptConfig,
 } from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
 import AddMediaPopover from "@/v2/pages-shared/llm/PromptMessageMediaTags/AddMediaPopover";
 import MediaTagsList from "@/v2/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
+import PromptVariableEditor, {
+  PromptVariableEditorHandle,
+} from "@/v2/pages-shared/llm/PromptVariableEditor/PromptVariableEditor";
 
 import { cn } from "@/lib/utils";
 import {
@@ -52,24 +49,12 @@ import {
   isMediaAllowedForRole,
 } from "@/lib/llm";
 import { useMessageContent } from "@/hooks/useMessageContent";
-import { useJsonPopover } from "./useJsonPopover";
 
 import isEmpty from "lodash/isEmpty";
 
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { DropdownOption } from "@/types/shared";
-import {
-  mustachePlugin,
-  codeMirrorPromptTheme,
-  VariableHintExtension,
-} from "@/constants/codeMirrorPlugins";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
-
-// @codemirror/view before 6.38 drops Chrome's own Shift+Enter line break.
-// Opt-in only: the Agent playground submits on Shift+Enter.
-const shiftEnterNewlineKeymap = keymap.of([
-  { key: "Shift-Enter", run: insertNewlineAndIndent },
-]);
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -143,17 +128,12 @@ const LLMPromptMessage = forwardRef<
     const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
     const [isMediaPopoverOpen, setIsMediaPopoverOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [focusedVariableKey, setFocusedVariableKey] = useState<string | null>(
-      null,
-    );
     const { id, role, content } = message;
 
     const { active, listeners, setNodeRef, transform, transition } =
       useSortable({ id });
 
-    const editorViewRef = useRef<EditorView | null>(null);
-    const popoverTriggerRef = useRef<HTMLSpanElement | null>(null);
-    const variableHintRef = useRef(new VariableHintExtension());
+    const editorRef = useRef<PromptVariableEditorHandle>(null);
     const style = {
       transform: CSS.Translate.toString(transform),
       transition,
@@ -173,83 +153,12 @@ const LLMPromptMessage = forwardRef<
       onChangeContent: (newContent) => onChangeMessage({ content: newContent }),
     });
 
-    const insertTextAtCursor = useCallback((text: string) => {
-      const view = editorViewRef.current;
-      if (view) {
-        const cursorPos = view.state.selection.main.head;
-        view.dispatch({
-          changes: { from: cursorPos, insert: text },
-          selection: { anchor: cursorPos + text.length },
-        });
-        view.focus();
-      }
-    }, []);
-
-    const focusOnCreateRef = useRef(false);
-
-    const focusAtEnd = useCallback((view: EditorView) => {
-      view.dispatch({ selection: { anchor: view.state.doc.length } });
-      view.focus();
-    }, []);
-
-    const handleCreateEditor = useCallback(
-      (view: EditorView) => {
-        editorViewRef.current = view;
-        if (focusOnCreateRef.current) {
-          focusOnCreateRef.current = false;
-          focusAtEnd(view);
-        }
-      },
-      [focusAtEnd],
-    );
-
     useImperativeHandle(ref, () => ({
-      insertAtCursor: insertTextAtCursor,
-      focus: () => {
-        const view = editorViewRef.current;
-        if (view) {
-          focusAtEnd(view);
-        } else {
-          // The editor is created a render after this message mounts, so a
-          // focus request for a just-added message has to wait for it.
-          focusOnCreateRef.current = true;
-        }
-      },
+      insertAtCursor: (text) => editorRef.current?.insertAtCursor(text),
+      focus: () => editorRef.current?.focusAtEnd(),
     }));
 
     const hasJsonData = !isEmpty(jsonTreeData);
-
-    const {
-      isJsonPopoverOpen,
-      jsonSearchQuery,
-      popoverPosition,
-      braceStartPos,
-      handleJsonPathSelect,
-      handlePopoverOpenChange,
-      handleEditorUpdate,
-      braceKeyExtension,
-      triggerVariableSearch,
-    } = useJsonPopover({
-      editorViewRef,
-      hasJsonData,
-      insertTextAtCursor,
-      onJsonPathSelect,
-    });
-
-    const hintText =
-      isJsonPopoverOpen && !jsonSearchQuery
-        ? focusedVariableKey || "Find variable"
-        : null;
-
-    // Sync the inline variable hint (ghost text after "{{") with the CodeMirror editor
-    useEffect(() => {
-      const view = editorViewRef.current;
-      if (!view) return;
-      variableHintRef.current.update(view, {
-        text: hintText,
-        pos: braceStartPos,
-      });
-    }, [hintText, braceStartPos]);
 
     const handleRoleChange = (newRole: LLM_MESSAGE_ROLE) => {
       if (
@@ -279,7 +188,7 @@ const LLMPromptMessage = forwardRef<
           style={style}
           ref={setNodeRef}
           onClick={() => {
-            editorViewRef.current?.focus();
+            editorRef.current?.focus();
           }}
           className={cn(
             "group p-1 pb-1.5 pl-2 shadow-none [&:focus-within]:border-primary",
@@ -400,32 +309,15 @@ const LLMPromptMessage = forwardRef<
                         : undefined
                     }
                   >
-                    <CodeMirror
-                      onCreateEditor={handleCreateEditor}
-                      onFocus={onFocus}
-                      onUpdate={handleEditorUpdate}
-                      theme={codeMirrorPromptTheme}
+                    <PromptVariableEditor
+                      ref={editorRef}
                       value={localText}
                       onChange={handleContentChange}
+                      onFocus={onFocus}
                       placeholder={messagePlaceholder}
-                      editable
-                      basicSetup={{
-                        foldGutter: false,
-                        allowMultipleSelections: false,
-                        lineNumbers: false,
-                        highlightActiveLine: false,
-                      }}
-                      extensions={[
-                        EditorView.lineWrapping,
-                        mustachePlugin,
-                        ...(shiftEnterInsertsNewline
-                          ? [shiftEnterNewlineKeymap]
-                          : []),
-                        ...(braceKeyExtension ? [braceKeyExtension] : []),
-                        ...(hasJsonData
-                          ? variableHintRef.current.getExtension()
-                          : []),
-                      ]}
+                      jsonTreeData={jsonTreeData}
+                      onJsonPathSelect={onJsonPathSelect}
+                      shiftEnterInsertsNewline={shiftEnterInsertsNewline}
                     />
                   </div>
                   {compact && !isExpanded && localText && (
@@ -455,30 +347,6 @@ const LLMPromptMessage = forwardRef<
                     >
                       Show less
                     </Button>
-                  )}
-                  {hasJsonData && (
-                    <JsonTreePopover
-                      data={jsonTreeData || {}}
-                      onSelect={handleJsonPathSelect}
-                      open={isJsonPopoverOpen}
-                      onOpenChange={handlePopoverOpenChange}
-                      searchQuery={jsonSearchQuery}
-                      onFocusedPathChange={setFocusedVariableKey}
-                      trigger={
-                        <span
-                          ref={popoverTriggerRef}
-                          className="pointer-events-none"
-                          aria-hidden="true"
-                          style={{
-                            position: "absolute",
-                            top: popoverPosition.top,
-                            left: popoverPosition.left,
-                            width: 1,
-                            height: 1,
-                          }}
-                        />
-                      }
-                    />
                   )}
                 </div>
 
@@ -568,7 +436,7 @@ const LLMPromptMessage = forwardRef<
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={(e) => {
                         e.stopPropagation();
-                        triggerVariableSearch();
+                        editorRef.current?.triggerVariableSearch();
                       }}
                       type="button"
                     >

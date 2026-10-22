@@ -23,10 +23,13 @@ public record ModelParams(
         NumberParam presencePenalty,
         NumberParam maxOutputTokens,
         FlagParam stop,
+        FlagParam seed,
         EffortParam effort,
         Boolean samplingExclusive,
         Boolean thinksByDefault,
         Map<String, ModelParams> routes) {
+
+    public static final String RESPONSES_API_ROUTE = "responses_api";
 
     public ModelParams {
         if (routes != null) {
@@ -127,6 +130,7 @@ public record ModelParams(
                 NumberParam.overlay(base.presencePenalty, top.presencePenalty),
                 NumberParam.overlay(base.maxOutputTokens, top.maxOutputTokens),
                 FlagParam.overlay(base.stop, top.stop),
+                FlagParam.overlay(base.seed, top.seed),
                 EffortParam.overlay(base.effort, top.effort),
                 ObjectUtils.getIfNull(top.samplingExclusive, base.samplingExclusive),
                 ObjectUtils.getIfNull(top.thinksByDefault, base.thinksByDefault),
@@ -170,6 +174,7 @@ public record ModelParams(
                 presencePenalty == null ? null : presencePenalty.settled(),
                 maxOutputTokens == null ? null : maxOutputTokens.settled(),
                 stop == null ? null : stop.settled(),
+                seed == null ? null : seed.settled(),
                 effort == null ? null : effort.settled(),
                 samplingExclusive,
                 thinksByDefault,

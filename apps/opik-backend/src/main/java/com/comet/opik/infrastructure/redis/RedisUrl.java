@@ -22,6 +22,9 @@ public record RedisUrl(
     private static final String SCHEME_SEPARATOR = "://";
     private static final char CREDENTIALS_SEPARATOR = '@';
     private static final char PASSWORD_SEPARATOR = ':';
+    /** Port of a parsed URL that had none, when parsed with it as the default. */
+    public static final int NO_DEFAULT_PORT = -1;
+
     private static final int DEFAULT_REDIS_PORT = 6379;
     private static final int DEFAULT_DATABASE = 0;
 
@@ -56,6 +59,14 @@ public record RedisUrl(
      * @see <a href="https://github.com/redis/lettuce/wiki/Redis-URI-and-connection-details">Redis URI Documentation</a>
      */
     public static RedisUrl parse(String redisUrl) {
+        return parse(redisUrl, DEFAULT_REDIS_PORT);
+    }
+
+    /**
+     * Same as {@link #parse(String)}, with the port to assume when the URL has none. Pass {@link #NO_DEFAULT_PORT} to
+     * detect a missing port.
+     */
+    public static RedisUrl parse(String redisUrl, int defaultPort) {
         Preconditions.checkArgument(StringUtils.isNotBlank(redisUrl), "Redis url cannot be blank");
         redisUrl = redisUrl.trim();
         var urlWithoutCredentials = redisUrl;
@@ -93,7 +104,7 @@ public record RedisUrl(
             var uri = new URI(urlWithoutCredentials);
             var scheme = uri.getScheme();
             var host = uri.getHost();
-            int port = uri.getPort() == -1 ? DEFAULT_REDIS_PORT : uri.getPort();
+            int port = uri.getPort() == -1 ? defaultPort : uri.getPort();
             return RedisUrl.builder()
                     .scheme(scheme)
                     .host(host)
