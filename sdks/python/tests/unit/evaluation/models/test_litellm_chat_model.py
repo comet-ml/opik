@@ -211,7 +211,15 @@ def test_litellm_chat_model_drops_temperature_for_provider_prefixed_gpt5(
     assert not caplog.records
 
 
-@pytest.mark.parametrize("model_name", ["gpt-6-luna", "openai/gpt-6.1-sol"])
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "gpt-6-luna",
+        "openai/gpt-6.1-sol",
+        "openrouter/openai/gpt-6-luna",
+        "azure/gpt-5-mini",
+    ],
+)
 def test_litellm_chat_model__gpt6__drops_temperature_and_logprobs(
     monkeypatch, model_name
 ):
@@ -224,6 +232,37 @@ def test_litellm_chat_model__gpt6__drops_temperature_and_logprobs(
     assert "temperature" not in kwargs
     assert "logprobs" not in kwargs
     assert "top_logprobs" not in kwargs
+
+
+@pytest.mark.parametrize(
+    "model_name", ["openrouter/openai/gpt-4o", "openrouter/openai/gpt-oss-120b"]
+)
+def test_litellm_chat_model__routed_model_outside_gpt5_family__temperature_and_logprobs_kept(
+    monkeypatch, model_name
+):
+    stub = _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name=model_name)
+    model.generate_string("hello", temperature=0.0, logprobs=True, top_logprobs=20)
+
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs["temperature"] == 0.0
+    assert kwargs["logprobs"] is True
+    assert kwargs["top_logprobs"] == 20
+
+
+def test_litellm_chat_model__model_map_refuses_sampling__warning_names_the_refusal(
+    monkeypatch, caplog
+):
+    stub = _install_litellm_stub(monkeypatch)
+    stub.model_cost = {"claude-sonnet-5-5": {"supports_sampling_params": False}}
+    caplog.set_level(logging.WARNING)
+
+    litellm_chat_model.LiteLLMChatModel(model_name="claude-sonnet-5-5", temperature=0.0)
+
+    messages = [record.message for record in caplog.records]
+    assert any("does not accept temperature" in message for message in messages)
+    assert not any("only supports temperature=1" in message for message in messages)
 
 
 @pytest.mark.parametrize(
@@ -1157,3 +1196,98 @@ def test_parse_assistant_message__object_choice_without_content__reports_finish_
 
     assert "finish_reason='stop'" in str(exc_info.value)
     assert "OPENAI_API_KEY" not in str(exc_info.value)
+
+
+_GEVAL_JSON_CHOICE = {"message": {"content": json.dumps({"score": 10, "reason": "ok"})}}
+
+
+def test_geval__provider_refuses_logprobs__retried_once_without_them(monkeypatch):
+    from opik import exceptions
+
+    _install_litellm_stub(
+        monkeypatch, supported_params=["logprobs", "top_logprobs", "response_format"]
+    )
+    calls = []
+
+    @contextmanager
+    def fake_get_provider_response(model_provider, messages, **kwargs):
+        calls.append(kwargs)
+        if kwargs.get("logprobs"):
+            raise exceptions.BaseLLMError(
+                "litellm.BadRequestError: VertexAIException - Logprobs is not supported for this model"
+            )
+        yield SimpleNamespace(choices=[_GEVAL_JSON_CHOICE])
+
+    monkeypatch.setattr(base_model, "get_provider_response", fake_get_provider_response)
+    metric = g_eval.GEval(
+        task_introduction="intro",
+        evaluation_criteria="criteria",
+        model="vertex_ai/gemini-3.5-flash-lite",
+    )
+
+    first = metric.score("{}")
+    second = metric.score("{}")
+
+    score_calls = [call for call in calls if call.get("response_format")]
+    assert first.value == 1.0
+    assert second.value == 1.0
+    assert [call.get("logprobs") for call in score_calls] == [True, None, None]
+
+
+def test_geval__provider_error_not_about_logprobs__raised_without_retry(monkeypatch):
+    from opik import exceptions
+
+    _install_litellm_stub(
+        monkeypatch, supported_params=["logprobs", "top_logprobs", "response_format"]
+    )
+    calls = []
+
+    @contextmanager
+    def fake_get_provider_response(model_provider, messages, **kwargs):
+        calls.append(kwargs)
+        if kwargs.get("response_format"):
+            raise exceptions.BaseLLMError("RateLimitError: slow down")
+        yield SimpleNamespace(choices=[{"message": {"content": "steps"}}])
+
+    monkeypatch.setattr(base_model, "get_provider_response", fake_get_provider_response)
+    metric = g_eval.GEval(
+        task_introduction="intro", evaluation_criteria="criteria", model="gpt-4o"
+    )
+
+    with pytest.raises(exceptions.BaseLLMError):
+        metric.score("{}")
+    assert len([call for call in calls if call.get("response_format")]) == 1
+
+
+@pytest.mark.asyncio
+async def test_geval__provider_refuses_logprobs_async__retried_once_without_them(
+    monkeypatch,
+):
+    from opik import exceptions
+
+    _install_litellm_stub(
+        monkeypatch, supported_params=["logprobs", "top_logprobs", "response_format"]
+    )
+    calls = []
+
+    @asynccontextmanager
+    async def fake_aget_provider_response(model_provider, messages, **kwargs):
+        calls.append(kwargs)
+        if kwargs.get("logprobs"):
+            raise exceptions.BaseLLMError("Logprobs is not supported for this model")
+        yield SimpleNamespace(choices=[_GEVAL_JSON_CHOICE])
+
+    monkeypatch.setattr(
+        base_model, "aget_provider_response", fake_aget_provider_response
+    )
+    metric = g_eval.GEval(
+        task_introduction="intro",
+        evaluation_criteria="criteria",
+        model="vertex_ai/gemini-3.5-flash-lite",
+    )
+
+    result = await metric.ascore("{}")
+
+    score_calls = [call for call in calls if call.get("response_format")]
+    assert result.value == 1.0
+    assert [call.get("logprobs") for call in score_calls] == [True, None]

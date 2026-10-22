@@ -329,10 +329,18 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             # fields. We already drop them gracefully, so skip logging to avoid
             # spamming GEval users with repeated warnings.
             return
-        if param == "temperature":
+        if param == "temperature" and not util.rejects_sampling_params(self.model_name):
             _log_warning(
                 "Model %s only supports temperature=1. Dropping temperature=%s.",
                 self.model_name,
+                value,
+            )
+        elif param in util.SAMPLING_PARAMS:
+            _log_warning(
+                "Model %s does not accept %s. Dropping %s=%s.",
+                self.model_name,
+                param,
+                param,
                 value,
             )
         else:
