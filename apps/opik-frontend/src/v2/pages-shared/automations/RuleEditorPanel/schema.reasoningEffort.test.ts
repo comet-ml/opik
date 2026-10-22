@@ -51,14 +51,21 @@ const open = (
   convertLLMJudgeObjectToLLMJudgeData(persisted(model, custom_parameters))
     .config;
 
-const save = (model: PROVIDER_MODEL_TYPE, config: unknown) =>
-  convertLLMJudgeDataToLLMJudgeObject(asFormData(model, config)).model
-    .custom_parameters;
+const save = (
+  model: PROVIDER_MODEL_TYPE,
+  config: unknown,
+  openAiPipelineMode?: OpenAiPipelineMode,
+) =>
+  convertLLMJudgeDataToLLMJudgeObject(
+    asFormData(model, config),
+    openAiPipelineMode,
+  ).model.custom_parameters;
 
 const unchangedSave = (
   model: PROVIDER_MODEL_TYPE,
   custom_parameters: Record<string, unknown>,
-) => save(model, open(model, custom_parameters));
+  openAiPipelineMode?: OpenAiPipelineMode,
+) => save(model, open(model, custom_parameters), openAiPipelineMode);
 
 describe("LLM judge OpenAI effort round trip", () => {
   it("reads the persisted effort back out of custom_parameters", () => {
@@ -117,6 +124,44 @@ describe("LLM judge OpenAI effort round trip", () => {
 
     expect(open(model, stored).reasoningEffort).toBeUndefined();
     expect(unchangedSave(model, stored)).toEqual(stored);
+  });
+});
+
+describe("LLM judge OpenAI effort and the key's mode", () => {
+  it("saves no effort for a max the Chat Completions key shows as the default", () => {
+    const config = open(PROVIDER_MODEL_TYPE.GPT_6_LUNA, {
+      reasoning_effort: "max",
+      user: "judge",
+    });
+
+    expect(
+      resolveEffort(
+        PROVIDER_MODEL_TYPE.GPT_6_LUNA,
+        config,
+        "chat_completions_api",
+      ),
+    ).toEqual({ reasoningEffort: "medium" });
+    expect(
+      save(PROVIDER_MODEL_TYPE.GPT_6_LUNA, config, "chat_completions_api"),
+    ).toEqual({ user: "judge" });
+  });
+
+  it.each<[string, OpenAiPipelineMode | undefined, Record<string, unknown>]>([
+    [
+      "keeps max on a Responses key",
+      "responses_api",
+      { reasoning_effort: "max" },
+    ],
+    ["keeps max while the keys load", undefined, { reasoning_effort: "max" }],
+    [
+      "keeps xhigh on a Chat Completions key",
+      "chat_completions_api",
+      { reasoning_effort: "xhigh" },
+    ],
+  ])("%s", (_, openAiPipelineMode, stored) => {
+    expect(
+      unchangedSave(PROVIDER_MODEL_TYPE.GPT_6_LUNA, stored, openAiPipelineMode),
+    ).toEqual(stored);
   });
 });
 

@@ -653,14 +653,17 @@ const getReasoningEffortProvider = (model: string) => {
     : undefined;
 };
 
-// The Responses API list, a superset of the Chat Completions one: the toolbar already fitted the level
-// to the key's mode, which a save does not know.
-const getRuleReasoningEffortOptions = (model: string) => {
+// An unknown mode (keys still loading) gets the Responses API list, a superset of the Chat Completions
+// one: assuming Chat Completions would drop a stored max for good on a save made before the keys load.
+const getRuleReasoningEffortOptions = (
+  model: string,
+  openAiPipelineMode?: OpenAiPipelineMode,
+) => {
   const provider = getReasoningEffortProvider(model);
   if (provider === PROVIDER_TYPE.OPEN_AI) {
     return getOpenAIReasoningEffortOptions(
       model as PROVIDER_MODEL_TYPE,
-      "responses_api",
+      openAiPipelineMode ?? "responses_api",
     );
   }
   return provider === PROVIDER_TYPE.OPEN_ROUTER
@@ -668,7 +671,7 @@ const getRuleReasoningEffortOptions = (model: string) => {
     : [];
 };
 
-const getNestedReasoningEffort = (
+const getPersistedReasoningEffort = (
   model: string,
   customParameters: unknown,
 ): OpenAIReasoningEffort | undefined => {
@@ -762,7 +765,7 @@ export const updateConfigForModelChange = <
   if (
     customParameters &&
     getRuleReasoningEffortOptions(previous.model).length > 0 &&
-    getNestedReasoningEffort(previous.model, customParameters)
+    getPersistedReasoningEffort(previous.model, customParameters)
   ) {
     const rest = withReasoningEffort(
       previous.model,
@@ -808,7 +811,10 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     thinkingEffort: ANTHROPIC_THINKING_EFFORT_VALUES.find(
       (e) => e === persistedEffort,
     ),
-    reasoningEffort: getNestedReasoningEffort(model, persistedCustomParameters),
+    reasoningEffort: getPersistedReasoningEffort(
+      model,
+      persistedCustomParameters,
+    ),
   };
   const config = model
     ? updateProviderConfig(rawConfig, {
@@ -835,6 +841,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     | LLMJudgeDetailsTraceFormType
     | LLMJudgeDetailsThreadFormType
     | LLMJudgeDetailsSpanFormType,
+  openAiPipelineMode?: OpenAiPipelineMode,
 ) => {
   const {
     temperature,
@@ -927,8 +934,12 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     ? thinkingEffort
     : undefined;
   // A model with no levels to offer is one the form shows no effort for, so a stored one (an
-  // SDK-made rule, a model this build does not know yet) is sent as it is.
-  const reasoningEffortOptions = getRuleReasoningEffortOptions(data.model);
+  // SDK-made rule, a model this build does not know yet) is sent as it is. A level the key's mode
+  // refuses (max on Chat Completions) is one the panel shows as the default, so it is not saved.
+  const reasoningEffortOptions = getRuleReasoningEffortOptions(
+    data.model,
+    openAiPipelineMode,
+  );
   const finalCustomParameters =
     getProviderFromModel(data.model as PROVIDER_MODEL_TYPE) ===
     PROVIDER_TYPE.ANTHROPIC
