@@ -3,10 +3,10 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 import { registryModelIds } from '@e2e/core/model-registry';
 
 /**
- * The LLM-judge rule dialog hides the model-parameters gear for an
+ * The LLM-judge rule editor panel hides the model-parameters gear for an
  * OpenRouter-routed OpenAI reasoning model (OPIK-8636, opik#8830).
  *
- * A pure rendering decision, so UI is the right and only surface: the dialog is
+ * A pure rendering decision, so UI is the right and only surface: the rule editor panel is
  * never submitted, no provider is ever called, and there is no rule to tear
  * down. `PromptModelConfigs` returns `null` rather than disabling the button —
  * "an empty panel misleads, and a disabled button can't say why" — and what
@@ -37,13 +37,13 @@ test.describe(
         const onlineEval = new OnlineEvaluationPage(page);
 
         // Each case opens the page fresh rather than cancelling the previous
-        // dialog: dismissing the parameters dropdown and then the dialog is a
+        // editor: dismissing the parameters dropdown and then the rule editor panel is a
         // race — the dropdown closes with an animation, and an Escape aimed at
-        // it lands on the dialog instead — and a reload costs about a second.
-        const openDialogOn = async (model: string): Promise<void> => {
+        // it lands on the rule editor panel instead — and a reload costs about a second.
+        const openPanelOn = async (model: string): Promise<void> => {
           await onlineEval.goto(project.id);
           await onlineEval.waitForReady();
-          await onlineEval.openCreateRuleDialog();
+          await onlineEval.openCreateRulePanel();
           await onlineEval.selectJudgeModelFromProvider(OPEN_ROUTER_GROUP, model);
         };
 
@@ -54,9 +54,9 @@ test.describe(
           ).toBe(true);
 
           // The positive case first, deliberately: if the gear never renders
-          // at all — a broken locator, a dialog that failed to open — this
+          // at all — a broken locator, an editor panel that failed to open — this
           // fails before the absence below has been read as meaningful.
-          await openDialogOn(OPEN_ROUTER_MODEL.openAiStandard);
+          await openPanelOn(OPEN_ROUTER_MODEL.openAiStandard);
 
           await expect(
             onlineEval.judgeModelParametersTrigger,
@@ -76,7 +76,7 @@ test.describe(
             'the native OpenAI reasoning row behind this id is listed — which is what gates it',
           ).toBe(true);
 
-          await openDialogOn(OPEN_ROUTER_MODEL.openAiReasoning);
+          await openPanelOn(OPEN_ROUTER_MODEL.openAiReasoning);
 
           // Hidden, not disabled. A build that disabled it instead would still
           // have count 1 here and fail, which is the intended reading.
@@ -85,11 +85,13 @@ test.describe(
             'no gear for an OpenRouter id behind a native OpenAI reasoning row',
           ).toHaveCount(0);
 
-          // The absence means nothing without these: a dialog that closed, or
+          // The absence means nothing without these: an editor that closed, or
           // a selection that silently did not take, would also show no gear.
-          await expect(onlineEval.dialog, 'the dialog is still open').toBeVisible();
+          // Read from the form, not the panel root, which stays mounted
+          // (translated off screen) while closed.
+          await expect(onlineEval.nameInput, 'the editor is still open').toBeVisible();
           await expect(
-            onlineEval.dialog,
+            onlineEval.panel,
             'and still shows the gated model as the chosen judge',
           ).toContainText(OPEN_ROUTER_MODEL.openAiReasoning);
         });

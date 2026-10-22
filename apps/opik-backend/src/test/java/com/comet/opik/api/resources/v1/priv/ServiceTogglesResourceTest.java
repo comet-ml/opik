@@ -20,11 +20,9 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -34,13 +32,11 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Service Toggles Resource Test")
@@ -52,10 +48,6 @@ class ServiceTogglesResourceTest {
     private static final String API_KEY_ENABLED = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME_ENABLED = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID_ENABLED = UUID.randomUUID().toString();
-
-    private static final String API_KEY_OTHER = UUID.randomUUID().toString();
-    private static final String WORKSPACE_NAME_OTHER = UUID.randomUUID().toString();
-    private static final String WORKSPACE_ID_OTHER = UUID.randomUUID().toString();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -85,7 +77,7 @@ class ServiceTogglesResourceTest {
                         .redisUrl(REDIS.getRedisURI())
                         .customConfigs(List.of(
                                 new CustomConfig("serviceToggles.ollieEnabled", "true"),
-                                new CustomConfig("customCharts.enabledWorkspaces", WORKSPACE_ID_ENABLED)))
+                                new CustomConfig("customCharts.enabled", "true")))
                         .build());
     }
 
@@ -101,39 +93,26 @@ class ServiceTogglesResourceTest {
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_ENABLED, WORKSPACE_NAME_ENABLED,
                 WORKSPACE_ID_ENABLED, USER);
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_OTHER, WORKSPACE_NAME_OTHER,
-                WORKSPACE_ID_OTHER, USER);
     }
 
-    Stream<Arguments> customChartsWorkspaces() {
-        return Stream.of(
-                arguments(API_KEY_ENABLED, WORKSPACE_NAME_ENABLED, true),
-                arguments(API_KEY_OTHER, WORKSPACE_NAME_OTHER, false));
-    }
-
-    @ParameterizedTest
-    @MethodSource("customChartsWorkspaces")
-    @DisplayName("custom_charts_enabled_for_workspace is true only for a workspace on the Custom Charts allowlist")
-    void getToggles__customChartsEnabled__followsTheCallersWorkspace(String apiKey, String workspaceName,
-            boolean expected) {
+    @Test
+    @DisplayName("custom_charts_enabled_for_workspace is true when Custom Charts is enabled")
+    void getToggles__whenCustomChartsEnabled__thenReportsEnabled() {
         var expectedToggles = TestConfigUtils.loadConfigTest().getServiceToggles();
         expectedToggles.setOllieEnabled(true);
 
         try (var response = client.target("%s/v1/private/toggles/".formatted(baseURI))
                 .request(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
+                .header(HttpHeaders.AUTHORIZATION, API_KEY_ENABLED)
+                .header(WORKSPACE_HEADER, WORKSPACE_NAME_ENABLED)
                 .get()) {
 
-            assertThat(response.getStatus()).as("[%s] status", workspaceName).isEqualTo(200);
+            assertThat(response.getStatus()).isEqualTo(200);
             var toggles = response.readEntity(JsonNode.class);
             assertThat(toggles)
-                    .as("[%s] toggles", workspaceName)
-                    .isEqualTo(JsonUtils.valueToTree(expectedToggles.withCustomChartsEnabledForWorkspace(expected)));
+                    .isEqualTo(JsonUtils.valueToTree(expectedToggles.withCustomChartsEnabledForWorkspace(true)));
             // The key the frontend reads.
-            assertThat(toggles.get("custom_charts_enabled_for_workspace").asBoolean())
-                    .as("[%s] custom_charts_enabled_for_workspace", workspaceName)
-                    .isEqualTo(expected);
+            assertThat(toggles.get("custom_charts_enabled_for_workspace").asBoolean()).isTrue();
         }
     }
 }

@@ -1,4 +1,4 @@
-export { test, expect } from './otel-routed-projects.fixture';
+export { test, expect } from './emptied-source-versions.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -475,3 +475,21 @@ export type {
   SmeInternalThreadQueueFixtures,
 } from './sme-internal-thread-queue.fixture';
 export type { OtelRoutedProjectsFixtures } from './otel-routed-projects.fixture';
+export type {
+  OpenRouterProviderRef,
+  OpenRouterProviderFixtures,
+} from './open-router-provider.fixture';
+export { OPEN_ROUTER_EFFORT_MODEL } from './open-router-provider.fixture';
+export type {
+  StudioRerunOptimizationRef,
+  StudioRerunOptimizationFixtures,
+} from './studio-rerun-optimization.fixture';
+export {
+  RETIRED_MODEL,
+  SAVED_MODEL_PARAMETERS,
+} from './studio-rerun-optimization.fixture';
+export type {
+  SourceVersionRef,
+  EmptiedSourceRef,
+  EmptiedSourceVersionsFixtures,
+} from './emptied-source-versions.fixture';

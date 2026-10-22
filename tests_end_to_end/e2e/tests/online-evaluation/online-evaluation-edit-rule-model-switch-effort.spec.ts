@@ -9,7 +9,7 @@ import type {
 import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 
 /**
- * Switching an LLM-judge rule's MODEL in the edit dialog must take the previous
+ * Switching an LLM-judge rule's MODEL in the rule editor panel must take the previous
  * model's Anthropic thinking effort with it (OPIK-8605, opik#8822).
  *
  * The effort is stored in `code.model.custom_parameters.output_config.effort`,
@@ -43,7 +43,7 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
  *
  * `thinkingEffort` is NOT in `RULE_UNSUPPORTED_PARAMS` — `modelConfigParams.ts`
  * keeps it precisely because it is saved inside `custom_parameters` — so the
- * rule dialog really does render a Thinking effort dropdown, and the screen can
+ * rule editor panel really does render a Thinking effort dropdown, and the screen can
  * disagree with what gets written. Asserting the PATCH body alone would miss a
  * dropdown showing a level the rule no longer holds, and asserting the screen
  * alone would miss the payload. So each test reads both, and the persisted blob
@@ -58,10 +58,10 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
  * fixture only has to make the picker OFFER these models; a placeholder key is
  * enough for that, and nothing is ever sent to a provider.
  *
- * ## Why each test opens the page fresh instead of reusing a dialog
+ * ## Why each test opens the page fresh instead of reusing an editor panel
  *
  * The Thinking effort dropdown lives inside the model-parameters gear, which is
- * a `DropdownMenu` over the dialog: while it is open the Update button cannot be
+ * a `DropdownMenu` over the rule editor panel: while it is open the Update button cannot be
  * clicked, and dismissing it is a race — the close is animated, so an Escape
  * aimed at the dropdown lands on the DIALOG instead and discards the form. Each
  * phase therefore reloads, the same choice and for the same reason as
@@ -77,7 +77,7 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 const SEEDED_MODEL_ID = 'claude-sonnet-5';
 
 /**
- * How the picker labels `SEEDED_MODEL_ID`, used to assert the dialog really
+ * How the picker labels `SEEDED_MODEL_ID`, used to assert the rule editor panel really
  * hydrated onto the seeded rule before anything is switched.
  *
  * Taken from `REGISTRY_MODEL` rather than written out, because that is also
@@ -115,7 +115,7 @@ const REFITTED_EFFORT = 'high';
  *     `output_config` from the effort alone — or dropped the whole nested
  *     object to be rid of one key — fails here rather than reading as a clean
  *     strip;
- *   - `unrelated_marker` is a top-level key no dialog control has ever heard
+ *   - `unrelated_marker` is a top-level key no editor control has ever heard
  *     of, which catches a serializer that discards everything it cannot name.
  */
 const SEEDED_CUSTOM_PARAMETERS = {
@@ -185,14 +185,14 @@ test.describe(
         const onlineEval = new OnlineEvaluationPage(page);
         const ruleId = await seedEffortRule({ backendClient, project, ruleName });
 
-        await test.step('The dialog shows the stored effort before anything is switched', async () => {
+        await test.step('The editor shows the stored effort before anything is switched', async () => {
           // The screen half of the premise. Read before the switch rather than
           // only after, so "the dropdown is gone" below cannot be satisfied by a
           // panel that never rendered the control in the first place.
-          await openEditDialogOn(onlineEval, project.id, ruleName);
+          await openEditPanelOn(onlineEval, project.id, ruleName);
           expect(
             await onlineEval.readModelPickerText(),
-            'the dialog hydrated onto the seeded rule',
+            'the rule editor panel hydrated onto the seeded rule',
           ).toContain(SEEDED_MODEL_NAME);
           await onlineEval.openJudgeModelParameters();
           await expect(
@@ -202,7 +202,7 @@ test.describe(
         });
 
         const update = await test.step(`Switch the model to ${OPENAI_TARGET} and save`, async () => {
-          await openEditDialogOn(onlineEval, project.id, ruleName);
+          await openEditPanelOn(onlineEval, project.id, ruleName);
           await onlineEval.selectJudgeModel(OPENAI_TARGET);
           return submitAndCaptureUpdate(page, onlineEval, ruleId);
         });
@@ -266,10 +266,10 @@ test.describe(
         const ruleId = await seedEffortRule({ backendClient, project, ruleName });
 
         const update = await test.step(`Switch the model to ${NO_EFFORT_TARGET} and save`, async () => {
-          await openEditDialogOn(onlineEval, project.id, ruleName);
+          await openEditPanelOn(onlineEval, project.id, ruleName);
           expect(
             await onlineEval.readModelPickerText(),
-            'the dialog hydrated onto the seeded rule',
+            'the rule editor panel hydrated onto the seeded rule',
           ).toContain(SEEDED_MODEL_NAME);
           await onlineEval.selectJudgeModel(NO_EFFORT_TARGET);
           return submitAndCaptureUpdate(page, onlineEval, ruleId);
@@ -296,7 +296,7 @@ test.describe(
         });
 
         await test.step('Reopened, the panel offers no Thinking effort at all', async () => {
-          await openEditDialogOn(onlineEval, project.id, ruleName);
+          await openEditPanelOn(onlineEval, project.id, ruleName);
           await onlineEval.openJudgeModelParameters();
           // Temperature first: this target DOES have a tunable parameter, so a
           // panel holding it is proof the panel opened and rendered. Without
@@ -335,10 +335,10 @@ test.describe(
         const ruleId = await seedEffortRule({ backendClient, project, ruleName });
 
         const update = await test.step(`Switch the model to ${NARROWER_EFFORT_TARGET} and save`, async () => {
-          await openEditDialogOn(onlineEval, project.id, ruleName);
+          await openEditPanelOn(onlineEval, project.id, ruleName);
           expect(
             await onlineEval.readModelPickerText(),
-            'the dialog hydrated onto the seeded rule',
+            'the rule editor panel hydrated onto the seeded rule',
           ).toContain(SEEDED_MODEL_NAME);
           await onlineEval.selectJudgeModel(NARROWER_EFFORT_TARGET);
           return submitAndCaptureUpdate(page, onlineEval, ruleId);
@@ -369,7 +369,7 @@ test.describe(
           // The screen and the stored value have to agree, and here they are
           // both NEW: a build that refitted the payload while leaving the
           // dropdown on the stale level would pass every assertion above.
-          await openEditDialogOn(onlineEval, project.id, ruleName);
+          await openEditPanelOn(onlineEval, project.id, ruleName);
           await onlineEval.openJudgeModelParameters();
           await expect(
             onlineEval.judgeThinkingEffortSelect,
@@ -406,10 +406,10 @@ test.describe(
         const ruleId = await seedEffortRule({ backendClient, project, ruleName });
 
         const update = await test.step('Open the rule and press Update with no edits', async () => {
-          await openEditDialogOn(onlineEval, project.id, ruleName);
+          await openEditPanelOn(onlineEval, project.id, ruleName);
           expect(
             await onlineEval.readModelPickerText(),
-            'the dialog hydrated onto the seeded rule',
+            'the rule editor panel hydrated onto the seeded rule',
           ).toContain(SEEDED_MODEL_NAME);
           return submitAndCaptureUpdate(page, onlineEval, ruleId);
         });
@@ -431,7 +431,7 @@ test.describe(
         });
 
         await test.step('Reopened, the panel still reads the stored level', async () => {
-          await openEditDialogOn(onlineEval, project.id, ruleName);
+          await openEditPanelOn(onlineEval, project.id, ruleName);
           await onlineEval.openJudgeModelParameters();
           await expect(
             onlineEval.judgeThinkingEffortSelect,
@@ -485,8 +485,8 @@ async function seedEffortRule(args: {
   });
 }
 
-/** Reload the Online Evaluation page and open one rule's edit dialog. */
-async function openEditDialogOn(
+/** Reload the Online Evaluation page and open one rule's rule editor panel. */
+async function openEditPanelOn(
   onlineEval: OnlineEvaluationPage,
   projectId: string,
   ruleName: string,
@@ -494,14 +494,14 @@ async function openEditDialogOn(
   await onlineEval.goto(projectId);
   await onlineEval.waitForReady();
   await expect(onlineEval.ruleRow(ruleName)).toHaveCount(1);
-  await onlineEval.openEditRuleDialogByName(ruleName);
+  await onlineEval.openEditRulePanelByName(ruleName);
 }
 
 /**
- * Press "Update rule" and return the PATCH request the dialog sent.
+ * Press "Save changes" and return the PATCH request the rule editor panel sent.
  *
- * Both the request and the response are awaited. `AddEditRuleDialog` calls
- * `setOpen(false)` outside the mutation's callbacks, so the dialog hides the
+ * Both the request and the response are awaited. `the rule editor panel` calls
+ * `setOpen(false)` outside the mutation's callbacks, so the rule editor panel hides the
  * moment the PATCH is dispatched — waiting only for it to close would leave the
  * persisted read below free to observe the PRE-save blob and pass on a backend
  * that threw the update away.
@@ -511,7 +511,7 @@ async function submitAndCaptureUpdate(
   onlineEval: OnlineEvaluationPage,
   ruleId: string,
 ): Promise<Request> {
-  // Armed before the click: the request is in flight the instant the dialog
+  // Armed before the click: the request is in flight the instant the rule editor panel
   // submits, so subscribing afterwards would race it.
   const patched = page.waitForRequest(
     (request) => request.method() === 'PATCH' && isRuleUpdate(request.url(), ruleId),
@@ -520,7 +520,7 @@ async function submitAndCaptureUpdate(
     (response) =>
       response.request().method() === 'PATCH' && isRuleUpdate(response.url(), ruleId),
   );
-  await onlineEval.submitRuleDialog();
+  await onlineEval.submitPanel();
   const request = await patched;
   const response = await answered;
   expect(response.ok(), `the save was accepted (got ${response.status()})`).toBe(true);

@@ -2,13 +2,13 @@ import { test, expect, REGISTRY_MODEL } from '@e2e/fixtures';
 import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 
 /**
- * An LLM-judge rule must persist the Anthropic thinking effort the dialog
+ * An LLM-judge rule must persist the Anthropic thinking effort the rule editor panel
  * displays, and must not offer a control it cannot keep (opik#8880).
  *
  * The effort is the ONE provider setting this surface can store beyond a
  * temperature, and it is stored in a place nothing on the rule list shows:
  * `code.model.custom_parameters.output_config.effort`, the slot the judge
- * actually reads. So an effort lost on save is invisible — the dialog closes,
+ * actually reads. So an effort lost on save is invisible — the rule editor panel closes,
  * the row looks right, and the judge simply never thinks. That is the silent
  * wrongness worth pinning.
  *
@@ -19,8 +19,8 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
  *   - the SAVE path (`convertLLMJudgeDataToLLMJudgeObject`) decides what lands
  *     in `custom_parameters`.
  *
- * A dialog showing Low over a save that stored nothing looks entirely correct,
- * and an API-only assertion would pass over a dialog that could never set the
+ * A editor showing Low over a save that stored nothing looks entirely correct,
+ * and an API-only assertion would pass over an editor panel that could never set the
  * value in the first place.
  *
  * ## Why this is not already covered
@@ -75,11 +75,11 @@ test.describe(
         await test.step('Open Online evaluation on an empty project and fill a judge rule', async () => {
           await onlineEval.goto(project.id);
           await onlineEval.waitForReady();
-          await onlineEval.openCreateRuleDialog();
+          await onlineEval.openCreateRulePanel();
           // Filled before the parameters are touched because picking the
           // template rebuilds the prompt and variable-mapping section; the
           // model has to be chosen before its parameters panel exists at all.
-          await onlineEval.fillCreateRuleDialogLLMJudge({
+          await onlineEval.fillCreateRuleLLMJudge({
             name: ruleName,
             template: 'Moderation',
             modelDisplayName: REGISTRY_MODEL.claudeWithSampling,
@@ -133,7 +133,7 @@ test.describe(
         });
 
         await test.step('Save the rule', async () => {
-          await onlineEval.submitRuleDialog();
+          await onlineEval.submitPanel();
           await expect(onlineEval.ruleRow(ruleName), 'the rule is listed').toHaveCount(1);
         });
 
@@ -168,9 +168,9 @@ test.describe(
 
         await test.step('…and reopening the rule hydrates the control back to it', async () => {
           // The read-back above proves the value reached storage. This proves
-          // the dialog can find it there — a rule whose effort only the API can
+          // the rule editor panel can find it there — a rule whose effort only the API can
           // see is one a user cannot change back.
-          await onlineEval.openEditRuleDialogByName(ruleName);
+          await onlineEval.openEditRulePanelByName(ruleName);
           await onlineEval.openJudgeModelParameters();
           expect(
             await onlineEval.readJudgeEffort(),

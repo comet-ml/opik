@@ -891,6 +891,14 @@ public class SpanDAO {
      * predicate prunes no partition either. The lookup takes the project, so it is served by the {@code span_weeks}
      * primary key. A search then skips its week pre-pass: the bound already prunes, and the pre-pass reads the trace's
      * keys in every partition.
+     * <p>
+     * Not scoped to a trace, every {@code spans} access carries the project's span weeks instead
+     * ({@code <project_span_weeks_bound>}, OPIK-8910), and a search skips its week pre-pass too. Unbounded, a project
+     * read lands on a boundary granule of the project's key range in nearly every weekly partition, which dominates
+     * the cost of a small project's read. The lookup is served by the {@code prj_project_weeks} projection of
+     * {@code span_weeks}, which only a {@code DISTINCT} read uses. Its id-range bounds become the week range each access
+     * already applies to {@code id_at}, so the set holds every week the access can return a row from; a week left by a
+     * deleted span only widens it.
      */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(span_id_prefilter)>span_id_prefilter AS (
@@ -910,10 +918,16 @@ public class SpanDAO {
                 <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT id_week FROM span_weeks
                     WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
+                <if(project_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id_week >= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                    <if(uuid_to_time)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+                    <if(last_received_span_id)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC'), 1)))<endif>)<endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned && search_text && !trace_span_weeks_bound)>
+                <if(spans_partitioned && search_text && !trace_span_weeks_bound && !project_span_weeks_bound)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     FROM spans
@@ -1107,10 +1121,16 @@ public class SpanDAO {
                 <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT id_week FROM span_weeks
                     WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
+                <if(project_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id_week >= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                    <if(uuid_to_time)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+                    <if(last_received_span_id)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC'), 1)))<endif>)<endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned && search_text && !trace_span_weeks_bound)>
+                <if(spans_partitioned && search_text && !trace_span_weeks_bound && !project_span_weeks_bound)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     FROM spans
@@ -1169,6 +1189,12 @@ public class SpanDAO {
                 <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT id_week FROM span_weeks
                     WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
+                <if(project_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id_week >= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                    <if(uuid_to_time)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+                    <if(last_received_span_id)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC'), 1)))<endif>)<endif>
                 <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -1231,7 +1257,7 @@ public class SpanDAO {
      * initiator; this one comes back from the shard as one finished row, as {@link #SELECT_SPANS_STATS} does
      * (OPIK-8833).
      * <p>
-     * Scoped to a trace, carries the span_weeks bound and skips the search week pre-pass, as
+     * Carries the span_weeks bound of the trace, or else of the project, and skips the search week pre-pass, as
      * {@link #SELECT_BY_PROJECT_ID} does.
      */
     private static final String COUNT_BY_PROJECT_ID = """
@@ -1251,10 +1277,15 @@ public class SpanDAO {
                 <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT id_week FROM span_weeks
                     WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
+                <if(project_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id_week >= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                    <if(uuid_to_time)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>)<endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned && search_text && !trace_span_weeks_bound)>
+                <if(spans_partitioned && search_text && !trace_span_weeks_bound && !project_span_weeks_bound)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     FROM spans
@@ -1344,10 +1375,15 @@ public class SpanDAO {
             <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                 SELECT id_week FROM span_weeks
                 WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
+            <if(project_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                SELECT DISTINCT id_week FROM span_weeks
+                WHERE workspace_id = :workspace_id AND project_id = :project_id
+                <if(uuid_from_time)> AND id_week >= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                <if(uuid_to_time)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>)<endif>
             <if(type)> AND type = :type <endif>
             <if(filters)> AND <filters> <endif>
             <if(search_text)> AND <search_text> <endif>
-            <if(spans_partitioned && search_text && !trace_span_weeks_bound)>
+            <if(spans_partitioned && search_text && !trace_span_weeks_bound && !project_span_weeks_bound)>
             AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                 FROM spans
@@ -1547,6 +1583,10 @@ public class SpanDAO {
      * same-named {@code SELECT} alias first: an alias such as {@code duration}, {@code tags}, {@code usage},
      * {@code input}, {@code output} or {@code metadata} at the reading level would turn a user filter on that column
      * into an aggregate in {@code WHERE}, and the query would fail.
+     * <p>
+     * On partitioned spans the read is bound to the weeks of the project's (or the trace's) spans. Under a span_weeks
+     * bound they come from the index, as in {@link #SELECT_BY_PROJECT_ID}; otherwise from a pre-pass over
+     * {@code spans}, which has no week bound of its own and so reads a boundary granule in nearly every partition.
      */
     private static final String SELECT_SPANS_STATS = """
             WITH feedback_scores_deduped AS (
@@ -1674,7 +1714,14 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned)>
+                <if(trace_span_weeks_bound || project_span_weeks_bound)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id_week >= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                    <if(uuid_to_time)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <elseif(spans_partitioned)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     FROM spans
@@ -1730,7 +1777,8 @@ public class SpanDAO {
      * traces.
      * <ul>
      * <li>{@code filters_present} adds a {@code spans_final} CTE that narrows the scores to the filtered spans. It must
-     * select the same spans as {@link #SELECT_SPANS_STATS}; only its week-pruning hint may differ.</li>
+     * select the same spans as {@link #SELECT_SPANS_STATS}; only its week-pruning hint may differ. Under a span_weeks
+     * bound it carries the same index lookup; otherwise only a search adds the spans pre-pass.</li>
      * <li>{@code has_legacy_scores} adds the legacy {@code feedback_scores} table as a {@code UNION ALL} branch.</li>
      * <li>Only {@code value} is projected, not the per-score tuples the listing queries build.</li>
      * </ul>
@@ -1831,7 +1879,14 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned && search_text)>
+                <if(trace_span_weeks_bound || project_span_weeks_bound)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id_week >= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                    <if(uuid_to_time)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <elseif(spans_partitioned && search_text)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     FROM spans
@@ -3120,13 +3175,14 @@ public class SpanDAO {
                 .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
         Optional.ofNullable(spanSearchCriteria.searchText())
                 .ifPresent(searchText -> template.add("search_text", SPAN_SEARCH_CLAUSE));
-        // Bounds a search scan to the weeks of the project's own spans; pure cost on the unpartitioned legacy table.
+        // Enables the spans pre-pass that bounds these reads to their weeks when no span_weeks bound applies; pure cost
+        // on the unpartitioned legacy table.
         if (spanColumnsNonNullable()) {
             template.add("spans_partitioned", true);
         }
-        if (spanSearchCriteria.traceId() != null
-                && configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
-            template.add("trace_span_weeks_bound", true);
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add(spanSearchCriteria.traceId() != null ? "trace_span_weeks_bound" : "project_span_weeks_bound",
+                    true);
         }
         return template;
     }

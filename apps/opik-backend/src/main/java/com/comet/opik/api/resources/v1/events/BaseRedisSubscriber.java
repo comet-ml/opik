@@ -635,6 +635,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         .status(MessageStatus.FAILURE)
                         .error(throwable)
                         .context(context)
+                        .message(message)
                         .build()))
                 .doFinally(signalType -> {
                     messageProcessingTime.record(System.currentTimeMillis() - startMillis, workspaceAttributes);
@@ -726,7 +727,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .map(failure -> {
                     log.warn("Non-retryable error for messageId '{}', removing from stream",
                             failure.messageId(), failure.error());
-                    return failure.messageId();
+                    return failure;
                 })
                 .toList();
 
@@ -741,10 +742,32 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .filter(this::maxRetriesReached)
                 .map(this::handleMaxRetriesReached)
                 .collectList() // Emits an empty list if the sequence is empty
-                .flatMap(maxRetries ->
-                // Delete all non-retryable combined with max retries reached
-                ackAndRemoveMessages(Stream.concat(nonRetryable.stream(), maxRetries.stream()).toList()))
+                .flatMap(maxRetries -> {
+                    // Delete all non-retryable combined with max retries reached
+                    var retired = Stream.concat(nonRetryable.stream(), maxRetries.stream()).toList();
+                    return notifyRetired(retired)
+                            .then(ackAndRemoveMessages(retired.stream().map(ProcessingResult::messageId).toList()));
+                })
                 .thenReturn(processingResults);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Mono<Void> notifyRetired(List<ProcessingResult> retired) {
+        return Flux.fromIterable(retired)
+                .filter(failure -> failure.message() != null)
+                .flatMap(failure -> Mono.defer(() -> onRetired((M) failure.message(), failure.error()))
+                        .subscribeOn(workersScheduler)
+                        .onErrorResume(throwable -> {
+                            log.error("Failed to handle retired messageId '{}'", failure.messageId(), throwable);
+                            return Mono.empty();
+                        }))
+                .then();
+    }
+
+    // Runs once, just before a message the stream gives up on is acked and removed, so a subclass can record
+    // a terminal outcome for it. Best effort: an error here is logged and the message is removed anyway.
+    protected Mono<Void> onRetired(M message, Throwable error) {
+        return Mono.empty();
     }
 
     private boolean maxRetriesReached(ProcessingResult failure) {
@@ -758,11 +781,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         return true;
     }
 
-    private StreamMessageId handleMaxRetriesReached(ProcessingResult maxRetriesFailure) {
+    private ProcessingResult handleMaxRetriesReached(ProcessingResult maxRetriesFailure) {
         // TODO: Send to the dead letter queue (DLQ) for further analysis
         log.error("Max retries reached, removing from stream, messageId '{}'",
                 maxRetriesFailure.messageId(), maxRetriesFailure.error());
-        return maxRetriesFailure.messageId();
+        return maxRetriesFailure;
     }
 
     private Mono<Long> ackAndRemoveMessages(List<StreamMessageId> messageIds) {
@@ -890,7 +913,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     @Builder(toBuilder = true)
     private record ProcessingResult(
             StreamMessageId messageId, MessageStatus status, Throwable error, long deliveryCount,
-            MessageContext context) {
+            MessageContext context, Object message) {
     }
 
     /**

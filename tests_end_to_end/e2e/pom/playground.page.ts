@@ -60,6 +60,43 @@ const hasProducedOutput = (text: string): boolean =>
 /** The title `useRunCompletionToast` gives the toast a finished run raises. */
 const RUN_COMPLETE_TEXT = /Run complete/;
 
+/** The localStorage key zustand persists the Playground store under. */
+const PLAYGROUND_STORE_KEY = 'PLAYGROUND_STATE';
+
+/**
+ * One persisted Playground prompt, reduced to the fields that decide whether a
+ * remount re-applies a library template over the user's own edits.
+ *
+ * Every field is optional because their ABSENCE is the state under test: a
+ * prompt written before `appliedChatPromptVersionId` existed carries no marker,
+ * and a card that followed the library's latest version carries no pinned
+ * version either.
+ */
+export interface StoredChatPrompt {
+  loadedChatPromptId?: string;
+  loadedChatPromptVersionId?: string;
+  appliedChatPromptVersionId?: string;
+  messages: Array<{ role: string; content: string }>;
+}
+
+/**
+ * A `PLAYGROUND_STATE` blob to plant, as a user carrying one would have it.
+ *
+ * Optional fields are omitted to model a state that genuinely lacks them —
+ * see {@link StoredChatPrompt} — so `undefined` here means "delete the key",
+ * not "set it to undefined".
+ */
+export interface PlantedChatPrompt {
+  loadedChatPromptId: string;
+  /** Omit to model a card that followed the library's LATEST version. */
+  loadedChatPromptVersionId?: string;
+  /** Omit to model state written before the applied-version marker existed. */
+  appliedChatPromptVersionId?: string;
+  messages: Array<{ role: 'system' | 'user'; content: string }>;
+  /** Omit to model state written before the backfill flag existed. */
+  backfilled?: boolean;
+}
+
 export interface PlaygroundVariantConfig {
   systemPrompt?: string;
   /** User prompt body. Supports `{{column}}` templating against suite/dataset items. */
@@ -534,6 +571,99 @@ export class PlaygroundPage {
     });
   }
 
+  // ── the run gate (opik#8813) ────────────────────────────────────────────
+  //
+  // Both Run surfaces refuse a source whose SELECTED version has no items, and
+  // each decides that for itself — `PlaygroundHeader` from the `versionItemsTotal`
+  // prop, `PlaygroundRunButton` from its own `usePlaygroundDataset()` call — so a
+  // spec about the gate has to address them separately. One is not evidence
+  // about the other.
+  //
+  // The reason a control gives is a Radix `TooltipContent`, not an `aria-label`
+  // or a `title`, so hovering is the only way to read it. Both buttons keep
+  // `pointer-events: auto` while disabled (`style={isRunDisabled ? ... : {}}`)
+  // precisely so that the hover still lands — which is what makes the reason
+  // readable at all in the state it matters in.
+
+  /**
+   * The header's Run / Re-run control, whichever of the two is mounted.
+   *
+   * Public because the gate is about the button's own disabled state, not about
+   * clicking it: `clickReRun` presses the same element but cannot say anything
+   * about a press that must not be possible.
+   */
+  headerRunButton(): Locator {
+    return this.runButton();
+  }
+
+  /** Hover the header's Run and read the reason it gives. */
+  async headerRunTooltipText(): Promise<string> {
+    return test.step('read the header Run tooltip', async () =>
+      this.hoverAndReadTooltip(this.headerRunButton()),
+    );
+  }
+
+  /** Hover one variant's own Run and read the reason it gives. */
+  async variantRunTooltipText(index: number): Promise<string> {
+    return test.step(`read variant ${index}'s Run tooltip`, async () =>
+      this.hoverAndReadTooltip(this.variantRunButton(index)),
+    );
+  }
+
+  /**
+   * Fire the Run-all keyboard shortcut.
+   *
+   * `PlaygroundHeader` listens on `window` in the CAPTURE phase and returns
+   * early on `isRunDisabled`, so the shortcut reaches the handler whatever has
+   * focus — including the CodeMirror message editor a variant's configuration
+   * leaves focused. That is why this does not park focus anywhere first: doing
+   * so would test a path the keyboard handler does not have.
+   */
+  async pressRunAllHotkey(): Promise<void> {
+    return test.step('press Shift+Enter', async () => {
+      await this.page.keyboard.press('Shift+Enter');
+    });
+  }
+
+  /**
+   * Hover a control and return the reason IT gave.
+   *
+   * Read through the trigger's own `aria-describedby`, which Radix points at
+   * the content it opened for that trigger, rather than by looking up "the
+   * tooltip on the page". The difference is load-bearing when several controls'
+   * reasons are read in a row: a DISABLED button never receives the
+   * pointer-leave that would close its tooltip, so the previous one is still
+   * mounted when the next is read — measured here, where the header's reason
+   * outlived a move to the far corner of the page for a full ten seconds. A
+   * page-scoped lookup would have quietly returned the header's reason as the
+   * variant card's.
+   *
+   * Addressed with an attribute selector rather than `#id`: Radix's generated
+   * ids contain colons, which a CSS id selector reads as a pseudo-class.
+   */
+  private async hoverAndReadTooltip(control: Locator): Promise<string> {
+    // Dismiss whatever is still open before hovering the next control, and
+    // confirm it went. A disabled button never receives the pointer-leave that
+    // would close its own tooltip, and the positioning wrapper Radix puts
+    // around the content is wider than the visible bubble — wide enough, from
+    // the header, to sit over the variant cards' Run buttons, where it
+    // swallowed the hover entirely and left the next read waiting on a tooltip
+    // that could never open. Escape is the dismissal Radix listens for on
+    // `document`, and `TooltipWrapper` honours it.
+    await this.page.keyboard.press('Escape');
+    await expect(this.page.getByRole('tooltip')).toHaveCount(0, { timeout: 10_000 });
+
+    await control.hover();
+    await expect(control).toHaveAttribute('aria-describedby', /.+/, { timeout: 10_000 });
+    const describedBy = await control.getAttribute('aria-describedby');
+    if (!describedBy) {
+      throw new Error('tooltip trigger carried no aria-describedby after it opened');
+    }
+    const tooltip = this.page.locator(`[id="${describedBy}"]`);
+    await expect(tooltip).toHaveCount(1);
+    return (await tooltip.innerText()).trim();
+  }
+
   /**
    * Wait until a loaded dataset/suite can actually be run.
    *
@@ -747,6 +877,10 @@ export class PlaygroundPage {
    * Detach the prompt loaded into variant 0, through `LoadedPromptDisplay`'s
    * own control.
    *
+   * While a chat prompt is loaded, `LoadedPromptDisplay` REPLACES the library
+   * trigger, so `load-prompt-button` does not exist and a second pick is only
+   * reachable through this control.
+   *
    * By its icon, because the trigger is an icon-only `Button` whose only label
    * is a `TooltipWrapper` — no testid, no accessible name — and these specs run
    * against a deployed Opik, where an attribute added alongside them would not
@@ -772,6 +906,10 @@ export class PlaygroundPage {
         detach,
         'the loaded-prompt chip left the card, so the prompt really is detached',
       ).toHaveCount(0);
+      // The library trigger comes back only once the prompt is really detached,
+      // so this is the other half of the signal — and it is also what the next
+      // pick needs.
+      await expect(card.getByTestId('load-prompt-button')).toHaveCount(1);
     });
   }
 
@@ -830,6 +968,74 @@ export class PlaygroundPage {
   /** Confirm the suite/dataset pill is showing with the expected entity name. */
   loadedSourcePill(): Locator {
     return this.page.getByTestId('playground-loaded-source-pill');
+  }
+
+  // ── the loaded source's version ─────────────────────────────────────────
+  //
+  // The pill's own control is a Radix Select listing the project's datasets (or
+  // suites); each row carries a submenu of THAT source's versions, opened by
+  // hovering its chevron (`DatasetVersionSelectBox`). Clicking the row itself
+  // takes the latest version, so the submenu is the only way to put an earlier
+  // version in front of the Playground — and therefore the only way to ask
+  // whether the run gate reads the SELECTED version's item count or the
+  // source's live one.
+
+  /**
+   * The version label the loaded-source pill is showing, e.g. `v2`.
+   *
+   * Also the settle signal for a freshly loaded source, and the reason the
+   * specs wait on it before asserting anything about the gate: the label and
+   * the `itemsTotal` the gate reads come out of the SAME
+   * `GET /datasets/{id}/versions` response (`useValidatedDatasetVersion`), and
+   * the pill commits with the selection, strictly before that response lands.
+   * In the window between the two, `itemsTotal` is `undefined` and the gate
+   * reads it as "not empty" — so an assertion made before the label is painted
+   * is racing a state in which Run is legitimately still enabled.
+   */
+  loadedSourceVersionLabel(): Locator {
+    return this.loadedSourcePill().getByRole('combobox').getByText(/^v\d+$/);
+  }
+
+  /**
+   * Switch the loaded source to a named version through the pill's picker.
+   *
+   * The source is reached by SEARCHING for it rather than by position, and the
+   * resulting row count is asserted, so a search that matched two sources fails
+   * here instead of hovering whichever the DOM happened to order first.
+   */
+  async selectSourceVersion(args: {
+    entityName: string;
+    versionName: string;
+  }): Promise<void> {
+    return test.step(`select version ${args.versionName} of "${args.entityName}"`, async () => {
+      await this.loadedSourcePill().getByRole('combobox').click();
+      const listbox = this.page.getByRole('listbox');
+      await listbox.waitFor({ state: 'visible' });
+      await listbox.getByPlaceholder('Search').fill(args.entityName);
+
+      // Hovered, not clicked: the chevron is a `PopoverTrigger asChild` over a
+      // bare div whose only handler is `onMouseEnter`, and a click would land on
+      // the row instead and select the LATEST version — the state this method
+      // exists to leave. One such trigger per listed source that has a version
+      // at all, which is why the list is filtered to this one source first.
+      const versionSubmenuTrigger = listbox.locator('[aria-haspopup="dialog"]');
+      await expect(versionSubmenuTrigger).toHaveCount(1);
+      await versionSubmenuTrigger.hover();
+
+      // The submenu is a portalled Popover, so its options are addressed at
+      // page scope — and they are the only `role="option"` elements the picker
+      // renders, since the source rows themselves are plain divs. Matched on
+      // the version-name span EXACTLY, because the option's accessible name
+      // also carries the version's change description, and because `v1` as a
+      // substring would match `v10` once a source has ten versions.
+      const option = this.page
+        .getByRole('option')
+        .filter({ has: this.page.getByText(args.versionName, { exact: true }) });
+      await expect(option).toHaveCount(1);
+      await option.click();
+
+      await expect(this.loadedSourceVersionLabel()).toHaveText(args.versionName);
+    });
   }
 
   // ── metrics picker ──────────────────────────────────────────────────────
@@ -1436,6 +1642,18 @@ export class PlaygroundPage {
   /**
    * Open the prompt library menu in the first variant card, hover the named prompt
    * to reveal the version submenu, and click the specified version label (e.g. "v1").
+   *
+   * Two things here are worked around rather than waited on, and neither is a
+   * product defect — a human moving a mouse continuously hits neither:
+   *
+   * 1. The row list REMOUNTS when the search result lands, so a pointer already
+   *    parked over the row raises no fresh `pointerenter` and the Radix
+   *    `HoverCard` (`openDelay: 120`) never opens. The pointer is moved away and
+   *    the row hovered again until the submenu is really up.
+   * 2. The HoverCard content ANIMATES in, and a real click has to walk the
+   *    pointer off the trigger to reach it — so Playwright's actionability check
+   *    never settles and `click()` times out. The click is dispatched on the
+   *    version row instead.
    */
   private async navigateLibraryMenuToVersion(promptName: string, versionLabel: string): Promise<void> {
     const menu = this.page.getByTestId('prompt-library-menu');
@@ -1448,20 +1666,27 @@ export class PlaygroundPage {
 
     const versionSubmenu = this.page.getByTestId('prompt-versions-submenu');
 
-    // The hover and the click are retried as a PAIR, and the search above is
-    // not: `PromptsSelectBox` mounts the menu with `refetchOnMount`, so the
-    // list can re-render under the cursor and detach the version submenu
-    // between opening it and clicking into it. Re-hovering re-opens it against
-    // the row that is mounted now; re-filling the search box would reset the
-    // list and lose the hover that opens the submenu at all.
+    const versionRow = versionSubmenu
+      .getByRole('button')
+      .filter({ has: this.page.getByText(versionLabel, { exact: true }) });
+
+    // The hover, the count check and the click are retried as a GROUP, and the
+    // search above is not: `PromptsSelectBox` mounts the menu with
+    // `refetchOnMount`, so the list can re-render under the cursor and detach
+    // the version submenu between opening it and clicking into it. Re-hovering
+    // re-opens it against the row that is mounted now; re-filling the search
+    // box would reset the list and lose the hover that opens the submenu at
+    // all. The mouse is parked first so each re-hover is a real pointer move.
     await expect(async () => {
+      await this.page.mouse.move(0, 0);
       await promptRow.hover();
       await expect(versionSubmenu).toBeVisible({ timeout: 2_000 });
-      await versionSubmenu
-        .getByRole('button')
-        .filter({ has: this.page.getByText(versionLabel, { exact: true }) })
-        .first()
-        .click({ timeout: 2_000 });
+      // Exactly one, not `.first()`: an ambiguous match would silently load a
+      // version the caller did not ask for.
+      await expect(versionRow, `version "${versionLabel}" of "${promptName}"`).toHaveCount(1, {
+        timeout: 2_000,
+      });
+      await versionRow.dispatchEvent('click');
     }).toPass({ timeout: 20_000 });
   }
 
@@ -1535,6 +1760,57 @@ export class PlaygroundPage {
     });
   }
 
+  // ── persisted store (PLAYGROUND_STATE) ──────────────────────────────────
+  //
+  // Read and written directly because this is where the behaviour under test
+  // lives. `appliedChatPromptVersionId` is the record of WHICH library version
+  // was last applied to the editors, it is a field of the persisted prompt, and
+  // nothing renders it — so a spec about which version a remount re-applies
+  // cannot observe it any other way. The blob is also the only way to express
+  // "state written by a build that predates the marker", which is a real user's
+  // localStorage after an upgrade and is unreachable through the UI by
+  // construction.
+
+  /**
+   * Arm a wait for the Playground's own fetch of one prompt version, and for
+   * the render that follows it.
+   *
+   * ARM IT BEFORE the navigation or reload it covers, and await the returned
+   * promise after. This is the signal a "the template was NOT re-applied"
+   * assertion needs: the re-apply happens the moment this response lands, so a
+   * spec that asserted before it did would go green on a build that clobbers
+   * the editors a tick later — the exact regression these specs exist for.
+   *
+   * `/prompts/versions/{id}` is `usePromptVersionById`'s request, which the
+   * variant card issues on every mount (the query carries no `staleTime`, so
+   * coming back through the SPA refetches as surely as a reload does).
+   */
+  waitForPromptVersionFetch(versionId: string): Promise<void> {
+    return this.page
+      .waitForResponse(
+        (response) =>
+          response.url().includes(`/prompts/versions/${versionId}`) && response.ok(),
+        { timeout: 30_000 },
+      )
+      .then(() => this.settle());
+  }
+
+  /**
+   * The single persisted Playground prompt.
+   *
+   * Exactly one, asserted rather than indexed: every caller here drives one
+   * variant card, and a second prompt in the map would mean the read is
+   * reporting a card the assertions never touched.
+   */
+  async readStoredPrompt(): Promise<StoredChatPrompt> {
+    return test.step('read the persisted Playground prompt', async () => {
+      const state = await this.readStoredState();
+      const prompts = Object.values(state.promptMap ?? {});
+      expect(prompts, 'the persisted Playground holds exactly one prompt').toHaveLength(1);
+      return prompts[0];
+    });
+  }
+
   /**
    * Change a message row's role through the dropdown a user would use.
    *
@@ -1556,6 +1832,19 @@ export class PlaygroundPage {
         row.locator('button').first(),
         `message ${messageIndex} is now a ${role} message`,
       ).toHaveText(role);
+    });
+  }
+
+  /**
+   * The store's one-shot migration flag, `appliedChatPromptVersionsBackfilled`.
+   *
+   * `boolean | undefined` and never defaulted: absent is precisely the pre-fix
+   * state the backfill keys off, so collapsing it into `false` would erase the
+   * difference a hydration assertion exists to check.
+   */
+  async readStoredBackfillFlag(): Promise<boolean | undefined> {
+    return test.step('read the persisted applied-version backfill flag', async () => {
+      return (await this.readStoredState()).appliedChatPromptVersionsBackfilled;
     });
   }
 
@@ -1796,6 +2085,89 @@ export class PlaygroundPage {
     return test.step(`type into message ${messageIndex}`, async () => {
       await this.fillMessageBody(this.messageRowAt(messageIndex, variantIndex), text);
     });
+  }
+
+  /**
+   * Overwrite the persisted prompt with `planted`, and prove the write landed.
+   *
+   * PRECONDITION: call this from a page the Playground is NOT mounted on (the
+   * Prompt library, say). The store persists on every change, so a plant made
+   * while the Playground is live races the app's own next write.
+   *
+   * The blob is edited in place rather than built from scratch, so the planted
+   * state keeps the exact shape this build writes — a hand-rolled one would
+   * drift from it silently and the spec would then be asserting against a
+   * fiction. Absent optional fields are DELETED, which is what makes
+   * "written before this key existed" expressible at all.
+   */
+  async plantStoredPrompt(planted: PlantedChatPrompt): Promise<void> {
+    return test.step('plant a persisted Playground prompt', async () => {
+      const written = await this.page.evaluate(
+        ({ key, seed }) => {
+          const raw = window.localStorage.getItem(key);
+          if (!raw) throw new Error(`${key} is not in localStorage yet`);
+          const blob = JSON.parse(raw);
+          const map = blob.state?.promptMap ?? {};
+          const ids = Object.keys(map);
+          if (ids.length !== 1) {
+            throw new Error(`${key} holds ${ids.length} prompts, expected exactly 1`);
+          }
+          const prompt = map[ids[0]];
+
+          prompt.loadedChatPromptId = seed.loadedChatPromptId;
+          if (seed.loadedChatPromptVersionId === undefined) {
+            delete prompt.loadedChatPromptVersionId;
+          } else {
+            prompt.loadedChatPromptVersionId = seed.loadedChatPromptVersionId;
+          }
+          if (seed.appliedChatPromptVersionId === undefined) {
+            delete prompt.appliedChatPromptVersionId;
+          } else {
+            prompt.appliedChatPromptVersionId = seed.appliedChatPromptVersionId;
+          }
+          prompt.messages = seed.messages.map((message, index) => ({
+            ...message,
+            id: `planted-${index}`,
+          }));
+
+          if (seed.backfilled === undefined) {
+            delete blob.state.appliedChatPromptVersionsBackfilled;
+          } else {
+            blob.state.appliedChatPromptVersionsBackfilled = seed.backfilled;
+          }
+
+          window.localStorage.setItem(key, JSON.stringify(blob));
+          return JSON.parse(window.localStorage.getItem(key)!);
+        },
+        { key: PLAYGROUND_STORE_KEY, seed: planted },
+      );
+
+      // The plant is the whole precondition of every assertion that follows, so
+      // it is read back here rather than taken on trust: a blob that silently
+      // failed to change would leave a test that cannot fail.
+      const prompt = Object.values(
+        written.state.promptMap as Record<string, StoredChatPrompt>,
+      )[0];
+      expect(prompt.loadedChatPromptId).toBe(planted.loadedChatPromptId);
+      expect(prompt.loadedChatPromptVersionId).toBe(planted.loadedChatPromptVersionId);
+      expect(prompt.appliedChatPromptVersionId).toBe(planted.appliedChatPromptVersionId);
+      expect(prompt.messages.map((m) => m.content)).toEqual(
+        planted.messages.map((m) => m.content),
+      );
+      expect(written.state.appliedChatPromptVersionsBackfilled).toBe(planted.backfilled);
+    });
+  }
+
+  private async readStoredState(): Promise<{
+    promptMap?: Record<string, StoredChatPrompt>;
+    appliedChatPromptVersionsBackfilled?: boolean;
+  }> {
+    const raw = await this.page.evaluate(
+      (key) => window.localStorage.getItem(key),
+      PLAYGROUND_STORE_KEY,
+    );
+    expect(raw, `${PLAYGROUND_STORE_KEY} in localStorage`).not.toBeNull();
+    return JSON.parse(raw!).state;
   }
 
   /** Edit the content of the User message in variant 0 directly in the Playground editor. */

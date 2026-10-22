@@ -122,6 +122,12 @@ function seededVersion(
   if (!found.versionHash) {
     throw new Error(`[${label}] version ${name} came back with no version_hash`);
   }
+  // `id` is nullable on the list shape too, and it is what `base_version`
+  // wants — an absent one would post `base_version: undefined` and read the
+  // 409-free answer as agreement rather than as a seed that never pinned.
+  if (!found.id) {
+    throw new Error(`[${label}] version ${name} came back with no id`);
+  }
   return { name, id: found.id, hash: found.versionHash, itemsTotal: found.itemsTotal };
 }
 

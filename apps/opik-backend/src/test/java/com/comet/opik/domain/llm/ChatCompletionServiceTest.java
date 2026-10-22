@@ -48,8 +48,10 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.net.ConnectException;
 import java.nio.channels.ClosedChannelException;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -1504,6 +1506,79 @@ class ChatCompletionServiceTest {
             var sent = judgeParametersSentByScoreTrace("gpt-4o-mini", false);
 
             assertThat(sent.temperature()).isEqualTo(0.0);
+        }
+    }
+
+    @Nested
+    @DisplayName("OpenAI Responses route:")
+    class OpenAiResponsesRoute {
+
+        private static final String WORKSPACE_ID = UUID.randomUUID().toString();
+        private static final String MODEL = "gpt-4.1";
+
+        private final ChatCompletionRequest requestWithEverySetting = ChatCompletionRequest.builder()
+                .from(podamFactory.manufacturePojo(ChatCompletionRequest.class))
+                .model(MODEL)
+                .temperature(0.7)
+                .topP(0.9)
+                .frequencyPenalty(0.5)
+                .presencePenalty(0.4)
+                .stop(List.of("END"))
+                .seed(7)
+                .build();
+
+        private void givenTheShippedCatalogAnd(String route) {
+            when(llmProviderFactory.openAiParams(MODEL))
+                    .thenReturn(Optional.ofNullable(bundledRegistry().paramsOf("openai", MODEL)));
+            when(llmProviderFactory.getService(WORKSPACE_ID, MODEL)).thenReturn(llmProviderService);
+            when(llmProviderService.paramsRoute()).thenReturn(route);
+        }
+
+        private ChatCompletionRequest requestSentByCreate(String route) {
+            givenTheShippedCatalogAnd(route);
+            var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
+            when(llmProviderService.generate(captor.capture(), anyString()))
+                    .thenReturn(podamFactory.manufacturePojo(ChatCompletionResponse.class));
+
+            chatCompletionService.create(requestWithEverySetting, WORKSPACE_ID);
+
+            return captor.getValue();
+        }
+
+        private ChatCompletionRequest withoutWhatTheResponsesRouteRefuses() {
+            return ChatCompletionRequest.builder()
+                    .from(requestWithEverySetting)
+                    .frequencyPenalty(null)
+                    .presencePenalty(null)
+                    .stop(List.of())
+                    .seed(null)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("create: a Responses key sends no penalties, stop or seed, and keeps the rest")
+        void create__whenResponsesRoute__thenDropWhatTheRouteRefuses() {
+            assertThat(requestSentByCreate(ModelParams.RESPONSES_API_ROUTE))
+                    .isEqualTo(withoutWhatTheResponsesRouteRefuses());
+        }
+
+        @Test
+        @DisplayName("create: a Chat Completions key sends every setting the model takes")
+        void create__whenNoRoute__thenKeepEverySetting() {
+            assertThat(requestSentByCreate(null)).isEqualTo(requestWithEverySetting);
+        }
+
+        @Test
+        @DisplayName("createAndStreamResponse: a Responses key sends no penalties, stop or seed")
+        void stream__whenResponsesRoute__thenDropWhatTheRouteRefuses() {
+            givenTheShippedCatalogAnd(ModelParams.RESPONSES_API_ROUTE);
+            var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
+
+            chatCompletionService.createAndStreamResponse(requestWithEverySetting, WORKSPACE_ID,
+                    mock(ChunkedOutputHandlers.class));
+
+            verify(llmProviderService).generateStream(captor.capture(), anyString(), any(), any(), any());
+            assertThat(captor.getValue()).isEqualTo(withoutWhatTheResponsesRouteRefuses());
         }
     }
 }

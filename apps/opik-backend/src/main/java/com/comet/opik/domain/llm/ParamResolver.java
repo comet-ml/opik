@@ -1,14 +1,18 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ModelParams;
+import com.comet.opik.api.ModelParams.FlagParam;
 import com.comet.opik.api.ModelParams.NumberParam;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,6 +39,7 @@ public class ParamResolver {
 
         public enum Reason {
             REFUSED_BY_MODEL,
+            REFUSED_BY_ROUTE,
             THINKING_ENABLED,
             EXCLUSIVE_SAMPLING
         }
@@ -46,7 +51,7 @@ public class ParamResolver {
     private final @NonNull LlmProviderFactory llmProviderFactory;
     private final @NonNull LlmModelRegistryService registryService;
 
-    public Resolution<ChatCompletionRequest> resolve(@NonNull ChatCompletionRequest request) {
+    public Resolution<ChatCompletionRequest> resolve(@NonNull ChatCompletionRequest request, @Nullable String route) {
         var changes = new ArrayList<ParamChange>();
         var builder = ChatCompletionRequest.builder().from(request);
         var model = request.model();
@@ -87,23 +92,38 @@ public class ParamResolver {
             changes.add(new ParamChange(TOP_P, ParamChange.Reason.EXCLUSIVE_SAMPLING));
         }
 
-        var params = openAiParams(model);
+        var params = openAiParams(model, route);
         if (params.isPresent()) {
-            if (temperature != null && isRefused(params.get().temperature())) {
+            var modelParams = params.get();
+            var effectiveParams = route == null || modelParams.routes() == null
+                    ? modelParams
+                    : modelParams.routes().getOrDefault(route, modelParams);
+            if (temperature != null && isRefused(effectiveParams.temperature())) {
                 builder.temperature(null);
-                changes.add(new ParamChange(TEMPERATURE, ParamChange.Reason.REFUSED_BY_MODEL));
+                changes.add(new ParamChange(TEMPERATURE, refusalReason(isRefused(modelParams.temperature()))));
             }
-            if (topP != null && isRefused(params.get().topP())) {
+            if (topP != null && isRefused(effectiveParams.topP())) {
                 builder.topP(null);
-                changes.add(new ParamChange(TOP_P, ParamChange.Reason.REFUSED_BY_MODEL));
+                changes.add(new ParamChange(TOP_P, refusalReason(isRefused(modelParams.topP()))));
             }
-            if (request.frequencyPenalty() != null && isRefused(params.get().frequencyPenalty())) {
+            if (request.frequencyPenalty() != null && isRefused(effectiveParams.frequencyPenalty())) {
                 builder.frequencyPenalty(null);
-                changes.add(new ParamChange("frequency_penalty", ParamChange.Reason.REFUSED_BY_MODEL));
+                changes.add(
+                        new ParamChange("frequency_penalty", refusalReason(isRefused(modelParams.frequencyPenalty()))));
             }
-            if (request.presencePenalty() != null && isRefused(params.get().presencePenalty())) {
+            if (request.presencePenalty() != null && isRefused(effectiveParams.presencePenalty())) {
                 builder.presencePenalty(null);
-                changes.add(new ParamChange("presence_penalty", ParamChange.Reason.REFUSED_BY_MODEL));
+                changes.add(
+                        new ParamChange("presence_penalty", refusalReason(isRefused(modelParams.presencePenalty()))));
+            }
+            if (CollectionUtils.isNotEmpty(request.stop()) && isRefused(effectiveParams.stop())) {
+                // stop(null) keeps the list from() copied; an empty one is left out of the body (NON_EMPTY).
+                builder.stop(List.of());
+                changes.add(new ParamChange("stop", refusalReason(isRefused(modelParams.stop()))));
+            }
+            if (request.seed() != null && isRefused(effectiveParams.seed())) {
+                builder.seed(null);
+                changes.add(new ParamChange("seed", refusalReason(isRefused(modelParams.seed()))));
             }
         }
 
@@ -122,7 +142,7 @@ public class ParamResolver {
         }
         var model = parameters.name();
         var refused = ModelCapabilities.rejectsTemperature(model, registryService)
-                || openAiParams(model).map(ModelParams::temperature).filter(this::isRefused).isPresent();
+                || openAiParams(model, null).map(ModelParams::temperature).filter(this::isRefused).isPresent();
         // Thinking costs a judge its temperature only on a Claude (the exclusive-sampling rule's loose match), unlike
         // the chat path: a judge on another provider's thinking model keeps the temperature it was saved with.
         var claudeThinks = ModelCapabilities.requiresExclusiveSamplingParams(model)
@@ -136,13 +156,28 @@ public class ParamResolver {
                 List.of(new ParamChange(TEMPERATURE, reason)));
     }
 
-    private Optional<ModelParams> openAiParams(String model) {
-        return model == null ? Optional.empty() : llmProviderFactory.openAiParams(model);
+    // Only OpenAI keys have a route, so an id the registry doesn't list still gets the OpenAI profile there.
+    private Optional<ModelParams> openAiParams(String model, String route) {
+        if (model == null) {
+            return Optional.empty();
+        }
+        return llmProviderFactory.openAiParams(model)
+                .or(() -> route == null
+                        ? Optional.empty()
+                        : Optional.ofNullable(registryService.paramsOf(LlmProvider.OPEN_AI.getValue(), model)));
+    }
+
+    private static ParamChange.Reason refusalReason(boolean refusedByModel) {
+        return refusedByModel ? ParamChange.Reason.REFUSED_BY_MODEL : ParamChange.Reason.REFUSED_BY_ROUTE;
     }
 
     // A param the catalog leaves out counts as accepted: an OpenAI model keeps every setting its catalog row doesn't
     // refuse. ModelCapabilities.isAccepted reads a missing Claude param the other way on purpose.
     private boolean isRefused(NumberParam param) {
+        return param != null && Boolean.FALSE.equals(param.accepted());
+    }
+
+    private boolean isRefused(FlagParam param) {
         return param != null && Boolean.FALSE.equals(param.accepted());
     }
 }

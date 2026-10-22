@@ -26,14 +26,14 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
  * `online-evaluation-edit-rule-preserves-model-parameters.spec.ts` covers the
  * opposite gesture with the opposite expectation: an UNCHANGED save, where
  * every key must survive. Its taxonomy note says in as many words that
- * "editing a field through the dialog is not covered", and a model change is
+ * "editing a field through the rule editor panel is not covered", and a model change is
  * the one edit that is supposed to rewrite this blob rather than preserve it.
  * The two specs together are the pair: nothing is dropped unless the model
  * changed, and the stale level is dropped when it did.
  *
  * ## Both surfaces, and both providers
  *
- * The dialog's displayed level and the PATCH it sends can disagree — the
+ * The editor's displayed level and the PATCH it sends can disagree — the
  * reconciler writes the settled level into the form state while
  * `resolveEffort` independently masks an unofferable one for display — so a
  * build where the write-back failed shows the right level and saves the old
@@ -51,7 +51,7 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
  * not be reintroduced by this edit path.
  *
  * Deterministic and provider-free: the rules are seeded over REST, edited
- * through the dialog and read back, but never executed.
+ * through the rule editor panel and read back, but never executed.
  */
 
 const JUDGE_MESSAGES: JudgeMessageWrite[] = [
@@ -75,7 +75,7 @@ const JUDGE_SCHEMA: Array<{
   },
 ];
 
-/** A key no dialog control has ever heard of — the free-form control. */
+/** A key no editor control has ever heard of — the free-form control. */
 const UNRELATED_MARKER = { unrelated_marker: 'keep-me' } as const;
 
 /** Matches the rule PATCH on both the `/opik/api` and bare `/api` mounts. */
@@ -124,7 +124,7 @@ test.describe(
           }));
 
         await test.step('The seed really holds that effort, before the browser opens', async () => {
-          // Asserted server-side first: a dialog round-trip over a rule that
+          // Asserted server-side first: an editor panel round-trip over a rule that
           // never held the level would pass without proving anything, and would
           // read as coverage forever.
           const model = await backendClient.getLlmJudgeModel(ruleId);
@@ -134,11 +134,11 @@ test.describe(
 
         const onlineEval = new OnlineEvaluationPage(page);
 
-        await test.step('The dialog hydrates the control to Max', async () => {
+        await test.step('The editor hydrates the control to Max', async () => {
           await onlineEval.goto(project.id);
           await onlineEval.waitForReady();
           await expect(onlineEval.ruleRow(ruleName)).toHaveCount(1);
-          await onlineEval.openEditRuleDialogByName(ruleName);
+          await onlineEval.openEditRulePanelByName(ruleName);
           await onlineEval.openJudgeModelParameters();
 
           await expect(
@@ -182,7 +182,7 @@ test.describe(
           const patched = page.waitForRequest(
             (request) => request.method() === 'PATCH' && isRuleUpdate(request.url(), ruleId),
           );
-          // The response as well as the dispatch: the dialog closes the moment
+          // The response as well as the dispatch: the rule editor panel closes the moment
           // the PATCH is sent, so waiting for it to close is no barrier and the
           // persisted read below would otherwise be free to observe the
           // pre-save blob.
@@ -190,7 +190,7 @@ test.describe(
             (response) =>
               response.request().method() === 'PATCH' && isRuleUpdate(response.url(), ruleId),
           );
-          await onlineEval.submitRuleDialog();
+          await onlineEval.submitPanel();
           const request = await patched;
           const response = await answered;
           expect(response.ok(), `the save was accepted (got ${response.status()})`).toBe(true);
@@ -268,11 +268,11 @@ test.describe(
 
         const onlineEval = new OnlineEvaluationPage(page);
 
-        await test.step('The dialog hydrates the level control to Off', async () => {
+        await test.step('The editor hydrates the level control to Off', async () => {
           await onlineEval.goto(project.id);
           await onlineEval.waitForReady();
           await expect(onlineEval.ruleRow(ruleName)).toHaveCount(1);
-          await onlineEval.openEditRuleDialogByName(ruleName);
+          await onlineEval.openEditRulePanelByName(ruleName);
           await onlineEval.openJudgeModelParameters();
 
           await expect(
@@ -313,7 +313,7 @@ test.describe(
             (response) =>
               response.request().method() === 'PATCH' && isRuleUpdate(response.url(), ruleId),
           );
-          await onlineEval.submitRuleDialog();
+          await onlineEval.submitPanel();
           const request = await patched;
           const response = await answered;
           expect(response.ok(), `the save was accepted (got ${response.status()})`).toBe(true);

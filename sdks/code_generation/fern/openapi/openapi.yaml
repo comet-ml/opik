@@ -4194,6 +4194,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ExperimentExecutionResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments/items/bulk:
     put:
       tags:

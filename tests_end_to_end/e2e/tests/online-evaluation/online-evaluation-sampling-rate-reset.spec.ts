@@ -5,17 +5,17 @@ import { buildConstantScoreMetric } from '@e2e/core/metrics';
 /**
  * `SliderInputControl`'s reset arrow is a LOCAL undo: it restores one field's
  * default and nothing else. Two things had to be true for that to hold inside
- * the online-evaluation rule dialog, and neither is visible on screen.
+ * the online-evaluation rule editor panel, and neither is visible on screen.
  *
- * 1. The arrow must not submit the form. `AddEditRuleDialog` is a native
+ * 1. The arrow must not submit the form. `the rule editor panel` is a native
  *    `<form onSubmit=…>`, and a bare `<button>` inside one defaults to
  *    `type="submit"`. On an EDIT the form is already valid, so a submitting
- *    reset saves the rule and closes the dialog — taking every other pending
+ *    reset saves the rule and closes the rule editor panel — taking every other pending
  *    edit with it. The stored sampling rate is NOT the tell: the reset handler
  *    restores the default before the submit runs, so the rate the save writes
  *    is the one the user just reset to and looks untouched. What a user loses
  *    is the rest of their edit, so the evidence has to be the WRITE itself —
- *    this spec asserts on the outbound PATCH and on the dialog staying open,
+ *    this spec asserts on the outbound PATCH and on the rule editor panel staying open,
  *    not on the rate.
  *
  *    `last_updated_at` would be the obvious server-side way to catch a silent
@@ -35,12 +35,12 @@ import { buildConstantScoreMetric } from '@e2e/core/metrics';
  *
  * Deterministic and LLM-free by construction: a `user_defined_metric_python`
  * rule needs no provider key, and nothing here ever makes the rule run — only
- * the dialog is exercised.
+ * the rule editor panel is exercised.
  *
- * Seeded over REST rather than through the create dialog so that a create-path
+ * Seeded over REST rather than through the rule editor panel so that a create-path
  * regression cannot be mistaken for an edit-path one, and because the edit
- * dialog is where a submitting reset actually does damage (in the CREATE
- * dialog the form is incomplete, so a stray submit is refused by validation).
+ * editor is where a submitting reset actually does damage (in the CREATE
+ * editor the form is incomplete, so a stray submit is refused by validation).
  */
 
 /** Matches this rule's PATCH on both the `/opik/api` and bare `/api` mounts. */
@@ -62,7 +62,7 @@ test.describe(
           backendClient.createAutomationRule({
             projectId: project.id,
             name: ruleName,
-            // 1.0 is the dialog's default too, which is what makes the reset
+            // 1.0 is the rule editor panel's default too, which is what makes the reset
             // gesture available: the arrow only appears once the field leaves
             // its default, so the test has to start ON it.
             samplingRate: 1,
@@ -72,7 +72,7 @@ test.describe(
 
         await test.step('The seed really is at the default rate', async () => {
           // Before the browser opens. A rule seeded at anything but 1.0 would
-          // hydrate the dialog off its default, the arrow would already be
+          // hydrate the rule editor panel off its default, the arrow would already be
           // visible, and the "it appears when you change the value" assertion
           // below would pass without the value ever having changed.
           const rule = await backendClient.getAutomationRule(ruleId);
@@ -81,11 +81,11 @@ test.describe(
 
         const onlineEval = new OnlineEvaluationPage(page);
 
-        await test.step('Open the rule in the edit dialog', async () => {
+        await test.step('Open the rule in the rule editor panel', async () => {
           await onlineEval.goto(project.id);
           await onlineEval.waitForReady();
           await expect(onlineEval.ruleRow(ruleName)).toHaveCount(1);
-          await onlineEval.openEditRuleDialogByName(ruleName);
+          await onlineEval.openEditRulePanelByName(ruleName);
           await onlineEval.expandFilteringAndSampling();
           await expect(onlineEval.samplingRateInput).toHaveValue('100');
         });
@@ -135,11 +135,14 @@ test.describe(
           }
         });
 
-        await test.step('Clicking the arrow restores 100% and leaves the dialog open', async () => {
+        await test.step('Clicking the arrow restores 100% and leaves the editor open', async () => {
           await onlineEval.resetSamplingRate();
+          // The editor's root stays mounted while closed (translated off
+          // screen), so open/closed is read from the form inside it — asserting
+          // on the root would pass whether or not the reset submitted.
           await expect(
-            onlineEval.dialog,
-            'the dialog must still be open — a reset that submitted the form ' +
+            onlineEval.nameInput,
+            'the editor must still be open — a reset that submitted the form ' +
               'would have saved and closed it',
           ).toBeVisible();
           expect(
@@ -161,14 +164,14 @@ test.describe(
           // Without this the assertion above is unfalsifiable. "No PATCH was
           // sent" reads exactly the same way if the listener were mis-wired, if
           // the URL predicate never matched, or if the reset click had missed
-          // the button entirely. Saving on purpose — same dialog, same test,
+          // the button entirely. Saving on purpose — same editor, same test,
           // same recorder — shows the observer can see a write when there is
           // one, which is what gives the empty list above its meaning.
           const answered = page.waitForResponse(
             (response) =>
               response.request().method() === 'PATCH' && isRuleUpdate(response.url(), ruleId),
           );
-          await onlineEval.submitRuleDialog();
+          await onlineEval.submitPanel();
           expect((await answered).ok(), 'the deliberate save was accepted').toBe(true);
 
           expect(
@@ -198,16 +201,16 @@ test.describe(
 
         const onlineEval = new OnlineEvaluationPage(page);
 
-        await test.step('Open the rule in the edit dialog', async () => {
+        await test.step('Open the rule in the rule editor panel', async () => {
           await onlineEval.goto(project.id);
           await onlineEval.waitForReady();
-          await onlineEval.openEditRuleDialogByName(ruleName);
+          await onlineEval.openEditRulePanelByName(ruleName);
           await onlineEval.expandFilteringAndSampling();
           await expect(onlineEval.samplingRateInput).toHaveValue('100');
         });
 
         /**
-         * Heights, never positions. The dialog's own scroll offset differs
+         * Heights, never positions. The editor's own scroll offset differs
          * between the two reads, so the row's `top` legitimately moves while
          * its height — the thing that pushed the controls below it around — does
          * not.

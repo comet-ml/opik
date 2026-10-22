@@ -24,6 +24,24 @@ export interface ProjectRef {
   name: string;
 }
 
+/**
+ * The Optimization Studio payload a seeded run carries, as `createOptimization`
+ * takes it.
+ *
+ * Every field is required by the backend record (`OptimizationStudioConfig`),
+ * so this is deliberately not a `Partial`: a seed that omitted `evaluation`
+ * would be rejected with a 422 that reads as a fixture bug long after the fact.
+ * `parameters` stay free-form `JsonNode` on both sides — the model parameters a
+ * run saved are whatever its provider took.
+ */
+export interface StudioConfigSeed {
+  datasetName: string;
+  prompt: { messages: Array<{ role: string; content: string }> };
+  llmModel: { model: string; parameters?: Record<string, unknown> };
+  evaluation: { metrics: Array<{ type: string; parameters?: Record<string, unknown> }> };
+  optimizer: { type: string; parameters?: Record<string, unknown> };
+}
+
 export interface DashboardRef {
   id: string;
   name: string;
@@ -171,12 +189,18 @@ export interface LlmCatalogModelRef {
 export interface DatasetVersionRef {
   /**
    * The version's own row id — what the Version history table stamps as
-   * `data-row-id`, and what `POST /datasets/{id}/items/changes` wants as its
-   * `base_version`. Distinct from `versionHash`, which is the content hash the
-   * sidebar and the items endpoint address a version by; passing one where the
-   * other is wanted is accepted-looking and wrong.
+   * `data-row-id`, what `POST /datasets/{id}/items/changes` wants as its
+   * `base_version`, what the Playground's picker keys a selection on
+   * (`datasetId::versionId`), and what `/experiments/execute` carries as
+   * `dataset_version_id`. Distinct from `versionHash`, which is the content hash
+   * the sidebar and the items endpoint address a version by; passing one where
+   * the other is wanted is accepted-looking and wrong.
+   *
+   * Nullable for the same reason the hash is: the API marks it optional, and a
+   * caller pinning a specific version has to assert it arrived rather than send
+   * an absent id and read the answer as version-scoped.
    */
-  id: string;
+  id: string | null;
   versionName: string;
   /**
    * The version's content hash. Nullable because the API's own shape makes it
@@ -1025,6 +1049,33 @@ export interface LlmJudgeModelRef {
   name: string;
   temperature: number | null;
   customParameters: Record<string, unknown> | null;
+}
+
+/**
+ * One `llm_as_judge` rule's whole stored body — the top-level fields the editor
+ * can change, plus `code` exactly as `GET /automations/evaluators/{id}` answers
+ * it.
+ *
+ * A sibling of the narrow readers above rather than a replacement for them: a
+ * caller asking "did the model block survive" wants `getLlmJudgeModel`'s
+ * validated shape, while a caller comparing two rules wants everything, and
+ * wants it un-normalised. `code` is therefore a bare record and is NOT mapped
+ * into camelCase: the clone spec's question is whether the frontend rebuilt the
+ * body faithfully, and any normalisation here would hide a difference in a key
+ * this suite does not happen to model (`seed`, `custom_parameters`, a score
+ * entry's `unsaved` flag). Absent keys stay absent for the same reason —
+ * `max_cost_usd` is dropped from the response entirely once cleared, which is a
+ * different answer from the explicit `null` the form sends.
+ */
+export interface LlmJudgeRuleBodyRef {
+  id: string;
+  name: string;
+  enabled: boolean;
+  /** Fraction in [0, 1] — the backend's own units, not the panel's percentage. */
+  samplingRate: number;
+  /** `production` | `experiment` | `both`. */
+  triggerScope: string;
+  code: Record<string, unknown>;
 }
 
 /** One line of a rule's user-facing log stream. */
@@ -2710,7 +2761,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       const page = await opik.api.datasets.listDatasetVersions(datasetId, { size: 100 });
       const content = page.content ?? [];
       return content.map((v) => ({
-        id: String(v.id ?? ''),
+        id: v.id ?? null,
         versionName: String(v.versionName ?? ''),
         versionHash: v.versionHash ?? null,
         itemsTotal: Number(v.itemsTotal ?? 0),
@@ -3847,18 +3898,32 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      *
      * Returns rather than throws on a non-2xx: the endpoint's rejection of a
      * blank name is behaviour under test.
+     *
+     * `versionHash` and `datasetVersionId` are the pair the Playground sends
+     * (`useRunExperimentExecution`), and both are omitted rather than nulled
+     * when absent so a caller testing the unversioned payload exercises the
+     * shape the page actually posts. The hash is the load-bearing one: the
+     * backend streams the dataset's items AT that version, so it is what decides
+     * whether `requireDatasetItems` sees any — and therefore the only way to ask
+     * this endpoint about one version of a dataset rather than its latest.
      */
     async executeExperiments(args: {
       datasetName: string;
       datasetId: string;
       projectName: string;
       prompts: ExecutePromptSeed[];
+      versionHash?: string;
+      datasetVersionId?: string;
     }): Promise<ExecuteExperimentsResult> {
       const { status, message, json } = await rawFetch('POST', '/v1/private/experiments/execute', {
         body: {
           dataset_name: args.datasetName,
           dataset_id: args.datasetId,
           project_name: args.projectName,
+          ...(args.versionHash === undefined ? {} : { version_hash: args.versionHash }),
+          ...(args.datasetVersionId === undefined
+            ? {}
+            : { dataset_version_id: args.datasetVersionId }),
           prompts: args.prompts.map((prompt) => ({
             model: prompt.model,
             messages: prompt.messages,
@@ -5088,6 +5153,14 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        */
       schema?: Array<{ name: string; type: JudgeOutputSchemaType; description: string }>;
       enabled?: boolean;
+      /**
+       * Per-evaluation spending cap in USD, the panel's "Cost limit (USD)".
+       * Omitted from the request when not given rather than sent as `null`: the
+       * server drops the key from the read-back of a rule with no limit, so
+       * "never set" and "explicitly cleared" are the same stored state and a
+       * seed must be able to produce either side of it.
+       */
+      maxCostUsd?: number;
     }): Promise<string> {
       const scoreName = args.scoreName ?? 'Accuracy';
       const { status, message, location } = await rawFetch(
@@ -5122,6 +5195,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
                   description: 'Score assigned by the judge.',
                 },
               ],
+              ...(args.maxCostUsd === undefined ? {} : { max_cost_usd: args.maxCostUsd }),
             },
           },
         },
@@ -5419,6 +5493,69 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             })) ?? null,
         };
       });
+    },
+
+    /**
+     * The whole stored body of one `llm_as_judge` rule, `code` verbatim.
+     *
+     * For the questions that are about the body as a WHOLE rather than about
+     * one field of it — chiefly "is this clone the same evaluator as its
+     * source". Comparing two of these catches a key the frontend forgot to
+     * carry over even when no spec thought to name that key, which is the
+     * failure a field-by-field assertion is structurally unable to see.
+     *
+     * The rule type is checked rather than assumed: a python rule also answers
+     * 200 here and also has a `code`, and deep-comparing two of THOSE would
+     * pass while asserting nothing about the judge body this exists to read.
+     */
+    async getLlmJudgeRuleBody(ruleId: string): Promise<LlmJudgeRuleBodyRef> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getLlmJudgeRuleBody: ${ruleId} answered ${status}: ${message}`);
+      }
+      const rule = json as {
+        id?: string;
+        name?: string;
+        enabled?: boolean;
+        sampling_rate?: number;
+        trigger_scope?: string;
+        type?: string;
+        code?: unknown;
+      };
+      if (rule.type !== 'llm_as_judge') {
+        throw new Error(
+          `getLlmJudgeRuleBody: ${ruleId} is type '${rule.type}', not 'llm_as_judge'`,
+        );
+      }
+      // Same reasoning as `getAutomationRule`: defaulting an absent rate or
+      // scope would present as the server's own default, which is the value a
+      // caller here is trying to prove was carried over rather than re-derived.
+      if (typeof rule.sampling_rate !== 'number' || Number.isNaN(rule.sampling_rate)) {
+        throw new Error(`getLlmJudgeRuleBody: ${ruleId} returned no sampling_rate`);
+      }
+      if (typeof rule.trigger_scope !== 'string') {
+        throw new Error(`getLlmJudgeRuleBody: ${ruleId} returned no trigger_scope`);
+      }
+      if (typeof rule.name !== 'string') {
+        throw new Error(`getLlmJudgeRuleBody: ${ruleId} returned no name`);
+      }
+      if (!rule.code || typeof rule.code !== 'object' || Array.isArray(rule.code)) {
+        throw new Error(
+          `getLlmJudgeRuleBody: ${ruleId} returned code as ` +
+            `${Array.isArray(rule.code) ? 'an array' : typeof rule.code}, not an object`,
+        );
+      }
+      return {
+        id: String(rule.id ?? ruleId),
+        name: rule.name,
+        enabled: rule.enabled ?? true,
+        samplingRate: rule.sampling_rate,
+        triggerScope: rule.trigger_scope,
+        code: rule.code as Record<string, unknown>,
+      };
     },
 
     /**
@@ -6399,6 +6536,12 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       projectName: string;
       objectiveName: string;
       status?: 'completed' | 'running';
+      /**
+       * The Studio payload the run was launched from. Only a row that carries
+       * one is rerunnable — `NewRunSidebar` ignores an optimization whose
+       * `studio_config` is absent, so a fixture seeding a rerun must set it.
+       */
+      studioConfig?: StudioConfigSeed;
     }): Promise<string> {
       await opik.api.optimizations.createOptimization({
         id: args.id,
@@ -6407,8 +6550,52 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         projectName: args.projectName,
         objectiveName: args.objectiveName,
         status: args.status ?? 'completed',
+        ...(args.studioConfig ? { studioConfig: args.studioConfig } : {}),
       });
       return args.id;
+    },
+
+    /**
+     * Every model id the deployment's LLM registry serves, across all
+     * providers.
+     *
+     * The endpoint answers a map of provider → models, which is the shape the
+     * model pickers are built from. Flattened to ids here because the question
+     * a caller has is almost always "can this deployment serve X at all" —
+     * and the answer must not depend on which provider would serve it.
+     *
+     * Not on the pinned SDK (no generated method for `/llm/models`), hence
+     * `rawFetch` — which is also what gets the workspace and auth headers
+     * right on a cloud deployment, unlike a hand-rolled request from a spec.
+     */
+    async listRegistryModelIds(): Promise<string[]> {
+      const res = await rawFetch('GET', '/v1/private/llm/models');
+      if (res.status !== 200) {
+        throw new Error(`list registry models returned ${res.status}: ${res.message}`);
+      }
+      const byProvider = (res.json ?? {}) as Record<string, Array<{ id?: string }>>;
+      return Object.values(byProvider).flatMap((models) =>
+        (models ?? []).map((model) => model.id).filter((id): id is string => !!id),
+      );
+    },
+
+    /**
+     * An optimization's stored Studio payload, read back from the server.
+     *
+     * A fixture that seeds a `studio_config` cannot verify it through the
+     * create call: the write answers 204 with no body, and the backend enriches
+     * the config on the way in. So a spec whose premise is "this run was saved
+     * holding model X with parameters Y" has to read it back, or a payload the
+     * backend silently dropped would leave every later assertion vacuous.
+     */
+    async getOptimizationStudioConfig(
+      optimizationId: string,
+    ): Promise<StudioConfigSeed | undefined> {
+      const optimization = await opik.api.optimizations.getOptimizationById(optimizationId);
+      // The read and write shapes are field-for-field identical (the SDK
+      // camel-cases both), so the seed type doubles as the read type — there is
+      // no second shape here to drift from it.
+      return optimization.studioConfig as StudioConfigSeed | undefined;
     },
 
     /**

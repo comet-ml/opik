@@ -7,6 +7,7 @@ import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -25,7 +26,12 @@ public record TraceToScoreLlmAsJudge(
         @NotNull Map<String, String> scoreNameMapping,
         @NotNull PromptType promptType,
         @Nullable UUID experimentId,
-        @Nullable String workspaceName) implements RedisSubscriberMessage {
+        @Nullable String workspaceName,
+        @Nullable List<String> judgeFallbackModels) implements RedisSubscriberMessage {
+
+    public TraceToScoreLlmAsJudge {
+        judgeFallbackModels = judgeFallbackModels == null ? null : List.copyOf(judgeFallbackModels);
+    }
 
     @Override
     public RedisSubscriberMessage withWorkspaceName(String workspaceName) {
