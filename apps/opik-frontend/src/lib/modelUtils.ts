@@ -601,8 +601,8 @@ export const getDefaultThinkingEffort = (
 const asRecord = (value: unknown): Record<string, unknown> =>
   isPlainObject(value) ? (value as Record<string, unknown>) : {};
 
-// A judge rule saves an OpenAI effort under custom_parameters, and the backend sends that key in place
-// of the typed reasoning_effort, so it is the effort the judge runs at.
+// A judge rule saves an OpenAI effort under custom_parameters, which the backend sends in place of the
+// typed reasoning_effort.
 const getCustomParametersReasoningEffort = (
   customParameters: unknown,
 ): string | undefined => {
@@ -1154,8 +1154,8 @@ export type EffortParams = {
  * Both defaults are the model's own (none on gpt-5.1 to gpt-5.4, medium on Opus 5.5). An Anthropic
  * effort under custom_parameters counts as stored too: the flat one wins when the model offers it,
  * else the nested one does, so a reloaded request shape shows the level it will send and a stale
- * flat value cannot override a valid nested one. An OpenAI one under custom_parameters wins over the
- * flat one, as it does on the backend.
+ * flat value cannot override a valid nested one. An OpenAI one under custom_parameters is read the
+ * same way: it is what a judge rule saved, and the flat one is the form's current pick.
  */
 export const resolveEffort = (
   model: PROVIDER_MODEL_TYPE | "",
@@ -1174,8 +1174,8 @@ export const resolveEffort = (
       return {};
     }
     const stored = [
-      getCustomParametersReasoningEffort(configs.custom_parameters),
       configs.reasoningEffort,
+      getCustomParametersReasoningEffort(configs.custom_parameters),
     ]
       .map((effort) => options.find((o) => o.value === effort)?.value)
       .find((effort) => effort !== undefined);

@@ -1848,12 +1848,19 @@ describe("resolveEffort", () => {
     ).toEqual({ reasoningEffort: "minimal" });
   });
 
-  // The judge sends custom_parameters.reasoning_effort in place of the typed one.
+  // A judge rule saves its effort under custom_parameters; the rule form's flat pick wins over it.
   it.each([
     [{ custom_parameters: { reasoning_effort: "none" } }, "none"],
     [
       {
         reasoningEffort: "low",
+        custom_parameters: { reasoning_effort: "none" },
+      },
+      "low",
+    ],
+    [
+      {
+        reasoningEffort: "extreme",
         custom_parameters: { reasoning_effort: "none" },
       },
       "none",
@@ -1870,7 +1877,7 @@ describe("resolveEffort", () => {
       "low",
     ],
   ] as const)(
-    "reads an OpenAI effort saved under custom_parameters first (%o)",
+    "reads an OpenAI effort saved under custom_parameters when the flat one is not offered (%o)",
     (configs, effort) => {
       expect(
         resolveEffort(PROVIDER_MODEL_TYPE.GPT_6_LUNA, configs as EffortParams),
