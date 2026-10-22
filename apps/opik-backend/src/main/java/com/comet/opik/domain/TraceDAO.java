@@ -365,9 +365,9 @@ class TraceDAOImpl implements TraceDAO {
                     :name as name,
                     parseDateTime64BestEffort(:start_time, 9) as start_time,
                     parseDateTime64BestEffort(:end_time, 9) as end_time,
-                    p.input as input,
-                    p.output as output,
-                    p.metadata as metadata,
+                    payload.input as input,
+                    payload.output as output,
+                    payload.metadata as metadata,
                     :tags as tags,
                     :error_info as error_info,
                     now64(9) as created_at,
@@ -376,8 +376,8 @@ class TraceDAOImpl implements TraceDAO {
                     :thread_id as thread_id,
                     if(:visibility_mode IS NULL, 'default', :visibility_mode) as visibility_mode,
                     :truncation_threshold as truncation_threshold,
-                    p.input_slim as input_slim,
-                    p.output_slim as output_slim,
+                    payload.input_slim as input_slim,
+                    payload.output_slim as output_slim,
                     :ttft as ttft,
                     :source as source,
                     :environment as environment
@@ -407,28 +407,28 @@ class TraceDAOImpl implements TraceDAO {
             	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft, source, environment
             )
             SELECT
-            	t.id,
-            	t.project_id,
-            	t.workspace_id,
-            	<if(name)> :name <else> t.name <endif> as name,
-            	t.start_time,
-            	<if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> t.end_time <endif> as end_time,
-            	<if(input)> p.input <else> t.input <endif> as input,
-            	<if(output)> p.output <else> t.output <endif> as output,
-            	<if(metadata)> p.metadata <else> t.metadata <endif> as metadata,
-            	<if(tags)> :tags <else> t.tags <endif> as tags,
-            	<if(error_info)> :error_info <else> t.error_info <endif> as error_info,
-            	t.created_at,
-            	t.created_by,
+            	stored_trace.id,
+            	stored_trace.project_id,
+            	stored_trace.workspace_id,
+            	<if(name)> :name <else> stored_trace.name <endif> as name,
+            	stored_trace.start_time,
+            	<if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> stored_trace.end_time <endif> as end_time,
+            	<if(input)> payload.input <else> stored_trace.input <endif> as input,
+            	<if(output)> payload.output <else> stored_trace.output <endif> as output,
+            	<if(metadata)> payload.metadata <else> stored_trace.metadata <endif> as metadata,
+            	<if(tags)> :tags <else> stored_trace.tags <endif> as tags,
+            	<if(error_info)> :error_info <else> stored_trace.error_info <endif> as error_info,
+            	stored_trace.created_at,
+            	stored_trace.created_by,
                 :user_name as last_updated_by,
-                <if(thread_id)> :thread_id <else> t.thread_id <endif> as thread_id,
-                t.visibility_mode,
+                <if(thread_id)> :thread_id <else> stored_trace.thread_id <endif> as thread_id,
+                stored_trace.visibility_mode,
                 :truncation_threshold as truncation_threshold,
-                <if(input)> p.input_slim <else> t.input_slim <endif> as input_slim,
-                <if(output)> p.output_slim <else> t.output_slim <endif> as output_slim,
-                <if(ttft)> :ttft <else> t.ttft <endif> as ttft,
-                <if(source)> :source <else> t.source <endif> as source,
-                <if(environment)> :environment <else> t.environment <endif> as environment
+                <if(input)> payload.input_slim <else> stored_trace.input_slim <endif> as input_slim,
+                <if(output)> payload.output_slim <else> stored_trace.output_slim <endif> as output_slim,
+                <if(ttft)> :ttft <else> stored_trace.ttft <endif> as ttft,
+                <if(source)> :source <else> stored_trace.source <endif> as source,
+                <if(environment)> :environment <else> stored_trace.environment <endif> as environment
             """
             + StreamedPayload.FROM
             + """
@@ -439,7 +439,7 @@ class TraceDAOImpl implements TraceDAO {
                         AND workspace_id = :workspace_id
                         ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                         LIMIT 1
-                    ) AS t
+                    ) AS stored_trace
                     SETTINGS log_comment = '<log_comment>'
                     """
             + StreamedPayload.VALUES;
@@ -2437,9 +2437,9 @@ class TraceDAOImpl implements TraceDAO {
                     <if(name)> :name <else> '' <endif> as name,
                     toDateTime64('1970-01-01 00:00:00.000', 9) as start_time,
                     parseDateTime64BestEffort(:end_time, 9) as end_time,
-                    <if(input)> p.input <else> '' <endif> as input,
-                    <if(output)> p.output <else> '' <endif> as output,
-                    <if(metadata)> p.metadata <else> '' <endif> as metadata,
+                    <if(input)> payload.input <else> '' <endif> as input,
+                    <if(output)> payload.output <else> '' <endif> as output,
+                    <if(metadata)> payload.metadata <else> '' <endif> as metadata,
                     <if(tags)> :tags <else> [] <endif> as tags,
                     <if(error_info)> :error_info <else> '' <endif> as error_info,
                     now64(9) as created_at,
@@ -2448,8 +2448,8 @@ class TraceDAOImpl implements TraceDAO {
                     <if(thread_id)> :thread_id <else> '' <endif> as thread_id,
                     <if(visibility_mode)> :visibility_mode <else> 'unknown' <endif> as visibility_mode,
                     :truncation_threshold as truncation_threshold,
-                    <if(input)> p.input_slim <else> '' <endif> as input_slim,
-                    <if(output)> p.output_slim <else> '' <endif> as output_slim,
+                    <if(input)> payload.input_slim <else> '' <endif> as input_slim,
+                    <if(output)> payload.output_slim <else> '' <endif> as output_slim,
                     :ttft as ttft,
                     :source as source,
                     <if(environment)> :environment <else> '' <endif> as environment
@@ -3629,29 +3629,29 @@ class TraceDAOImpl implements TraceDAO {
                 environment
             )
             SELECT
-                t.id,
-                t.project_id,
-                t.workspace_id,
-                <if(name)> :name <else> t.name <endif> as name,
-                t.start_time,
-                <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> t.end_time <endif> as end_time,
-                <if(input)> p.input <else> t.input <endif> as input,
-                <if(output)> p.output <else> t.output <endif> as output,
-                <if(metadata)> p.metadata <else> t.metadata <endif> as metadata,
-                """ + TagOperations.tagUpdateFragment("t.tags") + """
+                stored_trace.id,
+                stored_trace.project_id,
+                stored_trace.workspace_id,
+                <if(name)> :name <else> stored_trace.name <endif> as name,
+                stored_trace.start_time,
+                <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> stored_trace.end_time <endif> as end_time,
+                <if(input)> payload.input <else> stored_trace.input <endif> as input,
+                <if(output)> payload.output <else> stored_trace.output <endif> as output,
+                <if(metadata)> payload.metadata <else> stored_trace.metadata <endif> as metadata,
+                """ + TagOperations.tagUpdateFragment("stored_trace.tags") + """
                 as tags,
-                <if(error_info)> :error_info <else> t.error_info <endif> as error_info,
-                t.created_at,
-                t.created_by,
+                <if(error_info)> :error_info <else> stored_trace.error_info <endif> as error_info,
+                stored_trace.created_at,
+                stored_trace.created_by,
                 :user_name as last_updated_by,
-                <if(thread_id)> :thread_id <else> t.thread_id <endif> as thread_id,
-                t.visibility_mode,
+                <if(thread_id)> :thread_id <else> stored_trace.thread_id <endif> as thread_id,
+                stored_trace.visibility_mode,
                 :truncation_threshold as truncation_threshold,
-                <if(input)> p.input_slim <else> t.input_slim <endif> as input_slim,
-                <if(output)> p.output_slim <else> t.output_slim <endif> as output_slim,
-                <if(ttft)> :ttft <else> t.ttft <endif> as ttft,
-                t.source,
-                <if(environment)> :environment <else> t.environment <endif> as environment
+                <if(input)> payload.input_slim <else> stored_trace.input_slim <endif> as input_slim,
+                <if(output)> payload.output_slim <else> stored_trace.output_slim <endif> as output_slim,
+                <if(ttft)> :ttft <else> stored_trace.ttft <endif> as ttft,
+                stored_trace.source,
+                <if(environment)> :environment <else> stored_trace.environment <endif> as environment
             """
             + StreamedPayload.FROM
             + """
@@ -3661,7 +3661,7 @@ class TraceDAOImpl implements TraceDAO {
                         WHERE id IN :ids AND workspace_id = :workspace_id
                         ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY id
-                    ) AS t
+                    ) AS stored_trace
                     SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable'
                     """
             + StreamedPayload.VALUES;

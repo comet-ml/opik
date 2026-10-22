@@ -2,6 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.utils.TruncationUtils;
 import io.r2dbc.spi.Statement;
+import jakarta.annotation.Nullable;
+import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
 
 /**
@@ -22,10 +24,10 @@ import org.apache.commons.lang3.StringUtils;
 public class StreamedPayload {
 
     /**
-     * {@code FROM} clause for the streamed row; templates read its columns as {@code p.<column>}. Carries its own
+     * {@code FROM} clause for the streamed row; templates read its columns as {@code payload.<column>}. Carries its own
      * keyword and newline because a text block strips the trailing space a {@code FROM """ + ...} split relies on.
      */
-    public static final String FROM = "FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS p\n";
+    public static final String FROM = "FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload\n";
 
     /** Trailing data clause; must be the last thing in the statement, after {@code SETTINGS}. */
     public static final String VALUES = "FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)";
@@ -37,7 +39,8 @@ public class StreamedPayload {
      * Binds the streamed row. A {@code null} value binds {@code ''} and an empty slim; a non-null one gets its slim
      * copy computed here, so callers cannot let the two drift.
      */
-    public static void bind(Statement statement, String input, String output, String metadata) {
+    public static void bind(@NonNull Statement statement, @Nullable String input, @Nullable String output,
+            @Nullable String metadata) {
         statement.bind("input", StringUtils.defaultString(input))
                 .bind("output", StringUtils.defaultString(output))
                 .bind("metadata", StringUtils.defaultString(metadata))
