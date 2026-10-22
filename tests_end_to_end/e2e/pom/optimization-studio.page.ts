@@ -632,8 +632,18 @@ export class OptimizationStudioPage {
     // `svg.lucide-settings2` is the same handle `OnlineEvaluationPage`'s
     // `judgeModelParametersTrigger` uses for the identical component, and it is
     // what separates the gear from the panel's other menu buttons (every message
-    // row's role selector is one). Asserted unique by the callers.
-    return this.newRunPanel().locator('button:has(svg.lucide-settings2)');
+    // row's role selector is one).
+    //
+    // Scoped to the prompt model's own `FormItem` rather than to the panel: the
+    // panel renders a SECOND Settings2 gear, `AlgorithmConfigs`, beside the
+    // Algorithm picker, so panel-wide the icon is ambiguous (strict mode
+    // violation, two matches, measured on a local 2.2.117 build). The prompt
+    // gear is the one sharing a parent with the `PromptModelSelect` trigger —
+    // `OptimizationsNewPromptSection` renders them as the two children of one
+    // `FormItem`, and `select-a-llm-model` is a testid only that select emits.
+    return this.newRunPanel()
+      .locator('div:has(> button[role="combobox"]:has([data-testid="select-a-llm-model"]))')
+      .locator('button:has(svg.lucide-settings2)');
   }
 
   /**
