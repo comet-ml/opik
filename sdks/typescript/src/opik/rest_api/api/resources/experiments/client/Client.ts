@@ -504,6 +504,8 @@ export class ExperimentsClient {
      * @param {OpikApi.ExperimentExecutionRequest} request
      * @param {ExperimentsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
+     * @throws {@link OpikApi.BadRequestError}
+     *
      * @example
      *     await client.experiments.executeExperiment({
      *         datasetName: "dataset_name",
@@ -574,11 +576,16 @@ export class ExperimentsClient {
         }
 
         if (_response.error.reason === "status-code") {
-            throw new errors.OpikApiError({
-                statusCode: _response.error.statusCode,
-                body: _response.error.body,
-                rawResponse: _response.rawResponse,
-            });
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
         }
 
         return handleNonStatusCodeError(
