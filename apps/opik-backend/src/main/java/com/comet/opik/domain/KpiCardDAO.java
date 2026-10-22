@@ -237,9 +237,16 @@ class KpiCardDAOImpl implements KpiCardDAO {
                       AND trace_id IN (<if(traces_summary)>SELECT arrayJoin(traces_summary.7)<else>SELECT id FROM traces_filtered<endif>)
                       <if(spans_partitioned)>
                       AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                          <if(span_weeks_bound)>
+                          SELECT id_week FROM span_weeks
+                          WHERE workspace_id = :workspace_id AND project_id = :project_id
+                          AND trace_id >= :uuid_from_time <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+                          AND id_week >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))) <if(uuid_to_time)>AND id_week \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                          <else>
                           SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
                           WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN (<if(traces_summary)>SELECT arrayJoin(traces_summary.7)<else>SELECT id FROM traces_filtered<endif>)
                           AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))) <if(uuid_to_time)>AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                          <endif>
                       <endif>
                     GROUP BY trace_id
                 )
@@ -257,21 +264,21 @@ class KpiCardDAOImpl implements KpiCardDAO {
             FROM trace_costs tc
             <else>
             SELECT
-                COUNTIf(filtered_traces.id >= :id_current_start<if(uuid_to_time)> AND filtered_traces.id \\<= :id_end<endif>) AS current_count,
-                COUNTIf(filtered_traces.id >= :id_prior_start AND filtered_traces.id \\< :id_current_start) AS previous_count,
-                if(COUNTIf(filtered_traces.id >= :id_current_start<if(uuid_to_time)> AND filtered_traces.id \\<= :id_end<endif>) = 0,
+                COUNTIf(traces_filtered.id >= :id_current_start<if(uuid_to_time)> AND traces_filtered.id \\<= :id_end<endif>) AS current_count,
+                COUNTIf(traces_filtered.id >= :id_prior_start AND traces_filtered.id \\< :id_current_start) AS previous_count,
+                if(COUNTIf(traces_filtered.id >= :id_current_start<if(uuid_to_time)> AND traces_filtered.id \\<= :id_end<endif>) = 0,
                     0,
-                    COUNTIf(length(filtered_traces.error_info) > 0 AND filtered_traces.id >= :id_current_start<if(uuid_to_time)> AND filtered_traces.id \\<= :id_end<endif>) * 100.0
-                    / COUNTIf(filtered_traces.id >= :id_current_start<if(uuid_to_time)> AND filtered_traces.id \\<= :id_end<endif>)) AS current_error_rate,
-                if(COUNTIf(filtered_traces.id >= :id_prior_start AND filtered_traces.id \\< :id_current_start) = 0,
+                    COUNTIf(length(traces_filtered.error_info) > 0 AND traces_filtered.id >= :id_current_start<if(uuid_to_time)> AND traces_filtered.id \\<= :id_end<endif>) * 100.0
+                    / COUNTIf(traces_filtered.id >= :id_current_start<if(uuid_to_time)> AND traces_filtered.id \\<= :id_end<endif>)) AS current_error_rate,
+                if(COUNTIf(traces_filtered.id >= :id_prior_start AND traces_filtered.id \\< :id_current_start) = 0,
                     0,
-                    COUNTIf(length(filtered_traces.error_info) > 0 AND filtered_traces.id >= :id_prior_start AND filtered_traces.id \\< :id_current_start) * 100.0
-                    / COUNTIf(filtered_traces.id >= :id_prior_start AND filtered_traces.id \\< :id_current_start)) AS previous_error_rate,
-                AVGIf(filtered_traces.duration, filtered_traces.id >= :id_current_start<if(uuid_to_time)> AND filtered_traces.id \\<= :id_end<endif>) AS current_avg_duration,
-                AVGIf(filtered_traces.duration, filtered_traces.id >= :id_prior_start AND filtered_traces.id \\< :id_current_start) AS previous_avg_duration,
+                    COUNTIf(length(traces_filtered.error_info) > 0 AND traces_filtered.id >= :id_prior_start AND traces_filtered.id \\< :id_current_start) * 100.0
+                    / COUNTIf(traces_filtered.id >= :id_prior_start AND traces_filtered.id \\< :id_current_start)) AS previous_error_rate,
+                AVGIf(traces_filtered.duration, traces_filtered.id >= :id_current_start<if(uuid_to_time)> AND traces_filtered.id \\<= :id_end<endif>) AS current_avg_duration,
+                AVGIf(traces_filtered.duration, traces_filtered.id >= :id_prior_start AND traces_filtered.id \\< :id_current_start) AS previous_avg_duration,
                 any(tc.current_total_cost) AS current_total_cost,
                 any(tc.previous_total_cost) AS previous_total_cost
-            FROM traces_filtered filtered_traces
+            FROM traces_filtered
             CROSS JOIN trace_costs tc
             <endif>
             SETTINGS log_comment = '<log_comment>';
@@ -698,6 +705,11 @@ class KpiCardDAOImpl implements KpiCardDAO {
         // the weeks their own matching span ids resolve to; on the legacy table there is nothing to prune.
         if (spanColumnsNonNullable()) {
             template.add("spans_partitioned", true);
+        }
+        // The trace query takes those weeks from the span_weeks index instead of a key scan of spans filtered by the
+        // matched traces, which also spares it one more evaluation of traces_filtered.
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
         }
         // Without a requested end the upper bounds are omitted, so far-future ids count, as they do in the list.
         if (criteria.intervalEnd() != null) {
