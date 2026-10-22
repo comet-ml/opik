@@ -60,6 +60,11 @@ class KpiCardDAOImpl implements KpiCardDAO {
      * UUIDv7 matching the trace id used for the count/error/duration split) and is CROSS JOINed as a
      * single row, avoiding the per-trace LEFT JOIN whose hash build dominated peak memory on large
      * projects. Identical results; the trace_id IN (traces_filtered) semijoin is retained. OPIK-7319.
+     * <p>
+     * traces_filtered is read once, through the traces_summary scalar: its count/error/duration aggregates and the
+     * matched ids come from one pass, and every trace_id IN reads those ids. ClickHouse inlines a plain CTE at each
+     * reference but evaluates a scalar subquery once per query, so referencing traces_filtered directly in the final
+     * SELECT and in each IN would re-run its scan (and any input search) once per reference.
      */
     private static final String GET_TRACE_KPI_CARDS = """
             WITH feedback_scores_deduped AS (
@@ -193,7 +198,19 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     AND fsc.feedback_scores_count = 0
                     <endif>
                 ) AS t
-            ), trace_costs AS (
+            ),
+            (
+                SELECT tuple(
+                    COUNTIf(id >= :id_current_start<if(uuid_to_time)> AND id \\<= :id_end<endif>),
+                    COUNTIf(id >= :id_prior_start AND id \\< :id_current_start),
+                    COUNTIf(length(error_info) > 0 AND id >= :id_current_start<if(uuid_to_time)> AND id \\<= :id_end<endif>),
+                    COUNTIf(length(error_info) > 0 AND id >= :id_prior_start AND id \\< :id_current_start),
+                    AVGIf(duration, id >= :id_current_start<if(uuid_to_time)> AND id \\<= :id_end<endif>),
+                    AVGIf(duration, id >= :id_prior_start AND id \\< :id_current_start),
+                    groupArray(id))
+                FROM traces_filtered
+            ) AS traces_summary,
+            trace_costs AS (
                 SELECT
                     SUMIf(cost, trace_id >= :id_current_start<if(uuid_to_time)> AND trace_id \\<= :id_end<endif>) AS current_total_cost,
                     SUMIf(cost, trace_id >= :id_prior_start AND trace_id \\< :id_current_start) AS previous_total_cost
@@ -206,33 +223,26 @@ class KpiCardDAOImpl implements KpiCardDAO {
                           >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
                       <if(uuid_to_time)>AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                           \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
-                      AND trace_id IN (SELECT id FROM traces_filtered)
+                      AND trace_id IN (SELECT arrayJoin(traces_summary.7))
                       <if(spans_partitioned)>
                       AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                           SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
-                          WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN (SELECT id FROM traces_filtered)
+                          WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN (SELECT arrayJoin(traces_summary.7))
                           AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))) <if(uuid_to_time)>AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
                       <endif>
                     GROUP BY trace_id
                 )
             )
             SELECT
-                COUNTIf(tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) AS current_count,
-                COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_count,
-                if(COUNTIf(tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) = 0,
-                    0,
-                    COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) * 100.0
-                    / COUNTIf(tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>)) AS current_error_rate,
-                if(COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start) = 0,
-                    0,
-                    COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_prior_start AND tf.id \\< :id_current_start) * 100.0
-                    / COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start)) AS previous_error_rate,
-                AVGIf(tf.duration, tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) AS current_avg_duration,
-                AVGIf(tf.duration, tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_avg_duration,
-                any(tc.current_total_cost) AS current_total_cost,
-                any(tc.previous_total_cost) AS previous_total_cost
-            FROM traces_filtered tf
-            CROSS JOIN trace_costs tc
+                traces_summary.1 AS current_count,
+                traces_summary.2 AS previous_count,
+                if(traces_summary.1 = 0, 0, traces_summary.3 * 100.0 / traces_summary.1) AS current_error_rate,
+                if(traces_summary.2 = 0, 0, traces_summary.4 * 100.0 / traces_summary.2) AS previous_error_rate,
+                traces_summary.5 AS current_avg_duration,
+                traces_summary.6 AS previous_avg_duration,
+                tc.current_total_cost AS current_total_cost,
+                tc.previous_total_cost AS previous_total_cost
+            FROM trace_costs tc
             SETTINGS log_comment = '<log_comment>';
             """;
 
