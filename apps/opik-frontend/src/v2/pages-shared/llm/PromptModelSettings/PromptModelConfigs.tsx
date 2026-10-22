@@ -29,6 +29,12 @@ import OpenRouterModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/pr
 import GeminiModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiModelConfigs";
 import VertexAIModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
 import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
+import GenericModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GenericModelConfigs";
+import {
+  ANTHROPIC_PANEL,
+  OPENAI_PANEL,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/genericPanels";
+import { getModelParams, toParamsRoute } from "@/lib/modelParams";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import {
   isOpenAICompatibleProvider,
@@ -71,6 +77,22 @@ const PromptModelConfigs = ({
 
   const getProviderForm = () => {
     if (provider === PROVIDER_TYPE.OPEN_AI) {
+      const params = getModelParams(
+        PROVIDER_TYPE.OPEN_AI,
+        model,
+        toParamsRoute(openAiPipelineMode),
+      );
+      if (params) {
+        return (
+          <GenericModelConfigs
+            params={params}
+            presentation={OPENAI_PANEL}
+            configs={configs as Record<string, unknown>}
+            unsupportedParams={unsupportedParams}
+            onChange={onChange}
+          />
+        );
+      }
       return (
         <OpenAIModelConfigs
           configs={configs as LLMOpenAIConfigsType}
@@ -83,6 +105,18 @@ const PromptModelConfigs = ({
     }
 
     if (provider === PROVIDER_TYPE.ANTHROPIC) {
+      const params = getModelParams(PROVIDER_TYPE.ANTHROPIC, model);
+      if (params) {
+        return (
+          <GenericModelConfigs
+            params={params}
+            presentation={ANTHROPIC_PANEL}
+            configs={configs as Record<string, unknown>}
+            unsupportedParams={unsupportedParams}
+            onChange={onChange}
+          />
+        );
+      }
       return (
         <AnthropicModelConfigs
           configs={configs as LLMAnthropicConfigsType}

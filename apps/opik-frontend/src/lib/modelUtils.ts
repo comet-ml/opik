@@ -31,9 +31,22 @@ import isEmpty from "lodash/isEmpty";
 import omit from "lodash/omit";
 import sortBy from "lodash/sortBy";
 import {
+  getLatestListedModelParams,
   getLatestModelFlags,
   getLatestProviderModelsSnapshot,
 } from "@/lib/modelRegistryStore";
+import {
+  adjustConfigForModel,
+  getEffortLevels,
+  getModelParams,
+  isAccepted,
+  OPENAI_PARAM_BINDING,
+  resolveEffortLevel,
+  resolveMaxOutputTokens,
+  resolveSampling,
+  toParamsRoute,
+} from "@/lib/modelParams";
+import { ModelParams } from "@/types/modelParams";
 import { PROVIDER_MODELS } from "@/constants/providerModels";
 import { snakeCaseObj } from "@/lib/utils";
 
@@ -386,6 +399,18 @@ const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
   max: "Max",
 };
 
+// Only an id the Anthropic registry lists: these helpers take no provider, and a Bedrock or OpenRouter
+// spelling of the same Claude must keep the canonical-id rules below.
+const getAnthropicListedParams = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): ModelParams | undefined =>
+  getLatestListedModelParams(PROVIDER_TYPE.ANTHROPIC, model);
+
+const toAnthropicEffort = (
+  level: unknown,
+): AnthropicThinkingEffort | undefined =>
+  ANTHROPIC_THINKING_EFFORT_VALUES.find((value) => value === level);
+
 // Derived from the capability map so the two cannot drift.
 const SAMPLING_CAPABLE_MODELS = Object.entries(ANTHROPIC_MODEL_CAPABILITIES)
   .filter(([, capabilities]) => capabilities?.supportsSamplingParams)
@@ -547,6 +572,11 @@ export const supportsSamplingParams = (
     return true;
   }
 
+  const params = getAnthropicListedParams(model);
+  if (params) {
+    return isAccepted(params.temperature) || isAccepted(params.top_p);
+  }
+
   const declared =
     ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
       ?.supportsSamplingParams;
@@ -566,16 +596,22 @@ export const supportsSamplingParams = (
 
 export const supportsAnthropicThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean =>
-  !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-    ?.thinkingEffortOptions;
+): boolean => {
+  const params = getAnthropicListedParams(model);
+  return params
+    ? getEffortLevels(params.effort).length > 0
+    : !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+        ?.thinkingEffortOptions;
+};
 
 // A Claude model with no row is one this build does not know yet. The backend checks its effort only
 // against the known level names and lets Anthropic judge the rest, so a stored level must pass through
 // rather than be dropped as unsupported. A row without thinkingEffortOptions means the model takes none.
 export const knowsAnthropicEffortLevels = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean => !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE];
+): boolean =>
+  !!getAnthropicListedParams(model) ||
+  !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE];
 
 export const thinksOnlyWhenAsked = (
   model?: PROVIDER_MODEL_TYPE | "",
@@ -593,9 +629,18 @@ export const hasEffortWithoutThinking = (
 // effort, so a new prompt or rule does not start thinking until someone picks a level.
 export const getDefaultThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
-): AnthropicThinkingEffort =>
-  ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-    ?.defaultThinkingEffort ?? (thinksOnlyWhenAsked(model) ? "off" : "high");
+): AnthropicThinkingEffort => {
+  const params = thinksOnlyWhenAsked(model)
+    ? undefined
+    : getAnthropicListedParams(model);
+  const level = params ? resolveEffortLevel(params.effort, []) : undefined;
+  return (
+    toAnthropicEffort(level) ??
+    ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+      ?.defaultThinkingEffort ??
+    (thinksOnlyWhenAsked(model) ? "off" : "high")
+  );
+};
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   isPlainObject(value) ? (value as Record<string, unknown>) : {};
@@ -633,16 +678,29 @@ export const withThinkingEffort = (
   return Object.keys(next).length > 0 ? next : undefined;
 };
 
+export const getAnthropicThinkingEffortLabel = (level: string): string =>
+  EFFORT_LABELS[level as AnthropicThinkingEffort] ?? level;
+
 export const getAnthropicThinkingEffortOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
-): Array<{ label: string; value: AnthropicThinkingEffort }> =>
-  supportsAnthropicThinkingEffort(model)
-    ? [
-        ...(thinksOnlyWhenAsked(model) ? (["off"] as const) : []),
-        ...(ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-          ?.thinkingEffortOptions ?? []),
-      ].map((value) => ({ label: EFFORT_LABELS[value], value }))
-    : [];
+): Array<{ label: string; value: AnthropicThinkingEffort }> => {
+  const params = getAnthropicListedParams(model);
+  const levels: readonly AnthropicThinkingEffort[] = params
+    ? getEffortLevels(params.effort).flatMap((level) => {
+        const effort = toAnthropicEffort(level);
+        return effort ? [effort] : [];
+      })
+    : supportsAnthropicThinkingEffort(model)
+      ? ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+          ?.thinkingEffortOptions ?? []
+      : [];
+  return [
+    ...(levels.length > 0 && thinksOnlyWhenAsked(model)
+      ? (["off"] as const)
+      : []),
+    ...levels,
+  ].map((value) => ({ label: EFFORT_LABELS[value], value }));
+};
 
 const OPENAI_EFFORT_LABELS: Record<OpenAIReasoningEffort, string> = {
   none: "None",
@@ -654,11 +712,42 @@ const OPENAI_EFFORT_LABELS: Record<OpenAIReasoningEffort, string> = {
   max: "Max",
 };
 
+export const toOpenAIReasoningEffort = (
+  level: unknown,
+): OpenAIReasoningEffort | undefined =>
+  typeof level === "string" && Object.keys(OPENAI_EFFORT_LABELS).includes(level)
+    ? (level as OpenAIReasoningEffort)
+    : undefined;
+
+export const getOpenAIReasoningEffortLabel = (level: string): string =>
+  OPENAI_EFFORT_LABELS[level as OpenAIReasoningEffort] ?? level;
+
+// Only an id the OpenAI registry lists, read on the key's route: getProviderFromModel also answers
+// OpenAI for a custom gateway's ids, and those keep the rules below.
+const getOpenAIListedParams = (
+  model?: PROVIDER_MODEL_TYPE | "",
+  openAiPipelineMode?: OpenAiPipelineMode,
+): ModelParams | undefined => {
+  const params = getLatestListedModelParams(PROVIDER_TYPE.OPEN_AI, model);
+  const route = toParamsRoute(openAiPipelineMode);
+  return (route ? params?.routes?.[route] : undefined) ?? params;
+};
+
+const getOpenAIEffortLevels = (params: ModelParams): OpenAIReasoningEffort[] =>
+  getEffortLevels(params.effort).flatMap((level) => {
+    const effort = toOpenAIReasoningEffort(level);
+    return effort ? [effort] : [];
+  });
+
 export const supportsOpenAIReasoningEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean =>
-  !!OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-    ?.reasoningEffortOptions;
+): boolean => {
+  const params = getOpenAIListedParams(model);
+  return params
+    ? getOpenAIEffortLevels(params).length > 0
+    : !!OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+        ?.reasoningEffortOptions;
+};
 
 export const getDefaultReasoningEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
@@ -673,6 +762,13 @@ export const getOpenAIReasoningEffortOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
   openAiPipelineMode?: OpenAiPipelineMode,
 ): Array<{ label: string; value: OpenAIReasoningEffort }> => {
+  const params = getOpenAIListedParams(model, openAiPipelineMode);
+  if (params) {
+    return getOpenAIEffortLevels(params).map((value) => ({
+      label: OPENAI_EFFORT_LABELS[value],
+      value,
+    }));
+  }
   const capabilities = OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE];
   const responsesApiOnly =
     openAiPipelineMode === "responses_api"
@@ -761,6 +857,19 @@ export const updateProviderConfig = <
   const providerType = parseComposedProviderType(params.provider);
 
   if (providerType === PROVIDER_TYPE.OPEN_AI) {
+    const modelParams = getModelParams(
+      PROVIDER_TYPE.OPEN_AI,
+      params.model,
+      toParamsRoute(params.openAiPipelineMode ?? "responses_api"),
+    );
+    if (modelParams) {
+      return adjustConfigForModel(
+        currentConfig,
+        modelParams,
+        OPENAI_PARAM_BINDING,
+      );
+    }
+
     const next: T = { ...currentConfig };
     let changed = false;
 
@@ -1061,6 +1170,13 @@ export const resolveSamplingParams = (
     return { temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE };
   }
 
+  if (provider === PROVIDER_TYPE.OPEN_AI) {
+    const params = getOpenAIListedParams(model);
+    if (params) {
+      return resolveSampling(params, configs);
+    }
+  }
+
   // Reasoning models take neither: top_p is rejected outright ("Unsupported parameter: 'top_p' is
   // not supported with this model.") and temperature accepts only the provider's own default, so
   // there is nothing to tune and omitting both is the one payload that always works.
@@ -1110,6 +1226,16 @@ export const supportsPenaltyParams = (
     return !native || supportsPenaltyParams(native);
   }
 
+  if (provider === PROVIDER_TYPE.OPEN_AI) {
+    const params = getOpenAIListedParams(model, openAiPipelineMode);
+    if (params) {
+      return (
+        isAccepted(params.frequency_penalty) &&
+        isAccepted(params.presence_penalty)
+      );
+    }
+  }
+
   return (
     provider !== PROVIDER_TYPE.OPEN_AI ||
     (!isReasoningModel(model) &&
@@ -1150,6 +1276,13 @@ export const resolveEffort = (
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
   if (provider === PROVIDER_TYPE.OPEN_AI) {
+    const params = getOpenAIListedParams(model, openAiPipelineMode);
+    if (params) {
+      const reasoningEffort = toOpenAIReasoningEffort(
+        resolveEffortLevel(params.effort, [configs.reasoningEffort]),
+      );
+      return reasoningEffort ? { reasoningEffort } : {};
+    }
     const options = getOpenAIReasoningEffortOptions(model, openAiPipelineMode);
     if (options.length === 0) {
       return {};
@@ -1197,6 +1330,26 @@ export const getMaxCompletionTokensRange = (
   provider: keyof typeof MAX_COMPLETION_TOKENS_FALLBACK,
   model: string,
   openAiPipelineMode?: OpenAiPipelineMode,
+): MaxCompletionTokensRange => {
+  const catalogRange =
+    provider === PROVIDER_TYPE.ANTHROPIC
+      ? getAnthropicListedParams(model as PROVIDER_MODEL_TYPE)
+          ?.max_output_tokens
+      : undefined;
+  if (catalogRange?.min !== undefined && catalogRange.max !== undefined) {
+    return { min: catalogRange.min, max: catalogRange.max };
+  }
+  return getPricingMaxCompletionTokensRange(
+    provider,
+    model,
+    openAiPipelineMode,
+  );
+};
+
+const getPricingMaxCompletionTokensRange = (
+  provider: keyof typeof MAX_COMPLETION_TOKENS_FALLBACK,
+  model: string,
+  openAiPipelineMode?: OpenAiPipelineMode,
 ): MaxCompletionTokensRange => ({
   // Below 16, the Responses API rejects max_output_tokens. Elsewhere 0 is rejected too: OpenAI
   // wants at least 1, and Anthropic refuses 0 on a streamed request, which every playground run is.
@@ -1225,7 +1378,13 @@ export const resolveMaxCompletionTokens = (
   );
   // A stored 0 was saved while the slider still went down to 0: it meant "not set", never a
   // one-token answer, so it gets the default rather than the new floor.
-  const requested = value || MAX_COMPLETION_TOKENS_DEFAULT[provider];
+  const catalogDefault =
+    provider === PROVIDER_TYPE.ANTHROPIC
+      ? getAnthropicListedParams(model as PROVIDER_MODEL_TYPE)
+          ?.max_output_tokens?.default
+      : undefined;
+  const requested =
+    value || (catalogDefault ?? MAX_COMPLETION_TOKENS_DEFAULT[provider]);
   return Math.min(Math.max(Math.floor(requested), min), max);
 };
 
@@ -1282,6 +1441,111 @@ export const resolveOpenRouterMaxTokens = (
 ): number | undefined =>
   value ? Math.min(value, getOpenRouterMaxTokensLimit(model)) : value;
 
+// Today's wire shape from the catalog: temperature or top_p (or neither), max_completion_tokens, and the
+// effort under custom_parameters.output_config. Sending catalog names and letting the backend write the
+// shape is a later step.
+export const writeAnthropicRequest = (
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: Record<string, unknown>,
+  params: ModelParams,
+): Record<string, unknown> => {
+  const sanitized: Record<string, unknown> = omit(configs, [
+    "temperature",
+    "topP",
+    "reasoningEffort",
+    "thinkingEffort",
+  ]);
+
+  const sampling = isAnthropicThinkingRequested(model, configs as EffortParams)
+    ? {}
+    : resolveSampling(params, configs as SamplingParams);
+  if (sampling.temperature !== undefined) {
+    sanitized.temperature = sampling.temperature;
+  }
+  if (sampling.topP !== undefined) {
+    sanitized.topP = sampling.topP;
+  }
+
+  const maxCompletionTokens = resolveMaxOutputTokens(
+    params.max_output_tokens,
+    configs.maxCompletionTokens as number | null | undefined,
+  );
+  if (maxCompletionTokens === undefined) {
+    delete sanitized.maxCompletionTokens;
+  } else {
+    sanitized.maxCompletionTokens = maxCompletionTokens;
+  }
+
+  const effort = resolveEffort(model, configs as EffortParams).thinkingEffort;
+  const customParameters = withThinkingEffort(
+    configs.custom_parameters,
+    effort,
+  );
+  if (customParameters) {
+    sanitized.custom_parameters = customParameters;
+  } else {
+    delete sanitized.custom_parameters;
+  }
+
+  if (sanitized.thinkingLevel != null) {
+    delete sanitized.thinkingLevel;
+  }
+
+  return sanitized;
+};
+
+export const writeOpenAIRequest = (
+  configs: Record<string, unknown>,
+  params: ModelParams,
+): Record<string, unknown> => {
+  const sanitized: Record<string, unknown> = omit(configs, [
+    "temperature",
+    "topP",
+    "reasoningEffort",
+    "thinkingEffort",
+  ]);
+
+  const sampling = resolveSampling(params, configs as SamplingParams);
+  if (sampling.temperature !== undefined) {
+    sanitized.temperature = sampling.temperature;
+  }
+  if (sampling.topP !== undefined) {
+    sanitized.topP = sampling.topP;
+  }
+
+  if (!isAccepted(params.frequency_penalty)) {
+    delete sanitized.frequencyPenalty;
+  }
+  if (!isAccepted(params.presence_penalty)) {
+    delete sanitized.presencePenalty;
+  }
+
+  if (typeof configs.maxCompletionTokens === "number") {
+    const maxCompletionTokens = resolveMaxOutputTokens(
+      params.max_output_tokens,
+      configs.maxCompletionTokens,
+    );
+    if (maxCompletionTokens === undefined) {
+      delete sanitized.maxCompletionTokens;
+    } else {
+      sanitized.maxCompletionTokens = maxCompletionTokens;
+    }
+  }
+
+  const reasoningEffort = toOpenAIReasoningEffort(
+    resolveEffortLevel(params.effort, [configs.reasoningEffort]),
+  );
+  if (reasoningEffort) {
+    sanitized.reasoningEffort = reasoningEffort;
+  }
+
+  if (sanitized.thinkingLevel != null) {
+    delete sanitized.thinkingLevel;
+  }
+
+  return sanitized;
+};
+
 // Last-mile request hardening, complementary to updateProviderConfig: this
 // layer doesn't trust upstream and keeps the payload valid for stale state
 // (e.g. older persisted prompts missing maxCompletionTokens).
@@ -1292,8 +1556,23 @@ export const sanitizeConfigForRequest = (
 ): Record<string, unknown> => {
   if (!model) return configs;
 
-  const sanitized: Record<string, unknown> = { ...configs };
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
+
+  if (provider === PROVIDER_TYPE.ANTHROPIC) {
+    const params = getAnthropicListedParams(model);
+    if (params) {
+      return writeAnthropicRequest(model, configs, params);
+    }
+  }
+
+  if (provider === PROVIDER_TYPE.OPEN_AI) {
+    const params = getOpenAIListedParams(model, openAiPipelineMode);
+    if (params) {
+      return writeOpenAIRequest(configs, params);
+    }
+  }
+
+  const sanitized: Record<string, unknown> = { ...configs };
 
   const sampling = resolveSamplingParams(
     model,

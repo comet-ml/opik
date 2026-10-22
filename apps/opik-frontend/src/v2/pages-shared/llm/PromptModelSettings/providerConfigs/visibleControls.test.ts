@@ -27,6 +27,7 @@ import {
 import {
   resetModelRegistryStoreForTesting,
   setLatestModelFlags,
+  setLatestProviderProfiles,
 } from "@/lib/modelRegistryStore";
 
 const ANTHROPIC_CONFIG = {
@@ -571,4 +572,50 @@ describe("Anthropic sampling params while Claude thinks", () => {
       expectAllAgree(model, configs, thinking);
     },
   );
+});
+
+describe("hasVisibleControls on the catalog panel", () => {
+  const MODEL = "claude-fixture-1" as PROVIDER_MODEL_TYPE;
+  const REFUSES_ALL = {
+    temperature: { accepted: false },
+    top_p: { accepted: false },
+    max_output_tokens: { accepted: true, min: 1, max: 8000, default: 4000 },
+    effort: { accepted: false },
+    sampling_exclusive: true,
+  };
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it("hides the settings button on a rule when the model's params leave nothing to set", () => {
+    setLatestProviderProfiles({ [PROVIDER_TYPE.ANTHROPIC]: REFUSES_ALL });
+
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.ANTHROPIC,
+        MODEL,
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(false);
+  });
+
+  it("shows it once the model takes an effort", () => {
+    setLatestProviderProfiles({
+      [PROVIDER_TYPE.ANTHROPIC]: {
+        ...REFUSES_ALL,
+        effort: { accepted: true, levels: ["low", "high"], default: "high" },
+      },
+    });
+
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.ANTHROPIC,
+        MODEL,
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(true);
+  });
 });
