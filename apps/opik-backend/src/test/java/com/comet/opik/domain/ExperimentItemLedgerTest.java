@@ -224,6 +224,7 @@ class ExperimentItemLedgerTest {
         ledger.record(WORKSPACE_ID, experimentId, entry(), Outcome.OK).block();
 
         assertThat(ttl(experimentId))
+                .isPositive()
                 .isLessThanOrEqualTo(config.getPendingMessageDuration().toJavaDuration().multipliedBy(6));
     }
 

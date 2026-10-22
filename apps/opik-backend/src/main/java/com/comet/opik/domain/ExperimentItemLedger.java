@@ -107,8 +107,8 @@ public class ExperimentItemLedger {
                 .expire(config.getPendingMessageDuration().toJavaDuration().multipliedBy(DRAINED_RETENTION_PERIODS))
                 .onErrorResume(error -> {
                     // The full TTL still clears them; the run has drained either way
-                    log.warn("Failed to shorten the outcomes of a drained experiment, experimentId '{}'",
-                            experimentId, error);
+                    log.warn("Failed to shorten the outcomes of a drained experiment, workspaceId '{}',"
+                            + " experimentId '{}'", workspaceId, experimentId, error);
                     return Mono.just(false);
                 })
                 .then();
