@@ -217,7 +217,20 @@ data:
         }
         {{- end }}
 
-        location ^~ {{ $rootPath }}/api/v1/internal/ {
+        # The internal API must be unreachable from the edge. A literal `^~` prefix
+        # on the raw path was bypassable: a matrix param (`/internal;x/`), a
+        # percent-encoded separator (`/internal%3Bx/`, `/internal%2F..%2F`), or
+        # mixed case (`/Internal/`) all skipped it and fell through to
+        # `location /api/` -> backend. Match the NORMALIZED, case-folded `$uri`
+        # instead: nginx has already decoded `%3B`->`;`, `%69`->`i` and resolved
+        # dot-segments there, so one boundary check after `internal` closes the
+        # literal `/`, the matrix-param `;`, a bare `/api/v1/internal` (no trailing
+        # char, which the old trailing-slash prefix also missed), and -- for nginx
+        # builds that keep `%2F`/`%3B` encoded in `$uri` -- their raw `%2f`/`%3b`
+        # forms. A regex location outranks the `location /api/` prefix, so it wins.
+        # The regex is quoted because it contains `;`, which nginx otherwise reads
+        # as the directive terminator. See GHSA-jq6h.
+        location ~* "^{{ $rootPath }}/api/v1/internal([/;]|%2f|%3b|$)" {
           deny all;
         }
 
