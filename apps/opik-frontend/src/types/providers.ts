@@ -1078,6 +1078,16 @@ export type OpenAIReasoningEffort =
   | ReasoningEffort
   | ResponsesApiOnlyReasoningEffort;
 
+export const OPENAI_REASONING_EFFORT_VALUES = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const satisfies readonly OpenAIReasoningEffort[];
+
 export interface LLMOpenAIConfigsType {
   temperature: number;
   maxCompletionTokens: number;
