@@ -81,15 +81,17 @@ export class DashboardsPage {
    * opens from its "Pick a chart" item; otherwise it opens the dialog directly.
    */
   private async openAddWidgetDialog(): Promise<Locator> {
-    await this.page.getByRole('button', { name: 'Add widget' }).first().click();
-    const dialog = this.page.getByRole('dialog');
-    const pickAChart = this.page.getByRole('menuitem', { name: 'Pick a chart' });
-    await dialog.or(pickAChart).first().waitFor({ state: 'visible' });
-    if (await pickAChart.isVisible()) {
-      await pickAChart.click();
-    }
-    await dialog.waitFor({ state: 'visible' });
-    return dialog;
+    return test.step('Open the Add widget dialog', async () => {
+      await this.page.getByRole('button', { name: 'Add widget' }).first().click();
+      const dialog = this.page.getByRole('dialog');
+      const pickAChart = this.page.getByRole('menuitem', { name: 'Pick a chart' });
+      await dialog.or(pickAChart).first().waitFor({ state: 'visible' });
+      if (await pickAChart.isVisible()) {
+        await pickAChart.click();
+      }
+      await dialog.waitFor({ state: 'visible' });
+      return dialog;
+    });
   }
 
   /**
