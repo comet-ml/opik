@@ -212,6 +212,7 @@ const usePromptCombination = ({
           messages: providerMessages,
           configs: prompt.configs,
           openAiPipelineMode,
+          provider: prompt.provider,
           signal: controller.signal,
           onAddChunk: (o) => {
             updateOutput(prompt.id, {

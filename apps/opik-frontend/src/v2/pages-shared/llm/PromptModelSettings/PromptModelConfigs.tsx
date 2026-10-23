@@ -29,6 +29,14 @@ import OpenRouterModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/pr
 import GeminiModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiModelConfigs";
 import VertexAIModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
 import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
+import GenericModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GenericModelConfigs";
+import {
+  ANTHROPIC_PANEL,
+  GenericPanelPresentation,
+  OPENAI_PANEL,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/genericPanels";
+import { getModelParams, toParamsRoute } from "@/lib/modelParams";
+import { ModelParams } from "@/types/modelParams";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import {
   isOpenAICompatibleProvider,
@@ -69,8 +77,30 @@ const PromptModelConfigs = ({
   const provider: PROVIDER_TYPE =
     parseComposedProviderType(composedProviderType);
 
+  const renderCatalogPanel = (
+    params: ModelParams,
+    presentation: GenericPanelPresentation,
+  ) => (
+    <GenericModelConfigs
+      model={model}
+      params={params}
+      presentation={presentation}
+      configs={configs as Record<string, unknown>}
+      unsupportedParams={unsupportedParams}
+      onChange={onChange}
+    />
+  );
+
   const getProviderForm = () => {
     if (provider === PROVIDER_TYPE.OPEN_AI) {
+      const params = getModelParams(
+        PROVIDER_TYPE.OPEN_AI,
+        model,
+        toParamsRoute(openAiPipelineMode),
+      );
+      if (params) {
+        return renderCatalogPanel(params, OPENAI_PANEL);
+      }
       return (
         <OpenAIModelConfigs
           configs={configs as LLMOpenAIConfigsType}
@@ -83,6 +113,10 @@ const PromptModelConfigs = ({
     }
 
     if (provider === PROVIDER_TYPE.ANTHROPIC) {
+      const params = getModelParams(PROVIDER_TYPE.ANTHROPIC, model);
+      if (params) {
+        return renderCatalogPanel(params, ANTHROPIC_PANEL);
+      }
       return (
         <AnthropicModelConfigs
           configs={configs as LLMAnthropicConfigsType}

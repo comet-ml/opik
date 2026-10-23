@@ -215,6 +215,17 @@ public class LlmModelRegistryService {
         return registry;
     }
 
+    public Map<String, ModelParams> getProfiles() {
+        var profiles = new LinkedHashMap<String, ModelParams>();
+        for (var provider : LlmProvider.values()) {
+            var params = paramsOf(provider.getValue(), null);
+            if (params != null) {
+                profiles.put(provider.getValue(), params);
+            }
+        }
+        return profiles;
+    }
+
     public Optional<ModelLookupResult> findModel(@NonNull String model) {
         var snapshot = this.registry;
 
