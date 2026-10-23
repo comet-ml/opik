@@ -57,11 +57,12 @@ const RUNTIME = `(() => {
     };
     queue.splice(0).forEach((message) => port.postMessage(message));
   });
-  document.addEventListener("DOMContentLoaded", () => {
-    const postHeight = () =>
-      post({ type: "opik:resize", height: document.body.scrollHeight });
-    new ResizeObserver(postHeight).observe(document.body);
-  });
+  const postHeight = () =>
+    post({
+      type: "opik:resize",
+      height: Math.ceil(document.documentElement.getBoundingClientRect().height),
+    });
+  new ResizeObserver(postHeight).observe(document.documentElement);
   window.parent.postMessage({ type: "opik:ready" }, "*");
 })();`;
 
