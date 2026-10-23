@@ -206,6 +206,7 @@ const useAnnotatorViewEditor = ({
       entryId,
       artifact: { kind: ANNOTATOR_VIEW_ARTIFACT, context },
     });
+    if (action !== "fix") return;
     setIsDrafting(true);
     clearTimeout(draftingTimer.current);
     draftingTimer.current = setTimeout(stopDrafting, DRAFTING_TIMEOUT_MS);

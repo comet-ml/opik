@@ -38,6 +38,14 @@ const RUNTIME = `(() => {
     if (String(event.message).startsWith("ResizeObserver loop")) return;
     window.opik.error(event.message);
   });
+  document.addEventListener(
+    "click",
+    (event) => {
+      const link = event.target instanceof Element && event.target.closest("a[href]");
+      if (link && !link.getAttribute("href").startsWith("#")) event.preventDefault();
+    },
+    true,
+  );
   window.addEventListener("unhandledrejection", (event) =>
     window.opik.error(event.reason?.message ?? event.reason),
   );
