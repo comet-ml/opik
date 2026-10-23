@@ -17,6 +17,7 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
@@ -62,6 +63,8 @@ import com.comet.opik.utils.JsonUtils;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import lombok.Builder;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
@@ -1148,6 +1151,82 @@ class ExperimentAggregatesIntegrationTest {
     }
 
     // Helper methods
+
+    /**
+     * Both score tables are {@code ReplacingMergeTree}s: a second write of the same score is a second
+     * physical row, and until the parts merge both are readable. The aggregation has to collapse them, or it
+     * stores the average of a superseded value and the current one — and stores it, so it does not heal on
+     * the next merge.
+     */
+    @Test
+    @DisplayName("A re-scored trace is aggregated once, at its latest value")
+    void rescoredTraceIsAggregatedOnce() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+
+        var datasetItem = DatasetResourceClient.buildDatasetItem(factory);
+        datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                .datasetId(dataset.id())
+                .items(List.of(datasetItem))
+                .build(), workspaceName, apiKey);
+
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(project.name())
+                .usage(null)
+                .visibilityMode(null)
+                .feedbackScores(null)
+                .build();
+        traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+        experimentResourceClient.createExperimentItem(Set.of(ExperimentItem.builder()
+                .experimentId(experiment.id())
+                .datasetItemId(datasetItem.id())
+                .traceId(trace.id())
+                .build()), apiKey, workspaceName);
+
+        var scoreName = RandomStringUtils.secure().nextAlphabetic(10);
+        var superseded = BigDecimal.valueOf(random.nextInt(1, 50), 2);
+        var latest = BigDecimal.valueOf(random.nextInt(51, 100), 2);
+
+        scoreTrace(trace.id(), project.name(), scoreName, superseded, apiKey, workspaceName);
+        scoreTrace(trace.id(), project.name(), scoreName, latest, apiKey, workspaceName);
+
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        assertThat(findByIds(Set.of(experiment.id()), workspaceId))
+                .singleElement()
+                .extracting(Experiment::feedbackScores)
+                .asInstanceOf(InstanceOfAssertFactories.list(FeedbackScoreAverage.class))
+                .as("the superseded version must not be averaged into the current one")
+                .usingRecursiveFieldByFieldElementComparator(RecursiveComparisonConfiguration.builder()
+                        .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                        .build())
+                .containsExactly(new FeedbackScoreAverage(scoreName, latest));
+    }
+
+    private void scoreTrace(UUID traceId, String projectName, String name, BigDecimal value, String apiKey,
+            String workspaceName) {
+        traceResourceClient.feedbackScores(
+                List.of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                        .id(traceId)
+                        .projectName(projectName)
+                        .name(name)
+                        .value(value)
+                        .source(ScoreSource.SDK)
+                        .build()),
+                apiKey, workspaceName);
+    }
 
     private Project createProject(String apiKey, String workspaceName) {
         var projectName = "test-project-" + UUID.randomUUID();
