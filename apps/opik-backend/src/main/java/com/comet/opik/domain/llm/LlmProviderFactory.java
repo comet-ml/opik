@@ -33,6 +33,8 @@ public interface LlmProviderFactory {
     /** The catalog params of a model the registry lists under OpenAI, or empty for any other model. */
     Optional<ModelParams> openAiParams(String model);
 
+    Optional<ModelParams> geminiParams(String model);
+
     /**
      * Returns the resolved model info for the given model name.
      * For the built-in provider, this returns the actual model name and span provider.
