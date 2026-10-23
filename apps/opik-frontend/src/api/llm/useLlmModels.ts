@@ -9,6 +9,7 @@ export type LlmModelDefinition = {
   reasoning: boolean;
   supported_parameters?: string[];
   reasoning_efforts?: string[];
+  retires_on?: string;
 };
 
 export type LlmModelsByProvider = Record<string, LlmModelDefinition[]>;
