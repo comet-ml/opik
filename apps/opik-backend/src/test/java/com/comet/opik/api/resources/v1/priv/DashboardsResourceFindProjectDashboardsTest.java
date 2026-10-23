@@ -48,7 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class DashboardsResourceFindProjectDashboardsTest {
 
-    public static final String[] DASHBOARD_IGNORED_FIELDS = {"id", "workspaceId", "slug", "projectName", "createdAt",
+    public static final String[] DASHBOARD_IGNORED_FIELDS = {"id", "workspaceId", "projectName", "createdAt",
             "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);

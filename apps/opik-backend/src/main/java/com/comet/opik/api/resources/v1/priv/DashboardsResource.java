@@ -88,8 +88,8 @@ public class DashboardsResource {
 
         Dashboard savedDashboard = service.create(dashboard, DashboardScope.WORKSPACE);
 
-        log.info("Created dashboard with id '{}', name '{}', slug '{}' in workspace '{}'",
-                savedDashboard.id(), savedDashboard.name(), savedDashboard.slug(), workspaceId);
+        log.info("Created dashboard with id '{}', name '{}' in workspace '{}'",
+                savedDashboard.id(), savedDashboard.name(), workspaceId);
 
         URI uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(savedDashboard.id().toString())).build();
         return Response.created(uri).entity(savedDashboard).build();
@@ -147,8 +147,7 @@ public class DashboardsResource {
     @Path("/{dashboardId}")
     @Operation(operationId = "updateDashboard", summary = "Update dashboard", description = "Update dashboard by id. Partial updates are supported - only provided fields will be updated.", responses = {
             @ApiResponse(responseCode = "200", description = "Updated dashboard", content = @Content(schema = @Schema(implementation = Dashboard.class))),
-            @ApiResponse(responseCode = "404", description = "Dashboard not found"),
-            @ApiResponse(responseCode = "409", description = "Conflict - dashboard with this name already exists")
+            @ApiResponse(responseCode = "404", description = "Dashboard not found")
     })
     @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_EDIT)
     @JsonView(Dashboard.View.Public.class)
