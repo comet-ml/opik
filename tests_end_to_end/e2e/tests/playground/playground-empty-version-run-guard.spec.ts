@@ -55,12 +55,13 @@ test.describe(
      * Every request that would mean a run had started, from before the page is
      * opened.
      *
-     * All three paths, because the Playground reaches the model through
-     * different ones depending on mode and the gate has to close all of them:
-     * dataset mode posts an experiment per variant to the bare `/experiments`
-     * collection and then streams completions, suite mode posts one
-     * `/experiments/execute`. Anchored on the end of the path — `/experiments`,
-     * `/experiments/items` and `/experiments/execute` share a prefix.
+     * All three paths, because the gate has to close every way a run can start:
+     * a dataset or suite run posts one `/experiments/execute`, a run without
+     * one streams completions from the browser, and the bare `/experiments`
+     * collection is the browser-side dataset path from before runs moved
+     * server-side, kept so a build that fell back to it is still caught.
+     * Anchored on the end of the path — `/experiments`, `/experiments/items`
+     * and `/experiments/execute` share a prefix.
      */
     const collectRunRequests = (page: Page): string[] => {
       const seen: string[] = [];
