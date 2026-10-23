@@ -125,6 +125,12 @@ public class OpikConfiguration extends JobConfiguration {
     private PythonEvaluatorConfig pythonEvaluator = new PythonEvaluatorConfig();
 
     @Valid @NotNull @JsonProperty
+    private OpikInferenceConfig opikInference = new OpikInferenceConfig();
+
+    @Valid @NotNull @JsonProperty
+    private GuardrailsConfig guardrails = new GuardrailsConfig();
+
+    @Valid @NotNull @JsonProperty
     private JerseyClientConfiguration jerseyClient = new JerseyClientConfiguration();
 
     @Valid @NotNull @JsonProperty
@@ -225,5 +231,11 @@ public class OpikConfiguration extends JobConfiguration {
     @AssertTrue(message = "alertsEventBridge.eventBus (ALERTS_EVENTBRIDGE_EVENT_BUS) must be set when serviceToggles.eventBridgeAlertsEnabled (ALERTS_EVENTBRIDGE_ENABLED) is true")
     public boolean isAlertsEventBridgeBusConfigured() {
         return !serviceToggles.isEventBridgeAlertsEnabled() || StringUtils.isNotBlank(alertsEventBridge.getEventBus());
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "opikInference.url (OPIK_INFERENCE_URL) and opikInference.apiKey (OPIK_INFERENCE_API_KEY) must be set when serviceToggles.opikInferenceEnabled (TOGGLE_OPIK_INFERENCE_ENABLED) is true")
+    public boolean isOpikInferenceConfigured() {
+        return !serviceToggles.isOpikInferenceEnabled() || opikInference.isConfigured();
     }
 }

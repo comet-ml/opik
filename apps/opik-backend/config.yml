@@ -1738,6 +1738,41 @@ attachmentsConfig:
   stripMinSize: ${ATTACHMENTS_STRIP_MIN_SIZE:-256000}
 
 # Python evaluator configuration
+# Opik inference service: the shared decision model that answers the guardrails questions.
+# Read at startup: url and apiKey must be set when serviceToggles.opikInferenceEnabled is true.
+opikInference:
+  # Default: empty
+  # Description: Base URL of the opik-inference service, e.g. https://opik-inference.comet.com
+  url: ${OPIK_INFERENCE_URL:-}
+  # Default: empty
+  # Description: Bearer token issued to this deployment by the inference service
+  apiKey: ${OPIK_INFERENCE_API_KEY:-}
+  # Default: 2
+  # Description: Attempts per decide call when the service answers with a retryable error
+  maxRetryAttempts: ${OPIK_INFERENCE_MAX_RETRY_ATTEMPTS:-2}
+  # Default: 2s
+  # Description: Max wait for the connection to the inference service
+  connectTimeout: ${OPIK_INFERENCE_CONNECT_TIMEOUT:-2s}
+  # Default: 5s
+  # Description: Max wait for a decide response read per call; keep it above the deadline
+  readTimeout: ${OPIK_INFERENCE_READ_TIMEOUT:-5s}
+  # Default: 1s
+  # Description: Time the decision service may spend on one call (sent as deadline_ms); the realtime lane allows up to 5s
+  deadline: ${OPIK_INFERENCE_DEADLINE:-1s}
+
+# Guardrails checks: the thresholds that turn the decision model's probabilities into verdicts.
+# Server-side only; the validations endpoint rejects a threshold sent by the caller.
+guardrails:
+  # Default: 0.5
+  # Description: A PII check fails when any selected class scores at or above this
+  piiThreshold: ${GUARDRAILS_PII_THRESHOLD:-0.5}
+  # Default: 0.3
+  # Description: A topic counts as matched when its probability is at or above this
+  topicThreshold: ${GUARDRAILS_TOPIC_THRESHOLD:-0.3}
+  # Default: 0.4
+  # Description: A prompt injection check fails when the probability is at or above this
+  promptInjectionThreshold: ${GUARDRAILS_PROMPT_INJECTION_THRESHOLD:-0.4}
+
 pythonEvaluator:
   # Default: http://localhost:8000
   # Description: URL of the Python evaluator service, generally the opik-python-backend service
@@ -1804,6 +1839,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not the backend may call the opik-inference service (requires opikInference.url and apiKey)
+  opikInferenceEnabled: ${TOGGLE_OPIK_INFERENCE_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}

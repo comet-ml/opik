@@ -159,7 +159,12 @@ class RemoteAuthService implements AuthService {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     @Builder(toBuilder = true)
-    record AuthResponse(String user, String workspaceId, String workspaceName, List<Quota> quotas) {
+    /**
+     * {@code guardrailsEnabled} is whether guardrails are enabled for the workspace's organization, as the platform
+     * resolved it. Absent on a platform that does not know the feature yet, which reads as disabled.
+     */
+    record AuthResponse(String user, String workspaceId, String workspaceName, List<Quota> quotas,
+            Boolean guardrailsEnabled) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -174,7 +179,8 @@ class RemoteAuthService implements AuthService {
             String workspaceId,
             String workspaceName,
             List<Quota> quotas,
-            List<String> permissions) {
+            List<String> permissions,
+            boolean guardrailsEnabled) {
 
         static ValidatedAuthCredentials from(AuthResponse authResponse, List<String> permissions) {
             return ValidatedAuthCredentials.builder()
@@ -184,6 +190,7 @@ class RemoteAuthService implements AuthService {
                     .workspaceName(authResponse.workspaceName())
                     .quotas(authResponse.quotas())
                     .permissions(permissions)
+                    .guardrailsEnabled(Boolean.TRUE.equals(authResponse.guardrailsEnabled()))
                     .build();
         }
 
@@ -195,6 +202,7 @@ class RemoteAuthService implements AuthService {
                     .workspaceName(authCredentials.workspaceName())
                     .quotas(authCredentials.quotas())
                     .permissions(authCredentials.permissions())
+                    .guardrailsEnabled(authCredentials.guardrailsEnabled())
                     .build();
         }
 
@@ -205,6 +213,7 @@ class RemoteAuthService implements AuthService {
                     .workspaceName(workspaceName)
                     .quotas(quotas)
                     .permissions(permissions)
+                    .guardrailsEnabled(guardrailsEnabled)
                     .build();
         }
     }
@@ -609,6 +618,7 @@ class RemoteAuthService implements AuthService {
         requestContext.get().setPermissions(credentials.permissions() == null
                 ? Set.of()
                 : Set.copyOf(credentials.permissions()));
+        requestContext.get().setGuardrailsEnabled(credentials.guardrailsEnabled());
     }
 
     private boolean isEndpointPublic(ContextInfoHolder contextInfo) {

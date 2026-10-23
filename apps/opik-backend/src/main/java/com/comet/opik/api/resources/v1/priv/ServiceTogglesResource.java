@@ -38,8 +38,11 @@ public class ServiceTogglesResource {
         ServiceTogglesConfig toggles = config.getServiceToggles();
         boolean customChartsEnabledForWorkspace = config.getCustomCharts()
                 .isEnabledFor(toggles, requestContext.get().getWorkspaceId());
+        boolean guardrailsEnabledForWorkspace = toggles.isGuardrailsEnabled()
+                && requestContext.get().isGuardrailsEnabled();
         return Response.ok()
-                .entity(toggles.withCustomChartsEnabledForWorkspace(customChartsEnabledForWorkspace))
+                .entity(toggles.withCustomChartsEnabledForWorkspace(customChartsEnabledForWorkspace)
+                        .withGuardrailsEnabledForWorkspace(guardrailsEnabledForWorkspace))
                 .build();
     }
 }

@@ -20,6 +20,7 @@ import com.comet.opik.infrastructure.db.NameGeneratorModule;
 import com.comet.opik.infrastructure.events.EventListenerRegistrar;
 import com.comet.opik.infrastructure.events.EventModule;
 import com.comet.opik.infrastructure.http.HttpModule;
+import com.comet.opik.infrastructure.inference.OpikInferenceModule;
 import com.comet.opik.infrastructure.job.JobGuiceyInstaller;
 import com.comet.opik.infrastructure.job.JobModule;
 import com.comet.opik.infrastructure.llm.LlmModule;
@@ -110,7 +111,8 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         new ConfigurationModule(), new CacheModule(), new JobModule(), new AnthropicModule(),
                         new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule(),
                         new AwsModule(), new UsageLimitModule(), new VertexAIModule(), new CustomLlmModule(),
-                        new OllamaModule(), new FreeModelModule(), new ToolsModule())
+                        new OllamaModule(), new FreeModelModule(), new ToolsModule(),
+                        new OpikInferenceModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener(), new EventListenerRegistrar())
                 .enableAutoConfig()

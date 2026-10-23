@@ -43,6 +43,29 @@ public class AuthTestUtils {
         mockTargetWorkspace(server, apiKey, workspaceName, workspaceId, user, null);
     }
 
+    /** The auth response of a workspace whose organization has guardrails enabled. */
+    public static String newWorkspaceAuthResponseWithGuardrails(String user, String workspaceId,
+            String workspaceName) {
+        var response = new LinkedHashMap<String, Object>();
+        response.put("user", user);
+        response.put("workspaceId", workspaceId);
+        response.put("workspaceName", workspaceName);
+        response.put("quotas", null);
+        response.put("guardrailsEnabled", true);
+        return JsonUtils.writeValueAsString(response);
+    }
+
+    public static void mockTargetWorkspaceWithGuardrails(WireMockServer server, String apiKey,
+            String workspaceName, String workspaceId, String user) {
+        server.stubFor(
+                post(urlPathEqualTo("/opik/auth"))
+                        .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
+                        .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
+                        .withRequestBody(matchingJsonPath("$.path", matching("/v1/private/.*")))
+                        .willReturn(okJson(newWorkspaceAuthResponseWithGuardrails(user, workspaceId,
+                                workspaceName))));
+    }
+
     /**
      * Stubs the auth call so it returns the caller's workspace permissions, the way the platform does. Pass
      * the granted permission names; anything omitted is simply absent, which is how a withheld permission

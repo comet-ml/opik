@@ -50,4 +50,31 @@ public class FeatureFlags {
         }
     }
 
+    public boolean isGuardrailsEnabled() {
+        return config.getServiceToggles() != null && config.getServiceToggles().isGuardrailsEnabled();
+    }
+
+    /**
+     * @throws ForbiddenException if the guardrails feature is not enabled
+     */
+    public void checkGuardrailsEnabled() {
+        if (!isGuardrailsEnabled()) {
+            log.warn("Guardrails feature is disabled, returning 403");
+            throw new ForbiddenException("Guardrails feature is not enabled");
+        }
+    }
+
+    public boolean isOpikInferenceEnabled() {
+        return config.getServiceToggles() != null && config.getServiceToggles().isOpikInferenceEnabled();
+    }
+
+    /**
+     * @throws ForbiddenException if calls to the opik-inference service are not enabled
+     */
+    public void checkOpikInferenceEnabled() {
+        if (!isOpikInferenceEnabled()) {
+            log.warn("Opik inference service is disabled, returning 403");
+            throw new ForbiddenException("Opik inference service is not enabled");
+        }
+    }
 }

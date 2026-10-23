@@ -30,6 +30,9 @@ public class ServiceTogglesConfig {
     @NotNull boolean spanUserDefinedMetricPythonEnabled;
     @JsonProperty
     @NotNull boolean guardrailsEnabled;
+
+    @JsonProperty
+    @NotNull boolean opikInferenceEnabled;
     @JsonProperty
     @NotNull boolean opikAIEnabled;
     @JsonProperty
@@ -88,6 +91,12 @@ public class ServiceTogglesConfig {
     @With
     @Getter(AccessLevel.NONE)
     boolean customChartsEnabledForWorkspace;
+
+    // Set per request by the toggles endpoint from the authenticated workspace's enablement, never from config.
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @With
+    @Getter(AccessLevel.NONE)
+    boolean guardrailsEnabledForWorkspace;
 
     @JsonIgnore
     public boolean isAgentInsightsActive() {

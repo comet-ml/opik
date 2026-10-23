@@ -65,6 +65,13 @@ public class RequestContext {
     @Builder.Default
     private Set<String> permissions = Set.of();
 
+    /**
+     * Whether guardrails are enabled for this workspace's organization, as the platform resolved it on the
+     * authentication call. False when the auth response carries no flag, so a platform that does not know the
+     * feature yet leaves it closed.
+     */
+    private boolean guardrailsEnabled;
+
     public void setWorkspaceFallbackFor(String entityType, String entityName) {
         this.workspaceFallbackMessage = WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted(entityType, entityName);
     }

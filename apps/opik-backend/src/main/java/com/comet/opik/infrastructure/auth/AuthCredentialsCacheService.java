@@ -37,6 +37,7 @@ class AuthCredentialsCacheService implements CacheService {
     private static final String QUOTAS_KEY = "quotas";
     private static final String PERMISSIONS_KEY = "permissions";
     private static final String DEVICE_ID_KEY = "deviceId";
+    private static final String GUARDRAILS_ENABLED_KEY = "guardrailsEnabled";
 
     private static final Set<String> V2_MAP_FIELDS = Set.of(
             USER_NAME_KEY,
@@ -44,7 +45,8 @@ class AuthCredentialsCacheService implements CacheService {
             WORKSPACE_NAME_KEY,
             QUOTAS_KEY,
             PERMISSIONS_KEY,
-            DEVICE_ID_KEY);
+            DEVICE_ID_KEY,
+            GUARDRAILS_ENABLED_KEY);
 
     private final @NonNull RedissonReactiveClient redissonClient;
     private final int ttlInSeconds;
@@ -74,6 +76,9 @@ class AuthCredentialsCacheService implements CacheService {
                         // Blank for every credential that is not a CIPX device token, and absent for entries
                         // written before device ids; both mean no device, so they read back the same.
                         .deviceId(StringUtils.trimToNull(m.get(DEVICE_ID_KEY)))
+                        // Absent for entries written before the flag was cached; they read back disabled until
+                        // they expire, so a stale entry withholds rather than grants.
+                        .guardrailsEnabled(Boolean.parseBoolean(m.get(GUARDRAILS_ENABLED_KEY)))
                         .build());
     }
 
@@ -110,7 +115,8 @@ class AuthCredentialsCacheService implements CacheService {
                 QUOTAS_KEY, JsonUtils.writeValueAsString(Optional.ofNullable(credentials.quotas()).orElse(List.of())),
                 PERMISSIONS_KEY,
                 JsonUtils.writeValueAsString(Optional.ofNullable(credentials.permissions()).orElse(List.of())),
-                DEVICE_ID_KEY, StringUtils.defaultString(credentials.deviceId()));
+                DEVICE_ID_KEY, StringUtils.defaultString(credentials.deviceId()),
+                GUARDRAILS_ENABLED_KEY, Boolean.toString(credentials.guardrailsEnabled()));
 
         RBatchReactive batch = redissonClient.createBatch();
         RMapReactive<String, String> v2Map = batch.getMap(v2Key);
