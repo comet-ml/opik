@@ -1,20 +1,15 @@
 package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.LlmProvider;
-import com.comet.opik.api.ModelCostData;
 import com.comet.opik.api.ModelParams;
-import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.domain.cost.ModelPriceTable;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
-import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -332,36 +327,21 @@ public class ModelCapabilities {
     }
 
     private Map<String, ModelCapability> loadCapabilities() {
-        try {
-            Map<String, ModelCostData> rawData = JsonUtils.readJsonFile(CostService.MODEL_PRICES_FILE,
-                    new TypeReference<>() {
-                    });
-            if (rawData.isEmpty()) {
-                throw new IllegalStateException(
-                        "No entries found in model prices file '%s'".formatted(CostService.MODEL_PRICES_FILE));
+        var capabilities = new HashMap<String, ModelCapability>();
+        ModelPriceTable.readModelCosts().forEach((modelName, modelData) -> {
+            if (StringUtils.isBlank(modelName)) {
+                return;
             }
 
-            var capabilities = new HashMap<String, ModelCapability>();
-            rawData.forEach((modelName, modelData) -> {
-                if (StringUtils.isBlank(modelName)) {
-                    return;
-                }
-
-                var normalizedName = normalize(modelName);
-                var canonicalName = modelName.trim();
-                capabilities.putIfAbsent(normalizedName, ModelCapability.builder()
-                        .name(canonicalName)
-                        .litellmProvider(Objects.requireNonNullElse(modelData.litellmProvider(), ""))
-                        .supportsVision(modelData.supportsVision())
-                        .build());
-            });
-
-            return Collections.unmodifiableMap(capabilities);
-        } catch (IOException exception) {
-            throw new UncheckedIOException(
-                    "Failed to load model capabilities from file '%s'".formatted(CostService.MODEL_PRICES_FILE),
-                    exception);
-        }
+            var normalizedName = normalize(modelName);
+            var canonicalName = modelName.trim();
+            capabilities.putIfAbsent(normalizedName, ModelCapability.builder()
+                    .name(canonicalName)
+                    .litellmProvider(Objects.requireNonNullElse(modelData.litellmProvider(), ""))
+                    .supportsVision(modelData.supportsVision())
+                    .build());
+        });
+        return Collections.unmodifiableMap(capabilities);
     }
 
     private List<String> candidateKeys(String modelName) {

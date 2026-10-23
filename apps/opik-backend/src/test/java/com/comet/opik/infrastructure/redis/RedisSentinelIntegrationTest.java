@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure.redis;
 
-import com.comet.opik.api.Project;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -12,12 +11,16 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.resources.HealthCheckResourceClient;
 import com.comet.opik.api.resources.utils.resources.HealthCheckResourceClient.HealthCheckResponse;
-import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.infrastructure.ratelimit.RateLimited;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -28,12 +31,10 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
-import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -78,17 +79,38 @@ class RedisSentinelIntegrationTest {
                 .build());
     }
 
-    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
+    /**
+     * Rate limited and side-effect free: the limit lives only in Redis, so the test proves commands reach the master
+     * without writing to the shared MySQL container, which other test classes read.
+     */
+    @Path(PROBE_PATH)
+    public static class RateLimitedProbe {
 
+        @POST
+        @RateLimited
+        public Response probe() {
+            return Response.status(Response.Status.CREATED).build();
+        }
+    }
+
+    private static final String PROBE_PATH = "/v1/private/redis-sentinel-probe";
+
+    private ClientSupport client;
+    private String baseURI;
     private HealthCheckResourceClient healthCheckClient;
-    private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
-        var baseURI = TestUtils.getBaseUrl(client);
+        this.client = client;
+        this.baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
         this.healthCheckClient = new HealthCheckResourceClient(client, baseURI);
-        this.projectResourceClient = new ProjectResourceClient(client, baseURI, podamFactory);
+    }
+
+    // The only container this class does not reuse
+    @AfterAll
+    void tearDownAll() {
+        sentinel.container().stop();
     }
 
     @Test
@@ -100,14 +122,12 @@ class RedisSentinelIntegrationTest {
 
     @Test
     void runsRedisBackedRateLimitingAgainstTheMaster() {
-        assertThat(createProject()).isEqualTo(HttpStatus.SC_CREATED);
-        assertThat(createProject()).isEqualTo(HttpStatus.SC_TOO_MANY_REQUESTS);
+        assertThat(callProbe()).isEqualTo(HttpStatus.SC_CREATED);
+        assertThat(callProbe()).isEqualTo(HttpStatus.SC_TOO_MANY_REQUESTS);
     }
 
-    private int createProject() {
-        var apiKey = RandomStringUtils.secure().nextAlphanumeric(20);
-        try (var response = projectResourceClient.callCreateProject(podamFactory.manufacturePojo(Project.class), apiKey,
-                DEFAULT_WORKSPACE_NAME)) {
+    private int callProbe() {
+        try (var response = client.target(baseURI + PROBE_PATH).request().post(Entity.json(""))) {
             return response.getStatus();
         }
     }
