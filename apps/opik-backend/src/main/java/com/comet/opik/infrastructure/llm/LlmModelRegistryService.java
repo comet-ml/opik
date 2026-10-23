@@ -296,8 +296,9 @@ public class LlmModelRegistryService {
     public void reload() {
         try {
             var loaded = load();
+            var loadedDefaults = resolveDefaultModels(loaded);
             registry = loaded;
-            defaultModels = resolveDefaultModels(loaded);
+            defaultModels = loadedDefaults;
             log.info("LLM model registry reloaded successfully");
         } catch (Exception e) {
             log.error("Failed to reload LLM model registry, keeping previous version", e);

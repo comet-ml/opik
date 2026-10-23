@@ -99,7 +99,7 @@ vi.mock("@/api/provider-keys/useProviderKeys", () => ({
 }));
 
 vi.mock("@/api/llm/useLlmModelDefaults", () => ({
-  default: () => ({ data: undefined }),
+  default: () => ({ data: undefined, isFetched: true }),
 }));
 
 vi.mock("@/api/llm/useLlmModels", () => ({

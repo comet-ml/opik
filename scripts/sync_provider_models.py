@@ -1451,7 +1451,7 @@ def default_models_out_of_picker(dropdown_by_provider: dict[str, list[ModelEntry
         if provider_key is None:
             continue
         picker = {entry.value.removeprefix("vertex_ai/") for entry in dropdown_by_provider.get(provider_key, [])}
-        if model_id not in picker:
+        if model_id.removeprefix("vertex_ai/") not in picker:
             missing.append(f"{yaml_key}/{model_id}")
     return missing
 

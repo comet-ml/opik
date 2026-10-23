@@ -149,7 +149,8 @@ const useLLMProviderModelsData = () => {
     isError,
     error,
   } = useLlmModels();
-  const { data: defaultModels } = useLlmModelDefaults();
+  const { data: defaultModels, isFetched: isDefaultsFetched } =
+    useLlmModelDefaults();
   const openAICompatibleModels = useOpenAICompatibleModels();
 
   // Dropdown-facing map: only entries that are flagged as visible (i.e.
@@ -327,9 +328,15 @@ const useLLMProviderModelsData = () => {
       const providerType = parseComposedProviderType(composedProviderType);
 
       if (composedProviderType && providerType) {
-        const defaultModel =
-          (defaultModels?.[providerType] as PROVIDER_MODEL_TYPE | undefined) ??
-          PROVIDERS[providerType]?.defaultModel;
+        const catalogDefault = (defaultModels?.[providerType] ?? "") as
+          | PROVIDER_MODEL_TYPE
+          | "";
+        const defaultModel = isDropdownModel(
+          catalogDefault,
+          composedProviderType,
+        )
+          ? catalogDefault
+          : PROVIDERS[providerType]?.defaultModel;
         return (
           defaultModel ||
           first(providerModels[composedProviderType])?.value ||
@@ -339,7 +346,7 @@ const useLLMProviderModelsData = () => {
 
       return "";
     },
-    [calculateModelProvider, defaultModels, providerModels],
+    [calculateModelProvider, defaultModels, isDropdownModel, providerModels],
   );
 
   return {
@@ -349,7 +356,7 @@ const useLLMProviderModelsData = () => {
     calculateDefaultModel,
     isDropdownModel,
     isPending,
-    isFetched,
+    isFetched: isFetched && isDefaultsFetched,
     isError,
     error,
     hasRegistryModels: some(

@@ -16,16 +16,18 @@ const registry = vi.hoisted(() => ({
 
 const defaults = vi.hoisted(() => ({
   data: undefined as Record<string, string> | undefined,
+  isFetched: true,
 }));
 
 vi.mock("@/api/llm/useLlmModelDefaults", () => ({
-  default: () => ({ data: defaults.data }),
+  default: () => ({ data: defaults.data, isFetched: defaults.isFetched }),
 }));
 
 vi.mock("@/api/llm/useLlmModels", () => ({
   default: () => ({
     data: registry.data,
     isPending: false,
+    isFetched: true,
     isError: false,
     error: null,
   }),
@@ -52,6 +54,7 @@ const GEMINI_AND_VERTEX_REGISTRY: LlmModelsByProvider = {
 beforeEach(() => {
   registry.data = GEMINI_AND_VERTEX_REGISTRY;
   defaults.data = undefined;
+  defaults.isFetched = true;
 });
 
 describe("useLLMProviderModelsData", () => {
@@ -312,7 +315,7 @@ describe("useLLMProviderModelsData default model", () => {
     ).toBe(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO);
   });
 
-  it("starts on the built-in default until the catalog's defaults load", () => {
+  it("starts on the built-in default when the catalog sends none", () => {
     const { result } = renderHook(() => useLLMProviderModelsData());
 
     expect(
@@ -322,6 +325,28 @@ describe("useLLMProviderModelsData default model", () => {
         PROVIDER_TYPE.GEMINI,
       ),
     ).toBe(PROVIDERS[PROVIDER_TYPE.GEMINI].defaultModel);
+  });
+
+  it("skips a catalog default the picker no longer lists", () => {
+    defaults.data = {
+      [PROVIDER_TYPE.GEMINI]: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+    };
+    const { result } = renderHook(() => useLLMProviderModelsData());
+
+    expect(
+      result.current.calculateDefaultModel(
+        "",
+        [PROVIDER_TYPE.GEMINI],
+        PROVIDER_TYPE.GEMINI,
+      ),
+    ).toBe(PROVIDERS[PROVIDER_TYPE.GEMINI].defaultModel);
+  });
+
+  it("is not fetched until the catalog's defaults answer", () => {
+    defaults.isFetched = false;
+    const { result } = renderHook(() => useLLMProviderModelsData());
+
+    expect(result.current.isFetched).toBe(false);
   });
 
   it("starts online-evaluation rules on the same model as the playground", () => {

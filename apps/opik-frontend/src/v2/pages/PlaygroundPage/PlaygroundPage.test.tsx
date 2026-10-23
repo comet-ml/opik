@@ -20,6 +20,7 @@ import { TooltipProvider } from "@/ui/tooltip";
 import usePlaygroundStore from "@/store/PlaygroundStore";
 import { getDefaultConfigByProvider } from "@/lib/playground";
 import api, {
+  LLM_MODEL_DEFAULTS_REST_ENDPOINT,
   LLM_MODELS_REST_ENDPOINT,
   PROVIDER_KEYS_REST_ENDPOINT,
 } from "@/api/api";
@@ -317,6 +318,7 @@ beforeEach(() => {
   apiGet = vi.spyOn(api, "get").mockImplementation(((url: string) => {
     if (url === PROVIDER_KEYS_REST_ENDPOINT) return backend.providerKeys();
     if (url === LLM_MODELS_REST_ENDPOINT) return backend.registry();
+    if (url === LLM_MODEL_DEFAULTS_REST_ENDPOINT) return reply({})();
     return Promise.reject(new Error(`Unexpected GET ${url}`));
   }) as typeof api.get);
 });
