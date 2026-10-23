@@ -64,7 +64,7 @@ class TestHeuristicSelector:
     def test_context_present__capable_model__returns_agentic(self):
         sel = strategy_selector.HeuristicSelector()
         ctx = _fake_ctx(payload={"trace": {"id": "t"}, "spans": []})
-        for model in ("gpt-5", "gpt-4o", "gpt-4o-mini", "claude-opus-4-6"):
+        for model in ("gpt-5", "gpt-4o", "gpt-4o-mini", "claude-opus-4-7"):
             assert (
                 sel.select(trace_tool_context=ctx, model_name=model, assertions=[])
                 is strategy_selector.ScoringToolStrategy.AGENTIC
@@ -162,17 +162,18 @@ class TestCapabilityLookup:
             assert cap.model_name_prefix == model_name, model_name
             assert cap.context_window == 1_000_000, model_name
 
-    def test_sampling_rejecting_models__stay_out_of_agentic_auto(self):
-        # `agentic/loop.py` sends temperature=0 on every turn, and Opus 4.7
-        # onward rejects a non-default temperature, so routing these models
-        # into the agentic loop under `auto` would fail the first request
-        # instead of scoring.
-        for model_name in ("claude-opus-4-7", "claude-opus-5", "claude-sonnet-5"):
-            cap = strategy_selector._capability_for(model_name)
-            assert cap.agentic_in_auto is False, model_name
-
-    def test_sampling_accepting_models__keep_agentic_auto(self):
-        for model_name in ("claude-sonnet-4-6", "claude-opus-4-6", "gpt-4o"):
+    def test_default_temperature_only_models__keep_agentic_auto(self):
+        # These models reject a non-default temperature. The LiteLLM filter
+        # drops the loop's temperature=0 for them, so `auto` keeps them on
+        # the agentic path like the other 1M-context Claude models.
+        for model_name in (
+            "claude-opus-4-7",
+            "claude-opus-5",
+            "claude-sonnet-5",
+            "claude-sonnet-4-6",
+            "claude-opus-4-6",
+            "gpt-4o",
+        ):
             cap = strategy_selector._capability_for(model_name)
             assert cap.agentic_in_auto is True, model_name
 
