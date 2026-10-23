@@ -21,6 +21,13 @@ public interface LlmProviderFactory {
     ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters);
 
     /**
+     * For a judge call that carries function tools, or replays a conversation that used them: some models take
+     * tools only on another endpoint or setting than the key's default, and every round of one evaluation must
+     * reach the model the same way.
+     */
+    ChatModel getToolCallingLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters);
+
+    /**
      * Resolves the workspace's provider configuration (decrypted API key, headers, base URL) for the model.
      * For callers that reach a provider without a LangChain4j client, e.g. the OpenRouter Decisions API.
      */

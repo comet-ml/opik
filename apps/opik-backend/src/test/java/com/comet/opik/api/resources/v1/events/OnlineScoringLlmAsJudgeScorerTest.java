@@ -29,6 +29,7 @@ import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
@@ -163,7 +164,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 stubTool(GetTraceSpansTool.NAME, "{}"),
                 stubTool(ReadTool.NAME, "{}")));
         AgenticScoringService agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig,
-                toolRegistry);
+                toolRegistry,
+                LlmModelRegistryTestUtils.bundledRegistry());
         TraceCompressor traceCompressor = new TraceCompressor();
 
         scorer = new OnlineScoringLlmAsJudgeScorer(
@@ -330,7 +332,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
         AgenticScoringService agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig,
                 new ToolRegistry(Set.of(
                         stubTool(GetTraceSpansTool.NAME, "{}"),
-                        stubTool(ReadTool.NAME, "{}"))));
+                        stubTool(ReadTool.NAME, "{}"))),
+                LlmModelRegistryTestUtils.bundledRegistry());
         ChatRequest withTools = agenticScoringService.addToolSpecs(original, ToolChoice.REQUIRED);
 
         // Tool specs come from the registry (sorted alphabetically by ToolRegistry).

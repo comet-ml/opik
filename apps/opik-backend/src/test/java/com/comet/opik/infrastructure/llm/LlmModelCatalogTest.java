@@ -14,6 +14,8 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -379,6 +381,31 @@ class LlmModelCatalogTest {
                     .as("OpenAI reasoning models without effort levels; give each a curated row with them, or"
                             + " effort: {accepted: false} if it refuses reasoning_effort")
                     .isEmpty();
+        }
+
+        @ParameterizedTest(name = "{0} -> {1}")
+        @CsvSource(value = {"gpt-5.2, null", "gpt-5.4, EFFORT_NONE_ONLY", "gpt-6-luna, EFFORT_NONE_ONLY",
+                "gpt-6-astra, REFUSED", "gpt-6.1-sol, REFUSED", "gpt-4o, null"}, nullValues = "null")
+        void theListedOpenAiModelsCarryHowChatCompletionsTakesTheirTools(String id,
+                ModelParams.ChatCompletionsTools expected) {
+            var model = registry.get("openai").stream().filter(listed -> listed.id().equals(id)).findFirst()
+                    .orElseThrow();
+
+            assertThat(model.params().tools() == null ? null : model.params().tools().chatCompletions())
+                    .isEqualTo(expected);
+        }
+
+        // A judge whose key has its own base URL calls tools on these models with reasoning_effort "none".
+        @Test
+        void everyOpenAiModelThatTakesToolsOnlyWithoutReasoningCanTurnReasoningOff() {
+            var cannotTurnItOff = registry.getOrDefault("openai", List.of()).stream()
+                    .filter(model -> model.params().tools() != null && model.params().tools()
+                            .chatCompletions() == ModelParams.ChatCompletionsTools.EFFORT_NONE_ONLY)
+                    .filter(model -> !model.params().effort().levels().contains("none"))
+                    .map(LlmModelDefinition::id)
+                    .toList();
+
+            assertThat(cannotTurnItOff).isEmpty();
         }
 
         private static Stream<ModelParams> allVariants(ModelParams params) {
