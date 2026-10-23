@@ -16,7 +16,8 @@ export class BasePage {
   }
 
   async dismissWelcomeDialogIfPresent(): Promise<void> {
-    const skipBtn = this.page.getByRole('button', { name: /skip|close|dismiss/i });
+    // Scoped to a dialog: banners and callouts have close buttons too.
+    const skipBtn = this.page.getByRole('dialog').getByRole('button', { name: /skip|close|dismiss/i }).first();
     try {
       await skipBtn.waitFor({ state: 'visible', timeout: 2000 });
       await skipBtn.click();
