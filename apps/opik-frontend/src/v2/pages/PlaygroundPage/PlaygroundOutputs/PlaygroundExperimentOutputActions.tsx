@@ -3,7 +3,7 @@ import React from "react";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import PlaygroundExperimentName from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundExperimentName";
 import PlaygroundProgressIndicator from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundProgressIndicator";
-import { useIsRunning } from "@/store/PlaygroundStore";
+import { useIsRunning, useShowsRunProgress } from "@/store/PlaygroundStore";
 
 interface PlaygroundExperimentOutputActionsProps {
   datasetId: string | null;
@@ -13,6 +13,7 @@ interface PlaygroundExperimentOutputActionsProps {
   onChangeSize: (size: number) => void;
   total: number;
   isLoadingTotal?: boolean;
+  checkAgain: () => void;
 }
 
 const PlaygroundExperimentOutputActions = ({
@@ -23,8 +24,10 @@ const PlaygroundExperimentOutputActions = ({
   onChangeSize,
   total,
   isLoadingTotal,
+  checkAgain,
 }: PlaygroundExperimentOutputActionsProps) => {
   const isRunning = useIsRunning();
+  const showsRunProgress = useShowsRunProgress();
 
   const isExperimentMode = !!datasetId;
 
@@ -32,9 +35,9 @@ const PlaygroundExperimentOutputActions = ({
 
   return (
     <div className="border-y">
-      {isRunning ? (
+      {isRunning && showsRunProgress ? (
         <div className="px-4 pb-3 pt-2">
-          <PlaygroundProgressIndicator />
+          <PlaygroundProgressIndicator onCheckAgain={checkAgain} />
         </div>
       ) : (
         <div className="flex items-center justify-between bg-gray-100 py-3 pl-2 pr-4">
@@ -48,7 +51,6 @@ const PlaygroundExperimentOutputActions = ({
               total={total}
               variant="minimal"
               itemsPerPage={[10, 50, 100, 200, 500, 1000]}
-              disabled={isRunning}
               isLoadingTotal={isLoadingTotal}
             />
           </div>

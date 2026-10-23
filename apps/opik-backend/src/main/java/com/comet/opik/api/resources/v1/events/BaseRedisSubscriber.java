@@ -623,7 +623,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 ErrorMetricsResolver.WORKSPACE_ID_KEY, context.workspaceId(),
                 ErrorMetricsResolver.WORKSPACE_NAME_KEY, context.workspaceName());
         // Deferring as processEvent is out of our control, it might not return a cold Mono
-        return Mono.defer(() -> processEvent(message))
+        return Mono.defer(() -> processEvent(message, messageId))
                 .subscribeOn(workersScheduler)
                 .thenReturn(ProcessingResult.builder()
                         .messageId(messageId)
@@ -755,7 +755,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private Mono<Void> notifyRetired(List<ProcessingResult> retired) {
         return Flux.fromIterable(retired)
                 .filter(failure -> failure.message() != null)
-                .flatMap(failure -> Mono.defer(() -> onRetired((M) failure.message(), failure.error()))
+                .flatMap(failure -> Mono.defer(
+                        () -> onRetired((M) failure.message(), failure.messageId(), failure.error()))
                         .subscribeOn(workersScheduler)
                         .onErrorResume(throwable -> {
                             log.error("Failed to handle retired messageId '{}'", failure.messageId(), throwable);
@@ -768,6 +769,14 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     // a terminal outcome for it. Best effort: an error here is logged and the message is removed anyway.
     protected Mono<Void> onRetired(M message, Throwable error) {
         return Mono.empty();
+    }
+
+    /**
+     * The same, for a subscriber that keys what it records on the stream entry, as
+     * {@link #processEvent(Object, StreamMessageId)} does.
+     */
+    protected Mono<Void> onRetired(M message, StreamMessageId messageId, Throwable error) {
+        return onRetired(message, error);
     }
 
     private boolean maxRetriesReached(ProcessingResult failure) {
@@ -837,6 +846,17 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * @param message a Redis message, guaranteed non-null by {@link #processMessage}
      */
     protected abstract Mono<Void> processEvent(M message);
+
+    /**
+     * The same, for a subscriber that has to know which stream entry it is handling. The entry id is the only
+     * thing that stays the same when Redis delivers an unacknowledged message again, so it is what a subscriber
+     * keys on to make handling a message twice do no more than handling it once.
+     *
+     * @param messageId the stream entry id, identical across every delivery of the same message
+     */
+    protected Mono<Void> processEvent(M message, StreamMessageId messageId) {
+        return processEvent(message);
+    }
 
     /**
      * Redis Streams messageId are in the format <millisecondsTime>-<sequenceNumber>

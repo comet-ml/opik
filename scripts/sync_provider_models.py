@@ -55,6 +55,8 @@ VERTEXAI_JAVA = JAVA_BASE / "vertexai" / "VertexAIModelName.java"
 PROVIDERS_TS = Path("apps/opik-frontend/src/types/providers.ts")
 MODELS_DATA_TS = Path("apps/opik-frontend/src/constants/providerModels.ts")
 MODEL_PRICES_JSON = Path("apps/opik-backend/src/main/resources/model_prices_and_context_window.json")
+# LiteLLM's prices JSON no longer lists OpenRouter models; scripts/update_openrouter_model_prices.py writes them here.
+OPENROUTER_MODEL_PRICES_JSON = Path("apps/opik-backend/src/main/resources/model_prices_openrouter.json")
 LLM_MODELS_YAML = Path("apps/opik-backend/src/main/resources/llm-models-default.yaml")
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/models"
@@ -602,9 +604,11 @@ def fetch_gemini_models(api_key: str) -> list[tuple[str, str]]:
 
 
 def load_model_prices() -> dict:
-    path = REPO_ROOT / MODEL_PRICES_JSON
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    prices = {}
+    for path in (MODEL_PRICES_JSON, OPENROUTER_MODEL_PRICES_JSON):
+        with open(REPO_ROOT / path, encoding="utf-8") as f:
+            prices.update(json.load(f))
+    return prices
 
 
 def extract_models_from_prices(

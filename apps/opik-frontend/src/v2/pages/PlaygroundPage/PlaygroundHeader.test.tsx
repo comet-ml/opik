@@ -19,6 +19,8 @@ const prompt: PlaygroundPromptType = {
 
 let datasetType: DATASET_TYPE | null = DATASET_TYPE.DATASET;
 
+let isStoppingAll = false;
+
 vi.mock("@/store/PlaygroundStore", () => ({
   usePromptMap: () => ({ [prompt.id]: prompt }),
   useClearCreatedExperiments: () => vi.fn(),
@@ -32,6 +34,10 @@ vi.mock("@/store/PlaygroundStore", () => ({
   useDatasetType: () => datasetType,
   useDatasetFilters: () => [],
   useSetDatasetFilters: () => vi.fn(),
+  // Added with the server-side run: the header reads a run's state to decide what it may offer
+  useIsStoppingAll: () => isStoppingAll,
+  useIsResumingRun: () => false,
+  useDatasetItemsTotal: () => null,
 }));
 
 vi.mock("@/contexts/PermissionsContext", () => ({
@@ -98,6 +104,7 @@ const pressRunShortcut = () =>
   fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
 
 beforeEach(() => {
+  isStoppingAll = false;
   onRunAll.mockClear();
   datasetType = DATASET_TYPE.DATASET;
 });

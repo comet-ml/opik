@@ -1,4 +1,56 @@
-import { test, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
+
+/**
+ * Copy the thread views show instead of a blank Messages tab when every trace
+ * in the thread is an internal call and all of them are hidden.
+ *
+ * Mirrors `ONLY_INTERNAL_CALLS_MESSAGE` in
+ * `apps/opik-frontend/src/v2/pages-shared/traces/hiddenSpans.ts`. Duplicated
+ * rather than imported — the e2e suite does not build against the frontend's
+ * sources — so a copy-edit there turns this into a failing assertion, which is
+ * the right outcome: the string IS the empty state.
+ */
+export const ONLY_INTERNAL_CALLS_MESSAGE = 'Only internal calls in this thread';
+
+/**
+ * The accessible name of the `Internal` tag a revealed internal trace carries,
+ * from `TraceMessage.tsx`'s `INTERNAL_TRACE_TOOLTIP`. The tag is a `role="note"`
+ * whose `aria-label` is this text, which is the only non-structural handle on
+ * it — the visible word "Internal" is a two-character-wide element with no role
+ * of its own.
+ */
+export const INTERNAL_TRACE_TAG_LABEL =
+  'Internal call (e.g. title generation), hidden by default';
+
+/** The messages-chip tooltip while nothing is hidden. */
+export const PLAIN_MESSAGE_COUNT_TOOLTIP = 'Number of messages in the thread';
+
+/**
+ * The messages-chip tooltip while traces ARE hidden — the one mitigation for
+ * the header disagreeing with every other count of the same thread, so a spec
+ * asserting the reduced number has to assert this alongside it.
+ */
+export const hiddenIncludedMessageCountTooltip = (rawCount: number): string =>
+  `${rawCount} messages in the thread, hidden ones included`;
+
+/**
+ * The `InternalTracesToggle` label, which is also its `aria-label`. Action-
+ * labelled: it names what clicking will do, not the current state.
+ */
+export const internalCallsToggleLabel = (
+  action: 'Show' | 'Hide',
+  count: number,
+): string => `${action} internal calls (${count})`;
+
+/**
+ * localStorage key holding the shared "hidden things are collapsed" preference,
+ * from `hiddenSpans.ts`. The thread panel's internal-calls toggle and the trace
+ * tree's own eye control are two controls over this ONE key, which is why a
+ * spec pins it directly as well as pinning what the panel renders: the shared
+ * key is the contract between them, and a panel that kept its state privately
+ * would render identically while silently breaking the trace tree.
+ */
+export const TRACE_HIDE_SPANS_KEY = 'trace-hide-spans';
 
 /**
  * The thread detail side-panel: a chat-style view of a conversation. Each turn
@@ -25,9 +77,160 @@ export class ThreadPanelPage {
     });
   }
 
+  /**
+   * Wait for the panel to load a thread whose every trace is hidden, and so
+   * renders its empty state rather than any turn.
+   *
+   * The sibling of `waitForFullyLoaded`, which cannot serve here: it gates on
+   * the first turn becoming visible, and the whole claim about this thread is
+   * that no turn does.
+   */
+  async waitForOnlyInternalCalls(): Promise<void> {
+    return test.step(`Wait for thread panel ${this.threadId} to load with no visible turns`, async () => {
+      await this.page.waitForURL((url) => url.searchParams.get('thread') === this.threadId);
+      await this.root.waitFor({ state: 'visible', timeout: 30_000 });
+      await this.onlyInternalCallsMessage.waitFor({ state: 'visible', timeout: 30_000 });
+    });
+  }
+
   /** All conversation turns, in render (chronological) order. */
   get turns(): Locator {
     return this.root.locator('[data-trace-message-id]');
+  }
+
+  // --- Internal calls (traces the SDK flagged `metadata._opik.is_internal`) ---
+  //
+  // Messages drops these outright rather than collapsing them — one trace is
+  // one turn, so there is no tree to re-parent — and subtracts them from the
+  // header's message count while they are hidden. Three things are therefore
+  // assertable and none implies another: which turns render, what the header
+  // says, and what the control offers to do.
+
+  /**
+   * The internal-calls toggle, matched on the exact label it must carry.
+   *
+   * Both halves are load-bearing and neither is cosmetic. The action word is
+   * the control's own state — "Show" means hiding is ON — and the count is the
+   * number of traces it would reveal, which deliberately EXCLUDES a trace the
+   * URL is keeping listed. Matching the whole label as an accessible name is
+   * what makes "the toggle flipped" distinguishable from "the toggle re-rendered
+   * with a different count".
+   */
+  internalCallsToggle(action: 'Show' | 'Hide', count: number): Locator {
+    return this.root.getByRole('button', {
+      name: internalCallsToggleLabel(action, count),
+      exact: true,
+    });
+  }
+
+  /**
+   * Any internal-calls control, whatever its label — for asserting the control
+   * is ABSENT.
+   *
+   * `InternalTracesToggle` returns null at a count of zero, so "no control
+   * renders" is a real state with its own meaning: every internal trace in this
+   * thread is one the view is keeping listed anyway, so there is nothing to
+   * reveal. Asserting the absence of one specific label would pass just as
+   * happily against a control that rendered with the wrong count.
+   */
+  get anyInternalCallsToggle(): Locator {
+    return this.root.getByRole('button', { name: /internal calls \(\d+\)/ });
+  }
+
+  /** Click the internal-calls toggle and wait for the label to flip. */
+  async toggleInternalCalls(action: 'Show' | 'Hide', count: number): Promise<void> {
+    return test.step(`Click "${internalCallsToggleLabel(action, count)}"`, async () => {
+      const button = this.internalCallsToggle(action, count);
+      await expect(button, `exactly one "${action} internal calls (${count})" control`).toHaveCount(
+        1,
+      );
+      await button.click();
+      // The label is derived from the same preference the click writes, so the
+      // flip is the settle signal — no fixed wait, and no reading the turn list
+      // before the re-render that the click causes.
+      const flipped = action === 'Show' ? 'Hide' : 'Show';
+      await expect(
+        this.internalCallsToggle(flipped, count),
+        `the control reads "${internalCallsToggleLabel(flipped, count)}" after clicking`,
+      ).toBeVisible();
+    });
+  }
+
+  /**
+   * The `Internal` tag on one turn, located by the turn's trace id.
+   *
+   * Scoped to the turn rather than looked up panel-wide on purpose: a badge
+   * rendered on the wrong turn is exactly the regression a panel-wide "one tag
+   * exists" assertion would miss.
+   */
+  internalTag(traceId: string): Locator {
+    return this.turn(traceId).getByRole('note', { name: INTERNAL_TRACE_TAG_LABEL, exact: true });
+  }
+
+  /** Every `Internal` tag in the panel — for pinning how many turns are badged. */
+  get internalTags(): Locator {
+    return this.root.getByRole('note', { name: INTERNAL_TRACE_TAG_LABEL, exact: true });
+  }
+
+  /**
+   * The empty state shown when the thread has traces but every one of them is
+   * hidden. Distinct from a thread with no traces at all, which is the point:
+   * before this existed the tab went blank and read as a load failure.
+   */
+  get onlyInternalCallsMessage(): Locator {
+    return this.root.getByText(ONLY_INTERNAL_CALLS_MESSAGE, { exact: true });
+  }
+
+  /**
+   * Assert the messages chip's hover tooltip reads `expected`.
+   *
+   * The tooltip is the only thing on the page that explains a header count
+   * disagreeing with every other count of the same thread, so a spec asserting
+   * the reduced number asserts this too — a reduced count with the plain
+   * tooltip is a number with no explanation, which is the part a user would
+   * report as a bug.
+   *
+   * Radix portals the content out of the panel, so it is looked up at page
+   * scope by role and asserted to be the only one, the same way
+   * `ItemReturnNavPage.expectBackTooltip` does. `TooltipWrapper` opens on a
+   * timer, so the wait is on the tooltip appearing rather than on a delay.
+   *
+   * No dismissal afterwards, deliberately. Radix shares one tooltip provider
+   * across the page, so hovering the next trigger swaps the content rather than
+   * adding to it and the `toHaveCount(1)` below keeps holding. Trying to close
+   * it instead is what does not work: a `pointerleave` synthesised by moving
+   * the mouse away leaves the tooltip open and visible, and `Escape` — which
+   * `TooltipWrapper` does honour — also unmounts the side panel's content, so
+   * the dismissal would cost the assertions after it.
+   */
+  async expectMessagesChipTooltip(count: number, expected: string): Promise<void> {
+    await test.step(`the "${count} messages" chip's tooltip reads "${expected}"`, async () => {
+      const chip = this.messagesChip(count);
+      await expect(chip, `exactly one "${count} messages" chip in the header`).toHaveCount(1);
+      await chip.hover();
+      const tooltip = this.page.getByRole('tooltip');
+      await expect(tooltip, 'exactly one tooltip raised by the messages chip').toHaveCount(1, {
+        timeout: 10_000,
+      });
+      await expect(tooltip, "the messages chip's tooltip").toHaveText(expected, {
+        timeout: 15_000,
+      });
+    });
+  }
+
+  /**
+   * Read the shared hide preference out of localStorage.
+   *
+   * Returns the raw stored string, not a boolean: `use-local-storage-state`
+   * stores JSON, and an absent key (the default-value case, which READS as
+   * hidden) is a different fact from a stored `"true"`. A caller that needs the
+   * preference to have been persisted has to be able to tell those apart —
+   * collapsing both to `true` is how "the toggle never wrote anything" passes
+   * as "the toggle persisted hiding".
+   */
+  async readHideSpansPreference(): Promise<string | null> {
+    return test.step(`Read localStorage["${TRACE_HIDE_SPANS_KEY}"]`, async () =>
+      this.page.evaluate((key) => window.localStorage.getItem(key), TRACE_HIDE_SPANS_KEY));
   }
 
   async countTurns(): Promise<number> {
