@@ -354,7 +354,7 @@ component:
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python"
       # PYTHON_CODE_EXECUTOR_IMAGE_TAG defaults to Chart.AppVersion when not specified
-      PYTHON_CODE_EXECUTOR_STRATEGY: "process"
+      PYTHON_CODE_EXECUTOR_STRATEGY: "docker"
       PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "5"
       PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: "3"
       PYTHON_CODE_EXECUTOR_ALLOW_NETWORK: "false"
@@ -425,6 +425,8 @@ component:
       - configMapRef:
           name: opik-python-backend
 
+    # privileged runs the Docker-in-Docker daemon of the docker executor strategy; the chart
+    # leaves it out when PYTHON_CODE_EXECUTOR_STRATEGY is "process".
     securityContext:
       privileged: true
     networkPolicy:

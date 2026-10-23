@@ -1,0 +1,73 @@
+suite: python-backend executor strategy and securityContext
+
+# The docker executor strategy runs its own Docker daemon, which needs a privileged container.
+# The process strategy starts no daemon, so the chart leaves privileged out for it.
+templates:
+  - templates/deployment.yaml
+  - templates/configmap-backend.yaml
+
+tests:
+  - it: defaults to the docker executor strategy
+    template: templates/configmap-backend.yaml
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - equal:
+          path: data.PYTHON_CODE_EXECUTOR_STRATEGY
+          value: docker
+
+  - it: keeps privileged for the docker strategy
+    template: templates/deployment.yaml
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            privileged: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext
+          value:
+            privileged: true
+
+  - it: drops privileged for the process strategy
+    template: templates/deployment.yaml
+    set:
+      component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY: process
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext.privileged
+      - notExists:
+          path: spec.template.spec.initContainers[0].securityContext.privileged
+
+  - it: keeps the rest of the securityContext for the process strategy
+    template: templates/deployment.yaml
+    set:
+      component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY: process
+      component.python-backend.securityContext.runAsNonRoot: true
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            runAsNonRoot: true
+
+  - it: leaves other components' securityContext untouched
+    template: templates/deployment.yaml
+    set:
+      component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY: process
+      component.backend.securityContext.privileged: true
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.privileged
+          value: true
