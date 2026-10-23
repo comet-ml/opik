@@ -1,4 +1,4 @@
-export { test, expect } from './project-overview-copy.fixture';
+export { test, expect } from './openrouter-vision-models.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -497,3 +497,23 @@ export type {
   ProjectOverviewTracesRef,
   ProjectOverviewCopyFixtures,
 } from './project-overview-copy.fixture';
+export type {
+  OpenRouterSpelling,
+  OpenRouterCostSpanSeed,
+  OpenRouterCostSpansRef,
+  OpenRouterCostSpansFixtures,
+} from './openrouter-cost-spans.fixture';
+export type { ImageOnlyPromptRef, ImageOnlyPromptFixtures } from './image-only-prompt.fixture';
+export {
+  IMAGE_ONLY_PROMPT_TEXT,
+  IMAGE_ONLY_PROMPT_IMAGE_URL,
+  IMAGE_ONLY_PROMPT_CONTENT,
+} from './image-only-prompt.fixture';
+export type {
+  OpenRouterVisionModelsRef,
+  OpenRouterVisionModelsFixtures,
+} from './openrouter-vision-models.fixture';
+export {
+  OPEN_ROUTER_VISION_MODEL,
+  OPEN_ROUTER_MAX_TOKENS_LIMIT,
+} from './openrouter-vision-models.fixture';
