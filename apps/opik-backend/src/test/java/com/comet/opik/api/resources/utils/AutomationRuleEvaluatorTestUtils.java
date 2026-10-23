@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.ProjectReference;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -58,9 +59,11 @@ public class AutomationRuleEvaluatorTestUtils {
     /**
      * Judges whose prompt gives the model tools ask the factory for a tool-calling model instead of the plain one.
      * With deep stubs, stubbing only the plain one leaves those judges an empty answer, and the test times out
-     * waiting for a score.
+     * waiting for a score. Deep stubs also hand back a mocked LlmProvider with no value, which the catalog lookup
+     * for the model fails on, so every model reports OpenAI, where these tests' gpt-4o judges belong.
      */
     public static void answerEveryJudgeCall(LlmProviderFactory llmProviderFactory, Answer<ChatResponse> answer) {
+        when(llmProviderFactory.getLlmProvider(anyString())).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getLanguageModel(anyString(), any()).chat(any(ChatRequest.class)))
                 .thenAnswer(answer);
         when(llmProviderFactory.getToolCallingLanguageModel(anyString(), any()).chat(any(ChatRequest.class)))
