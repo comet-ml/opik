@@ -309,7 +309,7 @@ repos:
         name: 🧪 model bot PR alert tests
         entry: scripts/test_model_bot_pr_alert.sh
         language: system
-        files: ^\.github/scripts/model-bot-pr-alert\.sh$|^scripts/test_model_bot_pr_alert\.sh$
+        files: ^\.github/scripts/model-bot-pr-alert\.sh$|^scripts/test_model_bot_pr_alert\.sh$|^\.pre-commit-config\.yaml$
         pass_filenames: false
 
   # ---------------------------------------------------------------------------

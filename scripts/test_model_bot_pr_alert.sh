@@ -57,7 +57,9 @@ pr() { # pr <branch> <hours-open> <checks-json> [cross-repo] [title]
 }
 run() {
 	: >"$CURL_LOG"
-	env BOT_BRANCHES="$1" "${@:2}" bash .github/scripts/model-bot-pr-alert.sh 2>&1 || true
+	local rc=0
+	env BOT_BRANCHES="$1" "${@:2}" bash .github/scripts/model-bot-pr-alert.sh 2>&1 || rc=$?
+	echo "exit=$rc"
 }
 
 RED='[{"name":"Test on Node 20","conclusion":"FAILURE"},{"name":"Unit Tests","conclusion":"SUCCESS"}]'
@@ -75,6 +77,7 @@ check "the alert goes to the webhook" "https://hooks.example" "$(cat "$CURL_LOG"
 pr bot/fresh-red 5 "$RED"
 out=$(run bot/fresh-red SLACK_WEBHOOK_URL=https://hooks.example)
 check "red for under a day waits" "No model bot PR needs attention" "$out"
+check "no alert exits 0" "exit=0" "$out"
 check_absent "nothing posted for a fresh red PR" "hooks.example" "$(cat "$CURL_LOG")"
 
 pr bot/pending 30 "$PENDING"
@@ -102,9 +105,12 @@ check_absent "no raw mention reaches Slack" '<!channel>' "$out"
 
 out=$(run bot/red DRY_RUN=true SLACK_WEBHOOK_URL=https://hooks.example)
 check "a dry run prints the message" "Dry run, not posting" "$out"
+check "a dry run exits 0" "exit=0" "$out"
 check_absent "a dry run posts nothing" "hooks.example" "$(cat "$CURL_LOG")"
 
-check "no webhook outside a dry run is an error" "SLACK_WEBHOOK_URL is not set" "$(run bot/red SLACK_WEBHOOK_URL=)"
+out=$(run bot/red SLACK_WEBHOOK_URL=)
+check "no webhook outside a dry run is an error" "SLACK_WEBHOOK_URL is not set" "$out"
+check "no webhook exits 1" "exit=1" "$out"
 
 if [ "$fails" -gt 0 ]; then
 	echo "$fails check(s) failed"
