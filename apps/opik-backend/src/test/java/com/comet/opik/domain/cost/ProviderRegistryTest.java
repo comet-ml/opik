@@ -1,12 +1,8 @@
 package com.comet.opik.domain.cost;
 
 import com.comet.opik.api.LlmProvider;
-import com.comet.opik.api.ModelCostData;
 import com.comet.opik.domain.mapping.otel.GoogleProviderResolver;
 import com.comet.opik.domain.mapping.otel.VertexAnthropicResolver;
-import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
-import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -14,53 +10,22 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.TreeSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * The price file is replaced by an automated LiteLLM sync, so these checks also guard every sync: a provider LiteLLM
- * renames or drops fails here instead of silently losing its prices.
- */
 class ProviderRegistryTest {
-
-    // Every litellm_provider of the price file and of Opik's overrides file.
-    private static final Set<String> PRICE_FILE_PROVIDERS = priceFileProviders();
-
-    private static Set<String> priceFileProviders() {
-        var providers = new TreeSet<String>();
-        for (var file : List.of(CostService.MODEL_PRICES_FILE, CostService.MODEL_PRICES_OVERRIDES_FILE)) {
-            try {
-                Map<String, ModelCostData> costsByModel = JsonUtils.readJsonFile(file, new TypeReference<>() {
-                });
-                costsByModel.forEach((model, cost) -> {
-                    if (!model.equals("sample_spec") && StringUtils.isNotBlank(cost.litellmProvider())) {
-                        providers.add(cost.litellmProvider());
-                    }
-                });
-            } catch (IOException exception) {
-                throw new UncheckedIOException(exception);
-            }
-        }
-        return providers;
-    }
 
     @Test
     void resolveKeepsEveryProviderOfThePriceFileUnderItsOwnName() {
-        assertThat(PRICE_FILE_PROVIDERS).hasSizeGreaterThan(100)
+        assertThat(PriceFileProviders.ALL).hasSizeGreaterThan(100)
                 .allSatisfy(provider -> assertThat(ProviderRegistry.resolve(provider, null)).contains(provider));
     }
 
     @Test
     void aliasesMapNamesOutsideThePriceFileToProvidersInIt() {
         assertThat(ProviderRegistry.aliases()).allSatisfy((alias, provider) -> {
-            assertThat(PRICE_FILE_PROVIDERS).doesNotContain(alias).contains(provider);
+            assertThat(PriceFileProviders.ALL).doesNotContain(alias).contains(provider);
             assertThat(ProviderRegistry.resolve(alias, null)).contains(provider);
         });
     }
@@ -68,13 +33,13 @@ class ProviderRegistryTest {
     @Test
     void siblingGroupsHoldOnlyProvidersOfThePriceFile() {
         assertThat(ProviderRegistry.siblingGroups())
-                .allSatisfy(group -> assertThat(PRICE_FILE_PROVIDERS).containsAll(group));
+                .allSatisfy(group -> assertThat(PriceFileProviders.ALL).containsAll(group));
     }
 
     @ParameterizedTest
     @EnumSource(value = LlmProvider.class, names = {"CUSTOM_LLM", "OPIK_FREE"}, mode = EnumSource.Mode.EXCLUDE)
     void resolveMapsEveryPlaygroundProviderToAProviderOfThePriceFile(LlmProvider provider) {
-        assertThat(ProviderRegistry.resolve(provider.getValue(), null)).get().isIn(PRICE_FILE_PROVIDERS);
+        assertThat(ProviderRegistry.resolve(provider.getValue(), null)).get().isIn(PriceFileProviders.ALL);
     }
 
     @ParameterizedTest
@@ -82,7 +47,7 @@ class ProviderRegistryTest {
             VertexAnthropicResolver.ANTHROPIC_VERTEX_AI, "azure", "bedrock", "mistral", "xai", "openai", "jina_ai",
             "elastic"})
     void resolveMapsEveryNameOtelIngestionStoresToAProviderOfThePriceFile(String provider) {
-        assertThat(ProviderRegistry.resolve(provider, null)).get().isIn(PRICE_FILE_PROVIDERS);
+        assertThat(ProviderRegistry.resolve(provider, null)).get().isIn(PriceFileProviders.ALL);
     }
 
     @ParameterizedTest
