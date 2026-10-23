@@ -136,39 +136,8 @@ Opik treats a span as a root span when one of these conditions is true:
 <Warning>
   Every trace must have one root span. If all the spans of a trace have a parent, Opik stores the spans but does not
   create the trace. The spans then show in the **Spans** tab, but the **Traces** tab stays empty and the span details do
-  not load.
+  not load. See [Troubleshooting](#troubleshooting) for how to fix it.
 </Warning>
-
-To find out if you have this problem, print your spans with the `ConsoleSpanExporter` and look at the `parent_id` field.
-At least one span of each trace must have `"parent_id": null`.
-
-To fix the problem, start a new root span at the start of each agent invocation. Pass an empty `Context` so that the
-span does not use the incoming trace context:
-
-```python wordWrap
-import json
-
-from opentelemetry import trace
-from opentelemetry.context import Context
-from opentelemetry.trace import Link
-
-tracer = trace.get_tracer("my-agent")
-
-
-def invoke(payload: dict) -> str:
-    # Keep a link to the incoming trace, so that other backends can still connect the two traces
-    incoming = trace.get_current_span().get_span_context()
-    links = [Link(incoming)] if incoming.is_valid else []
-
-    with tracer.start_as_current_span("agent_invocation", context=Context(), links=links) as root_span:
-        root_span.set_attribute("input.value", json.dumps(payload))
-        result = str(agent(payload["prompt"]))
-        root_span.set_attribute("output.value", result)
-        return result
-```
-
-All the spans that the agent creates in the `with` block are children of `agent_invocation`, so Opik creates one trace
-for each invocation.
 
 <Note>
   A span with the `opik.trace_id` attribute attaches to an Opik trace that already exists, so Opik does not create a
@@ -415,7 +384,7 @@ Run this code once, before the agent starts its first span.
 </Warning>
 
 When the platform continues an incoming trace, the first span of your agent has a parent. In this case, add a root span
-for each invocation, as shown in [How Opik builds traces from spans](#how-opik-builds-traces-from-spans).
+for each invocation, as shown in [Troubleshooting](#troubleshooting).
 
 ## Amazon SageMaker partner apps
 
@@ -527,8 +496,36 @@ signed session.
     runtime such as Amazon Bedrock AgentCore or an API gateway sends a trace context with each request. The first span
     of your agent is then a child of a span that Opik never receives.
 
-    Add a root span at the start of each agent invocation. See
-    [How Opik builds traces from spans](#how-opik-builds-traces-from-spans).
+    To find out if you have this problem, print your spans with the `ConsoleSpanExporter` and look at the `parent_id`
+    field. At least one span of each trace must have `"parent_id": null`.
+
+    To fix the problem, start a new root span at the start of each agent invocation. Pass an empty `Context` so that
+    the span does not use the incoming trace context:
+
+    ```python wordWrap
+    import json
+
+    from opentelemetry import trace
+    from opentelemetry.context import Context
+    from opentelemetry.trace import Link
+
+    tracer = trace.get_tracer("my-agent")
+
+
+    def invoke(payload: dict) -> str:
+        # Keep a link to the incoming trace, so that other backends can still connect the two traces
+        incoming = trace.get_current_span().get_span_context()
+        links = [Link(incoming)] if incoming.is_valid else []
+
+        with tracer.start_as_current_span("agent_invocation", context=Context(), links=links) as root_span:
+            root_span.set_attribute("input.value", json.dumps(payload))
+            result = str(agent(payload["prompt"]))
+            root_span.set_attribute("output.value", result)
+            return result
+    ```
+
+    All the spans that the agent creates in the `with` block are children of `agent_invocation`, so Opik creates one
+    trace for each invocation.
   </Accordion>
   <Accordion title="Spans show under a different trace, or under no trace">
     All the spans of a trace must go to the same project. If you set `opik.project_name`, set it as a resource
