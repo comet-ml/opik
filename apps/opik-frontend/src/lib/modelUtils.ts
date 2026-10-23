@@ -27,6 +27,7 @@ import {
   isCustomProviderModel,
 } from "@/lib/modelCapabilities";
 import isPlainObject from "lodash/isPlainObject";
+import isString from "lodash/isString";
 import isEmpty from "lodash/isEmpty";
 import omit from "lodash/omit";
 import sortBy from "lodash/sortBy";
@@ -600,6 +601,15 @@ export const getDefaultThinkingEffort = (
 const asRecord = (value: unknown): Record<string, unknown> =>
   isPlainObject(value) ? (value as Record<string, unknown>) : {};
 
+// A judge rule saves an OpenAI effort under custom_parameters, which the backend sends in place of the
+// typed reasoning_effort.
+const getCustomParametersReasoningEffort = (
+  customParameters: unknown,
+): string | undefined => {
+  const effort = asRecord(customParameters).reasoning_effort;
+  return isString(effort) ? effort : undefined;
+};
+
 /**
  * The effort a config holds under custom_parameters.output_config, which is where the request
  * carries it. Surfaces that store the request shape and load it back (a saved optimization run, an
@@ -1042,7 +1052,11 @@ export const resolveSamplingParams = (
     }
     const native = getNativeModelBehindOpenRouter(model);
     if (native) {
-      return resolveSamplingParams(native, { temperature, topP });
+      return resolveSamplingParams(native, {
+        temperature,
+        topP,
+        reasoningEffort: configs.reasoningEffort,
+      });
     }
   }
 
@@ -1061,11 +1075,15 @@ export const resolveSamplingParams = (
     return { temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE };
   }
 
-  // Reasoning models take neither: top_p is rejected outright ("Unsupported parameter: 'top_p' is
-  // not supported with this model.") and temperature accepts only the provider's own default, so
-  // there is nothing to tune and omitting both is the one payload that always works.
+  // Reasoning models take neither while they reason: top_p is rejected outright ("Unsupported
+  // parameter: 'top_p' is not supported with this model.") and temperature accepts only the
+  // provider's own default. At effort none they take both, as a plain model does ("When reasoning
+  // effort is not none, remove temperature, top_p, and top_logprobs"), and that includes the models
+  // that run at none when no effort is sent at all, like GPT 5.4.
   if (provider === PROVIDER_TYPE.OPEN_AI && isReasoningModel(model)) {
-    return {};
+    return resolveEffort(model, configs).reasoningEffort === "none"
+      ? { temperature, topP }
+      : {};
   }
 
   if (!supportsGeminiSamplingParams(model)) {
@@ -1136,7 +1154,8 @@ export type EffortParams = {
  * Both defaults are the model's own (none on gpt-5.1 to gpt-5.4, medium on Opus 5.5). An Anthropic
  * effort under custom_parameters counts as stored too: the flat one wins when the model offers it,
  * else the nested one does, so a reloaded request shape shows the level it will send and a stale
- * flat value cannot override a valid nested one.
+ * flat value cannot override a valid nested one. An OpenAI one under custom_parameters is read the
+ * same way: it is what a judge rule saved, and the flat one is the form's current pick.
  */
 export const resolveEffort = (
   model: PROVIDER_MODEL_TYPE | "",
@@ -1154,11 +1173,13 @@ export const resolveEffort = (
     if (options.length === 0) {
       return {};
     }
-    return {
-      reasoningEffort: options.some((o) => o.value === configs.reasoningEffort)
-        ? configs.reasoningEffort
-        : getDefaultReasoningEffort(model),
-    };
+    const stored = [
+      configs.reasoningEffort,
+      getCustomParametersReasoningEffort(configs.custom_parameters),
+    ]
+      .map((effort) => options.find((o) => o.value === effort)?.value)
+      .find((effort) => effort !== undefined);
+    return { reasoningEffort: stored ?? getDefaultReasoningEffort(model) };
   }
 
   if (provider === PROVIDER_TYPE.ANTHROPIC) {
