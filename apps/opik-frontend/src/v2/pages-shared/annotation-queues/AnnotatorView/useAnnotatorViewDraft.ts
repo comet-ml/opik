@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import isEqual from "lodash/isEqual";
 import { AnnotationQueueAnnotatorView } from "@/types/annotation-queues";
 import { LATEST_KIT_VERSION } from "@/shared/SandboxedView/kit/loadKit";
@@ -22,23 +22,36 @@ type UseAnnotatorViewDraftParams = {
   isThreadScope: boolean;
 };
 
+const toDraft = (view?: AnnotationQueueAnnotatorView): AnnotatorViewDraft => ({
+  html: view?.html ?? "",
+  kitVersion: view?.kit_version ?? LATEST_KIT_VERSION,
+  summary: view?.summary ?? "",
+});
+
 const useAnnotatorViewDraft = ({
   view,
   isThreadScope,
 }: UseAnnotatorViewDraftParams) => {
   const scope: Scope = isThreadScope ? "thread" : "trace";
   const [initialScope] = useState(scope);
-  const [initial] = useState<AnnotatorViewDraft>(() => ({
-    html: view?.html ?? "",
-    kitVersion: view?.kit_version ?? LATEST_KIT_VERSION,
-    summary: view?.summary ?? "",
-  }));
+  const [initial, setInitial] = useState<AnnotatorViewDraft>(() =>
+    toDraft(view),
+  );
+  const [isLoaded, setIsLoaded] = useState(Boolean(view));
   const [drafts, setDrafts] = useState<Record<Scope, AnnotatorViewDraft>>(
     () => ({
       trace: initialScope === "trace" ? initial : EMPTY_DRAFT,
       thread: initialScope === "thread" ? initial : EMPTY_DRAFT,
     }),
   );
+
+  useEffect(() => {
+    if (!view || isLoaded) return;
+    const loaded = toDraft(view);
+    setIsLoaded(true);
+    setInitial(loaded);
+    setDrafts((prev) => ({ ...prev, [initialScope]: loaded }));
+  }, [view, isLoaded, initialScope]);
   const draft = drafts[scope];
   const saved = scope === initialScope ? initial : EMPTY_DRAFT;
 

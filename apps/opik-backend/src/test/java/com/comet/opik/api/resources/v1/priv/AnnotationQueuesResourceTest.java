@@ -1857,6 +1857,34 @@ class AnnotationQueuesResourceTest {
         }
 
         @Test
+        @DisplayName("should clear annotatorView when updated with an empty view")
+        void clearAnnotatorView() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .annotatorView(AnnotationQueueAnnotatorView.builder().html("<div></div>").build())
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.updateAnnotationQueue(
+                    annotationQueue.id(),
+                    AnnotationQueueUpdate.builder().annotatorView(AnnotationQueueAnnotatorView.builder().build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var retrieved = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(retrieved.annotatorView()).isNull();
+        }
+
+        @Test
         @DisplayName("should return null annotatorView when omitted on create")
         void createAnnotationQueueWithoutAnnotatorView() {
             var project = factory.manufacturePojo(Project.class);
@@ -2601,7 +2629,9 @@ class AnnotationQueuesResourceTest {
                                 .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                                 .build())
                 .ignoringFields(QUEUE_IGNORED_FIELDS)
-                .isEqualTo(expectedQueues);
+                .isEqualTo(expectedQueues.stream()
+                        .map(queue -> queue.toBuilder().annotatorView(null).build())
+                        .toList());
 
         // verify ignored field if present
         for (int i = 0; i < expectedQueues.size(); i++) {

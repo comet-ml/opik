@@ -311,7 +311,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     feedback_definitions,
                     annotators_per_item,
                     lock_timeout_seconds,
-                    annotator_view,
+                    <if(id)> annotator_view, <endif>
                     created_by,
                     created_at,
                     last_updated_by,
@@ -477,7 +477,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 q.feedback_definitions,
                 q.annotators_per_item,
                 q.lock_timeout_seconds,
-                q.annotator_view,
+                <if(id)> q.annotator_view, <endif>
                 q.scope,
                 q.created_at,
                 q.created_by,
@@ -769,8 +769,9 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         .orElse(DEFAULT_MIN_ANNOTATORS_PER_ITEM))
                 .lockTimeoutSeconds(Optional.ofNullable(row.get("lock_timeout_seconds", Integer.class))
                         .orElse(DEFAULT_LOCK_TIMEOUT_SECONDS))
-                .annotatorView(deserializeAnnotatorView(row.get("id", UUID.class),
-                        row.get("annotator_view", String.class)))
+                .annotatorView(rowMetadata.contains("annotator_view")
+                        ? deserializeAnnotatorView(row.get("id", UUID.class), row.get("annotator_view", String.class))
+                        : null)
                 .scope(AnnotationQueue.AnnotationScope.fromString(row.get("scope", String.class)))
                 .itemsCount(row.get("items_count", Long.class))
                 .reviewers(mapReviewers(row))
@@ -914,7 +915,9 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     private String serializeAnnotatorView(AnnotationQueueAnnotatorView annotatorView) {
-        return annotatorView != null ? JsonUtils.writeValueAsString(annotatorView) : "";
+        return annotatorView != null && StringUtils.isNotBlank(annotatorView.html())
+                ? JsonUtils.writeValueAsString(annotatorView)
+                : "";
     }
 
     private AnnotationQueueAnnotatorView deserializeAnnotatorView(UUID queueId, String json) {

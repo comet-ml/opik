@@ -49,6 +49,8 @@ import {
 } from "@/types/annotation-queues";
 import useAnnotationQueueCreateMutation from "@/api/annotation-queues/useAnnotationQueueCreateMutation";
 import useAnnotationQueueUpdateMutation from "@/api/annotation-queues/useAnnotationQueueUpdateMutation";
+import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueById";
+import Loader from "@/shared/Loader/Loader";
 import { DEFAULT_LOCK_TIMEOUT_SECONDS } from "@/lib/annotation-queues";
 import { Separator } from "@/ui/separator";
 import { Description } from "@/ui/description";
@@ -322,6 +324,11 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   const { mutate: updateMutate, isPending: isUpdatePending } =
     useAnnotationQueueUpdateMutation();
   const isSubmitting = isCreatePending || isUpdatePending;
+  const { data: fullQueue } = useAnnotationQueueById(
+    { annotationQueueId: defaultQueue?.id ?? "" },
+    { enabled: open && Boolean(defaultQueue) },
+  );
+  const isViewLoading = Boolean(defaultQueue) && !fullQueue;
 
   const automationEnabled = form.watch("automation_enabled");
   const capEnabled = form.watch("automation_cap_enabled");
@@ -335,7 +342,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   const isThreadScope = form.watch("scope") === ANNOTATION_QUEUE_SCOPE.THREAD;
   const annotatorViewEditor = useAnnotatorViewEditor({
     open,
-    view: defaultQueue?.annotator_view,
+    view: fullQueue?.annotator_view,
     projectId: form.watch("project_id"),
     queueId: defaultQueue?.id,
     queueName: form.watch("name"),
@@ -812,12 +819,16 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                   </div>
                 </>
               )}
-              <AnnotatorViewCard
-                editor={annotatorViewEditor}
-                onPreview={() => setPage("preview")}
-                onStartOllie={startAnnotatorViewOllie}
-                isVisible={page === "form"}
-              />
+              {isViewLoading ? (
+                <Loader className="min-h-32 rounded-md border border-border" />
+              ) : (
+                <AnnotatorViewCard
+                  editor={annotatorViewEditor}
+                  onPreview={() => setPage("preview")}
+                  onStartOllie={startAnnotatorViewOllie}
+                  isVisible={page === "form"}
+                />
+              )}
             </form>
           </Form>
         </div>
@@ -841,7 +852,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
           <Button
             type="submit"
             size="sm"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isViewLoading}
             className="min-w-[115px]"
             onClick={handleSubmit}
           >
