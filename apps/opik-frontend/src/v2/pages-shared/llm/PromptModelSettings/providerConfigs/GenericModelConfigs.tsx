@@ -10,6 +10,7 @@ import { createSupports } from "@/v2/pages-shared/llm/PromptModelSettings/provid
 import {
   GenericPanelPresentation,
   getShownControls,
+  getShownValue,
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/genericPanels";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import {
@@ -17,9 +18,6 @@ import {
   NumberControl,
   NumberParamName,
   ParamControl,
-  resolveEffortLevel,
-  resolveMaxOutputTokens,
-  resolveSampling,
   SamplingChoiceControl,
 } from "@/lib/modelParams";
 import { ModelParams } from "@/types/modelParams";
@@ -54,6 +52,7 @@ const maxOutputTokensTooltip = (min: number, reasoningNoun: string) =>
   `The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On ${reasoningNoun} models, ${reasoningNoun} tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. The minimum is ${min}. (One token is roughly 4 characters for standard English text).`;
 
 interface GenericModelConfigsProps {
+  model?: string;
   params: ModelParams;
   presentation: GenericPanelPresentation;
   configs: Record<string, unknown>;
@@ -62,6 +61,7 @@ interface GenericModelConfigsProps {
 }
 
 const GenericModelConfigs = ({
+  model = "",
   params,
   presentation,
   configs,
@@ -74,18 +74,24 @@ const GenericModelConfigs = ({
     presentation,
     configs,
     unsupportedParams,
+    model,
   );
-  const sampling = resolveSampling(params, configs);
+  const shown = (control: ParamControl) =>
+    getShownValue(control, params, presentation, configs, model);
+  const samplingOffNote = params.temperature?.accepted
+    ? presentation.getSamplingOffNote(
+        model,
+        configs,
+        supports("topP") && params.top_p?.accepted === true,
+      )
+    : undefined;
 
   const renderNumber = (control: NumberControl) => {
     if (control.param === "max_output_tokens") {
       return (
         <SliderInputControl
           key={control.configKey}
-          value={resolveMaxOutputTokens(
-            params.max_output_tokens,
-            configs[control.configKey] as number | undefined,
-          )}
+          value={shown(control) as number}
           onChange={(v) => onChange({ [control.configKey]: v })}
           id={control.configKey}
           min={control.min}
@@ -106,16 +112,10 @@ const GenericModelConfigs = ({
       );
     }
     const slider = SLIDERS[control.param];
-    const value =
-      control.param === "temperature"
-        ? sampling.temperature
-        : control.param === "top_p"
-          ? sampling.topP
-          : (configs[control.configKey] as number | undefined);
     return (
       <SliderInputControl
         key={control.configKey}
-        value={value}
+        value={shown(control) as number | undefined}
         onChange={(v) => onChange({ [control.configKey]: v })}
         id={control.configKey}
         min={control.min}
@@ -128,41 +128,42 @@ const GenericModelConfigs = ({
     );
   };
 
-  const renderSamplingChoice = (control: SamplingChoiceControl) => (
-    <ExclusiveSamplingParams
-      key="sampling"
-      temperature={sampling.temperature}
-      topP={sampling.topP}
-      temperatureDefault={control.temperature.default}
-      topPDefault={control.topP?.default ?? control.temperature.default}
-      temperatureMin={control.temperature.min}
-      temperatureMax={control.temperature.max}
-      offerChoice={control.topP !== undefined}
-      onChange={({ temperature, topP }) =>
-        onChange({
-          [control.temperature.configKey]: temperature,
-          ...(control.topP && { [control.topP.configKey]: topP }),
-        })
-      }
-    />
-  );
+  const renderSamplingChoice = (control: SamplingChoiceControl) => {
+    const sampling = shown(control) as {
+      temperature?: number;
+      topP?: number;
+    };
+    return (
+      <ExclusiveSamplingParams
+        key="sampling"
+        temperature={sampling.temperature}
+        topP={sampling.topP}
+        temperatureDefault={control.temperature.default}
+        topPDefault={control.topP?.default ?? control.temperature.default}
+        temperatureMin={control.temperature.min}
+        temperatureMax={control.temperature.max}
+        offerChoice={control.topP !== undefined}
+        onChange={({ temperature, topP }) =>
+          onChange({
+            [control.temperature.configKey]: temperature,
+            ...(control.topP && { [control.topP.configKey]: topP }),
+          })
+        }
+      />
+    );
+  };
 
   const renderEffort = (control: EffortControl) => (
     <div key={control.configKey} className="space-y-2">
       <div className="flex items-center space-x-2">
         <Label htmlFor={control.configKey} className="text-sm font-medium">
-          {presentation.effortLabel}
+          {presentation.getEffortTitle(model)}
         </Label>
-        <ExplainerIcon description={presentation.effortDescription} />
+        <ExplainerIcon description={presentation.getEffortDescription(model)} />
       </div>
       <SelectBox
         id={control.configKey}
-        value={
-          resolveEffortLevel(
-            params.effort,
-            presentation.getStoredEffort(configs),
-          ) ?? control.default
-        }
+        value={shown(control) as string}
         onChange={(value: string) => onChange({ [control.configKey]: value })}
         options={control.levels.map((level) => ({
           label: presentation.getEffortLabel(level),
@@ -187,6 +188,10 @@ const GenericModelConfigs = ({
   return (
     <div className="flex w-72 flex-col gap-6">
       {controls.map(renderControl)}
+
+      {samplingOffNote && (
+        <p className="comet-body-xs text-muted-slate">{samplingOffNote}</p>
+      )}
 
       {supports("throttling") && (
         <SliderInputControl

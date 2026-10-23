@@ -1,10 +1,24 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import GenericModelConfigs from "./GenericModelConfigs";
-import { GenericPanelPresentation } from "./genericPanels";
+import { ANTHROPIC_PANEL, GenericPanelPresentation } from "./genericPanels";
+import ANTHROPIC_FIXTURE from "@/lib/anthropicCatalog.fixture.json";
+import { buildParamsIndex } from "@/hooks/useLLMProviderModelsData";
+import {
+  resetModelRegistryStoreForTesting,
+  setLatestModelParams,
+  setLatestProviderProfiles,
+} from "@/lib/modelRegistryStore";
+import { getModelParams } from "@/lib/modelParams";
+import { sanitizeConfigForRequest } from "@/lib/modelUtils";
+import { getDefaultConfigByProvider } from "@/lib/playground";
+import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
+import { ModelParamsByProvider } from "@/types/modelParams";
+import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { RULE_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import { ModelParams } from "@/types/modelParams";
+import { getEffortLevels, resolveEffortLevel } from "@/lib/modelParams";
 import { TooltipProvider } from "@/ui/tooltip";
 
 const PRESENTATION: GenericPanelPresentation = {
@@ -16,11 +30,15 @@ const PRESENTATION: GenericPanelPresentation = {
   },
   storedNumbersOnly: false,
   reasoningNoun: "thinking",
-  effortLabel: "Thinking effort",
-  effortDescription: "How hard the model thinks.",
+  getEffortTitle: () => "Thinking effort",
+  getEffortDescription: () => "How hard the model thinks.",
   effortPlaceholder: "Select thinking effort",
   getEffortLabel: (level) => level.toUpperCase(),
-  getStoredEffort: (configs) => [configs.thinkingEffort],
+  getEffortChoice: (_model, params, configs) => ({
+    levels: getEffortLevels(params.effort),
+    value: resolveEffortLevel(params.effort, [configs.thinkingEffort]),
+  }),
+  getSamplingOffNote: () => undefined,
   throttlingDefault: 0,
   maxConcurrentRequestsDefault: 5,
 };
@@ -44,7 +62,10 @@ const STORED_NUMBERS_PRESENTATION: GenericPanelPresentation = {
     effort: "reasoningEffort",
   },
   storedNumbersOnly: true,
-  getStoredEffort: (configs) => [configs.reasoningEffort],
+  getEffortChoice: (_model, params, configs) => ({
+    levels: getEffortLevels(params.effort),
+    value: resolveEffortLevel(params.effort, [configs.reasoningEffort]),
+  }),
 };
 
 const INDEPENDENT_SAMPLING_MODEL: ModelParams = {
@@ -73,10 +94,12 @@ const renderPanel = (
   unsupportedParams?: ReadonlySet<never> | typeof RULE_UNSUPPORTED_PARAMS,
   onChange = vi.fn(),
   presentation = PRESENTATION,
+  model?: string,
 ) => {
   render(
     <TooltipProvider delayDuration={700}>
       <GenericModelConfigs
+        model={model}
         params={params}
         presentation={presentation}
         configs={configs}
@@ -203,4 +226,95 @@ describe("GenericModelConfigs", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("maxCompletionTokens-input")).toHaveValue("16");
   });
+});
+
+describe("the catalog panel for a Claude model that thinks only when asked", () => {
+  beforeEach(() => {
+    resetModelRegistryStoreForTesting();
+    setLatestModelParams(
+      buildParamsIndex(
+        ANTHROPIC_FIXTURE.models as unknown as LlmModelsByProvider,
+      ),
+    );
+    setLatestProviderProfiles(
+      ANTHROPIC_FIXTURE.profiles as unknown as ModelParamsByProvider,
+    );
+  });
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  const MODELS = [
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+  ];
+
+  const defaults = (model: PROVIDER_MODEL_TYPE) =>
+    getDefaultConfigByProvider(PROVIDER_TYPE.ANTHROPIC, model) as Record<
+      string,
+      unknown
+    >;
+
+  const renderCatalogPanel = (
+    model: PROVIDER_MODEL_TYPE,
+    configs: Record<string, unknown>,
+  ) =>
+    renderPanel(
+      getModelParams(PROVIDER_TYPE.ANTHROPIC, model)!,
+      configs,
+      undefined,
+      vi.fn(),
+      ANTHROPIC_PANEL,
+      model,
+    );
+
+  const sentEffort = (request: Record<string, unknown>) =>
+    (
+      (request.custom_parameters as Record<string, unknown> | undefined)
+        ?.output_config as Record<string, unknown> | undefined
+    )?.effort;
+
+  it.each(MODELS)(
+    "starts at Off with Off listed first, and sends no effort but the temperature, for %s",
+    (model) => {
+      const configs = defaults(model);
+      renderCatalogPanel(model, configs);
+
+      expect(screen.getByRole("combobox")).toHaveTextContent("Off");
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+      expect(
+        screen.getAllByRole("option").map((option) => option.textContent),
+      ).toEqual(["Off", "Low", "Medium", "High", "Max"]);
+      expect(screen.getByTestId("temperature-input")).toBeInTheDocument();
+
+      const request = sanitizeConfigForRequest(model, configs);
+      expect(sentEffort(request)).toBeUndefined();
+      expect(request.temperature).toBe(0);
+    },
+  );
+
+  it.each(MODELS)(
+    "hides the temperature while a level is picked, and Off brings it back, for %s",
+    (model) => {
+      const thinking = { ...defaults(model), thinkingEffort: "low" };
+      renderCatalogPanel(model, thinking);
+
+      expect(screen.getByRole("combobox")).toHaveTextContent("Low");
+      expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
+      expect(
+        screen.getByText(/off while Claude can think/),
+      ).toBeInTheDocument();
+      const thinkingRequest = sanitizeConfigForRequest(model, thinking);
+      expect(sentEffort(thinkingRequest)).toBe("low");
+      expect(thinkingRequest.temperature).toBeUndefined();
+
+      const offAgain = sanitizeConfigForRequest(model, {
+        ...thinking,
+        thinkingEffort: "off",
+      });
+      expect(sentEffort(offAgain)).toBeUndefined();
+      expect(offAgain.temperature).toBe(0);
+    },
+  );
 });

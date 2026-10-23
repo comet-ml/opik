@@ -26,8 +26,10 @@ import {
 } from "@/types/providers";
 import {
   resetModelRegistryStoreForTesting,
+  getLatestProviderModelsSnapshot,
   setLatestModelFlags,
   setLatestModelParams,
+  setLatestProviderModelsSnapshot,
   setLatestProviderProfiles,
 } from "@/lib/modelRegistryStore";
 
@@ -604,6 +606,42 @@ describe("hasVisibleControls on the catalog panel", () => {
   });
 
   it("shows it once the model takes an effort", () => {
+    setLatestProviderModelsSnapshot({
+      ...getLatestProviderModelsSnapshot(),
+      [PROVIDER_TYPE.ANTHROPIC]: [{ value: MODEL, label: MODEL }],
+    });
+    setLatestModelParams(
+      new Map([
+        [
+          PROVIDER_TYPE.ANTHROPIC,
+          new Map([
+            [
+              MODEL,
+              {
+                ...REFUSES_ALL,
+                effort: {
+                  accepted: true,
+                  levels: ["low", "high"],
+                  default: "high",
+                },
+              },
+            ],
+          ]),
+        ],
+      ]),
+    );
+
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.ANTHROPIC,
+        MODEL,
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(true);
+  });
+
+  it("offers no effort for a Claude id the registry doesn't list, as the request sends none for it", () => {
     setLatestModelParams(new Map([[PROVIDER_TYPE.ANTHROPIC, new Map()]]));
     setLatestProviderProfiles({
       [PROVIDER_TYPE.ANTHROPIC]: {
@@ -619,6 +657,6 @@ describe("hasVisibleControls on the catalog panel", () => {
         RULE_CONFIG,
         RULE_UNSUPPORTED_PARAMS,
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 });

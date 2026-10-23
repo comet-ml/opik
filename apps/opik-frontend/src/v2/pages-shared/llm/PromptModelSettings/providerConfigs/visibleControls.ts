@@ -187,11 +187,12 @@ export const hasGenericControls = (
   presentation: GenericPanelPresentation,
   configs: Record<string, unknown>,
   unsupportedParams?: ReadonlySet<ModelConfigParam>,
+  model = "",
 ): boolean => {
   const supports = createSupports(unsupportedParams);
   return (
-    getShownControls(params, presentation, configs, unsupportedParams).length >
-      0 ||
+    getShownControls(params, presentation, configs, unsupportedParams, model)
+      .length > 0 ||
     supports("throttling") ||
     supports("maxConcurrentRequests")
   );
@@ -219,6 +220,7 @@ export const hasVisibleControls = (
           OPENAI_PANEL,
           configs as Record<string, unknown>,
           unsupportedParams,
+          model,
         );
       }
       return isAnyControlVisible(
@@ -238,6 +240,7 @@ export const hasVisibleControls = (
           ANTHROPIC_PANEL,
           configs as Record<string, unknown>,
           unsupportedParams,
+          model,
         );
       }
       return isAnyControlVisible(

@@ -82,6 +82,7 @@ const PromptModelConfigs = ({
     presentation: GenericPanelPresentation,
   ) => (
     <GenericModelConfigs
+      model={model}
       params={params}
       presentation={presentation}
       configs={configs as Record<string, unknown>}
