@@ -67,7 +67,7 @@ public class AiLabelsConfig {
 
     /** Under the tick interval, so every tick sweeps: a tick only submits what its own sweep found. */
     @NotNull @JsonProperty
-    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     private Duration sweepInterval = Duration.seconds(55);
 
     @NotNull @JsonProperty

@@ -73,6 +73,16 @@ jobs:
         working-directory: sdks/typescript
 
     steps:
+      # comet-ci App token: the version bump is pushed straight to protected main.
+      - name: Mint GitHub App token
+        id: app-token
+        if: env.IS_RELEASE == 'true'   # only releases push
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          client-id: ${{ vars.COMET_CI_APP_CLIENT_ID }}
+          private-key: ${{ secrets.COMET_CI_APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Checkout
         # For releases, check out the tag for the version we're publishing — not
         # `github.ref` (which is the dispatch ref and may have moved past the tag).
@@ -90,7 +100,7 @@ jobs:
         with:
           ref: ${{ env.IS_RELEASE == 'true' && format('refs/tags/{0}', inputs.version) || github.ref }}
           fetch-depth: 0
-          token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API || github.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
 
       - name: Build and Publish TypeScript SDK
         id: build_publish
@@ -100,7 +110,7 @@ jobs:
           version: ${{ inputs.version || '' }}
           is_release: ${{ env.IS_RELEASE }}
           package_name: "TypeScript SDK"
-          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API || github.token }}
+          github_token: ${{ steps.app-token.outputs.token || github.token }}
           skip_commit_push: ${{ inputs.skip_commit_push }}
 
       - name: Summary
