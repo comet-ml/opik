@@ -192,11 +192,11 @@ class LlmModelRegistryServiceTest {
 
         var expected = new LlmModelRegistryService.ModelLookupResult(provider,
                 LlmModelDefinition.builder().id(id).qualifiedName(qualifiedName).build());
-        // The capability flags come from the sync and the params from the catalog, and both have their own tests;
-        // this one is about hiding the model.
+        // The capability flags and retirement date come from the sync and the params from the catalog, and all have
+        // their own tests; this one is about hiding the model.
         assertThat(result).get()
                 .usingRecursiveComparison()
-                .ignoringFields("model.structuredOutput", "model.reasoning", "model.params")
+                .ignoringFields("model.structuredOutput", "model.reasoning", "model.params", "model.retiresOn")
                 .isEqualTo(expected);
     }
 
