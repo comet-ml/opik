@@ -85,7 +85,15 @@ class SpanFilterEvaluationServiceTest {
                     arguments(SpanField.MODEL, "gpt-4", Operator.EQUAL, "gpt-4", true),
                     arguments(SpanField.MODEL, "gpt-4", Operator.CONTAINS, "gpt", true),
                     arguments(SpanField.PROVIDER, "openai", Operator.EQUAL, "openai", true),
-                    arguments(SpanField.PROVIDER, "openai", Operator.CONTAINS, "open", true));
+                    arguments(SpanField.PROVIDER, "openai", Operator.CONTAINS, "open", true),
+                    arguments(SpanField.NAME, "Test Span", Operator.STARTS_WITH, "test", true),
+                    arguments(SpanField.NAME, "Test Span", Operator.STARTS_WITH, "Span", false),
+                    arguments(SpanField.NAME, "Test Span", Operator.ENDS_WITH, "SPAN", true),
+                    arguments(SpanField.NAME, "Test Span", Operator.ENDS_WITH, "Test", false),
+                    arguments(SpanField.MODEL, "gpt-4o", Operator.STARTS_WITH, "GPT", true),
+                    arguments(SpanField.MODEL, "gpt-4o", Operator.ENDS_WITH, "4o", true),
+                    arguments(SpanField.PROVIDER, "openai", Operator.STARTS_WITH, "anthropic", false),
+                    arguments(SpanField.PROVIDER, "openai", Operator.ENDS_WITH, "AI", true));
         }
 
         @ParameterizedTest
