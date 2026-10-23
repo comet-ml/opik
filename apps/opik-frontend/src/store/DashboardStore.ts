@@ -35,6 +35,9 @@ interface DashboardStoreState {
   onAddEditWidgetCallback:
     | ((params: AddEditWidgetCallbackParams) => void)
     | null;
+  onAddWidgetToTemplate:
+    | ((sectionId: string, widget: DashboardWidget) => void)
+    | null;
   widgetResolver: WidgetResolver | null;
   previewWidget: DashboardWidget | null;
   readOnly: boolean;
@@ -78,6 +81,10 @@ interface DashboardActions {
 
   setOnAddEditWidgetCallback: (
     callback: ((params: AddEditWidgetCallbackParams) => void) | null,
+  ) => void;
+
+  setOnAddWidgetToTemplate: (
+    callback: ((sectionId: string, widget: DashboardWidget) => void) | null,
   ) => void;
 
   setWidgetResolver: (resolver: WidgetResolver | null) => void;
@@ -130,6 +137,7 @@ export const useDashboardStore = create<DashboardStore>()(
         lastModified: initialDashboard.lastModified,
         runtimeConfig: {},
         onAddEditWidgetCallback: null,
+        onAddWidgetToTemplate: null,
         widgetResolver: null,
         previewWidget: null,
         readOnly: false,
@@ -409,6 +417,14 @@ export const useDashboardStore = create<DashboardStore>()(
           );
         },
 
+        setOnAddWidgetToTemplate: (callback) => {
+          set(
+            { onAddWidgetToTemplate: callback },
+            false,
+            "setOnAddWidgetToTemplate",
+          );
+        },
+
         setWidgetResolver: (resolver) => {
           set({ widgetResolver: resolver }, false, "setWidgetResolver");
         },
@@ -548,4 +564,6 @@ export const selectUpdatePreviewWidget = (state: DashboardStore) =>
   state.updatePreviewWidget;
 
 export const selectReadOnly = (state: DashboardStore) => state.readOnly;
+export const selectSetOnAddWidgetToTemplate = (state: DashboardStore) =>
+  state.setOnAddWidgetToTemplate;
 export const selectSetReadOnly = (state: DashboardStore) => state.setReadOnly;

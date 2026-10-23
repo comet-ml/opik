@@ -36,6 +36,18 @@ export interface UnreachableProviderSeed {
   modelName?: string;
 }
 
+export interface ModelListProviderSeed {
+  providerName: string;
+  /**
+   * The model display names the picker should offer, in list order.
+   *
+   * Order is part of the contract: a caller asserting something about the FIRST
+   * or LAST entry of a long list needs the rendered order to be the one it
+   * asked for, not whatever the backend happened to store.
+   */
+  modelNames: readonly string[];
+}
+
 export interface FailingProviderSeed {
   providerName: string;
   /**
@@ -144,6 +156,23 @@ export interface ProviderKeysFixture {
    * `notFoundProviderBaseUrl` for how.
    */
   createPermanentlyFailing(seed: FailingProviderSeed): Promise<string>;
+  /**
+   * REST-seeds a Custom provider offering exactly `modelNames`, and returns
+   * them in the order the picker will render them; registered for teardown
+   * deletion.
+   *
+   * For specs about the model PICKER rather than about calling a model — a list
+   * long enough to overflow the dropdown is otherwise unreachable, because
+   * every other selection helper in the estate types a full model name into
+   * "Search model" first and so never sees more than a handful of options.
+   *
+   * Points at `UNREACHABLE_BASE_URL` for the same reason `createUnreachable`
+   * does, with the opposite intent: here nothing is ever meant to call these
+   * models, and a refused connect means a spec that accidentally ran one fails
+   * in milliseconds instead of billing. Every name is registered unbilled, so
+   * the model-policy guard lets a picker select them.
+   */
+  createWithModels(seed: ModelListProviderSeed): Promise<string[]>;
   /**
    * Registers a provider name for teardown deletion without seeding — for tests where
    * UI creation is itself the behavior under test. Cleanup runs even when the test fails.
@@ -260,6 +289,28 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
           configuration: { models: qualifiedModel },
         });
         return qualifiedModel;
+      },
+      async createWithModels({ providerName, modelNames }) {
+        if (modelNames.length === 0) {
+          throw new Error(
+            '[provider-key fixture] createWithModels needs at least one model — ' +
+              'a provider with none renders no options at all, which is a different page',
+          );
+        }
+        registered.push(providerName);
+        for (const model of modelNames) registerUnbilledModel(model);
+        await createProviderKey({
+          provider: 'custom-llm',
+          provider_name: providerName,
+          base_url: UNREACHABLE_BASE_URL,
+          // Required whenever `auth_config` is absent, and never presented to
+          // anything: the connect is refused before a request is written.
+          api_key: 'unused-these-models-are-never-called',
+          configuration: {
+            models: modelNames.map((model) => `custom-llm/${providerName}/${model}`).join(','),
+          },
+        });
+        return [...modelNames];
       },
       register(providerName) {
         registered.push(providerName);

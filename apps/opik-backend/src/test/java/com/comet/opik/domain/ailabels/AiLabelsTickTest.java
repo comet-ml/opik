@@ -370,6 +370,7 @@ class AiLabelsTickTest {
                 job(jobs, "generate").jobId());
         // In flight in MySQL only: nothing is written to ClickHouse at submit.
         assertThat(statuses(workspaceId, traceIds)).isEmpty();
+        assertThat(tickService.lastJobs().open()).isEqualTo(2);
         assertThat(inFlight(workspaceId)).hasSize(6).allSatisfy(item -> {
             assertThat(item.jobId()).isEqualTo(jobIdByTask.get(item.task()));
             assertThat(item.attempt()).isOne();
@@ -390,6 +391,7 @@ class AiLabelsTickTest {
                 .containsExactlyInAnyOrder(jobIdByTask.get(DECIDE_TASK), jobIdByTask.get(GENERATE_TASK)));
         assertThat(jobs(workspaceId)).extracting(JobRow::status).containsOnly("loaded");
         assertThat(inFlight(workspaceId)).isEmpty();
+        assertThat(tickService.lastJobs()).isEqualTo(AiLabelsTickService.JobsObservation.NONE);
         assertThat(statuses(workspaceId, traceIds)).hasSize(6).allSatisfy(status -> {
             assertThat(status.status()).isEqualTo(AiLabelStatus.Status.DONE);
             assertThat(status.attempt()).isOne();

@@ -1,5 +1,4 @@
 import React from "react";
-import { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -11,14 +10,16 @@ const SIZE_CLASSES: Record<IconTagSize, { tag: string; icon: string }> = {
 };
 
 type IconTagProps = {
-  icon: LucideIcon;
+  icon: React.ComponentType<{ className?: string }>;
   className: string;
+  iconClassName?: string;
   size?: IconTagSize;
 };
 
 const IconTag: React.FC<IconTagProps> = ({
   icon: Icon,
   className,
+  iconClassName = "text-foreground dark:text-background",
   size = "sm",
 }) => (
   <span
@@ -28,12 +29,7 @@ const IconTag: React.FC<IconTagProps> = ({
       className,
     )}
   >
-    <Icon
-      className={cn(
-        "text-foreground dark:text-background",
-        SIZE_CLASSES[size].icon,
-      )}
-    />
+    <Icon className={cn(iconClassName, SIZE_CLASSES[size].icon)} />
   </span>
 );
 
