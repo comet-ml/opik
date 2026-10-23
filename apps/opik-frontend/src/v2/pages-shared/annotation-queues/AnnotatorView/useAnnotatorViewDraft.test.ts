@@ -18,6 +18,22 @@ describe("useAnnotatorViewDraft", () => {
     expect(result.current.isUnsaved).toBe(false);
   });
 
+  it("takes the saved view when it arrives after mount", () => {
+    const { result, rerender } = renderHook(
+      ({ view }: { view?: typeof SAVED }) =>
+        useAnnotatorViewDraft({ view, isThreadScope: false }),
+      { initialProps: {} },
+    );
+
+    expect(result.current.hasView).toBe(false);
+
+    rerender({ view: SAVED });
+
+    expect(result.current.draft.html).toBe(SAVED.html);
+    expect(result.current.annotatorView).toEqual(SAVED);
+    expect(result.current.isUnsaved).toBe(false);
+  });
+
   it("marks a reset view as unsaved and sends no view", () => {
     const { result } = renderHook(() =>
       useAnnotatorViewDraft({ view: SAVED, isThreadScope: false }),

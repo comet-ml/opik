@@ -14,7 +14,7 @@ import lombok.Builder;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AnnotationQueueAnnotatorView(
-        @Schema(description = "A custom HTML view rendered in a sandboxed iframe instead of the default trace blocks or conversation") @Nullable @Size(max = 500_000) String html,
+        @Schema(description = "A custom HTML view rendered in a sandboxed iframe instead of the default trace blocks or conversation") @Nullable @Size(max = 200_000) String html,
         @Schema(description = "Version of the view kit the html was written for") @Nullable @Min(1) @Max(LATEST_KIT_VERSION) Integer kitVersion,
         @Schema(description = "What annotators see in the view, in one or two sentences") @Nullable @Size(max = 1000) String summary) {
 

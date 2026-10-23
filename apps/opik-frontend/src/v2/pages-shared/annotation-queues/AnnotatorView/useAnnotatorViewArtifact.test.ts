@@ -48,6 +48,18 @@ describe("useAnnotatorViewArtifact", () => {
     hook.unmount();
   });
 
+  it("applies a replayed proposal only once", () => {
+    const { onApply, hook } = renderArtifact();
+
+    propose(TARGET, PAYLOAD);
+    expect(propose(TARGET, PAYLOAD)).toEqual({
+      proposalId: "p1",
+      applied: true,
+    });
+    expect(onApply).toHaveBeenCalledTimes(1);
+    hook.unmount();
+  });
+
   it.each([
     ["another queue", { ...TARGET, queueId: "q2" }],
     ["another project", { ...TARGET, projectId: "pr2" }],
@@ -70,7 +82,7 @@ describe("useAnnotatorViewArtifact", () => {
     ["a missing kit version", { html: VIEW, summary: SUMMARY }],
     ["a missing summary", { html: VIEW, kitVersion: 1 }],
     ["an overlong summary", { ...PAYLOAD, summary: "a".repeat(1001) }],
-    ["an oversized view", { ...PAYLOAD, html: "a".repeat(500_001) }],
+    ["an oversized view", { ...PAYLOAD, html: "a".repeat(200_001) }],
   ])("rejects %s as invalid", (_, payload) => {
     const { onApply, hook } = renderArtifact();
 

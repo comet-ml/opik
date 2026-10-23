@@ -324,11 +324,12 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   const { mutate: updateMutate, isPending: isUpdatePending } =
     useAnnotationQueueUpdateMutation();
   const isSubmitting = isCreatePending || isUpdatePending;
-  const { data: fullQueue } = useAnnotationQueueById(
+  const { data: fullQueue, isError: isQueueError } = useAnnotationQueueById(
     { annotationQueueId: defaultQueue?.id ?? "" },
     { enabled: open && Boolean(defaultQueue) },
   );
-  const isViewLoading = Boolean(defaultQueue) && !fullQueue;
+  const isViewLoading = Boolean(defaultQueue) && !fullQueue && !isQueueError;
+  const isViewFailed = Boolean(defaultQueue) && !fullQueue && isQueueError;
 
   const automationEnabled = form.watch("automation_enabled");
   const capEnabled = form.watch("automation_cap_enabled");
@@ -389,11 +390,17 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
         maxItems: automation_max_items,
         groups: automation_groups,
       }),
-      ...(defaultQueue || annotatorView.html
+      ...(annotatorViewEditor.isUnsaved
         ? { annotator_view: annotatorView }
         : {}),
     };
-  }, [defaultQueue, form, isAutomationEnabled, annotatorView]);
+  }, [
+    defaultQueue,
+    form,
+    isAutomationEnabled,
+    annotatorView,
+    annotatorViewEditor.isUnsaved,
+  ]);
 
   const onQueueCreatedEdited = useCallback(
     (queue: Partial<AnnotationQueue>) => {
@@ -821,6 +828,10 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
               )}
               {isViewLoading ? (
                 <Loader className="min-h-32 rounded-md border border-border" />
+              ) : isViewFailed ? (
+                <div className="comet-body-s rounded-md border border-border p-3 text-muted-slate">
+                  Couldn&apos;t load the annotator view.
+                </div>
               ) : (
                 <AnnotatorViewCard
                   editor={annotatorViewEditor}

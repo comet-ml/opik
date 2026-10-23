@@ -424,7 +424,7 @@ class AnnotationQueuesResourceTest {
         private Stream<Arguments> invalidAnnotatorViews() {
             return Stream.of(
                     arguments(AnnotationQueueAnnotatorView.builder()
-                            .html("a".repeat(500_001))
+                            .html("a".repeat(200_001))
                             .build(), "html over the size limit"),
                     arguments(AnnotationQueueAnnotatorView.builder()
                             .html("<div></div>")

@@ -1,13 +1,14 @@
 import isInteger from "lodash/isInteger";
 import isPlainObject from "lodash/isPlainObject";
 import isString from "lodash/isString";
+import { useRef } from "react";
 import useOllieArtifact from "@/hooks/useOllieArtifact";
 import { ArtifactProposal, ArtifactRejection } from "@/types/assistant-sidebar";
 import { LATEST_KIT_VERSION } from "@/shared/SandboxedView/kit/loadKit";
 
 export const ANNOTATOR_VIEW_ARTIFACT = "annotator_view";
 
-const MAX_HTML_LENGTH = 500_000;
+const MAX_HTML_LENGTH = 200_000;
 const MAX_SUMMARY_LENGTH = 1000;
 
 export type AnnotatorViewScope = "trace" | "thread";
@@ -75,10 +76,14 @@ const useAnnotatorViewArtifact = ({
   onApply,
   onReject,
 }: UseAnnotatorViewArtifactParams) => {
+  const appliedProposalIds = useRef(new Set<string>());
+
   const check = ({
+    proposalId,
     target,
     payload,
   }: ArtifactProposal): ArtifactRejection | null => {
+    if (appliedProposalIds.current.has(proposalId)) return null;
     if (!isTarget(target)) return "invalid";
     if (
       target.projectId !== projectId ||
@@ -88,6 +93,7 @@ const useAnnotatorViewArtifact = ({
       return "target_mismatch";
     }
     if (!isPayload(payload)) return "invalid";
+    appliedProposalIds.current.add(proposalId);
     onApply(payload.html, payload.kitVersion, payload.summary);
     return null;
   };

@@ -34,26 +34,26 @@ const useAnnotatorViewDraft = ({
 }: UseAnnotatorViewDraftParams) => {
   const scope: Scope = isThreadScope ? "thread" : "trace";
   const [initialScope] = useState(scope);
-  const [initial, setInitial] = useState<AnnotatorViewDraft>(() =>
+  const [initialDraft, setInitialDraft] = useState<AnnotatorViewDraft>(() =>
     toDraft(view),
   );
-  const [isLoaded, setIsLoaded] = useState(Boolean(view));
+  const [hasHydratedView, setHasHydratedView] = useState(Boolean(view));
   const [drafts, setDrafts] = useState<Record<Scope, AnnotatorViewDraft>>(
     () => ({
-      trace: initialScope === "trace" ? initial : EMPTY_DRAFT,
-      thread: initialScope === "thread" ? initial : EMPTY_DRAFT,
+      trace: initialScope === "trace" ? initialDraft : EMPTY_DRAFT,
+      thread: initialScope === "thread" ? initialDraft : EMPTY_DRAFT,
     }),
   );
 
   useEffect(() => {
-    if (!view || isLoaded) return;
-    const loaded = toDraft(view);
-    setIsLoaded(true);
-    setInitial(loaded);
-    setDrafts((prev) => ({ ...prev, [initialScope]: loaded }));
-  }, [view, isLoaded, initialScope]);
+    if (!view || hasHydratedView) return;
+    const hydrated = toDraft(view);
+    setHasHydratedView(true);
+    setInitialDraft(hydrated);
+    setDrafts((prev) => ({ ...prev, [initialScope]: hydrated }));
+  }, [view, hasHydratedView, initialScope]);
   const draft = drafts[scope];
-  const saved = scope === initialScope ? initial : EMPTY_DRAFT;
+  const saved = scope === initialScope ? initialDraft : EMPTY_DRAFT;
 
   const apply = useCallback(
     (html: string, kitVersion: number, summary: string) =>
