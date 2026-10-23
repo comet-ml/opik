@@ -11,12 +11,9 @@ import {
   setLatestProviderModelsSnapshot,
   setLatestProviderProfiles,
 } from "@/lib/modelRegistryStore";
+import { getModelParams, toParamsRoute } from "@/lib/modelParams";
 import {
-  getListedModelParams,
-  getModelParams,
-  toParamsRoute,
-} from "@/lib/modelParams";
-import {
+  getGeminiOrVertexListedParams,
   getThinkingLevelOptions,
   sanitizeConfigForRequest,
 } from "@/lib/modelUtils";
@@ -157,6 +154,15 @@ const CASES: Case[] = [
       ),
     ),
   ),
+  // A bare id saved under Vertex AI that AI Studio also lists: the panel and the request must both read
+  // the same row, whichever provider the prompt names.
+  [
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_TYPE.VERTEX_AI,
+    VERTEX_AI_PANEL,
+    undefined,
+    { maxCompletionTokens: 200000, thinkingLevel: "off" },
+  ],
 ];
 
 // The Gemini and Vertex AI panels open for listed models only: an unlisted id keeps the old panel.
@@ -166,7 +172,7 @@ const getPanelParams = (
   mode?: OpenAiPipelineMode,
 ) =>
   GEMINI_PROVIDERS.includes(provider)
-    ? getListedModelParams(provider, model)
+    ? getGeminiOrVertexListedParams(model)
     : getModelParams(provider, model, toParamsRoute(mode));
 
 describe("the catalog panel shows what the request sends", () => {

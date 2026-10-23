@@ -16,8 +16,11 @@ import {
   setLatestModelParams,
   setLatestProviderProfiles,
 } from "@/lib/modelRegistryStore";
-import { getListedModelParams, getModelParams } from "@/lib/modelParams";
-import { sanitizeConfigForRequest } from "@/lib/modelUtils";
+import { getModelParams } from "@/lib/modelParams";
+import {
+  getGeminiOrVertexListedParams,
+  sanitizeConfigForRequest,
+} from "@/lib/modelUtils";
 import { getDefaultConfigByProvider } from "@/lib/playground";
 import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
 import { ModelParamsByProvider } from "@/types/modelParams";
@@ -347,7 +350,7 @@ describe("the catalog panel for Gemini and Vertex AI", () => {
     unsupportedParams?: typeof RULE_UNSUPPORTED_PARAMS,
   ) =>
     renderPanel(
-      getListedModelParams(provider, model)!,
+      getGeminiOrVertexListedParams(model)!,
       configs,
       unsupportedParams,
       vi.fn(),

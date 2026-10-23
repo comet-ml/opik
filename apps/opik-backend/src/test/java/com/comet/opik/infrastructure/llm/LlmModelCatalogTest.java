@@ -11,6 +11,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.apache.commons.collections4.CollectionUtils;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -393,6 +394,21 @@ class LlmModelCatalogTest {
                     .as("OpenAI reasoning models without effort levels; give each a curated row with them, or"
                             + " effort: {accepted: false} if it refuses reasoning_effort")
                     .isEmpty();
+        }
+
+        // Gemini 2.5 Flash and Flash-Lite turn thinking off with a zero budget, which GeminiThinkingParams sends for
+        // OFF. A row without it makes the catalog panel replace a saved Off with the default.
+        @Test
+        void gemini25FlashModelsOfferThinkingOff() {
+            Map.of("gemini", List.of("gemini-2.5-flash", "gemini-2.5-flash-lite"),
+                    "vertex-ai", List.of("gemini-2.5-flash", "gemini-2.5-flash-lite-preview-06-17"))
+                    .forEach((provider, ids) -> ids.forEach(id -> assertThat(registry.get(provider))
+                            .as("%s/%s", provider, id)
+                            .filteredOn(model -> model.id().equals(id))
+                            .singleElement()
+                            .extracting(model -> model.params().effort().levels())
+                            .asInstanceOf(InstanceOfAssertFactories.list(String.class))
+                            .contains("auto", "off")));
         }
 
         private static Stream<ModelParams> allVariants(ModelParams params) {

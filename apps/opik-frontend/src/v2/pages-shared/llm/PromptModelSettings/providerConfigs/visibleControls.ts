@@ -13,6 +13,7 @@ import {
 } from "@/types/providers";
 import {
   OpenRouterParam,
+  getGeminiOrVertexListedParams,
   getOpenRouterReasoningEffortOptions,
   isAnthropicThinkingRequested,
   resolveEffort,
@@ -24,11 +25,7 @@ import {
   supportsVertexAIThinkingLevel,
 } from "@/lib/modelUtils";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
-import {
-  getListedModelParams,
-  getModelParams,
-  toParamsRoute,
-} from "@/lib/modelParams";
+import { getModelParams, toParamsRoute } from "@/lib/modelParams";
 import { ModelParams } from "@/types/modelParams";
 import {
   ANTHROPIC_PANEL,
@@ -258,7 +255,7 @@ export const hasVisibleControls = (
       );
     }
     case PROVIDER_TYPE.GEMINI: {
-      const params = getListedModelParams(PROVIDER_TYPE.GEMINI, model);
+      const params = getGeminiOrVertexListedParams(model);
       if (params) {
         return hasGenericControls(
           params,
@@ -277,7 +274,7 @@ export const hasVisibleControls = (
       );
     }
     case PROVIDER_TYPE.VERTEX_AI: {
-      const params = getListedModelParams(PROVIDER_TYPE.VERTEX_AI, model);
+      const params = getGeminiOrVertexListedParams(model);
       if (params) {
         return hasGenericControls(
           params,

@@ -37,11 +37,8 @@ import {
   OPENAI_PANEL,
   VERTEX_AI_PANEL,
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/genericPanels";
-import {
-  getListedModelParams,
-  getModelParams,
-  toParamsRoute,
-} from "@/lib/modelParams";
+import { getModelParams, toParamsRoute } from "@/lib/modelParams";
+import { getGeminiOrVertexListedParams } from "@/lib/modelUtils";
 import { ModelParams } from "@/types/modelParams";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import {
@@ -145,7 +142,7 @@ const PromptModelConfigs = ({
     }
 
     if (provider === PROVIDER_TYPE.GEMINI) {
-      const params = getListedModelParams(PROVIDER_TYPE.GEMINI, model);
+      const params = getGeminiOrVertexListedParams(model);
       if (params) {
         return renderCatalogPanel(params, GEMINI_PANEL);
       }
@@ -160,7 +157,7 @@ const PromptModelConfigs = ({
     }
 
     if (provider === PROVIDER_TYPE.VERTEX_AI) {
-      const params = getListedModelParams(PROVIDER_TYPE.VERTEX_AI, model);
+      const params = getGeminiOrVertexListedParams(model);
       if (params) {
         return renderCatalogPanel(params, VERTEX_AI_PANEL);
       }

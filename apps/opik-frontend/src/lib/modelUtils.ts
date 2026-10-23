@@ -175,8 +175,9 @@ const isVertexModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean =>
   typeof model === "string" && model.startsWith("vertex_ai/");
 
 // Only an id the Gemini or Vertex AI registry lists: OpenRouter's google/gemini-* and an id no registry
-// knows keep the tables, so their panel and their request still read the same rules.
-const getGeminiListedParams = (
+// knows keep the tables. The panel picks its form with this lookup too, never by the prompt's provider,
+// so a bare id saved under Vertex AI resolves the same way for the panel and for the request.
+export const getGeminiOrVertexListedParams = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): ModelParams | undefined =>
   getLatestListedModelParams(
@@ -217,7 +218,7 @@ const SAMPLING_CAPABLE_UNVERSIONED_GEMINI_IDS: ReadonlySet<string> = new Set([
 export const supportsGeminiSamplingParams = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean => {
-  const params = getGeminiListedParams(model);
+  const params = getGeminiOrVertexListedParams(model);
   if (params) {
     return isAccepted(params.temperature) || isAccepted(params.top_p);
   }
@@ -258,7 +259,7 @@ export const supportsVertexAIThinkingLevel = (
 export const getThinkingLevelOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): Array<{ label: string; value: GeminiThinkingLevel }> => {
-  const params = getGeminiListedParams(model);
+  const params = getGeminiOrVertexListedParams(model);
   const levels = params
     ? getCatalogThinkingLevels(params)
     : THINKING_LEVELS_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ?? [];
@@ -339,7 +340,7 @@ const DEFAULT_THINKING_LEVEL_BY_MODEL: ReadonlyMap<
 export const getDefaultThinkingLevel = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): GeminiThinkingLevel => {
-  const params = getGeminiListedParams(model);
+  const params = getGeminiOrVertexListedParams(model);
   const level = params ? resolveEffortLevel(params.effort, []) : undefined;
   return (
     (level ? toGeminiThinkingLevel(level) : undefined) ??
@@ -355,7 +356,7 @@ export const resolveGeminiMaxOutputTokens = (
   model: PROVIDER_MODEL_TYPE | "",
   value: number,
 ): number => {
-  const limit = getGeminiListedParams(model)?.max_output_tokens;
+  const limit = getGeminiOrVertexListedParams(model)?.max_output_tokens;
   return isAccepted(limit) && limit?.max !== undefined
     ? Math.min(value, limit.max)
     : value;
@@ -1252,7 +1253,7 @@ export const resolveSamplingParams = (
     provider === PROVIDER_TYPE.GEMINI ||
     provider === PROVIDER_TYPE.VERTEX_AI
   ) {
-    const params = getGeminiListedParams(model);
+    const params = getGeminiOrVertexListedParams(model);
     if (params) {
       return resolveSampling(params, configs);
     }
