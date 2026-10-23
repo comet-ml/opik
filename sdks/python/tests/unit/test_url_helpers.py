@@ -91,7 +91,7 @@ def test_get_ui_url__url_override__only_strips_api_suffix(
     [
         (
             "http://localhost:5173/api",
-            "http://localhost:5173/opik/my-workspace/projects/project-id/datasets/dataset-id/items",
+            "http://localhost:5173/my-workspace/projects/project-id/datasets/dataset-id/items",
         ),
         (
             "https://www.comet.com/opik/api/",
@@ -118,7 +118,7 @@ def test_get_dataset_url_by_id__returns_direct_project_scoped_url(
     [
         (
             "http://localhost:5173/api",
-            "http://localhost:5173/opik/my-workspace/projects/project-id/test-suites/suite-id/items",
+            "http://localhost:5173/my-workspace/projects/project-id/test-suites/suite-id/items",
         ),
         (
             "https://www.comet.com/opik/api/",
@@ -145,7 +145,7 @@ def test_get_test_suite_url_by_id__returns_direct_project_scoped_url(
     [
         (
             "http://localhost:5173/api",
-            "http://localhost:5173/opik/my-workspace/experiments/dataset-id"
+            "http://localhost:5173/my-workspace/experiments/dataset-id"
             "/compare?experiments=%5B%22experiment-id%22%5D",
         ),
         (

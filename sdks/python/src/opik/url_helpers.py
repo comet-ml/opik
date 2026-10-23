@@ -23,18 +23,20 @@ def ensure_ending_slash(url: str) -> str:
 
 def get_ui_url() -> str:
     config = opik.config.OpikConfig()
-    opik_url_override = config.url_override
+    return get_ui_base_url(config.url_override)
 
-    return opik_url_override.rstrip("/").removesuffix("/api") + "/"
+
+def get_ui_base_url(api_url: str) -> str:
+    return api_url.rstrip("/").removesuffix("/api") + "/"
 
 
 def get_experiment_url_by_id(
     dataset_id: str, experiment_id: str, base_url: str, workspace: str
 ) -> str:
-    domain_root = get_base_url(base_url)
+    ui_url = get_ui_base_url(base_url)
     experiments = urllib.parse.quote(json.dumps([experiment_id]))
     return (
-        f"{domain_root}opik/{workspace}/experiments/{dataset_id}/compare"
+        f"{ui_url}{workspace}/experiments/{dataset_id}/compare"
         f"?experiments={experiments}"
     )
 
@@ -63,27 +65,29 @@ def get_project_url_by_trace_id(trace_id: str, url_override: str) -> str:
 def get_dataset_url_by_id(
     base_url: str, workspace: str, project_id: str, dataset_id: str
 ) -> str:
-    domain_root = get_base_url(base_url)
-    return f"{domain_root}opik/{workspace}/projects/{project_id}/datasets/{dataset_id}/items"
+    ui_url = get_ui_base_url(base_url)
+    return f"{ui_url}{workspace}/projects/{project_id}/datasets/{dataset_id}/items"
 
 
 def get_test_suite_url_by_id(
     base_url: str, workspace: str, project_id: str, test_suite_id: str
 ) -> str:
-    domain_root = get_base_url(base_url)
-    return f"{domain_root}opik/{workspace}/projects/{project_id}/test-suites/{test_suite_id}/items"
+    ui_url = get_ui_base_url(base_url)
+    return (
+        f"{ui_url}{workspace}/projects/{project_id}/test-suites/{test_suite_id}/items"
+    )
 
 
 def get_project_url_by_id(base_url: str, project_id: str, workspace: str) -> str:
-    domain_root = get_base_url(base_url)
-    return f"{domain_root}opik/{workspace}/projects/{project_id}/"
+    ui_url = get_ui_base_url(base_url)
+    return f"{ui_url}{workspace}/projects/{project_id}/"
 
 
 def get_agent_playground_url_by_project_id(
     base_url: str, project_id: str, workspace: str
 ) -> str:
-    domain_root = get_base_url(base_url)
-    return f"{domain_root}opik/{workspace}/projects/{project_id}/agent-playground"
+    ui_url = get_ui_base_url(base_url)
+    return f"{ui_url}{workspace}/projects/{project_id}/agent-playground"
 
 
 def get_base_url(url: str) -> str:
