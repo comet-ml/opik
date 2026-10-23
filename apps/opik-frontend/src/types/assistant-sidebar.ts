@@ -42,6 +42,8 @@ export interface ConversationStartOptions {
   entryId?: string;
   // The section the Add widget dialog was opened from, so Ollie adds the widget there.
   section?: string;
+  // Its id, which Ollie prefers to the title: titles can repeat or be renamed.
+  sectionId?: string;
 }
 
 export interface ChartEditRequest {

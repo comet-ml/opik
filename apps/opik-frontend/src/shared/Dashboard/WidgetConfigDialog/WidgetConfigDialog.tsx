@@ -142,6 +142,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
         origin: "describe_widget",
         entryId,
         section: getSectionById(sectionId)?.title,
+        sectionId,
       },
     );
   };

@@ -89,6 +89,8 @@ describe("WidgetConfigDialog Ollie prompt", () => {
     expect(options).toEqual({
       origin: "describe_widget",
       entryId: expect.any(String),
+      // The section's id goes with its title: Ollie adds by id, since titles can repeat or be renamed.
+      sectionId: "section",
     });
     expect(trackEvent).toHaveBeenCalledWith(
       OpikEvent.DASHBOARD_ASK_OLLIE_CLICKED,
