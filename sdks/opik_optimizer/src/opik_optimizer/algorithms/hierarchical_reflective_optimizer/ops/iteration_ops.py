@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import logging
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from typing import Any, TYPE_CHECKING
 
 import opik
+from opik import exceptions as opik_exceptions
 
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
 from ....constants import normalize_eval_threads
-from ....core import runtime
+from ....core import evaluation, runtime
 from ....core.state import OptimizationContext
 from ....utils.logging import debug_log
 from ....utils.reporting import convert_tqdm_to_rich
@@ -47,7 +48,18 @@ def run_root_cause_analysis(
                 if suppress_progress
                 else convert_tqdm_to_rich("  Evaluation", verbose=optimizer.verbose)
             )
-            with progress_ctx:
+            with progress_ctx, ExitStack() as recording_stack:
+                # Record the evaluation's trace trees so the analysis sees the agent's
+                # steps, not only its final output. Opik refuses nested recordings, and
+                # task-span metrics open their own inside evaluate().
+                recording = None
+                if not evaluation._metric_requires_task_span(metric):
+                    try:
+                        recording = recording_stack.enter_context(
+                            opik.record_traces_locally()
+                        )
+                    except (RuntimeError, opik_exceptions.OpikException) as exc:
+                        logger.debug("Agent traces unavailable for analysis: %s", exc)
                 train_dataset_experiment_result = optimizer.evaluate_prompt(
                     prompt=best_prompts,
                     dataset=dataset,
@@ -63,8 +75,14 @@ def run_root_cause_analysis(
                     allow_tool_use=context.allow_tool_use,
                     sampling_tag=sampling_tag,
                 )
+                # Read before the recording closes: closing resets the local store.
+                traces = (
+                    {trace.id: trace for trace in recording.trace_trees}
+                    if recording is not None
+                    else None
+                )
             hierarchical_analysis = optimizer._hierarchical_root_cause_analysis(
-                train_dataset_experiment_result
+                train_dataset_experiment_result, traces
             )
             rca_reporter.set_completed(
                 hierarchical_analysis.total_test_cases,

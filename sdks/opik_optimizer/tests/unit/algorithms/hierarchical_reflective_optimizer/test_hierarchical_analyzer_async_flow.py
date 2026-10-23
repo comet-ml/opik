@@ -196,6 +196,6 @@ class TestHierarchicalAnalyzerAsync:
             result = analyzer.analyze(mock_evaluation_result, project_name="test")
 
             mock_async.assert_called_once_with(
-                mock_evaluation_result, project_name="test"
+                mock_evaluation_result, project_name="test", traces=None
             )
             assert result is synthesis_response

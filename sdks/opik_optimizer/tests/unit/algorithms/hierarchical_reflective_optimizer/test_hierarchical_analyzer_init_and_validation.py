@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import datetime
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from opik.message_processing.emulation import models
 
 from opik_optimizer.algorithms.hierarchical_reflective_optimizer.rootcause_ops import (
     HierarchicalRootCauseAnalyzer,
@@ -62,6 +65,90 @@ class TestHierarchicalRootCauseAnalyzer:
         assert "Test Case #3" in formatted
         assert "item_0" in formatted
         assert "accuracy:" in formatted
+
+    def test_format_test_results_batch_includes_agent_trace(
+        self, analyzer: HierarchicalRootCauseAnalyzer, mock_evaluation_result: MagicMock
+    ) -> None:
+        now = datetime.datetime.now()
+
+        def span(**kw: Any) -> models.SpanModel:
+            return models.SpanModel(start_time=now, source="sdk", **kw)
+
+        trace = models.TraceModel(
+            id="trace-0",
+            start_time=now,
+            name="evaluation_task",
+            project_name="p",
+            source="sdk",
+            spans=[
+                span(
+                    id="task",
+                    name="evaluation_task",
+                    input={"question": "dup"},
+                    spans=[
+                        span(
+                            id="llm",
+                            name="completion",
+                            type="llm",
+                            model="gpt-4o",
+                            input={"messages": "SYSTEM PROMPT"},
+                            output={
+                                "choices": [
+                                    {
+                                        "message": {
+                                            "content": None,
+                                            "tool_calls": [
+                                                {
+                                                    "function": {
+                                                        "name": "search",
+                                                        "arguments": '{"query": "x"}',
+                                                    }
+                                                }
+                                            ],
+                                        }
+                                    }
+                                ]
+                            },
+                        ),
+                        span(
+                            id="tool",
+                            name="search",
+                            type="tool",
+                            input={"query": "capital of france"},
+                            error_info={"message": "timeout"},
+                        ),
+                        span(
+                            id="llm-2",
+                            name="completion",
+                            type="llm",
+                            input={"messages": "REPLAYED HISTORY"},
+                        ),
+                    ],
+                ),
+                span(
+                    id="scoring",
+                    name="metrics_calculation",
+                    spans=[span(id="metric", name="accuracy_arg_validation")],
+                ),
+            ],
+        )
+        results = mock_evaluation_result.test_results
+        results[0].test_case.trace_id = "trace-0"
+
+        formatted = analyzer._format_test_results_batch(
+            results, 0, 2, traces={"trace-0": trace}
+        )
+        case_0, case_1 = formatted.split("Test Case #2")
+
+        assert "- [llm] completion (gpt-4o)" in case_0
+        assert 'search({\\"query\\": \\"x\\"})' in case_0
+        assert "choices" not in case_0
+        assert "arg_validation" not in case_0
+        assert "SYSTEM PROMPT" in case_0
+        assert "REPLAYED HISTORY" not in case_0
+        assert '  input: {"query": "capital of france"}' in case_0
+        assert "timeout" in case_0
+        assert "Agent trace" not in case_1
 
     def test_validate_reasons_present_raises_error(
         self, analyzer: HierarchicalRootCauseAnalyzer

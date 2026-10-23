@@ -144,7 +144,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         }
 
     def _hierarchical_root_cause_analysis(
-        self, evaluation_result: EvaluationResult
+        self,
+        evaluation_result: EvaluationResult,
+        traces: dict[str, Any] | None = None,
     ) -> HierarchicalRootCauseAnalysis:
         """
         Perform hierarchical root cause analysis on evaluation results.
@@ -155,13 +157,14 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         Args:
             evaluation_result: The evaluation result to analyze
+            traces: Trace trees recorded during the evaluation, by trace id
 
         Returns:
             HierarchicalRootCauseAnalysis containing batch analyses and overall synthesis
         """
         logger.debug("Performing hierarchical root cause analysis...")
         return self._hierarchical_analyzer.analyze(
-            evaluation_result, project_name=self.project_name
+            evaluation_result, project_name=self.project_name, traces=traces
         )
 
     def _record_trial_score(

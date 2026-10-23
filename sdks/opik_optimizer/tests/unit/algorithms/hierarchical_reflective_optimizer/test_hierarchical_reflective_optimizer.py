@@ -141,7 +141,7 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
         monkeypatch.setattr(
             optimizer,
             "_hierarchical_root_cause_analysis",
-            lambda evaluation_result: analysis,
+            lambda evaluation_result, traces=None: analysis,
         )
 
         def mock_generate_and_evaluate(**kwargs):
@@ -205,7 +205,7 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
         monkeypatch.setattr(
             optimizer,
             "_hierarchical_root_cause_analysis",
-            lambda evaluation_result: analysis,
+            lambda evaluation_result, traces=None: analysis,
         )
 
         def mock_generate_and_evaluate(**kwargs):
@@ -320,7 +320,7 @@ class TestHierarchicalReflectiveOptimizerCounters:
         monkeypatch.setattr(
             optimizer,
             "_hierarchical_root_cause_analysis",
-            lambda evaluation_result: analysis,
+            lambda evaluation_result, traces=None: analysis,
         )
 
         improvement_calls: list[int] = []
