@@ -50,7 +50,12 @@ type Case = [
   PROVIDER_TYPE,
   GenericPanelPresentation,
   OpenAiPipelineMode | undefined,
+  Record<string, unknown>,
 ];
+
+const UNLISTED_OPENAI = "gpt-unlisted-1" as PROVIDER_MODEL_TYPE;
+const UNLISTED_CLAUDE = "claude-unlisted-1" as PROVIDER_MODEL_TYPE;
+const MODES = ["chat_completions_api", "responses_api"] as const;
 
 const CASES: Case[] = [
   ...REGISTRY[PROVIDER_TYPE.ANTHROPIC].map(
@@ -59,21 +64,43 @@ const CASES: Case[] = [
       PROVIDER_TYPE.ANTHROPIC,
       ANTHROPIC_PANEL,
       undefined,
+      {},
     ],
   ),
   ...REGISTRY[PROVIDER_TYPE.OPEN_AI].flatMap((m) =>
-    (["chat_completions_api", "responses_api"] as const).map(
+    MODES.map(
       (mode): Case => [
         m.id as PROVIDER_MODEL_TYPE,
         PROVIDER_TYPE.OPEN_AI,
         OPENAI_PANEL,
         mode,
+        {},
       ],
     ),
   ),
+  // An id the registry doesn't list gets the provider profile, and a stored value outside its range
+  // is shown clamped: the request must send the clamped value too.
+  ...MODES.flatMap((mode) =>
+    [200000, 5].map(
+      (tokens): Case => [
+        UNLISTED_OPENAI,
+        PROVIDER_TYPE.OPEN_AI,
+        OPENAI_PANEL,
+        mode,
+        { maxCompletionTokens: tokens },
+      ],
+    ),
+  ),
+  [
+    UNLISTED_CLAUDE,
+    PROVIDER_TYPE.ANTHROPIC,
+    ANTHROPIC_PANEL,
+    undefined,
+    { maxCompletionTokens: 200000 },
+  ],
 ];
 
-describe("the catalog panel shows what the request sends, on an untouched config", () => {
+describe("the catalog panel shows what the request sends", () => {
   beforeEach(() => {
     resetModelRegistryStoreForTesting();
     setLatestModelParams(buildParamsIndex(REGISTRY));
@@ -87,39 +114,46 @@ describe("the catalog panel shows what the request sends, on an untouched config
     resetModelRegistryStoreForTesting();
   });
 
-  it.each(CASES)("%s (%s, %s)", (model, provider, presentation, mode) => {
-    const params = getModelParams(provider, model, toParamsRoute(mode))!;
-    const configs = getDefaultConfigByProvider(provider, model) as Record<
-      string,
-      unknown
-    >;
-    const request = sanitizeConfigForRequest(model, configs, mode);
-    const controls = getShownControls(
-      params,
-      presentation,
-      configs,
-      undefined,
-      model,
-    );
-
-    for (const control of controls) {
-      const shown = getShownValue(
-        control,
+  it.each(CASES)(
+    "%s (%s, %s, %s, %o)",
+    (model, provider, presentation, mode, stored) => {
+      const params = getModelParams(provider, model, toParamsRoute(mode))!;
+      const configs = {
+        ...(getDefaultConfigByProvider(provider, model) as Record<
+          string,
+          unknown
+        >),
+        ...stored,
+      };
+      const request = sanitizeConfigForRequest(model, configs, mode, provider);
+      const controls = getShownControls(
         params,
         presentation,
         configs,
+        undefined,
         model,
       );
-      const sent =
-        control.kind === "effort"
-          ? sentEffort(provider, request)
-          : control.kind === "sampling_choice"
-            ? { temperature: request.temperature, topP: request.topP }
-            : request[control.configKey];
-      expect(
-        sent,
-        control.kind === "number" ? control.param : control.kind,
-      ).toEqual(shown);
-    }
-  });
+
+      expect(controls.length).toBeGreaterThan(0);
+      for (const control of controls) {
+        const shown = getShownValue(
+          control,
+          params,
+          presentation,
+          configs,
+          model,
+        );
+        const sent =
+          control.kind === "effort"
+            ? sentEffort(provider, request)
+            : control.kind === "sampling_choice"
+              ? { temperature: request.temperature, topP: request.topP }
+              : request[control.configKey];
+        expect(
+          sent,
+          control.kind === "number" ? control.param : control.kind,
+        ).toEqual(shown);
+      }
+    },
+  );
 });

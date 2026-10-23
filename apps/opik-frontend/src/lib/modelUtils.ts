@@ -1560,6 +1560,7 @@ export const sanitizeConfigForRequest = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: Record<string, unknown>,
   openAiPipelineMode?: OpenAiPipelineMode,
+  promptProvider?: string,
 ): Record<string, unknown> => {
   if (!model) return configs;
 
@@ -1699,6 +1700,31 @@ export const sanitizeConfigForRequest = (
       DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS;
   }
 
+  // An OpenAI or Anthropic prompt on an id the registry doesn't list shows the provider profile's token
+  // range, so its request is held to the same one. Only the prompt's provider can say which profile:
+  // getProviderFromModel answers OpenAI for every unlisted id.
+  const panelProvider = promptProvider
+    ? parseComposedProviderType(promptProvider as COMPOSED_PROVIDER_TYPE)
+    : undefined;
+  const profileTokens =
+    (panelProvider === PROVIDER_TYPE.OPEN_AI ||
+      panelProvider === PROVIDER_TYPE.ANTHROPIC) &&
+    !getLatestListedModelParams(panelProvider, model)
+      ? getModelParams(
+          panelProvider,
+          model,
+          panelProvider === PROVIDER_TYPE.OPEN_AI
+            ? toParamsRoute(openAiPipelineMode)
+            : undefined,
+        )?.max_output_tokens
+      : undefined;
+  if (profileTokens && typeof sanitized.maxCompletionTokens === "number") {
+    sanitized.maxCompletionTokens = resolveMaxOutputTokens(
+      profileTokens,
+      sanitized.maxCompletionTokens,
+    );
+  }
+
   // getProviderFromModel answers OpenAI for any model the registry does not list, a custom gateway's
   // ids included, so only a listed model is held to OpenAI's or Anthropic's limits.
   if (
@@ -1820,6 +1846,7 @@ export const getRequestParameters = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: LLMPromptConfigsType,
   openAiPipelineMode?: OpenAiPipelineMode,
+  promptProvider?: string,
 ): Record<string, unknown> =>
   snakeCaseObj(
     omit(
@@ -1827,6 +1854,7 @@ export const getRequestParameters = (
         model,
         configs as unknown as Record<string, unknown>,
         openAiPipelineMode,
+        promptProvider,
       ),
       RUNNER_SETTINGS,
     ),

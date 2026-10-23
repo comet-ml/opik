@@ -56,6 +56,7 @@ const runExperimentExecution = async ({
         prompt.model,
         prompt.configs as Record<string, unknown>,
         openAiPipelineMode,
+        prompt.provider,
       ),
       prompt_versions: promptVersions,
       experiment_name: experimentNames?.[prompt.id],
