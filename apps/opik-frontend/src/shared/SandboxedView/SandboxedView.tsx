@@ -57,12 +57,21 @@ const RUNTIME = `(() => {
     };
     queue.splice(0).forEach((message) => port.postMessage(message));
   });
-  const postHeight = () =>
-    post({
-      type: "opik:resize",
-      height: Math.ceil(document.documentElement.getBoundingClientRect().height),
-    });
-  new ResizeObserver(postHeight).observe(document.documentElement);
+  const postHeight = () => {
+    const bottoms = Array.from(document.body.children, (element) => element.getBoundingClientRect().bottom);
+    post({ type: "opik:resize", height: Math.ceil(Math.max(0, ...bottoms) + window.scrollY) });
+  };
+  const resizeObserver = new ResizeObserver(postHeight);
+  document.addEventListener("DOMContentLoaded", () => {
+    Array.from(document.body.children).forEach((element) => resizeObserver.observe(element));
+    new MutationObserver((records) => {
+      records.forEach((record) =>
+        record.addedNodes.forEach((node) => node instanceof Element && resizeObserver.observe(node)),
+      );
+      postHeight();
+    }).observe(document.body, { childList: true });
+    postHeight();
+  });
   window.parent.postMessage({ type: "opik:ready" }, "*");
 })();`;
 
