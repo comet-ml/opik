@@ -405,6 +405,28 @@ class DashboardsResourceTest {
         }
 
         @Test
+        @DisplayName("Update dashboard without changing the name keeps its slug")
+        void updateDashboardWithUnchangedNameKeepsSlug() {
+            var name = "Report " + RandomStringUtils.secure().nextAlphanumeric(10).toLowerCase();
+
+            var firstId = dashboardResourceClient.create(
+                    dashboardResourceClient.createPartialDashboard().name(name).build(),
+                    API_KEY, TEST_WORKSPACE_NAME);
+            var secondId = dashboardResourceClient.create(
+                    dashboardResourceClient.createPartialDashboard().name(name).build(),
+                    API_KEY, TEST_WORKSPACE_NAME);
+            dashboardResourceClient.delete(firstId, API_KEY, TEST_WORKSPACE_NAME);
+
+            dashboardResourceClient.update(secondId,
+                    DashboardUpdate.builder().name(name.toUpperCase()).description("new description").build(),
+                    API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+
+            var updated = dashboardResourceClient.get(secondId, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+            assertThat(updated.description()).isEqualTo("new description");
+            assertThat(updated.slug()).isEqualTo(SlugUtils.generateSlug(name) + "-2");
+        }
+
+        @Test
         @DisplayName("Create dashboard without name fails")
         void createDashboardWithoutNameFails() {
             var dashboard = dashboardResourceClient.createPartialDashboard()

@@ -244,12 +244,15 @@ class DashboardServiceImpl implements DashboardService {
         return template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DashboardDAO.class);
 
-            // Generate new slug if name is being updated
             String newSlug = null;
             if (StringUtils.isNotBlank(dashboardUpdate.name())) {
+                var existing = dao.findById(id, workspaceId, scope.getValue())
+                        .orElseThrow(() -> new NotFoundException(DASHBOARD_NOT_FOUND));
                 String baseSlug = SlugUtils.generateSlug(dashboardUpdate.name());
-                long maxSuffix = dao.findMaxSlugSuffix(workspaceId, baseSlug, id);
-                newSlug = SlugUtils.generateUniqueSlug(baseSlug, maxSuffix);
+                if (!baseSlug.equals(SlugUtils.generateSlug(existing.name()))) {
+                    long maxSuffix = dao.findMaxSlugSuffix(workspaceId, baseSlug, id);
+                    newSlug = SlugUtils.generateUniqueSlug(baseSlug, maxSuffix);
+                }
             }
 
             try {
