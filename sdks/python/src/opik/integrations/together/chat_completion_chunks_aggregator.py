@@ -2,7 +2,10 @@ import logging
 from typing import Any, Dict, List, Optional
 
 import pydantic
-from together.types import ChatCompletionChunk
+
+# together 3.0 stopped re-exporting ChatCompletionChunk from together.types;
+# this module path exists in both 2.x and 3.x.
+from together.types.chat.chat_completion_chunk import ChatCompletionChunk
 
 LOGGER = logging.getLogger(__name__)
 
