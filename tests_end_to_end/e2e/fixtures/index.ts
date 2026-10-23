@@ -1,4 +1,4 @@
-export { test, expect } from './emptied-source-versions.fixture';
+export { test, expect } from './gemini-thinking-stub.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -493,3 +493,46 @@ export type {
   EmptiedSourceRef,
   EmptiedSourceVersionsFixtures,
 } from './emptied-source-versions.fixture';
+export type {
+  ProjectOverviewTracesRef,
+  ProjectOverviewCopyFixtures,
+} from './project-overview-copy.fixture';
+export type {
+  OpenRouterSpelling,
+  OpenRouterCostSpanSeed,
+  OpenRouterCostSpansRef,
+  OpenRouterCostSpansFixtures,
+} from './openrouter-cost-spans.fixture';
+export type { ImageOnlyPromptRef, ImageOnlyPromptFixtures } from './image-only-prompt.fixture';
+export {
+  IMAGE_ONLY_PROMPT_TEXT,
+  IMAGE_ONLY_PROMPT_IMAGE_URL,
+  IMAGE_ONLY_PROMPT_CONTENT,
+} from './image-only-prompt.fixture';
+export type {
+  OpenAiStreamToolsStubRef,
+  OpenAiStreamToolsStubFixtures,
+} from './openai-stream-tools-stub.fixture';
+export {
+  STREAM_TOOLS_MODEL,
+  STREAM_TOOLS_PROMPT_TOKENS,
+  STREAM_TOOLS_COMPLETION_TOKENS,
+  STREAM_TOOL_CALLS,
+} from './openai-stream-tools-stub.fixture';
+export type {
+  GeminiThinkingStubRef,
+  GeminiThinkingStubFixtures,
+} from './gemini-thinking-stub.fixture';
+export {
+  GEMINI_STUB_MODEL,
+  GEMINI_STUB_USAGE,
+  GEMINI_STUB_TEXT,
+} from './gemini-thinking-stub.fixture';
+export type {
+  OpenRouterVisionModelsRef,
+  OpenRouterVisionModelsFixtures,
+} from './openrouter-vision-models.fixture';
+export {
+  OPEN_ROUTER_VISION_MODEL,
+  OPEN_ROUTER_MAX_TOKENS_LIMIT,
+} from './openrouter-vision-models.fixture';

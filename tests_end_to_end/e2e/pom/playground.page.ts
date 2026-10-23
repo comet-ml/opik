@@ -538,6 +538,28 @@ export class PlaygroundPage {
   }
 
   /**
+   * The run progress indicator's own readout, mounted only while a whole-run
+   * launch is in flight (`PlaygroundProgressIndicator`, `useShowsRunProgress`).
+   *
+   * Both of the two things it can say, as one locator: "Preparing dataset
+   * items..." before `/execute` has answered with a total, and
+   * "<done>/<total> completed (<pct>%)" once it has. A spec that needs to know
+   * a run is still going wants either — which of the two it happens to be is
+   * a race against the server's paging, and pinning one would make the
+   * assertion about timing instead of about the run.
+   *
+   * Matched on the text because the component carries no `data-testid`, and
+   * anchored so neither phrase can be satisfied by prose elsewhere on the
+   * page. Also the reason this is the readout and not the bar: the bar is an
+   * unlabelled `div` whose only distinguishing feature is an inline width.
+   */
+  runProgressReadout(): Locator {
+    return this.page.getByText(
+      /^(Preparing dataset items\.\.\.|\d+\/\d+ completed \(\d+%\))$/,
+    );
+  }
+
+  /**
    * Run ONE variant, from its own card.
    *
    * The count is asserted rather than `.first()`-ed: a lookup that matched two
@@ -968,6 +990,190 @@ export class PlaygroundPage {
   /** Confirm the suite/dataset pill is showing with the expected entity name. */
   loadedSourcePill(): Locator {
     return this.page.getByTestId('playground-loaded-source-pill');
+  }
+
+  // ── the dataset grid's own Filters popover (opik#8750) ───────────────────
+  //
+  // Mounted beside the loaded-source pill, and only in dataset-experiment
+  // mode. It is a `FiltersButton` in `layout="icon"`, so the trigger renders
+  // the icon alone with NO accessible name and no `data-testid` — and adding
+  // one is not an option for a spec verified against a deployed build, which
+  // would not have it. It is addressed as the one dialog-popup button on the
+  // page carrying a filter icon, and the count is asserted at every call site
+  // below so a second such control arriving fails loudly rather than driving
+  // whichever the DOM ordered first.
+  //
+  // Three things about this popover cost a discovery pass, and all three
+  // differ from the grid filters elsewhere in the app:
+  //
+  //  - it is `deferOnChange`, so the filter is applied when the popover
+  //    CLOSES, not as the value is typed. An incomplete row is dropped in
+  //    silence, and a row the popover considers incomplete commits as no
+  //    filter at all — which, from a grid that was already unfiltered, is
+  //    indistinguishable from nothing having happened.
+  //  - the value box is a `DebounceInput`: it holds the typed text locally and
+  //    only hands it up after 300ms, or IMMEDIATELY on blur. The popover's
+  //    close handler reads the row's committed state, and a pointer-down
+  //    outside reaches that handler before the input's blur has flushed — so
+  //    closing straight after typing commits a row whose value is still empty,
+  //    `isFilterValid` drops it, and the grid never hears about the filter.
+  //    Measured on 2.2.119: the request simply never goes out. The blur is
+  //    therefore its own step, and the trigger's valid-filter count is read
+  //    back as proof the value arrived before anything is dismissed.
+  //  - the row opens with its column select unset and its operator select
+  //    DISABLED; choosing the column enables the operator and auto-selects
+  //    `contains`, which is the operator these methods rely on.
+  //
+  // The settle point is the grid's own dataset-items response carrying the
+  // value, never the popover closing: the grid is virtualised and the total
+  // only exists in that payload, so counting the DOM would report the
+  // viewport rather than the result set.
+
+  /**
+   * The Filters trigger beside the loaded-source pill.
+   *
+   * Public so a spec can assert the control is there at all before driving it —
+   * it renders only in dataset-experiment mode.
+   */
+  datasetGridFiltersTrigger(): Locator {
+    return this.page
+      .locator('button[aria-haspopup="dialog"]')
+      .filter({ has: this.page.locator('svg.lucide-filter') });
+  }
+
+  /** The open popover, identified by the column select only it contains. */
+  private get datasetGridFiltersPopover(): Locator {
+    return this.page
+      .getByRole('dialog')
+      .filter({ has: this.page.getByTestId('filter-column') });
+  }
+
+  /** Open the Filters popover and resolve once its first row is addressable. */
+  private async openDatasetGridFilters(): Promise<Locator> {
+    return test.step('open the dataset grid Filters popover', async () => {
+      const trigger = this.datasetGridFiltersTrigger();
+      await expect(
+        trigger,
+        'exactly one dataset-grid Filters control — it renders only in dataset mode',
+      ).toHaveCount(1);
+      await trigger.click();
+      const popover = this.datasetGridFiltersPopover;
+      await popover.waitFor({ state: 'visible' });
+      return popover;
+    });
+  }
+
+
+  /**
+   * Put one `<column> contains <value>` filter on the dataset grid, and return
+   * the row total the grid received.
+   *
+   * Idempotent in the column: on the first call the select is unset and the
+   * column is chosen, and on a later call it already holds `column`, so only
+   * the value is retyped. That is what lets a spec move from a filter matching
+   * nothing to one matching a row without clearing in between — which would
+   * otherwise return to a query key react-query has already cached, and so to a
+   * grid that updates with no request to settle on.
+   *
+   * The returned total comes from the grid's own response, so a caller can
+   * assert what the filter MATCHED rather than only that a filter was typed.
+   */
+  async setDatasetGridFilter(args: {
+    datasetId: string;
+    column: string;
+    value: string;
+  }): Promise<number> {
+    return test.step(
+      `filter the dataset grid where "${args.column}" contains "${args.value}"`,
+      async () => {
+        const popover = await this.openDatasetGridFilters();
+
+        const columnSelect = popover
+          .getByRole('combobox')
+          .filter({ has: this.page.getByTestId('filter-column') });
+        await expect(columnSelect, 'exactly one column select in the first row').toHaveCount(1);
+        if ((await columnSelect.innerText()).trim() !== args.column) {
+          await columnSelect.click();
+          const option = this.page.getByRole('option', { name: args.column, exact: true });
+          await expect(
+            option,
+            `exactly one "${args.column}" column option — the dataset's own data columns`,
+          ).toHaveCount(1);
+          await option.click();
+        }
+
+        // Asserted rather than assumed: choosing the column is what enables the
+        // operator select and auto-selects `contains`, and every value these
+        // methods type is written for that operator. A row left on a different
+        // one would filter for something else entirely and still answer with a
+        // total.
+        const operatorSelect = popover
+          .getByRole('combobox')
+          .filter({ has: this.page.getByTestId('filter-operator') });
+        await expect(
+          operatorSelect,
+          'choosing a column auto-selects the contains operator',
+        ).toContainText('contains');
+
+        const valueBox = popover.getByTestId('filter-string-input');
+        await expect(valueBox, 'exactly one value box in the first row').toHaveCount(1);
+        await valueBox.fill(args.value);
+
+        // Blur the value box so the DebounceInput flushes into the filter row
+        // BEFORE the popover is dismissed. Tab rather than a click elsewhere:
+        // Radix traps focus inside the content, so it moves focus within the
+        // popover and cannot dismiss it by accident.
+        await valueBox.press('Tab');
+        // Read back from the trigger, which renders the number of rows the
+        // popover considers complete — the product's own statement that there
+        // is exactly one filter and it is ready to apply, rather than a wait on
+        // a timer. On a first application this is what would have caught the
+        // swallowed value described above; on a later one the count is already
+        // 1, and what it still rules out is a stray second row having been
+        // added to the popover.
+        await expect(
+          this.datasetGridFiltersTrigger(),
+          'the Filters control counts exactly one completed row',
+        ).toHaveText('1');
+
+        // Matched on the pathname and not on a substring of the whole URL: the
+        // page issues several reads carrying the same `filters` param, and only
+        // this one answers with a `total`.
+        //
+        // The query string is decoded as a QUERY STRING — `+` back to a space
+        // first, then percent-decoded. Axios' own encoder emits `+` for a
+        // space, so a bare `decodeURIComponent` leaves `"value":"seed+input+2"`
+        // and a match on the value a caller passed can never fire. Measured on
+        // 2.2.119 against a filter value with spaces in it, which is what any
+        // value read off a seeded dataset item looks like.
+        const settled = this.page.waitForResponse(
+          (response) => {
+            const url = new URL(response.url());
+            if (!url.pathname.endsWith('/items')) return false;
+            if (!url.pathname.includes(args.datasetId)) return false;
+            if (!response.ok()) return false;
+            const query = decodeURIComponent(url.search.replace(/\+/g, ' '));
+            return query.includes(`"value":"${args.value}"`);
+          },
+          { timeout: 30_000 },
+        );
+        // Commit by clicking the page heading: it is inert, always present, and
+        // outside the popover, and `deferOnChange` applies the filter from the
+        // close handler.
+        await this.page.getByRole('heading', { name: 'Playground', level: 1 }).click();
+        await popover.waitFor({ state: 'hidden' });
+
+        const body: unknown = await (await settled).json();
+        const total = (body as { total?: unknown }).total;
+        if (typeof total !== 'number') {
+          throw new Error(
+            'PlaygroundPage.setDatasetGridFilter: the filtered dataset-items read answered ' +
+              'without a total — cannot tell a narrowed result set from an unfiltered one.',
+          );
+        }
+        return total;
+      },
+    );
   }
 
   // ── the loaded source's version ─────────────────────────────────────────

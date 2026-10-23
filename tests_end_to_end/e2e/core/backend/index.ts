@@ -4,6 +4,8 @@ export {
   type ProjectRef,
   type DashboardRef,
   type InsightsViewRef,
+  type InsightsViewSectionRef,
+  type InsightsViewDetail,
   type DatasetRef as BackendDatasetRef,
   type DatasetItemRef,
   type DatasetItemWithTagsRef,
