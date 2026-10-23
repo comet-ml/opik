@@ -15,6 +15,11 @@ type Kit = {
 
 export const LATEST_KIT_VERSION = 1;
 
+const KIT_HTML = `const kitHtml = (() => {
+  const policy = window.trustedTypes?.createPolicy("kit", { createHTML: (value) => value });
+  return (value) => (policy ? policy.createHTML(value) : value);
+})();`;
+
 const KITS: Record<number, Kit> = {
   1: {
     css: [V1_TOKENS_CSS, V1_BASE_CSS, V1_CORE_CSS],
@@ -27,6 +32,9 @@ export const loadKit = (version: number, packs: KitPack[]) => {
   const kit = KITS[version] ?? KITS[LATEST_KIT_VERSION];
   return {
     css: [...kit.css, ...packs.map((pack) => kit.packs[pack].css)].join("\n"),
-    js: [...kit.js, ...packs.map((pack) => kit.packs[pack].js)].join("\n;\n"),
+    js: `(() => {\n${KIT_HTML}\n${[
+      ...kit.js,
+      ...packs.map((pack) => kit.packs[pack].js),
+    ].join("\n;\n")}\n})();`,
   };
 };

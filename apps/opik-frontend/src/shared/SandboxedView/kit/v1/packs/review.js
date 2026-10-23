@@ -1,4 +1,4 @@
-/* global kit */
+/* global kit, kitHtml */
 Object.assign(
   window.kit,
   (() => {
@@ -96,7 +96,7 @@ Object.assign(
         class: "kit-email",
         sandbox: "allow-same-origin",
         title: "Email preview",
-        srcdoc: html,
+        srcdoc: kitHtml(html),
       });
       const fit = () => {
         const doc = frame.contentDocument;

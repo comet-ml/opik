@@ -10,7 +10,7 @@ import { useTheme } from "@/contexts/theme-provider";
 import { KitPack, loadKit } from "./kit/loadKit";
 
 const CSP =
-  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:";
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:; require-trusted-types-for 'script'; trusted-types kit";
 
 const RUNTIME = `(() => {
   let data;

@@ -1,4 +1,4 @@
-/* global opik */
+/* global opik, kitHtml */
 window.kit = (() => {
   const h = (tag, props = {}, ...children) => {
     const el = document.createElement(tag);
@@ -59,7 +59,7 @@ window.kit = (() => {
     /<(html|body|table|div|p|br|span)\b/i.test(value);
 
   const stripHtml = (value) => {
-    const doc = new DOMParser().parseFromString(value, "text/html");
+    const doc = new DOMParser().parseFromString(kitHtml(value), "text/html");
     doc
       .querySelectorAll("style, script, head")
       .forEach((node) => node.remove());

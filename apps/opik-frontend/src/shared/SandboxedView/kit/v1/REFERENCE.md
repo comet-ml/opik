@@ -10,6 +10,9 @@ Store `kit_version: 1` with every view written against this reference.
 - No network. Every request, external script, stylesheet, font or image URL is blocked. Images and media only
   from `data:` or `blob:` URLs.
 - No forms, popups, dialogs or navigation. Links do not open pages.
+- Build elements with `kit.h` and set text with `text`. `innerHTML`, `outerHTML`, `insertAdjacentHTML`,
+  `document.write` and `srcdoc` are blocked, so trace content can never run as markup. Use `kit.stripHtml` to show
+  HTML as plain text and `kit.emailFrame` to render an email.
 - Render through `kit.mount`. A view that does not call `kit.mount`, throws, or returns nothing is replaced by the
   default Opik view, and the error is shown to the user.
 - Style with the kit tokens and classes below. Do not hard-code colours: the same view must work in light and
