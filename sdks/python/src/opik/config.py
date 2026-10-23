@@ -548,7 +548,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
             the configuration is misconfigured for cloud logging, and the second element is either
             an error message indicating the reason for misconfiguration or None.
         """
-        api_key_configured = self.api_key is not None
+        api_key_configured = bool((self.api_key or "").strip())
         tracking_disabled = self.track_disable
 
         if (
