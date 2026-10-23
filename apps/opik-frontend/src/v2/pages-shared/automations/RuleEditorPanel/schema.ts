@@ -156,6 +156,7 @@ type LLMJudgeRefineData = {
   model: string;
   messages: LLMMessage[];
   variables: Record<string, string>;
+  parsingVariablesError?: boolean;
   schema: { type: LLM_SCHEMA_TYPE; description?: string }[];
 };
 
@@ -173,12 +174,41 @@ const isTextOnlyMessage = (message: LLMMessage) =>
   isString(message.content) ||
   message.content.every((part) => part.type === "text");
 
+const requirePrompt = (
+  data: { messages: LLMMessage[]; parsingVariablesError?: boolean },
+  ctx: z.RefinementCtx,
+) => {
+  const message = !data.messages.length
+    ? "Select a template or write your own prompt"
+    : data.parsingVariablesError
+      ? "A variable is not written correctly, use {{name}}"
+      : null;
+  if (!message) return;
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message,
+    path: ["messages", 0, "content"],
+  });
+};
+
+const requirePromptVariable = (
+  data: LLMJudgeRefineData,
+  ctx: z.RefinementCtx,
+) => {
+  if (data.parsingVariablesError || Object.keys(data.variables).length) return;
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message: "Add at least one variable, for example {{input}}",
+    path: ["messages", 0, "content"],
+  });
+};
+
 const refineDecisionModelRule = (
   data: LLMJudgeRefineData,
   ctx: z.RefinementCtx,
   scope: EVALUATORS_RULE_SCOPE,
 ) => {
-  if (!isDecisionModel(data.model)) {
+  if (!isDecisionModel(data.model) || !data.messages.length) {
     return;
   }
 
@@ -267,7 +297,7 @@ const LLMJudgeBaseSchema = z.object({
     z.object({
       id: z.string(),
       content: z.union([
-        z.string().min(1, { message: "Message is required" }),
+        z.string().min(1, { message: "Prompt is required" }),
         z
           .array(
             z.union([
@@ -286,7 +316,7 @@ const LLMJudgeBaseSchema = z.object({
               }),
             ]),
           )
-          .min(1, { message: "Message is required" }),
+          .min(1, { message: "Prompt is required" }),
       ]),
       role: z.nativeEnum(LLM_MESSAGE_ROLE),
     }),
@@ -333,7 +363,9 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
       }),
   ),
 }).superRefine((data, ctx) => {
+  requirePrompt(data, ctx);
   refineDecisionModelRule(data, ctx, EVALUATORS_RULE_SCOPE.trace);
+  requirePromptVariable(data, ctx);
 
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
@@ -386,7 +418,9 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
       }),
   ),
 }).superRefine((data, ctx) => {
+  requirePrompt(data, ctx);
   refineDecisionModelRule(data, ctx, EVALUATORS_RULE_SCOPE.span);
+  requirePromptVariable(data, ctx);
 
   const hasImages = data.messages.some((message) =>
     hasImagesInContent(message.content),
@@ -431,6 +465,7 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),
 }).superRefine((data, ctx) => {
+  requirePrompt(data, ctx);
   if (isDecisionModel(data.model)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

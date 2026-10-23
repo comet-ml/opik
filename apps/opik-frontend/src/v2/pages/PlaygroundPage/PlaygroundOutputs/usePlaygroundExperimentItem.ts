@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { MutableRefObject, useMemo, useRef } from "react";
 import get from "lodash/get";
 
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
@@ -30,6 +30,30 @@ const hasFinished = (experiment: Experiment | undefined) =>
   experiment?.status === EXPERIMENT_STATUS.FAILED ||
   (experiment?.status === EXPERIMENT_STATUS.CANCELLED &&
     isPastWatchAge(experiment));
+
+type Observation = { experimentId: string; observedAt: number } | null;
+
+// The read that first saw `seen` hold. Pinned rather than taken fresh: the run is read again
+// whenever a cell scrolls back, and anything else watching it can refresh it too, so a reference
+// that moved would put the loader back on a row that had already settled. Held against the
+// experiment it was made for — a re-run gives the cell a new id, and a finished one is served from
+// cache, so carrying the old observation over would settle its rows against a stranger's.
+const pinObservation = (
+  observed: MutableRefObject<Observation>,
+  seen: boolean,
+  experimentId: string | undefined,
+  observedAt: number,
+) => {
+  if (!seen || observed.current?.experimentId !== experimentId) {
+    observed.current = null;
+  }
+  if (seen && experimentId) {
+    observed.current ??= { experimentId, observedAt };
+  }
+};
+
+const wasReadAfter = (observed: Observation, rowsAt: number) =>
+  observed !== null && rowsAt >= observed.observedAt;
 
 export type PlaygroundExperimentItem = {
   /** False while the row is still being processed, which is what the cell shows a loader for. */
@@ -100,24 +124,15 @@ export default function usePlaygroundExperimentItem(
     );
 
   const finished = hasFinished(experiment);
+  const cancelled = experiment?.status === EXPERIMENT_STATUS.CANCELLED;
 
-  // The read that first told us this run had finished. Pinned rather than taken fresh: the run is
-  // read again whenever a cell scrolls back, and anything else watching it can refresh it too, so a
-  // reference that moved would put the loader back on a row that had already settled. Held against
-  // the experiment it was made for — a re-run gives the cell a new id, and a finished one is served
-  // from cache, so carrying the old observation over would settle its rows against a stranger's.
-  const finishedObserved = useRef<{ experimentId: string; at: number } | null>(
-    null,
-  );
-  if (!finished || finishedObserved.current?.experimentId !== experimentId) {
-    finishedObserved.current = null;
-  }
-  if (finished && experimentId) {
-    finishedObserved.current ??= { experimentId, at: experimentReadAt };
-  }
+  const finishedObserved = useRef<Observation>(null);
+  pinObservation(finishedObserved, finished, experimentId, experimentReadAt);
+  const cancelledObserved = useRef<Observation>(null);
+  pinObservation(cancelledObserved, cancelled, experimentId, experimentReadAt);
 
   const wasReadAfterFinish = (rowsAt: number) =>
-    finishedObserved.current !== null && rowsAt >= finishedObserved.current.at;
+    wasReadAfter(finishedObserved.current, rowsAt);
 
   const { data, dataUpdatedAt: rowsReadAt } = useCompareExperimentsList(
     {
@@ -152,6 +167,10 @@ export default function usePlaygroundExperimentItem(
   );
 
   const rowsReadAfterFinish = wasReadAfterFinish(rowsReadAt);
+  const rowsReadAfterCancel = wasReadAfter(
+    cancelledObserved.current,
+    rowsReadAt,
+  );
 
   return useMemo(() => {
     if (!experimentId) return EMPTY_ITEM;
@@ -163,12 +182,11 @@ export default function usePlaygroundExperimentItem(
 
     const latest = items[0];
     if (!latest) {
-      return rowsReadAfterFinish
-        ? {
-            ...EMPTY_ITEM,
-            notRun: true,
-            cancelled: experiment?.status === EXPERIMENT_STATUS.CANCELLED,
-          }
+      // A cancelled run is labelled at its status rather than its finish stamp, which waits for the
+      // stream to drain. Its rows keep being read, so an item a consumer already held still lands
+      // and replaces the label; a cancelled run cannot revert, so nothing else does.
+      return rowsReadAfterFinish || rowsReadAfterCancel
+        ? { ...EMPTY_ITEM, notRun: true, cancelled }
         : EMPTY_ITEM;
     }
 
@@ -191,6 +209,7 @@ export default function usePlaygroundExperimentItem(
     datasetItemId,
     experimentId,
     rowsReadAfterFinish,
-    experiment?.status,
+    rowsReadAfterCancel,
+    cancelled,
   ]);
 }

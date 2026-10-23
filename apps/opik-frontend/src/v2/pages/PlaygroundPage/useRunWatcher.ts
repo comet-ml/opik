@@ -10,7 +10,7 @@ import {
   COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
   EXPERIMENT_POLL_INTERVAL_MS,
 } from "@/constants/experiments";
-import { ExperimentsCompare } from "@/types/datasets";
+import { EXPERIMENT_STATUS, ExperimentsCompare } from "@/types/datasets";
 import { LogExperiment } from "@/types/playground";
 import { isExperimentTerminal } from "@/lib/experiments";
 import { extractErrorMessage } from "@/lib/errors";
@@ -37,6 +37,26 @@ const MAX_POLL_DURATION_LABEL = "5 minutes";
 const STILL_RUNNING_DESCRIPTION =
   `This run is taking longer than ${MAX_POLL_DURATION_LABEL}, so it is no longer being followed here. ` +
   "It continues on the server — refresh the progress bar to pick it back up.";
+
+// A finished or stopped experiment will run nothing more, so it counts what it ran on both sides
+// of the bar rather than what it was planned to run.
+export const runProgressOf = (
+  experiments: {
+    experiment?: { status?: EXPERIMENT_STATUS; trace_count?: number };
+    plannedItems: number;
+  }[],
+) => {
+  let completed = 0;
+  let total = 0;
+  for (const { experiment, plannedItems } of experiments) {
+    const traceCount = experiment?.trace_count ?? 0;
+    completed += traceCount;
+    total += isExperimentTerminal(experiment?.status)
+      ? traceCount
+      : plannedItems;
+  }
+  return { completed: Math.min(completed, total), total };
+};
 
 export interface PollScope {
   scopedPromptIds?: string[];
@@ -309,11 +329,11 @@ export default function useRunWatcher({
 
   const pollExperimentCompletion = useCallback(
     async (
-      experimentIds: string[],
-      totalItems: number,
+      plannedItemsByExperimentId: Record<string, number>,
       curDatasetId: string,
       scope?: PollScope,
     ) => {
+      const experimentIds = Object.keys(plannedItemsByExperimentId);
       const startTime = Date.now();
       const pollKey = `poll-experiment${scope?.pollKeySuffix ?? ""}`;
       const isScoped = !!scope?.scopedPromptIds;
@@ -349,12 +369,14 @@ export default function useRunWatcher({
             ),
           );
 
-          const totalTraces = results.reduce(
-            (sum, exp) => sum + (exp?.trace_count ?? 0),
-            0,
+          const { completed, total: totalItems } = runProgressOf(
+            results.map((experiment, index) => ({
+              experiment,
+              plannedItems: plannedItemsByExperimentId[experimentIds[index]],
+            })),
           );
-          if (!isScoped) {
-            setProgress(Math.min(totalTraces, totalItems), totalItems);
+          if (!isScoped && totalItems > 0) {
+            setProgress(completed, totalItems);
           }
 
           const allExperimentsFinished = results.every((exp) =>
@@ -364,7 +386,6 @@ export default function useRunWatcher({
           if (allExperimentsFinished) {
             // Assertions already done — skip Step 2, finish immediately
             if (!isScoped) {
-              setProgress(totalItems, totalItems);
               // Guarded: a run started inside this window moves the generation, and clearing
               // its progress would empty the new bar and swap the row for the pagination.
               setTimeout(() => {
@@ -382,7 +403,7 @@ export default function useRunWatcher({
           }
 
           // A regular dataset has no assertions to wait for
-          const allTracesCollected = totalTraces >= totalItems;
+          const allTracesCollected = completed >= totalItems;
           if (allTracesCollected && isTestSuite) {
             if (!isScoped) {
               setProgress(totalItems, totalItems);
