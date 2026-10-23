@@ -844,6 +844,9 @@ navigation:
               - page: Pipecat
                 path: ./docs-v2/integrations/pipecat.mdx
                 slug: pipecat
+              - page: Pixeltable
+                path: ./docs-v2/integrations/pixeltable.mdx
+                slug: pixeltable
               - page: Pydantic AI
                 path: ./docs-v2/integrations/pydantic-ai.mdx
                 slug: pydantic-ai
