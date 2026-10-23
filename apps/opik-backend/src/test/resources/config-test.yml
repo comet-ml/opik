@@ -916,19 +916,11 @@ attachmentsConfig:
   stripMinSize: 5000
 
 # Python evaluator configuration
-opikInference:
-  # Default: empty. Tests that need the service point this at WireMock and set the toggle.
-  url: ""
-  apiKey: ""
-  maxRetryAttempts: 2
-  connectTimeout: 2s
-  readTimeout: 5s
-  deadline: 1s
-
 guardrails:
   piiThreshold: 0.5
   topicThreshold: 0.3
   promptInjectionThreshold: 0.4
+  deadline: 1s
 
 pythonEvaluator:
   # Default: http://localhost:8000
@@ -1001,8 +993,8 @@ serviceToggles:
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: "false"
   # Default: false
-  # Description: Whether or not the backend may call the opik-inference service
-  opikInferenceEnabled: "false"
+  # Description: Whether or not the backend runs guardrail checks itself on opik-inference
+  guardrailsValidationsEnabled: "false"
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: "false"

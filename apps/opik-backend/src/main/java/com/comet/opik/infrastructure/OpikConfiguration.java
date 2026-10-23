@@ -234,9 +234,9 @@ public class OpikConfiguration extends JobConfiguration {
     }
 
     @JsonIgnore
-    @AssertTrue(message = "aiLabels.inference.url (AI_LABELS_INFERENCE_URL) and aiLabels.inference.credential (AI_LABELS_INFERENCE_CREDENTIAL) must be set when serviceToggles.guardrailsEnabled (TOGGLE_GUARDRAILS_ENABLED) is true: guardrail checks run on opik-inference")
+    @AssertTrue(message = "aiLabels.inference.url (AI_LABELS_INFERENCE_URL) and aiLabels.inference.credential (AI_LABELS_INFERENCE_CREDENTIAL) must be set when serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED) is true: the backend runs guardrail checks on opik-inference")
     public boolean isGuardrailsInferenceConfigured() {
-        return !serviceToggles.isGuardrailsEnabled()
+        return !serviceToggles.isGuardrailsValidationsEnabled()
                 || (StringUtils.isNotBlank(aiLabels.getInference().getUrl())
                         && StringUtils.isNotBlank(aiLabels.getInference().getCredential()));
     }

@@ -8,12 +8,14 @@ import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.GuardrailsConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.inference.DecideQuestion;
-import com.comet.opik.infrastructure.inference.DecideResponse;
-import com.comet.opik.infrastructure.inference.OpikInferenceService;
+import com.comet.opik.infrastructure.inference.Answer;
+import com.comet.opik.infrastructure.inference.DecideRequest;
+import com.comet.opik.infrastructure.inference.InferenceClient;
+import com.comet.opik.infrastructure.inference.Question;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -26,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,9 +44,9 @@ public interface GuardrailsValidationService {
 }
 
 /**
- * Turns each check into decision questions, sends them all in one decide call and applies the server-side
- * thresholds. The check path has no other engine: if the decision service cannot answer, every check reports an
- * error and passes (FR-7, fail open).
+ * Turns each check into decision questions, sends them all in one decide call through the shared
+ * {@link InferenceClient} and applies the server-side thresholds. The check path has no other engine: if the
+ * decision service cannot answer, every check reports an error and passes (FR-7, fail open).
  */
 @Slf4j
 @Singleton
@@ -52,40 +55,47 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
 
     /** The decision service rejects a longer state; longer texts are cut and every verdict says so. */
     static final int MAX_TEXT_LENGTH = 16_384;
-    /** Questions per decide call, the decision service's limit. */
-    static final int MAX_QUESTIONS = 32;
     static final String MODE_ALLOW = "allow";
     static final String MODE_RESTRICT = "restrict";
     /** FR-5: what a workspace whose organization is not enabled is told. */
     static final String NOT_ENABLED_MESSAGE = "Guardrails is available on the Enterprise plan";
 
-    private final @NonNull OpikInferenceService opikInferenceService;
+    private final @NonNull InferenceClient inferenceClient;
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @Override
     public Mono<GuardrailsValidationResponse> validate(@NonNull GuardrailsValidationRequest request) {
-        featureFlags.checkGuardrailsEnabled();
-        featureFlags.checkOpikInferenceEnabled();
+        featureFlags.checkGuardrailsValidationsEnabled();
         if (!requestContext.get().isGuardrailsEnabled()) {
             throw new ForbiddenException(NOT_ENABLED_MESSAGE);
         }
         var rules = parseRules(request.validations());
-        var questions = new LinkedHashMap<String, DecideQuestion>();
+        var questions = new LinkedHashMap<String, Question>();
         rules.forEach(rule -> questions.putAll(rule.questions()));
-        if (questions.size() > MAX_QUESTIONS) {
+        if (questions.size() > DecideRequest.MAX_QUESTIONS) {
             throw new BadRequestException("The checks need %d questions; at most %d fit in one call"
-                    .formatted(questions.size(), MAX_QUESTIONS));
+                    .formatted(questions.size(), DecideRequest.MAX_QUESTIONS));
         }
         boolean truncated = request.text().length() > MAX_TEXT_LENGTH;
         var state = truncated ? request.text().substring(0, MAX_TEXT_LENGTH) : request.text();
         var thresholds = configuration.getGuardrails();
+        var serviceDeadline = thresholds.getDeadline().toJavaDuration();
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            return opikInferenceService.decide(workspaceId, state, questions)
+            var decideRequest = DecideRequest.builder()
+                    .orgId(workspaceId)
+                    .state(TextNode.valueOf(state))
+                    .questions(questions)
+                    .lane(DecideRequest.REALTIME_LANE)
+                    .deadlineMs(serviceDeadline.toMillis())
+                    .cache(true)
+                    .build();
+            // Twice the service's deadline leaves the client room for one retry within its own.
+            return inferenceClient.decide(decideRequest, Instant.now().plus(serviceDeadline.multipliedBy(2)))
                     .map(response -> toResponse(rules,
-                            rule -> rule.evaluate(response.answers(), thresholds, truncated)))
+                            rule -> rule.evaluate(response.result().answers(), thresholds, truncated)))
                     .onErrorResume(error -> {
                         log.warn("Guardrails check failed open on workspaceId '{}': {}", workspaceId,
                                 error.toString());
@@ -162,14 +172,26 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
         return mode;
     }
 
-    private static DecideResponse.Answer answer(Map<String, DecideResponse.Answer> answers, String questionId) {
+    private static Answer answer(Map<String, Answer> answers, String questionId) {
         return Optional.ofNullable(answers.get(questionId))
                 .orElseThrow(() -> new IllegalStateException(
                         "opik-inference returned no answer for question '%s'".formatted(questionId)));
     }
 
-    private static double yes(Map<String, DecideResponse.Answer> answers, String questionId) {
-        return Optional.ofNullable(answer(answers, questionId).noul()).orElse(0.0);
+    private static double yes(Map<String, Answer> answers, String questionId) {
+        if (answer(answers, questionId) instanceof Answer.NoulAnswer noul) {
+            return noul.noul();
+        }
+        throw new IllegalStateException(
+                "opik-inference answered question '%s' with the wrong type".formatted(questionId));
+    }
+
+    private static Map<String, Double> probabilities(Map<String, Answer> answers, String questionId) {
+        if (answer(answers, questionId) instanceof Answer.ChoiceAnswer choice) {
+            return choice.probabilities();
+        }
+        throw new IllegalStateException(
+                "opik-inference answered question '%s' with the wrong type".formatted(questionId));
     }
 
     private static ObjectNode details(boolean truncated) {
@@ -184,10 +206,9 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
 
         ValidationDescriptor descriptor();
 
-        Map<String, DecideQuestion> questions();
+        Map<String, Question> questions();
 
-        ValidationResult evaluate(Map<String, DecideResponse.Answer> answers, GuardrailsConfig thresholds,
-                boolean truncated);
+        ValidationResult evaluate(Map<String, Answer> answers, GuardrailsConfig thresholds, boolean truncated);
 
         default ValidationResult failOpen(Throwable error) {
             var message = Optional.ofNullable(error.getMessage()).orElse(error.getClass().getSimpleName());
@@ -208,8 +229,8 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
     private record PiiRule(int index, ValidationDescriptor descriptor, List<String> entities) implements Rule {
 
         @Override
-        public Map<String, DecideQuestion> questions() {
-            var questions = new LinkedHashMap<String, DecideQuestion>();
+        public Map<String, Question> questions() {
+            var questions = new LinkedHashMap<String, Question>();
             entities.forEach(entity -> questions.put(questionId(entity), GuardrailQuestions.pii(entity)));
             return questions;
         }
@@ -219,7 +240,7 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
         }
 
         @Override
-        public ValidationResult evaluate(Map<String, DecideResponse.Answer> answers, GuardrailsConfig thresholds,
+        public ValidationResult evaluate(Map<String, Answer> answers, GuardrailsConfig thresholds,
                 boolean truncated) {
             var scores = JsonUtils.createObjectNode();
             var detected = JsonUtils.createObjectNode();
@@ -242,7 +263,7 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
                 Rule {
 
         @Override
-        public Map<String, DecideQuestion> questions() {
+        public Map<String, Question> questions() {
             return Map.of(questionId(), GuardrailQuestions.topic(topics));
         }
 
@@ -251,10 +272,9 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
         }
 
         @Override
-        public ValidationResult evaluate(Map<String, DecideResponse.Answer> answers, GuardrailsConfig thresholds,
+        public ValidationResult evaluate(Map<String, Answer> answers, GuardrailsConfig thresholds,
                 boolean truncated) {
-            var probabilities = Optional.ofNullable(answer(answers, questionId()).probabilities())
-                    .orElse(Map.of());
+            var probabilities = probabilities(answers, questionId());
             var scores = JsonUtils.createObjectNode();
             var matched = JsonUtils.createObjectNode();
             for (var topic : topics) {
@@ -275,7 +295,7 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
     private record InjectionRule(int index, ValidationDescriptor descriptor) implements Rule {
 
         @Override
-        public Map<String, DecideQuestion> questions() {
+        public Map<String, Question> questions() {
             return Map.of(questionId(), GuardrailQuestions.injection());
         }
 
@@ -284,7 +304,7 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
         }
 
         @Override
-        public ValidationResult evaluate(Map<String, DecideResponse.Answer> answers, GuardrailsConfig thresholds,
+        public ValidationResult evaluate(Map<String, Answer> answers, GuardrailsConfig thresholds,
                 boolean truncated) {
             double score = yes(answers, questionId());
             var details = details(truncated);

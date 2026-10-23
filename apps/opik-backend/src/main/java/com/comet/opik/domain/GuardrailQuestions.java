@@ -1,9 +1,12 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.infrastructure.inference.DecideQuestion;
+import com.comet.opik.infrastructure.inference.Question;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import lombok.NonNull;
 
-import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -49,17 +52,30 @@ public final class GuardrailQuestions {
     private GuardrailQuestions() {
     }
 
-    public static DecideQuestion injection() {
-        return DecideQuestion.noul(INJECTION_QUESTION, INJECTION_TRUE, INJECTION_FALSE);
+    public static Question injection() {
+        return Question.NoulQuestion.builder()
+                .instructions(TextNode.valueOf(INJECTION_QUESTION))
+                .criteria(Question.NoulCriteria.builder()
+                        .whenTrue(TextNode.valueOf(INJECTION_TRUE))
+                        .whenFalse(TextNode.valueOf(INJECTION_FALSE))
+                        .build())
+                .build();
     }
 
-    public static DecideQuestion topic(@NonNull List<String> topics) {
-        var options = new ArrayList<>(topics);
-        options.add(NONE_OF_THESE);
-        return DecideQuestion.choice(TOPIC_QUESTION, options);
+    /** The options carry no descriptions: the option text itself is what the model reads. */
+    public static Question topic(@NonNull List<String> topics) {
+        var criteria = new LinkedHashMap<String, JsonNode>();
+        topics.forEach(topic -> criteria.put(topic, NullNode.getInstance()));
+        criteria.put(NONE_OF_THESE, NullNode.getInstance());
+        return Question.ChoiceQuestion.builder()
+                .instructions(TextNode.valueOf(TOPIC_QUESTION))
+                .criteria(criteria)
+                .build();
     }
 
-    public static DecideQuestion pii(@NonNull String entity) {
-        return DecideQuestion.noul("Does this text contain %s?".formatted(PII_DESCRIPTIONS.get(entity)));
+    public static Question pii(@NonNull String entity) {
+        return Question.NoulQuestion.builder()
+                .instructions(TextNode.valueOf("Does this text contain %s?".formatted(PII_DESCRIPTIONS.get(entity))))
+                .build();
     }
 }

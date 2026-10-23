@@ -92,12 +92,12 @@ class GuardrailsValidationsResourceTest {
                 .runtimeInfo(wireMock.runtimeInfo())
                 .redisUrl(REDIS.getRedisURI())
                 .customConfigs(List.of(
-                        new TestDropwizardAppExtensionUtils.CustomConfig("serviceToggles.guardrailsEnabled", "true"),
-                        new TestDropwizardAppExtensionUtils.CustomConfig("serviceToggles.opikInferenceEnabled",
+                        new TestDropwizardAppExtensionUtils.CustomConfig("serviceToggles.guardrailsValidationsEnabled",
                                 "true"),
-                        new TestDropwizardAppExtensionUtils.CustomConfig("opikInference.url",
+                        new TestDropwizardAppExtensionUtils.CustomConfig("aiLabels.inference.url",
                                 wireMock.runtimeInfo().getHttpBaseUrl()),
-                        new TestDropwizardAppExtensionUtils.CustomConfig("opikInference.apiKey", INFERENCE_API_KEY)))
+                        new TestDropwizardAppExtensionUtils.CustomConfig("aiLabels.inference.credential",
+                                INFERENCE_API_KEY)))
                 .build());
     }
 
