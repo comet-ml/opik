@@ -1,4 +1,4 @@
-export { test, expect } from './openrouter-vision-models.fixture';
+export { test, expect } from './gemini-thinking-stub.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -509,6 +509,25 @@ export {
   IMAGE_ONLY_PROMPT_IMAGE_URL,
   IMAGE_ONLY_PROMPT_CONTENT,
 } from './image-only-prompt.fixture';
+export type {
+  OpenAiStreamToolsStubRef,
+  OpenAiStreamToolsStubFixtures,
+} from './openai-stream-tools-stub.fixture';
+export {
+  STREAM_TOOLS_MODEL,
+  STREAM_TOOLS_PROMPT_TOKENS,
+  STREAM_TOOLS_COMPLETION_TOKENS,
+  STREAM_TOOL_CALLS,
+} from './openai-stream-tools-stub.fixture';
+export type {
+  GeminiThinkingStubRef,
+  GeminiThinkingStubFixtures,
+} from './gemini-thinking-stub.fixture';
+export {
+  GEMINI_STUB_MODEL,
+  GEMINI_STUB_USAGE,
+  GEMINI_STUB_TEXT,
+} from './gemini-thinking-stub.fixture';
 export type {
   OpenRouterVisionModelsRef,
   OpenRouterVisionModelsFixtures,

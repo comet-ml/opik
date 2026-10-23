@@ -18,16 +18,21 @@
     "opik": "^2.2.74"
   },
   "devDependencies": {
+    "@google/genai": "^1.33.0",
     "@playwright/test": "^1.64.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^26.6.2",
     "allure-playwright": "^3.13.0",
     "openai": "^6.49.0",
-    "opik-openai": "^2.2.94",
+    "opik-gemini": "^2.2.119",
+    "opik-openai": "^2.2.119",
     "typescript": "^7.0.2"
   },
   "overrides": {
     "opik-openai": {
+      "opik": "$opik"
+    },
+    "opik-gemini": {
       "opik": "$opik"
     }
   }
