@@ -1,5 +1,7 @@
 import logging
 import pytest
+from opik.evaluation.models import models_factory
+from opik.evaluation.models.litellm import util as litellm_util
 from opik.evaluation.suite_evaluators import llm_judge
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 
@@ -78,7 +80,6 @@ class TestLLMJudgeToConfig:
         assert config_dict["model"] == {
             "temperature": 0.0,
             "seed": 123,
-            "customParameters": {"reasoning_effort": "low"},
         }
         assert config_dict["variables"] == {"input": "input", "output": "output"}
         # Schema items: name, type, description (matching backend's LlmAsJudgeOutputSchema)
@@ -126,6 +127,59 @@ class TestLLMJudgeToConfig:
         assert "schema_" not in config_dict
 
 
+class TestLLMJudgeReasoningEffort:
+    @pytest.fixture
+    def model_kwargs(self, monkeypatch):
+        captured = {}
+
+        def fake_get(model_name, track=True, **kwargs):
+            captured.update(kwargs)
+            return object()
+
+        monkeypatch.setattr(models_factory, "get", fake_get)
+        return captured
+
+    def test_init__model_takes_an_effort__defaults_to_low(
+        self, monkeypatch, model_kwargs
+    ):
+        monkeypatch.setattr(litellm_util, "takes_reasoning_effort", lambda _: True)
+
+        llm_judge.LLMJudge(assertions=["ok"], model="gpt-6-luna", track=False)
+
+        assert model_kwargs["reasoning_effort"] == "low"
+
+    def test_init__model_without_reasoning__sends_no_effort(
+        self, monkeypatch, model_kwargs
+    ):
+        monkeypatch.setattr(litellm_util, "takes_reasoning_effort", lambda _: False)
+
+        llm_judge.LLMJudge(assertions=["ok"], model="ollama/qwen2.5:1.5b", track=False)
+
+        assert "reasoning_effort" not in model_kwargs
+
+    def test_init__explicit_effort__sent_whatever_the_model(
+        self, monkeypatch, model_kwargs
+    ):
+        monkeypatch.setattr(litellm_util, "takes_reasoning_effort", lambda _: False)
+
+        llm_judge.LLMJudge(
+            assertions=["ok"], model="gpt-4o", reasoning_effort="high", track=False
+        )
+
+        assert model_kwargs["reasoning_effort"] == "high"
+
+    def test_to_config__explicit_effort__stored_for_the_backend_judge(self):
+        evaluator = llm_judge.LLMJudge(
+            assertions=["ok"], reasoning_effort="medium", track=False
+        )
+
+        config_dict = evaluator.to_config().model_dump(by_alias=True, exclude_none=True)
+
+        assert config_dict["model"] == {
+            "customParameters": {"reasoning_effort": "medium"}
+        }
+
+
 class TestLLMJudgeSerializedFormat:
     def test_to_config__serialized_json__matches_expected_format(self):
         """Shows the full serialized JSON that gets stored in the backend."""
@@ -148,7 +202,6 @@ class TestLLMJudgeSerializedFormat:
             "model": {
                 "temperature": 0.0,
                 "seed": 42,
-                "customParameters": {"reasoning_effort": "low"},
             },
             "messages": [
                 {
@@ -289,7 +342,6 @@ class TestLLMJudgeFromConfig:
         assert new_config_dict["model"] == {
             "temperature": 0.7,
             "seed": 123,
-            "customParameters": {"reasoning_effort": "low"},
         }
 
 
