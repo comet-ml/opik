@@ -9,7 +9,7 @@ import {
 } from "@/ui/dropdown-menu";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { LLM_JUDGE, LLMPromptTemplate } from "@/types/llm";
-import MenuOptionItems from "@/v2/pages-shared/CreateMenuButton/MenuOptionItems";
+import MenuOptionItems from "@/shared/MenuOptionItems/MenuOptionItems";
 import { getJudgeTemplateOptions } from "@/v2/pages-shared/automations/RuleEditorPanel/judgeTemplates";
 
 type JudgeTemplateMenuProps = {

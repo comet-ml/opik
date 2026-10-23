@@ -202,7 +202,7 @@ GEMINI_DROPDOWN_EXCLUDE = [
     r"^gemini-pro-vision$",
     r"^gemini-1\.0-",
     r"-latest$",
-    r"^nano-banana",
+    r"nano-banana",              # unanchored: also gemini-nano-banana-*, image models that 500 on chat requests
     r"-image",
     r"-tts",
     r"-exp$",                    # experimental, removed without a deprecation date
@@ -340,24 +340,36 @@ def _deduplicate_by_base(entries: list[ModelEntry]) -> list[ModelEntry]:
     return result
 
 
-def build_deprecated_set(prices: dict) -> set[str]:
-    """Build a set of model values with deprecation_date in the past."""
+# A date belongs to the provider LiteLLM files the row under. Matched on the bare id, Vertex AI's
+# "gemini-2.5-flash" row hid the Gemini API model and DeepSeek's own "deepseek/deepseek-chat" hid OpenRouter's.
+def _deprecated_value(key: str, litellm_provider: str) -> tuple[str, str] | None:
+    if litellm_provider in ("openai", "text-completion-openai"):
+        return "openai", key.removeprefix("openai/")
+    if litellm_provider == "anthropic":
+        return "anthropic", key.removeprefix("anthropic/")
+    if litellm_provider == "gemini":
+        return "gemini", key.removeprefix("gemini/")
+    if litellm_provider == "openrouter":
+        return "openrouter", key.removeprefix("openrouter/")
+    if key.startswith("vertex_ai/"):
+        return "vertexai", key
+    return None
+
+
+def build_deprecated_by_provider(prices: dict) -> dict[str, set[str]]:
     today = date.today()
-    deprecated = set()
+    deprecated: dict[str, set[str]] = {}
     for key, info in prices.items():
-        if not isinstance(info, dict):
-            continue
-        dep = info.get("deprecation_date")
-        if not dep:
+        if not isinstance(info, dict) or not info.get("deprecation_date"):
             continue
         try:
-            if date.fromisoformat(dep) <= today:
-                deprecated.add(key)
-                for prefix in ("gemini/", "anthropic/", "openai/", "vertex_ai/", "openrouter/"):
-                    if key.startswith(prefix):
-                        deprecated.add(key.removeprefix(prefix))
+            if date.fromisoformat(info["deprecation_date"]) > today:
+                continue
         except ValueError:
-            pass
+            continue
+        scoped = _deprecated_value(key, str(info.get("litellm_provider", "")))
+        if scoped:
+            deprecated.setdefault(scoped[0], set()).add(scoped[1])
     return deprecated
 
 
@@ -1759,7 +1771,7 @@ def main():
 
     prices = load_model_prices()
     so_lookup = _build_structured_output_lookup(prices)
-    deprecated = build_deprecated_set(prices)
+    deprecated = build_deprecated_by_provider(prices)
 
     # 1. Fetch sources — prefer provider APIs when keys are available
 
@@ -1890,7 +1902,7 @@ def main():
     # Dropdown (src/constants/providerModels.ts) gets curated subset — filtered and sorted
     dropdown_by_provider = {
         provider: filter_for_dropdown(
-            entries, provider, deprecated,
+            entries, provider, deprecated.get(provider),
             served_ids=openrouter_picker_ids if provider == "openrouter" else None,
         )
         for provider, entries in models_by_provider.items()
@@ -1944,7 +1956,7 @@ def main():
         total_stale += len(stale)
         entries = changes["entries"]
         dropdown = dropdown_by_provider[provider]
-        dep_in_enum = sorted(e.value for e in entries if e.value in deprecated)
+        dep_in_enum = sorted(e.value for e in entries if e.value in deprecated.get(provider, set()))
         total_deprecated += len(dep_in_enum)
         print(f"### {provider.title()}")
         if added:

@@ -2741,12 +2741,14 @@ describe("an OpenAI reasoning model reached through a custom gateway", () => {
 describe("an OpenAI or Gemini model reached through OpenRouter", () => {
   const SAMPLING: SamplingParams = { temperature: 0.7, topP: 0.9 };
 
-  // Out of the picker because OpenRouter no longer serves them on chat completions. The registry still
-  // lists them, which is how the app resolves a stored prompt's id to OpenRouter.
+  // Out of the picker because OpenRouter no longer serves them on chat completions, or their deprecation
+  // date has passed. The registry still lists them, which is how the app resolves a stored prompt's id to
+  // OpenRouter.
   const OUT_OF_PICKER_OPEN_ROUTER_MODELS = [
     PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH,
     PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW_BATCH,
     PROVIDER_MODEL_TYPE.OPENAI_GPT_5_CHAT,
+    PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH,
   ];
 
   beforeEach(() => {
@@ -3711,6 +3713,17 @@ describe("OpenRouter parameters follow the model's OpenRouter lists", () => {
   };
 
   beforeEach(() => {
+    const snapshot = getLatestProviderModelsSnapshot();
+    setLatestProviderModelsSnapshot({
+      ...snapshot,
+      [PROVIDER_TYPE.OPEN_ROUTER]: [
+        ...(snapshot[PROVIDER_TYPE.OPEN_ROUTER] ?? []),
+        {
+          value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH,
+          label: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH,
+        },
+      ],
+    });
     setLatestModelFlags(
       new Map(
         Object.entries(LISTS).map(([model, lists]) => [
