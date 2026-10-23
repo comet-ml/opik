@@ -374,6 +374,27 @@ describe("PlaygroundOutputScoresContainer", () => {
       expect(screen.getByTestId("metric-names")).toHaveTextContent("Relevance");
     });
 
+    // A row the run never reached has no trace to correct the picker, which can change once the
+    // run is over, so its tags must not follow it.
+    it("should not take the picker's picks for a row that was not run", () => {
+      rulesState.content = [
+        makeRule("r1", ["Relevance"], {
+          trigger_scope: EVAL_TRIGGER_SCOPE.production,
+        }),
+        makeRule("r2", ["Helpfulness"], {
+          trigger_scope: EVAL_TRIGGER_SCOPE.experiment,
+        }),
+      ];
+      rulesState.total = 2;
+      pickerRuleIds = ["r1"];
+
+      render(<PlaygroundOutputScoresContainer traceId={null} notRun />);
+
+      expect(screen.getByTestId("metric-names")).toHaveTextContent(
+        /^Helpfulness$/,
+      );
+    });
+
     it("should replace the picker's picks with the trace's once it loads", () => {
       rulesState.content = [
         makeRule("r1", ["Relevance"], {

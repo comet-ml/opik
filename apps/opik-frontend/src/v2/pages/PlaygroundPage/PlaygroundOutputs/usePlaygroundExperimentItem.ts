@@ -31,7 +31,7 @@ const hasFinished = (experiment: Experiment | undefined) =>
   (experiment?.status === EXPERIMENT_STATUS.CANCELLED &&
     isPastWatchAge(experiment));
 
-type Observation = { experimentId: string; at: number } | null;
+type Observation = { experimentId: string; observedAt: number } | null;
 
 // The read that first saw `seen` hold. Pinned rather than taken fresh: the run is read again
 // whenever a cell scrolls back, and anything else watching it can refresh it too, so a reference
@@ -42,18 +42,18 @@ const pinObservation = (
   observed: MutableRefObject<Observation>,
   seen: boolean,
   experimentId: string | undefined,
-  at: number,
+  observedAt: number,
 ) => {
   if (!seen || observed.current?.experimentId !== experimentId) {
     observed.current = null;
   }
   if (seen && experimentId) {
-    observed.current ??= { experimentId, at };
+    observed.current ??= { experimentId, observedAt };
   }
 };
 
 const wasReadAfter = (observed: Observation, rowsAt: number) =>
-  observed !== null && rowsAt >= observed.at;
+  observed !== null && rowsAt >= observed.observedAt;
 
 export type PlaygroundExperimentItem = {
   /** False while the row is still being processed, which is what the cell shows a loader for. */

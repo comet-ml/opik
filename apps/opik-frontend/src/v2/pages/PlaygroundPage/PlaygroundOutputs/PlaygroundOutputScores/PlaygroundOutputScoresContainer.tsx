@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useEffect } from "react";
 import get from "lodash/get";
+import isArray from "lodash/isArray";
 
 import useTraceById from "@/api/traces/useTraceById";
 import useRulesList from "@/api/automations/useRulesList";
@@ -24,7 +25,7 @@ const scoreNamesOf = (rules: EvaluatorsRule[]) =>
 
 const pickedRuleIdsOf = (trace: Trace): string[] => {
   const picked: unknown = get(trace.metadata, "selected_rule_ids");
-  return Array.isArray(picked) ? picked : [];
+  return isArray(picked) ? picked : [];
 };
 
 const scoringRulesOf = (rules: EvaluatorsRule[], pickedRuleIds: string[]) => {
@@ -117,17 +118,16 @@ const PlaygroundOutputScoresContainer: React.FC<
   );
 
   // The picker stands in until the trace loads, so picked metrics show pending from the start.
-  // It never affects when polling stops.
-  const expectedMetricNames = useMemo(
-    () =>
-      scoreNamesOf(
-        scoringRulesOf(
-          rules,
-          trace ? pickedRuleIdsOf(trace) : pickerRuleIds ?? [],
-        ),
-      ),
-    [rules, trace, pickerRuleIds],
-  );
+  // It never affects when polling stops. A row that was not run never gets a trace, and the
+  // picker is free to change once the run is over, so it does not stand in there.
+  const expectedMetricNames = useMemo(() => {
+    const pickedRuleIds = trace
+      ? pickedRuleIdsOf(trace)
+      : notRun
+        ? []
+        : pickerRuleIds ?? [];
+    return scoreNamesOf(scoringRulesOf(rules, pickedRuleIds));
+  }, [rules, trace, notRun, pickerRuleIds]);
 
   const metricScores = useMemo(() => {
     const scores: Record<string, ScoreData> = {};
