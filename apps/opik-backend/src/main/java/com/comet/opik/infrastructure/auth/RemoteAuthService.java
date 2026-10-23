@@ -290,7 +290,8 @@ class RemoteAuthService implements AuthService {
                 response -> ValidatedAuthCredentials.from(verifyResponse(response), grantedPermissions(
                         () -> workspacePermissionsService.getPermissionsByUsername(token.userName(),
                                 token.workspaceName()))));
-        setCredentialIntoContext(credentials, token.workspaceName(), null);
+        setCredentialIntoContext(credentials, token.workspaceName(), null,
+                new PlatformCredential(PlatformCredential.Type.OAUTH_USER, token.userName()));
     }
 
     @Override
@@ -483,7 +484,8 @@ class RemoteAuthService implements AuthService {
                 response -> ValidatedAuthCredentials.from(verifyResponse(response), grantedPermissions(
                         () -> workspacePermissionsService.getPermissionsBySession(sessionToken.getValue(),
                                 workspaceName))));
-        setCredentialIntoContext(credentials, workspaceName, sessionToken.getValue());
+        setCredentialIntoContext(credentials, workspaceName, sessionToken.getValue(),
+                new PlatformCredential(PlatformCredential.Type.SESSION, sessionToken.getValue()));
     }
 
     private void authenticateUsingApiKey(HttpHeaders headers, String workspaceName, String path,
@@ -498,7 +500,8 @@ class RemoteAuthService implements AuthService {
             log.debug("Caching user and workspace id for API key");
             cacheService.cache(apiKey, workspaceName, requiredPermissions, credentials.toAuthCredentials());
         }
-        setCredentialIntoContext(credentials, workspaceName, apiKey);
+        setCredentialIntoContext(credentials, workspaceName, apiKey,
+                new PlatformCredential(PlatformCredential.Type.API_KEY, apiKey));
     }
 
     private ValidatedAuthCredentials validateApiKeyAndGetCredentials(String workspaceName, String apiKey, String path,
@@ -596,7 +599,8 @@ class RemoteAuthService implements AuthService {
     }
 
     private void setCredentialIntoContext(
-            ValidatedAuthCredentials credentials, String fallbackWorkspaceName, String apiKey) {
+            ValidatedAuthCredentials credentials, String fallbackWorkspaceName, String apiKey,
+            PlatformCredential platformCredential) {
         var workspaceName = Optional.ofNullable(credentials.workspaceName()).orElse(fallbackWorkspaceName);
         log.debug(
                 "setting credentials into context, userName: '{}', workspaceId: '{}', workspaceName: '{}', quotas: '{}'",
@@ -606,6 +610,7 @@ class RemoteAuthService implements AuthService {
         requestContext.get().setWorkspaceName(workspaceName);
         requestContext.get().setQuotas(credentials.quotas());
         requestContext.get().setApiKey(apiKey);
+        requestContext.get().setPlatformCredential(platformCredential);
         requestContext.get().setPermissions(credentials.permissions() == null
                 ? Set.of()
                 : Set.copyOf(credentials.permissions()));

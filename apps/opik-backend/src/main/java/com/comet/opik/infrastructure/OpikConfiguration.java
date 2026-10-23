@@ -227,6 +227,9 @@ public class OpikConfiguration extends JobConfiguration {
     @Valid @NotNull @JsonProperty
     private AiLabelsConfig aiLabels = new AiLabelsConfig();
 
+    @Valid @NotNull @JsonProperty
+    private WorkspaceFeaturesConfig workspaceFeatures = new WorkspaceFeaturesConfig();
+
     @JsonIgnore
     @AssertTrue(message = "alertsEventBridge.eventBus (ALERTS_EVENTBRIDGE_EVENT_BUS) must be set when serviceToggles.eventBridgeAlertsEnabled (ALERTS_EVENTBRIDGE_ENABLED) is true")
     public boolean isAlertsEventBridgeBusConfigured() {

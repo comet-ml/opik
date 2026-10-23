@@ -1,7 +1,7 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.AuthenticationConfig;
+import com.comet.opik.infrastructure.auth.PlatformCredential;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.ws.rs.client.Client;
@@ -26,12 +26,11 @@ import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_USERNAME_HEADE
 
 /**
  * Asks the platform's workspace features API on the caller's behalf, with the credential the caller authenticated
- * with, and caches each answer per workspace for the authentication cache's TTL. Enablement belongs to the
- * workspace's organization, not to the caller, and the caller's access to the workspace is already settled by the
- * time an endpoint asks.
+ * with, and caches each answer per workspace. Enablement belongs to the workspace's organization, not to the caller,
+ * and the caller's access to the workspace is already settled by the time an endpoint asks.
  * <p>
  * A lookup that fails reads as not enabled and is not cached, so an outage withholds a feature rather than grants
- * it, and the next request asks again.
+ * it, and the next request asks again. The cache is best effort: when it cannot answer, the platform is asked.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -49,50 +48,63 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
     private final @NonNull Client client;
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
     private final @NonNull RedissonReactiveClient redissonClient;
-    private final int cacheTtlInSeconds;
+    private final @NonNull Duration cacheTtl;
 
     @Override
     public boolean isEnabled(@NonNull RequestContext caller, @NonNull WorkspaceFeature feature) {
-        if (!isPlatformUser(caller)) {
+        var credential = caller.getPlatformCredential();
+        // A device token or a public read was not authenticated by the platform, so there is nobody to ask for.
+        if (credential == null || StringUtils.isAnyBlank(caller.getWorkspaceId(), caller.getWorkspaceName())) {
             return false;
         }
+
         var cacheKey = CACHE_KEY_FORMAT.formatted(caller.getWorkspaceId(), feature.getValue());
-        if (cacheTtlInSeconds > 0) {
-            String cached = redissonClient.<String>getBucket(cacheKey, StringCodec.INSTANCE).get().block();
-            if (cached != null) {
-                return Boolean.parseBoolean(cached);
-            }
+        String cached = readCache(cacheKey);
+        if (cached != null) {
+            return Boolean.parseBoolean(cached);
         }
 
         boolean enabled;
         try {
-            enabled = lookUp(caller, feature);
+            enabled = lookUp(caller.getWorkspaceName(), credential, feature);
         } catch (RuntimeException lookupFailed) {
             log.warn("Could not resolve feature '{}' for workspaceId '{}', treating it as not enabled",
                     feature.getValue(), caller.getWorkspaceId(), lookupFailed);
             return false;
         }
 
-        if (cacheTtlInSeconds > 0) {
-            redissonClient.<String>getBucket(cacheKey, StringCodec.INSTANCE)
-                    .set(Boolean.toString(enabled), Duration.ofSeconds(cacheTtlInSeconds))
-                    .block();
-        }
+        writeCache(cacheKey, enabled);
         return enabled;
     }
 
-    /** A device token or a public read names no platform user, so there is nobody to ask on behalf of. */
-    private static boolean isPlatformUser(RequestContext caller) {
-        return caller.getCipxDeviceId() == null
-                && caller.getVisibility() != Visibility.PUBLIC
-                && StringUtils.isNotBlank(caller.getWorkspaceId())
-                && StringUtils.isNotBlank(caller.getWorkspaceName())
-                && StringUtils.isNotBlank(caller.getUserName());
+    private String readCache(String cacheKey) {
+        if (cacheTtl.isZero()) {
+            return null;
+        }
+        try {
+            return redissonClient.<String>getBucket(cacheKey, StringCodec.INSTANCE).get().block();
+        } catch (RuntimeException cacheFailed) {
+            log.warn("Could not read the workspace feature cache, asking the platform", cacheFailed);
+            return null;
+        }
     }
 
-    private boolean lookUp(RequestContext caller, WorkspaceFeature feature) {
-        var body = Entity.json(new WorkspaceFeaturesRequest(caller.getWorkspaceName(), List.of(feature.getValue())));
-        try (var response = requestFor(caller).post(body)) {
+    private void writeCache(String cacheKey, boolean enabled) {
+        if (cacheTtl.isZero()) {
+            return;
+        }
+        try {
+            redissonClient.<String>getBucket(cacheKey, StringCodec.INSTANCE)
+                    .set(Boolean.toString(enabled), cacheTtl)
+                    .block();
+        } catch (RuntimeException cacheFailed) {
+            log.warn("Could not write the workspace feature cache", cacheFailed);
+        }
+    }
+
+    private boolean lookUp(String workspaceName, PlatformCredential credential, WorkspaceFeature feature) {
+        var body = Entity.json(new WorkspaceFeaturesRequest(workspaceName, List.of(feature.getValue())));
+        try (var response = requestFor(credential).post(body)) {
             if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL) {
                 throw new IllegalStateException(
                         "the platform answered the workspace features call with status '%d'"
@@ -103,24 +115,15 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
         }
     }
 
-    /**
-     * The same credential the caller authenticated with. RemoteAuthService keeps it as {@code apiKey}: the api key
-     * itself, which is also the request's Authorization header, or the session token; OAuth callers have none and
-     * are named by user.
-     */
-    private Invocation.Builder requestFor(RequestContext caller) {
-        String credential = caller.getApiKey();
-        if (credential == null) {
-            return featuresRequest("workspace-features-by-username").header(OAUTH_USERNAME_HEADER,
-                    caller.getUserName());
-        }
-        String authorization = caller.getHeaders() == null
-                ? null
-                : caller.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-        if (credential.equals(authorization)) {
-            return featuresRequest("workspace-features").header(HttpHeaders.AUTHORIZATION, credential);
-        }
-        return featuresRequest("workspace-features-session").cookie(RequestContext.SESSION_COOKIE, credential);
+    private Invocation.Builder requestFor(PlatformCredential credential) {
+        return switch (credential.type()) {
+            case API_KEY -> featuresRequest("workspace-features")
+                    .header(HttpHeaders.AUTHORIZATION, credential.value());
+            case SESSION -> featuresRequest("workspace-features-session")
+                    .cookie(RequestContext.SESSION_COOKIE, credential.value());
+            case OAUTH_USER -> featuresRequest("workspace-features-by-username")
+                    .header(OAUTH_USERNAME_HEADER, credential.value());
+        };
     }
 
     private Invocation.Builder featuresRequest(String path) {

@@ -7,7 +7,9 @@ import jakarta.ws.rs.core.MultivaluedMap;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.util.List;
 import java.util.Set;
@@ -64,6 +66,15 @@ public class RequestContext {
      */
     @Builder.Default
     private Set<String> permissions = Set.of();
+
+    /**
+     * How the platform authenticated this caller, for a later platform call made on the caller's behalf. Null when
+     * authentication is off or the platform did not authenticate the caller (device tokens, public reads). Left out
+     * of equality and toString: it repeats {@link #apiKey} or {@link #userName}, and its value is a secret.
+     */
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private PlatformCredential platformCredential;
 
     public void setWorkspaceFallbackFor(String entityType, String entityName) {
         this.workspaceFallbackMessage = WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted(entityType, entityName);

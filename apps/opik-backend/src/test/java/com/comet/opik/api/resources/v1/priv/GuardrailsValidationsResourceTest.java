@@ -98,8 +98,7 @@ class GuardrailsValidationsResourceTest {
                         new TestDropwizardAppExtensionUtils.CustomConfig("serviceToggles.guardrailsValidationsEnabled",
                                 "true"),
                         // Caching on, so the tests see how often the platform is really asked.
-                        new TestDropwizardAppExtensionUtils.CustomConfig(
-                                "authentication.apiKeyResolutionCacheTTLInSec", "60"),
+                        new TestDropwizardAppExtensionUtils.CustomConfig("workspaceFeatures.cacheTtl", "60s"),
                         new TestDropwizardAppExtensionUtils.CustomConfig("aiLabels.inference.url",
                                 wireMock.runtimeInfo().getHttpBaseUrl()),
                         new TestDropwizardAppExtensionUtils.CustomConfig("aiLabels.inference.credential",

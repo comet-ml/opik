@@ -3,16 +3,22 @@ package com.comet.opik.domain;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.AuthenticationConfig;
+import com.comet.opik.infrastructure.auth.PlatformCredential;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MultivaluedHashMap;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.mockito.Mockito;
+import org.redisson.api.RBucketReactive;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.client.RedisException;
+import org.redisson.client.codec.Codec;
+import reactor.core.publisher.Mono;
+
+import java.time.Duration;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_USERNAME_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -24,6 +30,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class RemoteWorkspaceFeaturesServiceTest {
@@ -32,15 +41,16 @@ class RemoteWorkspaceFeaturesServiceTest {
     private static final String ENABLED = "{\"workspaceName\":\"team-a\",\"features\":{\"guardrails\":true}}";
 
     private WireMockUtils.WireMockRuntime wireMock;
+    private AuthenticationConfig.UrlConfig platformUrl;
     private RemoteWorkspaceFeaturesService service;
 
     @BeforeAll
     void setUpAll() {
         wireMock = WireMockUtils.startWireMock();
+        platformUrl = new AuthenticationConfig.UrlConfig(wireMock.runtimeInfo().getHttpBaseUrl());
         // No cache: every call reaches the platform, so each credential path is observable.
-        service = new RemoteWorkspaceFeaturesService(TestHttpClientUtils.client(),
-                new AuthenticationConfig.UrlConfig(wireMock.runtimeInfo().getHttpBaseUrl()),
-                Mockito.mock(RedissonReactiveClient.class), 0);
+        service = new RemoteWorkspaceFeaturesService(TestHttpClientUtils.client(), platformUrl,
+                Mockito.mock(RedissonReactiveClient.class), Duration.ZERO);
     }
 
     @AfterAll
@@ -61,7 +71,8 @@ class RemoteWorkspaceFeaturesServiceTest {
                 .withRequestBody(matchingJsonPath("$.features[0]", equalTo("guardrails")))
                 .willReturn(okJson(ENABLED)));
 
-        assertThat(service.isEnabled(caller("key-1", "key-1"), WorkspaceFeature.GUARDRAILS)).isTrue();
+        assertThat(service.isEnabled(caller(PlatformCredential.Type.API_KEY, "key-1"), WorkspaceFeature.GUARDRAILS))
+                .isTrue();
     }
 
     @Test
@@ -70,7 +81,8 @@ class RemoteWorkspaceFeaturesServiceTest {
                 .withHeader(HttpHeaders.COOKIE, containing(RequestContext.SESSION_COOKIE + "=session-1"))
                 .willReturn(okJson(ENABLED)));
 
-        assertThat(service.isEnabled(caller("session-1", null), WorkspaceFeature.GUARDRAILS)).isTrue();
+        assertThat(service.isEnabled(caller(PlatformCredential.Type.SESSION, "session-1"),
+                WorkspaceFeature.GUARDRAILS)).isTrue();
     }
 
     @Test
@@ -79,8 +91,8 @@ class RemoteWorkspaceFeaturesServiceTest {
                 .withHeader(OAUTH_USERNAME_HEADER, equalTo("user-1"))
                 .willReturn(okJson(ENABLED)));
 
-        assertThat(service.isEnabled(caller(null, "Bearer some-oauth-token"), WorkspaceFeature.GUARDRAILS))
-                .isTrue();
+        assertThat(service.isEnabled(caller(PlatformCredential.Type.OAUTH_USER, "user-1"),
+                WorkspaceFeature.GUARDRAILS)).isTrue();
     }
 
     @Test
@@ -92,30 +104,48 @@ class RemoteWorkspaceFeaturesServiceTest {
                 .withHeader(HttpHeaders.AUTHORIZATION, equalTo("key-old"))
                 .willReturn(okJson("{\"workspaceName\":\"team-a\",\"features\":{}}")));
 
-        assertThat(service.isEnabled(caller("key-500", "key-500"), WorkspaceFeature.GUARDRAILS)).isFalse();
-        assertThat(service.isEnabled(caller("key-old", "key-old"), WorkspaceFeature.GUARDRAILS)).isFalse();
+        assertThat(service.isEnabled(caller(PlatformCredential.Type.API_KEY, "key-500"),
+                WorkspaceFeature.GUARDRAILS)).isFalse();
+        assertThat(service.isEnabled(caller(PlatformCredential.Type.API_KEY, "key-old"),
+                WorkspaceFeature.GUARDRAILS)).isFalse();
     }
 
     @Test
-    void deviceTokenCallerIsNotAsked() {
-        var caller = caller("key-1", "key-1");
-        caller.setCipxDeviceId("device-1");
+    void callerThePlatformDidNotAuthenticateIsNotAsked() {
+        var deviceToken = RequestContext.builder()
+                .userName("device-user")
+                .workspaceId("workspace-id-1")
+                .workspaceName(WORKSPACE_NAME)
+                .cipxDeviceId("device-1")
+                .build();
 
-        assertThat(service.isEnabled(caller, WorkspaceFeature.GUARDRAILS)).isFalse();
+        assertThat(service.isEnabled(deviceToken, WorkspaceFeature.GUARDRAILS)).isFalse();
         wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/opik/workspace-features")));
     }
 
-    private static RequestContext caller(String credential, String authorizationHeader) {
-        var headers = new MultivaluedHashMap<String, String>();
-        if (authorizationHeader != null) {
-            headers.putSingle(HttpHeaders.AUTHORIZATION, authorizationHeader);
-        }
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void cacheFailureFallsBackToThePlatformAndStillAnswers() {
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features")).willReturn(okJson(ENABLED)));
+        var redis = Mockito.mock(RedissonReactiveClient.class);
+        RBucketReactive bucket = Mockito.mock(RBucketReactive.class);
+        when(redis.getBucket(anyString(), any(Codec.class))).thenReturn(bucket);
+        when(bucket.get()).thenReturn(Mono.error(new RedisException("cache down")));
+        when(bucket.set(any(), any(Duration.class))).thenReturn(Mono.error(new RedisException("cache down")));
+        var cached = new RemoteWorkspaceFeaturesService(TestHttpClientUtils.client(), platformUrl, redis,
+                Duration.ofSeconds(5));
+
+        assertThat(cached.isEnabled(caller(PlatformCredential.Type.API_KEY, "key-1"), WorkspaceFeature.GUARDRAILS))
+                .isTrue();
+        wireMock.server().verify(1, postRequestedFor(urlPathEqualTo("/opik/workspace-features")));
+    }
+
+    private static RequestContext caller(PlatformCredential.Type type, String credential) {
         return RequestContext.builder()
                 .userName("user-1")
                 .workspaceId("workspace-id-1")
                 .workspaceName(WORKSPACE_NAME)
-                .apiKey(credential)
-                .headers(headers)
+                .platformCredential(new PlatformCredential(type, credential))
                 .build();
     }
 }
