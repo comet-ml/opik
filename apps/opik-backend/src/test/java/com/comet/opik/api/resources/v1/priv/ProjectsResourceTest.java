@@ -23,6 +23,7 @@ import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.metrics.KpiCardRequest;
+import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.BigDecimalCollectors;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -41,6 +42,7 @@ import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
 import com.comet.opik.api.resources.utils.traces.TraceDBUtils;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
@@ -198,6 +200,7 @@ class ProjectsResourceTest {
     private SpanResourceClient spanResourceClient;
     private ProjectResourceClient projectResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
+    private WorkspaceResourceClient workspaceResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
 
     @BeforeAll
@@ -215,6 +218,7 @@ class ProjectsResourceTest {
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
         this.guardrailsResourceClient = new GuardrailsResourceClient(this.client, baseURI);
+        this.workspaceResourceClient = new WorkspaceResourceClient(this.client, baseURI, factory);
         this.guardrailsGenerator = new GuardrailsGenerator();
     }
 
@@ -3220,6 +3224,101 @@ class ProjectsResourceTest {
                     .usingRecursiveComparison()
                     .ignoringCollectionOrder()
                     .isEqualTo(notDeletedIds);
+        }
+
+        @Test
+        void deleteProject__whenProjectHasTraces__thenDeletesItsTracesAndSpans() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var deletedProjectId = createProjectWithTracedSpans(apiKey, workspaceName);
+            var keptProjectId = createProjectWithTracedSpans(apiKey, workspaceName);
+            var keptProjectCost = getProjectCost(keptProjectId, apiKey, workspaceName);
+            assertThat(getProjectCost(deletedProjectId, apiKey, workspaceName)).isPositive();
+
+            projectResourceClient.deleteProject(deletedProjectId, apiKey, workspaceName);
+
+            Awaitility.await().untilAsserted(
+                    () -> assertThat(getProjectCost(deletedProjectId, apiKey, workspaceName)).isZero());
+            assertThat(getProjectCost(keptProjectId, apiKey, workspaceName)).isEqualTo(keptProjectCost);
+        }
+
+        @Test
+        void deleteProjectsBatch__whenProjectsHaveTraces__thenDeletesTheirTracesAndSpans() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var deletedProjectId = createProjectWithTracedSpans(apiKey, workspaceName);
+            var keptProjectId = createProjectWithTracedSpans(apiKey, workspaceName);
+            var keptProjectCost = getProjectCost(keptProjectId, apiKey, workspaceName);
+            assertThat(getProjectCost(deletedProjectId, apiKey, workspaceName)).isPositive();
+
+            projectResourceClient.deleteProjectsBatch(Set.of(deletedProjectId), apiKey, workspaceName);
+
+            Awaitility.await().untilAsserted(
+                    () -> assertThat(getProjectCost(deletedProjectId, apiKey, workspaceName)).isZero());
+            assertThat(getProjectCost(keptProjectId, apiKey, workspaceName)).isEqualTo(keptProjectCost);
+        }
+
+        @Test
+        void deleteProject__whenProjectHasSpansWithoutTraces__thenDeletesTheSpans() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = createProject(project, apiKey, workspaceName);
+            // Spans whose trace was never logged, so no traces row leads to them.
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(project.name())
+                            .traceId(idGenerator.generateId())
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            assertThat(getProjectCost(projectId, apiKey, workspaceName)).isPositive();
+
+            projectResourceClient.deleteProject(projectId, apiKey, workspaceName);
+
+            Awaitility.await().untilAsserted(
+                    () -> assertThat(getProjectCost(projectId, apiKey, workspaceName)).isZero());
+        }
+
+        private UUID createProjectWithTracedSpans(String apiKey, String workspaceName) {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = createProject(project, apiKey, workspaceName);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder().projectName(project.name()).build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            var spans = traces.stream()
+                    .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                            .map(span -> span.toBuilder()
+                                    .projectName(project.name())
+                                    .traceId(trace.id())
+                                    .build()))
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            return projectId;
+        }
+
+        /**
+         * The project's span cost, read by project id. The trace and span endpoints 404 once the project is gone,
+         * whatever is left of its data, so they can't show it was deleted. Spans are deleted in the cascade of their
+         * traces' delete, so the cost reaching zero also shows the traces' delete ran.
+         */
+        private double getProjectCost(UUID projectId, String apiKey, String workspaceName) {
+            var now = Instant.now();
+            return workspaceResourceClient.getCostsSummary(WorkspaceMetricsSummaryRequest.builder()
+                    .projectIds(Set.of(projectId))
+                    .intervalStart(now.minus(1, ChronoUnit.DAYS))
+                    .intervalEnd(now.plus(1, ChronoUnit.DAYS))
+                    .build(), apiKey, workspaceName).current();
         }
     }
 
