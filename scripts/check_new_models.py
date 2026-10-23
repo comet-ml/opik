@@ -20,7 +20,8 @@ others. Report-only: a failure is a result for a person to read, not an error. T
 the check itself could not run.
 
 A changed model that no picker offers (the backend serves it without a label) is listed as not checked rather than
-called: it is retired or not a chat model, so a call only adds a failure nobody can act on. --models still calls it.
+called: nobody can pick it, and most such models are retired, not chat models, or a dated copy of a listed one, so a
+failure there is one nobody acts on. --models still calls it.
 
 When nothing changed, it checks one cheap model per provider instead (from SMOKE_MODELS, when that model is in
 the registry), so a PR that touches only this script or its workflow still runs end to end.
