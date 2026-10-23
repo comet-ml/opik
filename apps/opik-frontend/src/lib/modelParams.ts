@@ -28,6 +28,16 @@ export const getModelParams = (
   return (route ? params?.routes?.[route] : undefined) ?? params;
 };
 
+// No provider profile here: an id the registry doesn't list keeps the old panel and the old request
+// rules together, where the profile would show sliders the request still drops.
+export const getListedModelParams = (
+  provider: string,
+  model?: string | null,
+): ModelParams | undefined =>
+  hasLatestModelList(provider)
+    ? getLatestListedModelParams(provider, model)
+    : undefined;
+
 export const isAccepted = (param?: { accepted?: boolean }): boolean =>
   param?.accepted === true;
 
@@ -159,6 +169,13 @@ export const ANTHROPIC_PARAM_BINDING: ParamBinding = {
   top_p: "topP",
   max_output_tokens: "maxCompletionTokens",
   effort: "thinkingEffort",
+};
+
+export const GEMINI_PARAM_BINDING: ParamBinding = {
+  temperature: "temperature",
+  top_p: "topP",
+  max_output_tokens: "maxCompletionTokens",
+  effort: "thinkingLevel",
 };
 
 export const OPENAI_PARAM_BINDING: ParamBinding = {

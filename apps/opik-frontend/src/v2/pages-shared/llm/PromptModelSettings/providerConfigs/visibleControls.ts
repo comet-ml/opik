@@ -24,13 +24,19 @@ import {
   supportsVertexAIThinkingLevel,
 } from "@/lib/modelUtils";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
-import { getModelParams, toParamsRoute } from "@/lib/modelParams";
+import {
+  getListedModelParams,
+  getModelParams,
+  toParamsRoute,
+} from "@/lib/modelParams";
 import { ModelParams } from "@/types/modelParams";
 import {
   ANTHROPIC_PANEL,
+  GEMINI_PANEL,
   GenericPanelPresentation,
   getShownControls,
   OPENAI_PANEL,
+  VERTEX_AI_PANEL,
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/genericPanels";
 import { resolveSamplingPresentation } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 
@@ -251,7 +257,17 @@ export const hasVisibleControls = (
         }),
       );
     }
-    case PROVIDER_TYPE.GEMINI:
+    case PROVIDER_TYPE.GEMINI: {
+      const params = getListedModelParams(PROVIDER_TYPE.GEMINI, model);
+      if (params) {
+        return hasGenericControls(
+          params,
+          GEMINI_PANEL,
+          configs as Record<string, unknown>,
+          unsupportedParams,
+          model,
+        );
+      }
       return isAnyControlVisible(
         getGeminiVisibleControls({
           model,
@@ -259,7 +275,18 @@ export const hasVisibleControls = (
           supports,
         }),
       );
-    case PROVIDER_TYPE.VERTEX_AI:
+    }
+    case PROVIDER_TYPE.VERTEX_AI: {
+      const params = getListedModelParams(PROVIDER_TYPE.VERTEX_AI, model);
+      if (params) {
+        return hasGenericControls(
+          params,
+          VERTEX_AI_PANEL,
+          configs as Record<string, unknown>,
+          unsupportedParams,
+          model,
+        );
+      }
       return isAnyControlVisible(
         getVertexAIVisibleControls({
           model,
@@ -267,6 +294,7 @@ export const hasVisibleControls = (
           supports,
         }),
       );
+    }
     case PROVIDER_TYPE.OPEN_ROUTER:
       return isAnyControlVisible(
         getOpenRouterVisibleControls({
