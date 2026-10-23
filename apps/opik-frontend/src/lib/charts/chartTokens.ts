@@ -23,6 +23,9 @@ export interface ChartTokens {
   surface: string;
   foreground: string;
   tick: string;
+  // Axis numbers and legend labels match Opik's built-in charts.
+  axisLabel: string;
+  legendLabel: string;
   grid: string;
   baseline: string;
   type: {
@@ -124,6 +127,8 @@ export const readChartTokens = (): ChartTokens => {
     surface: hsl("--background"),
     foreground: hsl("--foreground"),
     tick: color("--chart-tick-stroke"),
+    axisLabel: hsl("--muted-foreground"),
+    legendLabel: hsl("--light-slate"),
     grid: color("--chart-grid"),
     baseline: color("--chart-baseline"),
     type: {

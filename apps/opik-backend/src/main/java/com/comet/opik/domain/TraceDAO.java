@@ -367,9 +367,9 @@ class TraceDAOImpl implements TraceDAO {
                     :name as name,
                     parseDateTime64BestEffort(:start_time, 9) as start_time,
                     parseDateTime64BestEffort(:end_time, 9) as end_time,
-                    :input as input,
-                    :output as output,
-                    :metadata as metadata,
+                    payload.input as input,
+                    payload.output as output,
+                    payload.metadata as metadata,
                     :tags as tags,
                     :error_info as error_info,
                     now64(9) as created_at,
@@ -378,11 +378,12 @@ class TraceDAOImpl implements TraceDAO {
                     :thread_id as thread_id,
                     if(:visibility_mode IS NULL, 'default', :visibility_mode) as visibility_mode,
                     :truncation_threshold as truncation_threshold,
-                    :input_slim as input_slim,
-                    :output_slim as output_slim,
+                    payload.input_slim as input_slim,
+                    payload.output_slim as output_slim,
                     :ttft as ttft,
                     :source as source,
                     :environment as environment
+                FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -395,7 +396,7 @@ class TraceDAOImpl implements TraceDAO {
             ) as old_trace
             ON new_trace.id = old_trace.id
             SETTINGS log_comment = '<log_comment>'
-            ;
+            FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
             """;
 
     /***
@@ -406,35 +407,39 @@ class TraceDAOImpl implements TraceDAO {
             	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft, source, environment
             )
             SELECT
-            	id,
-            	project_id,
-            	workspace_id,
-            	<if(name)> :name <else> name <endif> as name,
-            	start_time,
-            	<if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> end_time <endif> as end_time,
-            	<if(input)> :input <else> input <endif> as input,
-            	<if(output)> :output <else> output <endif> as output,
-            	<if(metadata)> :metadata <else> metadata <endif> as metadata,
-            	<if(tags)> :tags <else> tags <endif> as tags,
-            	<if(error_info)> :error_info <else> error_info <endif> as error_info,
-            	created_at,
-            	created_by,
+            	stored_trace.id,
+            	stored_trace.project_id,
+            	stored_trace.workspace_id,
+            	<if(name)> :name <else> stored_trace.name <endif> as name,
+            	stored_trace.start_time,
+            	<if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> stored_trace.end_time <endif> as end_time,
+            	<if(input)> payload.input <else> stored_trace.input <endif> as input,
+            	<if(output)> payload.output <else> stored_trace.output <endif> as output,
+            	<if(metadata)> payload.metadata <else> stored_trace.metadata <endif> as metadata,
+            	<if(tags)> :tags <else> stored_trace.tags <endif> as tags,
+            	<if(error_info)> :error_info <else> stored_trace.error_info <endif> as error_info,
+            	stored_trace.created_at,
+            	stored_trace.created_by,
                 :user_name as last_updated_by,
-                <if(thread_id)> :thread_id <else> thread_id <endif> as thread_id,
-                visibility_mode,
+                <if(thread_id)> :thread_id <else> stored_trace.thread_id <endif> as thread_id,
+                stored_trace.visibility_mode,
                 :truncation_threshold as truncation_threshold,
-                <if(input)> :input_slim <else> input_slim <endif> as input_slim,
-                <if(output)> :output_slim <else> output_slim <endif> as output_slim,
-                <if(ttft)> :ttft <else> ttft <endif> as ttft,
-                <if(source)> :source <else> source <endif> as source,
-                <if(environment)> :environment <else> environment <endif> as environment
-            FROM traces
-            WHERE id = :id
-            AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-            LIMIT 1
+                <if(input)> payload.input_slim <else> stored_trace.input_slim <endif> as input_slim,
+                <if(output)> payload.output_slim <else> stored_trace.output_slim <endif> as output_slim,
+                <if(ttft)> :ttft <else> stored_trace.ttft <endif> as ttft,
+                <if(source)> :source <else> stored_trace.source <endif> as source,
+                <if(environment)> :environment <else> stored_trace.environment <endif> as environment
+            FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
+            CROSS JOIN (
+                SELECT *
+                FROM traces
+                WHERE id = :id
+                AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1
+            ) AS stored_trace
             SETTINGS log_comment = '<log_comment>'
-            ;
+            FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
             """;
 
     /** The sources an SDK logs under: {@link Source#isLoggingSource} as a bound list, legacy rows included. */
@@ -509,11 +514,19 @@ class TraceDAOImpl implements TraceDAO {
      * <p>The {@code traces} access carries the {@code <id_weeks>} week bound — see
      * {@link #SELECT_TARGET_PROJECTS_FOR_TRACES} (OPIK-8332). Only that access: the other arms read other tables,
      * whose partitioning is a separate slice.
+     *
+     * <p>Both {@code spans} accesses are bounded to {@code trace_span_weeks}, sourced as described in
+     * {@link #SELECT_TRACES_SPANS_STATS}.
      */
     private static final String SELECT_BY_IDS = """
             WITH <if(spans_partitioned)>trace_span_weeks AS (
+                <if(span_weeks_bound)>
+                SELECT DISTINCT id_week AS week
+                FROM span_weeks
+                <else>
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
+                <endif>
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
@@ -1012,6 +1025,9 @@ class TraceDAOImpl implements TraceDAO {
      * whose operators all accept an empty queue list ({@code annotation_queue_filters_match_unqueued}) exclude
      * the failing traces instead of selecting the passing ones. The same applies to the count and stats
      * templates.
+     * <p>
+     * On partitioned spans, with a page, a prefilter or a time window, {@code target_spans} and {@code spans_deduped}
+     * are bounded to {@code trace_span_weeks}, sourced as described in {@link #SELECT_TRACES_SPANS_STATS}.
      */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(annotation_queue_filters || annotation_queue_id)>annotation_queue_memberships AS (
@@ -1032,8 +1048,13 @@ class TraceDAOImpl implements TraceDAO {
                 <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
             ), <endif><if(trace_span_weeks)>trace_span_weeks AS (
+                <if(span_weeks_bound)>
+                SELECT DISTINCT id_week AS week
+                FROM span_weeks
+                <else>
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
+                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(page_keyed_aggregates)>AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
@@ -2414,9 +2435,9 @@ class TraceDAOImpl implements TraceDAO {
                     <if(name)> :name <else> '' <endif> as name,
                     toDateTime64('1970-01-01 00:00:00.000', 9) as start_time,
                     parseDateTime64BestEffort(:end_time, 9) as end_time,
-                    <if(input)> :input <else> '' <endif> as input,
-                    <if(output)> :output <else> '' <endif> as output,
-                    <if(metadata)> :metadata <else> '' <endif> as metadata,
+                    <if(input)> payload.input <else> '' <endif> as input,
+                    <if(output)> payload.output <else> '' <endif> as output,
+                    <if(metadata)> payload.metadata <else> '' <endif> as metadata,
                     <if(tags)> :tags <else> [] <endif> as tags,
                     <if(error_info)> :error_info <else> '' <endif> as error_info,
                     now64(9) as created_at,
@@ -2425,11 +2446,12 @@ class TraceDAOImpl implements TraceDAO {
                     <if(thread_id)> :thread_id <else> '' <endif> as thread_id,
                     <if(visibility_mode)> :visibility_mode <else> 'unknown' <endif> as visibility_mode,
                     :truncation_threshold as truncation_threshold,
-                    <if(input)> :input_slim <else> '' <endif> as input_slim,
-                    <if(output)> :output_slim <else> '' <endif> as output_slim,
+                    <if(input)> payload.input_slim <else> '' <endif> as input_slim,
+                    <if(output)> payload.output_slim <else> '' <endif> as output_slim,
                     :ttft as ttft,
                     :source as source,
                     <if(environment)> :environment <else> '' <endif> as environment
+                FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -2442,7 +2464,7 @@ class TraceDAOImpl implements TraceDAO {
             ) as old_trace
             ON new_trace.id = old_trace.id
             SETTINGS log_comment = '<log_comment>'
-            ;
+            FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
             """;
 
     private static final String SELECT_PARTIAL_BY_ID = """
@@ -2590,6 +2612,14 @@ class TraceDAOImpl implements TraceDAO {
      * matching spans' own ids resolve to, read off the key and {@code id_at} without {@code FINAL}. Every row the read
      * can return is in one of those weeks, so the bound prunes without assuming where a span sits relative to its
      * trace, and a set rather than a min/max range so one far-future id cannot widen it across every week between.
+     * <p>
+     * Under {@code <span_weeks_bound>} the set is read from the {@code span_weeks} index instead, with the same
+     * predicate (OPIK-8893): read from {@code spans} it has no week bound of its own, so it reads a boundary granule of
+     * the key range in nearly every weekly partition. The index holds a row per (trace, week) of every span and is read
+     * by its sort key, by its {@code trace_id} skip indexes when there is no project, or through
+     * {@code prj_project_weeks} when only the projects bound the read. A row left by a deleted span only widens the
+     * set. The {@code trace_span_weeks} of {@link #SELECT_BY_IDS} and {@link #SELECT_BY_PROJECT_ID} is sourced the same
+     * way.
      */
     @VisibleForTesting
     static final String SELECT_TRACES_SPANS_STATS = """
@@ -2612,8 +2642,13 @@ class TraceDAOImpl implements TraceDAO {
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
             ), <endif><if(spans_partitioned)>
             trace_span_weeks AS (
+                <if(span_weeks_bound)>
+                SELECT DISTINCT id_week AS week
+                FROM span_weeks
+                <else>
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
+                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
@@ -3077,8 +3112,13 @@ class TraceDAOImpl implements TraceDAO {
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
             ), <endif><if(spans_partitioned)>
             trace_span_weeks AS (
+                <if(span_weeks_bound)>
+                SELECT DISTINCT id_week AS week
+                FROM span_weeks
+                <else>
                 SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS week
                 FROM spans
+                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
@@ -3618,34 +3658,39 @@ class TraceDAOImpl implements TraceDAO {
                 environment
             )
             SELECT
-                t.id,
-                t.project_id,
-                t.workspace_id,
-                <if(name)> :name <else> t.name <endif> as name,
-                t.start_time,
-                <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> t.end_time <endif> as end_time,
-                <if(input)> :input <else> t.input <endif> as input,
-                <if(output)> :output <else> t.output <endif> as output,
-                <if(metadata)> :metadata <else> t.metadata <endif> as metadata,
-                """ + TagOperations.tagUpdateFragment("t.tags") + """
+                stored_trace.id,
+                stored_trace.project_id,
+                stored_trace.workspace_id,
+                <if(name)> :name <else> stored_trace.name <endif> as name,
+                stored_trace.start_time,
+                <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> stored_trace.end_time <endif> as end_time,
+                <if(input)> payload.input <else> stored_trace.input <endif> as input,
+                <if(output)> payload.output <else> stored_trace.output <endif> as output,
+                <if(metadata)> payload.metadata <else> stored_trace.metadata <endif> as metadata,
+                """ + TagOperations.tagUpdateFragment("stored_trace.tags") + """
                 as tags,
-                <if(error_info)> :error_info <else> t.error_info <endif> as error_info,
-                t.created_at,
-                t.created_by,
+                <if(error_info)> :error_info <else> stored_trace.error_info <endif> as error_info,
+                stored_trace.created_at,
+                stored_trace.created_by,
                 :user_name as last_updated_by,
-                <if(thread_id)> :thread_id <else> t.thread_id <endif> as thread_id,
-                t.visibility_mode,
+                <if(thread_id)> :thread_id <else> stored_trace.thread_id <endif> as thread_id,
+                stored_trace.visibility_mode,
                 :truncation_threshold as truncation_threshold,
-                <if(input)> :input_slim <else> t.input_slim <endif> as input_slim,
-                <if(output)> :output_slim <else> t.output_slim <endif> as output_slim,
-                <if(ttft)> :ttft <else> t.ttft <endif> as ttft,
-                t.source,
-                <if(environment)> :environment <else> t.environment <endif> as environment
-            FROM traces t
-            WHERE t.id IN :ids AND t.workspace_id = :workspace_id
-            ORDER BY (t.workspace_id, t.project_id, t.id) DESC, t.last_updated_at DESC
-            LIMIT 1 BY t.id
-            SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable';
+                <if(input)> payload.input_slim <else> stored_trace.input_slim <endif> as input_slim,
+                <if(output)> payload.output_slim <else> stored_trace.output_slim <endif> as output_slim,
+                <if(ttft)> :ttft <else> stored_trace.ttft <endif> as ttft,
+                stored_trace.source,
+                <if(environment)> :environment <else> stored_trace.environment <endif> as environment
+            FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
+            CROSS JOIN (
+                SELECT *
+                FROM traces
+                WHERE id IN :ids AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS stored_trace
+            SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable'
+            FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -3695,7 +3740,10 @@ class TraceDAOImpl implements TraceDAO {
                 .bind("start_time", trace.startTime().toString())
                 .bind("thread_id", StringUtils.defaultIfBlank(trace.threadId(), ""));
 
-        bindInputOutputMetadataAndSlim(statement, trace, null);
+        StreamedPayload.bind(statement,
+                TruncationUtils.toJsonString(trace.input()),
+                TruncationUtils.toJsonString(trace.output()),
+                TruncationUtils.toJsonString(trace.metadata()));
 
         bindEpochSentinel(statement, "end_time", trace.endTime());
 
@@ -3841,28 +3889,6 @@ class TraceDAOImpl implements TraceDAO {
         template.add("traces_mutation_table", tracesMutationTable());
     }
 
-    /**
-     * Binds input, output, metadata, and their slim versions (input_slim, output_slim) to a statement.
-     * Centralizes the JSON conversion and binding logic for consistency across single and batch inserts.
-     *
-     * @param statement the statement to bind to
-     * @param trace the trace containing the values
-     * @param index optional index suffix for batch operations (e.g., 0, 1, 2); pass null for single insert
-     */
-    private void bindInputOutputMetadataAndSlim(Statement statement, Trace trace, Integer index) {
-        String suffix = index != null ? String.valueOf(index) : "";
-
-        String inputValue = TruncationUtils.toJsonString(trace.input());
-        String outputValue = TruncationUtils.toJsonString(trace.output());
-        String metadataValue = TruncationUtils.toJsonString(trace.metadata());
-
-        statement.bind("input" + suffix, inputValue)
-                .bind("output" + suffix, outputValue)
-                .bind("metadata" + suffix, metadataValue)
-                .bind("input_slim" + suffix, TruncationUtils.createSlimJsonString(inputValue))
-                .bind("output_slim" + suffix, TruncationUtils.createSlimJsonString(outputValue));
-    }
-
     @Override
     @WithSpan
     public Mono<Void> update(@NonNull TraceUpdate traceUpdate, @NonNull UUID id, @NonNull Connection connection) {
@@ -3900,25 +3926,10 @@ class TraceDAOImpl implements TraceDAO {
             statement.bind("name", traceUpdate.name());
         }
 
-        Optional.ofNullable(traceUpdate.input())
-                .ifPresent(input -> {
-                    String inputValue = input.toString();
-                    statement.bind("input", inputValue);
-                    statement.bind("input_slim", TruncationUtils.createSlimJsonString(inputValue));
-                });
-
-        Optional.ofNullable(traceUpdate.output())
-                .ifPresent(output -> {
-                    String outputValue = output.toString();
-                    statement.bind("output", outputValue);
-                    statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
-                });
+        bindStreamedPayload(traceUpdate, statement);
 
         Optional.ofNullable(traceUpdate.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
-
-        Optional.ofNullable(traceUpdate.metadata())
-                .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
 
         Optional.ofNullable(traceUpdate.errorInfo())
                 .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.readTree(errorInfo).toString()));
@@ -4172,6 +4183,7 @@ class TraceDAOImpl implements TraceDAO {
                     }
 
                     addSpansPartitionedFlag(template);
+                    addSpanWeeksBound(template);
 
                     var idWeeks = idWeeks(ids);
                     idWeeks.ifPresent(_ -> template.add("id_weeks", true));
@@ -4600,6 +4612,7 @@ class TraceDAOImpl implements TraceDAO {
                 && Stream.of("page_keyed_aggregates", "trace_id_prefilter", "uuid_from_time", "uuid_to_time")
                         .anyMatch(name -> template.getAttribute(name) != null)) {
             template.add("trace_span_weeks", true);
+            addSpanWeeksBound(template);
         }
     }
 
@@ -4892,6 +4905,7 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("log_comment", logComment);
                         template.add("has_legacy_scores", hasLegacyScores);
                         addSpansPartitionedFlag(template);
+                        addSpanWeeksBound(template);
 
                         var statement = connection.createStatement(template.render())
                                 .bind("project_ids", List.of(criteria.projectId()))
@@ -4940,6 +4954,7 @@ class TraceDAOImpl implements TraceDAO {
         }
         template.add("has_legacy_scores", hasLegacyScores);
         addSpansPartitionedFlag(template);
+        addSpanWeeksBound(template);
         if (canDedupByArgMax(template)) {
             template.add("dedup_by_argmax", true);
         }
@@ -4964,6 +4979,7 @@ class TraceDAOImpl implements TraceDAO {
         var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORES_STATS).add("log_comment", logComment);
         template.add("has_legacy_scores", hasLegacyScores);
         addSpansPartitionedFlag(template);
+        addSpanWeeksBound(template);
         if (uuidFromTime != null) {
             template.add("uuid_from_time", true);
         }
@@ -5100,6 +5116,7 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("project_stats", true);
                         template.add("has_legacy_scores", hasLegacyScores);
                         addSpansPartitionedFlag(template);
+                        addSpanWeeksBound(template);
                         if (uuidFromTime != null) {
                             template.add("uuid_from_time", true);
                         }
@@ -5590,29 +5607,23 @@ class TraceDAOImpl implements TraceDAO {
         return template;
     }
 
+    private static void bindStreamedPayload(TraceUpdate traceUpdate, Statement statement) {
+        StreamedPayload.bind(statement,
+                Objects.toString(traceUpdate.input(), null),
+                Objects.toString(traceUpdate.output(), null),
+                Objects.toString(traceUpdate.metadata(), null));
+    }
+
     private void bindBulkUpdateParams(TraceUpdate traceUpdate, Statement statement) {
         if (StringUtils.isNotBlank(traceUpdate.name())) {
             statement.bind("name", traceUpdate.name());
         }
-        Optional.ofNullable(traceUpdate.input())
-                .ifPresent(input -> {
-                    String inputValue = input.toString();
-                    statement.bind("input", inputValue);
-                    statement.bind("input_slim", TruncationUtils.createSlimJsonString(inputValue));
-                });
-        Optional.ofNullable(traceUpdate.output())
-                .ifPresent(output -> {
-                    String outputValue = output.toString();
-                    statement.bind("output", outputValue);
-                    statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
-                });
+        bindStreamedPayload(traceUpdate, statement);
 
         TagOperations.bindTagParams(statement, traceUpdate);
 
         Optional.ofNullable(traceUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
-        Optional.ofNullable(traceUpdate.metadata())
-                .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
         Optional.ofNullable(traceUpdate.errorInfo())
                 .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.readTree(errorInfo).toString()));
         if (StringUtils.isNotBlank(traceUpdate.threadId())) {

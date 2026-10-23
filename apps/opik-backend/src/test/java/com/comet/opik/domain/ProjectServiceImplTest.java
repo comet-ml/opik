@@ -10,6 +10,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.common.eventbus.EventBus;
 import jakarta.inject.Provider;
 import org.jdbi.v3.core.Handle;
+import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -18,6 +19,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -27,11 +29,14 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -171,6 +176,69 @@ class ProjectServiceImplTest {
                 return callback.execute(handle);
             });
             when(handle.attach(ProjectDAO.class)).thenReturn(projectDAO);
+        }
+    }
+
+    /**
+     * Two callers logging into a project that does not exist yet both read "absent" and both insert. The method's
+     * name is its contract: the project exists afterwards. Before this, the loser of that race got a 409 from a
+     * method that promises otherwise - and the playground hit it every time a multi-prompt run started in a new
+     * project, because each variant resolved the project concurrently.
+     */
+    @Nested
+    class GetOrCreateRace {
+
+        private static final String WORKSPACE_ID = "workspace-id";
+        private static final String USER = "user";
+        private static final String PROJECT_NAME = "a-new-project";
+
+        @Test
+        void getOrCreate__whenAnotherCallerWinsTheInsert__thenReturnsTheirProject() {
+            var winner = Project.builder()
+                    .id(ID_GENERATOR.generateId())
+                    .name(PROJECT_NAME)
+                    .build();
+
+            when(template.inTransaction(eq(READ_ONLY), any())).thenAnswer(invocation -> {
+                TxAction<?> callback = invocation.getArgument(1);
+                return callback.execute(handle);
+            });
+            when(template.inTransaction(eq(WRITE), any())).thenAnswer(invocation -> {
+                TxAction<?> callback = invocation.getArgument(1);
+                return callback.execute(handle);
+            });
+            when(handle.attach(ProjectDAO.class)).thenReturn(projectDAO);
+
+            // Absent when we look, present by the time we insert.
+            when(projectDAO.findByNames(WORKSPACE_ID, List.of(PROJECT_NAME)))
+                    .thenReturn(List.of())
+                    .thenReturn(List.of(winner));
+            doThrow(new UnableToExecuteStatementException("duplicate",
+                    new SQLIntegrityConstraintViolationException("duplicate"), null))
+                    .when(projectDAO).save(eq(WORKSPACE_ID), any(Project.class));
+
+            var project = projectService.getOrCreate(WORKSPACE_ID, PROJECT_NAME, USER);
+
+            assertThat(project).isEqualTo(winner);
+        }
+
+        @Test
+        void getOrCreate__whenTheInsertFailsForAnotherReason__thenItStillFails() {
+            when(template.inTransaction(eq(READ_ONLY), any())).thenAnswer(invocation -> {
+                TxAction<?> callback = invocation.getArgument(1);
+                return callback.execute(handle);
+            });
+            when(template.inTransaction(eq(WRITE), any())).thenAnswer(invocation -> {
+                TxAction<?> callback = invocation.getArgument(1);
+                return callback.execute(handle);
+            });
+            when(handle.attach(ProjectDAO.class)).thenReturn(projectDAO);
+            when(projectDAO.findByNames(WORKSPACE_ID, List.of(PROJECT_NAME))).thenReturn(List.of());
+            doThrow(new UnableToExecuteStatementException("boom", new IllegalStateException("boom"), null))
+                    .when(projectDAO).save(eq(WORKSPACE_ID), any(Project.class));
+
+            assertThatThrownBy(() -> projectService.getOrCreate(WORKSPACE_ID, PROJECT_NAME, USER))
+                    .isInstanceOf(UnableToExecuteStatementException.class);
         }
     }
 

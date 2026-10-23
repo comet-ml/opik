@@ -3,6 +3,7 @@ package com.comet.opik.domain.llm;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.annotation.Nullable;
 import lombok.NonNull;
 
 import java.util.Optional;
@@ -23,4 +24,8 @@ public interface LlmProviderService {
     void validateRequest(@NonNull ChatCompletionRequest request);
 
     Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable);
+
+    default @Nullable String paramsRoute() {
+        return null;
+    }
 }

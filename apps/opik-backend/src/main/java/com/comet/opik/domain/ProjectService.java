@@ -591,7 +591,16 @@ class ProjectServiceImpl implements ProjectService {
 
                     UUID projectId = idGenerator.generateId();
 
-                    project = createProject(project, projectId, userName, workspaceId);
+                    try {
+                        project = createProject(project, projectId, userName, workspaceId);
+                    } catch (EntityAlreadyExistsException conflict) {
+                        log.info("Project '{}' was created concurrently on workspaceId '{}', reading it back",
+                                projectName, workspaceId);
+                        return findByNames(workspaceId, List.of(projectName))
+                                .stream()
+                                .findFirst()
+                                .orElseThrow(() -> conflict);
+                    }
 
                     log.info("Created project with id '{}', name '{}' on workspaceId '{}'", projectId, projectName,
                             workspaceId);

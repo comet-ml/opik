@@ -183,11 +183,10 @@ databaseAnalyticsDataModel:
   #   instance: the backfill covers the spans written until its first run, live registration the rest.
   spanWeeksBackfillEnabled: false
   #  Default: false
-  #  Description: Bound span reads by trace id to the weeks the span_weeks index holds for those traces. Effective only
-  #   while spanWeeksWriteEnabled and spanColumnsNonNullable are also true (without registration new spans never
-  #   reach the index; the legacy spans id_at wraps far-future ids). Turn true once the span
-  #   weeks backfill logs that it is complete; before that, spans it has not indexed yet would be skipped. Registration
-  #   is asynchronous, so a read right after a write can miss the new spans until their week is indexed.
+  #  Description: Bound the spans reads keyed by traces or by a project to the weeks the span_weeks index holds for
+  #   them. Effective only while spanColumnsNonNullable is also true (the legacy spans id_at wraps far-future ids). New
+  #   spans are indexed by span_weeks_mv in their insert, older ones by the span weeks backfill: turn true once the
+  #   backfill logs that it is complete, as spans it has not indexed yet would be skipped.
   spanWeeksReadEnabled: false
 
 # Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
@@ -382,6 +381,48 @@ redis:
   #  Default: 1s
   #  Description: Timeout for the Redis health check ping
   healthCheckTimeout: 1s
+  # Redis Sentinel configuration (optional)
+  # When enabled, singleNodeUrl is the seed sentinel, with its port (usually 26379), instead of a Redis data node: its
+  # scheme selects TLS for every sentinel, and its credentials and database number apply to the master data nodes.
+  # Redisson discovers the master through the sentinels and follows it on failover. The Python backend reads the same
+  # variables. Cannot be combined with awsIamAuth: ElastiCache and MemoryDB offer no Sentinel.
+  sentinel:
+    # Default: false
+    # Description: Enable Redis Sentinel master discovery
+    enabled: false
+    # Description: Name of the master group monitored by the sentinels. Required when enabled
+    masterName: ''
+    # Description: Comma separated extra seed sentinels, e.g. redis://sentinel-1:26379,redis://sentinel-2:26379. They
+    # must use the scheme of singleNodeUrl, include a port and carry no credentials. The seed from singleNodeUrl is
+    # always included
+    nodes: ''
+    # Description: Username for the sentinel nodes themselves, if they enforce ACLs
+    username: ''
+    # Description: Password for the sentinel nodes themselves, if they require auth
+    password: ''
+    # Default: 3
+    # Description: Times a failed command is retried, e.g. while a failover is in progress. Between 0 and 20
+    retryAttempts: 3
+    # Default: 500ms
+    # Description: Base of the full-jitter backoff between retries: each waits a random time up to
+    # min(base * 2^attempt, cap). At least 1ms
+    retryBackoffBase: 500ms
+    # Default: 2s
+    # Description: Longest wait between retries. At least retryBackoffBase and at most 5m
+    retryBackoffCap: 2s
+    # Default: true
+    # Description: Require the sentinels to report at least two of them, as a production quorum needs. Set to false to
+    # allow a single sentinel, e.g. in development setups
+    checkSentinelsList: true
+    # Default: 10s
+    # Description: Timeout for establishing connections. Between 100ms and 5m
+    connectTimeout: 10s
+    # Default: 5s
+    # Description: Timeout for command responses. Between 100ms and 5m
+    timeout: 5s
+    # Default: 2s
+    # Description: How often the sentinels are polled for topology changes. Between 100ms and 5m
+    scanInterval: 2s
 
 openTelemetry:
   # Default: 3h

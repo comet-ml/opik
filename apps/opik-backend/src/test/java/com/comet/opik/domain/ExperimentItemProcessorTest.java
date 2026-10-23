@@ -718,6 +718,87 @@ class ExperimentItemProcessorTest {
     }
 
     @Nested
+    @DisplayName("Online scoring metadata")
+    class OnlineScoringMetadata {
+
+        @Test
+        void processWritesSelectedRuleIdsAndDatasetItemDataOnTheTrace() {
+            var prompt = buildPrompt("gpt-4", "user", "Hello {{input}}");
+            var datasetItem = buildDatasetItem(UUID.randomUUID(), Map.of("input", new TextNode("hi")));
+            var ruleIds = List.of(UUID.randomUUID(), UUID.randomUUID());
+
+            stubCommonMocks();
+            when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
+                    .thenReturn(buildLlmResponse("response"));
+
+            var message = buildMessage(prompt, datasetItem, UUID.randomUUID(), UUID.randomUUID(), null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME).toBuilder().selectedRuleIds(ruleIds).build();
+            processor.process(message).block();
+
+            var captor = ArgumentCaptor.forClass(Trace.class);
+            verify(traceService).create(captor.capture());
+
+            var metadata = captor.getValue().metadata();
+            assertThat(metadata.get("selected_rule_ids").isArray()).isTrue();
+            assertThat(metadata.get("selected_rule_ids")).hasSize(2);
+            assertThat(metadata.get("selected_rule_ids").get(0).asText()).isEqualTo(ruleIds.getFirst().toString());
+            assertThat(metadata.get("dataset_item_data").get("input").asText()).isEqualTo("hi");
+        }
+
+        @Test
+        void processOmitsSelectedRuleIdsWhenNoneWerePicked() {
+            var prompt = buildPrompt("gpt-4", "user", "Hello");
+            var datasetItem = buildDatasetItem(UUID.randomUUID(), Map.of());
+
+            stubCommonMocks();
+            when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
+                    .thenReturn(buildLlmResponse("response"));
+
+            processor.process(buildMessage(prompt, datasetItem, UUID.randomUUID(), UUID.randomUUID(), null,
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME)).block();
+
+            var captor = ArgumentCaptor.forClass(Trace.class);
+            verify(traceService).create(captor.capture());
+
+            var metadata = captor.getValue().metadata();
+            assertThat(metadata.has("selected_rule_ids")).isFalse();
+            assertThat(metadata.has("dataset_item_data")).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("Trace metadata for a regular dataset")
+    class TraceMetadataRegularDataset {
+
+        @Test
+        void processOmitsTestSuiteMetadataWhenTheRunIsNotATestSuite() {
+            var prompt = buildPrompt("gpt-4", "user", "Hello");
+            var datasetItem = buildDatasetItem(UUID.randomUUID(), Map.of());
+            var experimentId = UUID.randomUUID();
+            var datasetId = UUID.randomUUID();
+
+            stubCommonMocks();
+            when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
+                    .thenReturn(buildLlmResponse("response"));
+
+            var message = buildMessage(prompt, datasetItem, experimentId, datasetId, "hash",
+                    PROJECT_NAME, WORKSPACE_ID, USER_NAME).toBuilder().testSuite(false).build();
+            processor.process(message).block();
+
+            var captor = ArgumentCaptor.forClass(Trace.class);
+            verify(traceService).create(captor.capture());
+
+            var metadata = captor.getValue().metadata();
+            assertThat(metadata.get("created_from").asText()).isEqualTo("playground");
+            assertThat(metadata.has("test_suite_dataset_id")).isFalse();
+            assertThat(metadata.has("test_suite_dataset_version_hash")).isFalse();
+            assertThat(metadata.has("test_suite_dataset_item_id")).isFalse();
+            assertThat(metadata.has("test_suite_model")).isFalse();
+            assertThat(metadata.has("test_suite_experiment_id")).isFalse();
+        }
+    }
+
+    @Nested
     @DisplayName("Trace metadata without version hash")
     class TraceMetadataNoVersionHash {
 

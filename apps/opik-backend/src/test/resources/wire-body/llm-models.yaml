@@ -4,6 +4,10 @@
 anthropic:
   - id: "claude-opus-5-5"
     structuredOutput: true
+  - id: "claude-sonnet-5-5"
+    structuredOutput: true
+  - id: "claude-haiku-5-5"
+    structuredOutput: true
   - id: "claude-opus-5"
     structuredOutput: true
   - id: "claude-sonnet-5"

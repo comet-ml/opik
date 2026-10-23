@@ -143,10 +143,11 @@ to its trace.
 
 ## Choosing a version
 
-Pass the `version` parameter to control which version is returned:
+Pass `version` or `environment` to control which version is returned:
 
-- **Omit `version`** (default) — The most recently created version. Useful when you want the agent to pick up new prompt edits automatically.
-- **`"v3"`** (or any `v<N>` name) — A specific version. Useful when you want the prompt to stay fixed regardless of newer edits — for example, when reproducing a past run or comparing versions.
+- **Omit `version`** (default): The most recently created version. Useful when you want the agent to pick up new prompt edits automatically.
+- **`"v3"`** (or any `v<N>` name): A specific version. Useful when you want the prompt to stay fixed regardless of newer edits, for example when reproducing a past run or comparing versions.
+- **`environment="production"`**: The version deployed to that environment. Useful in production code: you choose which version the agent serves from the Opik UI, without changing code. See [Environments](/development/prompt-library/environments).
 
 <CodeBlocks>
   ```python title="Python" wordWrap
@@ -155,6 +156,9 @@ Pass the `version` parameter to control which version is returned:
 
   # Fetch the most recent version (omit `version`)
   latest = client.get_prompt(name="system_prompt", project_name="my-agent")
+
+  # Fetch the version deployed to production
+  prod = client.get_prompt(name="system_prompt", environment="production", project_name="my-agent")
   ```
 
   ```ts title="TypeScript" wordWrap
@@ -168,6 +172,13 @@ Pass the `version` parameter to control which version is returned:
   // Fetch the most recent version (omit `version`)
   const latest = await client.getPrompt({
     name: "system_prompt",
+    projectName: "my-agent",
+  });
+
+  // Fetch the version deployed to production
+  const prod = await client.getPrompt({
+    name: "system_prompt",
+    environment: "production",
     projectName: "my-agent",
   });
   ```

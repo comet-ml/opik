@@ -210,11 +210,10 @@ databaseAnalyticsDataModel:
   #   instance: the backfill covers the spans written until its first run, live registration the rest.
   spanWeeksBackfillEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED:-false}
   #  Default: false
-  #  Description: Bound span reads by trace id to the weeks the span_weeks index holds for those traces. Effective only
-  #   while spanWeeksWriteEnabled and spanColumnsNonNullable are also true (without registration new spans never
-  #   reach the index; the legacy spans id_at wraps far-future ids). Turn true once the span
-  #   weeks backfill logs that it is complete; before that, spans it has not indexed yet would be skipped. Registration
-  #   is asynchronous, so a read right after a write can miss the new spans until their week is indexed.
+  #  Description: Bound the spans reads keyed by traces or by a project to the weeks the span_weeks index holds for
+  #   them. Effective only while spanColumnsNonNullable is also true (the legacy spans id_at wraps far-future ids). New
+  #   spans are indexed by span_weeks_mv in their insert, older ones by the span weeks backfill: turn true once the
+  #   backfill logs that it is complete, as spans it has not indexed yet would be skipped.
   spanWeeksReadEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_READ_ENABLED:-false}
 
 # Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
@@ -299,7 +298,7 @@ databaseAnalyticsReadOnlyFreeFormSql:
   socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_SOCKET_TIMEOUT:-200s}
 
 # Description: credentials for the extended free-form SQL read-only ClickHouse user.
-# Only used for workspaces in customCharts.enabledWorkspaces.
+# Only used when customCharts.enabled is true.
 databaseAnalyticsReadOnlyFreeFormExtendedSql:
   #  Default: comet_readonly_freeform_extended_sql_user
   #  Description: The read-only username used to connect to the server
@@ -314,12 +313,12 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
 # Custom Charts. The ClickHouse credentials it runs as are in databaseAnalyticsReadOnlyFreeFormExtendedSql instead:
 # those describe a database connection and keep the same shape as the account Agent Insights uses.
 customCharts:
-  #  Default: empty (feature off everywhere)
-  #  Description: Comma-separated workspace ids allowed to call POST /v1/internal/analytics-queries, which runs as
-  #   the wider ClickHouse account. The path-scoped Agent Insights endpoint is unaffected and keeps its own account
-  #   for every workspace. Requires serviceToggles.ollieEnabled, which
-  #   gates the endpoint, and the account to be provisioned first (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
-  enabledWorkspaces: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
+  #  Default: false (feature off everywhere)
+  #  Description: Lets every workspace call POST /v1/internal/analytics-queries, which runs as the wider ClickHouse
+  #   account. The path-scoped Agent Insights endpoint is unaffected and keeps its own account for every workspace.
+  #   Requires serviceToggles.ollieEnabled, which gates the endpoint, and the account to be provisioned first
+  #   (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
+  enabled: ${TOGGLE_CUSTOM_CHARTS_ENABLED:-false}
   #  Default: 5000
   #  Description: Cap on distinct ids resolved to names in one result. Above it no row gets a name column, rather
   #   than labelling some and not others.
@@ -376,8 +375,8 @@ health:
     - name: clickhouse-readonly-freeform-sql
       critical: false
       type: ready
-    # Non-critical for the same reason as the check above: Custom Charts is opt-in per workspace, and when no
-    # workspace is allowlisted the probe reports healthy without querying ClickHouse.
+    # Non-critical for the same reason as the check above: Custom Charts is opt-in, and when it is off the probe
+    # reports healthy without querying ClickHouse.
     - name: clickhouse-readonly-freeform-extended-sql
       critical: false
       type: ready
@@ -448,6 +447,48 @@ redis:
   #  Default: 1s
   #  Description: Timeout for the Redis health check ping
   healthCheckTimeout: ${REDIS_HEALTH_CHECK_TIMEOUT:-1s}
+  # Redis Sentinel configuration (optional)
+  # When enabled, singleNodeUrl is the seed sentinel, with its port (usually 26379), instead of a Redis data node: its
+  # scheme selects TLS for every sentinel, and its credentials and database number apply to the master data nodes.
+  # Redisson discovers the master through the sentinels and follows it on failover. The Python backend reads the same
+  # variables. Cannot be combined with awsIamAuth: ElastiCache and MemoryDB offer no Sentinel.
+  sentinel:
+    # Default: false
+    # Description: Enable Redis Sentinel master discovery
+    enabled: ${OPIK_REDIS_SENTINEL_ENABLED:-false}
+    # Description: Name of the master group monitored by the sentinels. Required when enabled
+    masterName: ${OPIK_REDIS_SENTINEL_MASTER_NAME:-''}
+    # Description: Comma separated extra seed sentinels, e.g. redis://sentinel-1:26379,redis://sentinel-2:26379. They
+    # must use the scheme of singleNodeUrl, include a port and carry no credentials. The seed from singleNodeUrl is
+    # always included
+    nodes: ${OPIK_REDIS_SENTINEL_NODES:-''}
+    # Description: Username for the sentinel nodes themselves, if they enforce ACLs
+    username: ${OPIK_REDIS_SENTINEL_USERNAME:-''}
+    # Description: Password for the sentinel nodes themselves, if they require auth
+    password: ${OPIK_REDIS_SENTINEL_PASSWORD:-''}
+    # Default: 3
+    # Description: Times a failed command is retried, e.g. while a failover is in progress. Between 0 and 20
+    retryAttempts: ${OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS:-3}
+    # Default: 500ms
+    # Description: Base of the full-jitter backoff between retries: each waits a random time up to
+    # min(base * 2^attempt, cap). At least 1ms
+    retryBackoffBase: ${OPIK_REDIS_SENTINEL_RETRY_BACKOFF_BASE:-500ms}
+    # Default: 2s
+    # Description: Longest wait between retries. At least retryBackoffBase and at most 5m
+    retryBackoffCap: ${OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP:-2s}
+    # Default: true
+    # Description: Require the sentinels to report at least two of them, as a production quorum needs. Set to false to
+    # allow a single sentinel, e.g. in development setups
+    checkSentinelsList: ${OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST:-true}
+    # Default: 10s
+    # Description: Timeout for establishing connections. Between 100ms and 5m
+    connectTimeout: ${OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT:-10s}
+    # Default: 5s
+    # Description: Timeout for command responses. Between 100ms and 5m
+    timeout: ${OPIK_REDIS_SENTINEL_TIMEOUT:-5s}
+    # Default: 2s
+    # Description: How often the sentinels are polled for topology changes. Between 100ms and 5m
+    scanInterval: ${OPIK_REDIS_SENTINEL_SCAN_INTERVAL:-2s}
   # AWS IAM authentication configuration (optional)
   # When enabled, takes precedence over singleNodeUrl authentication
   awsIamAuth:
@@ -1185,7 +1226,7 @@ experimentExecution:
   # Description: Duration for long-polling reads on the Redis Stream
   longPollingDuration: ${EXPERIMENT_EXECUTION_LONG_POLLING_DURATION:-5s}
   # Default: 10000
-  # Description: Maximum length of the Redis Stream (trimmed non-strictly)
+  # Description: Maximum length of the Redis Stream (trimmed non-strictly). A run is admitted against a lower bound derived from it, so that launches arriving together overshoot into headroom instead of trimming entries no consumer has taken
   streamMaxLen: ${EXPERIMENT_EXECUTION_STREAM_MAX_LEN:-10000}
   # Default: 100
   # Description: Trim limit for the Redis Stream
@@ -1202,6 +1243,12 @@ experimentExecution:
   # Default: 24h
   # Description: TTL for the batch completion counter in Redis
   batchCounterTtl: ${EXPERIMENT_EXECUTION_BATCH_COUNTER_TTL:-24h}
+  # Default: 60s
+  # Description: Lease on the lock that serialises launching a run, held from the queue-capacity check through publishing so the check cannot be overtaken. Must exceed the time to publish the largest run; a pod that dies holding it stalls launches until it expires
+  publishLockLease: ${EXPERIMENT_EXECUTION_PUBLISH_LOCK_LEASE:-60s}
+  # Default: 10s
+  # Description: How long a run waits for the publish lock before being refused with 429. Several times the time to publish a run, so a queued launch waits rather than being turned away; under publishLockLease, so a pod that died holding the lock refuses quickly instead of holding the request
+  publishLockWait: ${EXPERIMENT_EXECUTION_PUBLISH_LOCK_WAIT:-10s}
 
 # Configuration for Dataset Export
 datasetExport:
@@ -1703,6 +1750,10 @@ alertsEventBridge:
   # Description: AWS region of the bus. When empty, the region in an ARN bus is used, then the default
   #   AWS region provider chain
   region: ${ALERTS_EVENTBRIDGE_REGION:-}
+  # Default: empty
+  # Description: SageMaker Partner AI App endpoint that vends the customer role's credentials. When set, PutEvents
+  #   is signed only with those credentials, never IRSA, EKS Pod Identity or the default AWS chain
+  customerCredentialsEndpoint: ${SAGEMAKER_PARTNER_CUSTOMER_CREDENTIALS_ENDPOINT:-}
 
 # Configuration AWS S3
 s3Config:
@@ -2345,3 +2396,129 @@ redaction:
   # on long base64 payloads. The match budget now bounds that rather than leaving it to the pattern, but an
   # anchored rule is still the difference between exact masking and a value withheld whole.
   rules: '${OPIK_REDACTION_RULES:-[]}'
+
+# ai-labels: AI-generated labels (e.g. a trace summary) for every ended trace in opted-in workspaces, computed by
+# opik-inference. Off by default and on only in Comet-hosted deployments; opt-in is the ai_label_workspaces table.
+# Requires databaseAnalyticsDataModel.traceColumnsNonNullable (the cut-over traces table).
+aiLabels:
+  #  Default: false
+  #  Description: Runs the ai-labels job. Server-side only, never exposed to the UI.
+  enabled: ${AI_LABELS_ENABLED:-false}
+  #  Default: unset (the tasks bundled under ai-labels/tasks/)
+  #  Description: Directory of task YAML to load instead of the bundled tasks
+  tasksDir: ${AI_LABELS_TASKS_DIR:-}
+  inference:
+    #  Description: opik-inference base URL. Required when enabled.
+    url: ${AI_LABELS_INFERENCE_URL:-}
+    #  Description: opik-inference deployment credential, from a secret. Required when enabled. Never logged.
+    credential: ${AI_LABELS_INFERENCE_CREDENTIAL:-}
+    #  Default: 5s
+    #  Description: Per call to opik-inference, cut to the time left before the tick's deadline
+    connectTimeout: ${AI_LABELS_INFERENCE_CONNECT_TIMEOUT:-5s}
+    #  Default: 30s
+    #  Description: Per call to opik-inference, cut to the time left before the tick's deadline. Also the time a tick's
+    #  sends get past tickBudget, so it lengthens the leader lease
+    readTimeout: ${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}
+  #  Default: 16777216 (16 MiB, about 3 minutes of one L40S on the 4B model at 22K tokens/s)
+  #  Description: Global in-flight work: the cost of submitted items not yet loaded. Set as throughput x the queue time accepted
+  budgetBytes: ${AI_LABELS_BUDGET_BYTES:-16777216}
+  #  Default: 2000
+  #  Description: An item's cost per engine call beyond its request bytes. Fit from the pool's load test
+  perCallBytes: ${AI_LABELS_PER_CALL_BYTES:-2000}
+  #  Default: 16384 (16 KiB)
+  #  Description: The least an item costs. At most budgetBytes / (2 x the dispatchers' batch slots)
+  minItemBytes: ${AI_LABELS_MIN_ITEM_BYTES:-16384}
+  #  Default: 60s
+  #  Description: How often the leader ticks: polls, loads, sweeps and submits
+  tickInterval: ${AI_LABELS_TICK_INTERVAL:-60s}
+  #  Default: 25s
+  #  Description: Each tick stops starting work after this long. Must be under tickInterval
+  tickBudget: ${AI_LABELS_TICK_BUDGET:-25s}
+  #  Default: 55s
+  #  Description: Under tickInterval, so every tick sweeps; a tick only submits what its own sweep found
+  sweepInterval: ${AI_LABELS_SWEEP_INTERVAL:-55s}
+  #  Default: 5m
+  #  Description: How often the backlog and latency gauges are recomputed, one sweep-sized query per bucket
+  healthInterval: ${AI_LABELS_HEALTH_INTERVAL:-5m}
+  #  Default: 7d
+  #  Description: H, how far back (by trace created_at) traces are labeled; under overload the oldest age out of it.
+  #  The sweep scans every trace in H each tick, so its cost grows with H
+  horizon: ${AI_LABELS_HORIZON:-7d}
+  #  Default: 1h
+  #  Description: Q, how long a trace must go without updates before it is labeled
+  quietPeriod: ${AI_LABELS_QUIET_PERIOD:-1h}
+  #  Default: 15m
+  #  Description: The labeling SLO is quietPeriod + sloSlack; only the headline gauges use it
+  sloSlack: ${AI_LABELS_SLO_SLACK:-15m}
+  retry:
+    #  Default: 2
+    #  Description: X, Opik-side attempts per (trace, task), on top of the service's own retries
+    maxAttempts: ${AI_LABELS_RETRY_MAX_ATTEMPTS:-2}
+    #  Default: 15m
+    #  Description: D, the wait before a retryable failure is picked up again
+    delay: ${AI_LABELS_RETRY_DELAY:-15m}
+  #  Default: 1000
+  #  Description: The most traces one submit turn renders
+  chunkTraces: ${AI_LABELS_CHUNK_TRACES:-1000}
+  #  Default: 4
+  #  Description: Finished jobs whose results are read in parallel
+  loadConcurrency: ${AI_LABELS_LOAD_CONCURRENCY:-4}
+  #  Default: 200000
+  #  Description: A tick stops starting job loads once it holds this many label and status rows
+  loadMaxRows: ${AI_LABELS_LOAD_MAX_ROWS:-200000}
+  #  Default: 2000
+  #  Description: C, the most candidates one sweep returns per workspace. About 2 x budgetBytes / minItemBytes, the most
+  #  traces one tick admits; scale it with the budget
+  perWorkspaceCandidates: ${AI_LABELS_PER_WORKSPACE_CANDIDATES:-2000}
+  #  Default: 2097152 (2 MiB; the opik-inference gateway rejects bodies over 8 MiB)
+  #  Description: A submitted job's request body is kept under this size
+  maxJobBytes: ${AI_LABELS_MAX_JOB_BYTES:-2097152}
+  #  Default: 49152 (48 KiB, about 12k tokens at UTF-8 bytes / 4)
+  #  Description: The rendered trace's share of the model input
+  renderBudgetBytes: ${AI_LABELS_RENDER_BUDGET_BYTES:-49152}
+  #  Default: 100000
+  #  Description: The whole model input: a task's prompt plus the rendered trace. Must be over renderBudgetBytes
+  modelInputBudgetBytes: ${AI_LABELS_MODEL_INPUT_BUDGET_BYTES:-100000}
+  #  Default: 4
+  #  Description: Traces rendered in parallel by a submit turn
+  renderThreads: ${AI_LABELS_RENDER_THREADS:-4}
+  #  Default: 200
+  #  Description: A trace's spans are read in start order up to this many; 200 keeps every span of 99.8% of traces
+  maxSpansPerTrace: ${AI_LABELS_MAX_SPANS_PER_TRACE:-200}
+  #  Default: 16777216 (16 MiB)
+  #  Description: A trace's spans are read in start order up to this much name, input and output
+  maxSpanBytesPerTrace: ${AI_LABELS_MAX_SPAN_BYTES_PER_TRACE:-16777216}
+  #  Default: 67108864 (64 MiB)
+  #  Description: A chunk's spans are read in batches of traces up to this much span name, input and output
+  renderReadBytes: ${AI_LABELS_RENDER_READ_BYTES:-67108864}
+  #  Default: 20s
+  #  Description: Each render query's max_execution_time on ClickHouse, as a duration (e.g. 20s), at least 1s and sent
+  #  in whole seconds; at most tickBudget, so a slow read can't hold a tick
+  renderMaxExecutionTime: ${AI_LABELS_RENDER_MAX_EXECUTION_TIME:-20s}
+  #  Default: 1048576 (1 MiB)
+  #  Description: A larger trace or span field is replaced whole in SQL, before it reaches the JVM
+  maxFieldBytes: ${AI_LABELS_MAX_FIELD_BYTES:-1048576}
+  history:
+    #  Default: 20
+    #  Description: K, the most earlier turns of a trace's thread read for tasks that use {{history}}
+    turns: ${AI_LABELS_HISTORY_TURNS:-20}
+    #  Default: 2048
+    #  Description: Each earlier turn's input and output is cut in the middle to this many UTF-8 bytes
+    maxFieldBytes: ${AI_LABELS_HISTORY_MAX_FIELD_BYTES:-2048}
+    #  Default: 24h
+    #  Description: Earlier turns whose id time is more than this before the trace's are not read
+    lookback: ${AI_LABELS_HISTORY_LOOKBACK:-24h}
+  sweep:
+    #  Default: 8
+    #  Description: N, enabled workspaces are split into this many buckets, one sweep query each
+    buckets: ${AI_LABELS_SWEEP_BUCKETS:-8}
+    #  Default: 30000000
+    #  Description: Per sweep query on the shared ClickHouse; a trip skips that bucket for the tick
+    maxRowsToRead: ${AI_LABELS_SWEEP_MAX_ROWS_TO_READ:-30000000}
+    #  Default: 1073741824 (1 GiB)
+    #  Description: Per sweep query on the shared ClickHouse; a trip skips that bucket for the tick
+    maxMemoryUsage: ${AI_LABELS_SWEEP_MAX_MEMORY_USAGE:-1073741824}
+    #  Default: 50s
+    #  Description: Per sweep query on the shared ClickHouse; a trip skips that bucket for the tick. Lengthens the leader
+    #  lease when over readTimeout
+    maxExecutionTime: ${AI_LABELS_SWEEP_MAX_EXECUTION_TIME:-50s}

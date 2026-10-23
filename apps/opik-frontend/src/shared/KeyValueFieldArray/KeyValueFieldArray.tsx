@@ -15,6 +15,7 @@ import { Label } from "@/ui/label";
 import { FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
 import { Input } from "@/ui/input";
 import { Description } from "@/ui/description";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 /// Generic key/value array field editor backed by React Hook Form's
 /// `useFieldArray`. Reused by any form that stores a list of `{key, value}`
@@ -33,6 +34,7 @@ type KeyValueFieldArrayProps<T extends FieldValues> = {
   valuePlaceholder?: string;
   addButtonLabel?: string;
   showColumnHeaders?: boolean;
+  maxItems?: number;
   newItem: () => FieldArray<T, ArrayPath<T>>;
 };
 
@@ -45,12 +47,14 @@ function KeyValueFieldArray<T extends FieldValues>({
   valuePlaceholder = "Value",
   addButtonLabel = "Add",
   showColumnHeaders = false,
+  maxItems,
   newItem,
 }: KeyValueFieldArrayProps<T>) {
   const { fields, append, remove } = useFieldArray<T, ArrayPath<T>>({
     control: form.control,
     name,
   });
+  const isAtMax = maxItems !== undefined && fields.length >= maxItems;
 
   return (
     <div className="flex flex-col gap-3">
@@ -147,16 +151,24 @@ function KeyValueFieldArray<T extends FieldValues>({
         </div>
       )}
 
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="w-fit"
-        onClick={() => append(newItem())}
+      <TooltipWrapper
+        content={isAtMax ? `Maximum of ${maxItems} reached` : null}
       >
-        <Plus className="mr-1.5 size-3.5" />
-        {addButtonLabel}
-      </Button>
+        <span
+          className={cn("inline-flex w-fit", isAtMax && "cursor-not-allowed")}
+        >
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isAtMax}
+            onClick={() => append(newItem())}
+          >
+            <Plus className="mr-1.5 size-3.5" />
+            {addButtonLabel}
+          </Button>
+        </span>
+      </TooltipWrapper>
     </div>
   );
 }

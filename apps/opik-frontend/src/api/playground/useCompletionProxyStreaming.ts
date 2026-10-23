@@ -13,9 +13,9 @@ import {
   ChatCompletionOpikErrorMessageType,
   ChatCompletionPythonProxyErrorMessageType,
 } from "@/types/playground";
-import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
+import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
-import { sanitizeConfigForRequest } from "@/lib/modelUtils";
+import { getRequestParameters } from "@/lib/modelUtils";
 import {
   LLMPromptConfigsType,
   OpenAiPipelineMode,
@@ -107,12 +107,6 @@ const getCompletionProxyStream = async ({
   workspaceName,
   openAiPipelineMode,
 }: GetCompletionProxyStreamParams) => {
-  const configsRecord = sanitizeConfigForRequest(
-    model,
-    configs as unknown as Record<string, unknown>,
-    openAiPipelineMode,
-  );
-
   return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {
     method: "POST",
     headers: {
@@ -124,7 +118,7 @@ const getCompletionProxyStream = async ({
       messages,
       stream: true,
       stream_options: { include_usage: true },
-      ...snakeCaseObj(configsRecord),
+      ...getRequestParameters(model, configs, openAiPipelineMode),
     }),
     credentials: "include",
     signal,
@@ -258,6 +252,29 @@ const useCompletionProxyStreaming = ({
           pythonProxyError = pythonProxyErrorMessage(parsedMessage.detail);
         };
 
+        const handleLine = (line: string) => {
+          const jsonData = line.startsWith(DATA_PREFIX)
+            ? line.split(DATA_PREFIX)[1]
+            : line;
+
+          if (jsonData.trim() === "[DONE]") {
+            return;
+          }
+
+          const parsed = safelyParseJSON(jsonData) as ChatCompletionResponse;
+
+          // handle different message types
+          if (isPythonProxyError(parsed)) {
+            handlePythonProxyErrorMessage(parsed);
+          } else if (isOpikError(parsed)) {
+            handleOpikErrorMessage(parsed);
+          } else if (isProviderError(parsed)) {
+            handleAIPlatformErrorMessage(parsed);
+          } else {
+            handleSuccessMessage(parsed);
+          }
+        };
+
         // buffer to hold incomplete lines across chunks
         let lineBuffer = "";
 
@@ -274,28 +291,14 @@ const useCompletionProxyStreaming = ({
           const { lines, newBuffer } = processSSEChunk(chunk, lineBuffer);
           lineBuffer = newBuffer;
 
-          for (const line of lines) {
-            const JSONData = line.startsWith(DATA_PREFIX)
-              ? line.split(DATA_PREFIX)[1]
-              : line;
+          lines.forEach(handleLine);
+        }
 
-            if (JSONData.trim() === "[DONE]") {
-              continue;
-            }
-
-            const parsed = safelyParseJSON(JSONData) as ChatCompletionResponse;
-
-            // handle different message types
-            if (isPythonProxyError(parsed)) {
-              handlePythonProxyErrorMessage(parsed);
-            } else if (isOpikError(parsed)) {
-              handleOpikErrorMessage(parsed);
-            } else if (isProviderError(parsed)) {
-              handleAIPlatformErrorMessage(parsed);
-            } else {
-              handleSuccessMessage(parsed);
-            }
-          }
+        // A request the backend rejects before streaming (such as a custom parameter Opik sets itself)
+        // gets a plain JSON 400 with no trailing newline, which is still in the buffer when the stream ends.
+        const lastLine = (lineBuffer + decoder.decode()).trim();
+        if (lastLine && !opikError && !pythonProxyError && !providerError) {
+          handleLine(lastLine);
         }
 
         return {
