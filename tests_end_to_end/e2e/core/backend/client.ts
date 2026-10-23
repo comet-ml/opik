@@ -63,6 +63,39 @@ export interface InsightsViewRef {
   scope: string | null;
 }
 
+/**
+ * One section of an insights view's stored `config`, as the project Dashboards
+ * page reads it back.
+ *
+ * `widgetTitles` rather than the widgets themselves: what a copy-of-a-template
+ * assertion needs to know is which widgets landed in which section and in what
+ * order, and a title is the only part of a widget a reader of the page can also
+ * see. `id` is carried because it is the subject of its own assertion — the copy
+ * builder runs the template through `regenerateAllIds`, so a copy that kept the
+ * template's `template-section-N` ids would be sharing ids with every other
+ * copy in the workspace.
+ */
+export interface InsightsViewSectionRef {
+  id: string;
+  title: string;
+  widgetTitles: string[];
+}
+
+/**
+ * An insights view read back BY ID, with its stored `config` decoded.
+ *
+ * Separate from `InsightsViewRef`, which is what the list read returns: the list
+ * carries no config, and a spec asserting what a widget-save actually persisted
+ * has to read the sections. `type` is carried for the same reason `scope` is on
+ * `InsightsViewRef` — the project page's view picker filters on
+ * `type: multi_project`, so a copy stored with any other type exists but is
+ * unreachable from the UI that made it.
+ */
+export interface InsightsViewDetail extends InsightsViewRef {
+  type: string | null;
+  sections: InsightsViewSectionRef[];
+}
+
 export interface DatasetRef {
   id: string;
   name: string;
@@ -2175,6 +2208,55 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         projectId: d.projectId ?? null,
         scope: d.scope ?? null,
       }));
+    },
+
+    /**
+     * `GET /v1/private/insights-views/{id}` — the read a shared link resolves,
+     * and the only one that carries the stored `config`.
+     *
+     * Returns null for a view that is not there, so a caller can assert a
+     * deletion took effect; anything else throws. The config is decoded into
+     * `sections` here rather than handed back raw, because `config` is a
+     * `JsonNode` on the wire and every caller wants the same three facts out of
+     * it — the section order, each section's id, and which widgets are in it.
+     *
+     * A section the backend stored without `widgets` comes back as an empty
+     * list rather than being skipped: "the section exists and holds nothing" and
+     * "the section is missing" are different failures, and a spec comparing
+     * widget counts per section must be able to tell them apart.
+     */
+    async getInsightsView(id: string): Promise<InsightsViewDetail | null> {
+      try {
+        const view = await withReadRetry(() => opik.api.insightsViews.getInsightsViewById(id));
+        const config = (view.config ?? {}) as {
+          sections?: Array<{
+            id?: unknown;
+            title?: unknown;
+            widgets?: Array<{ title?: unknown; generatedTitle?: unknown }>;
+          }>;
+        };
+        return {
+          id: String(view.id ?? ''),
+          name: view.name,
+          projectId: view.projectId ?? null,
+          scope: view.scope ?? null,
+          type: view.type ?? null,
+          sections: (config.sections ?? []).map((section) => ({
+            id: String(section.id ?? ''),
+            title: String(section.title ?? ''),
+            // A widget's own `title` when it has one, the title the app
+            // generated for it otherwise — the config stores both, and the
+            // header renders `title || generatedTitle`, so this is the string a
+            // reader of the page would see.
+            widgetTitles: (section.widgets ?? []).map((widget) =>
+              String(widget.title || widget.generatedTitle || ''),
+            ),
+          })),
+        };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
     },
 
     /**

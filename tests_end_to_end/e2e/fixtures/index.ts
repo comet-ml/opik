@@ -1,4 +1,4 @@
-export { test, expect } from './emptied-source-versions.fixture';
+export { test, expect } from './project-overview-copy.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -493,3 +493,7 @@ export type {
   EmptiedSourceRef,
   EmptiedSourceVersionsFixtures,
 } from './emptied-source-versions.fixture';
+export type {
+  ProjectOverviewTracesRef,
+  ProjectOverviewCopyFixtures,
+} from './project-overview-copy.fixture';
