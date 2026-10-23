@@ -300,6 +300,19 @@ repos:
         pass_filenames: false
 
   # ---------------------------------------------------------------------------
+  # Self-check: the model bot PR alert. Stubs gh and curl, so it runs without a
+  # token and never posts to Slack.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: model-bot-pr-alert-tests
+        name: 🧪 model bot PR alert tests
+        entry: scripts/test_model_bot_pr_alert.sh
+        language: system
+        files: ^\.github/scripts/model-bot-pr-alert\.sh$|^scripts/test_model_bot_pr_alert\.sh$
+        pass_filenames: false
+
+  # ---------------------------------------------------------------------------
   # Self-check: the changelog re-baseline script's guards decide whether an
   # operator recovery is refused or silently bricks a database, so exercise them
   # (stubbed java/curl — no JVM, no ClickHouse) whenever the script changes.
