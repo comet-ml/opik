@@ -685,4 +685,16 @@ class ParamResolverTest {
 
         assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
     }
+
+    // The Python SDK saved reasoning_effort "low" into every test-suite judge config, whichever model judges it.
+    @Test
+    void dropsTheEffortAnOldSdkSuiteConfigSavedWhenGpt4oMiniJudgesIt() {
+        var saved = JsonUtils.readValue("""
+                {"name": "gpt-4o-mini", "temperature": null, "seed": null,
+                 "customParameters": {"reasoning_effort": "low"}}""", LlmAsJudgeModelParameters.class);
+
+        assertThat(shippedOpenAiResolver("gpt-4o-mini").resolve(saved)).isEqualTo(resolution(
+                LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
+                new ParamChange("reasoning_effort", Reason.REFUSED_BY_MODEL)));
+    }
 }

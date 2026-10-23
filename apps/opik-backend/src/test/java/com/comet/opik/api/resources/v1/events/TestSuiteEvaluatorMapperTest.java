@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.data.message.ChatMessageType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -133,6 +134,24 @@ class TestSuiteEvaluatorMapperTest {
             var result = mapper.toScoringCode(config, "gpt-4o-mini", false);
 
             assertThat(result.maxCostUsd()).isNull();
+        }
+
+        @Test
+        @DisplayName("keeps the custom parameters an SDK saved under customParameters")
+        void keepsCamelCaseCustomParameters() {
+            var mapper = new TestSuiteEvaluatorMapper(new TestSuiteConfig());
+            var config = JsonUtils.valueToTree(judgeCode(null));
+            ((ObjectNode) config).set("model", JsonUtils.getJsonNodeFromString(
+                    """
+                            {"name": null, "temperature": null, "seed": null, "customParameters": {"reasoning_effort": "low"}}"""));
+
+            var result = mapper.toScoringCode(config, "gpt-4o-mini", false);
+
+            assertThat(result.model()).isEqualTo(LlmAsJudgeModelParameters.builder()
+                    .name("gpt-4o-mini")
+                    .customParameters(JsonUtils.getJsonNodeFromString("""
+                            {"reasoning_effort": "low"}"""))
+                    .build());
         }
     }
 }
