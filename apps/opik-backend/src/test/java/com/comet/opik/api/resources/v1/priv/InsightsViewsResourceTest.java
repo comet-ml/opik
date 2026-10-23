@@ -139,7 +139,6 @@ class InsightsViewsResourceTest {
             assertThat(created.scope()).isEqualTo(DashboardScope.INSIGHTS);
             assertThat(created.name()).isEqualTo(dashboard.name());
             assertThat(created.id()).isNotNull();
-            assertThat(created.slug()).isNotNull();
             assertThat(created.createdBy()).isEqualTo(USER);
         }
 
