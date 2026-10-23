@@ -25,7 +25,13 @@ The `pixeltable[otel]` extra installs `opentelemetry-instrumentation-pixeltable`
 
 ## Environment configuration
 
-Configure your environment variables based on your Opik deployment. `init()` reads `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` when you leave `endpoint` and `headers` unset. You can also pass those values as arguments, as the example below does.
+Configure your environment variables based on your Opik deployment. `init()` reads `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` when you leave `endpoint` and `headers` unset. Pass `endpoint` and `headers` to `init()` instead, as the example below does.
+
+<Warning>
+  Give the Opik endpoint and headers to the exporter in code. Do not use the `OTEL_EXPORTER_OTLP_ENDPOINT` and
+  `OTEL_EXPORTER_OTLP_HEADERS` environment variables for Opik: all the OTLP exporters in the process read them, so the
+  other backend also gets the Opik endpoint and your Opik API key.
+</Warning>
 
 <Note>
   `init()` uses the OTLP/HTTP exporter by default and appends `/v1/traces` to the endpoint. Pass Opik's base URL. The path is not appended a second time when the URL already ends in `/v1/traces`.
@@ -33,10 +39,12 @@ Configure your environment variables based on your Opik deployment. `init()` rea
 
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
-        If you are using Opik Cloud, you will need to set the following
+        If you are using Opik Cloud, you can set the following
         environment variables:
 
         ```bash wordWrap
+        export OPIK_API_KEY='<your-api-key>'
+        export OPIK_WORKSPACE='default'
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
@@ -55,10 +63,12 @@ Configure your environment variables based on your Opik deployment. `init()` rea
         </Tip>
     </Tab>
     <Tab value="Enterprise deployment" title="Enterprise deployment">
-        If you are using an Enterprise deployment of Opik, you will need to set the following
+        If you are using an Enterprise deployment of Opik, you can set the following
         environment variables:
 
         ```bash wordWrap
+        export OPIK_API_KEY='<your-api-key>'
+        export OPIK_WORKSPACE='default'
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
         ```
@@ -78,7 +88,7 @@ Configure your environment variables based on your Opik deployment. `init()` rea
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
 
-    If you are self-hosting Opik, you will need to set the following environment
+    If you are self-hosting Opik, you can set the following environment
     variables. No authorization headers are required:
 
     ```bash wordWrap
@@ -108,7 +118,7 @@ Call `init()` once, before the first Pixeltable operation. `span_level='debug'` 
 
 Opik's OTLP endpoint accepts traces. Pass `metrics=False` so `init()` does not also export metrics.
 
-Set `OPENAI_API_KEY` before you run the script. Pixeltable reads that variable when the OpenAI UDF runs. `OPIK_API_KEY` is your Opik API key and `OPIK_WORKSPACE` is your Comet workspace name.
+Set `OPENAI_API_KEY` before you run the script. Pixeltable reads that variable when the OpenAI UDF runs. Export `OPIK_API_KEY` and `OPIK_WORKSPACE` as shown above. The script sends `OPIK_API_KEY` as `Authorization` and `OPIK_WORKSPACE` as `Comet-Workspace`.
 
 ```python title="pixeltable_opik.py" wordWrap
 import os
