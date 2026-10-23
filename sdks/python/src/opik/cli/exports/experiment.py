@@ -21,7 +21,7 @@ import opik
 from opik import exceptions
 from opik.cli.export_manifest import ExportManifest
 from opik.rest_api.core.api_error import ApiError
-from .project import _export_rest_retry
+from .project import _export_rest_retry, _validate_filter_syntax
 from .utils import (
     console,
     create_experiment_data_structure,
@@ -606,6 +606,10 @@ def export_experiment_by_name(
         if debug:
             debug_print(f"Exporting experiment: {name}", debug)
 
+        # Validate filter syntax before doing anything else
+        if filter_string and filter_string.strip():
+            _validate_filter_syntax(filter_string)
+
         # Initialize client
         if api_key:
             client = opik.Opik(api_key=api_key, workspace=workspace)
@@ -852,6 +856,10 @@ def export_experiment_by_name_or_id(
     try:
         if debug:
             debug_print(f"Attempting to export experiment: {name_or_id}", debug)
+
+        # Validate filter syntax before doing anything else
+        if filter_string and filter_string.strip():
+            _validate_filter_syntax(filter_string)
 
         # Initialize client
         if api_key:
