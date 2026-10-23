@@ -1,0 +1,189 @@
+---
+description: Start here to integrate Opik into your Pixeltable application for
+  end-to-end observability of table operations, UDFs, and LLM calls.
+headline: Pixeltable
+og:description: Trace Pixeltable table operations, row and UDF spans, and nested
+  OpenAI calls in Opik with OpenTelemetry.
+og:site_name: Opik Documentation
+og:title: Observability for Pixeltable with Opik
+title: Observability for Pixeltable with Opik
+---
+
+[Pixeltable](https://github.com/pixeltable/pixeltable) is declarative data infrastructure for multimodal AI applications. See the [Pixeltable documentation](https://docs.pixeltable.com) for the data model.
+
+Each table operation is one trace. With `span_level` set to `debug`, that trace includes a span per row and per UDF call, and OpenInference LLM spans nest under the UDF that made the call.
+
+## Getting started
+
+To use the Pixeltable integration with Opik, install Pixeltable's OpenTelemetry extra, the OpenAI SDK, and the OpenInference OpenAI instrumentor. Pixeltable requires Python 3.11 or newer.
+
+```bash wordWrap
+pip install 'pixeltable[otel]' openai openinference-instrumentation-openai
+```
+
+The `pixeltable[otel]` extra installs `opentelemetry-instrumentation-pixeltable` (0.1.0 on PyPI) together with the OpenTelemetry SDK and the OTLP exporters that `init()` needs.
+
+## Environment configuration
+
+Configure your environment variables based on your Opik deployment. `init()` reads `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` when you leave `endpoint` and `headers` unset. Pass `endpoint` and `headers` to `init()` instead, as the example below does.
+
+<Warning>
+  Give the Opik endpoint and headers to the exporter in code. Do not use the `OTEL_EXPORTER_OTLP_ENDPOINT` and
+  `OTEL_EXPORTER_OTLP_HEADERS` environment variables for Opik: all the OTLP exporters in the process read them, so the
+  other backend also gets the Opik endpoint and your Opik API key.
+</Warning>
+
+<Note>
+  `init()` uses the OTLP/HTTP exporter by default and appends `/v1/traces` to the endpoint. Pass Opik's base URL. The path is not appended a second time when the URL already ends in `/v1/traces`.
+</Note>
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        If you are using Opik Cloud, you can set the following
+        environment variables:
+
+        ```bash wordWrap
+        export OPIK_API_KEY='<your-api-key>'
+        export OPIK_WORKSPACE='default'
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you can set the following
+        environment variables:
+
+        ```bash wordWrap
+        export OPIK_API_KEY='<your-api-key>'
+        export OPIK_WORKSPACE='default'
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+
+    If you are self-hosting Opik, you can set the following environment
+    variables. No authorization headers are required:
+
+    ```bash wordWrap
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+    ```
+
+    <Tip>
+        To log the traces to a specific project, you can add the `projectName`
+        parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+
+    </Tip>
+    </Tab>
+
+</Tabs>
+
+<Warning>
+  The `Authorization` header is the raw Opik API key. Do not add a `Bearer ` prefix.
+</Warning>
+
+## Using Opik with Pixeltable
+
+Call `init()` once, before the first Pixeltable operation. `span_level='debug'` adds the per-row and per-UDF spans. The default `'info'` keeps the operation span plus its catalog, store, and SQL spans, and omits the row and UDF spans. Instrument OpenAI after `init()` so its spans use the tracer provider Pixeltable configured and nest under the UDF span.
+
+Opik's OTLP endpoint accepts traces. Pass `metrics=False` so `init()` does not also export metrics.
+
+Set `OPENAI_API_KEY` before you run the script. Pixeltable reads that variable when the OpenAI UDF runs. Export `OPIK_API_KEY` and `OPIK_WORKSPACE` as shown above. The script sends `OPIK_API_KEY` as `Authorization` and `OPIK_WORKSPACE` as `Comet-Workspace`.
+
+```python title="pixeltable_opik.py" wordWrap
+import os
+
+import opentelemetry.instrumentation.pixeltable as pxt_otel
+import pixeltable as pxt
+from openinference.instrumentation.openai import OpenAIInstrumentor
+from opentelemetry import trace
+from pixeltable.functions.openai import chat_completions
+
+pxt_otel.init(
+    endpoint='https://www.comet.com/opik/api/v1/private/otel',
+    headers=(
+        f"Authorization={os.environ['OPIK_API_KEY']},"
+        f"Comet-Workspace={os.environ['OPIK_WORKSPACE']},"
+        'projectName=pixeltable-demo'
+    ),
+    service_name='pixeltable-app',
+    span_level='debug',
+    metrics=False,
+)
+OpenAIInstrumentor().instrument()
+
+pxt.create_dir('opik_demo', if_exists='replace_force')
+prompts = pxt.create_table(
+    'opik_demo.prompts',
+    {'prompt': pxt.String},
+    if_exists='replace_force',
+)
+prompts.add_computed_column(
+    response=chat_completions(
+        messages=[{'role': 'user', 'content': prompts.prompt}],
+        model='gpt-4o-mini',
+    )
+)
+prompts.insert([{'prompt': 'Name one fact about Paris.'}])
+
+trace.get_tracer_provider().force_flush()
+```
+
+`init()` installs a batch span processor. `force_flush()` exports the queued spans before a short-lived script exits.
+
+For a self-hosted Opik server, use the same script with the local base URL and no auth headers:
+
+```python wordWrap
+pxt_otel.init(
+    endpoint='http://localhost:5173/api/v1/private/otel',
+    service_name='pixeltable-app',
+    span_level='debug',
+    metrics=False,
+)
+```
+
+To choose a project on that server, pass `headers='projectName=<your-project-name>'`. If you exported the variables in the section above, omit `endpoint` and `headers` and `init()` reads them from the environment.
+
+## What gets traced
+
+With this setup, Pixeltable exports:
+
+- **Table operations**: one trace per operation, rooted at a span such as `pixeltable.insert` or `pixeltable.add_computed_column`
+- **Rows and UDFs** (`span_level='debug'`): a `pixeltable.row` span for each row, with a nested `pixeltable.udf.<name>` span for each UDF call
+- **LLM calls**: OpenInference OpenAI spans nested under the UDF that called the model
+
+Span names and the rest of the tree are documented in the [Pixeltable observability guide](https://docs.pixeltable.com/platform/observability).
+
+## Further improvements
+
+If you have any questions or suggestions for improving the Pixeltable integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.
