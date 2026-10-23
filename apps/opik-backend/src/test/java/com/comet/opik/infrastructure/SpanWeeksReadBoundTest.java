@@ -20,6 +20,8 @@ import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.filter.TraceThreadFilter;
+import com.comet.opik.api.metrics.KpiCardRequest;
+import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -63,6 +65,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AsyncUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -223,6 +226,50 @@ class SpanWeeksReadBoundTest {
 
         TraceAssertions.assertPage(actual, 1, 1, 1);
         TraceAssertions.assertTraces(actual.content(), List.of(expectedTrace(trace)), USER);
+    }
+
+    /** The trace KPI cost reads its span weeks from span_weeks in both query shapes: no filter, and a payload filter. */
+    private Stream<Arguments> traceKpiCostCountsAFarFutureSpan() {
+        return Stream.of(
+                arguments(Named.of("no filter", (Function<FarFutureTrace, List<TraceFilter>>) trace -> List.of())),
+                arguments(Named.of("input filter", (Function<FarFutureTrace, List<TraceFilter>>) trace -> List.of(
+                        TraceFilter.builder()
+                                .field(TraceField.INPUT)
+                                .operator(Operator.CONTAINS)
+                                .value(trace.trace().input().propertyStream().toList().getFirst().getValue().asText())
+                                .build()))));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void traceKpiCostCountsAFarFutureSpan(Function<FarFutureTrace, List<TraceFilter>> filters) {
+        var trace = fixtures.createFarFutureTrace();
+
+        var actual = projectResourceClient.getKpiCards(trace.projectId(), KpiCardRequest.builder()
+                .entityType(KpiCardRequest.EntityType.TRACES)
+                .intervalStart(trace.trace().startTime().minus(Duration.ofHours(1)))
+                .filters(JsonUtils.writeValueAsString(filters.apply(trace)))
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        var durationMs = Duration.between(trace.trace().startTime(), trace.trace().endTime()).toNanos() / 1_000_000.0;
+        var expected = KpiCardResponse.builder()
+                .stats(List.of(
+                        kpi(KpiCardResponse.KpiMetricType.COUNT, 1.0, 0.0),
+                        kpi(KpiCardResponse.KpiMetricType.ERRORS, trace.trace().errorInfo() != null ? 100.0 : 0.0,
+                                0.0),
+                        kpi(KpiCardResponse.KpiMetricType.AVG_DURATION, durationMs, null),
+                        kpi(KpiCardResponse.KpiMetricType.TOTAL_COST, trace.totalCost().doubleValue(), 0.0)))
+                .build();
+        assertThat(actual)
+                .usingRecursiveComparison()
+                .ignoringCollectionOrder()
+                .withComparatorForType((a, b) -> Math.abs(a - b) <= 1e-6 ? 0 : Double.compare(a, b), Double.class)
+                .isEqualTo(expected);
+    }
+
+    private static KpiCardResponse.KpiMetric kpi(KpiCardResponse.KpiMetricType type, Double current,
+            Double previous) {
+        return KpiCardResponse.KpiMetric.builder().type(type).currentValue(current).previousValue(previous).build();
     }
 
     /**
