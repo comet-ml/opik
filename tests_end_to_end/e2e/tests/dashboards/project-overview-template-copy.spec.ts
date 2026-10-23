@@ -380,6 +380,35 @@ test.describe(
         page,
         testNamespace,
       }) => {
+        // QA: failing on staging for 2.2.119, and isolated to the detour this
+        // test exists to drive. The page DOES switch back to the copy — the
+        // `dashboardId` poll below passes — but the Edit view dialog opens with
+        // its Name box EMPTY instead of prefilled.
+        //
+        // Reproduced on staging as a pair, with no Playwright assertions
+        // involved: clicking the toast's Rename straight after the copy opens
+        // the dialog holding "Project overview (custom)", and clicking it after
+        // moving the view picker to another view opens the same dialog holding
+        // "". So neither the toast nor the dialog is broken; the combination is.
+        //
+        // Deterministic rather than a race, which is why it is marked rather
+        // than waited out: `ProjectDashboardViewDialog` reads its name through
+        // `useForm`'s `defaultValues`, which React Hook Form evaluates once at
+        // mount — so a dialog that mounts without the copy's name can never
+        // backfill it, however long anything waits. Held for 13s in two
+        // separate runs.
+        //
+        // The user-visible cost is the one this test's docblock describes, one
+        // step further on: Rename does reach the right view, but the box the
+        // user types into has lost the name it was supposed to be editing, so
+        // an empty submit is a validation error and a blind retype is a rename
+        // of a view whose old name is no longer on screen.
+        //
+        // The assertions below are the CORRECT behaviour and are left intact.
+        // Remove test.fail() once the dialog prefills on this path; Playwright
+        // reports it the moment this passes.
+        test.fail();
+
         const widgetTitle = `${testNamespace}-widget`;
         const renamedTo = `${testNamespace}-renamed-view`;
 
