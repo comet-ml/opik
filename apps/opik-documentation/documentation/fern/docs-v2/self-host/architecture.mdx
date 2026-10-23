@@ -11,7 +11,7 @@ title: Platform Architecture
 Opik's architecture consists of multiple services that each handle a specific role, including:
 
 - **A Java backend service**: Java 25 + Dropwizard — REST API, authentication, business logic, and database migrations.
-- **A Python backend service**: Flask + Gunicorn — evaluator execution, sandboxed code execution, and optimization workflows.
+- **A Python backend service**: Flask + Gunicorn — evaluator execution, user-supplied Python code execution, and optimization workflows.
 - **A frontend application**: TypeScript + React SPA, served by Nginx which also reverse-proxies API requests to the backend.
 - **SDKs**: Python and TypeScript clients that batch telemetry data and send it to the backend via REST/HTTP.
 - **Data stores**:
@@ -49,11 +49,22 @@ _You can find the full backend codebase in GitHub under the [`apps/opik-backend`
 
 Opik includes a Python backend service (Flask + Gunicorn) that handles workloads requiring Python execution:
 
-- **Evaluators**: Executes custom Python evaluation code in sandboxed subprocesses with configurable timeouts, memory limits, and network isolation.
+- **Evaluators**: Executes custom Python evaluation code in sandboxed subprocesses with configurable timeouts, memory limits, and network isolation. See [Code execution strategies](#code-execution-strategies) below for the full list.
 - **Optimization Studio**: Runs LLM-based optimization and prompt engineering workflows with concurrent job management.
 - **Background jobs**: Uses Redis Queue (RQ) for asynchronous job processing, including evaluation runs and optimization tasks.
 
 The Java backend calls the Python backend for evaluator execution, and both services share Redis for job coordination.
+
+### Code execution strategies
+
+`PYTHON_CODE_EXECUTOR_STRATEGY` selects how the Python backend runs user-supplied evaluator code:
+
+| Strategy | Isolation | Default in |
+| --- | --- | --- |
+| `process` | Runs the code in a worker process of the Python backend. Only the execution timeout (`PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS`) applies; the code runs with the service's user, environment variables, and network access. | `docker compose`, Helm chart |
+| `docker` | Runs each execution in a separate container built from the `opik-sandbox-executor-python` image, as a non-root user, with memory and CPU limits (`PYTHON_CODE_EXECUTOR_MEM_LIMIT`, `PYTHON_CODE_EXECUTOR_CPU_LIMIT`, `PYTHON_CODE_EXECUTOR_CPU_SHARES`) and no network access unless `PYTHON_CODE_EXECUTOR_ALLOW_NETWORK` is `true`. The Python backend starts its own Docker daemon, which requires a privileged container. | — |
+
+The limits other than the timeout apply only to the `docker` strategy.
 
 _You can find the full Python backend codebase in GitHub under the [`apps/opik-python-backend`](https://github.com/comet-ml/opik/tree/main/apps/opik-python-backend) folder._
 
