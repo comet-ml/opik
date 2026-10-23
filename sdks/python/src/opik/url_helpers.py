@@ -21,19 +21,14 @@ def ensure_ending_slash(url: str) -> str:
     return url.rstrip("/") + "/"
 
 
-def get_ui_url() -> str:
-    config = opik.config.OpikConfig()
-    return get_ui_base_url(config.url_override)
-
-
-def get_ui_base_url(api_url: str) -> str:
-    return api_url.rstrip("/").removesuffix("/api") + "/"
+def get_ui_url(url_override: str) -> str:
+    return url_override.rstrip("/").removesuffix("/api") + "/"
 
 
 def get_experiment_url_by_id(
     dataset_id: str, experiment_id: str, base_url: str, workspace: str
 ) -> str:
-    ui_url = get_ui_base_url(base_url)
+    ui_url = get_ui_url(base_url)
     experiments = urllib.parse.quote(json.dumps([experiment_id]))
     return (
         f"{ui_url}{workspace}/experiments/{dataset_id}/compare"
@@ -44,7 +39,7 @@ def get_experiment_url_by_id(
 def get_project_url_by_workspace(
     workspace: str, project_name: str
 ) -> str:  # don't use or update, will be removed soon
-    ui_url = get_ui_url()
+    ui_url = get_ui_url(opik.config.OpikConfig().url_override)
 
     project_path = urllib.parse.quote(
         f"{workspace}/redirect/projects?name={project_name}",
@@ -65,28 +60,28 @@ def get_project_url_by_trace_id(trace_id: str, url_override: str) -> str:
 def get_dataset_url_by_id(
     base_url: str, workspace: str, project_id: str, dataset_id: str
 ) -> str:
-    ui_url = get_ui_base_url(base_url)
+    ui_url = get_ui_url(base_url)
     return f"{ui_url}{workspace}/projects/{project_id}/datasets/{dataset_id}/items"
 
 
 def get_test_suite_url_by_id(
     base_url: str, workspace: str, project_id: str, test_suite_id: str
 ) -> str:
-    ui_url = get_ui_base_url(base_url)
+    ui_url = get_ui_url(base_url)
     return (
         f"{ui_url}{workspace}/projects/{project_id}/test-suites/{test_suite_id}/items"
     )
 
 
 def get_project_url_by_id(base_url: str, project_id: str, workspace: str) -> str:
-    ui_url = get_ui_base_url(base_url)
+    ui_url = get_ui_url(base_url)
     return f"{ui_url}{workspace}/projects/{project_id}/"
 
 
 def get_agent_playground_url_by_project_id(
     base_url: str, project_id: str, workspace: str
 ) -> str:
-    ui_url = get_ui_base_url(base_url)
+    ui_url = get_ui_url(base_url)
     return f"{ui_url}{workspace}/projects/{project_id}/agent-playground"
 
 

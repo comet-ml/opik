@@ -1,6 +1,5 @@
 import pytest
 from opik import url_helpers
-from opik.config import OpikConfig
 
 
 @pytest.mark.parametrize(
@@ -76,14 +75,9 @@ def test_get_user_permissions_url__url_override__keeps_path_prefix(
     ],
 )
 def test_get_ui_url__url_override__only_strips_api_suffix(
-    url_override: str, expected_ui_url: str, monkeypatch: pytest.MonkeyPatch
+    url_override: str, expected_ui_url: str
 ) -> None:
-    monkeypatch.setattr(
-        url_helpers.opik.config,
-        "OpikConfig",
-        lambda: OpikConfig(url_override=url_override),
-    )
-    assert url_helpers.get_ui_url() == expected_ui_url
+    assert url_helpers.get_ui_url(url_override) == expected_ui_url
 
 
 @pytest.mark.parametrize(
