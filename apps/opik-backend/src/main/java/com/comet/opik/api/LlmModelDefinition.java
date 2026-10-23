@@ -18,5 +18,6 @@ public record LlmModelDefinition(
         boolean reasoning,
         @Nullable List<String> supportedParameters,
         @Nullable List<String> reasoningEfforts,
-        ModelParams params) {
+        ModelParams params,
+        @Nullable String retiresOn) {
 }

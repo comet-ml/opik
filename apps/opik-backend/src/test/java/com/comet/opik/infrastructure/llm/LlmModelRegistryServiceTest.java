@@ -623,6 +623,95 @@ class LlmModelRegistryServiceTest {
         org.mockito.Mockito.verifyNoInteractions(client);
     }
 
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "hidden: true             | ",
+            "hidden: false            | GPT 4o",
+            "reasoning: true          | GPT 4o",
+            "label: GPT 4o from above | GPT 4o from above"
+    })
+    void anUpperLayerHidesAModelOnlyWhenItSaysSo(String overrideField, String expectedLabel, @TempDir Path tempDir)
+            throws IOException {
+        var service = serviceWithOverride(tempDir, """
+                openai:
+                  - id: "gpt-4o"
+                    %s
+                """.formatted(overrideField));
+
+        var model = service.findModel("gpt-4o").orElseThrow().model();
+
+        assertThat(model.label()).isEqualTo(expectedLabel);
+        assertThat(model.structuredOutput()).isTrue();
+    }
+
+    @Test
+    void aHiddenModelStillResolves(@TempDir Path tempDir) throws IOException {
+        var service = serviceWithOverride(tempDir, """
+                openai:
+                  - id: "gpt-4o"
+                    hidden: true
+                """);
+
+        assertThat(service.getRegistry().get("openai")).extracting(LlmModelDefinition::id)
+                .containsExactly("gpt-4o", "gpt-3.5-turbo", "o3");
+        assertThat(service.findModel("gpt-4o")).get()
+                .extracting(LlmModelRegistryService.ModelLookupResult::provider)
+                .isEqualTo(LlmProvider.OPEN_AI);
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "retiresOn: \"2026-10-23\"   | 2026-10-23",
+            "retiresOn: \" 2026-11-30 \" | 2026-11-30",
+            "retiresOn: \"soon\"         | ",
+            "reasoning: true             | "
+    })
+    void servesAModelsRetirementDateOnlyWhenItIsAnIsoDate(String overrideField, String expected,
+            @TempDir Path tempDir) throws IOException {
+        var service = serviceWithOverride(tempDir, """
+                openai:
+                  - id: "o3"
+                    %s
+                """.formatted(overrideField));
+
+        assertThat(service.findModel("o3").orElseThrow().model().retiresOn()).isEqualTo(expected);
+    }
+
+    @Test
+    void anUpperLayerKeepsTheLowerLayersRetirementDateAndHiddenFlagWhenItLeavesThemOut() {
+        var defaults = Map.of("openai", List.of(
+                ModelEntry.builder().id("o4-mini").label("GPT o4 Mini").hidden(true).retiresOn("2026-10-23").build()));
+        var overrides = Map.of("openai", List.of(ModelEntry.builder().id("o4-mini").reasoning(true).build()));
+
+        var merged = LlmModelRegistryService.merge(defaults, overrides);
+
+        assertThat(merged.get("openai")).containsExactly(ModelEntry.builder().id("o4-mini").label("GPT o4 Mini")
+                .reasoning(true).hidden(true).retiresOn("2026-10-23").build());
+    }
+
+    @Test
+    void theApiWritesTheRetirementDateInSnakeCase(@TempDir Path tempDir) throws IOException {
+        var service = serviceWithOverride(tempDir, """
+                openai:
+                  - id: "o3"
+                    retiresOn: "2026-10-23"
+                """);
+
+        var json = JsonUtils.valueToTree(service.findModel("o3").orElseThrow().model());
+
+        assertThat(json.get("retires_on").asText()).isEqualTo("2026-10-23");
+        assertThat(json.has("hidden")).isFalse();
+    }
+
+    private static LlmModelRegistryService serviceWithOverride(Path tempDir, String overrideYaml) throws IOException {
+        var overridePath = tempDir.resolve("override.yaml");
+        Files.writeString(overridePath, overrideYaml);
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+        config.setLocalOverridePath(overridePath.toString());
+        return new LlmModelRegistryService(config);
+    }
+
     private static Client mockHttpClient(int statusCode, String responseBody) {
         return mockHttpClient(mockResponse(statusCode, responseBody));
     }

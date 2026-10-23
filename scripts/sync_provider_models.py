@@ -354,21 +354,27 @@ def _deprecated_value(key: str, litellm_provider: str) -> tuple[str, str] | None
     return None
 
 
-def build_deprecated_by_provider(prices: dict) -> dict[str, set[str]]:
-    today = date.today()
-    deprecated: dict[str, set[str]] = {}
+def build_retirement_dates(prices: dict) -> dict[str, dict[str, str]]:
+    dates: dict[str, dict[str, str]] = {}
     for key, info in prices.items():
         if not isinstance(info, dict) or not info.get("deprecation_date"):
             continue
         try:
-            if date.fromisoformat(info["deprecation_date"]) > today:
-                continue
+            retires_on = date.fromisoformat(str(info["deprecation_date"]).strip())
         except ValueError:
             continue
         scoped = _deprecated_value(key, str(info.get("litellm_provider", "")))
         if scoped:
-            deprecated.setdefault(scoped[0], set()).add(scoped[1])
-    return deprecated
+            dates.setdefault(scoped[0], {})[scoped[1]] = retires_on.isoformat()
+    return dates
+
+
+def build_deprecated_by_provider(prices: dict) -> dict[str, set[str]]:
+    today = date.today().isoformat()
+    return {
+        provider: {value for value, retires_on in values.items() if retires_on <= today}
+        for provider, values in build_retirement_dates(prices).items()
+    }
 
 
 def filter_for_dropdown(
@@ -1551,6 +1557,7 @@ def regenerate_llm_models_yaml(
     openrouter_capabilities: dict[str, OpenRouterCapabilities] | None = None,
     kept_providers: frozenset[str] | set[str] = frozenset(),
     params_lines: dict[str, dict[str, str]] | None = None,
+    retirement_dates: dict[str, dict[str, str]] | None = None,
 ) -> str:
     """
     Regenerate llm-models-default.yaml from the synced model entries.
@@ -1580,6 +1587,7 @@ def regenerate_llm_models_yaml(
     openai_reasoning = openai_reasoning or {}
     openrouter_capabilities = openrouter_capabilities or {}
     params_lines = params_lines or {}
+    retirement_dates = retirement_dates or {}
 
     lines: list[str] = []
 
@@ -1627,6 +1635,13 @@ def regenerate_llm_models_yaml(
             if is_dropdown_entry and entry.label:
                 escaped_label = entry.label.replace('"', '\\"')
                 lines.append(f'    label: "{escaped_label}"')
+            # A layer that leaves the label out keeps the one below it, so the CDN copy could add a model to the
+            # picker but never take one out until a release ships this file; the explicit flag lets it.
+            elif provider_key in dropdown_by_provider:
+                lines.append("    hidden: true")
+            retires_on = retirement_dates.get(provider_key, {}).get(entry.value)
+            if retires_on:
+                lines.append(f'    retiresOn: "{retires_on}"')
 
             if entry.structured_output:
                 lines.append("    structuredOutput: true")
@@ -1974,6 +1989,7 @@ def main():
         openrouter_capabilities=openrouter_capabilities,
         kept_providers=kept_providers,
         params_lines=params_lines,
+        retirement_dates=build_retirement_dates(prices),
     )
     changed_params = params_changes(
         llm_models_yaml_content, params_lines, {_PROVIDER_TO_YAML_KEY[p] for p in kept_providers},
