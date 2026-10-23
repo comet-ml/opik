@@ -1637,6 +1637,10 @@ llmProviderClient:
   # Default: false
   # Description: Whether or not to log responses (HTTP-level logging via langchain4j - can be verbose)
   logResponses: ${LLM_PROVIDER_CLIENT_LOG_RESPONSES:-false}
+  # Default: relaxed
+  # Description: Destination check on user-supplied provider URLs (base URLs, Ollama connection checks).
+  #   strict refuses private and internal destinations; relaxed allows them, e.g. a local Ollama
+  destinationGuard: ${LLM_PROVIDER_CLIENT_DESTINATION_GUARD:-relaxed}
   # Configuration for OpenAI client
   openAiClient:
     # Default:

@@ -33,6 +33,7 @@ import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIClientGenerator;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.jupiter.api.BeforeAll;
@@ -44,6 +45,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.util.List;
@@ -64,6 +66,8 @@ import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class LlmProviderFactoryTest {
+    private static final String CUSTOM_LLM_MODEL = "custom-llm/my-provider/llama3.2";
+
     private LlmProviderClientConfig llmProviderClientConfig;
     private LlmModelRegistryService registryService;
 
@@ -88,7 +92,31 @@ class LlmProviderFactoryTest {
         freeModelConfig.setBaseUrl("https://test-endpoint.example.com");
         freeModelConfig.setApiKey("test-api-key");
         when(mockConfig.getFreeModel()).thenReturn(freeModelConfig);
+        when(mockConfig.getLlmProviderClient()).thenReturn(llmProviderClientConfig);
         return mockConfig;
+    }
+
+    private OpikConfiguration createMockConfigWithDestinationGuard(DestinationGuard.Mode mode) {
+        var mockConfig = createMockConfigWithFreeModel(true, "gpt-4o-mini", "openai");
+        var clientConfig = new LlmProviderClientConfig();
+        clientConfig.setDestinationGuard(mode);
+        when(mockConfig.getLlmProviderClient()).thenReturn(clientConfig);
+        return mockConfig;
+    }
+
+    private LlmProviderFactoryImpl createFactoryForCustomLlm(String workspaceId, String baseUrl,
+            DestinationGuard.Mode mode) {
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet()))
+                .thenReturn(List.of(ProviderApiKey.builder()
+                        .provider(LlmProvider.CUSTOM_LLM)
+                        .providerName("my-provider")
+                        .apiKey(EncryptionUtils.encrypt(UUID.randomUUID().toString()))
+                        .baseUrl(baseUrl)
+                        .configuration(Map.of("models", CUSTOM_LLM_MODEL))
+                        .build()));
+        return new LlmProviderFactoryImpl(llmProviderApiKeyService, createMockConfigWithDestinationGuard(mode),
+                registryService);
     }
 
     @ParameterizedTest
@@ -468,6 +496,73 @@ class LlmProviderFactoryTest {
 
         assertThat(llmProviderFactory.getLlmProvider(model)).isEqualTo(LlmProvider.CUSTOM_LLM);
         assertThat(llmProviderFactory.getClientApiConfig(workspaceId, model).provider()).isEqualTo(keyProvider);
+    }
+
+    // ========== Provider Base URL Destination Tests ==========
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "http://localhost:11434/v1",
+            "http://127.0.0.1:8080/v1",
+            "http://10.0.0.5/v1",
+            "http://169.254.169.254/latest/meta-data/?"})
+    @DisplayName("strict destination guard refuses a base URL pointing at a private or internal address")
+    void testGetClientApiConfig_strictGuardRefusesInternalBaseUrl(String baseUrl) {
+        String workspaceId = UUID.randomUUID().toString();
+        var llmProviderFactory = createFactoryForCustomLlm(workspaceId, baseUrl, DestinationGuard.Mode.STRICT);
+
+        assertThatThrownBy(() -> llmProviderFactory.getClientApiConfig(workspaceId, CUSTOM_LLM_MODEL))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Invalid provider base URL");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "https://8.8.8.8/v1",
+            "https://8.8.8.8/deployments/{model}/v1"})
+    @DisplayName("strict destination guard accepts a public base URL, with the {model} placeholder in its path")
+    void testGetClientApiConfig_strictGuardAcceptsPublicBaseUrl(String baseUrl) {
+        String workspaceId = UUID.randomUUID().toString();
+        var llmProviderFactory = createFactoryForCustomLlm(workspaceId, baseUrl, DestinationGuard.Mode.STRICT);
+
+        assertThat(llmProviderFactory.getClientApiConfig(workspaceId, CUSTOM_LLM_MODEL).baseUrl())
+                .isEqualTo(baseUrl);
+    }
+
+    @Test
+    @DisplayName("strict destination guard refuses a {model} placeholder outside the URL path")
+    void testGetClientApiConfig_strictGuardRefusesPlaceholderOutsidePath() {
+        String workspaceId = UUID.randomUUID().toString();
+        var llmProviderFactory = createFactoryForCustomLlm(workspaceId, "https://{model}@8.8.8.8/v1",
+                DestinationGuard.Mode.STRICT);
+
+        assertThatThrownBy(() -> llmProviderFactory.getClientApiConfig(workspaceId, CUSTOM_LLM_MODEL))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("only allowed in the URL path");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "http://localhost:11434/v1",
+            "http://169.254.169.254/latest/meta-data/?",
+            "http://{model}.internal:8080/v1"})
+    @DisplayName("relaxed destination guard accepts any base URL")
+    void testGetClientApiConfig_relaxedGuardAcceptsInternalBaseUrl(String baseUrl) {
+        String workspaceId = UUID.randomUUID().toString();
+        var llmProviderFactory = createFactoryForCustomLlm(workspaceId, baseUrl, DestinationGuard.Mode.RELAXED);
+
+        assertThat(llmProviderFactory.getClientApiConfig(workspaceId, CUSTOM_LLM_MODEL).baseUrl())
+                .isEqualTo(baseUrl);
+    }
+
+    @Test
+    @DisplayName("strict destination guard leaves the server-configured free model base URL alone")
+    void testGetClientApiConfig_strictGuardSkipsFreeModel() {
+        var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class),
+                createMockConfigWithDestinationGuard(DestinationGuard.Mode.STRICT), registryService);
+
+        assertThat(llmProviderFactory.getClientApiConfig(UUID.randomUUID().toString(), FreeModelConfig.FREE_MODEL)
+                .baseUrl()).isEqualTo("https://test-endpoint.example.com");
     }
 
     // ========== Structured Output Strategy Tests ==========

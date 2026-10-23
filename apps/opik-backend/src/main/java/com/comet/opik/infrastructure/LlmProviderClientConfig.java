@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure;
 import com.comet.opik.infrastructure.llm.AnthropicClientConfig;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.infrastructure.llm.VertexAIClientConfig;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
@@ -40,6 +41,13 @@ public class LlmProviderClientConfig {
     private Boolean logRequests;
 
     private Boolean logResponses;
+
+    /**
+     * Destination check on user-supplied provider URLs (base URLs, Ollama connection checks):
+     * {@code strict} refuses private/internal destinations; {@code relaxed} allows them. Relaxed by
+     * default because self-hosted installs legitimately point at local models.
+     */
+    @NotNull private DestinationGuard.Mode destinationGuard = DestinationGuard.Mode.RELAXED;
 
     @Valid private OpenAiClientConfig openAiClient;
 

@@ -18,6 +18,8 @@ import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
+import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardException;
 import dev.langchain4j.model.chat.ChatModel;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
@@ -28,6 +30,7 @@ import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.net.URI;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -74,7 +77,39 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             .filter(LlmProvider::supportsProviderName)
             .collect(Collectors.toUnmodifiableSet());
 
+    // The custom LLM client substitutes this with the request's model name (see InterceptingHttpClient)
+    private static final String MODEL_PLACEHOLDER = "{model}";
+    private static final String MODEL_PLACEHOLDER_STAND_IN = "opik-model-placeholder";
+
+    private void validateBaseUrl(ProviderApiKey providerConfig) {
+        if (providerConfig.provider() == LlmProvider.OPIK_FREE || StringUtils.isBlank(providerConfig.baseUrl())) {
+            return;
+        }
+
+        var mode = configuration.getLlmProviderClient().getDestinationGuard();
+        // {model} is not a valid URL character, so the check runs on a stand-in for it
+        var url = providerConfig.baseUrl().replace(MODEL_PLACEHOLDER, MODEL_PLACEHOLDER_STAND_IN);
+        try {
+            DestinationGuard.builder()
+                    .mode(mode)
+                    .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                    .build()
+                    .validate(url);
+        } catch (DestinationGuardException exception) {
+            throw new BadRequestException("Invalid provider base URL: " + exception.getMessage(), exception);
+        }
+
+        // outside the path, the model name would pick the host after this check
+        if (mode == DestinationGuard.Mode.STRICT
+                && URI.create(url).getRawAuthority().contains(MODEL_PLACEHOLDER_STAND_IN)) {
+            throw new BadRequestException(
+                    "Invalid provider base URL: '%s' is only allowed in the URL path".formatted(MODEL_PLACEHOLDER));
+        }
+    }
+
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig, String workspaceId) {
+        validateBaseUrl(providerConfig);
+
         var configuration = Optional.ofNullable(providerConfig.configuration()).orElse(Map.of());
 
         // For providers that support naming, add provider_name to configuration if present
