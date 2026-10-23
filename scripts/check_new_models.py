@@ -118,6 +118,7 @@ EFFORT_FIELDS = {
     "anthropic": lambda level: {"custom_parameters": {"output_config": {"effort": level}}},
     "gemini": lambda level: {"custom_parameters": {"thinking": {"level": level}}},
     "vertex-ai": lambda level: {"custom_parameters": {"thinking": {"level": level}}},
+    "openrouter": lambda level: {"custom_parameters": {"reasoning": {"effort": level}}},
 }
 
 # The playground sends these levels as no thinking setting at all, so their call would be the plain one.
@@ -845,15 +846,20 @@ def rotation_models(
 
 
 def _openrouter_prices() -> dict[str, float]:
-    path = REPO_ROOT / OPENROUTER_PRICES_JSON
-    if not path.exists():
+    # Only the order depends on prices, so an unreadable file means file order, not a failed run.
+    try:
+        rows = json.loads((REPO_ROOT / OPENROUTER_PRICES_JSON).read_text())
+    except (OSError, ValueError) as e:
+        print(f"::warning::Calling OpenRouter's rotation in file order: {e}", file=sys.stderr)
         return {}
     prices = {}
-    for key, row in json.loads(path.read_text()).items():
+    for key, row in rows.items() if isinstance(rows, dict) else ():
         if not isinstance(row, dict):
             continue
-        cost = (row.get("input_cost_per_token") or 0) + (row.get("output_cost_per_token") or 0)
-        prices[key.removeprefix("openrouter/")] = cost
+        costs = (row.get("input_cost_per_token"), row.get("output_cost_per_token"))
+        # A router's price depends on the model it picks, and the prices file leaves it out: unknown, not free.
+        if all(isinstance(c, (int, float)) and not isinstance(c, bool) for c in costs):
+            prices[key.removeprefix("openrouter/")] = sum(costs)
     return prices
 
 
