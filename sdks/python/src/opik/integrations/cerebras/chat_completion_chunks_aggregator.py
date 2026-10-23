@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Optional
 import pydantic
 from cerebras.cloud.sdk.types.chat.chat_completion import ChatChunkResponse
 
+from opik.integrations import _streamed_tool_calls
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -34,6 +36,8 @@ def aggregate(
         }
 
         text_chunks: List[str] = []
+        reasoning_chunks: List[str] = []
+        tool_calls = _streamed_tool_calls.StreamedToolCalls()
 
         for chunk in items:
             if chunk.choices and chunk.choices[0].delta:
@@ -48,6 +52,14 @@ def aggregate(
                 if delta.content:
                     text_chunks.append(delta.content)
 
+                # Older SDK versions have no `reasoning` field on the delta.
+                reasoning = getattr(delta, "reasoning", None)
+                if reasoning:
+                    reasoning_chunks.append(reasoning)
+
+                for tool_call in getattr(delta, "tool_calls", None) or []:
+                    tool_calls.add(tool_call)
+
             if chunk.choices and chunk.choices[0].finish_reason:
                 aggregated_response["choices"][0]["finish_reason"] = chunk.choices[
                     0
@@ -57,6 +69,12 @@ def aggregate(
                 aggregated_response["usage"] = chunk.usage.model_dump()
 
         aggregated_response["choices"][0]["message"]["content"] = "".join(text_chunks)
+        if reasoning_chunks:
+            aggregated_response["choices"][0]["message"]["reasoning"] = "".join(
+                reasoning_chunks
+            )
+        if streamed_calls := tool_calls.to_list():
+            aggregated_response["choices"][0]["message"]["tool_calls"] = streamed_calls
         result = ChatCompletionChunksAggregated(**aggregated_response)
 
         return result
