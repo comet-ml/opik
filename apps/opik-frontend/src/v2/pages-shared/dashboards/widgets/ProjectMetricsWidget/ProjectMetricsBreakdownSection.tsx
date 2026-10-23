@@ -283,6 +283,7 @@ const ProjectMetricsBreakdownSection: React.FC<
             </div>
           </div>
           {isCostMetricType(metricType as METRIC_NAME_TYPE) &&
+            compatibleBreakdownFields.includes(BREAKDOWN_FIELD.TAGS) &&
             breakdown.field === BREAKDOWN_FIELD.TAGS && (
               <Description>{TAG_COST_BREAKDOWN_DESCRIPTION}</Description>
             )}

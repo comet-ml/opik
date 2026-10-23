@@ -46,6 +46,7 @@ import {
   TAG_COST_BREAKDOWN_DESCRIPTION,
   buildBreakdownDrilldownFilter,
   getMetricEntityType,
+  getCompatibleBreakdownFields,
 } from "./breakdown";
 
 const ProjectMetricsWidget: React.FunctionComponent<
@@ -507,7 +508,11 @@ const ProjectMetricsWidget: React.FunctionComponent<
   };
 
   const tagCostInfo =
-    isCostMetric && effectiveBreakdown?.field === BREAKDOWN_FIELD.TAGS
+    isCostMetric &&
+    effectiveBreakdown?.field === BREAKDOWN_FIELD.TAGS &&
+    getCompatibleBreakdownFields(metricType ?? "").includes(
+      BREAKDOWN_FIELD.TAGS,
+    )
       ? TAG_COST_BREAKDOWN_DESCRIPTION
       : undefined;
 
