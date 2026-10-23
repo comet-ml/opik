@@ -212,30 +212,33 @@ skip the browser pairing flow entirely.
 
 ## Troubleshooting
 
-**"No entrypoint found" error**
+<AccordionGroup>
+  <Accordion title='"No entrypoint found" error'>
+    Make sure at least one function is decorated with `@opik.track(entrypoint=True)` in Python or
+    `track({ entrypoint: true }, fn)` in TypeScript. The entrypoint must be discoverable from the
+    current working directory.
+  </Accordion>
 
-Make sure at least one function is decorated with `@opik.track(entrypoint=True)` in Python or
-`track({ entrypoint: true }, fn)` in TypeScript. The entrypoint must be discoverable from the
-current working directory.
+  <Accordion title='"Could not resolve type for parameter(s)" warning'>
+    One or more entrypoint parameters use a type that the playground cannot fill from the UI.
+    Change them to a supported type. For a runtime object such as a chain or an LLM client,
+    create the object in your code and add a thin entrypoint, as shown in
+    [Mark your agent as an entrypoint](#getting-started). In TypeScript, the SDK also logs this
+    warning for `object` parameters, which still work as JSON fields.
+  </Accordion>
 
-**"Could not resolve type for parameter(s)" warning**
+  <Accordion title="Pairing times out">
+    The browser pairing session expires after 5 minutes. Re-run the command to generate a new
+    session. Make sure your Opik environment variables are set correctly. See
+    [Getting started with Observability](/tracing/getting-started) for configuration details.
+  </Accordion>
 
-One or more entrypoint parameters use a type that the playground cannot fill from the UI. Change
-them to a supported type. For a runtime object such as a chain or an LLM client, create the
-object in your code and add a thin entrypoint, as shown in
-[Mark your agent as an entrypoint](#getting-started). In TypeScript, the SDK also logs this
-warning for `object` parameters, which still work as JSON fields.
-
-**Pairing times out**
-
-The browser pairing session expires after 5 minutes. Re-run the command to generate a new session.
-Make sure your Opik environment variables are set correctly — see
-[Getting started with Observability](/tracing/getting-started) for configuration details.
-
-**Runner disconnects**
-
-Opik uses heartbeat monitoring to detect disconnects. If your runner shows as disconnected in the
-UI, check that the process is still running locally and that your network connection is stable.
+  <Accordion title="Runner disconnects">
+    Opik uses heartbeat monitoring to detect disconnects. If your runner shows as disconnected in
+    the UI, check that the process is still running locally and that your network connection is
+    stable.
+  </Accordion>
+</AccordionGroup>
 
 ## FAQ
 
