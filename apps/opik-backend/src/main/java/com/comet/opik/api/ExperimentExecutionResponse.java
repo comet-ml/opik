@@ -20,6 +20,7 @@ public record ExperimentExecutionResponse(
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record ExperimentInfo(
             UUID experimentId,
-            int promptIndex) {
+            int promptIndex,
+            int totalItems) {
     }
 }

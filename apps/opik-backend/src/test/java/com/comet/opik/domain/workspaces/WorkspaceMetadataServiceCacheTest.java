@@ -60,8 +60,6 @@ class WorkspaceMetadataServiceCacheTest {
         public Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId) {
             return Mono.just(ScopeMetadata.builder()
                     .sizeGb(PROJECT_SIZE_GB.get())
-                    .totalTableSizeGb(100)
-                    .percentageOfTable(1)
                     .limitSizeGb(10)
                     .build());
         }

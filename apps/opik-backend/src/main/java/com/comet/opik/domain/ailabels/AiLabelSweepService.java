@@ -96,6 +96,10 @@ public class AiLabelSweepService {
                 .setDescription("Traces in the horizon that never ended, so are out of scope")
                 .buildWithCallback(measurement -> measured()
                         .ifPresent(snapshot -> measurement.record(snapshot.neverEnded())));
+        meter.gaugeBuilder("ai_labels.sweep.buckets")
+                .ofLongs()
+                .setDescription("N: the buckets the enabled workspaces are split into, one sweep query each")
+                .buildWithCallback(measurement -> measurement.record(config.getSweep().getBuckets()));
     }
 
     /** The enabled workspaces split into N stable buckets by {@code murmur3_32(workspace_id) mod N}. */

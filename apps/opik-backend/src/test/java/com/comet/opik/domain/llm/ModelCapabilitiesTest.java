@@ -70,6 +70,8 @@ class ModelCapabilitiesTest {
                 Arguments.of("deepinfra/Qwen/Qwen2.5-VL-32B-Instruct", true, "Deepinfra Qwen VL supports vision"),
                 Arguments.of("openrouter/qwen/qwen-2.5-coder-32b-instruct", false,
                         "Qwen Coder does not support vision"),
+                Arguments.of("openrouter/meta-llama/llama-4-maverick", true,
+                        "OpenRouter model whose only row is in the OpenRouter price file supports vision"),
 
                 // Case insensitivity
                 Arguments.of("GPT-4-TURBO", true, "Uppercase vision model should work"),

@@ -55,6 +55,8 @@ VERTEXAI_JAVA = JAVA_BASE / "vertexai" / "VertexAIModelName.java"
 PROVIDERS_TS = Path("apps/opik-frontend/src/types/providers.ts")
 MODELS_DATA_TS = Path("apps/opik-frontend/src/constants/providerModels.ts")
 MODEL_PRICES_JSON = Path("apps/opik-backend/src/main/resources/model_prices_and_context_window.json")
+# LiteLLM's prices JSON no longer lists OpenRouter models; scripts/update_openrouter_model_prices.py writes them here.
+OPENROUTER_MODEL_PRICES_JSON = Path("apps/opik-backend/src/main/resources/model_prices_openrouter.json")
 LLM_MODELS_YAML = Path("apps/opik-backend/src/main/resources/llm-models-default.yaml")
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/models"
@@ -202,7 +204,7 @@ GEMINI_DROPDOWN_EXCLUDE = [
     r"^gemini-pro-vision$",
     r"^gemini-1\.0-",
     r"-latest$",
-    r"^nano-banana",
+    r"nano-banana",              # unanchored: also gemini-nano-banana-*, image models that 500 on chat requests
     r"-image",
     r"-tts",
     r"-exp$",                    # experimental, removed without a deprecation date
@@ -241,6 +243,9 @@ OPENROUTER_DROPDOWN_EXCLUDE = [
     r"^amazon/nova-premier-v1$",           # retired on Bedrock: 400 "This model version has reached the end of its life"
     r"^inclusionai/ling-3\.0-flash-fin$",  # no provider serves it: 404 "No endpoints found"
     r"^nousresearch/hermes-3-llama-3\.1-70b$",  # streams the same junk sentence until the output limit
+    r"llama-guard",                        # safety classifier: answers "safe" or "unsafe", not a chat model
+    r"content-safety",                     # safety classifier: answers "safe" or "unsafe", not a chat model
+    r"^openrouter/bodybuilder$",           # turns a request into OpenRouter API JSON, not a chat model
 ]
 
 
@@ -333,24 +338,36 @@ def _deduplicate_by_base(entries: list[ModelEntry]) -> list[ModelEntry]:
     return result
 
 
-def build_deprecated_set(prices: dict) -> set[str]:
-    """Build a set of model values with deprecation_date in the past."""
+# A date belongs to the provider LiteLLM files the row under. Matched on the bare id, Vertex AI's
+# "gemini-2.5-flash" row hid the Gemini API model and DeepSeek's own "deepseek/deepseek-chat" hid OpenRouter's.
+def _deprecated_value(key: str, litellm_provider: str) -> tuple[str, str] | None:
+    if litellm_provider in ("openai", "text-completion-openai"):
+        return "openai", key.removeprefix("openai/")
+    if litellm_provider == "anthropic":
+        return "anthropic", key.removeprefix("anthropic/")
+    if litellm_provider == "gemini":
+        return "gemini", key.removeprefix("gemini/")
+    if litellm_provider == "openrouter":
+        return "openrouter", key.removeprefix("openrouter/")
+    if key.startswith("vertex_ai/"):
+        return "vertexai", key
+    return None
+
+
+def build_deprecated_by_provider(prices: dict) -> dict[str, set[str]]:
     today = date.today()
-    deprecated = set()
+    deprecated: dict[str, set[str]] = {}
     for key, info in prices.items():
-        if not isinstance(info, dict):
-            continue
-        dep = info.get("deprecation_date")
-        if not dep:
+        if not isinstance(info, dict) or not info.get("deprecation_date"):
             continue
         try:
-            if date.fromisoformat(dep) <= today:
-                deprecated.add(key)
-                for prefix in ("gemini/", "anthropic/", "openai/", "vertex_ai/", "openrouter/"):
-                    if key.startswith(prefix):
-                        deprecated.add(key.removeprefix(prefix))
+            if date.fromisoformat(info["deprecation_date"]) > today:
+                continue
         except ValueError:
-            pass
+            continue
+        scoped = _deprecated_value(key, str(info.get("litellm_provider", "")))
+        if scoped:
+            deprecated.setdefault(scoped[0], set()).add(scoped[1])
     return deprecated
 
 
@@ -590,9 +607,11 @@ def fetch_gemini_models(api_key: str) -> list[tuple[str, str]]:
 
 
 def load_model_prices() -> dict:
-    path = REPO_ROOT / MODEL_PRICES_JSON
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    prices = {}
+    for path in (MODEL_PRICES_JSON, OPENROUTER_MODEL_PRICES_JSON):
+        with open(REPO_ROOT / path, encoding="utf-8") as f:
+            prices.update(json.load(f))
+    return prices
 
 
 def extract_models_from_prices(
@@ -1118,12 +1137,22 @@ def _litellm_info(prices: dict, provider_key: str, entry_value: str) -> dict | N
     candidates = {
         "openai": [entry_value],
         "anthropic": [entry_value, f"anthropic/{entry_value}"],
-        "gemini": [f"gemini/{entry_value}", entry_value],
+        "gemini": [f"gemini/{entry_value}"],
         "vertexai": [entry_value],
     }.get(provider_key, [])
     for key in candidates:
         info = prices.get(key)
         if isinstance(info, dict):
+            return info
+    # A bare id can be a Gemini API row or a Vertex AI one (litellm_provider vertex_ai-language-models), so its
+    # provider is checked: a model never takes the other provider's facts.
+    owns_bare_row = {
+        "gemini": lambda provider: provider == "gemini",
+        "vertexai": lambda provider: provider.startswith("vertex_ai"),
+    }.get(provider_key)
+    if owns_bare_row:
+        info = prices.get(entry_value.removeprefix("vertex_ai/"))
+        if isinstance(info, dict) and owns_bare_row(str(info.get("litellm_provider", ""))):
             return info
     return None
 
@@ -1378,6 +1407,40 @@ def curated_drift(
             if different:
                 disagree.append(f"{yaml_key}/{model_id}: {'; '.join(different)}")
     return agree, disagree, arrived
+
+
+# LiteLLM says whether a Gemini model thinks but not which levels it takes, and a level it doesn't take is a 400, so
+# the sync can't write Gemini levels: a picker model that thinks needs them written by hand.
+def thinking_models_without_effort(
+    dropdown_by_provider: dict[str, list[ModelEntry]], prices: dict, catalog: dict,
+) -> list[str]:
+    profiles = catalog.get("profiles") or {}
+    missing = []
+    for provider_key in ("gemini", "vertexai"):
+        yaml_key = _PROVIDER_TO_YAML_KEY[provider_key]
+        provider_profile = ((catalog.get("defaults") or {}).get(yaml_key) or {}).get("profile")
+        default_effort = (profiles.get(provider_profile) or {}).get("effort") or {}
+        rows = {row.get("id"): row for row in (catalog.get("models") or {}).get(yaml_key) or []}
+        for entry in dropdown_by_provider.get(provider_key, []):
+            info = _litellm_info(prices, provider_key, entry.value)
+            if not (info and info.get("supports_reasoning")):
+                continue
+            model_id = entry.value.removeprefix("vertex_ai/")
+            row = rows.get(model_id) or {}
+            own_effort = {
+                **((profiles.get(row.get("profile")) or {}).get("effort") or {}),
+                **((row.get("params") or {}).get("effort") or {}),
+            }
+            # The provider profile's {accepted: false} is only the fallback for a model nobody wrote levels for; a
+            # refusal or an empty levels list ("takes none") in the model's own row or profile is a decision.
+            if (
+                {**default_effort, **own_effort}.get("levels")
+                or "levels" in own_effort
+                or own_effort.get("accepted") is False
+            ):
+                continue
+            missing.append(f"{yaml_key}/{model_id}")
+    return missing
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1754,7 +1817,7 @@ def main():
 
     prices = load_model_prices()
     so_lookup = _build_structured_output_lookup(prices)
-    deprecated = build_deprecated_set(prices)
+    deprecated = build_deprecated_by_provider(prices)
 
     # 1. Fetch sources — prefer provider APIs when keys are available
 
@@ -1885,7 +1948,7 @@ def main():
     # Dropdown (src/constants/providerModels.ts) gets curated subset — filtered and sorted
     dropdown_by_provider = {
         provider: filter_for_dropdown(
-            entries, provider, deprecated,
+            entries, provider, deprecated.get(provider),
             served_ids=openrouter_picker_ids if provider == "openrouter" else None,
         )
         for provider, entries in models_by_provider.items()
@@ -1939,7 +2002,7 @@ def main():
         total_stale += len(stale)
         entries = changes["entries"]
         dropdown = dropdown_by_provider[provider]
-        dep_in_enum = sorted(e.value for e in entries if e.value in deprecated)
+        dep_in_enum = sorted(e.value for e in entries if e.value in deprecated.get(provider, set()))
         total_deprecated += len(dep_in_enum)
         print(f"### {provider.title()}")
         if added:
@@ -2003,6 +2066,18 @@ def main():
         for note in drift_agree:
             print(f"  = {note}")
     if drift_agree or drift_disagree or drift_arrived:
+        print()
+
+    thinking_without_levels = thinking_models_without_effort(dropdown_by_provider, prices, curated_catalog)
+    if thinking_without_levels:
+        print("### Thinking levels")
+        print(
+            f"- {len(thinking_without_levels)} picker model(s) think but have no curated effort levels; add them to "
+            "llm-models-curated.yaml, and to THINKING_LEVELS_BY_MODEL in modelUtils.ts until the Gemini panel reads "
+            "the catalog:"
+        )
+        for model_id in thinking_without_levels:
+            print(f"  ? {model_id}")
         print()
 
     if not _should_write_files(

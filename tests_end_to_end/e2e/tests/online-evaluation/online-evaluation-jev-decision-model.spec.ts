@@ -55,7 +55,7 @@ test.describe(
         await test.step('Build a decision model rule on the pinned Jev model', async () => {
           await rules.goto(project.id);
           await rules.waitForReady();
-          await rules.openCreateRulePanel('Decision model');
+          await rules.openCreateRulePanel('Decision model', 'Task completion');
           await expect(rules.decisionModelSelect, 'a new rule starts on the latest Jev').toHaveText(
             JEV_LATEST,
           );

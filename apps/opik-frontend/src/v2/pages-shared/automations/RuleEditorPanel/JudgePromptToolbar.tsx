@@ -12,6 +12,7 @@ import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptMod
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import { LLMPromptTemplate } from "@/types/llm";
 import JudgeTemplateMenu from "@/v2/pages-shared/automations/RuleEditorPanel/JudgeTemplateMenu";
+import { getJudgeTemplateOptions } from "@/v2/pages-shared/automations/RuleEditorPanel/judgeTemplates";
 import { RULE_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import { hasVisibleControls } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import { parseComposedProviderType } from "@/lib/provider";
@@ -175,7 +176,7 @@ const JudgePromptToolbar: React.FC<JudgePromptToolbarProps> = ({
       {onSelectTemplate && (
         <div className="ml-auto">
           <JudgeTemplateMenu
-            scope={form.watch("scope")}
+            options={getJudgeTemplateOptions(form.watch("scope"))}
             onSelect={onSelectTemplate}
             onAfterSelect={onAfterSelectTemplate}
           />

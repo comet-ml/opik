@@ -9,8 +9,6 @@ title: OpenTelemetry
 toc_max_heading_level: 4
 ---
 
-# Get Started with OpenTelemetry
-
 Opik provides native support for OpenTelemetry (OTel), allowing you to instrument
 your ML/AI applications with distributed tracing. This guide will show you how
 to directly integrate OpenTelemetry SDKs with Opik.
@@ -124,6 +122,66 @@ OpenAIInstrumentor().instrument()
   Make sure to import the `http` trace exporter (`opentelemetry.exporter.otlp.proto.http.trace_exporter`), if you use
   the GRPC exporter you will face errors.
 </Warning>
+
+## How Opik builds traces from spans
+
+OpenTelemetry sends spans only. Opik creates a trace from the root span of each OpenTelemetry trace: the span that has
+no parent span. The name, input, output, metadata, tags and errors of the root span become the values of the trace.
+
+Opik treats a span as a root span when one of these conditions is true:
+
+- The `parentSpanId` of the span is empty.
+- The `parentSpanId` of the span is equal to its `traceId`.
+
+<Warning>
+  Every trace must have one root span. If all the spans of a trace have a parent, Opik stores the spans but does not
+  create the trace. The spans then show in the **Spans** tab, but the **Traces** tab stays empty and the span details do
+  not load. See [Troubleshooting](#troubleshooting) for how to fix it.
+</Warning>
+
+<Note>
+  A span with the `opik.trace_id` attribute attaches to an Opik trace that already exists, so Opik does not create a
+  trace for it. See [Distributed traces](/tracing/advanced/log_distributed_traces).
+</Note>
+
+## Supported attribute conventions
+
+Opik reads the attributes of each span and maps them to the fields of the Opik span. Opik supports the
+[OpenTelemetry GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/), the
+[OpenInference conventions](https://github.com/Arize-ai/openinference/tree/main/spec) and a set of general Opik
+attributes. Opik also reads the attributes of some framework instrumentations, such as Logfire, Pydantic AI, LiteLLM,
+smolagents, LiveKit and Langfuse.
+
+| Opik field | GenAI | OpenInference | Opik general |
+| --- | --- | --- | --- |
+| Input | `gen_ai.prompt`, `gen_ai.input.*`, `gen_ai.system_instructions`, `gen_ai.request.*`, `gen_ai.tool.call.arguments` | `input.value` | `input`, `input.*` |
+| Output | `gen_ai.completion`, `gen_ai.output.*`, `gen_ai.response.*`, `gen_ai.tool.call.result` | `output.value` | `output`, `output.*` |
+| Model | `gen_ai.request.model`, `gen_ai.response.model` | `llm.model_name` | |
+| Provider | `gen_ai.system`, `gen_ai.provider.name` | | |
+| Token usage | `gen_ai.usage.*` | `llm.token_count.*` | |
+| Cost | `gen_ai.usage.cost` | | |
+| Metadata | `gen_ai.request.temperature`, `gen_ai.response.id`, `gen_ai.response.finish_reasons`, `gen_ai.operation.name`, `gen_ai.agent.*`, `gen_ai.tool.*`, `gen_ai.cost.*` | | `opik.metadata.*` |
+| Tags | | | `opik.tags` |
+| Thread ID | `gen_ai.conversation.id` | | `thread_id` |
+
+Some other rules apply:
+
+- A more specific attribute has priority over a prefix. For example, `gen_ai.request.model` sets the model, and the
+  other `gen_ai.request.*` attributes go to the input.
+- Opik renames the `input_tokens` and `output_tokens` usage keys to `prompt_tokens` and `completion_tokens`. If the span
+  has no `total_tokens`, Opik calculates it.
+- Opik sets the span type to `llm` when the span has a GenAI or OpenInference model or token usage attribute. Opik sets
+  the span type to `tool` when the span has `gen_ai.tool.call.arguments` or `gen_ai.tool.call.result`.
+- When the value of `input`, `output` or `opik.metadata` is a JSON object in a string, Opik adds the keys of the object
+  to the field.
+- Opik adds the span events to the metadata of the span. An `exception` event, or a span status of `ERROR`, becomes the
+  error of the span.
+
+<Note>
+  Opik puts each attribute that it does not recognize in the **Input** field of the span, with the attribute name as
+  the key. If the input of your spans shows only attribute names from your framework, set `input.value` and
+  `output.value` (or the GenAI attributes) on the spans that you want to read in Opik.
+</Note>
 
 ## Opik-specific span attributes
 
@@ -239,3 +297,150 @@ To send all the spans to one project, use a fixed value such as `"<your-project-
   All the spans of a trace must have the same project. If one trace goes through services that send to different
   projects, the spans that are not in the project of the root span do not show under any trace.
 </Note>
+
+## Send spans to Opik and to other backends
+
+One OpenTelemetry `TracerProvider` can send each span to more than one backend. Add one `BatchSpanProcessor` for each
+exporter. The frameworks that use OpenTelemetry (such as Strands Agents, LangGraph, LlamaIndex and CrewAI) send their
+spans to the global tracer provider, so one setup covers all of them.
+
+<Tabs>
+<Tab title="New tracer provider" language="python">
+
+Create the tracer provider, and add one exporter for Opik and one for your other backend:
+
+```python wordWrap
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+provider = TracerProvider()
+
+# Opik
+provider.add_span_processor(
+    BatchSpanProcessor(
+        OTLPSpanExporter(
+            endpoint="https://www.comet.com/opik/api/v1/private/otel/v1/traces",
+            headers={
+                "Authorization": "<your-api-key>",
+                "Comet-Workspace": "<your-workspace-name>",
+                "projectName": "<your-project-name>",
+            },
+        )
+    )
+)
+
+# Other backend
+provider.add_span_processor(
+    BatchSpanProcessor(OTLPSpanExporter(endpoint="https://<other-backend>/v1/traces"))
+)
+
+trace.set_tracer_provider(provider)
+```
+
+</Tab>
+<Tab title="Existing tracer provider" language="python">
+
+Some platforms set up the tracer provider before your code starts. For example, Amazon Bedrock AgentCore runs your
+agent with the AWS Distro for OpenTelemetry (ADOT), which sends the spans to CloudWatch. Add the Opik exporter to that
+tracer provider:
+
+```python wordWrap
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+provider = trace.get_tracer_provider()
+if not isinstance(provider, TracerProvider):
+    # No SDK tracer provider is set yet, so create one
+    provider = TracerProvider()
+    trace.set_tracer_provider(provider)
+
+provider.add_span_processor(
+    BatchSpanProcessor(
+        OTLPSpanExporter(
+            endpoint="https://www.comet.com/opik/api/v1/private/otel/v1/traces",
+            headers={
+                "Authorization": "<your-api-key>",
+                "Comet-Workspace": "<your-workspace-name>",
+                "projectName": "<your-project-name>",
+            },
+        )
+    )
+)
+```
+
+Run this code once, before the agent starts its first span.
+
+</Tab>
+</Tabs>
+
+<Warning>
+  Give the Opik endpoint and headers to the exporter in code. Do not use the `OTEL_EXPORTER_OTLP_ENDPOINT` and
+  `OTEL_EXPORTER_OTLP_HEADERS` environment variables for Opik: all the OTLP exporters in the process read them, so the
+  other backend also gets the Opik endpoint and your Opik API key.
+</Warning>
+
+When the platform continues an incoming trace, the first span of your agent has a parent. In this case, add a root span
+for each invocation, as shown in [Troubleshooting](#troubleshooting).
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="The exporter gets a 401 or 403 error">
+    - Make sure that the `Authorization` header contains your Opik API key, without the `Bearer ` prefix.
+    - Make sure that `Comet-Workspace` is the name of a workspace that your API key can access.
+  </Accordion>
+  <Accordion title="Spans show in the Spans tab, but the Traces tab is empty">
+    No span of the trace is a root span, so Opik did not create the trace.
+
+    This problem occurs when the instrumentation continues a trace that started in a different process. For example, a
+    runtime such as Amazon Bedrock AgentCore or an API gateway sends a trace context with each request. The first span
+    of your agent is then a child of a span that Opik never receives.
+
+    To find out if you have this problem, print your spans with the `ConsoleSpanExporter` and look at the `parent_id`
+    field. At least one span of each trace must have `"parent_id": null`.
+
+    To fix the problem, start a new root span at the start of each agent invocation. Pass an empty `Context` so that
+    the span does not use the incoming trace context:
+
+    ```python wordWrap
+    import json
+
+    from opentelemetry import trace
+    from opentelemetry.context import Context
+    from opentelemetry.trace import Link
+
+    tracer = trace.get_tracer("my-agent")
+
+
+    def invoke(payload: dict) -> str:
+        # Keep a link to the incoming trace, so that other backends can still connect the two traces
+        incoming = trace.get_current_span().get_span_context()
+        links = [Link(incoming)] if incoming.is_valid else []
+
+        with tracer.start_as_current_span("agent_invocation", context=Context(), links=links) as root_span:
+            root_span.set_attribute("input.value", json.dumps(payload))
+            result = str(agent(payload["prompt"]))
+            root_span.set_attribute("output.value", result)
+            return result
+    ```
+
+    All the spans that the agent creates in the `with` block are children of `agent_invocation`, so Opik creates one
+    trace for each invocation.
+  </Accordion>
+  <Accordion title="Spans show under a different trace, or under no trace">
+    All the spans of a trace must go to the same project. If you set `opik.project_name`, set it as a resource
+    attribute. See [Routing spans to a project](#routing-spans-to-a-project).
+  </Accordion>
+  <Accordion title="The input of a span shows framework attributes and no model or token usage">
+    Your instrumentation uses attribute names that Opik does not recognize. Opik puts these attributes in the input.
+    Set the attributes of one of the [supported conventions](#supported-attribute-conventions) on your spans.
+  </Accordion>
+  <Accordion title="The exporter fails with a protocol error">
+    Opik accepts OTLP over HTTP only. Use the `http` exporter
+    (`opentelemetry.exporter.otlp.proto.http.trace_exporter`), not the gRPC exporter.
+  </Accordion>
+</AccordionGroup>

@@ -9,7 +9,7 @@ import {
 } from "@/ui/dropdown-menu";
 import MenuOptionItems, {
   MenuOption,
-} from "@/v2/pages-shared/CreateMenuButton/MenuOptionItems";
+} from "@/shared/MenuOptionItems/MenuOptionItems";
 
 export type CreateMenuOption<T extends string> = MenuOption<T>;
 
