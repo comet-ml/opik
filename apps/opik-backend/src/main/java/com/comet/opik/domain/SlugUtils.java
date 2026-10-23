@@ -54,18 +54,18 @@ public class SlugUtils {
      * Generates a unique slug by appending a number suffix if needed.
      *
      * @param baseSlug the base slug to make unique
-     * @param existingCount the count of existing slugs with the same prefix
+     * @param maxSuffix the highest suffix in use for the base slug (the bare base slug counts as 1), or 0 if none
      * @return the unique slug
      */
-    public static String generateUniqueSlug(String baseSlug, long existingCount) {
+    public static String generateUniqueSlug(String baseSlug, long maxSuffix) {
         if (StringUtils.isBlank(baseSlug)) {
             return baseSlug;
         }
-        if (existingCount == 0) {
+        if (maxSuffix == 0) {
             return baseSlug;
         }
 
-        String suffix = "-" + (existingCount + 1);
+        String suffix = "-" + (maxSuffix + 1);
         String slug = baseSlug + suffix;
 
         // Ensure the slug doesn't exceed database constraint

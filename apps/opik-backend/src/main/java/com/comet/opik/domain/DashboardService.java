@@ -106,9 +106,8 @@ class DashboardServiceImpl implements DashboardService {
         return template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DashboardDAO.class);
 
-            // Check for existing slugs to generate unique slug
-            long existingCount = dao.countBySlugPrefix(workspaceId, baseSlug);
-            String uniqueSlug = SlugUtils.generateUniqueSlug(baseSlug, existingCount);
+            long maxSuffix = dao.findMaxSlugSuffix(workspaceId, baseSlug, dashboardId);
+            String uniqueSlug = SlugUtils.generateUniqueSlug(baseSlug, maxSuffix);
 
             // Build the complete dashboard, forcing the provided scope
             var newDashboard = dashboard.toBuilder()
@@ -249,8 +248,8 @@ class DashboardServiceImpl implements DashboardService {
             String newSlug = null;
             if (StringUtils.isNotBlank(dashboardUpdate.name())) {
                 String baseSlug = SlugUtils.generateSlug(dashboardUpdate.name());
-                long existingCount = dao.countBySlugPrefix(workspaceId, baseSlug);
-                newSlug = SlugUtils.generateUniqueSlug(baseSlug, existingCount);
+                long maxSuffix = dao.findMaxSlugSuffix(workspaceId, baseSlug, id);
+                newSlug = SlugUtils.generateUniqueSlug(baseSlug, maxSuffix);
             }
 
             try {

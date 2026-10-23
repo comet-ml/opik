@@ -165,8 +165,15 @@ public interface DashboardDAO {
     @AllowUnusedBindings
     List<Dashboard> findByIds(@BindList("ids") Collection<UUID> ids, @Bind("workspaceId") String workspaceId);
 
-    @SqlQuery("SELECT COUNT(*) FROM dashboards WHERE workspace_id = :workspaceId AND slug LIKE concat(:slugPrefix, '%')")
-    long countBySlugPrefix(@Bind("workspaceId") String workspaceId, @Bind("slugPrefix") String slugPrefix);
+    @SqlQuery("""
+            SELECT COALESCE(MAX(IF(slug = :baseSlug, 1, CAST(SUBSTRING(slug, CHAR_LENGTH(:baseSlug) + 2) AS UNSIGNED))), 0)
+            FROM dashboards
+            WHERE workspace_id = :workspaceId
+            AND id <> :excludeId
+            AND slug REGEXP CONCAT('^', :baseSlug, '(-[0-9]{1,9})?$')
+            """)
+    long findMaxSlugSuffix(@Bind("workspaceId") String workspaceId, @Bind("baseSlug") String baseSlug,
+            @Bind("excludeId") UUID excludeId);
 
     @SqlUpdate("""
             DELETE FROM dashboards WHERE id IN (<ids>) AND workspace_id = :workspaceId

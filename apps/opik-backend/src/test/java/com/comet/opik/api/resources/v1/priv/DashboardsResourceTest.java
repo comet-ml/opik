@@ -23,6 +23,7 @@ import com.comet.opik.api.resources.utils.resources.DashboardTestDataFactory;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.SlugUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
@@ -373,6 +374,34 @@ class DashboardsResourceTest {
             assertThat(created2.name()).isEqualTo(dashboardName);
             assertThat(created1.id()).isNotEqualTo(created2.id());
             assertThat(created1.slug()).isNotEqualTo(created2.slug());
+        }
+
+        @Test
+        @DisplayName("Create dashboard whose slug collides with a generated suffix succeeds")
+        void createDashboardWithSlugSuffixCollisionSucceeds() {
+            var baseName = "Report " + RandomStringUtils.secure().nextAlphanumeric(10).toLowerCase();
+
+            var numberedId = dashboardResourceClient.create(
+                    dashboardResourceClient.createPartialDashboard().name(baseName + " 2").build(),
+                    API_KEY, TEST_WORKSPACE_NAME);
+            var baseId = dashboardResourceClient.create(
+                    dashboardResourceClient.createPartialDashboard().name(baseName).build(),
+                    API_KEY, TEST_WORKSPACE_NAME);
+
+            dashboardResourceClient.update(baseId, DashboardUpdate.builder().name(baseName).build(),
+                    API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+
+            var duplicateId = dashboardResourceClient.create(
+                    dashboardResourceClient.createPartialDashboard().name(baseName).build(),
+                    API_KEY, TEST_WORKSPACE_NAME);
+
+            var baseSlug = SlugUtils.generateSlug(baseName);
+            assertThat(dashboardResourceClient.get(numberedId, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK)
+                    .slug()).isEqualTo(baseSlug + "-2");
+            assertThat(dashboardResourceClient.get(baseId, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK)
+                    .slug()).isEqualTo(baseSlug + "-3");
+            assertThat(dashboardResourceClient.get(duplicateId, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK)
+                    .slug()).isEqualTo(baseSlug + "-4");
         }
 
         @Test
