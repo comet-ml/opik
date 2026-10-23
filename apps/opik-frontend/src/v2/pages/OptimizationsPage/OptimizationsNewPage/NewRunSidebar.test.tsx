@@ -98,6 +98,10 @@ vi.mock("@/api/provider-keys/useProviderKeys", () => ({
   default: () => ({ data: mocks.providerKeysData }),
 }));
 
+vi.mock("@/api/llm/useLlmModelDefaults", () => ({
+  default: () => ({ data: undefined }),
+}));
+
 vi.mock("@/api/llm/useLlmModels", () => ({
   default: () => mocks.registryQuery,
 }));

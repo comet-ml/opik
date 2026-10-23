@@ -37,4 +37,14 @@ public class LlmModelsResource {
                 .entity(registryService.getRegistry())
                 .build();
     }
+
+    @GET
+    @Path("/defaults")
+    @Operation(operationId = "getLlmModelDefaults", summary = "Get default LLM models", description = "Get the model the playground and online evaluation rules start with, by provider", responses = {
+            @ApiResponse(responseCode = "200", description = "Default model by provider", content = @Content(schema = @Schema(implementation = Map.class)))})
+    public Response getDefaultModels() {
+        return Response.ok()
+                .entity(registryService.getDefaultModels())
+                .build();
+    }
 }

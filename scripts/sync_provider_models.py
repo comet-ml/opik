@@ -1443,6 +1443,19 @@ def thinking_models_without_effort(
     return missing
 
 
+def default_models_out_of_picker(dropdown_by_provider: dict[str, list[ModelEntry]], catalog: dict) -> list[str]:
+    yaml_to_provider = {yaml_key: provider_key for provider_key, yaml_key in _PROVIDER_TO_YAML_KEY.items()}
+    missing = []
+    for yaml_key, model_id in (catalog.get("defaultModels") or {}).items():
+        provider_key = yaml_to_provider.get(yaml_key)
+        if provider_key is None:
+            continue
+        picker = {entry.value.removeprefix("vertex_ai/") for entry in dropdown_by_provider.get(provider_key, [])}
+        if model_id not in picker:
+            missing.append(f"{yaml_key}/{model_id}")
+    return missing
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # YAML regeneration
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2077,6 +2090,18 @@ def main():
             "the catalog:"
         )
         for model_id in thinking_without_levels:
+            print(f"  ? {model_id}")
+        print()
+
+    defaults_out_of_picker = default_models_out_of_picker(dropdown_by_provider, curated_catalog)
+    if defaults_out_of_picker:
+        print("### Default models")
+        print(
+            f"- {len(defaults_out_of_picker)} default model(s) are no longer in the picker, so the playground and "
+            "online-evaluation rules start on the provider's first picker model; name a new one in "
+            "defaultModels in llm-models-curated.yaml:"
+        )
+        for model_id in defaults_out_of_picker:
             print(f"  ? {model_id}")
         print()
 
