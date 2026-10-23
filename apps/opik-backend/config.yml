@@ -1789,6 +1789,30 @@ attachmentsConfig:
   stripMinSize: ${ATTACHMENTS_STRIP_MIN_SIZE:-256000}
 
 # Python evaluator configuration
+# Per-organization features the platform switches on (guardrails today), asked for on demand by the endpoints that
+# need them, and only when authentication is enabled.
+workspaceFeatures:
+  # Default: 5s
+  # Description: How long one workspace's answer for a feature is cached in Redis; a feature switched on or off in the platform is seen within it. 0s asks the platform on every call
+  cacheTtl: ${WORKSPACE_FEATURES_CACHE_TTL:-5s}
+
+# Guardrail checks the backend runs on opik-inference (url and credential: aiLabels.inference, required at startup
+# when serviceToggles.guardrailsValidationsEnabled is true). Thresholds are server-side only; the validations endpoint
+# rejects a threshold sent by the caller.
+guardrails:
+  # Default: 0.5
+  # Description: A PII check fails when any selected class scores at or above this
+  piiThreshold: ${GUARDRAILS_PII_THRESHOLD:-0.5}
+  # Default: 0.3
+  # Description: A topic counts as matched when its probability is at or above this
+  topicThreshold: ${GUARDRAILS_TOPIC_THRESHOLD:-0.3}
+  # Default: 0.4
+  # Description: A prompt injection check fails when the probability is at or above this
+  promptInjectionThreshold: ${GUARDRAILS_PROMPT_INJECTION_THRESHOLD:-0.4}
+  # Default: 1s
+  # Description: Time the decision service may spend on one check (sent as deadline_ms); the realtime lane allows up to 5s
+  deadline: ${GUARDRAILS_INFERENCE_DEADLINE:-1s}
+
 pythonEvaluator:
   # Default: http://localhost:8000
   # Description: URL of the Python evaluator service, generally the opik-python-backend service
@@ -1855,6 +1879,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not the backend runs guardrail checks itself (POST /v1/private/guardrails/v2/validations) on opik-inference; requires aiLabels.inference url and credential
+  guardrailsValidationsEnabled: ${TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}

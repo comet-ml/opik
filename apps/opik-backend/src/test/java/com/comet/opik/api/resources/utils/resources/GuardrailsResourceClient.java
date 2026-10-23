@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailBatch;
+import com.comet.opik.api.GuardrailsValidationRequest;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
@@ -33,5 +34,15 @@ public class GuardrailsResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(new GuardrailBatch(guardrails)));
+    }
+
+    public Response validate(GuardrailsValidationRequest request, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("v2")
+                .path("validations")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
     }
 }

@@ -822,6 +822,40 @@ class RemoteAuthServiceTest {
         assertThat(requestContext).isEqualTo(expectedRequestContext);
     }
 
+    @Test
+    void testEachLoginPathRecordsThePlatformCredential() throws JsonProcessingException {
+        var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class);
+        var body = OBJECT_MAPPER.writeValueAsString(authResponse);
+        var apiKey = "apiKey-" + UUID.randomUUID();
+        var sessionTokenValue = "session-" + UUID.randomUUID();
+        var token = podamFactory.manufacturePojo(ValidatedToken.class).toBuilder()
+                .userName("oauth-user-" + UUID.randomUUID())
+                .workspaceName("workspace-" + UUID.randomUUID())
+                .build();
+        WIRE_MOCK.server().stubFor(post("/opik/auth").willReturn(okJson(body)));
+        WIRE_MOCK.server().stubFor(post("/opik/auth-session").willReturn(okJson(body)));
+        WIRE_MOCK.server().stubFor(post("/opik/auth-by-username").willReturn(okJson(body)));
+        var contextInfo = ContextInfoHolder.builder()
+                .uriInfo(createMockUriInfo("/priv/something"))
+                .method("GET")
+                .build();
+
+        remoteAuthService.authenticate(getHeadersMock("workspace-" + UUID.randomUUID(), apiKey), null,
+                contextInfo);
+        assertThat(requestContext.getPlatformCredential())
+                .isEqualTo(new PlatformCredential(PlatformCredential.Type.API_KEY, apiKey));
+
+        remoteAuthService.authenticate(getHeadersMock("workspace-" + UUID.randomUUID(), ""),
+                sessionCookie(sessionTokenValue), contextInfo);
+        assertThat(requestContext.getPlatformCredential())
+                .isEqualTo(new PlatformCredential(PlatformCredential.Type.SESSION, sessionTokenValue));
+
+        remoteAuthService.authorizeOAuth(token, contextInfo);
+        assertThat(requestContext.getPlatformCredential())
+                .isEqualTo(new PlatformCredential(PlatformCredential.Type.OAUTH_USER, token.userName()));
+        assertThat(requestContext.getPlatformCredential().toString()).doesNotContain(token.userName());
+    }
+
     // --- Auth-call timeout and retry (see AuthenticationConfig, and authPost/authCall which apply
     // the readTimeout and retry policy through the shared RetriableHttpClient) ---
     //
