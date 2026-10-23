@@ -213,6 +213,7 @@ function wrapAsyncIterable<T>(
   > {
     const chunks: unknown[] = [];
     const textChunks: string[] = [];
+    const functionCalls: GeminiFunctionCall[] = [];
     let usage: Record<string, number> | undefined;
     let aggregatedOutput: Record<string, unknown> = {};
     let modelMetadata:
@@ -232,6 +233,14 @@ function wrapAsyncIterable<T>(
 
         if (!chunkData.isToolCall) {
           textChunks.push(chunkData.data);
+        } else {
+          // Extract function calls from tool call chunks
+          if (chunkData.data && typeof chunkData.data === "object") {
+            const toolCallData = chunkData.data as GeminiFunctionCall;
+            if (toolCallData.name && toolCallData.args) {
+              functionCalls.push(toolCallData);
+            }
+          }
         }
 
         // Yield chunk to caller (pass-through)
@@ -281,31 +290,21 @@ function wrapAsyncIterable<T>(
         },
       });
 
-      // 3. Check for function calls in final chunk and create child spans
-      if (finalChunk && typeof finalChunk === "object") {
-        const geminiChunk = finalChunk as GeminiResponse;
-        if (
-          geminiChunk.functionCalls &&
-          Array.isArray(geminiChunk.functionCalls)
-        ) {
-          geminiChunk.functionCalls.forEach(
-            (functionCall: GeminiFunctionCall) => {
-              mainSpan.span({
-                name: `function_call: ${functionCall.name}`,
-                startTime: new Date(),
-                endTime: new Date(),
-                input: { arguments: functionCall.args },
-                output: { function_name: functionCall.name },
-                type: OpikSpanType.Tool,
-                metadata: {
-                  function_name: functionCall.name,
-                  function_arguments: functionCall.args,
-                },
-              });
-            }
-          );
-        }
-      }
+      // 3. Check for function calls in all chunks and create child spans
+      functionCalls.forEach((functionCall: GeminiFunctionCall) => {
+        mainSpan.span({
+          name: `function_call: ${functionCall.name}`,
+          startTime: new Date(),
+          endTime: new Date(),
+          input: { arguments: functionCall.args },
+          output: { function_name: functionCall.name },
+          type: OpikSpanType.Tool,
+          metadata: {
+            function_name: functionCall.name,
+            function_arguments: functionCall.args,
+          },
+        });
+      });
 
       // 4. Update trace output (will be overwritten by next call if multiple calls)
       if (!hasUserProvidedParent) {
