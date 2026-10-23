@@ -15,7 +15,7 @@ type Kit = {
 
 export const LATEST_KIT_VERSION = 1;
 
-const KIT_HTML = `const kitHtml = (() => {
+const TRUSTED_HTML_POLICY = `const kitHtml = (() => {
   const policy = window.trustedTypes?.createPolicy("kit", { createHTML: (value) => value });
   return (value) => (policy ? policy.createHTML(value) : value);
 })();`;
@@ -32,7 +32,7 @@ export const loadKit = (version: number, packs: KitPack[]) => {
   const kit = KITS[version] ?? KITS[LATEST_KIT_VERSION];
   return {
     css: [...kit.css, ...packs.map((pack) => kit.packs[pack].css)].join("\n"),
-    js: `(() => {\n${KIT_HTML}\n${[
+    js: `(() => {\n${TRUSTED_HTML_POLICY}\n${[
       ...kit.js,
       ...packs.map((pack) => kit.packs[pack].js),
     ].join("\n;\n")}\n})();`,
