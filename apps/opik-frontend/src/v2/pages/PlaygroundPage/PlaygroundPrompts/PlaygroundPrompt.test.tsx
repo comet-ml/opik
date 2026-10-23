@@ -60,6 +60,10 @@ vi.mock("@/store/PlaygroundStore", () => ({
   useUpdateOutput: () => vi.fn(),
 }));
 
+vi.mock("@/api/llm/useLlmModelDefaults", () => ({
+  default: () => ({ data: undefined }),
+}));
+
 vi.mock("@/api/llm/useLlmModels", () => ({
   default: () => ({
     data: REGISTRY,

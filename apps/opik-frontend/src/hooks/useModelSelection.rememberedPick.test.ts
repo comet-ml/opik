@@ -34,6 +34,10 @@ const registry = vi.hoisted(() => {
   };
 });
 
+vi.mock("@/api/llm/useLlmModelDefaults", () => ({
+  default: () => ({ data: undefined }),
+}));
+
 vi.mock("@/api/llm/useLlmModels", () => ({
   default: () => ({
     data: registry.data,

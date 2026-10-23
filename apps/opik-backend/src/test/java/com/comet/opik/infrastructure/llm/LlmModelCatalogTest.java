@@ -160,6 +160,23 @@ class LlmModelCatalogTest {
         }
 
         @Test
+        void aDefaultModelOutOfThePickerFallsBackToTheProvidersFirstPickerModel() {
+            var service = service("llm-models-test-default-models.yaml", "llm-models-test-curated-default-models.yaml",
+                    null);
+
+            assertThat(service.getDefaultModels()).isEqualTo(Map.of(
+                    "anthropic", "claude-haiku-4-5",
+                    "vertex-ai", "vertex_ai/gemini-2.5-pro",
+                    "openai", "gpt-4o",
+                    "openrouter", "openai/gpt-5.5"));
+        }
+
+        @Test
+        void aCuratedFileWithoutDefaultModelsServesNone() {
+            assertThat(service(null).getDefaultModels()).isEmpty();
+        }
+
+        @Test
         void aCuratedFileNamingAProfileItDoesNotDefineStopsTheLoad() {
             assertThatThrownBy(
                     () -> service("llm-models-test.yaml", "llm-models-test-curated-unknown-profile.yaml", null))
@@ -338,6 +355,17 @@ class LlmModelCatalogTest {
                                     provider, row.id())
                             .extracting(ModelEntry::id)
                             .contains(row.id())));
+        }
+
+        // Listed, not "in the picker": the sync only adds models, but it does take a retired one out of the picker,
+        // and the loader falls back then instead of failing the sync's PR.
+        @Test
+        void everyDefaultModelIsAModelTheSyncLists() {
+            catalog.defaultModels().forEach((provider, modelId) -> assertThat(generated.getOrDefault(provider,
+                    List.of()))
+                    .as("default model %s/%s is not listed by the sync", provider, modelId)
+                    .extracting(ModelEntry::id)
+                    .contains(modelId));
         }
 
         @Test

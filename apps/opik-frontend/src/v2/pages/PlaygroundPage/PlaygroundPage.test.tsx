@@ -42,6 +42,11 @@ const actionArgs = vi.hoisted(() => ({
   last: null as Record<string, unknown> | null,
 }));
 
+import { PROVIDERS } from "@/constants/providers";
+const OPEN_ROUTER_DEFAULT_MODEL =
+  PROVIDERS[PROVIDER_TYPE.OPEN_ROUTER].defaultModel;
+const ANTHROPIC_DEFAULT_MODEL = PROVIDERS[PROVIDER_TYPE.ANTHROPIC].defaultModel;
+
 vi.mock("@/hooks/useLastPickedModel", () => ({
   default: () => [lastPicked.model, vi.fn()],
 }));
@@ -162,6 +167,12 @@ const OPEN_ROUTER_KEYS = {
 
 const OPEN_ROUTER_REGISTRY: LlmModelsByProvider = {
   [PROVIDER_TYPE.OPEN_ROUTER]: [
+    {
+      id: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_5,
+      label: "GPT-5.5",
+      structured_output: true,
+      reasoning: true,
+    },
     {
       id: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
       label: "GPT-4o",
@@ -359,13 +370,10 @@ describe("PlaygroundPage default prompt", () => {
 
     const [prompt] = storedPrompts();
     expect(storedPrompts()).toHaveLength(1);
-    expect(prompt.model).toBe(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O);
+    expect(prompt.model).toBe(OPEN_ROUTER_DEFAULT_MODEL);
     expect(prompt.provider).toBe(OPEN_ROUTER);
     expect(prompt.configs).toEqual(
-      getDefaultConfigByProvider(
-        OPEN_ROUTER,
-        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
-      ),
+      getDefaultConfigByProvider(OPEN_ROUTER, OPEN_ROUTER_DEFAULT_MODEL),
     );
   });
 
@@ -399,13 +407,10 @@ describe("PlaygroundPage default prompt", () => {
     await advance();
 
     const [prompt] = storedPrompts();
-    expect(prompt.model).toBe(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O);
+    expect(prompt.model).toBe(OPEN_ROUTER_DEFAULT_MODEL);
     expect(prompt.provider).toBe(OPEN_ROUTER);
     expect(prompt.configs).toEqual(
-      getDefaultConfigByProvider(
-        OPEN_ROUTER,
-        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
-      ),
+      getDefaultConfigByProvider(OPEN_ROUTER, OPEN_ROUTER_DEFAULT_MODEL),
     );
   });
 
@@ -498,7 +503,7 @@ describe("PlaygroundPage stored models", () => {
 
     expect(storedPrompts().map(({ model }) => model)).toEqual([
       PROVIDER_MODEL_TYPE.GPT_4O_MINI,
-      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      ANTHROPIC_DEFAULT_MODEL,
     ]);
   });
 
@@ -536,7 +541,7 @@ describe("PlaygroundPage stored models", () => {
 
     expect(storedPrompts().map(({ model }) => model)).toEqual([
       PROVIDER_MODEL_TYPE.GPT_4O_MINI,
-      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      ANTHROPIC_DEFAULT_MODEL,
     ]);
   });
 
@@ -564,7 +569,7 @@ describe("PlaygroundPage stored models", () => {
 
     expect(storedPrompts().map(({ model }) => model)).toEqual([
       PROVIDER_MODEL_TYPE.GPT_4O_MINI,
-      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      ANTHROPIC_DEFAULT_MODEL,
     ]);
   });
 });
