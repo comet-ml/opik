@@ -172,12 +172,19 @@ class AgenticScoringServiceTest {
                 arguments(LlmProvider.ANTHROPIC, "claude-sonnet-4-6", thinkingBudget, ToolChoice.AUTO),
                 arguments(LlmProvider.ANTHROPIC, "claude-sonnet-4-6", adaptiveThinking, ToolChoice.REQUIRED),
                 arguments(LlmProvider.ANTHROPIC, "claude-sonnet-4-6", effort, ToolChoice.REQUIRED),
-                arguments(LlmProvider.OPEN_AI, "gpt-6-luna", null, ToolChoice.REQUIRED));
+                arguments(LlmProvider.OPEN_AI, "gpt-6-luna", null, ToolChoice.REQUIRED),
+                // OpenRouter lists tool_choice for these, and a forced one gets a 400 (probed 10-23).
+                arguments(LlmProvider.OPEN_ROUTER, "meta/muse-spark-1.3", null, ToolChoice.AUTO),
+                arguments(LlmProvider.OPEN_ROUTER, "meta/muse-spark-1.1", null, ToolChoice.AUTO),
+                arguments(LlmProvider.OPEN_ROUTER, "qwen/qwen3.8-max-prime", null, ToolChoice.AUTO),
+                arguments(LlmProvider.OPEN_ROUTER, "qwen/qwen3.8-flash", null, ToolChoice.AUTO),
+                arguments(LlmProvider.OPEN_ROUTER, "meta/muse-spark-open", null, ToolChoice.REQUIRED),
+                arguments(LlmProvider.OPEN_ROUTER, "qwen/qwen3.8-27b", null, ToolChoice.REQUIRED));
     }
 
     @ParameterizedTest(name = "{1} {2} -> {3}")
     @MethodSource("firstRoundToolChoicesPerClaude")
-    @DisplayName("firstRoundToolChoice leaves the choice to a Claude that refuses a forced one or thinks on a budget")
+    @DisplayName("firstRoundToolChoice leaves the choice to a model that refuses a forced one or a Claude thinking on a budget")
     void firstRoundToolChoicePerClaude(LlmProvider provider, String model, JsonNode customParameters,
             ToolChoice expected) {
         var modelParameters = LlmAsJudgeModelParameters.builder().name(model).customParameters(customParameters)

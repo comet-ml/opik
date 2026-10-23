@@ -146,6 +146,18 @@ public class ModelCapabilities {
     }
 
     /**
+     * The same, plus a refusal in the row of the provider the model is reached through. OpenRouter lists tool_choice
+     * for models that take only auto, so their refusal is written by hand there.
+     */
+    public boolean refusesForcedToolChoice(@NonNull LlmProvider provider, String modelName,
+            @NonNull LlmModelRegistryService registryService) {
+        return refusesForcedToolChoice(modelName, registryService)
+                || catalogParams(provider, modelName, registryService)
+                        .filter(params -> !acceptsForcedToolChoice(params))
+                        .isPresent();
+    }
+
+    /**
      * Whether the model's row says it takes no function tools. OpenRouter answers a tool request to one of those with
      * a 404, "No endpoints found that support tool use".
      */

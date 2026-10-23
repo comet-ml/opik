@@ -461,7 +461,7 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
     @Override
     public ToolChoice firstRoundToolChoice(@NonNull LlmProvider provider,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
-        if (ModelCapabilities.refusesForcedToolChoice(modelParameters.name(), registryService)
+        if (ModelCapabilities.refusesForcedToolChoice(provider, modelParameters.name(), registryService)
                 || hasExplicitThinkingEnabled(modelParameters.customParameters())) {
             return ToolChoice.AUTO;
         }
