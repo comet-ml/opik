@@ -1108,6 +1108,19 @@ class CostServiceTest {
                 Arguments.of("perplexity/sonar", "custom-llm", "0.0012"));
     }
 
+    @ParameterizedTest(name = "{0} via provider={1}")
+    @CsvSource({
+            "llama-3.3-70b, api.cerebras.ai, 0.00109",
+            "deepseek-chat, api.deepseek.com, 0.000364",
+            "grok-4.3, api.x.ai:443, 0.00175"})
+    void calculateCostPricesAProviderSentAsItsApiHost(String model, String provider, String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
     /**
      * OpenRouter exposes Moonshot's Kimi family under a different namespace prefix
      * ({@code moonshotai/*}) than LiteLLM's canonical ({@code moonshot/*}) — see the
@@ -1409,7 +1422,7 @@ class CostServiceTest {
     }
 
     private static Stream<Arguments> provideTokenPricedProviders() {
-        var modelCosts = CostService.readModelCosts();
+        var modelCosts = ModelPriceTable.readModelCosts();
         Map<String, Map<String, ModelCostData>> rowsByModelByProvider = modelCosts.entrySet().stream()
                 .filter(entry -> StringUtils.isNotBlank(entry.getValue().litellmProvider()))
                 .filter(entry -> price(entry.getValue().inputCostPerToken()).signum() > 0
