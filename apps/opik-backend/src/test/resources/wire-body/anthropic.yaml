@@ -7,7 +7,7 @@ models:
   # use the instruction strategy instead of a JSON schema.
   legacy:
     - claude-3-7-sonnet-20250219
-  # AnthropicModelName.SAMPLING_CAPABLE_MODEL_IDS, without Claude 3.
+  # The AnthropicModelName ids whose catalog params accept temperature, without Claude 3.
   sampling:
     - claude-haiku-4-5-20251001
     - claude-opus-4-1-20250805
@@ -37,8 +37,8 @@ models:
   # In the registry only, not in AnthropicModelName: what a model the sync or the CDN just added looks like.
   registry-only:
     - claude-opus-6
-  # Every AnthropicModelName id outside THINKING_OFF_BY_DEFAULT_MODEL_IDS. A judge on these thinks even when the rule
-  # names no thinking, so it gets the 5000 max_tokens default instead of 4096; so does a registry-only model.
+  # Every AnthropicModelName id the catalog doesn't mark thinksByDefault: false. A judge on these thinks even when
+  # the rule names no thinking, so it gets the 5000 max_tokens default instead of 4096; so does a registry-only model.
   thinks-by-default:
     - claude-fable-5
     - claude-fable-5-1
@@ -50,7 +50,15 @@ models:
     - claude-opus-5-5
     - claude-sonnet-5
     - claude-sonnet-5-5
-  # AnthropicModelName.EFFORT_LEVELS_BY_MODEL_ID, by the levels each model is listed with.
+  # AnthropicModelName.THINKS_ONLY_WHEN_ASKED_MODEL_IDS: an effort level turns adaptive thinking on for these.
+  thinks-only-when-asked:
+    - claude-opus-4-6
+    - claude-opus-4-6-20260205
+    - claude-opus-4-7
+    - claude-opus-4-7-20260416
+    - claude-opus-4-8
+    - claude-sonnet-4-6
+  # The AnthropicModelName ids by the effort levels their catalog params list.
   effort-all:
     - claude-fable-5
     - claude-fable-5-1
@@ -192,29 +200,49 @@ rows:
     model: claude-sonnet-4-6
     request: {max_tokens: 300}
 
-  # Effort, chat path. The whole output_config rides custom_parameters. #8841 (with #8880) adds
-  # thinking: {type: adaptive} to every row here that sends an effort to a model that thinks only when asked:
-  # claude-sonnet-4-6, claude-opus-4-6(-20260205), claude-opus-4-7(-20260416) and claude-opus-4-8.
+  # Effort, chat path. The whole output_config rides custom_parameters. On a model that thinks only when asked the
+  # effort also turns adaptive thinking on; claude-opus-4-5-20251101 has no adaptive thinking, so it gets none.
   - name: low effort is sent
-    models: [effort-all, effort-to-max, effort-to-high, registry-only]
+    models: [thinks-by-default, effort-to-high, registry-only]
     request: {custom_parameters: {output_config: {effort: low}}}
     body: {output_config: {effort: low}}
+  - name: low effort is sent with adaptive thinking to a model that thinks only when asked
+    models: [thinks-only-when-asked]
+    request: {custom_parameters: {output_config: {effort: low}}}
+    body: {thinking: {type: adaptive}, output_config: {effort: low}}
   - name: medium effort is sent
-    models: [effort-all, effort-to-max, effort-to-high, registry-only]
+    models: [thinks-by-default, effort-to-high, registry-only]
     request: {custom_parameters: {output_config: {effort: medium}}}
     body: {output_config: {effort: medium}}
+  - name: medium effort is sent with adaptive thinking to a model that thinks only when asked
+    models: [thinks-only-when-asked]
+    request: {custom_parameters: {output_config: {effort: medium}}}
+    body: {thinking: {type: adaptive}, output_config: {effort: medium}}
   - name: high effort is sent
-    models: [effort-all, effort-to-max, effort-to-high, registry-only]
+    models: [thinks-by-default, effort-to-high, registry-only]
     request: {custom_parameters: {output_config: {effort: high}}}
     body: {output_config: {effort: high}}
+  - name: high effort is sent with adaptive thinking to a model that thinks only when asked
+    models: [thinks-only-when-asked]
+    request: {custom_parameters: {output_config: {effort: high}}}
+    body: {thinking: {type: adaptive}, output_config: {effort: high}}
   - name: max effort is sent
-    models: [effort-all, effort-to-max, registry-only]
+    models: [thinks-by-default, registry-only]
     request: {custom_parameters: {output_config: {effort: max}}}
     body: {output_config: {effort: max}}
+  - name: max effort is sent with adaptive thinking to a model that thinks only when asked
+    models: [thinks-only-when-asked]
+    request: {custom_parameters: {output_config: {effort: max}}}
+    body: {thinking: {type: adaptive}, output_config: {effort: max}}
   - name: xhigh effort is sent
-    models: [effort-all, registry-only]
+    models: [claude-fable-5, claude-fable-5-1, claude-mythos-5, claude-mythos-5-1, claude-opus-5, claude-opus-5-5,
+      claude-sonnet-5, registry-only]
     request: {custom_parameters: {output_config: {effort: xhigh}}}
     body: {output_config: {effort: xhigh}}
+  - name: xhigh effort is sent with adaptive thinking to a model that thinks only when asked
+    models: [claude-opus-4-7, claude-opus-4-7-20260416, claude-opus-4-8]
+    request: {custom_parameters: {output_config: {effort: xhigh}}}
+    body: {thinking: {type: adaptive}, output_config: {effort: xhigh}}
   - name: xhigh effort is rejected by a model that stops below it
     models: [effort-to-max, effort-to-high]
     request: {custom_parameters: {output_config: {effort: xhigh}}}
@@ -242,22 +270,16 @@ rows:
   - name: other output_config fields are sent beside the effort
     model: claude-opus-4-7
     request: {custom_parameters: {output_config: {effort: high, format: {type: json_schema, schema: {type: object}}}}}
-    body: {output_config: {effort: high, format: {type: json_schema, schema: {type: object}}}}
+    # claude-opus-4-7 thinks only when asked, so the effort turns thinking on too.
+    body: {thinking: {type: adaptive}, output_config: {effort: high, format: {type: json_schema, schema: {type: object}}}}
   - name: an output_config without effort is sent to a model without effort
     model: claude-sonnet-4-5
     request: {custom_parameters: {output_config: {format: {type: json_schema, schema: {type: object}}}}}
     body: {output_config: {format: {type: json_schema, schema: {type: object}}}}
-  - name: effort alone turns no thinking on for a model that thinks only when asked
-    models: [claude-sonnet-4-6, claude-opus-4-6, claude-opus-4-6-20260205, claude-opus-4-7, claude-opus-4-7-20260416,
-      claude-opus-4-8]
-    request: {custom_parameters: {output_config: {effort: high}}}
-    # Today the effort only shortens or lengthens the answer on these models; #8841 makes it turn thinking on.
-    body: {output_config: {effort: high}}
-  - name: effort keeps temperature on a model that takes sampling params
+  - name: effort drops temperature on a model that takes sampling params, since it turns thinking on
     models: [claude-sonnet-4-6, claude-opus-4-6]
     request: {temperature: 0.3, custom_parameters: {output_config: {effort: high}}}
-    # #8841 also drops the temperature here, since the effort then turns thinking on.
-    body: {temperature: 0.3, output_config: {effort: high}}
+    body: {thinking: {type: adaptive}, output_config: {effort: high}}
   - name: other custom_parameters keys are not sent
     model: claude-sonnet-4-6
     request: {custom_parameters: {top_k: 5, metadata: {user_id: u-1}}}
@@ -361,14 +383,20 @@ rows:
     body: {max_tokens: 1000}
   - name: a judge sends the effort and the output schema in one output_config
     path: judge
-    models: [claude-opus-4-5-20251101, claude-opus-4-6, claude-opus-4-6-20260205, claude-opus-4-7,
-      claude-opus-4-7-20260416, claude-opus-4-8, claude-sonnet-4-6]
+    model: claude-opus-4-5-20251101
     request:
       custom_parameters: {output_config: {effort: high}}
     body:
       output_config: {effort: high}
-    # #8841 (with #8880) adds thinking: {type: adaptive} for all of these but claude-opus-4-5-20251101, and then
-    # max_tokens 5000 as well, since the judge will think.
+  - name: a judge sends adaptive thinking, the effort and 5000 max_tokens for a model that thinks only when asked
+    path: judge
+    models: [thinks-only-when-asked]
+    request:
+      custom_parameters: {output_config: {effort: high}}
+    body:
+      thinking: {type: adaptive}
+      output_config: {effort: high}
+      max_tokens: 5000
   - name: a judge sends the effort, the output schema and 5000 max_tokens for a model that thinks by default
     path: judge
     models: [thinks-by-default, registry-only]

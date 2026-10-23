@@ -19,12 +19,18 @@ profiles:
         frequencyPenalty: {accepted: false}
         presencePenalty: {accepted: false}
         stop: {accepted: false}
+        seed: {accepted: false}
         maxOutputTokens: {min: 16}
   openai-reasoning:
     temperature: {accepted: false}
     topP: {accepted: false}
     frequencyPenalty: {accepted: false}
     presencePenalty: {accepted: false}
+    # Reasoning tokens count against the limit, so a limit of 1 gets a 400 ("max_tokens or model output limit was
+    # reached") on Chat Completions. 16 is the Responses route's floor, where the same models pass.
+    maxOutputTokens: {min: 16}
+  # A Claude id without a row takes no sampling params and thinks: newer models increasingly refuse sampling, and
+  # omitting a param beats the 400 a refused one gets. So the rows below name the models that do take them.
   anthropic:
     temperature: {accepted: false, min: 0, max: 1, default: 0}
     topP: {accepted: false, min: 0, max: 1, default: 1}

@@ -140,6 +140,7 @@ export enum EXPERIMENT_STATUS {
   COMPLETED = "completed",
   CANCELLED = "cancelled",
   RUNNING = "running",
+  FAILED = "failed",
 }
 
 export enum EVALUATION_METHOD {
@@ -180,6 +181,7 @@ export interface Experiment {
   assertion_scores?: AssertionScoreAverage[];
   created_at: string;
   last_updated_at: string;
+  finished_at?: string | null;
   comments?: CommentItems;
 }
 

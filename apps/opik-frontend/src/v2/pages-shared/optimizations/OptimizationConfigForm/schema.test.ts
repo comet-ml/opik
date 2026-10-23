@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, beforeEach, describe, it, expect } from "vitest";
 import {
   hasPythonSyntaxError,
   CodeMetricParamsSchema,
@@ -21,6 +21,12 @@ import {
 } from "@/constants/llm";
 import { METRIC_TYPE, OPTIMIZER_TYPE } from "@/types/optimizations";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
+import { resolveEffort } from "@/lib/modelUtils";
+import {
+  ModelFlags,
+  resetModelRegistryStoreForTesting,
+  setLatestModelFlags,
+} from "@/lib/modelRegistryStore";
 
 const VALID_CODE_METRIC = `
 from opik.evaluation.metrics import BaseMetric
@@ -632,7 +638,6 @@ describe("convertOptimizationStudioToFormData — re-run round trip", () => {
 
     expect(modelConfig.thinkingEffort).toBe("low");
     expect(sent).toEqual({
-      temperature: 0.6,
       max_completion_tokens: 4000,
       custom_parameters: { output_config: { effort: "low" } },
     });
@@ -654,6 +659,17 @@ describe("convertOptimizationStudioToFormData — re-run round trip", () => {
       temperature: 0.4,
       custom_parameters: { top_k: 3, min_p: 0.1 },
     });
+  });
+
+  it("prefers an OpenRouter run's nested value over a flat copy of it", () => {
+    const { modelConfig, sent } = rerun(
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      { top_k: 40, custom_parameters: { top_k: 3 } },
+    );
+
+    expect(modelConfig.topK).toBe(3);
+    expect(sent).toMatchObject({ custom_parameters: { top_k: 3 } });
+    expect(sent).not.toHaveProperty("top_k");
   });
 
   // The demo template is written with max_tokens, which OpenAI models take as max_completion_tokens
@@ -699,6 +715,263 @@ describe("convertOptimizationStudioToFormData — re-run round trip", () => {
         temperature: 0.7,
         custom_parameters: { user: "run-1" },
       });
+    },
+  );
+});
+
+describe("convertOptimizationStudioToFormData — OpenRouter effort on re-run", () => {
+  const REASONING_LISTS: Record<
+    string,
+    Pick<ModelFlags, "supportedParameters" | "reasoningEfforts">
+  > = {
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO]: {
+      supportedParameters: [
+        "max_completion_tokens",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+      ],
+      reasoningEfforts: ["high", "medium", "low", "minimal"],
+    },
+    [PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW]: {
+      supportedParameters: [
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "temperature",
+        "top_p",
+      ],
+      reasoningEfforts: ["high", "medium", "low", "minimal"],
+    },
+    [PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH]: {
+      supportedParameters: ["max_tokens", "reasoning", "reasoning_effort"],
+      reasoningEfforts: ["high"],
+    },
+  };
+
+  const loadRegistryLists = () =>
+    setLatestModelFlags(
+      new Map(
+        Object.entries(REASONING_LISTS).map(([model, lists]) => [
+          model,
+          { reasoning: true, structuredOutput: false, ...lists },
+        ]),
+      ),
+    );
+
+  const savedRun = (model: string, parameters: Record<string, unknown>) =>
+    ({
+      studio_config: {
+        prompt: { messages: [{ role: "user", content: "hi" }] },
+        llm_model: { model, parameters },
+        optimizer: { type: OPTIMIZER_TYPE.GEPA },
+        evaluation: { metrics: [{ type: METRIC_TYPE.EQUALS }] },
+      },
+    }) as never;
+
+  const toForm = (model: string, parameters: Record<string, unknown>) =>
+    convertOptimizationStudioToFormData(savedRun(model, parameters), [model]);
+
+  const panelAndRequest = (form: OptimizationConfigFormType) => ({
+    panel: resolveEffort(
+      form.modelName as PROVIDER_MODEL_TYPE,
+      form.modelConfig as Record<string, unknown>,
+    ),
+    sent: convertFormDataToStudioConfig(form, "ds").llm_model.parameters,
+  });
+
+  beforeEach(loadRegistryLists);
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+    PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW,
+  ])("shows and sends a %s run's saved effort", (model) => {
+    const saved = {
+      max_tokens: 700,
+      custom_parameters: { reasoning: { effort: "low" } },
+    };
+
+    const { panel, sent } = panelAndRequest(toForm(model, saved));
+
+    expect(panel).toEqual({ reasoningEffort: "low" });
+    expect(sent).toEqual(saved);
+  });
+
+  it.each(["reasoning_effort", "reasoningEffort"])(
+    "shows a run's effort saved flat as %s and sends it nested",
+    (key) => {
+      const { panel, sent } = panelAndRequest(
+        toForm(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO, {
+          max_tokens: 700,
+          [key]: "low",
+        }),
+      );
+
+      expect(panel).toEqual({ reasoningEffort: "low" });
+      expect(sent).toEqual({
+        max_tokens: 700,
+        custom_parameters: { reasoning: { effort: "low" } },
+      });
+    },
+  );
+
+  it("prefers the nested effort over a flat copy of it", () => {
+    const { panel } = panelAndRequest(
+      toForm(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO, {
+        reasoning_effort: "high",
+        custom_parameters: { reasoning: { effort: "low" } },
+      }),
+    );
+
+    expect(panel).toEqual({ reasoningEffort: "low" });
+  });
+
+  it("keeps the other values saved next to the effort", () => {
+    const saved = {
+      max_tokens: 700,
+      custom_parameters: {
+        reasoning: { effort: "high", exclude: true },
+        provider: { order: ["openai"] },
+      },
+    };
+
+    const { panel, sent } = panelAndRequest(
+      toForm(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO, saved),
+    );
+
+    expect(panel).toEqual({ reasoningEffort: "high" });
+    expect(sent).toEqual(saved);
+  });
+
+  it("keeps a run saved without an effort at Default", () => {
+    const { panel, sent } = panelAndRequest(
+      toForm(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO, { max_tokens: 700 }),
+    );
+
+    expect(panel).toEqual({});
+    expect(sent).toEqual({ max_tokens: 700 });
+  });
+
+  it("shows Default and sends no effort for a level the model does not offer", () => {
+    const { panel, sent } = panelAndRequest(
+      toForm(PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH, {
+        max_tokens: 700,
+        custom_parameters: { reasoning: { effort: "low" } },
+      }),
+    );
+
+    expect(panel).toEqual({});
+    expect(sent).toEqual({ max_tokens: 700 });
+  });
+
+  it("keeps the effort when the registry arrives after the form is seeded", () => {
+    resetModelRegistryStoreForTesting();
+    const form = toForm(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO, {
+      max_tokens: 700,
+      custom_parameters: { reasoning: { effort: "low" } },
+    });
+
+    loadRegistryLists();
+
+    expect(panelAndRequest(form).sent).toEqual({
+      max_tokens: 700,
+      custom_parameters: { reasoning: { effort: "low" } },
+    });
+  });
+});
+
+describe("convertOptimizationStudioToFormData — keeping or replacing the saved model", () => {
+  const savedRun = (optimizerParameters: Record<string, unknown> = {}) =>
+    ({
+      studio_config: {
+        prompt: { messages: [{ role: "user", content: "hi" }] },
+        llm_model: {
+          model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+          parameters: {
+            max_tokens: 300,
+            temperature: 0.4,
+            custom_parameters: { reasoning: { effort: "low" }, top_k: 3 },
+          },
+        },
+        optimizer: {
+          type: OPTIMIZER_TYPE.GEPA,
+          parameters: optimizerParameters,
+        },
+        evaluation: { metrics: [{ type: METRIC_TYPE.EQUALS }] },
+      },
+    }) as never;
+
+  it("keeps the saved model and its settings when the workspace can run it", () => {
+    const form = convertOptimizationStudioToFormData(savedRun(), [
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+    ]);
+
+    expect(form.modelName).toBe(PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI);
+    expect(
+      convertFormDataToStudioConfig(form, "ds").llm_model.parameters,
+    ).toMatchObject({
+      max_tokens: 300,
+      temperature: 0.4,
+      custom_parameters: { top_k: 3 },
+    });
+  });
+
+  it("starts the replacement model from its own defaults, without the saved settings", () => {
+    const form = convertOptimizationStudioToFormData(savedRun(), [
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+    ]);
+    const sent = convertFormDataToStudioConfig(form, "ds").llm_model.parameters;
+
+    expect(form.modelName).toBe(PROVIDER_MODEL_TYPE.GPT_4O_MINI);
+    expect(form.modelConfig).toEqual(
+      getOptimizationDefaultConfigByProvider(
+        PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE,
+        PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      ),
+    );
+    expect(sent).not.toHaveProperty("custom_parameters");
+    expect(sent).not.toHaveProperty("max_tokens");
+    expect(sent?.temperature).toBe(0);
+  });
+
+  it.each([
+    {
+      availableModels: [
+        PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      ],
+      expected: {
+        model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+        model_parameters: { custom_parameters: { top_k: 3 } },
+      },
+    },
+    {
+      availableModels: [PROVIDER_MODEL_TYPE.GPT_4O_MINI],
+      expected: { model: undefined, model_parameters: undefined },
+    },
+  ])(
+    "keeps an algorithm model's settings only with the model ($expected.model)",
+    ({ availableModels, expected }) => {
+      const form = convertOptimizationStudioToFormData(
+        savedRun({
+          model: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+          model_parameters: { custom_parameters: { top_k: 3 } },
+          seed: 42,
+        }),
+        availableModels,
+      );
+      const optimizerParams = form.optimizerParams as Record<string, unknown>;
+
+      expect(optimizerParams.model).toEqual(expected.model);
+      expect(optimizerParams.model_parameters).toEqual(
+        expected.model_parameters,
+      );
+      expect(optimizerParams.seed).toBe(42);
     },
   );
 });

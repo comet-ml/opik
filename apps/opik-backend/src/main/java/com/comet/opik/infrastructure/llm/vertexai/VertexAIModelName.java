@@ -34,7 +34,9 @@ public enum VertexAIModelName implements StructuredOutputSupported {
     GEMINI_3_6_FLASH("vertex_ai/gemini-3.6-flash", "gemini-3.6-flash", true),
     GEMINI_3_7_FLASH("vertex_ai/gemini-3.7-flash", "gemini-3.7-flash", true),
     GEMINI_3_8_FLASH("vertex_ai/gemini-3.8-flash", "gemini-3.8-flash", true),
+    GEMINI_3_8_FLASH_CYBER("vertex_ai/gemini-3.8-flash-cyber", "gemini-3.8-flash-cyber", true),
     GEMINI_OMNI_1_1_FLASH("vertex_ai/gemini-omni-1.1-flash", "gemini-omni-1.1-flash", false),
+    GEMINI_OMNI_1_1_FLASH_PREVIEW("vertex_ai/gemini-omni-1.1-flash-preview", "gemini-omni-1.1-flash-preview", false),
     GEMINI_ROBOTICS_ER_2("vertex_ai/gemini-robotics-er-2", "gemini-robotics-er-2", false);
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find VertexAIModelName with name '{}'";

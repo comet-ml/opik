@@ -1,5 +1,4 @@
 import React, { useEffect, useRef } from "react";
-import { v4 as uuidv4 } from "uuid";
 import { ArrowRight } from "lucide-react";
 import {
   Dialog,
@@ -18,9 +17,7 @@ import {
 } from "@/store/DashboardStore";
 import WidgetTypeSelector from "./WidgetTypeSelector";
 import OllieIcon from "@/icons/ollie-owl.svg?react";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import usePluginsStore from "@/store/PluginsStore";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
+import useAskOllieForWidget from "@/shared/Dashboard/useAskOllieForWidget";
 import WidgetConfigPreview from "./WidgetConfigPreview";
 import {
   DashboardWidget,
@@ -31,7 +28,6 @@ import {
   createDefaultWidgetConfig,
   getWidgetTypesForDashboard,
 } from "@/lib/dashboard/utils";
-import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   open,
@@ -112,33 +108,10 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
     onOpenChange(false);
   };
 
-  // The sidebar plugin is what answers the bridge; without it the request would go nowhere.
-  const assistantAvailable = usePluginsStore((state) =>
-    Boolean(state.AssistantSidebar),
-  );
-  // Ollie can only build a widget in a workspace on the Custom Charts allowlist.
-  const customChartsEnabledForWorkspace = useIsFeatureEnabled(
-    FeatureToggleKeys.CUSTOM_CHARTS_ENABLED_FOR_WORKSPACE,
-  );
-  const ollieEnabled =
-    useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED) &&
-    customChartsEnabledForWorkspace &&
-    assistantAvailable;
-  // Hands the request to Ollie, which draws it and offers "Add to <this dashboard>" on the chart.
+  const { isOllieAvailable, askOllie } = useAskOllieForWidget();
   const handleDescribeToOllie = () => {
-    const entryId = uuidv4();
-    trackEvent(OpikEvent.DASHBOARD_ASK_OLLIE_CLICKED, {
-      entry_id: entryId,
-      dashboard_id: runtimeConfig.dashboardId,
-      dashboard_type: runtimeConfig.dashboardType,
-      dashboard_scope: runtimeConfig.dashboardScope,
-      project_id: runtimeConfig.projectIds?.[0],
-    });
     onOpenChange(false);
-    window.opikBridge?.startConversation(
-      "I want to add a custom widget to this dashboard. Ask me what it should show.",
-      { origin: "describe_widget", entryId },
-    );
+    askOllie("widget_dialog");
   };
 
   const dialogTitle = isEditMode ? "Edit widget" : "Add widget";
@@ -183,7 +156,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
         </div>
 
         <DialogFooter className="flex flex-row flex-wrap items-center justify-end gap-2 border-t pt-4 sm:flex-row sm:justify-end">
-          {!isEditMode && ollieEnabled && (
+          {!isEditMode && isOllieAvailable && (
             <div className="comet-code mr-auto flex items-center gap-2 text-foreground">
               Need a custom widget?
               <Button

@@ -36,12 +36,10 @@ public class ServiceTogglesResource {
             @ApiResponse(responseCode = "200", description = "Service Toggles", content = @Content(schema = @Schema(implementation = ServiceTogglesConfig.class)))})
     public Response getToggles() {
         ServiceTogglesConfig toggles = config.getServiceToggles();
-        boolean customChartsEnabledForWorkspace = config.getCustomCharts()
-                .isEnabledFor(toggles, requestContext.get().getWorkspaceId());
         boolean guardrailsEnabledForWorkspace = toggles.isGuardrailsEnabled()
                 && requestContext.get().isGuardrailsEnabled();
         return Response.ok()
-                .entity(toggles.withCustomChartsEnabledForWorkspace(customChartsEnabledForWorkspace)
+                .entity(toggles.withCustomChartsEnabledForWorkspace(config.getCustomCharts().isEnabled(toggles))
                         .withGuardrailsEnabledForWorkspace(guardrailsEnabledForWorkspace))
                 .build();
     }

@@ -19,6 +19,7 @@ interface PlaygroundPromptsProps {
   hasLoadedProviderKeys: boolean;
   runSingle?: (promptId: string) => void;
   stopSingle?: (promptId: string) => void;
+  checkAgain?: () => void;
 }
 
 const PlaygroundPrompts = ({
@@ -28,6 +29,7 @@ const PlaygroundPrompts = ({
   hasLoadedProviderKeys,
   runSingle,
   stopSingle,
+  checkAgain,
 }: PlaygroundPromptsProps) => {
   const promptCount = usePromptCount();
   const promptIds = usePromptIds();
@@ -89,6 +91,7 @@ const PlaygroundPrompts = ({
               ? () => stopSingle(promptId)
               : undefined
           }
+          onCheckAgain={checkAgain}
         />
       ))}
     </div>

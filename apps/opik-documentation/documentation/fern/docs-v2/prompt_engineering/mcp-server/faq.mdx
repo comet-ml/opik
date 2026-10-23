@@ -33,6 +33,26 @@ client. Most problems end there.
       your deployment's domain and its identity provider.
     - Sessions expire; when that happens the client asks you to sign in again.
   </Accordion>
+  <Accordion title="`404 Not Found` from `/opik/api/v1/mcp`">
+    Your deployment doesn't run the hosted server. That is the default on
+    dedicated and self-hosted Comet deployments, such as
+    `https://<company>.comet-hosted.com`.
+
+    - Use the local server instead:
+      [Self-hosted and dedicated deployments](/mcp-server/advanced-setup#self-hosted-and-dedicated-deployments)
+      has the config for Claude Code and Cursor.
+    - Adding `Authorization` or `Comet-Workspace` headers doesn't help. The
+      hosted server signs you in through the browser and does not accept API
+      keys.
+  </Accordion>
+  <Accordion title="Cursor asks for a Client ID and Client Secret">
+    Leave both empty. Cursor shows these optional OAuth fields for every remote
+    server, and you don't need them for Opik.
+
+    - On Opik Cloud, install and complete the browser sign-in when Cursor asks.
+    - If you are not on Opik Cloud, or you only have an API key, use the
+      [local server](/mcp-server/advanced-setup#local-server) instead.
+  </Accordion>
   <Accordion title="Only `authenticate` and `complete_authentication` are listed">
     You are connected but not signed in — those two tools are how you sign in.
 
