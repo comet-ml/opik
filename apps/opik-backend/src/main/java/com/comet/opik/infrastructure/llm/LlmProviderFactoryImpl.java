@@ -223,6 +223,13 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         // row mapper never decrypts — the auth_config of providers that can't match. Named
         // providers share the "custom-llm/" model prefix, so they're fetched as one family and
         // matched by model in memory (the models list lives inside the configuration JSON).
+        return findProviderApiKey(workspaceId, llmProvider, model)
+                .orElseThrow(() -> new BadRequestException(
+                        "API key not configured for LLM. provider='%s', model='%s'".formatted(
+                                llmProvider.getValue(), model)));
+    }
+
+    private Optional<ProviderApiKey> findProviderApiKey(String workspaceId, LlmProvider llmProvider, String model) {
         Set<LlmProvider> candidates = llmProvider.supportsProviderName()
                 ? NAMED_PROVIDERS
                 : Set.of(llmProvider);
@@ -230,10 +237,18 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         return llmProviderApiKeyService.findByProviders(workspaceId, candidates).stream()
                 .filter(providerApiKey -> !llmProvider.supportsProviderName()
                         || isModelConfiguredForProvider(model, providerApiKey))
-                .findFirst()
-                .orElseThrow(() -> new BadRequestException(
-                        "API key not configured for LLM. provider='%s', model='%s'".formatted(
-                                llmProvider.getValue(), model)));
+                .findFirst();
+    }
+
+    @Override
+    public LlmProvider getKeyProvider(@NonNull String workspaceId, @NonNull String model) {
+        var llmProvider = getLlmProvider(model);
+        if (!llmProvider.supportsProviderName()) {
+            return llmProvider;
+        }
+        return findProviderApiKey(workspaceId, llmProvider, model)
+                .map(ProviderApiKey::provider)
+                .orElse(llmProvider);
     }
 
     /**

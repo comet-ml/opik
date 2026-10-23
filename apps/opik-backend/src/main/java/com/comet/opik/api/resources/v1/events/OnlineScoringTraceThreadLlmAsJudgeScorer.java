@@ -425,7 +425,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             // estimatedContextTokens was derived up front from the cheap ClickHouse size aggregate.
             // shouldUseAgenticTools re-checks the size threshold, provider tool-support and template
             // modality; `spans` is used only to render the inline path (empty on the tools path).
-            boolean useTools = shouldUseAgenticTools(estimatedContextTokens, hasAttachments, modelName,
+            boolean useTools = shouldUseAgenticTools(message.workspaceId(), estimatedContextTokens, hasAttachments,
+                    modelName,
                     threadId, message.code().messages());
 
             ChatRequest scoreRequest;
@@ -464,7 +465,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 // Providers that reject a forced choice outright get AUTO here too — see
                 // firstRoundToolChoice.
                 scoreRequest = agenticScoringService.addToolSpecs(scoreRequest,
-                        agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName),
+                        agenticScoringService.firstRoundToolChoice(
+                                llmProviderFactory.getKeyProvider(message.workspaceId(), modelName),
                                 message.code().model()));
             }
 
@@ -486,8 +488,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
      * Both cases also require the provider to support tool-calling and the template to be
      * text-only. Falls back to inline with a user-facing warn when those secondary guards fail.
      */
-    boolean shouldUseAgenticTools(int estimatedContextTokens, boolean hasAttachments, String modelName,
-            String threadId, List<LlmAsJudgeMessage> templateMessages) {
+    boolean shouldUseAgenticTools(String workspaceId, int estimatedContextTokens, boolean hasAttachments,
+            String modelName, String threadId, List<LlmAsJudgeMessage> templateMessages) {
         boolean overSizeThreshold = estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
         // Skip the provider lookup when neither trigger is met — most evaluations have neither large
         // contexts nor attachments.
@@ -495,7 +497,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             return false;
         }
         boolean providerSupportsTools = agenticScoringService.supportsToolCalling(
-                llmProviderFactory.getLlmProvider(modelName));
+                llmProviderFactory.getKeyProvider(workspaceId, modelName));
         if (!providerSupportsTools) {
             userFacingLogger.warn(
                     "Thread has attachments or context exceeds '{}' tokens but provider for model '{}'"

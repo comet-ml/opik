@@ -60,6 +60,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -568,5 +569,58 @@ class LlmProviderFactoryTest {
                 registry);
 
         assertThat(llmProviderFactory.openAiParams("openai/gpt-5-mini")).isEmpty();
+    }
+
+    private LlmProviderFactoryImpl factoryWithKeys(String workspaceId, ProviderApiKey... keys) {
+        var llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet())).thenReturn(List.of(keys));
+        return new LlmProviderFactoryImpl(llmProviderApiKeyService,
+                createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai"), registryService);
+    }
+
+    private static ProviderApiKey namedKey(LlmProvider provider, String providerName, String models) {
+        return ProviderApiKey.builder()
+                .provider(provider)
+                .providerName(providerName)
+                .configuration(Map.of("models", models))
+                .build();
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "custom-llm/bedrock-use2/openai.gpt-oss-20b-1:0, BEDROCK",
+            "custom-llm/local/qwen2.5:1.5b, OLLAMA",
+            "custom-llm/gw/gpt-5.5, CUSTOM_LLM"})
+    @DisplayName("getKeyProvider answers the type of the key that serves a custom-llm model")
+    void getKeyProviderAnswersTheServingKeysType(String model, LlmProvider expected) {
+        var workspaceId = UUID.randomUUID().toString();
+        var factory = factoryWithKeys(workspaceId,
+                namedKey(LlmProvider.OLLAMA, "local", "custom-llm/local/qwen2.5:1.5b"),
+                namedKey(LlmProvider.BEDROCK, "bedrock-use2", "custom-llm/bedrock-use2/openai.gpt-oss-20b-1:0"),
+                namedKey(LlmProvider.CUSTOM_LLM, "gw", "custom-llm/gw/gpt-5.5"));
+
+        assertThat(factory.getLlmProvider(model)).isEqualTo(LlmProvider.CUSTOM_LLM);
+        assertThat(factory.getKeyProvider(workspaceId, model)).isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("getKeyProvider keeps CUSTOM_LLM for a custom-llm model no key serves")
+    void getKeyProviderKeepsCustomLlmWithoutAServingKey() {
+        var workspaceId = UUID.randomUUID().toString();
+        var factory = factoryWithKeys(workspaceId,
+                namedKey(LlmProvider.BEDROCK, "bedrock-use2", "custom-llm/bedrock-use2/openai.gpt-oss-20b-1:0"));
+
+        assertThat(factory.getKeyProvider(workspaceId, "custom-llm/other/model")).isEqualTo(LlmProvider.CUSTOM_LLM);
+    }
+
+    @Test
+    @DisplayName("getKeyProvider answers a named model's provider without reading the keys")
+    void getKeyProviderSkipsTheKeysForANamedModel() {
+        var llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        var factory = new LlmProviderFactoryImpl(llmProviderApiKeyService,
+                createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai"), registryService);
+
+        assertThat(factory.getKeyProvider(UUID.randomUUID().toString(), "gpt-4o")).isEqualTo(LlmProvider.OPEN_AI);
+        verifyNoInteractions(llmProviderApiKeyService);
     }
 }

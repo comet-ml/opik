@@ -226,7 +226,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             String modelName = "gpt-test";
             TraceToScoreLlmAsJudge message = buildSpansFetchMessage(
                     hasExperimentId, sentinelInVariables, templateHasSpans);
-            lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
+            lenient().when(llmProviderFactory.getKeyProvider(anyString(), eq(modelName))).thenReturn(provider);
 
             assertThat(scorer.shouldFetchSpans(message)).isEqualTo(expected);
         }
@@ -308,11 +308,23 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     ? newMessage(UUID.randomUUID())
                     : newMessageWithoutExperimentId(UUID.randomUUID());
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(thresholdTokens);
-            lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
+            lenient().when(llmProviderFactory.getKeyProvider(anyString(), eq(modelName))).thenReturn(provider);
 
-            boolean useTools = scorer.shouldUseAgenticTools(message, estimatedTokens, modelName, referencesTrace);
+            boolean useTools = scorer.shouldUseAgenticTools(message, estimatedTokens, modelName,
+                    referencesTrace);
 
             assertThat(useTools).isEqualTo(expectedUseTools);
+        }
+
+        @Test
+        void bedrockKeysCustomLlmModelTakesTheToolLoop() {
+            String modelName = "custom-llm/bedrock-use2/openai.gpt-oss-20b-1:0";
+            TraceToScoreLlmAsJudge message = newMessageWithoutExperimentId(UUID.randomUUID());
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(50_000);
+            lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(LlmProvider.CUSTOM_LLM);
+            when(llmProviderFactory.getKeyProvider(message.workspaceId(), modelName)).thenReturn(LlmProvider.BEDROCK);
+
+            assertThat(scorer.shouldUseAgenticTools(message, 0, modelName, true)).isTrue();
         }
     }
 
@@ -665,7 +677,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     .build();
 
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
-            when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-test"))).thenReturn(LlmProvider.OPEN_AI);
             when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
                     .thenReturn(new ToolCallingStrategy());
             when(spanService.getByTraceIds(any())).thenReturn(Flux.just(span));
@@ -724,7 +736,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     .build();
 
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
-            when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-test"))).thenReturn(LlmProvider.OPEN_AI);
             when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
                     .thenReturn(new ToolCallingStrategy());
             when(spanService.getByTraceIds(any())).thenReturn(Flux.just(span));
@@ -764,7 +776,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     .build();
 
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
-            when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-test"))).thenReturn(LlmProvider.OPEN_AI);
             when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
                     .thenReturn(new ToolCallingStrategy());
             when(spanService.getByTraceIds(any())).thenReturn(Flux.just(span));
@@ -814,7 +826,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     .build();
 
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
-            when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-test"))).thenReturn(LlmProvider.OPEN_AI);
             when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
                     .thenReturn(new ToolCallingStrategy());
             when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
@@ -862,7 +874,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     .build();
 
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
-            when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-test"))).thenReturn(LlmProvider.OPEN_AI);
             when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
                     .thenReturn(new ToolCallingStrategy());
             when(spanService.getByTraceIds(any())).thenReturn(Flux.just(span));
@@ -895,7 +907,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
             var message = buildScoringMessage(JsonUtils.readValue(EVALUATOR_JSON, LlmAsJudgeCode.class));
 
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
-            lenient().when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            lenient().when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-test")))
+                    .thenReturn(LlmProvider.OPEN_AI);
             when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
                     .thenReturn(new ToolCallingStrategy());
             lenient().when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
@@ -1150,7 +1163,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         private void stubJudgeRouting() {
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
-            lenient().when(llmProviderFactory.getLlmProvider(anyString())).thenReturn(LlmProvider.OPEN_AI);
+            lenient().when(llmProviderFactory.getKeyProvider(anyString(), anyString())).thenReturn(LlmProvider.OPEN_AI);
             lenient().when(llmProviderFactory.getStructuredOutputStrategy(anyString()))
                     .thenReturn(new ToolCallingStrategy());
             lenient().when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
