@@ -16,9 +16,6 @@ public final class OpenInferenceMappingRules {
 
     private static final List<OpenTelemetryMappingRule> RULES = List.of(
             OpenTelemetryMappingRule.builder()
-                    .rule("llm.invocation_parameters.*").isPrefix(true).source(SOURCE)
-                    .outcome(OpenTelemetryMappingRule.Outcome.INPUT).spanType(SpanType.llm).build(),
-            OpenTelemetryMappingRule.builder()
                     .rule("llm.model_name").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL)
                     .spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()

@@ -5,6 +5,7 @@ import { ArrowUpRight, Loader2 } from "lucide-react";
 import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataTypeIcon";
 import { TRACE_TYPE_FOR_TREE } from "@/constants/traces";
 import { Trace } from "@/types/traces";
+import { getPrettifyConfig } from "@/lib/traces";
 import { Filter } from "@/types/filters";
 import { useSMEFlow } from "../SMEFlowContext";
 import useTraceById from "@/api/traces/useTraceById";
@@ -135,6 +136,11 @@ const TraceContent: React.FC = () => {
 
   const { media, transformedInput, transformedOutput } =
     useUnifiedMedia(displayTrace);
+  const prettifySource = {
+    metadata: displayTrace?.metadata,
+    input: transformedInput,
+    output: transformedOutput,
+  };
 
   return (
     <>
@@ -144,14 +150,20 @@ const TraceContent: React.FC = () => {
           <CodeBlock
             title="Input"
             data={transformedInput}
-            prettifyConfig={{ fieldType: "input" }}
+            prettifyConfig={{
+              ...getPrettifyConfig(prettifySource, "input"),
+              fieldType: "input",
+            }}
             preserveKey="syntax-highlighter-annotation-input"
             withSearch
           />
           <CodeBlock
             title="Output"
             data={transformedOutput}
-            prettifyConfig={{ fieldType: "output" }}
+            prettifyConfig={{
+              ...getPrettifyConfig(prettifySource, "output"),
+              fieldType: "output",
+            }}
             preserveKey="syntax-highlighter-annotation-output"
             withSearch
           />

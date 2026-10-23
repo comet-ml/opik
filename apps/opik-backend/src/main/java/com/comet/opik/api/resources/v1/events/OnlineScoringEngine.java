@@ -776,6 +776,16 @@ public class OnlineScoringEngine {
             var valueToReplace = jsonSection != null
                     ? extractFromJson(jsonSection, mapper.jsonPath())
                     : mapper.valueToReplace;
+            // Historical OTel ingestion put output aliases in input. New OpenInference
+            // spans keep them with output; existing scoring rules must still resolve.
+            if (valueToReplace == null && section == TraceSection.INPUT
+                    && mapper.jsonPath().startsWith("$.llm.output_messages.")) {
+                var metadata = sectionExtractor.extract(TraceSection.METADATA);
+                var output = sectionExtractor.extract(TraceSection.OUTPUT);
+                if (metadata != null && metadata.has("openinference.span.kind") && output != null) {
+                    valueToReplace = extractFromJson(output, mapper.jsonPath());
+                }
+            }
             return mapper.toBuilder()
                     .valueToReplace(valueToReplace)
                     .build();

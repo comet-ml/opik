@@ -116,6 +116,9 @@ public final class UsageCases {
                         anthropic("litellm").inputTokens(1000).cacheReadInputTokens(1000)
                                 .cacheCreation5mInputTokens(1000)
                                 .cacheCreation1hInputTokens(2000).outputTokens(100).build()),
+                new UsageCase("Anthropic OpenInference with output usage only", "anthropic",
+                        usage("completion", 20),
+                        anthropic("openinference").outputTokens(20).build()),
                 new UsageCase("Anthropic through OpenInference", "anthropic",
                         usage("llm.token_count.prompt", 12000, "llm.token_count.completion", 500,
                                 "llm.token_count.total", 12500, "llm.token_count.prompt_details.cache_read", 10000),
@@ -298,6 +301,21 @@ public final class UsageCases {
                                 "cache_read_input_tokens", 4096),
                         bedrock("converse").inputTokens(12).cacheReadInputTokens(4096).cacheWriteInputTokens(1024)
                                 .outputTokens(7).build()),
+                new UsageCase("Bedrock OpenInference with output usage only", "bedrock",
+                        usage("completion", 20),
+                        bedrock("openinference").outputTokens(20).build()),
+                new UsageCase("Bedrock through OpenInference", "bedrock",
+                        usage("prompt", 1000, "completion", 20, "total", 1020,
+                                "prompt_details.cache_read", 800, "prompt_details.cache_write", 100),
+                        bedrock("openinference").inputTokens(100).cacheReadInputTokens(800)
+                                .cacheWriteInputTokens(100).outputTokens(20).build()),
+                new UsageCase("Bedrock OpenInference logged by the SDK", "bedrock_converse",
+                        usage("original_usage.prompt", 1000, "original_usage.completion", 20,
+                                "original_usage.prompt_details.cache_read", 800,
+                                "original_usage.prompt_details.cache_write", 100),
+                        BedrockConverseNativeUsage.builder().provider("bedrock_converse").variant("openinference")
+                                .inputTokens(100).cacheReadInputTokens(800).cacheWriteInputTokens(100)
+                                .outputTokens(20).build()),
                 new UsageCase("Bedrock InvokeModel with a Llama body", "bedrock",
                         usage("prompt_token_count", 120, "generation_token_count", 45),
                         bedrock("llama").inputTokens(120).outputTokens(45).build()),
