@@ -12,7 +12,7 @@ import opik.url_helpers
 
 
 def print(reports: List[pytest.TestReport]) -> None:
-    opik_ui_url = opik.url_helpers.get_ui_url(opik.config.OpikConfig().url_override)
+    opik_ui_url = opik.url_helpers.get_ui_url()
 
     console = rich.console.Console()
 

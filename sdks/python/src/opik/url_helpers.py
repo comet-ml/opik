@@ -1,7 +1,7 @@
 import base64
 import json
 import urllib.parse
-from typing import Final
+from typing import Final, Optional
 
 import opik.config
 
@@ -21,7 +21,9 @@ def ensure_ending_slash(url: str) -> str:
     return url.rstrip("/") + "/"
 
 
-def get_ui_url(url_override: str) -> str:
+def get_ui_url(url_override: Optional[str] = None) -> str:
+    if url_override is None:
+        url_override = opik.config.OpikConfig().url_override
     return url_override.rstrip("/").removesuffix("/api") + "/"
 
 
@@ -39,7 +41,7 @@ def get_experiment_url_by_id(
 def get_project_url_by_workspace(
     workspace: str, project_name: str
 ) -> str:  # don't use or update, will be removed soon
-    ui_url = get_ui_url(opik.config.OpikConfig().url_override)
+    ui_url = get_ui_url()
 
     project_path = urllib.parse.quote(
         f"{workspace}/redirect/projects?name={project_name}",
