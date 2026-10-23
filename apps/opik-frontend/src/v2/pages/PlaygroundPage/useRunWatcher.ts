@@ -23,12 +23,15 @@ import usePlaygroundStore, {
   useSetPromptRunning,
   useMarkWatchLapsed,
   useClearWatchLapsed,
+  useClearAllWatchLapsed,
   useSettleRun,
 } from "@/store/PlaygroundStore";
 import { useToast } from "@/ui/use-toast";
 import useRunCompletionToast from "@/v2/pages/PlaygroundPage/useRunCompletionToast";
 
 const MAX_POLL_DURATION_MS = 5 * 60 * 1000;
+// How long a finished run's bar stays at 100% before the row goes back to the pagination.
+const COMPLETED_PROGRESS_LINGER_MS = 3000;
 const MAX_POLL_DURATION_LABEL = "5 minutes";
 
 const STILL_RUNNING_DESCRIPTION =
@@ -82,6 +85,7 @@ export default function useRunWatcher({
   const resetProgress = useResetProgress();
   const markWatchLapsed = useMarkWatchLapsed();
   const clearWatchLapsed = useClearWatchLapsed();
+  const clearAllWatchLapsed = useClearAllWatchLapsed();
   const announceRunComplete = useRunCompletionToast(datasetId);
 
   const isToStopRef = useRef(false);
@@ -257,7 +261,12 @@ export default function useRunWatcher({
           if (experimentsFinished) {
             if (!isScoped) {
               setProgress(totalExperimentItems, totalExperimentItems);
-              setTimeout(() => resetProgress(), 3000);
+              // Guarded: a run started inside this window moves the generation, and clearing
+              // its progress would empty the new bar and swap the row for the pagination.
+              setTimeout(() => {
+                if (generation !== pollGenerationRef.current) return;
+                resetProgress();
+              }, COMPLETED_PROGRESS_LINGER_MS);
             }
             finishPollScope(scope);
             const scopedId = scope?.scopedPromptIds?.[0];
@@ -356,7 +365,12 @@ export default function useRunWatcher({
             // Assertions already done — skip Step 2, finish immediately
             if (!isScoped) {
               setProgress(totalItems, totalItems);
-              setTimeout(() => resetProgress(), 3000);
+              // Guarded: a run started inside this window moves the generation, and clearing
+              // its progress would empty the new bar and swap the row for the pagination.
+              setTimeout(() => {
+                if (generation !== pollGenerationRef.current) return;
+                resetProgress();
+              }, COMPLETED_PROGRESS_LINGER_MS);
             }
             finishPollScope(scope);
             const scopedId = scope?.scopedPromptIds?.[0];
@@ -425,23 +439,37 @@ export default function useRunWatcher({
   }, [stopPolling, settleRun, isBackendRun]);
 
   const stopAll = useCallback(() => {
-    // Read before settling, which empties both: these are the prompts the stop covers, and a
-    // stop that has to wait for ids needs to name them. A prompt stopped on its own is already
-    // out of the running map with its stop still queued, so carry that across or it is lost.
-    const { stopPending } = usePlaygroundStore.getState();
-    const covered = [...new Set([...getRunningPromptIds(), ...stopPending])];
+    // Read first: these are the prompts the stop covers, and a stop that has to wait for ids
+    // needs to name them. A prompt stopped on its own keeps its stop queued, so carry that
+    // across or it is lost.
+    const { stopsAwaitingRun } = usePlaygroundStore.getState();
+    const covered = [
+      ...new Set([...getRunningPromptIds(), ...stopsAwaitingRun]),
+    ];
 
     scopedAnnounceRef.current.clear();
-    settleRun();
-    isToStopRef.current = true;
     stopPolling();
+    isToStopRef.current = true;
+    clearAllWatchLapsed();
+
+    // Nothing answers for a browser-side run, and combinations still queued read isRunningMap to
+    // decide whether to start — left set, they open new streams after the stop.
+    if (!isBackendRun) {
+      settleRun();
+    }
+
     cancelBackendRun(covered);
-  }, [settleRun, stopPolling, cancelBackendRun]);
+  }, [
+    stopPolling,
+    clearAllWatchLapsed,
+    settleRun,
+    isBackendRun,
+    cancelBackendRun,
+  ]);
 
   const stopSingle = useCallback(
     (promptId: string) => {
       scopedAnnounceRef.current.delete(promptId);
-      setPromptRunning(promptId, false);
       clearWatchLapsed([promptId]);
       for (const [key, entry] of abortControllersRef.current.entries()) {
         if (entry.promptId === promptId) {
@@ -449,9 +477,21 @@ export default function useRunWatcher({
           abortControllersRef.current.delete(key);
         }
       }
+      // Same as above, for the one prompt: nothing answers for a browser-side run.
+      if (!isBackendRun) {
+        setPromptRunning(promptId, false);
+        releaseRunInFlight();
+      }
+
       cancelBackendRun([promptId]);
     },
-    [setPromptRunning, clearWatchLapsed, cancelBackendRun],
+    [
+      clearWatchLapsed,
+      isBackendRun,
+      setPromptRunning,
+      releaseRunInFlight,
+      cancelBackendRun,
+    ],
   );
 
   return {

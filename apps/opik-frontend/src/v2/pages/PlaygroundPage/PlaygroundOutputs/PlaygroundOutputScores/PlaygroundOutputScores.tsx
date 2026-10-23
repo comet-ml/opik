@@ -21,7 +21,6 @@ export interface ScoreData {
 interface PlaygroundOutputScoresProps {
   metricNames: string[]; // Expected metric names from rules
   metricScores: Record<string, ScoreData>; // Actual scores from trace (keyed by name)
-  stale?: boolean;
   notRun?: boolean;
   className?: string;
 }
@@ -29,7 +28,6 @@ interface PlaygroundOutputScoresProps {
 const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   metricNames,
   metricScores,
-  stale = false,
   notRun = false,
   className,
 }) => {
@@ -57,9 +55,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   }
 
   return (
-    <div
-      className={cn("flex flex-wrap gap-1.5", stale && "opacity-50", className)}
-    >
+    <div className={cn("flex flex-wrap gap-1.5", className)}>
       {visibleMetrics.map((metricName) => (
         <MetricTag
           key={metricName}

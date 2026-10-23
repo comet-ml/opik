@@ -9,9 +9,29 @@ import usePlaygroundStore from "@/store/PlaygroundStore";
 import useActionButtonActions from "./useActionButtonActions";
 
 const cancelExperimentRun = vi.fn();
+// The cancel settles from its own promise, so the mock hands one back per call and the test
+// decides when, and in what order, each answers. A queue rather than one slot: whether an earlier
+// stop still settles when a later one answers first is exactly what needs a test.
+let pendingCancels: Array<{
+  resolve: () => void;
+  reject: (e: unknown) => void;
+}> = [];
+const answerCancel = (index = 0) => {
+  pendingCancels.splice(index, 1)[0]?.resolve();
+};
+const failCancel = (index = 0) => {
+  pendingCancels.splice(index, 1)[0]?.reject(new Error("cancel refused"));
+};
 
 vi.mock("@/api/playground/useCancelExperimentExecution", () => ({
-  default: () => ({ mutate: cancelExperimentRun }),
+  default: () => ({
+    mutateAsync: (variables: unknown) => {
+      cancelExperimentRun(variables);
+      return new Promise<void>((resolve, reject) => {
+        pendingCancels.push({ resolve, reject });
+      });
+    },
+  }),
 }));
 
 const runExperimentExecution = vi.fn();
@@ -89,6 +109,7 @@ const startBackendRun = () =>
 
 beforeEach(() => {
   cancelExperimentRun.mockClear();
+  pendingCancels = [];
   usePlaygroundStore.setState({
     promptIds: [],
     promptMap: {},
@@ -98,6 +119,10 @@ beforeEach(() => {
     experimentByPromptId: {},
     runTotalItemsByPromptId: {},
     watchLapsed: new Set<string>(),
+    // A test whose cancel never answers leaves its prompt marked, and the next test then reads
+    // that prompt as already stopping and issues no cancel of its own.
+    stopsAwaitingRun: new Set<string>(),
+    cancelsInFlight: new Set<string>(),
   });
 });
 
@@ -304,14 +329,41 @@ describe("useActionButtonActions lifecycle", () => {
       });
     });
 
-    it("should settle the run rather than leave it watched", () => {
+    it("should hold the run as running until the server has accepted the stop", async () => {
       startBackendRun();
       const { result } = renderActions("dataset-1");
 
       act(() => result.current.stopAll());
 
+      expect(usePlaygroundStore.getState().isRunInFlight).toBe(true);
+      expect(usePlaygroundStore.getState().isRunningMap).toEqual({
+        [PROMPT_A]: true,
+        [PROMPT_B]: true,
+      });
+
+      await act(async () => answerCancel());
+
       expect(usePlaygroundStore.getState().isRunInFlight).toBe(false);
       expect(usePlaygroundStore.getState().isRunningMap).toEqual({});
+    });
+
+    // A stop we cannot confirm must not leave the button saying Stopping for ever. The settle
+    // hangs off .finally for exactly this: an onError-only cleanup would miss the success path,
+    // and a resolve-only one misses this.
+    it("should settle even when the cancel call fails", async () => {
+      startBackendRun();
+      const { result } = renderActions("dataset-1");
+      await act(async () => {});
+      startBackendRun();
+
+      act(() => result.current.stopAll());
+      expect(usePlaygroundStore.getState().isRunInFlight).toBe(true);
+
+      await act(async () => failCancel());
+
+      expect(usePlaygroundStore.getState().isRunInFlight).toBe(false);
+      expect(usePlaygroundStore.getState().isRunningMap).toEqual({});
+      expect(usePlaygroundStore.getState().cancelsInFlight.size).toBe(0);
     });
 
     it("should not reach the server for a run executing in the browser", () => {
@@ -327,6 +379,88 @@ describe("useActionButtonActions lifecycle", () => {
 
       expect(cancelExperimentRun).not.toHaveBeenCalled();
     });
+
+    // Nothing answers for a browser-side run, so the settle has to happen on the press. Combinations
+    // still queued read isRunningMap to decide whether to start: left set, they open new streams
+    // after the stop, which is spend the user has just asked not to make.
+    it("should settle a browser-side run on the press, since no cancel will answer", () => {
+      usePlaygroundStore.setState({
+        promptIds: [PROMPT_A, PROMPT_B],
+        isRunningMap: { [PROMPT_A]: true, [PROMPT_B]: true },
+        isRunInFlight: true,
+      });
+      const { result } = renderActions(undefined);
+
+      act(() => result.current.stopAll());
+
+      expect(usePlaygroundStore.getState().isRunningMap).toEqual({});
+      expect(usePlaygroundStore.getState().isRunInFlight).toBe(false);
+    });
+
+    // Stop all covers everything still running, which includes a prompt stopped a moment earlier
+    // whose cancel has not answered. Sending a second one duplicates the request, and its reply
+    // settles whatever holds that prompt by the time it lands — possibly a run started since.
+    it("should not cancel a prompt whose cancel is already in flight", async () => {
+      startBackendRun();
+      const { result } = renderActions("dataset-1");
+      await act(async () => {});
+      startBackendRun();
+
+      act(() => result.current.stopSingle(PROMPT_A));
+      expect(cancelExperimentRun).toHaveBeenCalledWith({
+        experimentIds: [EXPERIMENT_A],
+      });
+
+      cancelExperimentRun.mockClear();
+      act(() => result.current.stopAll());
+
+      expect(cancelExperimentRun).toHaveBeenCalledTimes(1);
+      expect(cancelExperimentRun).toHaveBeenCalledWith({
+        experimentIds: [EXPERIMENT_B],
+      });
+    });
+
+    // The settle lands long after the press. If the prompt has started a new run since, stopping
+    // it here stops the page watching a run the server is still working on: the poll never
+    // begins, the page reads idle, and the run finishes unnoticed.
+    it("should not settle a prompt that has since started another run", async () => {
+      startBackendRun();
+      const { result } = renderActions("dataset-1");
+      await act(async () => {});
+      startBackendRun();
+
+      act(() => result.current.stopSingle(PROMPT_A));
+
+      // The prompt moves on to a different run while the cancel is still in flight.
+      usePlaygroundStore.setState({
+        experimentByPromptId: {
+          [PROMPT_A]: "experiment-newer",
+          [PROMPT_B]: EXPERIMENT_B,
+        },
+        isRunningMap: { [PROMPT_A]: true, [PROMPT_B]: true },
+      });
+
+      await act(async () => answerCancel());
+
+      expect(usePlaygroundStore.getState().isRunningMap[PROMPT_A]).toBe(true);
+      expect(usePlaygroundStore.getState().cancelsInFlight.size).toBe(0);
+    });
+
+    it("should settle only the stopped prompt of a browser-side run", () => {
+      usePlaygroundStore.setState({
+        promptIds: [PROMPT_A, PROMPT_B],
+        isRunningMap: { [PROMPT_A]: true, [PROMPT_B]: true },
+        isRunInFlight: true,
+      });
+      const { result } = renderActions(undefined);
+
+      act(() => result.current.stopSingle(PROMPT_A));
+
+      expect(usePlaygroundStore.getState().isRunningMap).toEqual({
+        [PROMPT_B]: true,
+      });
+      expect(usePlaygroundStore.getState().isRunInFlight).toBe(true);
+    });
   });
 
   describe("stopSingle, one prompt of several", () => {
@@ -341,13 +475,15 @@ describe("useActionButtonActions lifecycle", () => {
       });
     });
 
-    it("should leave its sibling running", () => {
+    // Neither prompt leaves the running map until the server has taken the stop.
+    it("should leave both running until the stop is accepted", () => {
       startBackendRun();
       const { result } = renderActions("dataset-1");
 
       act(() => result.current.stopSingle(PROMPT_A));
 
       expect(usePlaygroundStore.getState().isRunningMap).toEqual({
+        [PROMPT_A]: true,
         [PROMPT_B]: true,
       });
     });
@@ -363,14 +499,26 @@ describe("useActionButtonActions lifecycle", () => {
       expect(usePlaygroundStore.getState().isRunInFlight).toBe(true);
     });
 
-    it("should settle once the last running prompt is cancelled", () => {
+    it("should settle once the last stopped prompt has been accepted", async () => {
       startBackendRun();
       const { result } = renderActions("dataset-1");
+      // Let the mount's resume settle first, so what follows is the stops and nothing else.
+      await act(async () => {});
+      startBackendRun();
 
       act(() => result.current.stopSingle(PROMPT_A));
+      await act(async () => answerCancel());
+
+      expect(usePlaygroundStore.getState().isRunInFlight).toBe(true);
+      expect(usePlaygroundStore.getState().isRunningMap).toEqual({
+        [PROMPT_B]: true,
+      });
+
       act(() => result.current.stopSingle(PROMPT_B));
+      await act(async () => answerCancel());
 
       expect(usePlaygroundStore.getState().isRunInFlight).toBe(false);
+      expect(usePlaygroundStore.getState().isRunningMap).toEqual({});
     });
   });
 
@@ -558,7 +706,7 @@ describe("useActionButtonActions lifecycle", () => {
       });
 
       act(() => result.current.stopSingle(PROMPT_A));
-      expect(usePlaygroundStore.getState().stopPending).toEqual(
+      expect(usePlaygroundStore.getState().stopsAwaitingRun).toEqual(
         new Set([PROMPT_A]),
       );
 
@@ -567,7 +715,7 @@ describe("useActionButtonActions lifecycle", () => {
         await running;
       });
 
-      expect(usePlaygroundStore.getState().stopPending.size).toBe(0);
+      expect(usePlaygroundStore.getState().stopsAwaitingRun.size).toBe(0);
     });
 
     // Each prompt launches on its own request, so one failing says nothing about the other. Its
@@ -607,7 +755,7 @@ describe("useActionButtonActions lifecycle", () => {
         await runningA;
       });
 
-      expect(usePlaygroundStore.getState().stopPending).toEqual(
+      expect(usePlaygroundStore.getState().stopsAwaitingRun).toEqual(
         new Set([PROMPT_B]),
       );
     });
@@ -727,7 +875,7 @@ describe("useActionButtonActions lifecycle", () => {
 
       act(() => result.current.stopAll());
 
-      expect(usePlaygroundStore.getState().stopPending.size).toBe(0);
+      expect(usePlaygroundStore.getState().stopsAwaitingRun.size).toBe(0);
     });
 
     // A stop can reach prompts in both states at once: one whose id arrived long ago, one still
@@ -753,7 +901,7 @@ describe("useActionButtonActions lifecycle", () => {
       expect(cancelExperimentRun).toHaveBeenCalledWith({
         experimentIds: [EXPERIMENT_A],
       });
-      expect(usePlaygroundStore.getState().stopPending).toEqual(
+      expect(usePlaygroundStore.getState().stopsAwaitingRun).toEqual(
         new Set([PROMPT_B]),
       );
     });
@@ -918,6 +1066,19 @@ describe("useActionButtonActions lifecycle", () => {
       );
 
       act(() => result.current.stopSingle(PROMPT_A));
+
+      expect(usePlaygroundStore.getState().watchLapsed.size).toBe(0);
+    });
+
+    // Same for the whole run: a lapsed row offers "still running, refresh", which a stop has just
+    // made wrong. Only stopSingle cleared it, so Stop all left that offer on every prompt.
+    it("should stop offering to pick it back up once the whole run is stopped", async () => {
+      const { result } = await runOneUntilItGivesUp();
+      expect(usePlaygroundStore.getState().watchLapsed).toEqual(
+        new Set([PROMPT_A]),
+      );
+
+      act(() => result.current.stopAll());
 
       expect(usePlaygroundStore.getState().watchLapsed.size).toBe(0);
     });
@@ -1149,5 +1310,219 @@ describe("useActionButtonActions lifecycle", () => {
         [PROMPT_B]: true,
       });
     });
+  });
+});
+
+// Run all clears the whole output map; re-running one prompt never cleared its own mark, so the
+// fresh result came back dimmed under a "Prompt changed" note describing the edit it had answered.
+describe("re-running one prompt after editing it", () => {
+  const staleOutput = {
+    isLoading: false,
+    value: "the old answer",
+    stale: true,
+    staleChanges: ["model"],
+  };
+
+  beforeEach(() => {
+    runExperimentExecution.mockReset();
+    getExperimentById.mockReset();
+    getExperimentById.mockResolvedValue({
+      status: EXPERIMENT_STATUS.RUNNING,
+      trace_count: 0,
+    });
+    usePlaygroundStore.setState({
+      promptIds: [PROMPT_A],
+      promptMap: {
+        [PROMPT_A]: { id: PROMPT_A, name: "A", messages: [], configs: {} },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      outputMap: { [PROMPT_A]: staleOutput } as any,
+    });
+  });
+
+  it("should stop calling the results stale once the re-run is under way", async () => {
+    runExperimentExecution.mockResolvedValue({
+      experiments: [
+        { experiment_id: EXPERIMENT_A, prompt_index: 0, total_items: 5 },
+      ],
+      total_items: 5,
+    });
+    const { result } = renderActions("dataset-1");
+
+    await act(async () => {
+      await result.current.runSingle(PROMPT_A);
+    });
+
+    const output = usePlaygroundStore.getState().outputMap[PROMPT_A];
+    expect(output.stale).toBe(false);
+    expect(output.staleChanges).toBeUndefined();
+  });
+
+  // Cleared where the new experiment id lands, not on the press: a launch that never starts keeps
+  // the last run on screen, and those results still answer the prompt as it was before the edit.
+  it("should keep the mark when the launch never starts", async () => {
+    runExperimentExecution.mockRejectedValue(new Error("no capacity"));
+    const { result } = renderActions("dataset-1");
+
+    await act(async () => {
+      await result.current.runSingle(PROMPT_A);
+    });
+
+    expect(usePlaygroundStore.getState().outputMap[PROMPT_A].stale).toBe(true);
+  });
+});
+
+// The phase outlives a reload, which is what tells a resumed whole-run launch from a scoped one.
+// That only holds if every path where resuming gives up clears it: a phase describing a run that
+// no longer exists puts a "Starting run" bar above every later run on the page.
+describe("progress left behind by a run that cannot be resumed", () => {
+  const STALE_PROGRESS = {
+    progressPhase: "running" as const,
+    progressTotal: 0,
+    progressCompleted: 0,
+  };
+
+  const mountAndSettle = async () => {
+    await act(async () => {
+      renderActions("dataset-1");
+    });
+    await act(async () => {});
+  };
+
+  beforeEach(() => {
+    getExperimentById.mockReset();
+    usePlaygroundStore.setState({
+      promptIds: [PROMPT_A],
+      ...STALE_PROGRESS,
+    });
+  });
+
+  // The launch reloaded before /execute named its run, so there is nothing to resume and nothing
+  // running. Without this the phase survives every further reload.
+  it("should clear it when there is no run to pick up", async () => {
+    usePlaygroundStore.setState({ experimentByPromptId: {}, isRunningMap: {} });
+
+    await mountAndSettle();
+
+    expect(usePlaygroundStore.getState().progressPhase).toBeNull();
+  });
+
+  // A live launch still paging its dataset has no experiment ids yet either, and its phase is
+  // current. The running map does not survive a reload, so it tells the two apart.
+  it("should keep it while a launch is still under way", async () => {
+    usePlaygroundStore.setState({
+      experimentByPromptId: {},
+      isRunningMap: { [PROMPT_A]: true },
+    });
+
+    await mountAndSettle();
+
+    expect(usePlaygroundStore.getState().progressPhase).toBe("running");
+  });
+
+  it("should clear it when every experiment has already finished", async () => {
+    usePlaygroundStore.setState({
+      experimentByPromptId: { [PROMPT_A]: EXPERIMENT_A },
+      runTotalItemsByPromptId: { [PROMPT_A]: 10 },
+    });
+    getExperimentById.mockResolvedValue({
+      status: EXPERIMENT_STATUS.COMPLETED,
+      trace_count: 10,
+    });
+
+    await mountAndSettle();
+
+    expect(usePlaygroundStore.getState().progressPhase).toBeNull();
+  });
+
+  it("should clear it when the run is resumable but has no items to count", async () => {
+    usePlaygroundStore.setState({
+      experimentByPromptId: { [PROMPT_A]: EXPERIMENT_A },
+      runTotalItemsByPromptId: {},
+    });
+    getExperimentById.mockResolvedValue({
+      status: EXPERIMENT_STATUS.RUNNING,
+      trace_count: 0,
+    });
+
+    await mountAndSettle();
+
+    expect(usePlaygroundStore.getState().progressPhase).toBeNull();
+  });
+
+  it("should clear it when the statuses cannot be read", async () => {
+    usePlaygroundStore.setState({
+      experimentByPromptId: { [PROMPT_A]: EXPERIMENT_A },
+      runTotalItemsByPromptId: { [PROMPT_A]: 10 },
+    });
+    getExperimentById.mockRejectedValue(new Error("unreadable"));
+
+    await mountAndSettle();
+
+    expect(usePlaygroundStore.getState().progressPhase).toBeNull();
+  });
+});
+
+// A finished run leaves its bar at 100% for a few seconds before the row goes back to the
+// pagination. Starting another run inside that window used to let the old timer clear the new
+// run's progress: its bar emptied and the row swapped to the pagination while it was still going.
+describe("a run started while the last one's bar is still up", () => {
+  const PAST_THE_LINGER = 4000;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    runExperimentExecution.mockReset();
+    runExperimentExecution.mockResolvedValue({
+      experiments: [
+        { experiment_id: EXPERIMENT_A, prompt_index: 0, total_items: 10 },
+      ],
+      total_items: 10,
+    });
+    getExperimentById.mockReset();
+    usePlaygroundStore.setState({
+      promptIds: [PROMPT_A],
+      promptMap: {
+        [PROMPT_A]: { id: PROMPT_A, name: "A", messages: [], configs: {} },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("should leave the new run's progress alone when the old timer fires", async () => {
+    const { result } = renderActions("dataset-1");
+
+    // First run, polled through to completion so its linger timer is armed.
+    getExperimentById.mockResolvedValue({
+      status: EXPERIMENT_STATUS.COMPLETED,
+      trace_count: 10,
+    });
+    await act(async () => {
+      await result.current.runAll();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(EXPERIMENT_POLL_INTERVAL_MS);
+    });
+    expect(usePlaygroundStore.getState().progressTotal).toBe(10);
+
+    // Second run starts inside the window the first one's timer is counting down.
+    getExperimentById.mockResolvedValue({
+      status: EXPERIMENT_STATUS.RUNNING,
+      trace_count: 0,
+    });
+    await act(async () => {
+      await result.current.runAll();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PAST_THE_LINGER);
+    });
+
+    expect(usePlaygroundStore.getState().progressPhase).toBe("running");
+    expect(usePlaygroundStore.getState().progressTotal).toBe(10);
   });
 });

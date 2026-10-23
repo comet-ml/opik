@@ -8,6 +8,7 @@ import {
   useProgressPhase,
   useProgressTotal,
   useHasRunProgress,
+  useShowsRunProgress,
   useIsAnyWatchLapsed,
 } from "@/store/PlaygroundStore";
 import { DATASET_TYPE } from "@/types/datasets";
@@ -35,22 +36,29 @@ const PlaygroundProgressIndicator: React.FC<
   const datasetType = useDatasetType();
   const watchLapsed = useIsAnyWatchLapsed();
   const hasRunProgress = useHasRunProgress();
+  const showsRunProgress = useShowsRunProgress();
 
-  if (!hasRunProgress) {
+  // /execute answers with a total only after paging the whole dataset, so the bar shows from the
+  // press without a count. Keyed on the phase, which only a whole-run launch sets: a scoped run
+  // reports itself per cell and has no bar to show.
+  const isAwaitingTotal = showsRunProgress && !hasRunProgress;
+
+  if (!showsRunProgress) {
     return null;
   }
 
-  const progressPercentage = Math.round(
-    (progressCompleted / progressTotal) * 100,
-  );
+  const progressPercentage = isAwaitingTotal
+    ? 0
+    : Math.round((progressCompleted / progressTotal) * 100);
 
   const phaseLabels =
     datasetType === DATASET_TYPE.TEST_SUITE
       ? TEST_SUITE_PHASE_LABELS
       : DATASET_PHASE_LABELS;
 
-  const phaseLabel =
-    (progressPhase && phaseLabels[progressPhase]) || "Progress";
+  const phaseLabel = isAwaitingTotal
+    ? "Starting run"
+    : (progressPhase && phaseLabels[progressPhase]) || "Progress";
 
   return (
     <div className="flex items-center gap-3">
@@ -62,6 +70,8 @@ const PlaygroundProgressIndicator: React.FC<
           <span className="comet-body-s text-light-slate">
             {watchLapsed ? (
               STILL_RUNNING_REFRESH_MESSAGE
+            ) : isAwaitingTotal ? (
+              "Preparing dataset items..."
             ) : (
               <>
                 {progressCompleted}/{progressTotal} completed (

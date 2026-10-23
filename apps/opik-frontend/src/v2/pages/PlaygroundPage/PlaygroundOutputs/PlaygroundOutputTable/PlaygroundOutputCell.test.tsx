@@ -112,6 +112,9 @@ const renderCell = () =>
 const queryStaleNote = () =>
   screen.queryByTestId("playground-stale-output-note");
 
+// The whole cell's content dims as one layer, so every part of it reads as last run's at once.
+const queryDimmedContent = () => document.querySelector(".opacity-50");
+
 const noExperimentItem: PlaygroundExperimentItem = {
   hasItem: false,
   notRun: false,
@@ -203,8 +206,10 @@ describe("PlaygroundOutputCell", () => {
 
       const markdown = screen.getByTestId("markdown");
       expect(markdown).toHaveTextContent("the answer");
-      expect(markdown).toHaveClass("text-muted-gray");
-      expect(screen.getByTestId("metric-chips")).toBeInTheDocument();
+      expect(queryDimmedContent()).toContainElement(markdown);
+      expect(queryDimmedContent()).toContainElement(
+        screen.getByTestId("metric-chips"),
+      );
       expect(queryStaleNote()).toHaveTextContent("Prompt changed");
       expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
     });
@@ -255,19 +260,51 @@ describe("PlaygroundOutputCell", () => {
 
       const tag = screen.getByTestId("playground-output-error");
       expect(tag).toHaveTextContent("Run failed: ratings not defined");
-      expect(tag).toHaveClass("opacity-50");
+      expect(queryDimmedContent()).toContainElement(tag);
       expect(queryStaleNote()).toHaveTextContent("Prompt changed");
     });
 
-    it("should still show No runs yet for a test suite", () => {
+    // A test suite reads its results back the same way, so it keeps them on the same terms.
+    it("should keep a test suite's results too", () => {
       datasetType = DATASET_TYPE.TEST_SUITE;
       experimentId = "experiment-1";
       output = { isLoading: false, value: null, stale: true };
+      experimentItem = {
+        ...noExperimentItem,
+        hasItem: true,
+        output: "the answer",
+      };
 
       renderCell();
 
-      expect(screen.getByText("No runs yet")).toBeInTheDocument();
-      expect(screen.queryByTestId("assertion-status")).not.toBeInTheDocument();
+      expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
+      // Dimmed with the output: full-strength pass/fail chips next to a "Prompt changed" note
+      // read as results for the prompt now on screen, which they are not.
+      expect(queryDimmedContent()).toContainElement(
+        screen.getByTestId("assertion-status"),
+      );
+    });
+
+    // Editing a prompt mid-run must not empty the rows the run is still filling: the progress bar
+    // is counting them, so No runs yet would contradict what the page is showing.
+    // The results are the only record of what the run produced, and the dimming plus the
+    // note already say they answer an older prompt, so there is nothing to clear them for.
+    it("should keep the results dimmed and noted rather than clearing them", () => {
+      experimentId = "experiment-1";
+      output = { isLoading: false, value: null, stale: true };
+      experimentItem = {
+        ...noExperimentItem,
+        hasItem: true,
+        output: "the answer",
+      };
+
+      renderCell();
+
+      expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
+      const markdown = screen.getByTestId("markdown");
+      expect(markdown).toHaveTextContent("the answer");
+      expect(queryDimmedContent()).toContainElement(markdown);
+      expect(queryStaleNote()).toHaveTextContent("Prompt changed");
     });
   });
 

@@ -6,8 +6,12 @@ import useCancelExperimentExecution from "@/api/playground/useCancelExperimentEx
 import usePlaygroundStore, {
   getRunningPromptIds,
   useSetIsRunInFlight,
-  useQueueStopPending,
-  useClearAllStopPending,
+  useSetPromptRunning,
+  useResetProgress,
+  useQueueStopAwaitingRun,
+  useClearAllStopsAwaitingRun,
+  useMarkCancelInFlight,
+  useClearCancelInFlight,
 } from "@/store/PlaygroundStore";
 
 /**
@@ -23,12 +27,16 @@ import usePlaygroundStore, {
 export default function useBackendRunCancellation(isBackendRun: boolean) {
   const queryClient = useQueryClient();
   const setIsRunInFlight = useSetIsRunInFlight();
-  const queueStopPending = useQueueStopPending();
-  const clearAllStopPending = useClearAllStopPending();
+  const setPromptRunning = useSetPromptRunning();
+  const resetProgress = useResetProgress();
+  const queueStopAwaitingRun = useQueueStopAwaitingRun();
+  const clearAllStopsAwaitingRun = useClearAllStopsAwaitingRun();
+  const markCancelInFlight = useMarkCancelInFlight();
+  const clearCancelInFlight = useClearCancelInFlight();
 
-  // Only `mutate` is stable; useMutation's object is new every render. stopAll ends up in an
-  // unmount cleanup, which an unstable identity re-runs every render, stopping the run it began.
-  const { mutate: cancelExperimentRun } = useCancelExperimentExecution();
+  // Destructured because useMutation's object is new every render. mutateAsync, not mutate: a
+  // per-call onSettled only fires for the latest call, so overlapping stops lost one's settle.
+  const { mutateAsync: cancelExperimentRun } = useCancelExperimentExecution();
 
   const refreshRunViews = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["experiment"] });
@@ -48,37 +56,72 @@ export default function useBackendRunCancellation(isBackendRun: boolean) {
     (promptIds: string[]) => {
       if (!isBackendRun) return;
 
-      const experimentByPromptId =
-        usePlaygroundStore.getState().experimentByPromptId ?? {};
+      const { experimentByPromptId = {}, cancelsInFlight } =
+        usePlaygroundStore.getState();
+
+      // A prompt whose cancel is already out needs no second one
+      const toCancel = promptIds.filter(
+        (promptId) => !cancelsInFlight.has(promptId),
+      );
 
       // Split rather than all-or-nothing: a stop can cover prompts whose ids have arrived and
       // prompts whose /execute has not answered yet, and taking the first branch for the whole
       // set would drop the unnamed ones — their runs carry on with nothing left to cancel them.
-      const named = promptIds.filter(
+      const named = toCancel.filter(
         (promptId) => experimentByPromptId[promptId],
       );
-      const unnamed = promptIds.filter(
+      const unnamed = toCancel.filter(
         (promptId) => !experimentByPromptId[promptId],
       );
 
       // The run exists on the server but this tab cannot name it. Remember those and replay them
       // when the ids arrive, keeping any stop already waiting so a second one does not drop it.
-      queueStopPending(unnamed);
+      queueStopAwaitingRun(unnamed);
 
       if (named.length === 0) return;
 
-      releaseRunInFlight();
+      // Settled when the server answers, not when the button is pressed. The call writes the
+      // cancelled status and purges the queue. Items a consumer already holds still finish.
+      // Marked stopping meanwhile, so no button offers a Stop whose cancel is already on its way.
+      // Paired with their ids: the settle lands later, and by then a prompt may hold a run this
+      // cancel never covered. Settling that one would stop a page watching a run still going.
+      const cancelled = named.map((promptId) => ({
+        promptId,
+        experimentId: experimentByPromptId[promptId],
+      }));
+
+      markCancelInFlight(named);
       cancelExperimentRun({
-        experimentIds: named.map((promptId) => experimentByPromptId[promptId]),
-      });
-      refreshRunViews();
+        experimentIds: cancelled.map(({ experimentId }) => experimentId),
+      })
+        .catch(() => {})
+        .finally(() => {
+          const current =
+            usePlaygroundStore.getState().experimentByPromptId ?? {};
+          cancelled
+            .filter(
+              ({ promptId, experimentId }) =>
+                current[promptId] === experimentId,
+            )
+            .forEach(({ promptId }) => setPromptRunning(promptId, false));
+          // Unconditional: the mark is this call's, so a prompt that moved on would keep it for
+          // ever. A newer cancel sets its own, and clears it from its own settle.
+          clearCancelInFlight(named);
+          if (getRunningPromptIds().length === 0) resetProgress();
+          releaseRunInFlight();
+          refreshRunViews();
+        });
     },
     [
       isBackendRun,
       cancelExperimentRun,
       releaseRunInFlight,
       refreshRunViews,
-      queueStopPending,
+      queueStopAwaitingRun,
+      markCancelInFlight,
+      clearCancelInFlight,
+      setPromptRunning,
+      resetProgress,
     ],
   );
 
@@ -89,17 +132,17 @@ export default function useBackendRunCancellation(isBackendRun: boolean) {
    */
   const applyQueuedStop = useCallback(
     (launched: string[]) => {
-      const queued = usePlaygroundStore.getState().stopPending;
+      const queued = usePlaygroundStore.getState().stopsAwaitingRun;
       if (queued.size === 0) return false;
 
-      clearAllStopPending();
+      clearAllStopsAwaitingRun();
       cancelBackendRun([...queued]);
 
       // Only a launch whose every prompt was stopped is over. A stop aimed at one of several
       // leaves its siblings running on the server, and they still need watching.
       return launched.every((promptId) => queued.has(promptId));
     },
-    [cancelBackendRun, clearAllStopPending],
+    [cancelBackendRun, clearAllStopsAwaitingRun],
   );
 
   return {

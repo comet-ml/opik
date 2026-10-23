@@ -15,6 +15,7 @@ import usePlaygroundStore, {
   usePromptIds,
   usePromptMap,
   useResetOutputMap,
+  useClearPromptOutputStale,
   useSelectedRuleIds,
   useSetCreatedExperiments,
   useSetRunTotalItemsForPrompts,
@@ -31,7 +32,7 @@ import usePlaygroundStore, {
   useDatasetType,
   useDatasetFilters,
   useSetExperimentByPromptId,
-  useClearStopPending,
+  useClearStopAwaitingRun,
   useClearWatchLapsed,
 } from "@/store/PlaygroundStore";
 
@@ -102,7 +103,7 @@ const useActionButtonActions = ({
     applyQueuedStop,
   } = useBackendRunCancellation(isBackendRun);
 
-  const clearStopPending = useClearStopPending();
+  const clearStopAwaitingRun = useClearStopAwaitingRun();
   const clearWatchLapsed = useClearWatchLapsed();
 
   const {
@@ -147,6 +148,7 @@ const useActionButtonActions = ({
   );
 
   const resetOutputMap = useResetOutputMap();
+  const clearPromptOutputStale = useClearPromptOutputStale();
   const setProgress = useSetProgress();
   const setProgressPhase = useSetProgressPhase();
   const resetProgress = useResetProgress();
@@ -190,6 +192,7 @@ const useActionButtonActions = ({
     resetState();
     markWatchStarted();
     setAllRunning(true);
+    setProgressPhase("running");
 
     try {
       const prompts = promptIds.map((id) => promptMap[id]);
@@ -234,10 +237,12 @@ const useActionButtonActions = ({
         }
       });
 
-      if (applyQueuedStop(promptIds)) return;
+      if (applyQueuedStop(promptIds)) {
+        resetProgress();
+        return;
+      }
 
       setIsRunInFlight(true);
-      setProgressPhase("running");
       setProgress(0, response.total_items);
 
       queryClient.invalidateQueries({ queryKey: ["experiments"] });
@@ -249,6 +254,7 @@ const useActionButtonActions = ({
       });
     } catch {
       settleRun();
+      resetProgress();
       markWatchStarted();
     }
   }, [
@@ -269,6 +275,7 @@ const useActionButtonActions = ({
     setExperimentByPromptId,
     setProgress,
     setProgressPhase,
+    resetProgress,
     setRunTotalItemsForPrompts,
     setIsRunInFlight,
     queryClient,
@@ -338,7 +345,7 @@ const useActionButtonActions = ({
         const experiment = response.experiments[0];
         if (!experiment) {
           setPromptRunning(promptId, false);
-          clearStopPending([promptId]);
+          clearStopAwaitingRun([promptId]);
           keepShowingThePreviousRun();
           return;
         }
@@ -350,6 +357,7 @@ const useActionButtonActions = ({
           [promptId]: experiment.experiment_id,
         });
         setRunTotalItemsForPrompts([promptId], experiment.total_items);
+        clearPromptOutputStale(promptId);
 
         // Record the id before deciding whether to watch: a run stopped mid-launch still exists on
         // the server, and cancelling it needs the id the stop could not reach.
@@ -382,7 +390,7 @@ const useActionButtonActions = ({
         );
       } catch {
         setPromptRunning(promptId, false);
-        clearStopPending([promptId]);
+        clearStopAwaitingRun([promptId]);
         keepShowingThePreviousRun();
       }
     },
@@ -398,6 +406,7 @@ const useActionButtonActions = ({
       setPromptRunning,
       setExperimentByPromptId,
       setRunTotalItemsForPrompts,
+      clearPromptOutputStale,
       setIsRunInFlight,
       queryClient,
       pollExperimentCompletion,
@@ -408,7 +417,7 @@ const useActionButtonActions = ({
       applyQueuedStop,
       expectScopedAnnouncement,
       forgetExperimentForPrompt,
-      clearStopPending,
+      clearStopAwaitingRun,
       clearWatchLapsed,
     ],
   );

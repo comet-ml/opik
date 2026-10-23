@@ -58,11 +58,7 @@ const PlaygroundPromptOutput = ({
     }
 
     return (
-      <MarkdownPreview
-        className={cn({
-          "text-muted-gray dark:text-foreground": stale,
-        })}
-      >
+      <MarkdownPreview className={cn(stale && "opacity-50")}>
         {value}
       </MarkdownPreview>
     );

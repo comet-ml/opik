@@ -127,11 +127,10 @@ const PlaygroundOutputCell: React.FunctionComponent<
     window.open(url, "_blank");
   };
 
-  // Results read back from a run carry no stale styling, so once the prompt is edited its cells show
-  // No runs yet rather than output that no longer answers the prompt in front of you.
-  const hasOutput = isBackendRun
-    ? !stale
-    : value !== null || Boolean(error) || isLoading;
+  // A run read back from the server keeps its results once the prompt is edited, dimmed and
+  // noted rather than cleared, so the last run stays readable until another replaces it.
+  const hasOutput =
+    isBackendRun || value !== null || Boolean(error) || isLoading;
   const promptColor =
     PLAYGROUND_PROMPT_COLORS[
       (promptIndex ?? 0) % PLAYGROUND_PROMPT_COLORS.length
@@ -158,15 +157,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
       return <PlaygroundExperimentItemOutput item={experimentItem} />;
     }
 
-    return (
-      <MarkdownPreview
-        className={cn({
-          "text-muted-gray dark:text-foreground": stale,
-        })}
-      >
-        {value}
-      </MarkdownPreview>
-    );
+    return <MarkdownPreview>{value}</MarkdownPreview>;
   };
 
   return (
@@ -193,32 +184,34 @@ const PlaygroundOutputCell: React.FunctionComponent<
             <PlaygroundStaleOutputNote
               changes={output?.staleChanges}
               compact
-              className="mb-1"
+              className="mb-3"
             />
           )}
-          <div className="mb-2 min-h-[var(--cell-top-height)]">
-            {error ? (
-              <PlaygroundOutputError
-                message={error}
-                hint={errorHint}
-                stale={stale}
-              />
-            ) : isTestSuite ? (
-              <PlaygroundOutputAssertionStatus
-                experimentId={experimentId}
-                datasetItemId={originalRow.dataItemId}
-                datasetId={plainDatasetId || ""}
-              />
-            ) : (
-              <PlaygroundOutputScoresContainer
-                traceId={traceId}
-                selectedRuleIds={selectedRuleIds}
-                stale={stale}
-                notRun={experimentItem.notRun}
-              />
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col",
+              stale && "opacity-50",
             )}
+          >
+            <div className="mb-2 min-h-[var(--cell-top-height)]">
+              {error ? (
+                <PlaygroundOutputError message={error} hint={errorHint} />
+              ) : isTestSuite ? (
+                <PlaygroundOutputAssertionStatus
+                  experimentId={experimentId}
+                  datasetItemId={originalRow.dataItemId}
+                  datasetId={plainDatasetId || ""}
+                />
+              ) : (
+                <PlaygroundOutputScoresContainer
+                  traceId={traceId}
+                  selectedRuleIds={selectedRuleIds}
+                  notRun={experimentItem.notRun}
+                />
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto">{renderContent()}</div>
           </div>
-          <div className="flex-1 overflow-y-auto">{renderContent()}</div>
         </div>
       ) : (
         <PlaygroundNoRunsYet color={noRunsColor} />

@@ -35,7 +35,7 @@ import {
   useDatasetFilters,
   useSetDatasetFilters,
   useDatasetItemsTotal,
-  useIsStopPending,
+  useIsStoppingAll,
 } from "@/store/PlaygroundStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -73,7 +73,7 @@ const PlaygroundHeader = ({
   const resetOutputMap = useResetOutputMap();
   const setExperimentName = useSetExperimentName();
   const isRunning = useIsRunning();
-  const isStopPending = useIsStopPending();
+  const isStoppingAll = useIsStoppingAll();
   const isResumingRun = useIsResumingRun();
   const setDatasetType = useSetDatasetType();
   const currentDatasetType = useDatasetType();
@@ -255,6 +255,15 @@ const PlaygroundHeader = ({
   };
 
   const renderRunButton = () => {
+    if (isStoppingAll) {
+      return (
+        <Button size="2xs" variant="outline" disabled>
+          <Loader2 className="mr-1 size-3.5 animate-spin" />
+          Stopping...
+        </Button>
+      );
+    }
+
     if (isRunning) {
       return (
         <TooltipWrapper content="Stop running prompts">
@@ -263,15 +272,6 @@ const PlaygroundHeader = ({
             Stop all
           </Button>
         </TooltipWrapper>
-      );
-    }
-
-    if (isStopPending) {
-      return (
-        <Button size="2xs" variant="outline" disabled>
-          <Loader2 className="mr-1 size-3.5 animate-spin" />
-          Stopping...
-        </Button>
       );
     }
 
