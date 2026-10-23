@@ -116,21 +116,31 @@ you're happy with the results, save the edit as a new prompt version for your ag
     Parameter types are displayed as input fields in the UI. In Python they are inferred from
     type hints; in TypeScript, provide them explicitly via the `params` option.
 
-    The playground sends each input as a plain value, so entrypoint parameters must use simple
-    types:
+    The example creates the prompt only when it is not in the Prompt Library. If you restart
+    your agent, the code does not replace the prompt versions that you saved from the playground.
 
-    - **Python:** `str`, `int`, `float`, `bool`, or `Optional` of one of these. `list` and
-      `dict` parameters receive the JSON text from the UI as a string, so parse it in your
-      function.
-    - **TypeScript:** `string`, `number`, or `boolean`.
+    The process must keep running so the runner can pick up jobs. If your agent is not already
+    served by a web framework (for example FastAPI, Flask, Express, or Fastify), block the main
+    thread as shown in the Python example.
 
-    Parameters with any other type, such as a LangChain chain, an LLM client, or a tracer, are
-    registered as `string` and receive the raw text from the UI, so your agent fails when it uses
-    them. Create these objects inside the entrypoint, or add a thin entrypoint that takes simple
-    inputs and calls your existing function:
+    The playground sends each input as a value typed in the UI, so entrypoint parameters must
+    use simple types:
+
+    - **Python:** `str`, `int`, `float`, `bool`, or `Optional` of one of these. A `list` or
+      `dict` parameter shows a text field, and your function receives the JSON text as a
+      string, so parse it in your function.
+    - **TypeScript:** `string`, `number`, or `boolean`. A parameter with type `object` shows a
+      JSON field, and your function receives the JSON as a string.
+
+    A playground input cannot hold a runtime object such as a LangChain chain, an LLM client, or
+    a tracer. If a parameter has one of these types, the SDK logs a warning and the parameter
+    receives the text from the UI, so your agent fails when it uses it. Create these objects in
+    your code, at module level or inside the entrypoint, and keep them out of the entrypoint
+    parameters. To reuse a function that takes such an object, add a thin entrypoint that takes
+    simple inputs and calls it:
 
     ```python title="Python" wordWrap
-    chain = build_chain()
+    chain = build_chain()  # created once, at module level
 
     def run_chain(chain, question: str) -> str:
         return chain.invoke({"question": question})
@@ -139,13 +149,6 @@ you're happy with the results, save the edit as a new prompt version for your ag
     def my_agent(question: str) -> str:
         return run_chain(chain, question)
     ```
-
-    The example creates the prompt only when it is not in the Prompt Library. If you restart
-    your agent, the code does not replace the prompt versions that you saved from the playground.
-
-    The process must keep running so the runner can pick up jobs. If your agent is not already
-    served by a web framework (for example FastAPI, Flask, Express, or Fastify), block the main
-    thread as shown in the Python example.
   </Step>
   <Step title="Start the playground">
     <CodeBlocks>
@@ -218,8 +221,10 @@ current working directory.
 **"Could not resolve type for parameter(s)" warning**
 
 One or more entrypoint parameters use a type that the playground cannot fill from the UI. Change
-them to a supported type, or move the object creation into the entrypoint as shown in
-[Mark your agent as an entrypoint](#getting-started).
+them to a supported type. For a runtime object such as a chain or an LLM client, create the
+object in your code and add a thin entrypoint, as shown in
+[Mark your agent as an entrypoint](#getting-started). In TypeScript, the SDK also logs this
+warning for `object` parameters, which still work as JSON fields.
 
 **Pairing times out**
 
