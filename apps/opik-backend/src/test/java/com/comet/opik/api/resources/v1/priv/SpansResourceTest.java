@@ -4542,6 +4542,102 @@ class SpansResourceTest {
             SpanAssertions.assertSpan(List.of(actual), List.of(span), USER);
         }
 
+        // The single-row writes below (create, update, update-before-create, batch update) used to inline input and
+        // output as SQL literals, so the whole statement had to fit in max_query_size: 100,000,000 bytes, set in
+        // config-test.yml as in production. A payload a batch create accepts then failed with code 62 ("Max query
+        // size exceeded"). Two halves of ~57.7 MB clear that limit together while each stays under the 100 MiB
+        // maxStringLength cap on a single JSON string.
+        private TextNode oversizedHalf() {
+            return TextNode.valueOf(RandomStringUtils.secure().nextAlphanumeric(1024).repeat(55 * 1024));
+        }
+
+        @Test
+        @DisplayName("a single span create whose payload exceeds max_query_size is written")
+        void oversizedSingleSpanCreateIsWritten() {
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(null)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .input(oversizedHalf())
+                    .output(oversizedHalf())
+                    .build();
+
+            spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(expectedSpan.toBuilder().projectName(DEFAULT_PROJECT).build(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("a span update whose payload exceeds max_query_size is written")
+        void oversizedSpanUpdateIsWritten() {
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(null)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+            var spanUpdate = SpanUpdate.builder()
+                    .projectName(expectedSpan.projectName())
+                    .traceId(expectedSpan.traceId())
+                    .parentSpanId(expectedSpan.parentSpanId())
+                    .input(oversizedHalf())
+                    .output(oversizedHalf())
+                    .build();
+            spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+
+            var expectedSpanBuilder = expectedSpan.toBuilder().projectName(DEFAULT_PROJECT);
+            SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, spanUpdate);
+            getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("a span update arriving before its create, whose payload exceeds max_query_size, is written")
+        void oversizedSpanUpdateBeforeCreateIsWritten() {
+            var id = generator.generate();
+            var expectedSpanBuilder = Span.builder().id(id).startTime(Instant.EPOCH).createdAt(Instant.now());
+            var spanUpdate = podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
+                    .projectId(null)
+                    .name(null)
+                    .type(null)
+                    .input(oversizedHalf())
+                    .output(oversizedHalf())
+                    .build();
+
+            spanResourceClient.updateSpan(id, spanUpdate, API_KEY, TEST_WORKSPACE);
+
+            var projectId = projectResourceClient.getByName(spanUpdate.projectName(), API_KEY, TEST_WORKSPACE).id();
+            SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, spanUpdate);
+            getAndAssert(expectedSpanBuilder.name(null).type(null).build(), projectId, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("a span batch update whose payload exceeds max_query_size is written")
+        void oversizedSpanBatchUpdateIsWritten() {
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(null)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+            var spanUpdate = SpanUpdate.builder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(expectedSpan.traceId())
+                    .input(oversizedHalf())
+                    .output(oversizedHalf())
+                    .build();
+            spanResourceClient.batchUpdateSpans(
+                    SpanBatchUpdate.builder().ids(Set.of(expectedSpan.id())).update(spanUpdate).build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(expectedSpan.toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(spanUpdate.input())
+                    .output(spanUpdate.output())
+                    .build(), API_KEY, TEST_WORKSPACE);
+        }
+
         @Test
         @DisplayName("Create span with two 35MB base64 encoded videos - should succeed with attachment stripping")
         void createSpan__whenTwoLargeVideoAttachments__thenSucceedWithStripping() throws Exception {

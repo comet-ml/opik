@@ -207,12 +207,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # comet-ci App token: the version bump is pushed straight to protected main.
+      - name: Mint GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          client-id: ${{ vars.COMET_CI_APP_CLIENT_ID }}
+          private-key: ${{ secrets.COMET_CI_APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Checkout
         uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
-          token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup Node.js for TypeScript version update
         uses: actions/setup-node@v7

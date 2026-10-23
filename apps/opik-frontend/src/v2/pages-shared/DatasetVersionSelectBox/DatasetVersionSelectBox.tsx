@@ -46,6 +46,7 @@ interface DatasetVersionSelectBoxProps {
   datasetType?: DATASET_TYPE;
   autoOpen?: boolean;
   onDismiss?: () => void;
+  disabled?: boolean;
 }
 
 function DatasetVersionSelectBox({
@@ -56,6 +57,7 @@ function DatasetVersionSelectBox({
   datasetType,
   autoOpen = false,
   onDismiss,
+  disabled,
 }: DatasetVersionSelectBoxProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const resetDialogKeyRef = useRef(0);
@@ -311,6 +313,7 @@ function DatasetVersionSelectBox({
             setIsSelectOpen(open);
           }}
           open={isSelectOpen}
+          disabled={disabled}
         >
           <TooltipWrapper content={displayValue} hoverOnly>
             <SelectTrigger
@@ -322,6 +325,8 @@ function DatasetVersionSelectBox({
                     ? "group text-foreground hover:text-primary group-hover:[&>svg]:text-primary"
                     : "text-light-slate hover:text-foreground",
                 { "[&>svg]:rotate-180": isSelectOpen },
+                disabled &&
+                  "disabled:cursor-default disabled:bg-transparent disabled:text-inherit disabled:opacity-50",
               )}
             >
               <SelectValue
