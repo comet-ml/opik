@@ -24,10 +24,12 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -38,10 +40,8 @@ class GuardrailsValidationServiceTest {
     private static final String TEXT = "My email is a@b.c";
 
     private final InferenceClient inference = Mockito.mock(InferenceClient.class);
-    private final RequestContext requestContext = RequestContext.builder()
-            .workspaceId(WORKSPACE_ID)
-            .guardrailsEnabled(true)
-            .build();
+    private final WorkspaceFeaturesService workspaceFeatures = Mockito.mock(WorkspaceFeaturesService.class);
+    private final RequestContext requestContext = RequestContext.builder().workspaceId(WORKSPACE_ID).build();
     private OpikConfiguration configuration;
     private GuardrailsValidationServiceImpl service;
 
@@ -49,13 +49,14 @@ class GuardrailsValidationServiceTest {
     void setUp() {
         configuration = new OpikConfiguration();
         configuration.getServiceToggles().setGuardrailsValidationsEnabled(true);
+        when(workspaceFeatures.isEnabled(requestContext, WorkspaceFeature.GUARDRAILS)).thenReturn(true);
         service = new GuardrailsValidationServiceImpl(inference, new FeatureFlags(configuration), configuration,
-                () -> requestContext);
+                () -> requestContext, workspaceFeatures);
     }
 
     @Test
     void workspaceWithoutEnablementIsForbiddenBeforeAnyCall() {
-        requestContext.setGuardrailsEnabled(false);
+        when(workspaceFeatures.isEnabled(requestContext, WorkspaceFeature.GUARDRAILS)).thenReturn(false);
 
         assertThatThrownBy(() -> validate(request(descriptor(GuardrailType.PROMPT_INJECTION, "{}"))))
                 .isInstanceOf(ForbiddenException.class)
@@ -195,9 +196,65 @@ class GuardrailsValidationServiceTest {
         assertThat(response.validationPassed()).isTrue();
         assertThat(response.validations()).hasSize(2).allSatisfy(result -> {
             assertThat(result.validationPassed()).isTrue();
-            assertThat(result.error()).contains("status '503'");
-            assertThat(result.validationDetails().path("error").asText()).contains("status '503'");
+            assertThat(result.error()).isEqualTo(GuardrailsValidationServiceImpl.FAIL_OPEN_MESSAGE);
+            assertThat(result.validationDetails().path("error").asText())
+                    .isEqualTo(GuardrailsValidationServiceImpl.FAIL_OPEN_MESSAGE);
         });
+    }
+
+    @Test
+    void topicsAtTheLimitsAreAccepted() {
+        var topics = IntStream.range(0, GuardrailsValidationServiceImpl.MAX_TOPICS)
+                .mapToObj(i -> i == 0 ? "t".repeat(GuardrailsValidationServiceImpl.MAX_TOPIC_LENGTH) : "topic " + i)
+                .toList();
+        var request = request(topicDescriptor(topics));
+        when(inference.decide(any(), any())).thenReturn(Mono.error(new IllegalStateException("not answered")));
+
+        validate(request);
+
+        var captor = ArgumentCaptor.forClass(DecideRequest.class);
+        verify(inference).decide(captor.capture(), any());
+        assertThat(captor.getValue().questions().get("0.topic"))
+                .isInstanceOfSatisfying(Question.ChoiceQuestion.class, question -> assertThat(question.criteria())
+                        .hasSize(Question.ChoiceQuestion.MAX_OPTIONS));
+    }
+
+    @Test
+    void topicsBeyondTheLimitsOrReservedAreRejected() {
+        var tooMany = IntStream.rangeClosed(0, GuardrailsValidationServiceImpl.MAX_TOPICS)
+                .mapToObj(i -> "topic " + i)
+                .toList();
+        assertThatThrownBy(() -> validate(request(topicDescriptor(tooMany))))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("1 to " + GuardrailsValidationServiceImpl.MAX_TOPICS);
+        assertThatThrownBy(() -> validate(request(topicDescriptor(
+                List.of("t".repeat(GuardrailsValidationServiceImpl.MAX_TOPIC_LENGTH + 1))))))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("longer than " + GuardrailsValidationServiceImpl.MAX_TOPIC_LENGTH);
+        assertThatThrownBy(() -> validate(request(topicDescriptor(List.of("billing", "None of these")))))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining(GuardrailQuestions.NONE_OF_THESE);
+        assertThatThrownBy(() -> validate(request(topicDescriptor(List.of("billing", "billing")))))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("more than once");
+        verifyNoInteractions(inference);
+    }
+
+    @Test
+    void piiEntitiesBeyondTheSupportedClassesOrRepeatedAreRejected() {
+        assertThatThrownBy(() -> validate(request(descriptor(GuardrailType.PII,
+                "{\"entities\":[\"EMAIL_ADDRESS\",\"EMAIL_ADDRESS\"]}"))))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("more than once");
+        var tooMany = JsonUtils.createArrayNode();
+        IntStream.rangeClosed(0, GuardrailQuestions.PII_DESCRIPTIONS.size()).forEach(i -> tooMany.add("EMAIL_ADDRESS"));
+        assertThatThrownBy(() -> validate(request(ValidationDescriptor.builder()
+                .type(GuardrailType.PII)
+                .config(JsonUtils.createObjectNode().set("entities", tooMany))
+                .build())))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("1 to " + GuardrailQuestions.PII_DESCRIPTIONS.size());
+        verifyNoInteractions(inference);
     }
 
     @Test
@@ -208,13 +265,16 @@ class GuardrailsValidationServiceTest {
         assertThatThrownBy(() -> validate(request)).isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("Guardrails");
         verifyNoInteractions(inference);
+        verify(workspaceFeatures, never()).isEnabled(any(), any());
     }
 
     @Test
     void longTextIsCutToTheServiceLimitAndFlagged() {
         var longText = "x".repeat(GuardrailsValidationServiceImpl.MAX_TEXT_LENGTH + 100);
-        var request = new GuardrailsValidationRequest(longText,
-                List.of(descriptor(GuardrailType.PROMPT_INJECTION, "{}")));
+        var request = GuardrailsValidationRequest.builder()
+                .text(longText)
+                .validations(List.of(descriptor(GuardrailType.PROMPT_INJECTION, "{}")))
+                .build();
         when(inference.decide(any(), any()))
                 .thenReturn(Mono.just(answers(Map.of("0.injection", noul(0.01)))));
 
@@ -233,11 +293,17 @@ class GuardrailsValidationServiceTest {
     }
 
     private static GuardrailsValidationRequest request(ValidationDescriptor... descriptors) {
-        return new GuardrailsValidationRequest(TEXT, List.of(descriptors));
+        return GuardrailsValidationRequest.builder().text(TEXT).validations(List.of(descriptors)).build();
     }
 
     private static ValidationDescriptor descriptor(GuardrailType type, String config) {
-        return new ValidationDescriptor(type, JsonUtils.getJsonNodeFromString(config));
+        return ValidationDescriptor.builder().type(type).config(JsonUtils.getJsonNodeFromString(config)).build();
+    }
+
+    private static ValidationDescriptor topicDescriptor(List<String> topics) {
+        var config = JsonUtils.createObjectNode().put("mode", "restrict");
+        topics.forEach(config.putArray("topics")::add);
+        return ValidationDescriptor.builder().type(GuardrailType.TOPIC).config(config).build();
     }
 
     private static DecideResponse answers(Map<String, Answer> answers) {

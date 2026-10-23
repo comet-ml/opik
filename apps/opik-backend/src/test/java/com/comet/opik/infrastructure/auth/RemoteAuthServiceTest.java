@@ -161,7 +161,6 @@ class RemoteAuthServiceTest {
                 .workspaceName(authResponse.workspaceName())
                 .apiKey(apiKey)
                 .quotas(authResponse.quotas())
-                .guardrailsEnabled(Boolean.TRUE.equals(authResponse.guardrailsEnabled()))
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
     }
@@ -197,7 +196,6 @@ class RemoteAuthServiceTest {
                 .workspaceName(authResponse.workspaceName())
                 .apiKey(apiKey)
                 .quotas(authResponse.quotas())
-                .guardrailsEnabled(Boolean.TRUE.equals(authResponse.guardrailsEnabled()))
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
     }
@@ -427,7 +425,6 @@ class RemoteAuthServiceTest {
                 .workspaceName(authResponse.workspaceName())
                 .apiKey(sessionTokenValue)
                 .quotas(authResponse.quotas())
-                .guardrailsEnabled(Boolean.TRUE.equals(authResponse.guardrailsEnabled()))
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
     }
@@ -821,7 +818,6 @@ class RemoteAuthServiceTest {
                 .workspaceId(authResponse.workspaceId())
                 .workspaceName(authResponse.workspaceName())
                 .quotas(authResponse.quotas())
-                .guardrailsEnabled(Boolean.TRUE.equals(authResponse.guardrailsEnabled()))
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
     }
@@ -910,7 +906,6 @@ class RemoteAuthServiceTest {
                 .workspaceName(authResponse.workspaceName())
                 .apiKey(apiKey)
                 .quotas(authResponse.quotas())
-                .guardrailsEnabled(Boolean.TRUE.equals(authResponse.guardrailsEnabled()))
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
         assertThat(authRequestCount()).isEqualTo(2);

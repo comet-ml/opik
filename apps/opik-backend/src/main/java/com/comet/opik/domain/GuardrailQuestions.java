@@ -28,6 +28,8 @@ public final class GuardrailQuestions {
             + "or rules without asking the assistant to reveal, repeat or act on them.";
 
     public static final String TOPIC_QUESTION = "Which of these topics is this text about?";
+    /** One yes/no per selected class; the placeholder takes the class's noun phrase from {@link #PII_DESCRIPTIONS}. */
+    public static final String PII_QUESTION = "Does this text contain %s?";
     /** The option that lets the choice question answer "none" instead of forcing a topic on off-topic text. */
     public static final String NONE_OF_THESE = "none of these";
 
@@ -75,7 +77,7 @@ public final class GuardrailQuestions {
 
     public static Question pii(@NonNull String entity) {
         return Question.NoulQuestion.builder()
-                .instructions(TextNode.valueOf("Does this text contain %s?".formatted(PII_DESCRIPTIONS.get(entity))))
+                .instructions(TextNode.valueOf(PII_QUESTION.formatted(PII_DESCRIPTIONS.get(entity))))
                 .build();
     }
 }

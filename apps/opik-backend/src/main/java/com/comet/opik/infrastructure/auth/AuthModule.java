@@ -1,7 +1,10 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.domain.LocalWorkspaceFeaturesService;
 import com.comet.opik.domain.LocalWorkspacePermissionsService;
+import com.comet.opik.domain.RemoteWorkspaceFeaturesService;
 import com.comet.opik.domain.RemoteWorkspacePermissionsService;
+import com.comet.opik.domain.WorkspaceFeaturesService;
 import com.comet.opik.domain.WorkspacePermissionsService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -98,6 +101,25 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
                 "The property authentication.reactService.url must not be blank when authentication is enabled");
 
         return new RemoteWorkspacePermissionsService(client, config.getReactService());
+    }
+
+    @Provides
+    @Singleton
+    public WorkspaceFeaturesService workspaceFeaturesService(
+            @Config("authentication") AuthenticationConfig config,
+            @NonNull Client client,
+            @NonNull RedissonReactiveClient redissonClient) {
+
+        if (!config.isEnabled()) {
+            return new LocalWorkspaceFeaturesService();
+        }
+
+        Objects.requireNonNull(config.getReactService(),
+                "The property authentication.reactService.url is required when authentication is enabled");
+
+        // The same TTL as the credentials cache: an organization switched on or off is seen within it.
+        return new RemoteWorkspaceFeaturesService(client, config.getReactService(), redissonClient,
+                config.getApiKeyResolutionCacheTTLInSec());
     }
 
 }

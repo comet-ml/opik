@@ -51,8 +51,6 @@ class AuthServiceImpl implements AuthService {
             requestContext.get().setWorkspaceId(ProjectService.DEFAULT_WORKSPACE_ID);
             requestContext.get().setWorkspaceName(ProjectService.DEFAULT_WORKSPACE_NAME);
             requestContext.get().setApiKey("default");
-            // No platform to hold an enablement flag when authentication is off: the service toggle alone decides.
-            requestContext.get().setGuardrailsEnabled(true);
             return;
         }
 

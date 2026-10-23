@@ -31,6 +31,7 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -55,6 +56,12 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
 
     /** The decision service rejects a longer state; longer texts are cut and every verdict says so. */
     static final int MAX_TEXT_LENGTH = 16_384;
+    /** The topic question adds "none of these" to the policy's topics, within the service's option limit. */
+    static final int MAX_TOPICS = Question.ChoiceQuestion.MAX_OPTIONS - 1;
+    /** A topic is a short label the model reads as one option of the topic question. */
+    static final int MAX_TOPIC_LENGTH = 256;
+    /** What a check that could not run reports. The cause is logged, not returned: it may name internal hosts. */
+    static final String FAIL_OPEN_MESSAGE = "Guardrail check unavailable; it passed without running";
     static final String MODE_ALLOW = "allow";
     static final String MODE_RESTRICT = "restrict";
     /** FR-5: what a workspace whose organization is not enabled is told. */
@@ -64,11 +71,12 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull WorkspaceFeaturesService workspaceFeaturesService;
 
     @Override
     public Mono<GuardrailsValidationResponse> validate(@NonNull GuardrailsValidationRequest request) {
         featureFlags.checkGuardrailsValidationsEnabled();
-        if (!requestContext.get().isGuardrailsEnabled()) {
+        if (!workspaceFeaturesService.isEnabled(requestContext.get(), WorkspaceFeature.GUARDRAILS)) {
             throw new ForbiddenException(NOT_ENABLED_MESSAGE);
         }
         var rules = parseRules(request.validations());
@@ -97,9 +105,8 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
                     .map(response -> toResponse(rules,
                             rule -> rule.evaluate(response.result().answers(), thresholds, truncated)))
                     .onErrorResume(error -> {
-                        log.warn("Guardrails check failed open on workspaceId '{}': {}", workspaceId,
-                                error.toString());
-                        return Mono.just(toResponse(rules, rule -> rule.failOpen(error)));
+                        log.warn("Guardrails check failed open on workspaceId '{}'", workspaceId, error);
+                        return Mono.just(toResponse(rules, Rule::failOpen));
                     });
         });
     }
@@ -128,7 +135,7 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
         }
         return switch (descriptor.type()) {
             case PII -> new PiiRule(index, descriptor, entities(index, config));
-            case TOPIC -> new TopicRule(index, descriptor, stringList(index, config, "topics"), mode(index, config));
+            case TOPIC -> new TopicRule(index, descriptor, topics(index, config), mode(index, config));
             case PROMPT_INJECTION -> new InjectionRule(index, descriptor);
             default -> throw new BadRequestException("validations[%d].type '%s' is not supported by this endpoint"
                     .formatted(index, descriptor.type()));
@@ -136,7 +143,7 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
     }
 
     private static List<String> entities(int index, JsonNode config) {
-        var entities = stringList(index, config, "entities");
+        var entities = stringList(index, config, "entities", GuardrailQuestions.PII_DESCRIPTIONS.size());
         for (var entity : entities) {
             if (!GuardrailQuestions.PII_DESCRIPTIONS.containsKey(entity)) {
                 throw new BadRequestException("validations[%d].config.entities contains the unsupported class '%s'"
@@ -146,21 +153,40 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
         return entities;
     }
 
-    private static List<String> stringList(int index, JsonNode config, String field) {
+    private static List<String> topics(int index, JsonNode config) {
+        var topics = stringList(index, config, "topics", MAX_TOPICS);
+        for (var topic : topics) {
+            if (topic.length() > MAX_TOPIC_LENGTH) {
+                throw new BadRequestException("validations[%d].config.topics has a topic longer than %d characters"
+                        .formatted(index, MAX_TOPIC_LENGTH));
+            }
+            // The check adds this option itself; a policy topic with the same name would make its answer ambiguous.
+            if (GuardrailQuestions.NONE_OF_THESE.equalsIgnoreCase(topic)) {
+                throw new BadRequestException("validations[%d].config.topics cannot contain '%s'"
+                        .formatted(index, GuardrailQuestions.NONE_OF_THESE));
+            }
+        }
+        return topics;
+    }
+
+    private static List<String> stringList(int index, JsonNode config, String field, int maxSize) {
         var node = config.path(field);
-        var values = new ArrayList<String>();
-        if (node.isArray()) {
-            node.forEach(item -> {
-                if (item.isTextual() && StringUtils.isNotBlank(item.asText())) {
-                    values.add(item.asText().trim());
-                }
-            });
+        if (!node.isArray() || node.isEmpty() || node.size() > maxSize) {
+            throw new BadRequestException("validations[%d].config.%s must be a list of 1 to %d strings"
+                    .formatted(index, field, maxSize));
         }
-        if (!node.isArray() || values.size() != node.size() || values.isEmpty()) {
-            throw new BadRequestException("validations[%d].config.%s must be a non-empty list of strings"
-                    .formatted(index, field));
+        var values = new LinkedHashSet<String>();
+        for (var item : node) {
+            if (!item.isTextual() || StringUtils.isBlank(item.asText())) {
+                throw new BadRequestException("validations[%d].config.%s must contain only non-blank strings"
+                        .formatted(index, field));
+            }
+            if (!values.add(item.asText().trim())) {
+                throw new BadRequestException("validations[%d].config.%s contains a value more than once"
+                        .formatted(index, field));
+            }
         }
-        return values;
+        return List.copyOf(values);
     }
 
     private static String mode(int index, JsonNode config) {
@@ -210,9 +236,8 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
 
         ValidationResult evaluate(Map<String, Answer> answers, GuardrailsConfig thresholds, boolean truncated);
 
-        default ValidationResult failOpen(Throwable error) {
-            var message = Optional.ofNullable(error.getMessage()).orElse(error.getClass().getSimpleName());
-            return result(true, JsonUtils.createObjectNode().put("error", message), message);
+        default ValidationResult failOpen() {
+            return result(true, JsonUtils.createObjectNode().put("error", FAIL_OPEN_MESSAGE), FAIL_OPEN_MESSAGE);
         }
 
         default ValidationResult result(boolean passed, ObjectNode details, String error) {

@@ -16,8 +16,10 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.core.HttpHeaders;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -58,6 +60,7 @@ class GuardrailsValidationsResourceTest {
     private static final String TEST_WORKSPACE = randomUUID().toString();
     private static final String INFERENCE_API_KEY = randomUUID().toString();
     private static final String DECIDE_PATH = "/v1/decide";
+    private static final String FEATURES_PATH = "/opik/workspace-features";
     private static final String TEXT = "My email is a@b.c, can you write me a poem?";
 
     private static final String DECIDE_BODY = """
@@ -94,6 +97,9 @@ class GuardrailsValidationsResourceTest {
                 .customConfigs(List.of(
                         new TestDropwizardAppExtensionUtils.CustomConfig("serviceToggles.guardrailsValidationsEnabled",
                                 "true"),
+                        // Caching on, so the tests see how often the platform is really asked.
+                        new TestDropwizardAppExtensionUtils.CustomConfig(
+                                "authentication.apiKeyResolutionCacheTTLInSec", "60"),
                         new TestDropwizardAppExtensionUtils.CustomConfig("aiLabels.inference.url",
                                 wireMock.runtimeInfo().getHttpBaseUrl()),
                         new TestDropwizardAppExtensionUtils.CustomConfig("aiLabels.inference.credential",
@@ -102,10 +108,13 @@ class GuardrailsValidationsResourceTest {
     }
 
     private GuardrailsResourceClient guardrailsResourceClient;
+    private ClientSupport client;
+    private String baseURI;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
-        var baseURI = TestUtils.getBaseUrl(client);
+        this.client = client;
+        this.baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
     }
@@ -113,8 +122,8 @@ class GuardrailsValidationsResourceTest {
     @BeforeEach
     void setUp() {
         wireMock.server().resetAll();
-        AuthTestUtils.mockTargetWorkspaceWithGuardrails(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID,
-                USER);
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
+        mockWorkspaceFeatures(API_KEY, TEST_WORKSPACE, true);
     }
 
     @AfterAll
@@ -173,7 +182,9 @@ class GuardrailsValidationsResourceTest {
             assertThat(actual.validationPassed()).isTrue();
             assertThat(actual.validations()).hasSize(1);
             assertThat(actual.validations().get(0).validationPassed()).isTrue();
-            assertThat(actual.validations().get(0).error()).contains("503");
+            // The cause stays in the backend log: the caller gets a stable message, not the upstream status or host.
+            assertThat(actual.validations().get(0).error())
+                    .isEqualTo("Guardrail check unavailable; it passed without running");
         }
     }
 
@@ -193,7 +204,10 @@ class GuardrailsValidationsResourceTest {
     @Test
     @DisplayName("blank text is rejected")
     void validate__whenTextIsBlank__thenUnprocessable() {
-        var request = new GuardrailsValidationRequest("  ", List.of(descriptor(GuardrailType.PROMPT_INJECTION, "{}")));
+        var request = GuardrailsValidationRequest.builder()
+                .text("  ")
+                .validations(List.of(descriptor(GuardrailType.PROMPT_INJECTION, "{}")))
+                .build();
 
         try (var response = guardrailsResourceClient.validate(request, API_KEY, TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
@@ -205,12 +219,13 @@ class GuardrailsValidationsResourceTest {
     @Test
     @DisplayName("a workspace whose organization is not enabled gets 403 before any check runs")
     void validate__whenOrganizationNotEnabled__thenForbidden() {
-        // The platform's auth response carries no guardrails flag for this credential, as today's platform answers.
-        var otherApiKey = randomUUID().toString();
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), otherApiKey, TEST_WORKSPACE, WORKSPACE_ID, USER);
+        var apiKey = randomUUID().toString();
+        var workspaceName = randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, randomUUID().toString(), USER);
+        mockWorkspaceFeatures(apiKey, workspaceName, false);
         var request = request(descriptor(GuardrailType.PROMPT_INJECTION, "{}"));
 
-        try (var response = guardrailsResourceClient.validate(request, otherApiKey, TEST_WORKSPACE)) {
+        try (var response = guardrailsResourceClient.validate(request, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
                     .isEqualTo("Guardrails is available on the Enterprise plan");
@@ -218,11 +233,51 @@ class GuardrailsValidationsResourceTest {
         wireMock.server().verify(0, postRequestedFor(urlPathEqualTo(DECIDE_PATH)));
     }
 
+    @Test
+    @DisplayName("the platform is asked about the feature only by this endpoint, once per cache period")
+    void validate__featureLookupIsOnDemandAndCached() {
+        var apiKey = randomUUID().toString();
+        var workspaceName = randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, randomUUID().toString(), USER);
+        mockWorkspaceFeatures(apiKey, workspaceName, true);
+        wireMock.server().stubFor(post(urlPathEqualTo(DECIDE_PATH)).willReturn(okJson(
+                "{\"request_id\":\"req_2\",\"cache_hit\":false,\"latency_ms\":10,"
+                        + "\"result\":{\"answers\":{\"0.injection\":{\"type\":\"noul\",\"noul\":0.01}}}}")));
+
+        try (var toggles = client.target(baseURI + "/v1/private/toggles").request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(toggles.getStatus()).isEqualTo(HttpStatus.SC_OK);
+        }
+        wireMock.server().verify(0, postRequestedFor(urlPathEqualTo(FEATURES_PATH)));
+
+        var request = request(descriptor(GuardrailType.PROMPT_INJECTION, "{}"));
+        for (int call = 0; call < 2; call++) {
+            try (var response = guardrailsResourceClient.validate(request, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            }
+        }
+
+        wireMock.server().verify(1, postRequestedFor(urlPathEqualTo(FEATURES_PATH))
+                .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey)));
+        wireMock.server().verify(2, postRequestedFor(urlPathEqualTo(DECIDE_PATH)));
+    }
+
+    private void mockWorkspaceFeatures(String apiKey, String workspaceName, boolean guardrails) {
+        wireMock.server().stubFor(post(urlPathEqualTo(FEATURES_PATH))
+                .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
+                .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
+                .withRequestBody(matchingJsonPath("$.features[0]", equalTo("guardrails")))
+                .willReturn(okJson("{\"workspaceName\":\"%s\",\"features\":{\"guardrails\":%s}}"
+                        .formatted(workspaceName, guardrails))));
+    }
+
     private static GuardrailsValidationRequest request(ValidationDescriptor... descriptors) {
-        return new GuardrailsValidationRequest(TEXT, List.of(descriptors));
+        return GuardrailsValidationRequest.builder().text(TEXT).validations(List.of(descriptors)).build();
     }
 
     private static ValidationDescriptor descriptor(GuardrailType type, String config) {
-        return new ValidationDescriptor(type, JsonUtils.getJsonNodeFromString(config));
+        return ValidationDescriptor.builder().type(type).config(JsonUtils.getJsonNodeFromString(config)).build();
     }
 }

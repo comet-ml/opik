@@ -75,7 +75,7 @@ public class AuthCredentialsCacheServiceTest {
         cacheService.cache(apiKey, workspaceName, requiredPermissions,
                 CacheService.AuthCredentials.builder()
                         .userName(userName).workspaceId(workspaceId)
-                        .workspaceName(resolvedWorkspaceName).quotas(quotas).guardrailsEnabled(true).build());
+                        .workspaceName(resolvedWorkspaceName).quotas(quotas).build());
 
         Optional<CacheService.AuthCredentials> credentials = cacheService
                 .resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, requiredPermissions);
@@ -85,7 +85,6 @@ public class AuthCredentialsCacheServiceTest {
         assertThat(credentials.get().workspaceId()).isEqualTo(workspaceId);
         assertThat(credentials.get().workspaceName()).isEqualTo(resolvedWorkspaceName);
         assertThat(credentials.get().quotas()).isEqualTo(ListUtils.emptyIfNull(quotas));
-        assertThat(credentials.get().guardrailsEnabled()).isTrue();
     }
 
     Stream<Arguments> testCacheAndRetrieveQuotas() {

@@ -15,8 +15,7 @@ interface CacheService {
             String workspaceName,
             List<Quota> quotas,
             List<String> permissions,
-            String deviceId,
-            boolean guardrailsEnabled) {
+            String deviceId) {
     }
 
     void cache(

@@ -29,6 +29,6 @@ public record GuardrailsValidationRequest(
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record ValidationDescriptor(
             @NotNull GuardrailType type,
-            @Schema(implementation = JsonNode.class, ref = "JsonNode", description = "User settings only: PII entities, or topics and mode. Thresholds are set by the server and rejected here.") @NotNull JsonNode config) {
+            @Schema(implementation = JsonNode.class, ref = "JsonNode", description = "User settings only: PII entities (each supported class at most once), or topics (1 to 254 distinct labels of up to 256 characters, not 'none of these') and mode. Thresholds are set by the server and rejected here.") @NotNull JsonNode config) {
     }
 }
