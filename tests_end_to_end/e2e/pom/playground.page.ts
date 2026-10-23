@@ -538,6 +538,28 @@ export class PlaygroundPage {
   }
 
   /**
+   * The run progress indicator's own readout, mounted only while a whole-run
+   * launch is in flight (`PlaygroundProgressIndicator`, `useShowsRunProgress`).
+   *
+   * Both of the two things it can say, as one locator: "Preparing dataset
+   * items..." before `/execute` has answered with a total, and
+   * "<done>/<total> completed (<pct>%)" once it has. A spec that needs to know
+   * a run is still going wants either — which of the two it happens to be is
+   * a race against the server's paging, and pinning one would make the
+   * assertion about timing instead of about the run.
+   *
+   * Matched on the text because the component carries no `data-testid`, and
+   * anchored so neither phrase can be satisfied by prose elsewhere on the
+   * page. Also the reason this is the readout and not the bar: the bar is an
+   * unlabelled `div` whose only distinguishing feature is an inline width.
+   */
+  runProgressReadout(): Locator {
+    return this.page.getByText(
+      /^(Preparing dataset items\.\.\.|\d+\/\d+ completed \(\d+%\))$/,
+    );
+  }
+
+  /**
    * Run ONE variant, from its own card.
    *
    * The count is asserted rather than `.first()`-ed: a lookup that matched two
@@ -1040,6 +1062,7 @@ export class PlaygroundPage {
       return popover;
     });
   }
+
 
   /**
    * Put one `<column> contains <value>` filter on the dataset grid, and return
