@@ -419,7 +419,7 @@ models:
     params:
       effort:
         accepted: true
-        levels: [auto, low, medium, high]
+        levels: [auto, 'off', low, medium, high]
         default: auto
   - id: gemini-2.5-flash-lite
     params:
@@ -535,7 +535,7 @@ models:
     params:
       effort:
         accepted: true
-        levels: [auto, low, medium, high]
+        levels: [auto, 'off', low, medium, high]
         default: auto
   - {id: gemini-omni-1.1-flash, profile: gemini-no-sampling}
   - {id: gemini-robotics-er-2, profile: gemini-no-sampling}
