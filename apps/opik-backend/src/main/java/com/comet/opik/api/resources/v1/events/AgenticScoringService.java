@@ -152,12 +152,13 @@ public interface AgenticScoringService {
             Map<UUID, Set<String>> referencedNamesBySpan);
 
     /**
-     * Whether the given provider is known to support tool-calling. Used to gate the agentic-tools
-     * path: providers that don't support tools fall back to the inline path even when the context
-     * exceeds the size threshold (which may overflow the model's window — in that case the operator
-     * should pick a different model for those workloads).
+     * Whether the model, reached through the given provider, takes tool calls. Used to gate the
+     * agentic-tools path: a provider without tools, or a model whose catalog row refuses them (some
+     * OpenRouter models), falls back to the inline path even when the context exceeds the size
+     * threshold (which may overflow the model's window — in that case the operator should pick a
+     * different model for those workloads).
      */
-    boolean supportsToolCalling(LlmProvider provider);
+    boolean supportsToolCalling(LlmProvider provider, String modelName);
 
     /**
      * Tool choice for the FIRST call of the agentic loop. {@link ToolChoice#REQUIRED} is what stops an
@@ -449,11 +450,12 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
     }
 
     @Override
-    public boolean supportsToolCalling(@NonNull LlmProvider provider) {
-        return switch (provider) {
+    public boolean supportsToolCalling(@NonNull LlmProvider provider, String modelName) {
+        var providerTakesTools = switch (provider) {
             case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, VERTEX_AI, BEDROCK -> true;
             case OLLAMA, CUSTOM_LLM, OPIK_FREE -> false;
         };
+        return providerTakesTools && !ModelCapabilities.refusesTools(provider, modelName, registryService);
     }
 
     @Override

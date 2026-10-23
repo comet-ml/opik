@@ -122,19 +122,20 @@ public record ModelParams(
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record ToolsParam(ChatCompletionsTools chatCompletions, FlagParam forcedChoice) {
+    public record ToolsParam(Boolean accepted, ChatCompletionsTools chatCompletions, FlagParam forcedChoice) {
 
         static ToolsParam overlay(ToolsParam base, ToolsParam top) {
             if (base == null || top == null) {
                 return ObjectUtils.getIfNull(top, base);
             }
             return new ToolsParam(
+                    ObjectUtils.getIfNull(top.accepted, base.accepted),
                     ObjectUtils.getIfNull(top.chatCompletions, base.chatCompletions),
                     FlagParam.overlay(base.forcedChoice, top.forcedChoice));
         }
 
         ToolsParam settled() {
-            return new ToolsParam(chatCompletions, forcedChoice == null ? null : forcedChoice.settled());
+            return new ToolsParam(accepted, chatCompletions, forcedChoice == null ? null : forcedChoice.settled());
         }
     }
 

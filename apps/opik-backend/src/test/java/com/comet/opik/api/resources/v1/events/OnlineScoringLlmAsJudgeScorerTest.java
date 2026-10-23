@@ -314,6 +314,18 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
             assertThat(useTools).isEqualTo(expectedUseTools);
         }
+
+        @ParameterizedTest(name = "{0} → useTools={1}")
+        @CsvSource({"microsoft/phi-4, false", "perplexity/sonar, false", "openai/gpt-6-luna, true"})
+        void aTraceRuleOnAnOpenRouterModelWithoutToolsStaysInline(String modelName, boolean expectedUseTools) {
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(50_000);
+            lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(LlmProvider.OPEN_ROUTER);
+
+            boolean useTools = scorer.shouldUseAgenticTools(newMessageWithoutExperimentId(UUID.randomUUID()), 0,
+                    modelName, true);
+
+            assertThat(useTools).isEqualTo(expectedUseTools);
+        }
     }
 
     @Test

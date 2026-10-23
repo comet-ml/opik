@@ -495,7 +495,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             return false;
         }
         boolean providerSupportsTools = agenticScoringService.supportsToolCalling(
-                llmProviderFactory.getLlmProvider(modelName));
+                llmProviderFactory.getLlmProvider(modelName), modelName);
         if (!providerSupportsTools) {
             userFacingLogger.warn(
                     "Thread has attachments or context exceeds '{}' tokens but provider for model '{}'"

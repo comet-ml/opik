@@ -720,7 +720,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         String modelName = message.llmAsJudgeCode().model().name();
         // Decisions models never take the agentic path, so only the template can need spans.
         boolean agenticToolsPathPossible = !OpenRouterDecisionModel.isDecisionModel(modelName)
-                && agenticScoringService.supportsToolCalling(llmProviderFactory.getLlmProvider(modelName));
+                && agenticScoringService.supportsToolCalling(llmProviderFactory.getLlmProvider(modelName), modelName);
         boolean templateNeedsSpans = OnlineScoringEngine.templateReferencesSpans(
                 message.llmAsJudgeCode().messages(),
                 message.llmAsJudgeCode().variables(),
@@ -753,7 +753,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             boolean referencesTrace) {
         boolean experimentIdPath = LlmAsJudgeToolsMode.shouldUseTools(message);
         boolean providerSupportsTools = agenticScoringService.supportsToolCalling(
-                llmProviderFactory.getLlmProvider(modelName));
+                llmProviderFactory.getLlmProvider(modelName), modelName);
         boolean overSizeThreshold = estimatedContextTokens >= onlineScoringConfig
                 .getAgenticToolsThresholdTokens();
         // The {{trace}} variable forces the agentic-tools path regardless of context size: the prompt

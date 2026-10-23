@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -183,6 +184,22 @@ class AgenticScoringServiceTest {
                 .build();
 
         assertThat(agenticScoringService.firstRoundToolChoice(provider, modelParameters)).isEqualTo(expected);
+    }
+
+    // OpenRouter's model list says which models take tools. A tool request to one that doesn't gets a 404, "No
+    // endpoints found that support tool use" (phi-4 and perplexity/sonar, probed 10-23).
+    @ParameterizedTest(name = "{0} {1} -> {2}")
+    @CsvSource({
+            "OPEN_ROUTER, microsoft/phi-4, false",
+            "OPEN_ROUTER, perplexity/sonar, false",
+            "OPEN_ROUTER, openai/gpt-6-luna, true",
+            "OPEN_ROUTER, anthropic/claude-sonnet-5.5, true",
+            "OPEN_ROUTER, someone/a-model-the-catalog-does-not-list, true",
+            "OPEN_AI, gpt-6-luna, true",
+            "OLLAMA, qwen2.5:1.5b, false"})
+    @DisplayName("supportsToolCalling reads a refusal from the model's own catalog row")
+    void supportsToolCallingPerModel(LlmProvider provider, String model, boolean expected) {
+        assertThat(agenticScoringService.supportsToolCalling(provider, model)).isEqualTo(expected);
     }
 
     @Test

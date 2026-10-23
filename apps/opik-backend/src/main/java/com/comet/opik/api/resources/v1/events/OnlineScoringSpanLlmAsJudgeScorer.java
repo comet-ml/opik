@@ -319,7 +319,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
 
             String modelName = message.llmAsJudgeCode().model().name();
             boolean providerSupportsTools = agenticScoringService.supportsToolCalling(
-                    llmProviderFactory.getLlmProvider(modelName));
+                    llmProviderFactory.getLlmProvider(modelName), modelName);
             // Tools require the {{span}} trigger AND a tool-calling provider. The {{span}} substitution
             // itself is independent of tools — see the inline branch below.
             boolean useTools = referencesSpan && providerSupportsTools;

@@ -145,6 +145,25 @@ public class ModelCapabilities {
         return isAnthropicModelWithout(modelName, registryService, ModelCapabilities::acceptsForcedToolChoice);
     }
 
+    /**
+     * Whether the model's row says it takes no function tools. OpenRouter answers a tool request to one of those with
+     * a 404, "No endpoints found that support tool use".
+     */
+    public boolean refusesTools(@NonNull LlmProvider provider, String modelName,
+            @NonNull LlmModelRegistryService registryService) {
+        return catalogParams(provider, modelName, registryService)
+                .map(ModelParams::tools)
+                .filter(tools -> Boolean.FALSE.equals(tools.accepted()))
+                .isPresent();
+    }
+
+    private Optional<ModelParams> catalogParams(LlmProvider provider, String modelName,
+            LlmModelRegistryService registryService) {
+        return StringUtils.isBlank(modelName)
+                ? Optional.empty()
+                : Optional.ofNullable(registryService.paramsOf(provider.getValue(), modelName));
+    }
+
     private boolean acceptsForcedToolChoice(ModelParams params) {
         var forcedChoice = params.tools() == null ? null : params.tools().forcedChoice();
         return forcedChoice == null || !Boolean.FALSE.equals(forcedChoice.accepted());

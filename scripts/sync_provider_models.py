@@ -1105,7 +1105,7 @@ CURATED_YAML = Path("apps/opik-backend/src/main/resources/llm-models-curated.yam
 # The field order of ModelParams.java, so a model's line reads the same way in every sync.
 PARAM_FIELDS = (
     "temperature", "topP", "topK", "frequencyPenalty", "presencePenalty",
-    "maxOutputTokens", "stop", "effort", "samplingExclusive", "thinksByDefault", "routes",
+    "maxOutputTokens", "stop", "effort", "tools", "samplingExclusive", "thinksByDefault", "routes",
 )
 EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 SAMPLING_FIELDS = ("temperature", "topP", "topK")
@@ -1208,6 +1208,8 @@ def openrouter_model_params(model: dict) -> dict:
     elif params["effort"]["accepted"]:
         # Reasoning with no levels to pick from is an on/off switch, which an effort can't express.
         del params["effort"]
+    # A judge that sends tools to a model without them gets a 404 ("No endpoints found that support tool use").
+    params["tools"] = {"accepted": "tools" in supported}
     return params
 
 
