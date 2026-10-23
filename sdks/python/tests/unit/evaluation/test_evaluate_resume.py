@@ -384,13 +384,20 @@ class TestMergeWithPreviouslyCompleted:
             )
             return score_result.ScoreResult(name="mean_equals", value=mean)
 
+        context.experiment.log_experiment_scores.return_value = [
+            score_result.ScoreResult(name="existing", value=0.25),
+            score_result.ScoreResult(name="mean_equals", value=0.5),
+        ]
+
         with (
             mock.patch.object(
                 evaluator.resume_module,
                 "prepare_resume_context",
                 return_value=context,
             ),
-            mock.patch.object(evaluator, "_evaluate_task", return_value=new_result),
+            mock.patch.object(
+                evaluator, "_evaluate_task", return_value=new_result
+            ) as mock_evaluate_task,
             mock.patch.object(
                 evaluator.resume_merge,
                 "reconstruct_previous_test_results",
@@ -408,15 +415,109 @@ class TestMergeWithPreviouslyCompleted:
             "done",
             "partial",
         }
-        # Aggregate value reflects the merged set (mean of 1.0 and 0.0).
-        assert len(result.experiment_scores) == 1
-        assert result.experiment_scores[0].name == "mean_equals"
-        assert result.experiment_scores[0].value == 0.5
+        # Returned aggregates include the merged value and preserved score.
+        assert [(score.name, score.value) for score in result.experiment_scores] == [
+            ("existing", 0.25),
+            ("mean_equals", 0.5),
+        ]
         # Merged aggregates were logged to the backend on the experiment.
         context.experiment.log_experiment_scores.assert_called_once()
         logged_kwargs = context.experiment.log_experiment_scores.call_args.kwargs
         assert logged_kwargs["score_results"][0].name == "mean_equals"
         assert logged_kwargs["score_results"][0].value == 0.5
+        assert logged_kwargs["preserve_unrelated"] is True
+        assert mock_evaluate_task.call_args.kwargs["log_experiment_scores"] is False
+        # The slice run gets no aggregate functions: they would run twice and the
+        # slice-only value would be displayed before the merged one is computed.
+        assert mock_evaluate_task.call_args.kwargs["experiment_scoring_functions"] == []
+
+    def test_experiment_scoring_functions__merged_aggregates_are_displayed(self):
+        context = _make_context(
+            items_to_stream=[dataset_item.DatasetItem(id="partial")],
+            completed_runs_by_item_id={"partial": 0},
+            default_runs_per_item=1,
+        )
+        new_result = _evaluation_result_from(
+            [_new_test_result("partial", "trace-partial-new", score=1.0)],
+            context.experiment,
+        )
+        context.experiment.log_experiment_scores.return_value = [
+            score_result.ScoreResult(name="mean_equals", value=1.0),
+        ]
+
+        with (
+            mock.patch.object(
+                evaluator.resume_module,
+                "prepare_resume_context",
+                return_value=context,
+            ),
+            mock.patch.object(evaluator, "_evaluate_task", return_value=new_result),
+            mock.patch.object(
+                evaluator.resume_merge,
+                "reconstruct_previous_test_results",
+                return_value=[],
+            ),
+            mock.patch.object(
+                evaluator.report, "display_experiment_scores"
+            ) as mock_display,
+        ):
+            evaluator.evaluate_resume(
+                "exp-1",
+                task=lambda _: {"output": "x"},
+                experiment_scoring_functions=[
+                    lambda test_results: score_result.ScoreResult(
+                        name="mean_equals", value=1.0
+                    )
+                ],
+                verbose=1,
+            )
+
+        displayed = mock_display.call_args.args[0]
+        assert [(score.name, score.value) for score in displayed] == [
+            ("mean_equals", 1.0)
+        ]
+
+    def test_failed_aggregate_clears_previous_backend_value(self):
+        context = _make_context(
+            items_to_stream=[dataset_item.DatasetItem(id="pending")],
+            completed_runs_by_item_id={"pending": 0},
+        )
+        new_result = _evaluation_result_from(
+            [_new_test_result("pending", "trace-pending", score=1.0)],
+            context.experiment,
+        )
+
+        def failed_score(_):
+            return score_result.ScoreResult(
+                name="classification_f1",
+                value=0.0,
+                scoring_failed=True,
+            )
+
+        with (
+            mock.patch.object(
+                evaluator.resume_module,
+                "prepare_resume_context",
+                return_value=context,
+            ),
+            mock.patch.object(evaluator, "_evaluate_task", return_value=new_result),
+            mock.patch.object(
+                evaluator.resume_merge,
+                "reconstruct_previous_test_results",
+                return_value=[],
+            ),
+        ):
+            result = evaluator.evaluate_resume(
+                "exp-1",
+                task=lambda _: {"output": "x"},
+                experiment_scoring_functions=[failed_score],
+            )
+
+        assert result.experiment_scores[0].scoring_failed is True
+        context.experiment.log_experiment_scores.assert_called_once_with(
+            score_results=result.experiment_scores,
+            preserve_unrelated=True,
+        )
 
 
 class TestErrorToleranceIsInherited:
