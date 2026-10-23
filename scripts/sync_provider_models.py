@@ -1816,7 +1816,7 @@ def _should_write_files(
     total_added: int,
     seeded_reasoning_ids: list[str],
     cleared_reasoning_ids: list[str],
-    picker_changed_ids: list[tuple[str, str]],
+    picker_changed_keys: list[tuple[str, str]],
     capability_changed_ids: list[str],
     force_regen: bool,
     changed_params: dict[str, tuple[int, int, int]] | None = None,
@@ -1828,7 +1828,7 @@ def _should_write_files(
         total_added > 0
         or bool(seeded_reasoning_ids)
         or bool(cleared_reasoning_ids)
-        or bool(picker_changed_ids)
+        or bool(picker_changed_keys)
         or bool(capability_changed_ids)
         or bool(changed_params)
         or bool(retirement_changes)
@@ -2017,7 +2017,7 @@ def main():
     )
     cleared_reasoning_ids = _cleared_reasoning_ids(llm_models_yaml_content, new_llm_models_yaml)
     picker_shown, picker_hidden = _picker_changes(llm_models_yaml_content, new_llm_models_yaml)
-    picker_changed_ids = picker_shown + picker_hidden
+    picker_changed_keys = picker_shown + picker_hidden
     retirement_changes = _retirement_changes(llm_models_yaml_content, new_llm_models_yaml)
     capability_changed_ids = _changed_openrouter_capability_ids(llm_models_yaml_content, new_llm_models_yaml)
 
@@ -2063,7 +2063,7 @@ def main():
             print(f"- Total models: {len(entries)} (dropdown: {len(dropdown)})")
         print()
 
-    if seeded_reasoning_ids or cleared_reasoning_ids or picker_changed_ids or capability_changed_ids or retirement_changes:
+    if seeded_reasoning_ids or cleared_reasoning_ids or picker_changed_keys or capability_changed_ids or retirement_changes:
         print("### Registry")
         for model_id in seeded_reasoning_ids:
             print(f"  + {model_id} (reasoning)")
@@ -2121,7 +2121,7 @@ def main():
         total_added,
         seeded_reasoning_ids,
         cleared_reasoning_ids,
-        picker_changed_ids,
+        picker_changed_keys,
         capability_changed_ids,
         args.force_regen,
         changed_params,
