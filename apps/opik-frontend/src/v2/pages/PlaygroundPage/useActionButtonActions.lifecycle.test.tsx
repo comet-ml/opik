@@ -45,6 +45,15 @@ vi.mock("@/api/datasets/useExperimentById", () => ({
   default: () => ({}),
 }));
 
+// Never answers by default: a test-suite run hands over to the assertion poll, and this read is
+// where that poll waits.
+const getCompareExperimentsList = vi.fn(() => new Promise(() => {}));
+vi.mock("@/api/datasets/useCompareExperimentsList", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  getCompareExperimentsList: (...args: unknown[]) =>
+    getCompareExperimentsList(...(args as [])),
+}));
+
 vi.mock("@/v2/pages/PlaygroundPage/usePromptCombination", () => ({
   default: () => ({
     createCombinations: vi.fn(),
@@ -118,6 +127,7 @@ beforeEach(() => {
     isResumingRun: false,
     experimentByPromptId: {},
     runTotalItemsByPromptId: {},
+    createdExperiments: [],
     watchLapsed: new Set<string>(),
     // A test whose cancel never answers leaves its prompt marked, and the next test then reads
     // that prompt as already stopping and issues no cancel of its own.
@@ -292,12 +302,12 @@ describe("useActionButtonActions lifecycle", () => {
       });
     });
 
-    it("should measure progress against only the prompts it is resuming", async () => {
-      // A finished, B still going: B's own total is what is left to do.
+    // A ended, B still going.
+    const resumeWithAEnded = async (aStatus: EXPERIMENT_STATUS) => {
       getExperimentById.mockImplementation((_ctx, { experimentId }) =>
         Promise.resolve(
           experimentId === EXPERIMENT_A
-            ? { id: EXPERIMENT_A, status: "completed", trace_count: 1_000 }
+            ? { id: EXPERIMENT_A, status: aStatus, trace_count: 600 }
             : { id: EXPERIMENT_B, status: "running", trace_count: 400 },
         ),
       );
@@ -308,12 +318,55 @@ describe("useActionButtonActions lifecycle", () => {
       await act(async () => {
         await Promise.resolve();
       });
+    };
+
+    it("should measure progress against only the prompts it is resuming", async () => {
+      // No Run all launched both, so A's experiment belongs to an earlier run.
+      await resumeWithAEnded(EXPERIMENT_STATUS.COMPLETED);
 
       expect(usePlaygroundStore.getState().progressTotal).toBe(1_000);
       expect(usePlaygroundStore.getState().progressCompleted).toBe(400);
       expect(usePlaygroundStore.getState().isRunningMap).toEqual({
         [PROMPT_B]: true,
       });
+    });
+
+    it.each([
+      ["finished", EXPERIMENT_STATUS.COMPLETED],
+      ["stopped", EXPERIMENT_STATUS.CANCELLED],
+    ])(
+      "should keep counting a %s variant of the same Run all on both sides",
+      async (_, aStatus) => {
+        usePlaygroundStore.setState({
+          createdExperiments: [
+            { id: EXPERIMENT_A, name: "A", datasetName: "dataset" },
+            { id: EXPERIMENT_B, name: "B", datasetName: "dataset" },
+          ],
+        });
+
+        await resumeWithAEnded(aStatus);
+
+        expect(usePlaygroundStore.getState().progressTotal).toBe(1_600);
+        expect(usePlaygroundStore.getState().progressCompleted).toBe(1_000);
+        expect(usePlaygroundStore.getState().isRunningMap).toEqual({
+          [PROMPT_B]: true,
+        });
+      },
+    );
+
+    it("should leave the Run all's variants out once a prompt was re-run on its own", async () => {
+      // B was re-run after the Run all: its live experiment is not one the Run all launched.
+      usePlaygroundStore.setState({
+        createdExperiments: [
+          { id: EXPERIMENT_A, name: "A", datasetName: "dataset" },
+          { id: "experiment-b-earlier", name: "B", datasetName: "dataset" },
+        ],
+      });
+
+      await resumeWithAEnded(EXPERIMENT_STATUS.CANCELLED);
+
+      expect(usePlaygroundStore.getState().progressTotal).toBe(1_000);
+      expect(usePlaygroundStore.getState().progressCompleted).toBe(400);
     });
   });
 
@@ -1524,5 +1577,156 @@ describe("a run started while the last one's bar is still up", () => {
 
     expect(usePlaygroundStore.getState().progressPhase).toBe("running");
     expect(usePlaygroundStore.getState().progressTotal).toBe(10);
+  });
+
+  // Two variants over 120 rows each, one stopped part-way: the bar has to follow the work that is
+  // still going to happen, not the 240 the run was launched with.
+  describe("progress once a variant stops part-way", () => {
+    type ExperimentState = { status: EXPERIMENT_STATUS; trace_count: number };
+    let experimentStates: Record<string, ExperimentState>;
+
+    const launchTwoVariants = async () => {
+      runExperimentExecution.mockResolvedValue({
+        experiments: [
+          { experiment_id: EXPERIMENT_A, prompt_index: 0, total_items: 120 },
+          { experiment_id: EXPERIMENT_B, prompt_index: 1, total_items: 120 },
+        ],
+        total_items: 240,
+      });
+      const rendered = renderActions("dataset-1");
+      await act(async () => {
+        await rendered.result.current.runAll();
+      });
+      return rendered;
+    };
+
+    const nextTick = () =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(EXPERIMENT_POLL_INTERVAL_MS);
+      });
+
+    const progress = () => {
+      const { progressCompleted, progressTotal } =
+        usePlaygroundStore.getState();
+      return `${progressCompleted}/${progressTotal}`;
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      runExperimentExecution.mockReset();
+      getExperimentById.mockReset();
+      getExperimentById.mockImplementation((_ctx, { experimentId }) =>
+        Promise.resolve({
+          id: experimentId,
+          ...experimentStates[experimentId],
+        }),
+      );
+      experimentStates = {
+        [EXPERIMENT_A]: { status: EXPERIMENT_STATUS.RUNNING, trace_count: 0 },
+        [EXPERIMENT_B]: { status: EXPERIMENT_STATUS.RUNNING, trace_count: 0 },
+      };
+      usePlaygroundStore.setState({
+        promptIds: [PROMPT_A, PROMPT_B],
+        promptMap: {
+          [PROMPT_A]: { id: PROMPT_A, name: "A", messages: [], configs: {} },
+          [PROMPT_B]: { id: PROMPT_B, name: "B", messages: [], configs: {} },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+        datasetType: DATASET_TYPE.DATASET,
+        progressCompleted: 0,
+        progressTotal: 0,
+        progressPhase: null,
+      });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("should count a stopped variant's runs on both sides of the bar", async () => {
+      await launchTwoVariants();
+
+      experimentStates[EXPERIMENT_A] = {
+        status: EXPERIMENT_STATUS.CANCELLED,
+        trace_count: 80,
+      };
+      experimentStates[EXPERIMENT_B].trace_count = 60;
+      await nextTick();
+
+      expect(progress()).toBe("140/200");
+    });
+
+    it("should reach a full bar once the live variant finishes its rows", async () => {
+      await launchTwoVariants();
+
+      experimentStates[EXPERIMENT_A] = {
+        status: EXPERIMENT_STATUS.CANCELLED,
+        trace_count: 80,
+      };
+      experimentStates[EXPERIMENT_B].trace_count = 120;
+      await nextTick();
+
+      expect(progress()).toBe("200/200");
+    });
+
+    it("should credit a completed variant that fell short with what it ran", async () => {
+      await launchTwoVariants();
+
+      experimentStates[EXPERIMENT_A] = {
+        status: EXPERIMENT_STATUS.COMPLETED,
+        trace_count: 119,
+      };
+      experimentStates[EXPERIMENT_B].trace_count = 50;
+      await nextTick();
+
+      expect(progress()).toBe("169/239");
+    });
+
+    it("should fill the bar with what ran when every variant has ended", async () => {
+      await launchTwoVariants();
+
+      experimentStates[EXPERIMENT_A] = {
+        status: EXPERIMENT_STATUS.CANCELLED,
+        trace_count: 80,
+      };
+      experimentStates[EXPERIMENT_B] = {
+        status: EXPERIMENT_STATUS.COMPLETED,
+        trace_count: 120,
+      };
+      await nextTick();
+
+      expect(progress()).toBe("200/200");
+    });
+
+    it("should not write an empty total when every variant ended before logging a trace", async () => {
+      await launchTwoVariants();
+
+      experimentStates[EXPERIMENT_A] = {
+        status: EXPERIMENT_STATUS.CANCELLED,
+        trace_count: 0,
+      };
+      experimentStates[EXPERIMENT_B] = {
+        status: EXPERIMENT_STATUS.CANCELLED,
+        trace_count: 0,
+      };
+      await nextTick();
+
+      expect(usePlaygroundStore.getState().progressTotal).toBe(240);
+    });
+
+    it("should move a test suite to evaluating once the live variant has its traces", async () => {
+      usePlaygroundStore.setState({ datasetType: DATASET_TYPE.TEST_SUITE });
+      await launchTwoVariants();
+
+      experimentStates[EXPERIMENT_A] = {
+        status: EXPERIMENT_STATUS.CANCELLED,
+        trace_count: 80,
+      };
+      experimentStates[EXPERIMENT_B].trace_count = 120;
+      await nextTick();
+
+      expect(usePlaygroundStore.getState().progressPhase).toBe("evaluating");
+      expect(progress()).toBe("0/200");
+    });
   });
 });

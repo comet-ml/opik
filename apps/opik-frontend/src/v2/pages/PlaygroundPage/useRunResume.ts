@@ -13,13 +13,15 @@ import usePlaygroundStore, {
   useClearAllWatchLapsed,
   useSettleRun,
 } from "@/store/PlaygroundStore";
-import { PollScope } from "@/v2/pages/PlaygroundPage/useRunWatcher";
+import {
+  PollScope,
+  runProgressOf,
+} from "@/v2/pages/PlaygroundPage/useRunWatcher";
 
 interface UseRunResumeArguments {
   datasetId?: string;
   pollExperimentCompletion: (
-    experimentIds: string[],
-    totalItems: number,
+    plannedItemsByExperimentId: Record<string, number>,
     curDatasetId: string,
     scope?: PollScope,
   ) => void;
@@ -82,18 +84,17 @@ export default function useRunResume({
           ),
         );
 
-        // The map keeps a prompt's experiment after its run ends, while runTotalItems describes only
-        // the latest run. Picking the finished ones back up would offer Stop for a run that is over
-        // and count its traces against a total that never included them.
-        const resumable = entries
-          .map(([promptId, experimentId], index) => ({
-            promptId,
-            experimentId,
-            experiment: experiments[index],
-          }))
-          .filter(
-            ({ experiment }) => !isExperimentTerminal(experiment?.status),
-          );
+        // The map keeps a prompt's experiment after its run ends, so a finished one may be from an
+        // earlier run, and picking it back up would offer Stop for a run that is over.
+        const tracked = entries.map(([promptId, experimentId], index) => ({
+          promptId,
+          experimentId,
+          experiment: experiments[index],
+          plannedItems: runTotalItemsByPromptId?.[promptId] ?? 0,
+        }));
+        const resumable = tracked.filter(
+          ({ experiment }) => !isExperimentTerminal(experiment?.status),
+        );
 
         if (resumable.length === 0) {
           // All over while we were away. The per-prompt running state is not cleared by leaving and
@@ -105,8 +106,7 @@ export default function useRunResume({
         }
 
         const resumableTotal = resumable.reduce(
-          (sum, { promptId }) =>
-            sum + (runTotalItemsByPromptId?.[promptId] ?? 0),
+          (sum, { plannedItems }) => sum + plannedItems,
           0,
         );
         if (resumableTotal === 0) {
@@ -115,19 +115,30 @@ export default function useRunResume({
           return;
         }
 
+        // The Run all's ended variants keep counting what they ran, as they did before the reload.
+        // Only if every live experiment is the Run all's: a prompt re-run since starts another run.
+        const runAllIds = new Set(createdExperiments.map(({ id }) => id));
+        const isRunAllStillGoing = resumable.every(({ experimentId }) =>
+          runAllIds.has(experimentId),
+        );
+        const followed = isRunAllStillGoing
+          ? tracked.filter(({ experimentId }) => runAllIds.has(experimentId))
+          : resumable;
+
         resumable.forEach(({ promptId }) => setPromptRunning(promptId, true));
         setIsRunInFlight(true);
         setProgressPhase("running");
-        // Seeded from the traces already logged, the same count the poll uses, so a run that is
-        // nearly done reopens near the end rather than at zero until the first poll lands.
-        const loggedTraces = resumable.reduce(
-          (sum, { experiment }) => sum + (experiment?.trace_count ?? 0),
-          0,
-        );
-        setProgress(Math.min(loggedTraces, resumableTotal), resumableTotal);
+        // Seeded with the count the poll uses, so a run that is nearly done reopens near the end
+        // rather than at zero until the first poll lands.
+        const { completed, total } = runProgressOf(followed);
+        setProgress(completed, total);
         pollExperimentCompletion(
-          resumable.map(({ experimentId }) => experimentId),
-          resumableTotal,
+          Object.fromEntries(
+            followed.map(({ experimentId, plannedItems }) => [
+              experimentId,
+              plannedItems,
+            ]),
+          ),
           datasetId,
           { announceExperiments: createdExperiments },
         );

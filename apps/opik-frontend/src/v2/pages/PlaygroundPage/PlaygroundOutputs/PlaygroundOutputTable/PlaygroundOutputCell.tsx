@@ -57,7 +57,6 @@ const PlaygroundOutputCell: React.FunctionComponent<
   const output = useOutputByPromptId(promptId);
   const stale = output?.stale ?? false;
   const errorHint = output?.errorHint;
-  const selectedRuleIds = output?.selectedRuleIds;
 
   const datasetType = useDatasetType();
   const experimentId = useExperimentIdByPromptId(promptId);
@@ -205,7 +204,6 @@ const PlaygroundOutputCell: React.FunctionComponent<
               ) : (
                 <PlaygroundOutputScoresContainer
                   traceId={traceId}
-                  selectedRuleIds={selectedRuleIds}
                   notRun={experimentItem.notRun}
                 />
               )}
