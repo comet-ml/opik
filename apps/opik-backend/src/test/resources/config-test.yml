@@ -916,6 +916,10 @@ attachmentsConfig:
   stripMinSize: 5000
 
 # Python evaluator configuration
+workspaceFeatures:
+  # Off in tests, like the auth cache: a test that needs it turns it on.
+  cacheTtl: 0s
+
 guardrails:
   piiThreshold: 0.5
   topicThreshold: 0.3

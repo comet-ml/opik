@@ -828,7 +828,7 @@ class RemoteAuthServiceTest {
         var body = OBJECT_MAPPER.writeValueAsString(authResponse);
         var apiKey = "apiKey-" + UUID.randomUUID();
         var sessionTokenValue = "session-" + UUID.randomUUID();
-        var token = ValidatedToken.builder()
+        var token = podamFactory.manufacturePojo(ValidatedToken.class).toBuilder()
                 .userName("oauth-user-" + UUID.randomUUID())
                 .workspaceName("workspace-" + UUID.randomUUID())
                 .build();

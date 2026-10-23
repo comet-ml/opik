@@ -21,6 +21,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_USERNAME_HEADER;
 
@@ -30,7 +31,8 @@ import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_USERNAME_HEADE
  * and the caller's access to the workspace is already settled by the time an endpoint asks.
  * <p>
  * A lookup that fails reads as not enabled and is not cached, so an outage withholds a feature rather than grants
- * it, and the next request asks again. The cache is best effort: when it cannot answer, the platform is asked.
+ * it, and the next request asks again. The cache is best effort: when it cannot answer, or holds a value this
+ * service did not write, the platform is asked.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -44,11 +46,23 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
     }
 
     private static final String CACHE_KEY_FORMAT = "workspaceFeature-%s-%s";
+    /** During a Redis incident every check would fail the same way, so only one warning per interval is logged. */
+    private static final Duration CACHE_WARNING_INTERVAL = Duration.ofMinutes(1);
 
     private final @NonNull Client client;
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
     private final @NonNull RedissonReactiveClient redissonClient;
     private final @NonNull Duration cacheTtl;
+    private final AtomicLong lastCacheWarningNanos = new AtomicLong(
+            System.nanoTime() - CACHE_WARNING_INTERVAL.toNanos());
+
+    /** What the cache holds for a key: an answer, nothing yet, or no answer because Redis failed. */
+    private enum CacheRead {
+        ENABLED,
+        DISABLED,
+        MISS,
+        UNAVAILABLE
+    }
 
     @Override
     public boolean isEnabled(@NonNull RequestContext caller, @NonNull WorkspaceFeature feature) {
@@ -59,9 +73,9 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
         }
 
         var cacheKey = CACHE_KEY_FORMAT.formatted(caller.getWorkspaceId(), feature.getValue());
-        String cached = readCache(cacheKey);
-        if (cached != null) {
-            return Boolean.parseBoolean(cached);
+        var cached = readCache(cacheKey, caller.getWorkspaceId(), feature);
+        if (cached == CacheRead.ENABLED || cached == CacheRead.DISABLED) {
+            return cached == CacheRead.ENABLED;
         }
 
         boolean enabled;
@@ -73,32 +87,55 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
             return false;
         }
 
-        writeCache(cacheKey, enabled);
+        // A cache that just failed to answer would fail the write too: skip it, rather than log it twice.
+        if (cached == CacheRead.MISS) {
+            writeCache(cacheKey, enabled, caller.getWorkspaceId(), feature);
+        }
         return enabled;
     }
 
-    private String readCache(String cacheKey) {
+    /** Anything but the two values this service writes is treated as a miss, so the platform is asked again. */
+    private CacheRead readCache(String cacheKey, String workspaceId, WorkspaceFeature feature) {
         if (cacheTtl.isZero()) {
-            return null;
+            return CacheRead.UNAVAILABLE;
         }
+        String value;
         try {
-            return redissonClient.<String>getBucket(cacheKey, StringCodec.INSTANCE).get().block();
+            value = redissonClient.<String>getBucket(cacheKey, StringCodec.INSTANCE).get().block();
         } catch (RuntimeException cacheFailed) {
-            log.warn("Could not read the workspace feature cache, asking the platform", cacheFailed);
-            return null;
+            logCacheFailure("read", workspaceId, feature, cacheFailed);
+            return CacheRead.UNAVAILABLE;
         }
+        if (Boolean.TRUE.toString().equals(value)) {
+            return CacheRead.ENABLED;
+        }
+        if (Boolean.FALSE.toString().equals(value)) {
+            return CacheRead.DISABLED;
+        }
+        return CacheRead.MISS;
     }
 
-    private void writeCache(String cacheKey, boolean enabled) {
-        if (cacheTtl.isZero()) {
-            return;
-        }
+    private void writeCache(String cacheKey, boolean enabled, String workspaceId, WorkspaceFeature feature) {
         try {
             redissonClient.<String>getBucket(cacheKey, StringCodec.INSTANCE)
                     .set(Boolean.toString(enabled), cacheTtl)
                     .block();
         } catch (RuntimeException cacheFailed) {
-            log.warn("Could not write the workspace feature cache", cacheFailed);
+            logCacheFailure("write", workspaceId, feature, cacheFailed);
+        }
+    }
+
+    private void logCacheFailure(String action, String workspaceId, WorkspaceFeature feature,
+            RuntimeException cacheFailed) {
+        long now = System.nanoTime();
+        long last = lastCacheWarningNanos.get();
+        if (now - last >= CACHE_WARNING_INTERVAL.toNanos() && lastCacheWarningNanos.compareAndSet(last, now)) {
+            log.warn("Could not {} the workspace feature cache for feature '{}', workspaceId '{}'; the platform "
+                    + "answers instead, and further cache failures in the next minute log at debug",
+                    action, feature.getValue(), workspaceId, cacheFailed);
+        } else {
+            log.debug("Could not {} the workspace feature cache for feature '{}', workspaceId '{}'",
+                    action, feature.getValue(), workspaceId, cacheFailed);
         }
     }
 

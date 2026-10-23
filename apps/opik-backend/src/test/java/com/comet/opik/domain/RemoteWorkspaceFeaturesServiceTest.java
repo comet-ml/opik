@@ -16,6 +16,7 @@ import org.redisson.api.RBucketReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.client.RedisException;
 import org.redisson.client.codec.Codec;
+import org.redisson.client.codec.StringCodec;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
@@ -32,6 +33,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -124,20 +127,80 @@ class RemoteWorkspaceFeaturesServiceTest {
     }
 
     @Test
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    void cacheFailureFallsBackToThePlatformAndStillAnswers() {
+    void cachedAnswersAreUsedWithoutAskingThePlatform() {
+        var redis = Mockito.mock(RedissonReactiveClient.class);
+        cacheEntry(redis, "workspaceFeature-workspace-on-guardrails", Mono.just("true"));
+        cacheEntry(redis, "workspaceFeature-workspace-off-guardrails", Mono.just("false"));
+        var cached = cachedService(redis);
+
+        assertThat(cached.isEnabled(caller("workspace-on", "key-1"), WorkspaceFeature.GUARDRAILS)).isTrue();
+        assertThat(cached.isEnabled(caller("workspace-off", "key-1"), WorkspaceFeature.GUARDRAILS)).isFalse();
+        wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/opik/workspace-features")));
+    }
+
+    @Test
+    void cacheMissAsksThePlatformOnceAndStoresTheAnswerUnderTheWorkspaceAndFeature() {
         wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features")).willReturn(okJson(ENABLED)));
         var redis = Mockito.mock(RedissonReactiveClient.class);
-        RBucketReactive bucket = Mockito.mock(RBucketReactive.class);
-        when(redis.getBucket(anyString(), any(Codec.class))).thenReturn(bucket);
-        when(bucket.get()).thenReturn(Mono.error(new RedisException("cache down")));
-        when(bucket.set(any(), any(Duration.class))).thenReturn(Mono.error(new RedisException("cache down")));
-        var cached = new RemoteWorkspaceFeaturesService(TestHttpClientUtils.client(), platformUrl, redis,
-                Duration.ofSeconds(5));
+        var entry = cacheEntry(redis, "workspaceFeature-workspace-id-1-guardrails", Mono.empty());
 
-        assertThat(cached.isEnabled(caller(PlatformCredential.Type.API_KEY, "key-1"), WorkspaceFeature.GUARDRAILS))
+        assertThat(cachedService(redis).isEnabled(caller("workspace-id-1", "key-1"), WorkspaceFeature.GUARDRAILS))
                 .isTrue();
         wireMock.server().verify(1, postRequestedFor(urlPathEqualTo("/opik/workspace-features")));
+        verify(entry).set("true", Duration.ofSeconds(5));
+    }
+
+    @Test
+    void cachedValueThisServiceDidNotWriteIsAMiss() {
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features")).willReturn(okJson(ENABLED)));
+        var redis = Mockito.mock(RedissonReactiveClient.class);
+        var entry = cacheEntry(redis, "workspaceFeature-workspace-id-1-guardrails", Mono.just("yes"));
+
+        assertThat(cachedService(redis).isEnabled(caller("workspace-id-1", "key-1"), WorkspaceFeature.GUARDRAILS))
+                .isTrue();
+        wireMock.server().verify(1, postRequestedFor(urlPathEqualTo("/opik/workspace-features")));
+        verify(entry).set("true", Duration.ofSeconds(5));
+    }
+
+    @Test
+    void cacheReadFailureAsksThePlatformAndSkipsTheWrite() {
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features")).willReturn(okJson(ENABLED)));
+        var redis = Mockito.mock(RedissonReactiveClient.class);
+        var entry = cacheEntry(redis, "workspaceFeature-workspace-id-1-guardrails",
+                Mono.error(new RedisException("cache down")));
+
+        assertThat(cachedService(redis).isEnabled(caller("workspace-id-1", "key-1"), WorkspaceFeature.GUARDRAILS))
+                .isTrue();
+        wireMock.server().verify(1, postRequestedFor(urlPathEqualTo("/opik/workspace-features")));
+        verify(entry, never()).set(any(), any(Duration.class));
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void cacheWriteFailureStillReturnsTheAnswer() {
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features")).willReturn(okJson(ENABLED)));
+        var redis = Mockito.mock(RedissonReactiveClient.class);
+        RBucketReactive entry = Mockito.mock(RBucketReactive.class);
+        when(redis.getBucket(anyString(), any(Codec.class))).thenReturn(entry);
+        when(entry.get()).thenReturn(Mono.empty());
+        when(entry.set(any(), any(Duration.class))).thenReturn(Mono.error(new RedisException("cache down")));
+
+        assertThat(cachedService(redis).isEnabled(caller("workspace-id-1", "key-1"), WorkspaceFeature.GUARDRAILS))
+                .isTrue();
+    }
+
+    private RemoteWorkspaceFeaturesService cachedService(RedissonReactiveClient redis) {
+        return new RemoteWorkspaceFeaturesService(TestHttpClientUtils.client(), platformUrl, redis,
+                Duration.ofSeconds(5));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static RBucketReactive<String> cacheEntry(RedissonReactiveClient redis, String key, Mono<String> value) {
+        RBucketReactive<String> entry = Mockito.mock(RBucketReactive.class);
+        when(entry.get()).thenReturn(value);
+        when(entry.set(any(), any(Duration.class))).thenReturn(Mono.empty());
+        when(redis.<String>getBucket(key, StringCodec.INSTANCE)).thenReturn(entry);
+        return entry;
     }
 
     private static RequestContext caller(PlatformCredential.Type type, String credential) {
@@ -147,5 +210,9 @@ class RemoteWorkspaceFeaturesServiceTest {
                 .workspaceName(WORKSPACE_NAME)
                 .platformCredential(new PlatformCredential(type, credential))
                 .build();
+    }
+
+    private static RequestContext caller(String workspaceId, String apiKey) {
+        return caller(PlatformCredential.Type.API_KEY, apiKey).toBuilder().workspaceId(workspaceId).build();
     }
 }

@@ -18,6 +18,9 @@ import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.ServerErrorException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import reactor.core.publisher.Mono;
@@ -25,6 +28,7 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -219,24 +223,27 @@ class GuardrailsValidationServiceTest {
                         .hasSize(Question.ChoiceQuestion.MAX_OPTIONS));
     }
 
-    @Test
-    void topicsBeyondTheLimitsOrReservedAreRejected() {
-        var tooMany = IntStream.rangeClosed(0, GuardrailsValidationServiceImpl.MAX_TOPICS)
-                .mapToObj(i -> "topic " + i)
-                .toList();
-        assertThatThrownBy(() -> validate(request(topicDescriptor(tooMany))))
+    static Stream<Arguments> rejectedTopicLists() {
+        return Stream.of(
+                Arguments.of("more topics than the choice question holds",
+                        IntStream.rangeClosed(0, GuardrailsValidationServiceImpl.MAX_TOPICS)
+                                .mapToObj(i -> "topic " + i)
+                                .toList(),
+                        "1 to " + GuardrailsValidationServiceImpl.MAX_TOPICS),
+                Arguments.of("a topic over the length limit",
+                        List.of("t".repeat(GuardrailsValidationServiceImpl.MAX_TOPIC_LENGTH + 1)),
+                        "longer than " + GuardrailsValidationServiceImpl.MAX_TOPIC_LENGTH),
+                Arguments.of("the reserved none-of-these option", List.of("billing", "None of these"),
+                        GuardrailQuestions.NONE_OF_THESE),
+                Arguments.of("a repeated topic", List.of("billing", "billing"), "more than once"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("rejectedTopicLists")
+    void topicListIsRejected(String scenario, List<String> topics, String expectedMessage) {
+        assertThatThrownBy(() -> validate(request(topicDescriptor(topics))))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("1 to " + GuardrailsValidationServiceImpl.MAX_TOPICS);
-        assertThatThrownBy(() -> validate(request(topicDescriptor(
-                List.of("t".repeat(GuardrailsValidationServiceImpl.MAX_TOPIC_LENGTH + 1))))))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("longer than " + GuardrailsValidationServiceImpl.MAX_TOPIC_LENGTH);
-        assertThatThrownBy(() -> validate(request(topicDescriptor(List.of("billing", "None of these")))))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining(GuardrailQuestions.NONE_OF_THESE);
-        assertThatThrownBy(() -> validate(request(topicDescriptor(List.of("billing", "billing")))))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("more than once");
+                .hasMessageContaining(expectedMessage);
         verifyNoInteractions(inference);
     }
 
