@@ -2,7 +2,7 @@ package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ModelParams;
-import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.domain.cost.ModelPriceTable;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.google.common.annotations.VisibleForTesting;
@@ -315,7 +315,7 @@ public class ModelCapabilities {
 
     private Map<String, ModelCapability> loadCapabilities() {
         var capabilities = new HashMap<String, ModelCapability>();
-        CostService.readModelCosts().forEach((modelName, modelData) -> {
+        ModelPriceTable.readModelCosts().forEach((modelName, modelData) -> {
             if (StringUtils.isBlank(modelName)) {
                 return;
             }

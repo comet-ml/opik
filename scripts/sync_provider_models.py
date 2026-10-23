@@ -243,6 +243,9 @@ OPENROUTER_DROPDOWN_EXCLUDE = [
     r"^amazon/nova-premier-v1$",           # retired on Bedrock: 400 "This model version has reached the end of its life"
     r"^inclusionai/ling-3\.0-flash-fin$",  # no provider serves it: 404 "No endpoints found"
     r"^nousresearch/hermes-3-llama-3\.1-70b$",  # streams the same junk sentence until the output limit
+    r"llama-guard",                        # safety classifier: answers "safe" or "unsafe", not a chat model
+    r"content-safety",                     # safety classifier: answers "safe" or "unsafe", not a chat model
+    r"^openrouter/bodybuilder$",           # turns a request into OpenRouter API JSON, not a chat model
 ]
 
 
@@ -1134,12 +1137,22 @@ def _litellm_info(prices: dict, provider_key: str, entry_value: str) -> dict | N
     candidates = {
         "openai": [entry_value],
         "anthropic": [entry_value, f"anthropic/{entry_value}"],
-        "gemini": [f"gemini/{entry_value}", entry_value],
+        "gemini": [f"gemini/{entry_value}"],
         "vertexai": [entry_value],
     }.get(provider_key, [])
     for key in candidates:
         info = prices.get(key)
         if isinstance(info, dict):
+            return info
+    # A bare id can be a Gemini API row or a Vertex AI one (litellm_provider vertex_ai-language-models), so its
+    # provider is checked: a model never takes the other provider's facts.
+    owns_bare_row = {
+        "gemini": lambda provider: provider == "gemini",
+        "vertexai": lambda provider: provider.startswith("vertex_ai"),
+    }.get(provider_key)
+    if owns_bare_row:
+        info = prices.get(entry_value.removeprefix("vertex_ai/"))
+        if isinstance(info, dict) and owns_bare_row(str(info.get("litellm_provider", ""))):
             return info
     return None
 
@@ -1394,6 +1407,40 @@ def curated_drift(
             if different:
                 disagree.append(f"{yaml_key}/{model_id}: {'; '.join(different)}")
     return agree, disagree, arrived
+
+
+# LiteLLM says whether a Gemini model thinks but not which levels it takes, and a level it doesn't take is a 400, so
+# the sync can't write Gemini levels: a picker model that thinks needs them written by hand.
+def thinking_models_without_effort(
+    dropdown_by_provider: dict[str, list[ModelEntry]], prices: dict, catalog: dict,
+) -> list[str]:
+    profiles = catalog.get("profiles") or {}
+    missing = []
+    for provider_key in ("gemini", "vertexai"):
+        yaml_key = _PROVIDER_TO_YAML_KEY[provider_key]
+        provider_profile = ((catalog.get("defaults") or {}).get(yaml_key) or {}).get("profile")
+        default_effort = (profiles.get(provider_profile) or {}).get("effort") or {}
+        rows = {row.get("id"): row for row in (catalog.get("models") or {}).get(yaml_key) or []}
+        for entry in dropdown_by_provider.get(provider_key, []):
+            info = _litellm_info(prices, provider_key, entry.value)
+            if not (info and info.get("supports_reasoning")):
+                continue
+            model_id = entry.value.removeprefix("vertex_ai/")
+            row = rows.get(model_id) or {}
+            own_effort = {
+                **((profiles.get(row.get("profile")) or {}).get("effort") or {}),
+                **((row.get("params") or {}).get("effort") or {}),
+            }
+            # The provider profile's {accepted: false} is only the fallback for a model nobody wrote levels for; a
+            # refusal or an empty levels list ("takes none") in the model's own row or profile is a decision.
+            if (
+                {**default_effort, **own_effort}.get("levels")
+                or "levels" in own_effort
+                or own_effort.get("accepted") is False
+            ):
+                continue
+            missing.append(f"{yaml_key}/{model_id}")
+    return missing
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2019,6 +2066,18 @@ def main():
         for note in drift_agree:
             print(f"  = {note}")
     if drift_agree or drift_disagree or drift_arrived:
+        print()
+
+    thinking_without_levels = thinking_models_without_effort(dropdown_by_provider, prices, curated_catalog)
+    if thinking_without_levels:
+        print("### Thinking levels")
+        print(
+            f"- {len(thinking_without_levels)} picker model(s) think but have no curated effort levels; add them to "
+            "llm-models-curated.yaml, and to THINKING_LEVELS_BY_MODEL in modelUtils.ts until the Gemini panel reads "
+            "the catalog:"
+        )
+        for model_id in thinking_without_levels:
+            print(f"  ? {model_id}")
         print()
 
     if not _should_write_files(
