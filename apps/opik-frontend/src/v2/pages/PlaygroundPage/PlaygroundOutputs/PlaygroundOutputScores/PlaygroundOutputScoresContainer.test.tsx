@@ -18,18 +18,26 @@ type RulesState = {
   isError: boolean;
 };
 
+type TraceData = {
+  feedback_scores: { name: string; value?: number }[];
+  metadata: Record<string, unknown>;
+};
+
 let rulesState: RulesState;
-let traceScores: { name: string; value: number }[];
+let traceData: TraceData | undefined;
+let pickerRuleIds: string[] | null;
 let traceQueryOptions: {
   enabled: boolean;
-  refetchInterval: (query: {
-    state: { data?: { feedback_scores: { name: string }[] } };
-  }) => number | false;
+  refetchInterval: (query: { state: { data?: TraceData } }) => number | false;
 };
 
 vi.mock("@/store/AppStore", () => ({
   default: vi.fn((selector) => selector({ activeWorkspaceName: "ws" })),
   useActiveProjectId: () => PROJECT_ID,
+}));
+
+vi.mock("@/store/PlaygroundStore", () => ({
+  useSelectedRuleIds: () => pickerRuleIds,
 }));
 
 vi.mock("@/api/automations/useRulesList", () => ({
@@ -43,7 +51,7 @@ vi.mock("@/api/automations/useRulesList", () => ({
 vi.mock("@/api/traces/useTraceById", () => ({
   default: (_params: unknown, options: typeof traceQueryOptions) => {
     traceQueryOptions = options;
-    return { data: { feedback_scores: traceScores } };
+    return { data: traceData };
   },
 }));
 
@@ -82,37 +90,33 @@ const makeRule = (
     ...overrides,
   }) as EvaluatorsRule;
 
-const renderContainer = (selectedRuleIds: string[] | null) =>
-  render(
-    <PlaygroundOutputScoresContainer
-      traceId={TRACE_ID}
-      selectedRuleIds={selectedRuleIds}
-    />,
-  );
+const makeTrace = (
+  pickedRuleIds: string[] | null,
+  receivedNames: string[] = [],
+): TraceData => ({
+  feedback_scores: receivedNames.map((name) => ({ name, value: 1 })),
+  metadata: {
+    created_from: "playground",
+    ...(pickedRuleIds && { selected_rule_ids: pickedRuleIds }),
+  },
+});
 
-const pollWith = (receivedNames: string[]) =>
-  traceQueryOptions.refetchInterval({
-    state: {
-      data: { feedback_scores: receivedNames.map((name) => ({ name })) },
-    },
-  });
+const renderContainer = () =>
+  render(<PlaygroundOutputScoresContainer traceId={TRACE_ID} />);
+
+const pollWith = (trace: TraceData | undefined) =>
+  traceQueryOptions.refetchInterval({ state: { data: trace } });
 
 beforeEach(() => {
   rulesState = { content: [], total: 0, isSuccess: true, isError: false };
-  traceScores = [];
+  traceData = undefined;
+  pickerRuleIds = null;
 });
 
 describe("PlaygroundOutputScoresContainer", () => {
   describe("polling gate", () => {
-    it("should not query the trace when no rule scores it", () => {
-      rulesState.content = [
-        makeRule("r1", ["Relevance"], {
-          trigger_scope: EVAL_TRIGGER_SCOPE.production,
-        }),
-      ];
-      rulesState.total = 1;
-
-      renderContainer(null);
+    it("should not query the trace when the project has no rule", () => {
+      renderContainer();
 
       expect(traceQueryOptions.enabled).toBe(false);
     });
@@ -120,7 +124,7 @@ describe("PlaygroundOutputScoresContainer", () => {
     it("should query the trace while the rules list is still loading", () => {
       rulesState.isSuccess = false;
 
-      renderContainer(null);
+      renderContainer();
 
       expect(traceQueryOptions.enabled).toBe(true);
     });
@@ -129,7 +133,7 @@ describe("PlaygroundOutputScoresContainer", () => {
       rulesState.isSuccess = false;
       rulesState.isError = true;
 
-      renderContainer(null);
+      renderContainer();
 
       expect(traceQueryOptions.enabled).toBe(false);
     });
@@ -137,17 +141,17 @@ describe("PlaygroundOutputScoresContainer", () => {
     it("should query the trace when the rules list holds more than one page", () => {
       rulesState.content = [
         makeRule("r1", ["Relevance"], {
-          trigger_scope: EVAL_TRIGGER_SCOPE.production,
+          type: EVALUATORS_RULE_TYPE.span_llm_judge,
         }),
       ];
       rulesState.total = 120;
 
-      renderContainer(null);
+      renderContainer();
 
       expect(traceQueryOptions.enabled).toBe(true);
     });
 
-    it("should query the trace for a rule the user picked, whatever its scope", () => {
+    it("should query the trace for a production rule, since the run may have picked it", () => {
       rulesState.content = [
         makeRule("r1", ["Relevance"], {
           trigger_scope: EVAL_TRIGGER_SCOPE.production,
@@ -156,7 +160,7 @@ describe("PlaygroundOutputScoresContainer", () => {
       ];
       rulesState.total = 1;
 
-      renderContainer(["r1"]);
+      renderContainer();
 
       expect(traceQueryOptions.enabled).toBe(true);
     });
@@ -169,7 +173,7 @@ describe("PlaygroundOutputScoresContainer", () => {
       ];
       rulesState.total = 1;
 
-      renderContainer(null);
+      renderContainer();
 
       expect(traceQueryOptions.enabled).toBe(true);
     });
@@ -188,7 +192,7 @@ describe("PlaygroundOutputScoresContainer", () => {
         ];
         rulesState.total = 1;
 
-        renderContainer(null);
+        renderContainer();
 
         expect(traceQueryOptions.enabled).toBe(false);
       },
@@ -196,23 +200,137 @@ describe("PlaygroundOutputScoresContainer", () => {
   });
 
   describe("refetch interval", () => {
-    it("should stop once every awaited score has arrived", () => {
+    it("should stop once every score of the rule picked for the trace has arrived", () => {
       rulesState.content = [makeRule("r1", ["Relevance", "Accuracy"])];
       rulesState.total = 1;
 
-      renderContainer(["r1"]);
+      renderContainer();
 
-      expect(pollWith(["Relevance"])).toBe(5000);
-      expect(pollWith(["Relevance", "Accuracy"])).toBe(false);
+      expect(pollWith(makeTrace(["r1"], ["Relevance"]))).toBe(5000);
+      expect(pollWith(makeTrace(["r1"], ["Relevance", "Accuracy"]))).toBe(
+        false,
+      );
+    });
+
+    it("should keep polling for a picked production rule after the always-run scores arrive", () => {
+      rulesState.content = [
+        makeRule("r1", ["Helpfulness"], {
+          trigger_scope: EVAL_TRIGGER_SCOPE.experiment,
+        }),
+        makeRule("r2", ["Test"], {
+          trigger_scope: EVAL_TRIGGER_SCOPE.production,
+        }),
+      ];
+      rulesState.total = 2;
+
+      renderContainer();
+
+      expect(pollWith(makeTrace(["r2"], ["Helpfulness"]))).toBe(5000);
+      expect(pollWith(makeTrace(["r2"], ["Helpfulness", "Test"]))).toBe(false);
+    });
+
+    it("should keep polling while the trace has not loaded, since its picks are unknown", () => {
+      rulesState.content = [
+        makeRule("r1", ["Relevance"], {
+          trigger_scope: EVAL_TRIGGER_SCOPE.production,
+        }),
+      ];
+      rulesState.total = 1;
+
+      renderContainer();
+
+      expect(pollWith(undefined)).toBe(5000);
+    });
+
+    it("should stop once the trace loads and no rule scores it", () => {
+      rulesState.content = [
+        makeRule("r1", ["Relevance"], {
+          trigger_scope: EVAL_TRIGGER_SCOPE.production,
+        }),
+      ];
+      rulesState.total = 1;
+
+      renderContainer();
+
+      expect(pollWith(makeTrace(null))).toBe(false);
+    });
+
+    it("should await a picked rule even when it is disabled, as the backend still scores it", () => {
+      rulesState.content = [makeRule("r1", ["Relevance"], { enabled: false })];
+      rulesState.total = 1;
+
+      renderContainer();
+
+      expect(pollWith(makeTrace(["r1"]))).toBe(5000);
+      expect(pollWith(makeTrace(["r1"], ["Relevance"]))).toBe(false);
+    });
+
+    it("should not await a disabled experiment rule nobody picked", () => {
+      rulesState.content = [
+        makeRule("r1", ["Relevance"], {
+          trigger_scope: EVAL_TRIGGER_SCOPE.experiment,
+          enabled: false,
+        }),
+      ];
+      rulesState.total = 1;
+
+      renderContainer();
+
+      expect(pollWith(makeTrace(null))).toBe(false);
+    });
+
+    it("should ignore a picked rule that no longer exists", () => {
+      rulesState.content = [makeRule("r1", ["Relevance"])];
+      rulesState.total = 1;
+
+      renderContainer();
+
+      expect(pollWith(makeTrace(["deleted-rule"]))).toBe(false);
+    });
+
+    it("should read malformed picks as none", () => {
+      rulesState.content = [makeRule("r1", ["Relevance"])];
+      rulesState.total = 1;
+
+      renderContainer();
+
+      expect(
+        pollWith({
+          feedback_scores: [],
+          metadata: { selected_rule_ids: "r1" },
+        }),
+      ).toBe(false);
+    });
+
+    it("should stop on the trace's picks, not the picker's", () => {
+      rulesState.content = [
+        makeRule("r1", ["Relevance"], {
+          trigger_scope: EVAL_TRIGGER_SCOPE.production,
+        }),
+      ];
+      rulesState.total = 1;
+      pickerRuleIds = ["r1"];
+
+      renderContainer();
+
+      expect(pollWith(makeTrace(null))).toBe(false);
+    });
+
+    it("should keep polling while the rules list is still loading", () => {
+      rulesState.isSuccess = false;
+
+      renderContainer();
+
+      expect(pollWith(makeTrace(["r1"]))).toBe(5000);
     });
 
     it("should keep polling when the rules list holds more than one page", () => {
       rulesState.content = [makeRule("r1", ["Relevance"])];
       rulesState.total = 120;
 
-      renderContainer(["r1"]);
+      renderContainer();
 
-      expect(pollWith(["Relevance"])).toBe(5000);
+      expect(pollWith(makeTrace(["r1"], ["Relevance"]))).toBe(5000);
     });
 
     it("should keep polling when no score name could be predicted", () => {
@@ -221,19 +339,62 @@ describe("PlaygroundOutputScoresContainer", () => {
       ];
       rulesState.total = 1;
 
-      renderContainer(null);
+      renderContainer();
 
-      expect(pollWith([])).toBe(5000);
+      expect(pollWith(makeTrace(null))).toBe(5000);
     });
   });
 
   describe("rendered metrics", () => {
+    it("should show a pending metric for the rule picked for the trace, whatever its scope", () => {
+      rulesState.content = [
+        makeRule("r1", ["Relevance"], {
+          trigger_scope: EVAL_TRIGGER_SCOPE.production,
+        }),
+      ];
+      rulesState.total = 1;
+      traceData = makeTrace(["r1"]);
+
+      renderContainer();
+
+      expect(screen.getByTestId("metric-names")).toHaveTextContent("Relevance");
+    });
+
+    it("should show a pending metric for a rule picked in the picker before the trace loads", () => {
+      rulesState.content = [
+        makeRule("r1", ["Relevance"], {
+          trigger_scope: EVAL_TRIGGER_SCOPE.production,
+        }),
+      ];
+      rulesState.total = 1;
+      pickerRuleIds = ["r1"];
+
+      renderContainer();
+
+      expect(screen.getByTestId("metric-names")).toHaveTextContent("Relevance");
+    });
+
+    it("should replace the picker's picks with the trace's once it loads", () => {
+      rulesState.content = [
+        makeRule("r1", ["Relevance"], {
+          trigger_scope: EVAL_TRIGGER_SCOPE.production,
+        }),
+      ];
+      rulesState.total = 1;
+      pickerRuleIds = ["r1"];
+      traceData = makeTrace(null);
+
+      renderContainer();
+
+      expect(screen.getByTestId("metric-names")).toHaveTextContent("");
+    });
+
     it("should show a score that no picked rule announced", () => {
       rulesState.content = [makeRule("r1", ["Relevance"])];
       rulesState.total = 1;
-      traceScores = [{ name: "Hallucination", value: 1 }];
+      traceData = makeTrace(["r1"], ["Hallucination"]);
 
-      renderContainer(["r1"]);
+      renderContainer();
 
       expect(screen.getByTestId("metric-names")).toHaveTextContent(
         "Hallucination,Relevance",
@@ -243,8 +404,9 @@ describe("PlaygroundOutputScoresContainer", () => {
     it("should show no metric when nothing is picked and nothing scored", () => {
       rulesState.content = [makeRule("r1", ["Relevance"])];
       rulesState.total = 1;
+      traceData = makeTrace(null);
 
-      renderContainer(null);
+      renderContainer();
 
       expect(screen.getByTestId("metric-names")).toHaveTextContent("");
     });
@@ -257,14 +419,15 @@ describe("PlaygroundOutputScoresContainer", () => {
       (_, type) => {
         rulesState.content = [makeRule("r1", ["Relevance"], { type })];
         rulesState.total = 1;
+        traceData = makeTrace(["r1"]);
 
-        renderContainer(["r1"]);
+        renderContainer();
 
         expect(screen.getByTestId("metric-names")).toHaveTextContent("");
       },
     );
 
-    it("should show a pending metric for an unpicked rule that targets experiments", () => {
+    it("should show a pending metric for an unpicked rule that targets experiments before the trace loads", () => {
       rulesState.content = [
         makeRule("r1", ["Relevance"], {
           trigger_scope: EVAL_TRIGGER_SCOPE.experiment,
@@ -272,7 +435,7 @@ describe("PlaygroundOutputScoresContainer", () => {
       ];
       rulesState.total = 1;
 
-      renderContainer(null);
+      renderContainer();
 
       expect(screen.getByTestId("metric-names")).toHaveTextContent("Relevance");
     });
