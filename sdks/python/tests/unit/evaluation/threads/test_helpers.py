@@ -101,3 +101,36 @@ def test_load_conversation_thread():
         max_results=10,
         truncate=False,
     )
+
+
+def test_load_conversation_thread__thread_id_with_double_quote__filter_stays_scoped():
+    """A thread id containing a double quote must not break out of the filter.
+
+    The filter is built by string interpolation, so an unescaped quote would
+    terminate the literal early and make the filter match other threads'
+    traces. The OQL parser reads a doubled quote inside a double-quoted
+    literal as one quote character.
+    """
+    mock_opik_client = mock.MagicMock()
+    mock_opik_client.search_traces.return_value = []
+
+    thread = TraceThread(id='thread"123')
+    helpers.load_conversation_thread(
+        thread=thread,
+        trace_input_transform=lambda x: x.get("content", ""),
+        trace_output_transform=lambda x: x.get("content", ""),
+        max_results=10,
+        project_name="test_project",
+        client=mock_opik_client,
+    )
+
+    call_kwargs = mock_opik_client.search_traces.call_args[1]
+    assert call_kwargs["filter_string"] == 'thread_id = "thread""123"'
+
+    # The generated filter must parse back to the original thread id.
+    from opik.api_objects import opik_query_language
+
+    parsed = opik_query_language.OpikQueryLanguage.for_traces(
+        call_kwargs["filter_string"]
+    ).get_filter_expressions()
+    assert parsed[0]["value"] == 'thread"123'

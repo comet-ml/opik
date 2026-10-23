@@ -68,3 +68,33 @@ class TestReasonToText:
 
     def test_reason_to_text__empty_list__returns_no_reason_provided(self):
         assert parsing_helpers.reason_to_text([]) == "No reason provided"
+
+
+class TestNormalizeVerdict:
+    def test_normalize_verdict__plain_yes_no__unchanged(self):
+        assert parsing_helpers.normalize_verdict("yes") == "yes"
+        assert parsing_helpers.normalize_verdict("no") == "no"
+
+    def test_normalize_verdict__case_and_whitespace__folded(self):
+        assert parsing_helpers.normalize_verdict("YES") == "yes"
+        assert parsing_helpers.normalize_verdict("  No ") == "no"
+
+    def test_normalize_verdict__trailing_punctuation__trimmed(self):
+        # Models drift from the "STRICTLY yes/no" prompt; the score
+        # computations must not read "No." as a positive verdict.
+        assert parsing_helpers.normalize_verdict("Yes.") == "yes"
+        assert parsing_helpers.normalize_verdict("No.") == "no"
+        assert parsing_helpers.normalize_verdict("no!") == "no"
+        assert parsing_helpers.normalize_verdict("yes,") == "yes"
+
+    def test_normalize_verdict__whitespace_before_punctuation__trimmed(self):
+        # A space between the verdict and its punctuation must not survive:
+        # "No ." would otherwise read as "no " and fail the exact comparison.
+        assert parsing_helpers.normalize_verdict("No .") == "no"
+        assert parsing_helpers.normalize_verdict("Yes !") == "yes"
+        assert parsing_helpers.normalize_verdict("no ;") == "no"
+
+    def test_normalize_verdict__unrecognized_words__left_as_is(self):
+        # A genuinely ambiguous verdict stays ambiguous: the caller decides
+        # how to count it, the normalizer only removes drift.
+        assert parsing_helpers.normalize_verdict("kind of") == "kind of"
