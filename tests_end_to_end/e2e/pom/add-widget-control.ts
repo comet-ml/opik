@@ -5,8 +5,8 @@ import { loadEnvConfig } from '../config/env.config';
  * A section header's "Add widget" control, which is two different controls.
  *
  * `AddWidgetButton` renders a plain button that opens the widget config dialog
- * when Ollie is unavailable, and a `DropdownMenu` trigger offering "Add widget"
- * / "Describe a widget" when it is (opik#9162, 2.2.118). Ollie needs
+ * when Ollie is unavailable, and a `DropdownMenu` trigger offering "Pick a
+ * chart" / "Ask Ollie" when it is (opik#9162, 2.2.118). Ollie needs
  * `OLLIE_ENABLED` *and* `CUSTOM_CHARTS_ENABLED_FOR_WORKSPACE` *and* the
  * `AssistantSidebar` plugin, all of which are off in OSS and self-hosted and on
  * for a cloud Custom-Charts workspace — which is exactly what
@@ -45,11 +45,18 @@ export async function openWidgetConfigDialog(page: Page, trigger: Locator): Prom
 
     if (ollie) {
       // Matched on the label's leading words: the item's accessible name is its
-      // label followed by its description ("Add widget Pick a built-in chart and
-      // configure it."), and the sibling item starts "Describe a widget", so an
+      // label followed by its description ("Pick a chart Choose a built-in chart
+      // and configure it."), and the sibling item starts "Ask Ollie", so an
       // anchored match separates them without depending on the description text.
-      const addItem = page.getByRole('menuitem', { name: /^Add widget/ });
-      await expect(addItem, 'the menu offers exactly one "Add widget" item').toHaveCount(1);
+      //
+      // The labels are the ones `ADD_WIDGET_OPTIONS` carries on main: opik#9169
+      // reworded them from "Add widget"/"Describe a widget" after 2.2.118 was
+      // cut, so a cloud workspace still on 2.2.118 renders the old pair and this
+      // match will not find the item there. Tracking main is deliberate — this
+      // spec's permanent home is main, and a tolerant alternation would let a
+      // future rename pass unnoticed.
+      const addItem = page.getByRole('menuitem', { name: /^Pick a chart/ });
+      await expect(addItem, 'the menu offers exactly one "Pick a chart" item').toHaveCount(1);
       await addItem.click();
     }
 
