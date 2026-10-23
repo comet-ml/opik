@@ -68,6 +68,11 @@ class LlmModelCatalogTest {
                 effort: {accepted: false}
             """);
 
+    private static final ModelParams ANTHROPIC_PROFILE = params("""
+            temperature: {accepted: false}
+            effort: {accepted: true, levels: [low, medium, high], default: high}
+            """);
+
     private static final ModelParams CLAUDE_SONNET_4_6 = params("""
             temperature: {accepted: true, min: 0, max: 1, default: 0}
             effort: {accepted: true, levels: [low, medium, high, max], default: high}
@@ -246,6 +251,15 @@ class LlmModelCatalogTest {
         @Test
         void aProviderWithoutDefaultsGetsNoParams() {
             assertThat(model(service(null), "vertex-ai", "gemini-2.0-flash-001").params()).isNull();
+        }
+
+        @Test
+        void theProfilesAreWhatAnUnlistedIdOfEachProviderGets() {
+            var service = service(null);
+
+            assertThat(service.getProfiles())
+                    .isEqualTo(Map.of("openai", OPENAI_PROFILE, "anthropic", ANTHROPIC_PROFILE));
+            assertThat(service.paramsOf("anthropic", "an-id-no-layer-lists")).isEqualTo(ANTHROPIC_PROFILE);
         }
 
         @Test
