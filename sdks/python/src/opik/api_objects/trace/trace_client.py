@@ -7,8 +7,14 @@ import opik.llm_usage as llm_usage
 import opik.api_objects.attachment as attachment
 from opik.message_processing import messages, streamer
 from opik import config as opik_config
-from opik.types import ErrorInfoDict, SpanType, LLMProvider, TraceSource
-from .. import constants, helpers, span
+from opik.types import (
+    BatchFeedbackScoreDict,
+    ErrorInfoDict,
+    SpanType,
+    LLMProvider,
+    TraceSource,
+)
+from .. import constants, helpers, span, validation_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -241,6 +247,7 @@ class Trace:
         value: float,
         category_name: Optional[str] = None,
         reason: Optional[str] = None,
+        evaluator_revision: Optional[str] = None,
     ) -> None:
         """
         Log a feedback score for the trace.
@@ -250,10 +257,27 @@ class Trace:
             value: The value of the feedback score.
             category_name: The category name for the feedback score.
             reason: The reason for the feedback score.
+            evaluator_revision: Optional revision of the evaluator that produced
+                the score (for example a prompt version or a commit hash), up to
+                256 characters.
 
         Returns:
             None
         """
+        score_dict: BatchFeedbackScoreDict = {
+            "id": self.id,
+            "name": name,
+            "value": value,
+            "category_name": category_name,
+            "reason": reason,
+            "evaluator_revision": evaluator_revision,
+        }
+        # Validate here, as the batch methods do: scores are sent in batches, and
+        # one invalid score (e.g. an over-long revision) would get the whole batch
+        # rejected by the backend.
+        if validation_helpers.validate_feedback_score(score_dict, LOGGER) is None:
+            return
+
         add_trace_feedback_batch_message = messages.AddTraceFeedbackScoresBatchMessage(
             batch=[
                 messages.FeedbackScoreMessage(
@@ -264,6 +288,7 @@ class Trace:
                     reason=reason,
                     source=constants.FEEDBACK_SCORE_SOURCE_SDK,
                     project_name=self._project_name,
+                    evaluator_revision=evaluator_revision,
                 )
             ],
         )

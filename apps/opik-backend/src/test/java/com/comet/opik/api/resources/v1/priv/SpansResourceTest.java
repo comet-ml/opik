@@ -143,6 +143,8 @@ import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertCom
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpdatedComment;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
+import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScores;
+import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.expectedFeedbackScore;
 import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
@@ -3847,6 +3849,35 @@ class SpansResourceTest {
                                                     .build()))
                                     .build(),
                             "scores[0].value must be less than or equal to 999999999.999999999"));
+        }
+
+        @Test
+        @DisplayName("when a score has an evaluator revision, then it is read back on the score and its entry")
+        void feedback__whenEvaluatorRevisionIsSet__thenReadItBack() {
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            var id = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            var withRevision = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(id)
+                    .projectName(DEFAULT_PROJECT)
+                    .name("with_revision")
+                    .evaluatorRevision(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .build();
+            var withoutRevision = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(id)
+                    .projectName(DEFAULT_PROJECT)
+                    .name("without_revision")
+                    .evaluatorRevision(null)
+                    .build();
+            spanResourceClient.feedbackScores(List.of(withRevision, withoutRevision), API_KEY, TEST_WORKSPACE);
+
+            var actualScores = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY).feedbackScores();
+
+            assertFeedbackScores(actualScores, Stream.of(withRevision, withoutRevision)
+                    .map(item -> expectedFeedbackScore(item, USER))
+                    .toList());
         }
 
         @Test

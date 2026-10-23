@@ -11,6 +11,7 @@ from opik.message_processing import messages, streamer
 from ..attachment import converters as attachment_converters
 
 from opik.types import (
+    BatchFeedbackScoreDict,
     DistributedTraceHeadersDict,
     ErrorInfoDict,
     LLMProvider,
@@ -292,6 +293,7 @@ class Span:
         value: float,
         category_name: Optional[str] = None,
         reason: Optional[str] = None,
+        evaluator_revision: Optional[str] = None,
     ) -> None:
         """
         Log a feedback score for the span.
@@ -301,10 +303,27 @@ class Span:
             value: The value of the feedback score.
             category_name: The category name for the feedback score.
             reason: The reason for the feedback score.
+            evaluator_revision: Optional revision of the evaluator that produced
+                the score (for example a prompt version or a commit hash), up to
+                256 characters.
 
         Returns:
             None
         """
+        score_dict: BatchFeedbackScoreDict = {
+            "id": self.id,
+            "name": name,
+            "value": value,
+            "category_name": category_name,
+            "reason": reason,
+            "evaluator_revision": evaluator_revision,
+        }
+        # Validate here, as the batch methods do: scores are sent in batches, and
+        # one invalid score (e.g. an over-long revision) would get the whole batch
+        # rejected by the backend.
+        if validation_helpers.validate_feedback_score(score_dict, LOGGER) is None:
+            return
+
         add_span_feedback_batch_message = messages.AddSpanFeedbackScoresBatchMessage(
             batch=[
                 messages.FeedbackScoreMessage(
@@ -315,6 +334,7 @@ class Span:
                     reason=reason,
                     source=constants.FEEDBACK_SCORE_SOURCE_SDK,
                     project_name=self._project_name,
+                    evaluator_revision=evaluator_revision,
                 )
             ],
         )

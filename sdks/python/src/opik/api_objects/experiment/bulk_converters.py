@@ -388,6 +388,7 @@ def _to_rest_feedback_score(
         category_name=score.get("category_name"),
         reason=score.get("reason"),
         source=constants.FEEDBACK_SCORE_SOURCE_SDK,
+        evaluator_revision=score.get("evaluator_revision"),
     )
 
 
