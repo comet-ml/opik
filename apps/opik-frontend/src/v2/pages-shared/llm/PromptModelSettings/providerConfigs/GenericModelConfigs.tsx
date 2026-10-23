@@ -99,7 +99,7 @@ const GenericModelConfigs = ({
           key={control.configKey}
           value={value}
           onChange={(v) => onChange({ [control.configKey]: v })}
-          id={control.configKey}
+          id={presentation.maxOutputTokensId ?? control.configKey}
           min={noLimitAtZero ? 0 : control.min}
           max={control.max}
           step={1}

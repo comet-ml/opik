@@ -385,9 +385,7 @@ describe("the catalog panel for Gemini and Vertex AI", () => {
       expect(screen.getByRole("combobox")).toHaveTextContent("Medium");
       expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
       expect(screen.queryByTestId("topP-input")).not.toBeInTheDocument();
-      expect(screen.getByTestId("maxCompletionTokens-input")).toHaveValue(
-        "4000",
-      );
+      expect(screen.getByTestId("maxOutputTokens-input")).toHaveValue("4000");
       expect(levelsOffered()).toEqual(["Low", "Medium", "High"]);
       expect(sentLevel(sanitizeConfigForRequest(model, configs))).toBe(
         "medium",
@@ -435,7 +433,7 @@ describe("the catalog panel for Gemini and Vertex AI", () => {
     };
     renderGeminiPanel(PROVIDER_TYPE.GEMINI, model, configs);
 
-    expect(screen.getByTestId("maxCompletionTokens-input")).toHaveValue("0");
+    expect(screen.getByTestId("maxOutputTokens-input")).toHaveValue("0");
     expect(screen.getByText(/^No limit/)).toBeInTheDocument();
     expect(
       sanitizeConfigForRequest(model, configs).maxCompletionTokens,
@@ -455,7 +453,7 @@ describe("the catalog panel for Gemini and Vertex AI", () => {
     expect(screen.getByRole("combobox")).toHaveTextContent("Auto");
     expect(screen.queryByTestId("topP-input")).not.toBeInTheDocument();
     expect(
-      screen.queryByTestId("maxCompletionTokens-input"),
+      screen.queryByTestId("maxOutputTokens-input"),
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("throttling-input")).not.toBeInTheDocument();
   });

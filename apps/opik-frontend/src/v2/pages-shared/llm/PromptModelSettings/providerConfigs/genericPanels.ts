@@ -49,6 +49,9 @@ export type GenericPanelPresentation = {
   // Gemini's slider starts at 0, which sends no limit, so a stored 0 is shown as it is rather than as
   // the catalog's default the other panels fall back to.
   zeroMeansNoLimit?: boolean;
+  // The old Gemini and Vertex AI panels mounted this slider as maxOutputTokens, and the Playwright specs
+  // still find it by that id.
+  maxOutputTokensId?: string;
   reasoningNoun: string;
   getEffortTitle: (model: string) => string;
   getEffortDescription: (model: string) => string;
@@ -132,6 +135,7 @@ const geminiFamilyPanel = (
   binding: GEMINI_PARAM_BINDING,
   storedNumbersOnly: true,
   zeroMeansNoLimit: true,
+  maxOutputTokensId: "maxOutputTokens",
   reasoningNoun: "thinking",
   getEffortTitle: () => "Thinking level",
   getEffortDescription: (model) =>

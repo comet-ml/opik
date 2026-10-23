@@ -15,6 +15,9 @@ import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -398,17 +401,23 @@ class LlmModelCatalogTest {
 
         // Gemini 2.5 Flash and Flash-Lite turn thinking off with a zero budget, which GeminiThinkingParams sends for
         // OFF. A row without it makes the catalog panel replace a saved Off with the default.
-        @Test
-        void gemini25FlashModelsOfferThinkingOff() {
-            Map.of("gemini", List.of("gemini-2.5-flash", "gemini-2.5-flash-lite"),
-                    "vertex-ai", List.of("gemini-2.5-flash", "gemini-2.5-flash-lite-preview-06-17"))
-                    .forEach((provider, ids) -> ids.forEach(id -> assertThat(registry.get(provider))
-                            .as("%s/%s", provider, id)
-                            .filteredOn(model -> model.id().equals(id))
-                            .singleElement()
-                            .extracting(model -> model.params().effort().levels())
-                            .asInstanceOf(InstanceOfAssertFactories.list(String.class))
-                            .contains("auto", "off")));
+        @ParameterizedTest(name = "{0}/{1}")
+        @MethodSource("gemini25FlashRows")
+        void gemini25FlashModelOffersThinkingOff(String provider, String id) {
+            assertThat(registry.get(provider))
+                    .filteredOn(model -> model.id().equals(id))
+                    .singleElement()
+                    .extracting(model -> model.params().effort().levels())
+                    .asInstanceOf(InstanceOfAssertFactories.list(String.class))
+                    .contains("auto", "off");
+        }
+
+        static Stream<Arguments> gemini25FlashRows() {
+            return Stream.of(
+                    Arguments.of("gemini", "gemini-2.5-flash"),
+                    Arguments.of("gemini", "gemini-2.5-flash-lite"),
+                    Arguments.of("vertex-ai", "gemini-2.5-flash"),
+                    Arguments.of("vertex-ai", "gemini-2.5-flash-lite-preview-06-17"));
         }
 
         private static Stream<ModelParams> allVariants(ModelParams params) {
