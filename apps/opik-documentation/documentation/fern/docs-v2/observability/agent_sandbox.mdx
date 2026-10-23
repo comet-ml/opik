@@ -116,6 +116,30 @@ you're happy with the results, save the edit as a new prompt version for your ag
     Parameter types are displayed as input fields in the UI. In Python they are inferred from
     type hints; in TypeScript, provide them explicitly via the `params` option.
 
+    The playground sends each input as a plain value, so entrypoint parameters must use simple
+    types:
+
+    - **Python:** `str`, `int`, `float`, `bool`, or `Optional` of one of these. `list` and
+      `dict` parameters receive the JSON text from the UI as a string, so parse it in your
+      function.
+    - **TypeScript:** `string`, `number`, or `boolean`.
+
+    Parameters with any other type, such as a LangChain chain, an LLM client, or a tracer, are
+    registered as `string` and receive the raw text from the UI, so your agent fails when it uses
+    them. Create these objects inside the entrypoint, or add a thin entrypoint that takes simple
+    inputs and calls your existing function:
+
+    ```python title="Python" wordWrap
+    chain = build_chain()
+
+    def run_chain(chain, question: str) -> str:
+        return chain.invoke({"question": question})
+
+    @opik.track(entrypoint=True, project_name="my-agent")
+    def my_agent(question: str) -> str:
+        return run_chain(chain, question)
+    ```
+
     The example creates the prompt only when it is not in the Prompt Library. If you restart
     your agent, the code does not replace the prompt versions that you saved from the playground.
 
@@ -190,6 +214,12 @@ skip the browser pairing flow entirely.
 Make sure at least one function is decorated with `@opik.track(entrypoint=True)` in Python or
 `track({ entrypoint: true }, fn)` in TypeScript. The entrypoint must be discoverable from the
 current working directory.
+
+**"Could not resolve type for parameter(s)" warning**
+
+One or more entrypoint parameters use a type that the playground cannot fill from the UI. Change
+them to a supported type, or move the object creation into the entrypoint as shown in
+[Mark your agent as an entrypoint](#getting-started).
 
 **Pairing times out**
 
