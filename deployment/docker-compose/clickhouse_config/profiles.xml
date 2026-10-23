@@ -1,0 +1,16 @@
+<!--
+  Allow sort and group-by operations to spill to disk when their working
+  memory exceeds 20% of the server memory budget, rather than OOMing the
+  whole server. This is a safety net for ad-hoc queries on large tables.
+
+  Mirrors the Helm chart block at deployment/helm_chart/opik/values.yaml
+  (under `clickhouse.configuration.files."conf.d/profiles.xml"`).
+-->
+<clickhouse>
+    <profiles>
+        <default>
+            <max_bytes_ratio_before_external_sort>0.2</max_bytes_ratio_before_external_sort>
+            <max_bytes_ratio_before_external_group_by>0.2</max_bytes_ratio_before_external_group_by>
+        </default>
+    </profiles>
+</clickhouse>
