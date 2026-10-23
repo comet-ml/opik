@@ -697,4 +697,63 @@ class ParamResolverTest {
                 LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                 new ParamChange("reasoning_effort", Reason.REFUSED_BY_MODEL)));
     }
+
+    private static final ParamChange TYPE_MOVED = new ParamChange("thinking.type", Reason.THINKING_TYPE_NOT_OFFERED);
+
+    // Probed 10-23 on Anthropic: '"thinking.type.enabled" is not supported for this model. Use "thinking.type.adaptive"
+    // and "output_config.effort" to control thinking behavior.' on each of these.
+    @ParameterizedTest
+    @ValueSource(strings = {"claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-4-7", "claude-opus-5",
+            "us.anthropic.claude-sonnet-5-5-v1:0"})
+    void turnsAThinkingBudgetTheModelRefusesIntoAdaptiveThinking(String model) {
+        var request = request(model, null, null, Map.of("thinking", Map.of("type", "enabled", "budget_tokens", 2048),
+                "max_tokens", 8000));
+
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(
+                request(model, null, null, Map.of("thinking", Map.of("type", "adaptive"), "max_tokens", 8000)),
+                TYPE_MOVED));
+    }
+
+    // Probed 10-23 on Anthropic: "adaptive thinking is not supported on this model" on each of these.
+    @ParameterizedTest
+    @ValueSource(strings = {"claude-haiku-4-5-20251001", "claude-opus-4-5-20251101", "claude-sonnet-4-5-20250929"})
+    void turnsAdaptiveThinkingTheModelRefusesIntoTheSmallestBudget(String model) {
+        var request = request(model, null, null,
+                Map.of("thinking", Map.of("type", "adaptive", "display", "summarized")));
+
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(
+                request(model, null, null, Map.of("thinking",
+                        Map.of("type", "enabled", "budget_tokens", 1024, "display", "summarized"))),
+                TYPE_MOVED));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"claude-sonnet-4-6,enabled", "claude-sonnet-4-6,adaptive", "claude-opus-5-5,adaptive",
+            "claude-haiku-4-5-20251001,enabled", "claude-sonnet-5-5,disabled", "custom-llm/gw/glm-4.6,adaptive",
+            "gemini-3.8-flash,enabled"})
+    void leavesAThinkingTypeTheModelTakesOrThatIsNotAClaudeOne(String model, String type) {
+        var request = request(model, null, null, Map.of("thinking", Map.of("type", type, "budget_tokens", 2048)));
+
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
+    }
+
+    @Test
+    void movesAJudgesThinkingTypeTheModelRefuses() {
+        assertThat(RESOLVER.resolve(judge("claude-haiku-5-5", null, """
+                {"thinking": {"type": "enabled", "budget_tokens": 2048}, "max_tokens": 8000}""")))
+                .isEqualTo(resolution(judge("claude-haiku-5-5", null, """
+                        {"thinking": {"type": "adaptive"}, "max_tokens": 8000}"""), TYPE_MOVED));
+        assertThat(RESOLVER.resolve(judge("claude-opus-4-5-20251101", null, """
+                {"thinking": {"type": "adaptive"}}""")))
+                .isEqualTo(resolution(judge("claude-opus-4-5-20251101", null, """
+                        {"thinking": {"type": "enabled", "budget_tokens": 1024}}"""), TYPE_MOVED));
+    }
+
+    @Test
+    void leavesAJudgesThinkingTypeTheModelTakes() {
+        var parameters = judge("claude-sonnet-4-6", null, """
+                {"thinking": {"type": "enabled", "budget_tokens": 2048}}""");
+
+        assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
+    }
 }
