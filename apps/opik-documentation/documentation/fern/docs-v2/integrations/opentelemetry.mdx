@@ -386,108 +386,12 @@ Run this code once, before the agent starts its first span.
 When the platform continues an incoming trace, the first span of your agent has a parent. In this case, add a root span
 for each invocation, as shown in [Troubleshooting](#troubleshooting).
 
-## Amazon SageMaker partner apps
-
-When Opik runs as an Amazon SageMaker partner app, AWS checks each request before the request gets to Opik. Each
-request must have an AWS Signature Version 4 (SigV4) signature, which includes the time and a hash of the request body.
-Static headers, such as the headers in `OTEL_EXPORTER_OTLP_HEADERS`, cannot give a signature that changes with each
-request, so AWS rejects the request with a `403` error.
-
-The Opik SDK signs its requests itself. When `AWS_PARTNER_APP_AUTH` is set, the SDK uses the `PartnerAppAuthProvider`
-of the `sagemaker` package to sign each request. An OpenTelemetry exporter does not read `AWS_PARTNER_APP_AUTH`, so you
-must sign the requests of the exporter yourself. You do not need the `sagemaker` package for this: `botocore` is
-sufficient, and AWS runtimes such as Lambda and Bedrock AgentCore already include it.
-
-Before you start, make sure that:
-
-- The `AWS_PARTNER_APP_ARN` environment variable contains the ARN of your partner app. You find it on the details page
-  of the app in Amazon SageMaker Studio.
-- The AWS role of your application has the `sagemaker:CallPartnerAppApi` permission on the partner app.
-- You know the Opik URL of the partner app. This is the value that you use for `OPIK_URL_OVERRIDE` with the Opik SDK.
-  The OpenTelemetry endpoint is this URL followed by `/v1/private/otel/v1/traces`.
-
-Add a `requests` authentication class that signs each request, and give it to the exporter in a session:
-
-```python wordWrap
-import os
-from hashlib import sha256
-
-import botocore.session
-import requests
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
-
-class PartnerAppSigV4Auth(requests.auth.AuthBase):
-    """Signs each request for a SageMaker partner app, like the PartnerAppAuthProvider of the sagemaker package."""
-
-    def __init__(self, app_arn: str):
-        self.app_arn = app_arn
-        region = app_arn.split(":")[3]
-        credentials = botocore.session.Session().get_credentials()
-        self.signer = SigV4Auth(credentials, "sagemaker", region)
-
-    def __call__(self, request: requests.PreparedRequest) -> requests.PreparedRequest:
-        # The exporter sends lowercase header names, so keep the lookups case-insensitive
-        headers = requests.structures.CaseInsensitiveDict(request.headers)
-        body = request.body or b""
-
-        # The Opik API key moves to its own header, because the SigV4 signature uses the Authorization header
-        if "Authorization" in headers:
-            headers["X-Amz-Partner-App-Authorization"] = headers.pop("Authorization")
-        headers["X-SageMaker-Partner-App-Server-Arn"] = self.app_arn
-        headers["X-Amz-Target"] = "SageMaker.CallPartnerAppApi"
-        headers["X-Amz-Content-SHA256"] = sha256(body).hexdigest()
-
-        # AWS does not include the Connection header in the signature
-        connection = headers.pop("Connection", None)
-
-        aws_request = AWSRequest(method=request.method, url=request.url, headers=dict(headers.items()), data=body)
-        self.signer.add_auth(aws_request)
-
-        signed_headers = dict(aws_request.headers.items())
-        if connection is not None:
-            signed_headers["Connection"] = connection
-        request.headers = requests.structures.CaseInsensitiveDict(signed_headers)
-        return request
-
-
-session = requests.Session()
-session.auth = PartnerAppSigV4Auth(os.environ["AWS_PARTNER_APP_ARN"])
-
-provider = TracerProvider()
-provider.add_span_processor(
-    BatchSpanProcessor(
-        OTLPSpanExporter(
-            endpoint="<your-opik-url>/v1/private/otel/v1/traces",
-            headers={
-                "Authorization": "<your-api-key>",
-                "Comet-Workspace": "<your-workspace-name>",
-                "projectName": "<your-project-name>",
-            },
-            session=session,
-        )
-    )
-)
-trace.set_tracer_provider(provider)
-```
-
-To also send the spans to another backend, use this exporter in the setup of
-[Send spans to Opik and to other backends](#send-spans-to-opik-and-to-other-backends). Only the Opik exporter uses the
-signed session.
-
 ## Troubleshooting
 
 <AccordionGroup>
   <Accordion title="The exporter gets a 401 or 403 error">
     - Make sure that the `Authorization` header contains your Opik API key, without the `Bearer ` prefix.
     - Make sure that `Comet-Workspace` is the name of a workspace that your API key can access.
-    - If Opik runs as an Amazon SageMaker partner app, sign each request. See
-      [Amazon SageMaker partner apps](#amazon-sagemaker-partner-apps).
   </Accordion>
   <Accordion title="Spans show in the Spans tab, but the Traces tab is empty">
     No span of the trace is a root span, so Opik did not create the trace.
