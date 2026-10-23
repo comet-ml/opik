@@ -965,6 +965,13 @@ export type OpenRouterParam = keyof typeof OPEN_ROUTER_PARAM_NAMES;
 
 // OpenRouter answers 200 and drops a parameter the model does not list. No list (a registry copy
 // synced before it was carried, an id OpenRouter no longer serves) keeps every control, as before.
+const OPEN_ROUTER_TEMPERATURE_MAX = 2;
+
+export const getOpenRouterTemperatureMax = (
+  model: PROVIDER_MODEL_TYPE | "" | undefined,
+): number =>
+  getLatestModelFlags(model)?.temperatureMax ?? OPEN_ROUTER_TEMPERATURE_MAX;
+
 export const supportsOpenRouterParam = (
   model: PROVIDER_MODEL_TYPE | "" | undefined,
   param: OpenRouterParam,
@@ -1046,6 +1053,11 @@ export const resolveSamplingParams = (
   if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
     if (!supportsOpenRouterParam(model, "temperature")) {
       temperature = undefined;
+    }
+    // Shown and sent clamped, never written back, like the max tokens: switching to a model with a
+    // higher cap brings the stored value back.
+    if (temperature !== undefined) {
+      temperature = Math.min(temperature, getOpenRouterTemperatureMax(model));
     }
     if (!supportsOpenRouterParam(model, "topP")) {
       topP = undefined;

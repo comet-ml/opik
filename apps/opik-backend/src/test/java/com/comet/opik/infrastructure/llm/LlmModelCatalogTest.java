@@ -395,6 +395,17 @@ class LlmModelCatalogTest {
                     .isEqualTo(expected);
         }
 
+        // Z.AI, the only provider OpenRouter routes it to, refuses a temperature above 1. The panel reads the cap here.
+        @Test
+        void theModelListCarriesGlm45sTemperatureCap() {
+            var glm = registry.get("openrouter").stream().filter(listed -> listed.id().equals("z-ai/glm-4.5"))
+                    .findFirst()
+                    .orElseThrow();
+
+            assertThat(glm.params().temperature()).isEqualTo(new ModelParams.NumberParam(true, null, BigDecimal.ONE,
+                    null));
+        }
+
         // A judge whose key has its own base URL calls tools on these models with reasoning_effort "none".
         @Test
         void everyOpenAiModelThatTakesToolsOnlyWithoutReasoningCanTurnReasoningOff() {

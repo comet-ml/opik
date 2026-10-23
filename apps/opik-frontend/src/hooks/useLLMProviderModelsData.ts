@@ -121,6 +121,7 @@ const buildFlagsIndex = (
         structuredOutput: m.structured_output,
         supportedParameters: m.supported_parameters,
         reasoningEfforts: m.reasoning_efforts,
+        temperatureMax: m.params?.temperature?.max,
       };
       index.set(
         getRoutableProviderModelValue(

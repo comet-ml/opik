@@ -34,6 +34,7 @@ export type ModelFlags = {
   structuredOutput: boolean;
   supportedParameters?: string[];
   reasoningEfforts?: string[];
+  temperatureMax?: number;
 };
 
 const buildInitialFlags = (): Map<string, ModelFlags> => {

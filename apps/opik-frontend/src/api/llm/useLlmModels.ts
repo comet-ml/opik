@@ -9,6 +9,7 @@ export type LlmModelDefinition = {
   reasoning: boolean;
   supported_parameters?: string[];
   reasoning_efforts?: string[];
+  params?: { temperature?: { max?: number } };
 };
 
 export type LlmModelsByProvider = Record<string, LlmModelDefinition[]>;

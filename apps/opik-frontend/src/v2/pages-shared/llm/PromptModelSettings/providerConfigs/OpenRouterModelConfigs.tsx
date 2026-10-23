@@ -4,6 +4,7 @@ import {
   getOpenRouterReasoningEffortOptions,
   resolveEffort,
   getOpenRouterMaxTokensLimit,
+  getOpenRouterTemperatureMax,
   resolveOpenRouterMaxTokens,
   resolveSamplingParams,
 } from "@/lib/modelUtils";
@@ -74,11 +75,11 @@ const OpenRouterModelConfigs = ({
       )}
       {visible.temperature && (
         <SliderInputControl
-          value={configs.temperature}
+          value={temperature}
           onChange={(v) => onChange({ temperature: v })}
           id="temperature"
           min={0}
-          max={2}
+          max={getOpenRouterTemperatureMax(model)}
           step={0.01}
           defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
           label="Temperature"

@@ -110,6 +110,29 @@ describe("useLLMProviderModelsData OpenRouter lists", () => {
   });
 });
 
+describe("useLLMProviderModelsData catalog limits", () => {
+  it("indexes the temperature cap the registry's params carry", () => {
+    registry.data = {
+      [PROVIDER_TYPE.OPEN_ROUTER]: [
+        {
+          id: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_5,
+          label: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_5,
+          structured_output: true,
+          reasoning: false,
+          supported_parameters: ["max_tokens", "temperature", "top_p"],
+          params: { temperature: { max: 1 } },
+        },
+      ],
+    };
+
+    renderHook(() => useLLMProviderModelsData());
+
+    expect(getLatestModelFlags(PROVIDER_MODEL_TYPE.Z_AI_GLM_4_5)).toMatchObject(
+      { temperatureMax: 1 },
+    );
+  });
+});
+
 describe("useLLMProviderModelsData model flags", () => {
   it("reads the registry's snake_case fields", () => {
     const { result } = renderHook(() => useLLMProviderModelsData());

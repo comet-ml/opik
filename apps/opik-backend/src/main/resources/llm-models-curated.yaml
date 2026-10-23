@@ -583,3 +583,6 @@ models:
   - {id: qwen/qwen3.8-flash, params: {tools: {forcedChoice: {accepted: false}}}}
   - {id: qwen/qwen3.8-max-prime, params: {tools: {forcedChoice: {accepted: false}}}}
   - {id: qwen/qwen3.8-omni-flash, params: {tools: {forcedChoice: {accepted: false}}}}
+  # OpenRouter serves it only through Z.AI, which answers temperature 1.5 with "The temperature parameter is
+  # illegal.：限制数值范围[0,1]" (probed 10-23). OpenRouter's list carries no ranges.
+  - {id: z-ai/glm-4.5, params: {temperature: {max: 1}}}
