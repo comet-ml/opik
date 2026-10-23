@@ -1,3 +1,4 @@
+import equal from "fast-deep-equal";
 import { JSONParsingError } from "../errors";
 
 /**
@@ -87,7 +88,9 @@ function extractPresumablyJsonDictOrRaise(content: string): unknown {
  * is returned. Two different objects are ambiguous, so an error is raised
  * instead of guessing by position. A brace-balanced span that fails to parse
  * is a malformed verdict and also raises: silently skipping it could score
- * garbled model output as a successful verdict.
+ * garbled model output as a successful verdict. A `{` that never closes ends
+ * the scan instead: everything after it is inside that span, so a nested
+ * object within it must not be mistaken for a top-level verdict.
  *
  * Each `{` is scanned with fresh string state (a quote in surrounding prose
  * must not swallow a later verdict), and the number of candidates is bounded
@@ -131,7 +134,7 @@ function extractUnambiguousJsonObjectOrRaise(
         if (!foundAny) {
           reference = parsed;
           foundAny = true;
-        } else if (!jsonValuesAreEqual(reference, parsed)) {
+        } else if (!equal(reference, parsed)) {
           throw new Error(
             "Ambiguous LLM output: found several different JSON objects; refusing to pick one by position"
           );
@@ -140,7 +143,10 @@ function extractUnambiguousJsonObjectOrRaise(
 
       index = content.indexOf("{", end + 1);
     } else {
-      index = content.indexOf("{", index + 1);
+      // This `{` never closes, so the rest of the content sits inside it:
+      // no later `{` can start a separate top-level object. Stepping inside
+      // would let a nested object pose as the verdict, so the scan stops.
+      break;
     }
   }
 
@@ -202,88 +208,6 @@ function findJsonValueEnd(content: string, startIndex: number): number {
  */
 const MAX_JSON_OBJECT_CANDIDATES = 64;
 
-/**
- * Caps the nesting depth compared by {@link jsonValuesAreEqual}. Model output
- * is untrusted, so the comparison runs on an explicit stack with a depth
- * limit instead of recursing into potentially adversarial nesting.
- */
-const MAX_VERDICT_COMPARE_DEPTH = 100;
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * Compares two parsed JSON values for equality, ignoring object key order.
- * Types stay distinct (`true` and `1` differ; key order does not matter).
- *
- * The comparison runs on an explicit stack with a depth cap: verdicts come
- * from untrusted model output, so unbounded recursion could overflow the
- * call stack on adversarially nested input.
- */
-function jsonValuesAreEqual(a: unknown, b: unknown): boolean {
-  const stack: Array<{ left: unknown; right: unknown; depth: number }> = [
-    { left: a, right: b, depth: 0 },
-  ];
-
-  while (stack.length > 0) {
-    const { left, right, depth } = stack.pop() as {
-      left: unknown;
-      right: unknown;
-      depth: number;
-    };
-
-    if (depth > MAX_VERDICT_COMPARE_DEPTH) {
-      throw new Error(
-        "Verdict objects are too deeply nested to compare safely"
-      );
-    }
-
-    if (typeof left !== typeof right) {
-      return false;
-    }
-
-    if (left === null || right === null || typeof left !== "object") {
-      if (left !== right) {
-        return false;
-      }
-      continue;
-    }
-
-    const leftIsArray = Array.isArray(left);
-    const rightIsArray = Array.isArray(right);
-    if (leftIsArray !== rightIsArray) {
-      return false;
-    }
-
-    if (leftIsArray && rightIsArray) {
-      if (left.length !== right.length) {
-        return false;
-      }
-      for (let index = 0; index < left.length; index += 1) {
-        stack.push({ left: left[index], right: right[index], depth: depth + 1 });
-      }
-      continue;
-    }
-
-    const leftRecord = left as Record<string, unknown>;
-    const rightRecord = right as Record<string, unknown>;
-    const leftKeys = Object.keys(leftRecord);
-    const rightKeys = Object.keys(rightRecord);
-    if (leftKeys.length !== rightKeys.length) {
-      return false;
-    }
-    for (const key of leftKeys) {
-      if (!Object.prototype.hasOwnProperty.call(rightRecord, key)) {
-        return false;
-      }
-      stack.push({
-        left: leftRecord[key],
-        right: rightRecord[key],
-        depth: depth + 1,
-      });
-    }
-  }
-
-  return true;
 }

@@ -215,6 +215,28 @@ describe("GEval Metric", () => {
       expect(result.value).toBeCloseTo(0.6);
       expect(result.reason).toBe("Repeated");
     });
+
+    it("should score a single verdict through the generateString fallback", async () => {
+      mockGenerateProviderResponse.mockRejectedValueOnce(
+        new Error("Provider error")
+      );
+      mockGenerateString
+        .mockResolvedValueOnce("CoT steps")
+        .mockResolvedValueOnce(
+          JSON.stringify({ score: 6, reason: "Single" })
+        );
+
+      const metric = new GEval({
+        taskIntroduction: "Evaluate fallback.",
+        evaluationCriteria: "Score fallback.",
+        trackMetric: false,
+      });
+
+      const result = await metric.score({ output: "Test output" });
+
+      expect(result.value).toBeCloseTo(0.6);
+      expect(result.reason).toBe("Single");
+    });
   });
 
   describe("CoT caching", () => {

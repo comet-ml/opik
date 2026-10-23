@@ -235,6 +235,26 @@ describe("extractJsonContentOrRaise", () => {
 });
 
 describe("review feedback hardening", () => {
+  it("should not let a nested object inside an unclosed object become the verdict", () => {
+    const unclosedOuter = '{"draft": {"score": 0.9, "reason": "inner"}';
+
+    expect(() => extractJsonContentOrRaise(unclosedOuter)).toThrow(
+      JSONParsingError
+    );
+  });
+
+  it("should return a complete verdict when a trailing repeat is truncated", () => {
+    const truncatedRepeat =
+      '{"score": 0.8, "reason": "Good"}\n' +
+      '{"score": 0.8, "reason": "Good", "detail": {"x": 1}';
+    const result = extractJsonContentOrRaise(truncatedRepeat);
+
+    expect(result).toEqual({
+      score: 0.8,
+      reason: "Good",
+    });
+  });
+
   it("should throw error when a trailing verdict object is malformed", () => {
     const malformedRepeat =
       '{"score": 0.8, "reason": "Good"}\n{"score": broken}';
@@ -258,16 +278,14 @@ describe("review feedback hardening", () => {
     }
   });
 
-  it("should throw error instead of overflowing the stack on deeply nested repeated verdicts", () => {
+  it("should compare deeply nested repeated verdicts without overflowing the stack", () => {
     let nested = '{"verdict": true}';
     for (let depth = 0; depth < 150; depth += 1) {
       nested = `{"nested": ${nested}}`;
     }
     const repeated = `${nested}\n${nested}`;
 
-    expect(() => extractJsonContentOrRaise(repeated)).toThrow(
-      JSONParsingError
-    );
+    expect(extractJsonContentOrRaise(repeated)).toEqual(JSON.parse(nested));
   });
 
   it("should throw error when output contains more object candidates than the scan bound", () => {
