@@ -1,7 +1,13 @@
-import { test, expect, REGISTRY_MODEL, OPEN_ROUTER_MAX_TOKENS_LIMIT } from '@e2e/fixtures';
+import {
+  test,
+  expect,
+  REGISTRY_MODEL,
+  OPEN_ROUTER_MAX_TOKENS_LIMIT,
+  OPEN_ROUTER_GROUP,
+  IMAGE_ONLY_PROMPT_CONTENT,
+} from '@e2e/fixtures';
 import type { Page } from '@playwright/test';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
-import { OPEN_ROUTER_GROUP, IMAGE_ONLY_PROMPT_CONTENT } from '@e2e/fixtures';
 
 /**
  * The Playground's media gate must read an OpenRouter model's modality flags
