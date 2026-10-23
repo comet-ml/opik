@@ -883,6 +883,9 @@ navigation:
               - page: DeepSeek
                 path: ./docs-v2/integrations/deepseek.mdx
                 slug: deepseek
+              - page: EmpirioLabs AI
+                path: ./docs-v2/integrations/empiriolabs.mdx
+                slug: empiriolabs
               - page: Fireworks AI
                 path: ./docs-v2/integrations/fireworks-ai.mdx
                 slug: fireworks-ai

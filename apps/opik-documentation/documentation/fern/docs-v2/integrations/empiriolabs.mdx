@@ -1,0 +1,203 @@
+---
+description: Start here to integrate Opik into your EmpirioLabs AI-based genai application
+  for end-to-end LLM observability, unit testing, and optimization.
+headline: EmpirioLabs AI
+og:description: Learn to integrate Opik with EmpirioLabs AI using the OpenAI SDK to
+  trace and evaluate your model calls.
+og:site_name: Opik Documentation
+og:title: Integrate Opik with EmpirioLabs AI for AI Observability
+title: Observability for EmpirioLabs AI with Opik
+---
+
+[EmpirioLabs AI](https://empiriolabs.ai) is specialized AI model hosting for open, proprietary, and custom stacks. It runs open-source models on GPU infrastructure it manages, serves optimized endpoints for proprietary models, and helps teams deploy their own models to real users.
+
+This guide explains how to integrate Opik with EmpirioLabs AI using the OpenAI SDK. EmpirioLabs AI provides an OpenAI-compatible API, so you can use the standard OpenAI client with EmpirioLabs AI models.
+
+## Getting started
+
+First, ensure you have both `opik` and `openai` packages installed:
+
+```bash wordWrap
+pip install opik openai
+```
+
+You'll also need an EmpirioLabs AI API key, which you can create on the [API keys page](https://platform.empiriolabs.ai/dashboard/api-keys).
+
+## Tracking EmpirioLabs AI API calls
+
+```python wordWrap
+import os
+
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+# Initialize the OpenAI client with the EmpirioLabs AI base URL
+client = OpenAI(
+    base_url="https://api.empiriolabs.ai/v1",
+    api_key=os.environ["EMPIRIOLABS_API_KEY"],
+)
+client = track_openai(client, provider="empiriolabs")
+
+response = client.chat.completions.create(
+    model="qwen3-8-flash",  # You can use any chat model available on EmpirioLabs AI
+    messages=[
+        {"role": "user", "content": "Hello, world!"}
+    ],
+    temperature=0.7,
+    max_tokens=100
+)
+
+print(response.choices[0].message.content)
+```
+
+Passing `provider="empiriolabs"` records EmpirioLabs AI as the provider on each LLM span. Without it, Opik records the base URL host.
+
+## Available Models
+
+The EmpirioLabs AI catalog spans text, image, video, audio, transcription, embedding, reranking, research, and 3D models. The chat models, such as `qwen3-7-max` and `qwen3-8-flash`, work with the tracking shown on this page.
+
+You can find the complete list of available models in the [EmpirioLabs AI model catalog](https://docs.empiriolabs.ai/models-pricing).
+
+## Supported Methods
+
+EmpirioLabs AI supports the following methods through the OpenAI SDK:
+
+### Chat Completions
+
+- `client.chat.completions.create()`: Works with every chat model in the catalog
+- Supports streaming with `stream=True`
+- Compatible with the OpenAI SDK interface
+
+### Structured Outputs
+
+- `client.chat.completions.parse()`: Works with models that support JSON Schema output, such as `qwen3-8-flash`
+- Each model's page in the [model catalog](https://docs.empiriolabs.ai/models-pricing) lists its structured output support
+
+Define the schema as a Pydantic model, pass it as `response_format`, and read the result from `message.parsed`:
+
+```python wordWrap
+from pydantic import BaseModel
+
+
+class City(BaseModel):
+    name: str
+    country: str
+
+
+completion = client.chat.completions.parse(
+    model="qwen3-8-flash",
+    messages=[
+        {"role": "user", "content": "Name one city in Japan."}
+    ],
+    response_format=City,
+)
+
+city = completion.choices[0].message.parsed
+print(city.name, city.country)
+```
+
+For detailed information about available methods and parameters, refer to the [EmpirioLabs AI documentation](https://docs.empiriolabs.ai).
+
+## Advanced Usage
+
+### Using with @track decorator
+
+You can combine the tracked client with Opik's `@track` decorator for comprehensive tracing:
+
+```python wordWrap
+import os
+
+from opik import track
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.empiriolabs.ai/v1",
+    api_key=os.environ["EMPIRIOLABS_API_KEY"],
+)
+client = track_openai(client, provider="empiriolabs")
+
+@track
+def analyze_data_with_ai(query: str):
+    """Analyze data using EmpirioLabs AI models."""
+
+    response = client.chat.completions.create(
+        model="qwen3-8-flash",
+        messages=[
+            {"role": "user", "content": query}
+        ]
+    )
+
+    return response.choices[0].message.content
+
+# Call the tracked function
+result = analyze_data_with_ai("Analyze this business data...")
+```
+
+### Streaming Responses
+
+EmpirioLabs AI supports streaming responses:
+
+```python wordWrap
+response = client.chat.completions.create(
+    model="qwen3-8-flash",
+    messages=[
+        {"role": "user", "content": "Tell me a story about AI"}
+    ],
+    stream=True
+)
+
+for chunk in response:
+    if chunk.choices and chunk.choices[0].delta.content is not None:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+## Environment Variables
+
+Make sure to set the following environment variables:
+
+```bash wordWrap
+# EmpirioLabs AI Configuration
+export EMPIRIOLABS_API_KEY="your-empiriolabs-api-key"
+
+# Opik Configuration
+export OPIK_PROJECT_NAME="your-project-name"
+export OPIK_WORKSPACE="your-workspace-name"
+```
+
+## Results viewing
+
+Once your EmpirioLabs AI calls are logged with Opik, you can view them in the Opik UI. Each API call will create a trace with detailed information including:
+
+- Input messages and parameters
+- Model used and configuration
+- Response content
+- Token usage
+- Timing and performance metrics
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Authentication Errors**: Ensure your API key is correct and active
+2. **Model Not Found**: Verify the model ID matches one listed in the EmpirioLabs AI model catalog
+3. **Rate Limiting**: If a request is rate limited, retry it with exponential backoff
+4. **Base URL Issues**: Ensure the base URL is `https://api.empiriolabs.ai/v1`
+
+### Getting Help
+
+- Check the [EmpirioLabs AI documentation](https://docs.empiriolabs.ai) for API details
+- Review the [EmpirioLabs AI status page](https://status.empiriolabs.ai) for service issues
+- Contact [EmpirioLabs AI support](mailto:support@empiriolabs.ai) for API-specific problems
+- Check Opik documentation for tracing and evaluation features
+
+## Next Steps
+
+Once you have EmpirioLabs AI integrated with Opik, you can:
+
+- [Evaluate your LLM applications](/evaluation/overview) using Opik's evaluation framework
+- [Create datasets](/evaluation/advanced/manage_datasets) to test and improve your models
+- [Set up feedback collection](/tracing/advanced/annotate_traces) to gather human evaluations
+- [Monitor performance](/tracing/concepts) across different models and configurations
+
+For more information about using Opik with OpenAI-compatible APIs, see the [OpenAI integration guide](/integrations/openai).
