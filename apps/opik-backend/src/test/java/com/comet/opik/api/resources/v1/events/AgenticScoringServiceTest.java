@@ -171,6 +171,9 @@ class AgenticScoringServiceTest {
                 arguments(LlmProvider.ANTHROPIC, "claude-sonnet-4-6", thinkingBudget, ToolChoice.AUTO),
                 arguments(LlmProvider.ANTHROPIC, "claude-sonnet-4-6", adaptiveThinking, ToolChoice.REQUIRED),
                 arguments(LlmProvider.ANTHROPIC, "claude-sonnet-4-6", effort, ToolChoice.REQUIRED),
+                arguments(LlmProvider.ANTHROPIC, "claude-haiku-4-5-20251001", adaptiveThinking, ToolChoice.AUTO),
+                arguments(LlmProvider.ANTHROPIC, "claude-opus-4-5-20251101", adaptiveThinking, ToolChoice.AUTO),
+                arguments(LlmProvider.ANTHROPIC, "claude-opus-4-7", thinkingBudget, ToolChoice.REQUIRED),
                 arguments(LlmProvider.OPEN_AI, "gpt-6-luna", null, ToolChoice.REQUIRED));
     }
 
