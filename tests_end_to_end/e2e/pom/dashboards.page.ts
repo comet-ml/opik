@@ -1,6 +1,7 @@
 import type { Page, Locator } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { openWidgetConfigDialog } from './add-widget-control';
 
 /** The dashboard date-range presets, labelled as the control renders them. */
 export type DashboardDateRange =
@@ -85,9 +86,14 @@ export class DashboardsPage {
    */
   async addWorkspaceSpanTokenUsageWidget(): Promise<void> {
     await test.step('Add a workspace-scoped Span token usage widget', async () => {
-      await this.page.getByRole('button', { name: 'Add widget' }).first().click();
-      const dialog = this.page.getByRole('dialog');
-      await dialog.waitFor({ state: 'visible' });
+      // `.first()` because the dialog's own submit button carries the same name;
+      // only the header control exists before it opens. Whether that control is
+      // a plain button or a dropdown trigger depends on whether Ollie is
+      // available on the target, so the branch lives in one shared helper.
+      const dialog = await openWidgetConfigDialog(
+        this.page,
+        this.page.getByRole('button', { name: 'Add widget' }).first(),
+      );
 
       await dialog.getByRole('checkbox', { name: 'All projects in the workspace' }).click();
       await dialog
@@ -123,9 +129,11 @@ export class DashboardsPage {
    */
   async addProjectSpanTokenUsageWidget(projectName: string): Promise<void> {
     await test.step(`Add a Span token usage widget scoped to "${projectName}"`, async () => {
-      await this.page.getByRole('button', { name: 'Add widget' }).first().click();
-      const dialog = this.page.getByRole('dialog');
-      await dialog.waitFor({ state: 'visible' });
+      // See `addWorkspaceSpanTokenUsageWidget` on the `.first()` and the helper.
+      const dialog = await openWidgetConfigDialog(
+        this.page,
+        this.page.getByRole('button', { name: 'Add widget' }).first(),
+      );
 
       await dialog.getByRole('button', { name: 'Select projects' }).click();
       const projectPopover = this.page.locator('[data-radix-popper-content-wrapper]');
