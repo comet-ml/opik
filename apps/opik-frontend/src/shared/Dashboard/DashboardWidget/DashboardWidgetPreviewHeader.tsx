@@ -38,20 +38,27 @@ const DashboardWidgetPreviewHeader: React.FunctionComponent<
 
   return (
     <div className={cn("flex flex-col gap-0.5 pt-1", className)}>
-      <InlineEditableText
-        value={displayTitle}
-        placeholder={titlePlaceholder}
-        defaultValue={generatedTitle}
-        onChange={handleTitleChange}
-        isTitle
-        rightIcon={
-          infoMessage ? (
-            <TooltipWrapper content={infoMessage}>
-              <Info className="size-3 shrink-0 text-light-slate" />
-            </TooltipWrapper>
-          ) : undefined
-        }
-      />
+      <div className="flex items-center gap-1.5">
+        <InlineEditableText
+          value={displayTitle}
+          placeholder={titlePlaceholder}
+          defaultValue={generatedTitle}
+          onChange={handleTitleChange}
+          isTitle
+          className="min-w-0 flex-1"
+        />
+        {infoMessage && (
+          <TooltipWrapper content={infoMessage}>
+            <button
+              type="button"
+              aria-label="Widget information"
+              className="shrink-0"
+            >
+              <Info className="size-3 text-light-slate" />
+            </button>
+          </TooltipWrapper>
+        )}
+      </div>
       <InlineEditableText
         value={subtitle || ""}
         placeholder="Click to add a description"

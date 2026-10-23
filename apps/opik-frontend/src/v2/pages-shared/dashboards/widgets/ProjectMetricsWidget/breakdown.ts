@@ -79,10 +79,10 @@ const SPAN_METRICS = [
 
 const ALL_METRIC_TYPES = [...TRACE_METRICS, ...THREAD_METRICS, ...SPAN_METRICS];
 
-const METRICS_WITHOUT_BREAKDOWN_SUPPORT: string[] = [
-  METRIC_TYPES.THREAD_COST,
-  METRIC_TYPES.SPAN_COST,
-];
+const METRICS_WITHOUT_BREAKDOWN_SUPPORT: string[] = [METRIC_TYPES.THREAD_COST];
+
+export const TAG_COST_BREAKDOWN_DESCRIPTION =
+  "Costs are counted in full under every matching tag. Tag groups overlap, so adding them can exceed actual spend.";
 
 const withBreakdownSupport = (metrics: string[]) =>
   metrics.filter(

@@ -14,9 +14,12 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
@@ -95,7 +98,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 .interval(request.interval());
 
         if (request.hasBreakdown()) {
-            builder.results(processBreakdownEntries(entries));
+            builder.results(processBreakdownEntries(entries, request.metricType()));
         } else {
             builder.results(entriesToResults(entries));
         }
@@ -103,7 +106,8 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
         return builder.build();
     }
 
-    private List<ProjectMetricResponse.Results<Number>> processBreakdownEntries(List<ProjectMetricsDAO.Entry> entries) {
+    private List<ProjectMetricResponse.Results<Number>> processBreakdownEntries(List<ProjectMetricsDAO.Entry> entries,
+            MetricType metricType) {
         if (entries.isEmpty()) {
             return List.of();
         }
@@ -150,6 +154,26 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                             .groupName(BreakdownQueryBuilder.OTHERS_GROUP_NAME)
                             .build())
                     .toList();
+            if (metricType == MetricType.SPAN_COST || metricType == MetricType.COST) {
+                // Cost is additive. Keep one exact decimal sum per bucket, ordered by time.
+                // Other metrics (for example quantiles and feedback averages) need their own aggregation rules.
+                Map<Instant, BigDecimal> costsByTime = new TreeMap<>();
+                othersEntries.forEach(entry -> costsByTime.merge(entry.time(), switch (entry.value()) {
+                    case null -> BigDecimal.ZERO;
+                    case BigDecimal decimal -> decimal;
+                    default -> new BigDecimal(entry.value().toString());
+                },
+                        BigDecimal::add));
+                String name = othersEntries.getFirst().name();
+                othersEntries = costsByTime.entrySet().stream()
+                        .map(entry -> ProjectMetricsDAO.Entry.builder()
+                                .name(name)
+                                .time(entry.getKey())
+                                .value(entry.getValue())
+                                .groupName(BreakdownQueryBuilder.OTHERS_GROUP_NAME)
+                                .build())
+                        .toList();
+            }
             resultGroups.put(BreakdownQueryBuilder.OTHERS_GROUP_NAME, othersEntries);
         }
 
