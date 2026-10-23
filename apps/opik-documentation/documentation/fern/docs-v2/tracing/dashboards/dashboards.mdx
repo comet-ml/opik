@@ -53,8 +53,8 @@ Every workspace dashboard has a type, which sets the widgets you can add:
 
 | Type | Use it to | Widgets |
 | --- | --- | --- |
-| **Multi-project** | Track traces, threads, spans, cost, and latency across one or more projects | Time series, Single metric, Markdown |
-| **Experiments** | Compare feedback scores across experiment runs | Metrics, Leaderboard, Markdown |
+| **Multi-project** | Track traces, threads, spans, cost, and latency across one or more projects | Time series, Single metric, Markdown, Ollie chart |
+| **Experiments** | Compare feedback scores across experiment runs | Metrics, Leaderboard, Markdown, Ollie chart |
 
 ### Creating a workspace dashboard
 
@@ -88,7 +88,7 @@ To track experiments over time or build your own charts, create an **Experiments
 
 ## Adding widgets
 
-1. Click **Add widget** in the header of a section.
+1. Click **Add widget** in the header of a section. On Opik Cloud, where [Ollie](/ollie) is available, the button opens a menu: choose **Pick a chart** for a built-in widget, or **Ask Ollie** to describe a custom one (see [Custom widgets with Ollie](#custom-widgets-with-ollie)).
 2. Pick a **Widget type**. The list depends on the dashboard type.
 3. Fill in the settings for that widget type. The **Widget preview** on the right updates as you go.
 4. Optionally, click the title or **Click to add a description** in the preview to rename the widget or describe it.
@@ -99,9 +99,8 @@ To track experiments over time or build your own charts, create an **Experiments
 </Frame>
 
 <Tip>
-  On Opik Cloud workspaces with Ollie and custom charts enabled, the dialog also shows **Need a custom widget? Ask
-  Ollie**. Describe the chart you want and Ollie builds it, then you add it to the dashboard as an **Ollie chart**
-  widget.
+  Need a chart that no built-in widget covers? Click **Ask Ollie** next to **Need a custom widget?** at the bottom of
+  the dialog, or read [Custom widgets with Ollie](#custom-widgets-with-ollie).
 </Tip>
 
 ## Widget types
@@ -190,6 +189,82 @@ Adds text, links, and notes to a dashboard, for example a description of what th
   <img src="/img/production/dashboard_widget_markdown_text.png" alt="A markdown widget with an on-call checklist" />
 </Frame>
 
+### Ollie chart
+
+A chart or table that Ollie built from a description you typed, backed by a query over your workspace data. It isn't in the **Pick a chart** list: you create one by asking Ollie, as described in [Custom widgets with Ollie](#custom-widgets-with-ollie). Available on all dashboards on Opik Cloud.
+
+## Custom widgets with Ollie
+
+When no built-in widget shows what you need, describe the chart to [Ollie](/ollie). Ollie writes a read-only query over your workspace's traces, spans, threads, feedback scores, experiments, and datasets, draws the chart in the chat, and adds it to a dashboard as an **Ollie chart** widget. The widget keeps the query and re-runs it whenever the dashboard loads, so the chart stays live.
+
+<Note>
+  Custom widgets are available on Opik Cloud, where Ollie is available. Ollie's queries are read-only and limited to
+  the workspace you are in.
+</Note>
+
+### Ask Ollie for a widget
+
+<Steps>
+  <Step title="Open Ollie from the dashboard">
+    Start from the dashboard the widget belongs on, so Ollie can add the chart there in one click:
+
+    - Click **Add widget** in a section header and choose **Ask Ollie**.
+    - In an empty section, click the **Ask Ollie** card.
+    - In the **Add widget** dialog, click **Ask Ollie** next to **Need a custom widget?**.
+
+    Ollie opens in the sidebar and asks what the widget should show. You can also open Ollie from any other page and ask for a chart; you then pick the dashboard when you add it.
+  </Step>
+  <Step title="Describe the chart">
+    Say what to measure, how to break it down, and which period to cover. For example:
+
+    - *"Average trace duration per day for the last 7 days, one line per tag."*
+    - *"Total tokens by model over the last 30 days, as a bar chart."*
+    - *"A table of the 10 slowest tool spans with their name and duration."*
+    - *"Average hallucination score per experiment on the support-bot dataset."*
+
+    Ollie writes the query, runs it, and shows the result in the chat. It can draw bar, line, area, scatter, bubble, pie and donut, heatmap, histogram, box plot, funnel, gauge, and waterfall charts, and it can show a table. It can't draw radar, treemap, sunburst, sankey, network, or map charts, or put two y-axes on one chart: it offers the closest chart, or one chart per metric, instead.
+
+    Reply in the chat to refine the result: *"make it a line chart"*, *"group by model instead"*, *"last 14 days"*. Ollie redraws the chart in place.
+  </Step>
+  <Step title="Add it to a dashboard">
+    Click **Add to “Dashboard name”** on the chart card to add the chart to the dashboard you started from. **Add to different dashboard** (or **Add to dashboard…** when you started from another page) lists the other dashboards the chart can go on and lets you create a new one. You can also ask in the chat: *"add it to the Latency dashboard"*.
+
+    The widget lands in the first section of the dashboard, and an open dashboard reloads to show it. From then on it behaves like any other widget: move it, resize it, or [edit it in Ollie](#editing-an-ollie-chart).
+  </Step>
+</Steps>
+
+A chart can only go on a dashboard of its kind. Ollie knows which dashboards fit and offers only those:
+
+| The chart is about | It can go on |
+| --- | --- |
+| Traces, spans, threads, or feedback scores | Project dashboards and Multi-project workspace dashboards |
+| Experiments, experiment items, or datasets | Experiments workspace dashboards |
+
+From the built-in **Project overview**, Ollie adds the chart to one of the project's own views, or creates a new one, because the built-in view can't be edited.
+
+### How an Ollie chart widget works
+
+- The title carries an owl badge, **Created with Ollie**. The header shows when the chart was last computed, with a refresh icon next to it.
+- Each time the dashboard loads, the widget re-runs its query. On project dashboards and Multi-project dashboards it uses the dashboard's [date range](#date-range), so changing the range changes the chart. Experiments dashboards have no date range, so the widget shows whatever period the query covers.
+- The widget's **...** menu offers **Edit in Ollie**, **Refresh**, **Duplicate**, and **Remove**.
+- The query is read-only, scoped to your workspace, and only Ollie can create or change it.
+
+### Editing an Ollie chart
+
+1. Open the widget's **...** menu and click **Edit in Ollie**.
+2. Ollie opens with the current chart pinned at the top of the chat, marked **On the dashboard now**. Describe what to change, for example *"show it as a line chart"* or *"group by provider instead of model"*.
+3. Under the redrawn chart, click **Save changes** to replace the widget in place, keeping its position and size, or **Duplicate** to add the new version next to the original.
+
+If Ollie isn't available, the menu shows **Edit** instead, which opens the chart's Vega-Lite spec for manual changes.
+
+### When a widget shows a message instead of a chart
+
+| Message | Why | What to do |
+| --- | --- | --- |
+| **No data for the selected period** | The query returned no rows for the current date range | Widen the date range, or ask Ollie to loosen the filters |
+| **Query not found** | The query behind the widget no longer exists | Ask Ollie to create the chart again, then remove the old widget |
+| **Data is masked** | Sensitive data is masked for your account in this workspace, and a chart from a custom query can't be masked | Ask a workspace admin for access to the original data |
+
 ## Organizing a dashboard
 
 **Sections** group widgets:
@@ -203,13 +278,13 @@ Adds text, links, and notes to a dashboard, for example a description of what th
 **Widgets** sit on a six-column grid:
 
 - Drag a widget to move it, and drag its edge to resize it.
-- Use the widget **...** menu to **Edit widget**, **Duplicate widget**, **Move to section**, or **Delete widget**.
+- Use the widget **...** menu to **Edit widget**, **Duplicate widget**, **Move to section**, or **Delete widget**. An Ollie chart's menu offers **Edit in Ollie**, **Refresh**, **Duplicate**, and **Remove** instead.
 
 ## Date range
 
 Project dashboards and Multi-project dashboards have a date range picker in the toolbar. Pick **Past 24 hours**, **Past 3 days**, **Past 7 days**, **Past 30 days**, **Past 60 days**, or **Custom dates**. The default is the past 30 days.
 
-Time series and Single metric widgets use the date range. Experiments dashboards and experiment insights have no date range: they always show the selected experiments.
+Time series, Single metric, and Ollie chart widgets use the date range. Experiments dashboards and experiment insights have no date range: they always show the selected experiments.
 
 ## Saving and permissions
 
@@ -226,3 +301,4 @@ Click **Share** to copy a link to the dashboard. The link includes the selected 
 - Set up [online evaluation rules](/production/online-evaluation/rules) to score production traces and chart the scores on your dashboards.
 - Configure [alerts](/production/alerts/alerts) to get notified when a metric crosses a threshold.
 - Read [Production monitoring](/tracing/dashboards/production_monitoring) for more ways to monitor agents in production.
+- Meet [Ollie](/ollie), the assistant that builds custom widgets and helps you debug the traces behind them.
