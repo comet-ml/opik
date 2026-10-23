@@ -139,10 +139,6 @@ Opik treats a span as a root span when one of these conditions is true:
   not load.
 </Warning>
 
-This problem occurs when the instrumentation continues a trace that started in a different process. For example, a
-runtime such as Amazon Bedrock AgentCore or an API gateway sends a trace context with each request. The first span of
-your agent is then a child of a span that Opik never receives.
-
 To find out if you have this problem, print your spans with the `ConsoleSpanExporter` and look at the `parent_id` field.
 At least one span of each trace must have `"parent_id": null`.
 
@@ -525,8 +521,14 @@ signed session.
       [Amazon SageMaker partner apps](#amazon-sagemaker-partner-apps).
   </Accordion>
   <Accordion title="Spans show in the Spans tab, but the Traces tab is empty">
-    No span of the trace is a root span, so Opik did not create the trace. Add a root span at the start of each agent
-    invocation. See [How Opik builds traces from spans](#how-opik-builds-traces-from-spans).
+    No span of the trace is a root span, so Opik did not create the trace.
+
+    This problem occurs when the instrumentation continues a trace that started in a different process. For example, a
+    runtime such as Amazon Bedrock AgentCore or an API gateway sends a trace context with each request. The first span
+    of your agent is then a child of a span that Opik never receives.
+
+    Add a root span at the start of each agent invocation. See
+    [How Opik builds traces from spans](#how-opik-builds-traces-from-spans).
   </Accordion>
   <Accordion title="Spans show under a different trace, or under no trace">
     All the spans of a trace must go to the same project. If you set `opik.project_name`, set it as a resource
