@@ -2,8 +2,10 @@ package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.filter.Field;
+import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
+import com.comet.opik.domain.filter.JsonPathUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
@@ -99,6 +101,12 @@ public abstract class FilterEvaluationServiceBase<E> {
     public boolean matchesFilter(Filter filter, E entity) {
         try {
             Field field = filter.field();
+            if (field.getType() == FieldType.DICTIONARY
+                    && StringUtils.isNotBlank(filter.key())
+                    && JsonPathUtils.hasAmbiguousDottedPlainKey(filter.key())) {
+                return matchesAmbiguousDictionaryFilter(filter, entity);
+            }
+
             Object fieldValue = extractFieldValue(field, filter.key(), entity);
 
             return evaluateOperator(filter.operator(), fieldValue, filter.value());
@@ -107,6 +115,24 @@ public abstract class FilterEvaluationServiceBase<E> {
                     getEntityId(entity), e);
             return false; // If we can't evaluate the filter, consider it a non-match
         }
+    }
+
+    private boolean matchesAmbiguousDictionaryFilter(Filter filter, E entity) {
+        var jsonRoot = extractFieldValue(filter.field(), null, entity);
+        var nestedValue = extractNestedValue(jsonRoot, filter.key());
+        var literalFlatKeyValue = extractJsonPathValue(jsonRoot,
+                JsonPathUtils.toAnalyticsDbLiteralFlatKeyPath(filter.key()));
+        var nestedMatches = evaluateOperator(filter.operator(), nestedValue, filter.value());
+        var literalMatches = evaluateOperator(filter.operator(), literalFlatKeyValue, filter.value());
+        return combineAmbiguousDictionaryMatches(filter.operator(), nestedMatches, literalMatches);
+    }
+
+    private static boolean combineAmbiguousDictionaryMatches(Operator operator, boolean nestedMatches,
+            boolean literalMatches) {
+        return switch (operator) {
+            case IS_EMPTY, NOT_CONTAINS, NOT_EQUAL -> nestedMatches && literalMatches;
+            default -> nestedMatches || literalMatches;
+        };
     }
 
     /**
@@ -168,6 +194,26 @@ public abstract class FilterEvaluationServiceBase<E> {
             return JsonPath.using(JSON_PATH_CONFIG).parse(jsonString).read(jsonPath);
         } catch (Exception e) {
             log.warn("Failed to extract nested value with JSONPath '{}'", jsonPath, e);
+            return null;
+        }
+    }
+
+    private Object extractJsonPathValue(Object jsonValue, String jsonPath) {
+        if (ObjectUtils.anyNull(jsonValue, jsonPath)) {
+            return null;
+        }
+
+        try {
+            String jsonString;
+            if (jsonValue instanceof String str) {
+                jsonString = str;
+            } else {
+                jsonString = JsonUtils.writeValueAsString(jsonValue);
+            }
+
+            return JsonPath.using(JSON_PATH_CONFIG).parse(jsonString).read(jsonPath);
+        } catch (Exception e) {
+            log.warn("Failed to extract value with JSONPath '{}'", jsonPath, e);
             return null;
         }
     }
