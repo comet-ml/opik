@@ -78,10 +78,6 @@ openai:
     label: "GPT 4.1 Mini"
     structuredOutput: true
     params: {maxOutputTokens: {max: 32768}}
-  - id: "gpt-4.1-nano"
-    label: "GPT 4.1 Nano"
-    structuredOutput: true
-    params: {maxOutputTokens: {max: 32768}}
   - id: "gpt-4o"
     label: "GPT 4o"
     structuredOutput: true
@@ -90,28 +86,9 @@ openai:
     label: "GPT 4o Mini"
     structuredOutput: true
     params: {maxOutputTokens: {max: 16384}}
-  - id: "gpt-4"
-    label: "GPT 4"
-    params: {maxOutputTokens: {max: 4096}}
-  - id: "gpt-4-turbo"
-    label: "GPT 4 Turbo"
-    params: {maxOutputTokens: {max: 4096}}
-  - id: "o4-mini"
-    label: "GPT o4 Mini"
-    structuredOutput: true
-    reasoning: true
-    params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "o3"
     label: "GPT o3"
     structuredOutput: true
-    reasoning: true
-    params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
-  - id: "o3-mini"
-    label: "GPT o3 Mini"
-    reasoning: true
-    params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
-  - id: "o1"
-    label: "GPT o1"
     reasoning: true
     params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "chatgpt-4o-latest"
@@ -127,15 +104,22 @@ openai:
     params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-3.5-turbo-instruct-0914"
     params: {maxOutputTokens: {max: 4097}}
+  - id: "gpt-4"
+    params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-4-0125-preview"
   - id: "gpt-4-0314"
   - id: "gpt-4-0613"
     params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-4-1106-preview"
     params: {maxOutputTokens: {max: 4096}}
+  - id: "gpt-4-turbo"
+    params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-4-turbo-2024-04-09"
     params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-4-turbo-preview"
+  - id: "gpt-4.1-nano"
+    structuredOutput: true
+    params: {maxOutputTokens: {max: 32768}}
   - id: "gpt-4o-2024-05-13"
     params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-4o-2024-08-06"
@@ -204,6 +188,9 @@ openai:
   - id: "gpt-image-2.5-flare"
   - id: "gpt-image-2.5-sunburst"
   - id: "gpt-live-1"
+  - id: "o1"
+    reasoning: true
+    params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "o1-2024-12-17"
     reasoning: true
     params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
@@ -223,7 +210,14 @@ openai:
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
+  - id: "o3-mini"
+    reasoning: true
+    params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "o3-pro"
+    structuredOutput: true
+    reasoning: true
+    params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
+  - id: "o4-mini"
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
@@ -365,9 +359,6 @@ gemini:
   - id: "gemma-4-31b-it"
     label: "Gemma 4 31B IT"
     params: {maxOutputTokens: {max: 32768}}
-  - id: "gemini-nano-banana-2.1"
-    label: "Nano Banana 2.1"
-    params: {maxOutputTokens: {max: 32768}}
   - id: "aqa"
   - id: "gemini-1.0-pro"
   - id: "gemini-1.5-flash-latest"
@@ -405,6 +396,8 @@ gemini:
   - id: "gemini-3.8-flash-tts"
     params: {maxOutputTokens: {max: 16384}}
   - id: "gemini-flash-latest-high-res-exp"
+  - id: "gemini-nano-banana-2.1"
+    params: {maxOutputTokens: {max: 32768}}
   - id: "gemini-omni-1.1-flash"
     params: {maxOutputTokens: {max: 65536}}
   - id: "gemini-omni-flash-preview"
@@ -1289,7 +1282,7 @@ openrouter:
   - id: "moonshotai/kimi-k3"
     label: "moonshotai/kimi-k3"
     structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 943718}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: max}}
   - id: "morph/morph-v3-fast"
@@ -2129,7 +2122,7 @@ openrouter:
     label: "typesafe/jev-router"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_a, top_k, top_p]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true}, stop: {accepted: true}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: true}}
   - id: "unbiased/pareto-26.10"
     label: "unbiased/pareto-26.10"
     supportedParameters: [max_tokens, temperature, top_p]
@@ -2208,13 +2201,13 @@ openrouter:
   - id: "xiaomi/mimo-v2.5"
     label: "xiaomi/mimo-v2.5"
     structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 945000}, stop: {accepted: true}}
   - id: "xiaomi/mimo-v2.5-pro"
     label: "xiaomi/mimo-v2.5-pro"
     structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 945000}, stop: {accepted: true}}
+    supportedParameters: [max_tokens, reasoning, temperature, top_p]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 945000}, stop: {accepted: false}}
   - id: "xiaomi/mimo-v2.6-flash"
     label: "xiaomi/mimo-v2.6-flash"
     structuredOutput: true
@@ -2359,7 +2352,7 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_a, top_k, top_p]
     reasoningEfforts: [max, high, low, none]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 131072}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: high}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 943718}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: high}}
   - id: "~google/gemini-flash-latest"
     label: "~google/gemini-flash-latest"
     structuredOutput: true
@@ -2375,7 +2368,7 @@ openrouter:
   - id: "~moonshotai/kimi-latest"
     label: "~moonshotai/kimi-latest"
     structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 943718}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: max}}
   - id: "~openai/gpt-astra-latest"

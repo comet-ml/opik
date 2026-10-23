@@ -96,10 +96,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "GPT 4.1 Mini",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GPT_4_1_NANO,
-      label: "GPT 4.1 Nano",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.GPT_4O,
       label: "GPT 4o",
     },
@@ -108,28 +104,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "GPT 4o Mini",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GPT_4,
-      label: "GPT 4",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GPT_4_TURBO,
-      label: "GPT 4 Turbo",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GPT_O4_MINI,
-      label: "GPT o4 Mini",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.GPT_O3,
       label: "GPT o3",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GPT_O3_MINI,
-      label: "GPT o3 Mini",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GPT_O1,
-      label: "GPT o1",
     },
   ],
 
@@ -1729,10 +1705,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMMA_4_31B_IT,
       label: "Gemma 4 31B IT",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GEMINI_NANO_BANANA_2_1,
-      label: "Nano Banana 2.1",
     },
   ],
 

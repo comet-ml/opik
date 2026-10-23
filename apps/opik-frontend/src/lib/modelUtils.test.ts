@@ -3607,8 +3607,17 @@ describe("OpenRouter parameters follow the model's OpenRouter lists", () => {
 
   beforeEach(() => {
     const snapshot = getLatestProviderModelsSnapshot();
+    // The app's store holds the whole registry, models out of the picker included; the static seed only holds the
+    // picker, which drops a model on the day its provider retires it.
     setLatestProviderModelsSnapshot({
       ...snapshot,
+      [PROVIDER_TYPE.OPEN_AI]: [
+        ...(snapshot[PROVIDER_TYPE.OPEN_AI] ?? []),
+        {
+          value: PROVIDER_MODEL_TYPE.GPT_O4_MINI,
+          label: PROVIDER_MODEL_TYPE.GPT_O4_MINI,
+        },
+      ],
       [PROVIDER_TYPE.OPEN_ROUTER]: [
         ...(snapshot[PROVIDER_TYPE.OPEN_ROUTER] ?? []),
         {

@@ -152,6 +152,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
                   {isDecisionModelRule && (
                     <DecisionModelPromptField
                       form={form}
+                      onSelectTemplate={applyTemplate}
                       datasetColumnNames={datasetColumnNames}
                     />
                   )}

@@ -6,7 +6,7 @@ import api, {
   PROJECTS_REST_ENDPOINT,
 } from "@/api/api";
 import { Project } from "@/types/projects";
-import { AxiosError } from "axios";
+import { AxiosError, HttpStatusCode } from "axios";
 import { useToast } from "@/ui/use-toast";
 import { extractIdFromLocation } from "@/lib/utils";
 
@@ -38,11 +38,10 @@ const useProjectCreateMutation = ({
     onError: (error: AxiosError) => {
       if (!showErrorToast) return;
 
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
+      const message =
+        error.response?.status === HttpStatusCode.Conflict
+          ? "Project with this name already exists"
+          : get(error, ["response", "data", "message"], error.message);
 
       toast({
         title: "Error",

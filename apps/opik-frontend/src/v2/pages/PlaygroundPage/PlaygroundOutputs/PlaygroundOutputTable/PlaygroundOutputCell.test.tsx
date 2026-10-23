@@ -4,6 +4,7 @@ import { CellContext } from "@tanstack/react-table";
 
 import { DATASET_TYPE } from "@/types/datasets";
 import { PlaygroundRunInputChange } from "@/types/playground";
+import { PlaygroundExperimentItem } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/usePlaygroundExperimentItem";
 import { TooltipProvider } from "@/ui/tooltip";
 import PlaygroundOutputCell from "./PlaygroundOutputCell";
 
@@ -25,12 +26,27 @@ type Output = {
 let output: Output;
 let datasetType: DATASET_TYPE;
 let experimentId: string | undefined;
+let experimentItem: PlaygroundExperimentItem;
 
 vi.mock("@/store/PlaygroundStore", () => ({
-  useOutputByPromptDatasetItemId: () => output,
+  useOutputByPromptId: () => output,
   useDatasetType: () => datasetType,
   useExperimentIdByPromptId: () => experimentId,
 }));
+
+vi.mock(
+  "@/v2/pages/PlaygroundPage/PlaygroundOutputs/usePlaygroundExperimentItem",
+  () => ({
+    default: () => experimentItem,
+  }),
+);
+
+vi.mock(
+  "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader",
+  () => ({
+    default: () => <div data-testid="output-loader" />,
+  }),
+);
 
 vi.mock("@/store/AppStore", () => ({
   default: vi.fn((selector) => selector({ activeWorkspaceName: "ws" })),
@@ -96,10 +112,24 @@ const renderCell = () =>
 const queryStaleNote = () =>
   screen.queryByTestId("playground-stale-output-note");
 
+// The whole cell's content dims as one layer, so every part of it reads as last run's at once.
+const queryDimmedContent = () => document.querySelector(".opacity-50");
+
+const noExperimentItem: PlaygroundExperimentItem = {
+  hasItem: false,
+  notRun: false,
+  cancelled: false,
+  output: null,
+  error: null,
+  traceId: null,
+  runCount: 0,
+};
+
 beforeEach(() => {
   output = { isLoading: false, value: null, stale: false };
   datasetType = DATASET_TYPE.DATASET;
   experimentId = undefined;
+  experimentItem = noExperimentItem;
 });
 
 describe("PlaygroundOutputCell", () => {
@@ -176,8 +206,10 @@ describe("PlaygroundOutputCell", () => {
 
       const markdown = screen.getByTestId("markdown");
       expect(markdown).toHaveTextContent("the answer");
-      expect(markdown).toHaveClass("text-muted-gray");
-      expect(screen.getByTestId("metric-chips")).toBeInTheDocument();
+      expect(queryDimmedContent()).toContainElement(markdown);
+      expect(queryDimmedContent()).toContainElement(
+        screen.getByTestId("metric-chips"),
+      );
       expect(queryStaleNote()).toHaveTextContent("Prompt changed");
       expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
     });
@@ -228,19 +260,170 @@ describe("PlaygroundOutputCell", () => {
 
       const tag = screen.getByTestId("playground-output-error");
       expect(tag).toHaveTextContent("Run failed: ratings not defined");
-      expect(tag).toHaveClass("opacity-50");
+      expect(queryDimmedContent()).toContainElement(tag);
       expect(queryStaleNote()).toHaveTextContent("Prompt changed");
     });
 
-    it("should still show No runs yet for a test suite", () => {
+    // A test suite reads its results back the same way, so it keeps them on the same terms.
+    it("should keep a test suite's results too", () => {
       datasetType = DATASET_TYPE.TEST_SUITE;
       experimentId = "experiment-1";
       output = { isLoading: false, value: null, stale: true };
+      experimentItem = {
+        ...noExperimentItem,
+        hasItem: true,
+        output: "the answer",
+      };
 
       renderCell();
 
-      expect(screen.getByText("No runs yet")).toBeInTheDocument();
-      expect(screen.queryByTestId("assertion-status")).not.toBeInTheDocument();
+      expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
+      // Dimmed with the output: full-strength pass/fail chips next to a "Prompt changed" note
+      // read as results for the prompt now on screen, which they are not.
+      expect(queryDimmedContent()).toContainElement(
+        screen.getByTestId("assertion-status"),
+      );
+    });
+
+    // Editing a prompt mid-run must not empty the rows the run is still filling: the progress bar
+    // is counting them, so No runs yet would contradict what the page is showing.
+    // The results are the only record of what the run produced, and the dimming plus the
+    // note already say they answer an older prompt, so there is nothing to clear them for.
+    it("should keep the results dimmed and noted rather than clearing them", () => {
+      experimentId = "experiment-1";
+      output = { isLoading: false, value: null, stale: true };
+      experimentItem = {
+        ...noExperimentItem,
+        hasItem: true,
+        output: "the answer",
+      };
+
+      renderCell();
+
+      expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
+      const markdown = screen.getByTestId("markdown");
+      expect(markdown).toHaveTextContent("the answer");
+      expect(queryDimmedContent()).toContainElement(markdown);
+      expect(queryStaleNote()).toHaveTextContent("Prompt changed");
+    });
+  });
+
+  // A dataset run executes on the server, so nothing streams into the store: the cell's content,
+  // its failure state and its trace link all come from the experiment item instead.
+  describe("a run that executed on the backend", () => {
+    beforeEach(() => {
+      experimentId = "experiment-1";
+    });
+
+    it("should render the output that came back with the experiment item", () => {
+      experimentItem = {
+        hasItem: true,
+        notRun: false,
+        cancelled: false,
+        output: "the server's answer",
+        error: null,
+        traceId: "trace-1",
+        runCount: 1,
+      };
+
+      renderCell();
+
+      expect(screen.getByTestId("markdown")).toHaveTextContent(
+        "the server's answer",
+      );
+    });
+
+    it("should show a row that failed as an error, not as an empty answer", () => {
+      experimentItem = {
+        hasItem: true,
+        notRun: false,
+        cancelled: false,
+        output: null,
+        error: "provider rejected the request",
+        traceId: "trace-1",
+        runCount: 1,
+      };
+
+      renderCell();
+
+      expect(screen.getByTestId("playground-output-error")).toHaveTextContent(
+        "provider rejected the request",
+      );
+      expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
+    });
+
+    it("should keep loading while the row has no experiment item yet", () => {
+      renderCell();
+
+      expect(screen.getByTestId("output-loader")).toBeInTheDocument();
+      expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
+    });
+
+    // Stopping a run leaves the rows it never reached without an experiment item, and nothing
+    // will ever write one. Keyed off the item alone, those rows load forever.
+    it("should stop loading and say so for a row the stopped run never reached", () => {
+      experimentItem = {
+        hasItem: false,
+        notRun: true,
+        cancelled: true,
+        output: null,
+        error: null,
+        traceId: null,
+        runCount: 0,
+      };
+
+      renderCell();
+
+      expect(screen.queryByTestId("output-loader")).not.toBeInTheDocument();
+      expect(screen.getByText("Cancelled")).toBeInTheDocument();
+    });
+
+    it("should settle empty rather than load forever when the call returned nothing", () => {
+      experimentItem = {
+        hasItem: true,
+        notRun: false,
+        cancelled: false,
+        output: null,
+        error: null,
+        traceId: "trace-1",
+        runCount: 1,
+      };
+
+      renderCell();
+
+      expect(screen.queryByTestId("output-loader")).not.toBeInTheDocument();
+    });
+
+    it("should offer the trace link using the item's trace", () => {
+      experimentItem = {
+        hasItem: true,
+        notRun: false,
+        cancelled: false,
+        output: "the server's answer",
+        error: null,
+        traceId: "trace-1",
+        runCount: 1,
+      };
+
+      renderCell();
+
+      expect(screen.getByRole("button")).toBeInTheDocument();
+    });
+
+    it("should offer no trace link before the item carries a trace", () => {
+      experimentItem = {
+        hasItem: true,
+        notRun: false,
+        cancelled: false,
+        output: "the server's answer",
+        error: null,
+        traceId: null,
+        runCount: 1,
+      };
+
+      renderCell();
+
+      expect(screen.queryByRole("button")).not.toBeInTheDocument();
     });
   });
 });

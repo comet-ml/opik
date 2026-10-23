@@ -7,29 +7,27 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
-import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
-import { LLM_JUDGE, LLMPromptTemplate } from "@/types/llm";
+import { LLMPromptTemplate } from "@/types/llm";
 import MenuOptionItems from "@/shared/MenuOptionItems/MenuOptionItems";
-import { getJudgeTemplateOptions } from "@/v2/pages-shared/automations/RuleEditorPanel/judgeTemplates";
+import { JudgeTemplateOption } from "@/v2/pages-shared/automations/RuleEditorPanel/judgeTemplates";
 
 type JudgeTemplateMenuProps = {
-  scope: EVALUATORS_RULE_SCOPE;
+  options: JudgeTemplateOption[];
   onSelect: (template: LLMPromptTemplate, label: string) => void;
   onAfterSelect?: () => void;
 };
 
 const JudgeTemplateMenu: React.FC<JudgeTemplateMenuProps> = ({
-  scope,
+  options,
   onSelect,
   onAfterSelect,
 }) => {
   const isSelectedRef = useRef(false);
-  const options = getJudgeTemplateOptions(scope);
 
   if (!options.length) return null;
 
-  const handleSelect = (value: LLM_JUDGE) => {
-    const option = options.find((o) => o.value === value);
+  const handleSelect = (label: string) => {
+    const option = options.find((o) => o.label === label);
     if (!option) return;
     isSelectedRef.current = true;
     onSelect(option.template, option.label);
@@ -52,7 +50,13 @@ const JudgeTemplateMenu: React.FC<JudgeTemplateMenuProps> = ({
           isSelectedRef.current = false;
         }}
       >
-        <MenuOptionItems options={options} onSelect={handleSelect} />
+        <MenuOptionItems
+          options={options.map((option) => ({
+            ...option,
+            value: option.label,
+          }))}
+          onSelect={handleSelect}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );
