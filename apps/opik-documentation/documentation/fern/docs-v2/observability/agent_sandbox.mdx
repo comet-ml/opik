@@ -126,9 +126,11 @@ you're happy with the results, save the edit as a new prompt version for your ag
     The playground sends each input as a value typed in the UI, so entrypoint parameters must
     use simple types:
 
-    - **Python:** `str`, `int`, `float`, `bool`, or `Optional` of one of these. A `list` or
-      `dict` parameter shows a text field, and your function receives the JSON text as a
-      string, so parse it in your function.
+    - **Python:** `str`, `int`, `float`, `bool`, or `Optional` of one of these. A typed
+      collection such as `list[str]` or `dict[str, int]` shows a text field, and your function
+      receives the JSON text as a string, so parse it in your function. A bare `list` or `dict`
+      behaves the same way but also logs the warning described in
+      [Troubleshooting](#could-not-resolve-type-for-parameters-warning).
     - **TypeScript:** `string`, `number`, or `boolean`. A parameter with type `object` shows a
       JSON field, and your function receives the JSON as a string.
 
@@ -223,8 +225,8 @@ skip the browser pairing flow entirely.
     One or more entrypoint parameters use a type that the playground cannot fill from the UI.
     Change them to a supported type. For a runtime object such as a chain or an LLM client,
     create the object in your code and add a thin entrypoint, as shown in
-    [Mark your agent as an entrypoint](#getting-started). In TypeScript, the SDK also logs this
-    warning for `object` parameters, which still work as JSON fields.
+    [Mark your agent as an entrypoint](#mark-your-agent-as-an-entrypoint). In TypeScript, the
+    SDK also logs this warning for `object` parameters, which still work as JSON fields.
   </Accordion>
 
   <Accordion title="Pairing times out">
