@@ -17,6 +17,7 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.client.Client;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -535,11 +536,11 @@ class VertexAIClientGeneratorTest {
         }
 
         @Test
-        @DisplayName("an unrecognised level is ignored rather than guessed at")
-        void ignoresUnrecognisedLevel() {
-            completeWithCustomParameters(Map.of("thinking", Map.of("level", "aggressive")));
-
-            assertThat(sentGenerationConfig().has("thinkingConfig")).isFalse();
+        @DisplayName("an unrecognised level is a 400 rather than silently left out")
+        void rejectsAnUnrecognisedLevel() {
+            assertThatThrownBy(() -> completeWithCustomParameters(Map.of("thinking", Map.of("level", "aggressive"))))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessageContaining("level 'aggressive'");
         }
 
         @Test

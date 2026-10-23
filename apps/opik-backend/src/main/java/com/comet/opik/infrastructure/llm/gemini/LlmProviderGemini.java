@@ -110,6 +110,9 @@ public class LlmProviderGemini implements LlmProviderService {
 
     @Override
     public void validateRequest(@NonNull ChatCompletionRequest request) {
+        // Called for its 400s only. The client build reads the same block again while sending, where a streamed
+        // request gets the error in-stream.
+        GeminiThinkingParams.from(request.customParameters());
     }
 
     /// gemini throws RuntimeExceptions with message structure as follows:
