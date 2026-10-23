@@ -395,6 +395,22 @@ class LlmModelCatalogTest {
                     .isEqualTo(expected);
         }
 
+        // Generated from OpenRouter's list (tools) and curated where the list says tool_choice but a forced one gets
+        // a 400 (forcedChoice); the judge reads both from the model list.
+        @ParameterizedTest(name = "{0}: tools {1}, forced choice {2}")
+        @CsvSource(nullValues = "null", value = {"microsoft/phi-4, false, null", "perplexity/sonar, false, null",
+                "openai/gpt-6-luna, true, null", "meta/muse-spark-1.3, true, false",
+                "qwen/qwen3.8-max-prime, true, false"})
+        void theModelListCarriesOpenRoutersToolFacts(String id, boolean takesTools, Boolean forcedChoice) {
+            var tools = registry.get("openrouter").stream().filter(listed -> listed.id().equals(id)).findFirst()
+                    .orElseThrow()
+                    .params()
+                    .tools();
+
+            assertThat(tools.accepted()).isEqualTo(takesTools);
+            assertThat(tools.forcedChoice() == null ? null : tools.forcedChoice().accepted()).isEqualTo(forcedChoice);
+        }
+
         // Z.AI, the only provider OpenRouter routes it to, refuses a temperature above 1. The panel reads the cap here.
         @Test
         void theModelListCarriesGlm45sTemperatureCap() {
