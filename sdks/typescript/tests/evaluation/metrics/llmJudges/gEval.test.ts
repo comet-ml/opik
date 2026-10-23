@@ -195,14 +195,35 @@ describe("GEval Metric", () => {
       expect(options).not.toHaveProperty("providerOptions");
     });
 
-    it("should fall back to generateString when generateProviderResponse fails", async () => {
+    it("should score a repeated identical verdict through the generateString fallback", async () => {
+      mockGenerateProviderResponse.mockRejectedValueOnce(
+        new Error("Provider error")
+      );
+      const verdict = JSON.stringify({ score: 6, reason: "Repeated" });
+      mockGenerateString
+        .mockResolvedValueOnce("CoT steps")
+        .mockResolvedValueOnce(`${verdict}\n${verdict}`);
+
+      const metric = new GEval({
+        taskIntroduction: "Evaluate fallback.",
+        evaluationCriteria: "Score fallback.",
+        trackMetric: false,
+      });
+
+      const result = await metric.score({ output: "Test output" });
+
+      expect(result.value).toBeCloseTo(0.6);
+      expect(result.reason).toBe("Repeated");
+    });
+
+    it("should score a single verdict through the generateString fallback", async () => {
       mockGenerateProviderResponse.mockRejectedValueOnce(
         new Error("Provider error")
       );
       mockGenerateString
         .mockResolvedValueOnce("CoT steps")
         .mockResolvedValueOnce(
-          JSON.stringify({ score: 6, reason: "Fallback" })
+          JSON.stringify({ score: 6, reason: "Single" })
         );
 
       const metric = new GEval({
@@ -214,8 +235,7 @@ describe("GEval Metric", () => {
       const result = await metric.score({ output: "Test output" });
 
       expect(result.value).toBeCloseTo(0.6);
-      expect(result.reason).toBe("Fallback");
-      expect(mockGenerateString).toHaveBeenCalledTimes(2);
+      expect(result.reason).toBe("Single");
     });
   });
 

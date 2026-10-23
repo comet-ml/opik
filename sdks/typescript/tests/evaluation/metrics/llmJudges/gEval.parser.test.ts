@@ -65,6 +65,25 @@ describe("GEval Parser", () => {
 
         expect(result.value).toBeCloseTo(0.3);
       });
+
+      it("should accept a repeated identical verdict object", () => {
+        const input =
+          '{"score": 8, "reason": "High quality output"}\n{"score": 8, "reason": "High quality output"}';
+        const result = parseModelOutputString(input, metricName);
+
+        expect(result.name).toBe(metricName);
+        expect(result.value).toBeCloseTo(0.8);
+        expect(result.reason).toBe("High quality output");
+      });
+
+      it("should reject a repeated verdict object followed by malformed JSON", () => {
+        const input =
+          '{"score": 8, "reason": "High quality output"}\n{"score": broken}';
+
+        expect(() => parseModelOutputString(input, metricName)).toThrow(
+          MetricComputationError
+        );
+      });
     });
 
     describe("Error handling - Invalid scores", () => {
