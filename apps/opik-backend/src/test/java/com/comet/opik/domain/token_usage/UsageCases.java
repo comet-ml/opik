@@ -211,7 +211,16 @@ public final class UsageCases {
                 new UsageCase("Azure OpenAI", "azure",
                         usage("prompt_tokens", 40, "completion_tokens", 2, "total_tokens", 42),
                         OpenAiNativeUsage.builder().provider("azure").variant("chat_completions").promptTokens(40)
-                                .completionTokens(2).totalTokens(42).build()));
+                                .completionTokens(2).totalTokens(42).build()),
+                new UsageCase("Claude through OpenRouter, LiteLLM's cache writes split by TTL", "openrouter",
+                        usage("prompt_tokens", 1000, "completion_tokens", 100, "total_tokens", 1100,
+                                "prompt_tokens_details.cached_tokens", 200,
+                                "prompt_tokens_details.cache_creation_tokens", 50,
+                                "prompt_tokens_details.cache_creation_token_details.ephemeral_5m_input_tokens", 30,
+                                "prompt_tokens_details.cache_creation_token_details.ephemeral_1h_input_tokens", 20),
+                        OpenAiNativeUsage.builder().provider("openrouter").variant("chat_completions")
+                                .promptTokens(1000).cachedTokens(200).cacheWriteTokens(50).cacheWrite1hTokens(20)
+                                .completionTokens(100).totalTokens(1100).build()));
     }
 
     public static Stream<UsageCase> gemini() {
@@ -318,7 +327,26 @@ public final class UsageCases {
                 new UsageCase("Bedrock under LiteLLM's Converse provider", "bedrock_converse",
                         usage("inputTokens", 9, "outputTokens", 1),
                         BedrockConverseNativeUsage.builder().provider("bedrock_converse").variant("converse")
-                                .inputTokens(9).outputTokens(1).build()));
+                                .inputTokens(9).outputTokens(1).build()),
+                new UsageCase("Bedrock InvokeModel with a Claude body splitting cache writes by TTL", "bedrock",
+                        usage("input_tokens", 12, "output_tokens", 7, "cache_creation_input_tokens", 1024,
+                                "cache_creation.ephemeral_5m_input_tokens", 768,
+                                "cache_creation.ephemeral_1h_input_tokens", 256, "cache_read_input_tokens", 4096),
+                        bedrock("converse").inputTokens(12).cacheReadInputTokens(4096).cacheWriteInputTokens(1024)
+                                .cacheWrite1hInputTokens(256).outputTokens(7).build()),
+                new UsageCase("Bedrock with Claude's TTL split flattened by underscores", "bedrock",
+                        usage("input_tokens", 12, "output_tokens", 7, "cache_creation_input_tokens", 1024,
+                                "cache_creation_ephemeral_1h_input_tokens", 256, "cache_read_input_tokens", 4096),
+                        bedrock("converse").inputTokens(12).cacheReadInputTokens(4096).cacheWriteInputTokens(1024)
+                                .cacheWrite1hInputTokens(256).outputTokens(7).build()),
+                new UsageCase("Bedrock Converse cache writes by TTL, as the SDK logs cacheDetails", "bedrock",
+                        usage("prompt_tokens", 280, "completion_tokens", 100, "total_tokens", 380,
+                                "original_usage.inputTokens", 200, "original_usage.outputTokens", 100,
+                                "original_usage.cacheWriteInputTokens", 50, "original_usage.cacheReadInputTokens", 30,
+                                "original_usage.cacheDetails.1h.inputTokens", 20,
+                                "original_usage.cacheDetails.5m.inputTokens", 30),
+                        bedrock("converse").inputTokens(200).cacheReadInputTokens(30).cacheWriteInputTokens(50)
+                                .cacheWrite1hInputTokens(20).outputTokens(100).build()));
     }
 
     public static Map<String, Integer> usage(Object... keysAndValues) {

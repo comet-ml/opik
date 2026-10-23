@@ -39,4 +39,18 @@ class BedrockUsage(base_original_provider_usage.BaseOriginalProviderUsage):
 
     @classmethod
     def from_original_usage_dict(cls, usage: Dict[str, Any]) -> "BedrockUsage":
+        cache_details = usage.get("cacheDetails")
+        if isinstance(cache_details, list):
+            # Converse lists cache writes by TTL. Keyed by TTL they survive flattening,
+            # which keeps only numbers, so the 1-hour writes can be billed at their rate.
+            usage = {
+                **usage,
+                "cacheDetails": {
+                    detail["ttl"]: {"inputTokens": detail["inputTokens"]}
+                    for detail in cache_details
+                    if isinstance(detail, dict)
+                    and "ttl" in detail
+                    and "inputTokens" in detail
+                },
+            }
         return cls(**usage)

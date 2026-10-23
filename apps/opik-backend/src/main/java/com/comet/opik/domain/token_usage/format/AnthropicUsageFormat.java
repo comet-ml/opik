@@ -141,23 +141,4 @@ final class AnthropicUsageFormat implements UsageFormat {
     private static AnthropicNativeUsage.AnthropicNativeUsageBuilder builder(VariantInput input) {
         return AnthropicNativeUsage.builder().provider(input.provider()).variant(input.variant());
     }
-
-    /**
-     * Anthropic splits cache writes by TTL. Without the split, every write counts as a 5-minute write, and so do the
-     * writes of a reported total that the split doesn't account for: they happened all the same.
-     */
-    private record CacheWrites(long fiveMinutes, long oneHour) {
-
-        static CacheWrites of(UsageKeys keys, String fiveMinutesKey, String oneHourKey, long total) {
-            if (keys.hasAny(fiveMinutesKey, oneHourKey)) {
-                long oneHour = keys.get(oneHourKey);
-                return new CacheWrites(Math.max(keys.get(fiveMinutesKey), total - oneHour), oneHour);
-            }
-            return new CacheWrites(total, 0);
-        }
-
-        long total() {
-            return fiveMinutes + oneHour;
-        }
-    }
 }

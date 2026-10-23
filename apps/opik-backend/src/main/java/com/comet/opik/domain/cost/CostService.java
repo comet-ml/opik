@@ -21,13 +21,16 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.function.BiFunction;
+import java.util.regex.Pattern;
 
 @Slf4j
 public class CostService {
@@ -51,6 +54,11 @@ public class CostService {
     // daily LiteLLM sync has not picked up yet) silently fell through to a zero cost.
     private static final String DATE_SUFFIX_PATTERN = "-\\d{4}-?(0[1-9]|1[0-2])-?(0[1-9]|[12]\\d|3[01])$";
     private static final String VERSION_SUFFIX_PATTERN = ":\\d+$";
+    // A token rate of one prompt-size tier, e.g. cache_creation_input_token_cost_above_1hr_above_200k_tokens. The name
+    // ends at "_tokens": service-tier variants (*_above_272k_tokens_priority) aren't billed.
+    static final Pattern PROMPT_TIER_RATE = Pattern.compile("(input_cost_per_token|output_cost_per_token"
+            + "|cache_creation_input_token_cost_above_1hr|cache_creation_input_token_cost|cache_read_input_token_cost)"
+            + "_above_(\\d+)(k?)_tokens");
 
     static {
         try {
@@ -460,24 +468,7 @@ public class CostService {
         BigDecimal outputReasoningTokenPrice = Optional.ofNullable(modelCost.outputCostPerReasoningToken())
                 .map(BigDecimal::new)
                 .orElse(BigDecimal.ZERO);
-        // Whole-prompt tiers: LiteLLM's above_{128k,200k,272k}_tokens rates replace the base
-        // rate wholesale once the prompt strictly exceeds the threshold. Only include a tier
-        // when at least one of its rates is non-zero; that keeps the tier list empty for the
-        // ~99% of models with no tier fields configured. Sorted DESCENDING so the effective
-        // helpers on ModelPrice pick the highest applicable tier without extra bookkeeping.
-        // Reachable models today: OpenRouter's Qwen3 and ByteDance Seed rows at 128K, Gemini 2.5 Pro /
-        // Claude Sonnet 4.5 at 200K, GPT-5.4 and GPT-5.5 (openai and azure) at 272K.
-        List<ModelPrice.PromptTier> promptTiers = new ArrayList<>();
-        addTierIfPresent(promptTiers, ModelPrice.TIER_THRESHOLD_272K,
-                modelCost.inputCostPerTokenAbove272kTokens(), modelCost.outputCostPerTokenAbove272kTokens(),
-                null, null);
-        addTierIfPresent(promptTiers, ModelPrice.TIER_THRESHOLD_200K,
-                modelCost.inputCostPerTokenAbove200kTokens(), modelCost.outputCostPerTokenAbove200kTokens(),
-                modelCost.cacheCreationInputTokenCostAbove200kTokens(),
-                modelCost.cacheReadInputTokenCostAbove200kTokens());
-        addTierIfPresent(promptTiers, ModelPrice.TIER_THRESHOLD_128K,
-                modelCost.inputCostPerTokenAbove128kTokens(), modelCost.outputCostPerTokenAbove128kTokens(),
-                null, null);
+        List<ModelPrice.PromptTier> promptTiers = promptTiers(modelCost.otherFields());
 
         ModelMode mode = ModelMode.fromValue(modelCost.mode());
 
@@ -499,36 +490,39 @@ public class CostService {
                 .outputAudioTokenPrice(outputAudioTokenPrice)
                 .outputReasoningTokenPrice(outputReasoningTokenPrice)
                 .calculator(calculator)
-                .promptTiers(List.copyOf(promptTiers))
+                .promptTiers(promptTiers)
                 .build();
     }
 
     /**
-     * Append one {@link ModelPrice.PromptTier} to {@code tiers} when at least one of the
-     * per-rate JSON strings is non-null and parses to a positive amount. Nulls (rate not
-     * published for this tier — e.g. LiteLLM does not carry cache rates at 128K/272K) are
-     * treated as ZERO by the tier record and skipped by the effective-price helpers.
+     * Whole-prompt tiers: LiteLLM's {@code <rate>_above_<N>k_tokens} rates replace the base rate wholesale once the
+     * prompt strictly exceeds the threshold, at whatever thresholds the price file uses. A tier is kept when one of
+     * its rates is positive, and the list is sorted DESCENDING so the effective helpers on ModelPrice pick the highest
+     * applicable tier.
      */
-    private static void addTierIfPresent(List<ModelPrice.PromptTier> tiers, int threshold,
-            String inputPrice, String outputPrice,
-            String cacheCreationInputTokenPrice, String cacheReadInputTokenPrice) {
-        BigDecimal in = parseTierRate(inputPrice);
-        BigDecimal out = parseTierRate(outputPrice);
-        BigDecimal cc = parseTierRate(cacheCreationInputTokenPrice);
-        BigDecimal cr = parseTierRate(cacheReadInputTokenPrice);
-        if (isPositive(in) || isPositive(out) || isPositive(cc) || isPositive(cr)) {
-            tiers.add(ModelPrice.PromptTier.builder()
-                    .threshold(threshold)
-                    .inputPrice(in)
-                    .outputPrice(out)
-                    .cacheCreationInputTokenPrice(cc)
-                    .cacheReadInputTokenPrice(cr)
-                    .build());
-        }
-    }
-
-    private static BigDecimal parseTierRate(String raw) {
-        return Optional.ofNullable(raw).map(BigDecimal::new).orElse(BigDecimal.ZERO);
+    private static List<ModelPrice.PromptTier> promptTiers(Map<String, JsonNode> fields) {
+        var ratesByThreshold = new TreeMap<Integer, Map<String, BigDecimal>>(Comparator.reverseOrder());
+        fields.forEach((name, value) -> {
+            var matcher = PROMPT_TIER_RATE.matcher(name);
+            if (matcher.matches() && value.isNumber() && value.decimalValue().signum() > 0) {
+                int threshold = Integer.parseInt(matcher.group(2)) * (matcher.group(3).isEmpty() ? 1 : 1000);
+                ratesByThreshold.computeIfAbsent(threshold, unused -> new HashMap<>())
+                        .put(matcher.group(1), value.decimalValue());
+            }
+        });
+        return ratesByThreshold.entrySet().stream()
+                .map(tier -> ModelPrice.PromptTier.builder()
+                        .threshold(tier.getKey())
+                        .inputPrice(tier.getValue().getOrDefault("input_cost_per_token", BigDecimal.ZERO))
+                        .outputPrice(tier.getValue().getOrDefault("output_cost_per_token", BigDecimal.ZERO))
+                        .cacheCreationInputTokenPrice(
+                                tier.getValue().getOrDefault("cache_creation_input_token_cost", BigDecimal.ZERO))
+                        .cacheReadInputTokenPrice(
+                                tier.getValue().getOrDefault("cache_read_input_token_cost", BigDecimal.ZERO))
+                        .cacheCreationInputTokenPriceAbove1hr(tier.getValue()
+                                .getOrDefault("cache_creation_input_token_cost_above_1hr", BigDecimal.ZERO))
+                        .build())
+                .toList();
     }
 
     private static String parseModelName(String modelName) {

@@ -134,6 +134,27 @@ def test_opik_usage__to_backend_compatible_full_usage_dict__bedrock_source():
     }
 
 
+def test_opik_usage__from_bedrock_dict__converse_lists_cache_writes_by_ttl__split_kept_by_ttl():
+    usage = OpikUsage.from_bedrock_dict(
+        {
+            "inputTokens": 200,
+            "outputTokens": 100,
+            "cacheWriteInputTokens": 50,
+            "cacheReadInputTokens": 30,
+            "cacheDetails": [
+                {"ttl": "1h", "inputTokens": 20},
+                {"ttl": "5m", "inputTokens": 30},
+            ],
+        }
+    )
+
+    full_dict = usage.to_backend_compatible_full_usage_dict()
+
+    assert full_dict["original_usage.cacheDetails.1h.inputTokens"] == 20
+    assert full_dict["original_usage.cacheDetails.5m.inputTokens"] == 30
+    assert full_dict["prompt_tokens"] == 280
+
+
 def test_opik_usage__from_bedrock_dict__no_cache_tokens__counts_input_tokens_only():
     # Non-anthropic Bedrock subproviders (llama, mistral, nova) never report cache
     # counters, and a cache hit reports them as an explicit 0, so both must keep
