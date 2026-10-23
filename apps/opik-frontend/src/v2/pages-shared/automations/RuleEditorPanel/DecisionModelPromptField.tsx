@@ -19,6 +19,7 @@ import RuleEditorCard from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEd
 import JudgePromptInput from "@/v2/pages-shared/automations/RuleEditorPanel/JudgePromptInput";
 import useRuleSampleData from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleSampleData";
 import TemplateEmptyState from "@/v2/pages-shared/automations/RuleEditorPanel/TemplateEmptyState";
+import JudgeTemplateMenu from "@/v2/pages-shared/automations/RuleEditorPanel/JudgeTemplateMenu";
 import useTemplateStart from "@/v2/pages-shared/automations/RuleEditorPanel/useTemplateStart";
 import { DECISION_MODEL_TEMPLATE_OPTIONS } from "@/v2/pages-shared/automations/RuleEditorPanel/decisionModelTemplates";
 import { PromptVariableEditorHandle } from "@/v2/pages-shared/llm/PromptVariableEditor/PromptVariableEditor";
@@ -161,7 +162,18 @@ const DecisionModelPromptField: React.FC<DecisionModelPromptFieldProps> = ({
             hasError={
               Boolean(fieldState.error) || decisionModelErrors.length > 0
             }
-            header={<DecisionModelSelect form={form} />}
+            header={
+              <>
+                <DecisionModelSelect form={form} />
+                <div className="ml-auto">
+                  <JudgeTemplateMenu
+                    options={DECISION_MODEL_TEMPLATE_OPTIONS}
+                    onSelect={onSelectTemplate}
+                    onAfterSelect={() => editorRef.current?.focusAtEnd()}
+                  />
+                </div>
+              </>
+            }
           >
             <JudgePromptInput
               value={field.value}

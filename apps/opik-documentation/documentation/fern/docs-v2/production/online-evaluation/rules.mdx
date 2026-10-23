@@ -150,7 +150,7 @@ A decision model answers yes or no questions about a text and returns a probabil
   <img src="/img/production/online_evaluation_decision_model.png" alt="The rule editor panel for a decision model evaluator" />
 </Frame>
 
-To create one, click **Evaluator** > **Decision model**, then pick a template or click **Write your own**. The templates are Task completion, Hallucination, Answer relevance, Moderation, Compliance risk and Support reply. Support reply asks three questions in one call: whether the reply solves the problem, whether its tone is polite, and whether it escalates.
+To create one, click **Evaluator** > **Decision model**, then pick a template or click **Write your own**. After that, click **Templates** in the text card header to load another template. The templates are Task completion, Hallucination, Answer relevance, Moderation, Compliance risk and Support reply. Support reply asks three questions in one call: whether the reply solves the problem, whether its tone is polite, and whether it escalates.
 
 The form has two parts:
 
@@ -166,7 +166,6 @@ Compared with LLM-as-a-Judge, decision models do not support:
 - Thread scope
 - `{{trace}}` and `{{span}}`. `{{spans}}` still works on trace scope.
 - Integer and Number scores
-- The **Templates** menu in the text card. Templates are only offered when you create the evaluator.
 - Model settings, media and a cost limit
 
 Jev has a 32,000 token context for the text and the questions together. Evaluations over that limit are skipped, and the reason is recorded in the evaluator logs. Point the text at narrower fields if this happens. Each call is logged as an LLM span with its token usage and cost, so decision models appear in [cost tracking](/tracing/advanced/cost_tracking).
