@@ -70,8 +70,9 @@ class LLMJuriesJudge(BaseMetric):
 
         Raises:
             MetricComputationError: If a judge returns a failed score, an
-                unsupported result type, or an out-of-range value, or no scores
-                are produced. Failed scores are not valid votes in the average.
+                unsupported result type, or a value outside [0, 1] (including
+                NaN), or no scores are produced. Failed scores are not valid
+                votes in the average.
         """
         precomputed: Optional[Dict[BaseMetric, ScoreResult]] = kwargs.pop(
             "precomputed", None
@@ -91,9 +92,10 @@ class LLMJuriesJudge(BaseMetric):
                     )
                 if result.scoring_failed:
                     raise exceptions.MetricComputationError(
-                        f"Judge {judge.name} returned a failed score '{result.name}'"
+                        f"Judge {judge.name} returned a failed score '{result.name}': "
+                        f"{result.reason}"
                     )
-                if result.value < 0 or result.value > 1:
+                if not 0 <= result.value <= 1:
                     raise exceptions.MetricComputationError(
                         f"Judge {judge.name} returned out-of-range score {result.value}"
                     )
