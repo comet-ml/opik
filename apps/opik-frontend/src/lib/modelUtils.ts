@@ -88,9 +88,9 @@ export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
 // upstream, so this cannot be collapsed into one list per family.
 //
 // Keep both provider spellings of a model on the same row: the level support is a property of the
-// underlying model, not of whether it is reached through AI Studio or Vertex. New models arrive via
-// the automated `sync provider model definitions` PRs, which cannot know about this table — so a
-// newly synced thinking model shows no control until it is added here.
+// underlying model, not of whether it is reached through AI Studio or Vertex. A model the catalog
+// lists takes its levels from the catalog's curated rows instead; this table is the fallback before the
+// model list loads.
 const MINIMAL_TO_HIGH: readonly GeminiThinkingLevel[] = [
   "minimal",
   "low",
@@ -174,6 +174,37 @@ const THINKING_LEVEL_LABELS: Record<GeminiThinkingLevel, string> = {
 const isVertexModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean =>
   typeof model === "string" && model.startsWith("vertex_ai/");
 
+// Only an id the Gemini or Vertex AI registry lists: OpenRouter's google/gemini-* and an id no registry
+// knows keep the tables. The panel picks its form with this lookup too, never by the prompt's provider,
+// so a bare id saved under Vertex AI resolves the same way for the panel and for the request.
+export const getGeminiOrVertexListedParams = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): ModelParams | undefined =>
+  getLatestListedModelParams(
+    isVertexModel(model) ? PROVIDER_TYPE.VERTEX_AI : PROVIDER_TYPE.GEMINI,
+    model,
+  );
+
+// The catalog spells a Gemini 3 model's "no thinking" as none, after the OpenAI word; the panel and the
+// backend call that level off.
+const toGeminiThinkingLevel = (
+  level: string,
+): GeminiThinkingLevel | undefined => {
+  const value = level === "none" ? "off" : level;
+  return value in THINKING_LEVEL_LABELS
+    ? (value as GeminiThinkingLevel)
+    : undefined;
+};
+
+const getCatalogThinkingLevels = (params: ModelParams): GeminiThinkingLevel[] =>
+  getEffortLevels(params.effort).flatMap((level) => {
+    const value = toGeminiThinkingLevel(level);
+    return value ? [value] : [];
+  });
+
+export const getThinkingLevelLabel = (level: string): string =>
+  THINKING_LEVEL_LABELS[level as GeminiThinkingLevel] ?? level;
+
 // An allow-list, so a Gemini generation newer than this list gets no sampling sliders until someone
 // checks it: Google asks to keep every Gemini 3 model at its default temperature, and the aliases,
 // Omni and Robotics ER ids all resolve to Gemini 3-era models. Only native ids are gated — OpenRouter's
@@ -187,6 +218,10 @@ const SAMPLING_CAPABLE_UNVERSIONED_GEMINI_IDS: ReadonlySet<string> = new Set([
 export const supportsGeminiSamplingParams = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean => {
+  const params = getGeminiOrVertexListedParams(model);
+  if (params) {
+    return isAccepted(params.temperature) || isAccepted(params.top_p);
+  }
   const id = (model ?? "").replace(/^vertex_ai\//, "");
   if (!id.startsWith("gemini-")) {
     return true;
@@ -206,8 +241,7 @@ export const supportsGeminiSamplingParams = (
 export const supportsGeminiThinkingLevel = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean =>
-  !isVertexModel(model) &&
-  THINKING_LEVELS_BY_MODEL.has(model as PROVIDER_MODEL_TYPE);
+  !isVertexModel(model) && getThinkingLevelOptions(model).length > 0;
 
 /**
  * Checks if a Vertex AI model supports thinking level parameter
@@ -217,19 +251,23 @@ export const supportsGeminiThinkingLevel = (
  */
 export const supportsVertexAIThinkingLevel = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean =>
-  isVertexModel(model) &&
-  THINKING_LEVELS_BY_MODEL.has(model as PROVIDER_MODEL_TYPE);
+): boolean => isVertexModel(model) && getThinkingLevelOptions(model).length > 0;
 
 /**
  * The thinking levels a model accepts, as select options. Empty for models without thinking.
  */
 export const getThinkingLevelOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
-): Array<{ label: string; value: GeminiThinkingLevel }> =>
-  (THINKING_LEVELS_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ?? []).map(
-    (value) => ({ label: THINKING_LEVEL_LABELS[value], value }),
-  );
+): Array<{ label: string; value: GeminiThinkingLevel }> => {
+  const params = getGeminiOrVertexListedParams(model);
+  const levels = params
+    ? getCatalogThinkingLevels(params)
+    : THINKING_LEVELS_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ?? [];
+  return levels.map((value) => ({
+    label: THINKING_LEVEL_LABELS[value],
+    value,
+  }));
+};
 
 // Each model's own default thinking level, as Google's two tables state it. Preselecting it keeps
 // the control from silently changing a model's behaviour just by being shown: 2.5 Flash Lite ships
@@ -301,8 +339,28 @@ const DEFAULT_THINKING_LEVEL_BY_MODEL: ReadonlyMap<
  */
 export const getDefaultThinkingLevel = (
   model?: PROVIDER_MODEL_TYPE | "",
-): GeminiThinkingLevel =>
-  DEFAULT_THINKING_LEVEL_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ?? "high";
+): GeminiThinkingLevel => {
+  const params = getGeminiOrVertexListedParams(model);
+  const level = params ? resolveEffortLevel(params.effort, []) : undefined;
+  return (
+    (level ? toGeminiThinkingLevel(level) : undefined) ??
+    DEFAULT_THINKING_LEVEL_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ??
+    "high"
+  );
+};
+
+// Vertex AI answers a value above the model's limit with a 400 ("the supported range is from 1
+// (inclusive) to 65537 (exclusive)"), so both providers send at most the catalog's limit. 0 still
+// means no limit and is left out.
+export const resolveGeminiMaxOutputTokens = (
+  model: PROVIDER_MODEL_TYPE | "",
+  value: number,
+): number => {
+  const limit = getGeminiOrVertexListedParams(model)?.max_output_tokens;
+  return isAccepted(limit) && limit?.max !== undefined
+    ? Math.min(value, limit.max)
+    : value;
+};
 
 export type ThinkingLevelParams = {
   thinkingLevel?: GeminiThinkingLevel;
@@ -1191,6 +1249,16 @@ export const resolveSamplingParams = (
     return {};
   }
 
+  if (
+    provider === PROVIDER_TYPE.GEMINI ||
+    provider === PROVIDER_TYPE.VERTEX_AI
+  ) {
+    const params = getGeminiOrVertexListedParams(model);
+    if (params) {
+      return resolveSampling(params, configs);
+    }
+  }
+
   if (!supportsGeminiSamplingParams(model)) {
     return {};
   }
@@ -1626,7 +1694,10 @@ export const sanitizeConfigForRequest = (
         sanitized[key] =
           provider === PROVIDER_TYPE.OPEN_ROUTER
             ? resolveOpenRouterMaxTokens(model, Math.floor(value))
-            : Math.floor(value);
+            : provider === PROVIDER_TYPE.GEMINI ||
+                provider === PROVIDER_TYPE.VERTEX_AI
+              ? resolveGeminiMaxOutputTokens(model, Math.floor(value))
+              : Math.floor(value);
       } else {
         delete sanitized[key];
       }

@@ -24,6 +24,9 @@ import {
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
+import GEMINI_FIXTURE from "@/lib/geminiCatalog.fixture.json";
+import { buildParamsIndex } from "@/hooks/useLLMProviderModelsData";
+import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
 import {
   resetModelRegistryStoreForTesting,
   getLatestProviderModelsSnapshot,
@@ -659,4 +662,53 @@ describe("hasVisibleControls on the catalog panel", () => {
       ),
     ).toBe(false);
   });
+});
+
+describe("hasVisibleControls on the Gemini and Vertex AI catalog panel", () => {
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  const seedCatalog = () =>
+    setLatestModelParams(
+      buildParamsIndex(GEMINI_FIXTURE.models as unknown as LlmModelsByProvider),
+    );
+
+  it.each([
+    [PROVIDER_TYPE.GEMINI, "gemini-3.5-transcribe"],
+    [PROVIDER_TYPE.VERTEX_AI, "vertex_ai/gemini-robotics-er-2"],
+  ])(
+    "hides the settings button for %s %s on a rule, which takes neither sampling nor a level",
+    (provider, model) => {
+      seedCatalog();
+
+      expect(
+        hasVisibleControls(
+          provider,
+          model as PROVIDER_MODEL_TYPE,
+          RULE_CONFIG,
+          RULE_UNSUPPORTED_PARAMS,
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it.each([
+    [PROVIDER_TYPE.GEMINI, PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH],
+    [PROVIDER_TYPE.VERTEX_AI, PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH],
+  ])(
+    "shows it for %s %s on a rule, for the thinking level",
+    (provider, model) => {
+      seedCatalog();
+
+      expect(
+        hasVisibleControls(
+          provider,
+          model,
+          RULE_CONFIG,
+          RULE_UNSUPPORTED_PARAMS,
+        ),
+      ).toBe(true);
+    },
+  );
 });

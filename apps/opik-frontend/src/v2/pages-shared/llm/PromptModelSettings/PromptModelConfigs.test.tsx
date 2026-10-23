@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
 // The custom panel embeds the real CodeMirror editor for custom_parameters, which does not mount
@@ -17,6 +17,13 @@ import {
 import { getDefaultConfigByProvider } from "@/lib/playground";
 import { TooltipProvider } from "@/ui/tooltip";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
+import GEMINI_FIXTURE from "@/lib/geminiCatalog.fixture.json";
+import { buildParamsIndex } from "@/hooks/useLLMProviderModelsData";
+import {
+  resetModelRegistryStoreForTesting,
+  setLatestModelParams,
+} from "@/lib/modelRegistryStore";
+import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
 
 const renderTrigger = (
   provider: COMPOSED_PROVIDER_TYPE,
@@ -126,4 +133,37 @@ describe("PromptModelConfigs typed values", () => {
 
     expect(onChange).toHaveBeenCalledWith({ temperature: 0.7 });
   });
+});
+
+describe("PromptModelConfigs for Gemini and Vertex AI", () => {
+  beforeEach(() => {
+    resetModelRegistryStoreForTesting();
+    setLatestModelParams(
+      buildParamsIndex(GEMINI_FIXTURE.models as unknown as LlmModelsByProvider),
+    );
+  });
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  // Both forms mount the slider under the same id. 2.0 Flash's catalog limit is 8,192 while the old
+  // panel shows the stored value as it is, so the shown value tells them apart.
+  it.each([
+    [PROVIDER_TYPE.GEMINI, "gemini-2.0-flash", "8192"],
+    [PROVIDER_TYPE.VERTEX_AI, "vertex_ai/gemini-2.0-flash-001", "8192"],
+    [PROVIDER_TYPE.GEMINI, "gemini-9-unlisted", "20000"],
+    [PROVIDER_TYPE.VERTEX_AI, "vertex_ai/gemini-9-unlisted", "20000"],
+  ])(
+    "opens the catalog panel only for a listed model: %s %s shows %s",
+    (provider, model, shown) => {
+      renderTrigger(provider, model as PROVIDER_MODEL_TYPE, {
+        ...getDefaultConfigByProvider(provider, model as PROVIDER_MODEL_TYPE),
+        maxCompletionTokens: 20000,
+      });
+      openPanel();
+
+      expect(screen.getByTestId("maxOutputTokens-input")).toHaveValue(shown);
+    },
+  );
 });
