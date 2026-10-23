@@ -25,6 +25,7 @@ import {
   DICTIONARY_OPERATORS,
   STRING_OPERATORS,
   LIST_OPERATORS,
+  COMMENTS_OPERATORS,
 } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
 import { useTagsOptions } from "@/v2/pages-shared/TagsAutocomplete/useTagsOptions";
 import { usePathsOptions } from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/usePathsOptions";
@@ -170,6 +171,15 @@ export const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     defaultOperator: "contains",
     value: { placeholder: "Enter annotation queue ID" },
   },
+  {
+    id: "comments",
+    field: "comments",
+    label: "Comments",
+    kind: "query-builder",
+    columnType: COLUMN_TYPE.list,
+    operators: COMMENTS_OPERATORS,
+    defaultOperator: "is_not_empty",
+  },
 ];
 
 export const TRACE_CHIP_ORDER: string[] = [
@@ -190,6 +200,7 @@ export const TRACE_CHIP_ORDER: string[] = [
   "id",
   "thread_id",
   "annotation_queue_ids",
+  "comments",
   "feedback_scores",
   "span_feedback_scores",
   "guardrails",

@@ -103,6 +103,7 @@ import {
   FEEDBACK_SCORE_OPERATORS,
   STRING_OPERATORS,
   LIST_OPERATORS,
+  COMMENTS_OPERATORS,
 } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
 import { useTagsOptions } from "@/v2/pages-shared/TagsAutocomplete/useTagsOptions";
 import ListCell from "@/shared/DataTableCells/ListCell";
@@ -374,6 +375,15 @@ const THREAD_CHIP_DEFINITIONS: ChipDefinition[] = [
     defaultOperator: "contains",
     value: { placeholder: "Enter annotation queue ID" },
   },
+  {
+    id: "comments",
+    field: "comments",
+    label: "Comments",
+    kind: "query-builder",
+    columnType: COLUMN_TYPE.list,
+    operators: COMMENTS_OPERATORS,
+    defaultOperator: "is_not_empty",
+  },
 ];
 
 const THREAD_CHIP_ORDER: string[] = [
@@ -386,6 +396,7 @@ const THREAD_CHIP_ORDER: string[] = [
   "tags",
   "id",
   "annotation_queue_ids",
+  "comments",
   "feedback_scores",
 ];
 
