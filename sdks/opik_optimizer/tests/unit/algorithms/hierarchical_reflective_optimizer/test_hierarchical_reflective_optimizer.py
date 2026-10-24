@@ -348,3 +348,93 @@ class TestHierarchicalReflectiveOptimizerCounters:
         assert result.details["trials_completed"] == 1
         assert len(result.history) == 1
         assert result.history[0]["trials_completed"] == 1
+
+
+class TestHierarchicalReflectiveOptimizerStopping:
+    @staticmethod
+    def _stub_analysis(optimizer, monkeypatch: pytest.MonkeyPatch) -> None:
+        analysis = HierarchicalRootCauseAnalysis(
+            total_test_cases=1,
+            num_batches=1,
+            unified_failure_modes=[
+                FailureMode(name="Failure", description="desc", root_cause="cause")
+            ],
+            synthesis_notes="Test",
+        )
+        monkeypatch.setattr(
+            optimizer,
+            "_hierarchical_root_cause_analysis",
+            lambda evaluation_result, traces=None: analysis,
+        )
+        monkeypatch.setattr(
+            optimizer,
+            "evaluate_prompt",
+            lambda **kwargs: _mock_experiment_result(0.1),
+        )
+
+    def test_perfect_score_returns_winning_prompt(
+        self,
+        mock_optimization_context,
+        monkeypatch: pytest.MonkeyPatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        mock_optimization_context()
+        optimizer = HierarchicalReflectiveOptimizer(model="gpt-4o-mini", verbose=0)
+        self._stub_analysis(optimizer, monkeypatch)
+        winner = ChatPrompt(system="winning prompt", user="{question}")
+
+        def perfect_improvement(**kwargs):
+            return {"chat-prompt": winner}, 1.0, _mock_experiment_result(1.0)
+
+        monkeypatch.setattr(
+            optimizer, "_generate_and_evaluate_improvement", perfect_improvement
+        )
+
+        result = optimizer.optimize_prompt(
+            prompt=simple_chat_prompt,
+            dataset=mock_dataset(sample_dataset_items, name="ds", dataset_id="ds-1"),
+            metric=sample_metric,
+            max_trials=5,
+        )
+
+        assert result.score == 1.0
+        assert result.prompt.get_messages() == winner.get_messages()
+        assert result.details["finish_reason"] == "perfect_score"
+
+    def test_reused_instance_runs_again_after_stop(
+        self,
+        mock_optimization_context,
+        monkeypatch: pytest.MonkeyPatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        mock_optimization_context()
+        optimizer = HierarchicalReflectiveOptimizer(model="gpt-4o-mini", verbose=0)
+        self._stub_analysis(optimizer, monkeypatch)
+        calls: list[int] = []
+
+        def no_improvement(**kwargs):
+            calls.append(kwargs["attempt"])
+            prompts = kwargs["best_prompts"]
+            return dict(prompts), 0.0, _mock_experiment_result(0.0)
+
+        monkeypatch.setattr(
+            optimizer, "_generate_and_evaluate_improvement", no_improvement
+        )
+        dataset = mock_dataset(sample_dataset_items, name="ds", dataset_id="ds-1")
+
+        for _ in range(2):
+            calls.clear()
+            optimizer.optimize_prompt(
+                prompt=simple_chat_prompt,
+                dataset=dataset,
+                metric=sample_metric,
+                max_trials=5,
+            )
+            # Converges after one round of 3 attempts (max_retries=2) — both runs.
+            assert calls == [1, 2, 3]

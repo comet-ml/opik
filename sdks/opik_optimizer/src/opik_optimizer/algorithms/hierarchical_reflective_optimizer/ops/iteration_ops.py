@@ -133,7 +133,6 @@ def improve_over_failure_modes(
                         max_trials,
                         root_cause.name,
                     )
-                    optimizer._should_stop_optimization = True
                     break
 
                 trials_before_attempt = context.trials_completed
@@ -195,9 +194,8 @@ def improve_over_failure_modes(
                         verbose=optimizer.verbose,
                     )
 
-        if optimizer._should_stop_optimization or context.should_stop:
-            break
-
+        # Adopt before honouring a stop: the attempt that ended the run (perfect
+        # score, last trial) is the winner and must be the prompt we return.
         if (
             improved_score is not None
             and improved_chat_prompts is not None
@@ -218,6 +216,9 @@ def improve_over_failure_modes(
                 "Keeping previous best prompt, no improvement from '%s'",
                 root_cause.name,
             )
+
+        if context.should_stop:
+            break
 
     return best_prompts, best_score
 
@@ -272,7 +273,11 @@ def finalize_iteration(
         trials_completed=context.trials_completed,
     )
 
-    if abs(iteration_improvement) < optimizer.convergence_threshold:
+    # Don't overwrite an earlier stop reason (e.g. perfect_score) with convergence.
+    if (
+        not context.should_stop
+        and abs(iteration_improvement) < optimizer.convergence_threshold
+    ):
         logger.info(
             "Convergence achieved: improvement (%.2f%%) below threshold (%.2f%%). Stopping after %s iterations.",
             iteration_improvement * 100,
@@ -281,6 +286,5 @@ def finalize_iteration(
         )
         context.should_stop = True
         context.finish_reason = "no_improvement"
-        optimizer._should_stop_optimization = True
 
     return iteration_improvement

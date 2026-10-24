@@ -16,12 +16,6 @@ import pytest
 
 from tests.unit.characterization import harness
 
-_HRPO_PERFECT = (
-    "reported score is the perfect-score trial's, but the returned prompt is the "
-    "pre-perfect best (final_prompt_rescore < score); finish_reason is "
-    "'no_improvement' although a perfect score was reached"
-)
-
 # Pairs whose golden snapshot pins a known bug or degraded output. The note is
 # copied into the snapshot ("known_issue") so a fix shows up as a deliberate
 # golden diff. Remove the entry together with the fix.
@@ -51,19 +45,9 @@ KNOWN_ISSUES: dict[tuple[str, str], str] = {
     ("MetaPromptOptimizer", "S3b_multimodal_multitext"): (
         "system content parts collapsed into a single string"
     ),
-    # current behaviour: see _HRPO_PERFECT.
-    ("HierarchicalReflectiveOptimizer", "S1_single"): _HRPO_PERFECT,
-    ("HierarchicalReflectiveOptimizer", "S2_multi"): _HRPO_PERFECT,
-    ("HierarchicalReflectiveOptimizer", "S3_multimodal"): _HRPO_PERFECT,
-    # current behaviour: see _HRPO_PERFECT; also the two system text parts
-    # collapse into one string.
+    # current behaviour: the two system text parts collapse into one string.
     ("HierarchicalReflectiveOptimizer", "S3b_multimodal_multitext"): (
-        _HRPO_PERFECT + "; system content parts collapsed into a single string"
-    ),
-    # current behaviour: see _HRPO_PERFECT; here the returned prompt and tool
-    # description are the unmodified originals (rescore 0.33 vs score 1.0).
-    ("HierarchicalReflectiveOptimizer", "S4_tools"): (
-        _HRPO_PERFECT + "; returned prompt and tool description are unchanged"
+        "system content parts collapsed into a single string"
     ),
     # current behaviour: optimize_parameter results carry no finish_reason.
     ("ParameterOptimizer", "S1_single"): "details have no finish_reason",

@@ -18,8 +18,8 @@
     "trials_completed",
     "verbose"
   ],
-  "final_prompt_rescore": 0.833333,
-  "finish_reason": "no_improvement",
+  "final_prompt_rescore": 1.0,
+  "finish_reason": "perfect_score",
   "history": [
     {
       "best_score": 0.666667,
@@ -40,19 +40,19 @@
       ]
     },
     {
-      "best_score": 0.833333,
+      "best_score": 1.0,
       "round_index": 2,
       "stop_reason": "perfect_score",
       "trial_scores": [
         1.0,
-        0.833333
+        1.0
       ]
     }
   ],
   "history_rounds": 3,
   "history_trials": 6,
   "initial_score": 0.333333,
-  "known_issue": "reported score is the perfect-score trial's, but the returned prompt is the pre-perfect best (final_prompt_rescore < score); finish_reason is 'no_improvement' although a perfect score was reached",
+  "known_issue": null,
   "llm_call_kinds": [
     "HierarchicalRootCauseAnalysis",
     "ImprovedPromptsResponse",
@@ -64,22 +64,22 @@
   "per_prompt_outputs": {
     "item-0": {
       "answerer": "A0",
-      "planner": "Plan (3 hints): Plan for: What is the code for item 0?"
+      "planner": "Plan (4 hints): Plan for: What is the code for item 0?"
     },
     "item-1": {
       "answerer": "A1",
-      "planner": "Plan (3 hints): Plan for: What is the code for item 1?"
+      "planner": "Plan (4 hints): Plan for: What is the code for item 1?"
     },
     "item-2": {
       "answerer": "A2",
-      "planner": "Plan (3 hints): Plan for: What is the code for item 2?"
+      "planner": "Plan (4 hints): Plan for: What is the code for item 2?"
     }
   },
   "prompt": {
     "answerer": {
       "messages": [
         {
-          "content": "You answer with the code. Answer with the exact value. Be concise. Think step by step.",
+          "content": "You answer with the code. Answer with the exact value. Be concise. Think step by step. Double check the facts. Use the provided context.",
           "role": "system"
         },
         {
@@ -95,7 +95,7 @@
     "planner": {
       "messages": [
         {
-          "content": "You plan how to find the code. Answer with the exact value. Be concise. Think step by step.",
+          "content": "You plan how to find the code. Answer with the exact value. Be concise. Think step by step. Double check the facts.",
           "role": "system"
         },
         {

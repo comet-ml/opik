@@ -113,7 +113,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         self.batch_size = batch_size
         self.convergence_threshold = convergence_threshold
         self._iterations_completed = 0
-        self._should_stop_optimization = False  # Flag to exit all loops
 
         # Initialize hierarchical analyzer
         self._hierarchical_analyzer = HierarchicalRootCauseAnalyzer(
@@ -634,14 +633,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             logger.info(
                 f"Starting iteration {iteration} (trials: {context.trials_completed}/{max_trials})"
             )
-
-            if self._should_stop_optimization:
-                logger.info(
-                    f"Stopping optimization: reached max_trials limit ({max_trials})."
-                )
-                context.should_stop = True
-                context.finish_reason = "max_trials"
-                break
             round_handle = self.pre_round(context)
 
             sampling_tag = self._build_sampling_tag(
@@ -705,11 +696,14 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             # Update previous score for next iteration
             previous_iteration_score = best_score
 
-        # finish_reason, stopped_early, stop_reason are handled by base class
-        # Align with context in case trial accounting updated current_best_score.
-        if context.current_best_score is not None and (
-            best_score is None or improves_over(context.current_best_score, best_score)
+        # finish_reason, stopped_early, stop_reason are handled by base class.
+        # Trial accounting tracks the best (prompt, score) pair; take it whole when
+        # it beats the local one so the returned prompt always matches the score.
+        if context.current_best_prompt is not None and (
+            context.current_best_score is not None
+            and improves_over(context.current_best_score, best_score)
         ):
+            best_prompts = context.current_best_prompt
             best_score = context.current_best_score
         history_entries = self.get_history_entries()
         for entry in history_entries:

@@ -18,23 +18,23 @@
     "trials_completed",
     "verbose"
   ],
-  "final_prompt_rescore": 0.333333,
-  "finish_reason": "no_improvement",
+  "final_prompt_rescore": 1.0,
+  "finish_reason": "perfect_score",
   "history": [
     {
-      "best_score": 0.333333,
+      "best_score": 1.0,
       "round_index": 0,
       "stop_reason": "perfect_score",
       "trial_scores": [
         1.0,
-        0.333333
+        1.0
       ]
     }
   ],
   "history_rounds": 1,
   "history_trials": 2,
   "initial_score": 0.333333,
-  "known_issue": "reported score is the perfect-score trial's, but the returned prompt is the pre-perfect best (final_prompt_rescore < score); finish_reason is 'no_improvement' although a perfect score was reached; returned prompt and tool description are unchanged",
+  "known_issue": null,
   "llm_call_kinds": [
     "HierarchicalRootCauseAnalysis",
     "ImprovedPromptsResponse",
@@ -46,7 +46,7 @@
   "prompt": {
     "messages": [
       {
-        "content": "You can use tools to answer.",
+        "content": "You can use tools to answer. Answer with the exact value. Be concise.",
         "role": "system"
       },
       {
@@ -60,7 +60,7 @@
     "tools": [
       {
         "function": {
-          "description": "Look up the code for an item.",
+          "description": "Look up the code for an item. Answer with the exact value. Be concise.",
           "name": "lookup_code",
           "parameters": {
             "properties": {
