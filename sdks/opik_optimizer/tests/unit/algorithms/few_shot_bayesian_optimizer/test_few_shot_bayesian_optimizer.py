@@ -481,3 +481,68 @@ class TestFewShotBayesianOptimizerEarlyStop:
             trials_completed=1,
             history_len=1,
         )
+
+
+class TestFewShotBayesianOptimizerEvaluate:
+    def test_custom_task_evaluation_records_scoring_health(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from opik.evaluation import evaluation_result, test_case, test_result
+        from opik.evaluation.metrics import score_result
+
+        from opik_optimizer.core import evaluation as core_evaluation
+        from tests.unit.test_helpers import make_optimization_context
+
+        def metric(dataset_item: dict[str, Any], llm_output: str) -> float:
+            return 0.0
+
+        failed = evaluation_result.EvaluationResult(
+            experiment_id="exp",
+            dataset_id="ds",
+            experiment_name="exp",
+            test_results=[
+                test_result.TestResult(
+                    test_case=test_case.TestCase(
+                        trace_id="t",
+                        dataset_item_id="i",
+                        task_output={},
+                        dataset_item_content={},
+                    ),
+                    score_results=[
+                        score_result.ScoreResult(
+                            name="metric", value=0.0, scoring_failed=True
+                        )
+                    ],
+                    trial_id=0,
+                )
+            ],
+            experiment_url=None,
+            trial_count=1,
+        )
+        monkeypatch.setattr(
+            core_evaluation,
+            "evaluate",
+            lambda **kwargs: failed if kwargs.get("return_evaluation_result") else 0.0,
+        )
+        optimizer = FewShotBayesianOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        optimizer._custom_evaluated_task = lambda item: {"llm_output": "x"}
+        context = make_optimization_context(
+            ChatPrompt(system="system", user="{question}"), metric=metric
+        )
+
+        optimizer.evaluate(context, context.prompts)
+
+        # The failed-scoring guard reads this; it stayed unset when the override
+        # coerced the result to a float.
+        assert context.scoring_health == {"failed_count": 1, "total_count": 1}
+
+    def test_allow_tool_use_default_matches_base(self) -> None:
+        import inspect
+
+        from opik_optimizer import BaseOptimizer
+
+        def default(cls: type) -> Any:
+            params = inspect.signature(cls.evaluate_prompt).parameters
+            return params["allow_tool_use"].default
+
+        assert default(FewShotBayesianOptimizer) == default(BaseOptimizer)

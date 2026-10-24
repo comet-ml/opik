@@ -12,6 +12,10 @@ import optuna.samplers
 import optuna.pruners
 
 from opik import Dataset
+from opik.evaluation.evaluation_result import (
+    EvaluationResult,
+    EvaluationResultOnDictItems,
+)
 
 from ... import base_optimizer
 from ...core import llm_calls as _llm_calls
@@ -167,10 +171,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_samples_strategy: str | None = None,
         seed: int | None = None,
         return_evaluation_result: bool = False,
-        allow_tool_use: bool = False,
+        allow_tool_use: bool | None = None,
         use_evaluate_on_dict_items: bool | None = None,
         sampling_tag: str | None = None,
-    ) -> float:
+    ) -> float | EvaluationResult | EvaluationResultOnDictItems:
         """
         Override evaluate_prompt to support custom evaluated_task.
 
@@ -189,12 +193,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 allow_tool_use=allow_tool_use,
                 use_evaluate_on_dict_items=use_evaluate_on_dict_items,
                 sampling_tag=sampling_tag,
+                return_evaluation_result=return_evaluation_result,
             )
 
-        # Default behavior: delegate to parent
-        # Note: This method always returns float, so we pass literal False
-        # to help mypy narrow the overload correctly
-        return super().evaluate_prompt(
+        return super().evaluate_prompt(  # type: ignore[call-overload,misc]
             prompt=prompt,
             dataset=dataset,
             metric=metric,
@@ -206,7 +208,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             n_samples=n_samples,
             n_samples_strategy=n_samples_strategy,
             seed=seed,
-            return_evaluation_result=False,
+            return_evaluation_result=return_evaluation_result,
             allow_tool_use=allow_tool_use,
             use_evaluate_on_dict_items=use_evaluate_on_dict_items,
             sampling_tag=sampling_tag,
@@ -223,7 +225,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         allow_tool_use: bool | None,
         use_evaluate_on_dict_items: bool | None,
         sampling_tag: str | None,
-    ) -> float:
+        return_evaluation_result: bool = False,
+    ) -> float | EvaluationResult | EvaluationResultOnDictItems:
         n_threads = normalize_eval_threads(n_threads or self.n_threads)
         if self._custom_evaluated_task is None:
             raise ValueError("Custom evaluated task is not set.")
@@ -248,6 +251,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             verbose=verbose,
             n_samples=self._custom_eval_n_samples,
             use_evaluate_on_dict_items=bool(use_evaluate_on_dict_items),
+            return_evaluation_result=return_evaluation_result,  # type: ignore[call-overload]
         )
 
     def get_config(self, context: OptimizationContext) -> dict[str, Any]:
