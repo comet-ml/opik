@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any, cast, overload, Literal
 from collections.abc import Iterator
 import logging
-import copy
 import traceback
 import warnings
 import time
@@ -79,6 +78,15 @@ def _compute_scoring_health_from_result(
     return compute_scoring_health(objective_scores)
 
 
+def _copy_model_parameters(value: Any) -> Any:
+    """Copy nested dicts/lists; share other values (clients, callbacks) that may not be copyable."""
+    if isinstance(value, dict):
+        return {key: _copy_model_parameters(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_copy_model_parameters(item) for item in value]
+    return value
+
+
 # Set up logging:
 logger = logging.getLogger(__name__)
 
@@ -135,11 +143,9 @@ class BaseOptimizer(ABC):
            display: Optional display handler for run output (used for testing or alternate renderers).
         """
         self.model = model
-        self.model_parameters = (
-            copy.deepcopy(model_parameters) if model_parameters is not None else {}
-        )
+        self.model_parameters = _copy_model_parameters(model_parameters or {})
         self.reasoning_model = reasoning_model or model
-        self.reasoning_model_parameters = copy.deepcopy(
+        self.reasoning_model_parameters = _copy_model_parameters(
             self.model_parameters
             if reasoning_model_parameters is None
             else reasoning_model_parameters

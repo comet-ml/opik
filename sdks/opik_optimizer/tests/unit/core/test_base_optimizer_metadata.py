@@ -196,3 +196,19 @@ def test_agent_config_does_not_substitute_the_optimizer_model(simple_chat_prompt
         optimizer=optimizer, prompt=simple_chat_prompt
     )
     assert "model" not in config
+
+
+def test_model_parameters_accept_non_copyable_values():
+    import threading
+
+    class Client:
+        def __init__(self) -> None:
+            self._lock = threading.RLock()
+
+    client = Client()
+    optimizer = ConcreteOptimizer(
+        model="optimizer-model", model_parameters={"client": client}
+    )
+    assert optimizer.model_parameters["client"] is client
+    assert optimizer.reasoning_model_parameters["client"] is client
+    assert optimizer.model_parameters is not optimizer.reasoning_model_parameters
