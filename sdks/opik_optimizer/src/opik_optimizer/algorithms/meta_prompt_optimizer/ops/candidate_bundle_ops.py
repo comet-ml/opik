@@ -7,7 +7,7 @@ import logging
 from typing import Any
 from collections.abc import Callable, Sequence
 
-from litellm.exceptions import BadRequestError
+from litellm.exceptions import AuthenticationError, BadRequestError, NotFoundError
 
 from ....api_objects import chat_prompt
 from ....utils.multimodal import text_only_messages
@@ -232,7 +232,15 @@ def generate_agent_bundle_candidates(
             return candidates
 
         except Exception as exc:
-            if isinstance(exc, (BadRequestError, StructuredOutputParsingError)):
+            if isinstance(
+                exc,
+                (
+                    AuthenticationError,
+                    BadRequestError,
+                    NotFoundError,
+                    StructuredOutputParsingError,
+                ),
+            ):
                 raise
             raise ValueError(
                 f"Unexpected error during agent bundle prompt generation: {exc}"
