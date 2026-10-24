@@ -4,6 +4,7 @@ import rapidfuzz
 from ...utils.helpers import json_to_dict
 from ...utils.toolcalling.ops import toolcalling as toolcalling_utils
 from ...utils.text import normalize_llm_text
+from ...utils.multimodal import redact_inline_media
 
 
 # FIXME: Refactor and move to prompts.py and prompt library.
@@ -12,7 +13,7 @@ def get_task_description_for_llm(
 ) -> str:
     """Generates a concise task description for LLM prompts that need context."""
     description = "Task: Given a list of AI messages with placeholder values, generate an effective prompt. "
-    description += f"The original high-level instruction being optimized is: '{prompt.get_messages()}'. "
+    description += f"The original high-level instruction being optimized is: '{redact_inline_media(prompt.get_messages())}'. "
     if optimize_tools:
         tool_blocks = toolcalling_utils.build_tool_blocks_from_prompt(prompt)
         if tool_blocks:

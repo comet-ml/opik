@@ -14,6 +14,7 @@ from ...api_objects.types import Content
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.prompt_library import PromptOverrides
+from ...utils.multimodal import redact_inline_media
 from ...utils.prompt_roles import (
     derive_prompt,
     apply_role_constraints,
@@ -238,7 +239,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         prompts_section = ""
         for prompt_name, prompt in prompts.items():
             prompts_section += f"\n--- Prompt: {prompt_name} ---\n"
-            prompts_section += f"```\n{prompt.get_messages()}\n```\n"
+            prompts_section += (
+                f"```\n{redact_inline_media(prompt.get_messages())}\n```\n"
+            )
             if optimize_tools:
                 tool_blocks = toolcalling_utils.build_tool_blocks_from_prompt(prompt)
                 if tool_blocks:

@@ -4,11 +4,13 @@ import json
 import re
 from typing import Any
 
+from .multimodal import redact_inline_media
+
 
 def sanitize_feedback(value: Any) -> Any:
     """Represent media as markers so reasoning prompts never carry base64 payloads."""
     if isinstance(value, str):
-        return re.sub(r"data:[^\s\"<>]*?;base64,[A-Za-z0-9+/=]+", "[media]", value)
+        return redact_inline_media(value)
     if isinstance(value, list):
         return [sanitize_feedback(item) for item in value]
     if isinstance(value, dict):

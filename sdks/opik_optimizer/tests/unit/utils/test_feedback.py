@@ -40,3 +40,28 @@ def test_input_fields_drop_labels_and_cap_values():
     assert set(fields) == {"question", "context"}
     assert fields["question"] == "Q?"
     assert len(fields["context"]) < 500
+
+
+def test_redact_inline_media_keeps_structure_and_placeholders():
+    from opik_optimizer.utils.multimodal import redact_inline_media
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Q: {question}"},
+                {"type": "image_url", "image_url": {"url": "{image}"}},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/png;base64,QUJD"},
+                },
+            ],
+        }
+    ]
+    redacted = redact_inline_media(messages)
+    assert redacted[0]["content"][:2] == messages[0]["content"][:2]
+    assert redacted[0]["content"][2] == {
+        "type": "image_url",
+        "image_url": {"url": "[media]"},
+    }
+    assert messages[0]["content"][2]["image_url"]["url"].endswith("QUJD")

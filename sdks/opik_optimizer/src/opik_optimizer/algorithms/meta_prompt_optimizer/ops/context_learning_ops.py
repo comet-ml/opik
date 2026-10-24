@@ -14,6 +14,7 @@ from ....api_objects.types import MetricFunction
 from ....utils import token as token_utils
 from ....utils.feedback import is_label_field
 from ....utils.logging import compact_debug_text, debug_log
+from ....utils.multimodal import redact_inline_media
 from ....utils import rng as rng_utils
 from .... import constants
 from .. import prompts as meta_prompts
@@ -121,7 +122,7 @@ def _build_metric_context(
 
 
 def _normalize_value(value: object, max_value_length: int) -> str:
-    value_str = str(value).replace("\n", " ").replace("\r", " ")
+    value_str = redact_inline_media(str(value)).replace("\n", " ").replace("\r", " ")
     value_str = re.sub(r"\s+", " ", value_str).strip()
     if len(value_str) > max_value_length:
         value_str = value_str[:max_value_length] + "..."

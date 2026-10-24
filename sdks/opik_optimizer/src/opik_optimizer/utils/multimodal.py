@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 import copy
+import re
 
 import rich.text
 from ..api_objects import types as api_types
@@ -306,3 +307,22 @@ def text_only_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         }
         for message in messages
     ]
+
+
+_INLINE_MEDIA = re.compile(r"data:[^\s\"<>]*?;base64,[A-Za-z0-9+/=]+")
+
+
+def redact_inline_media(value: Any) -> Any:
+    """Copy of prompt messages (or any nested value) to send to a reasoning model.
+
+    Inline base64 media (data: URLs) becomes a short "[media]" marker; structure,
+    text and placeholder URLs such as "{image}" are kept. Only the request changes:
+    optimized prompts keep their original media.
+    """
+    if isinstance(value, str):
+        return _INLINE_MEDIA.sub("[media]", value)
+    if isinstance(value, list):
+        return [redact_inline_media(item) for item in value]
+    if isinstance(value, dict):
+        return {key: redact_inline_media(item) for key, item in value.items()}
+    return value

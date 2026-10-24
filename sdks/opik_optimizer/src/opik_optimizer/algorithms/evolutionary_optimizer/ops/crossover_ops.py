@@ -1,5 +1,8 @@
 from ....utils.prompt_roles import apply_role_constraints
-from ....utils.multimodal import preserve_multimodal_message_structure
+from ....utils.multimodal import (
+    preserve_multimodal_message_structure,
+    redact_inline_media,
+)
 from typing import Any, Protocol
 
 import copy
@@ -202,8 +205,8 @@ def _call_llm_for_crossover(
     """Call the LLM for crossover and return the laddered child prompts."""
     user_prompt = prompts.get(
         user_template_key,
-        parent1_messages=messages_1,
-        parent2_messages=messages_2,
+        parent1_messages=redact_inline_media(messages_1),
+        parent2_messages=redact_inline_media(messages_2),
         style=output_style_guidance,
     )
     response = _llm_calls.call_model(

@@ -23,6 +23,7 @@ from ....utils.prompt_roles import (
     count_disallowed_role_updates,
 )
 from ....utils.text import normalize_llm_text
+from ....utils.multimodal import redact_inline_media
 from .. import prompts as meta_prompts
 from .. import reporting
 from ..types import PromptCandidatesResponse
@@ -279,7 +280,10 @@ def generate_synthesis_prompts(
 
         synthesis_user_prompt = meta_prompts.build_synthesis_prompt(
             template=synthesis_template,
-            top_prompts_with_scores=top_prompts_with_scores,
+            top_prompts_with_scores=[
+                (redact_inline_media(messages), score, reasoning)
+                for messages, score, reasoning in top_prompts_with_scores
+            ],
             task_context_str=task_context_str,
             best_score=best_score,
             num_prompts=num_synthesis_prompts,

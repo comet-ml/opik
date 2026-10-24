@@ -8,6 +8,7 @@ import json
 
 from ...api_objects import chat_prompt
 from ..candidate_selection import DEFAULT_SELECTION_POLICY
+from ..multimodal import redact_inline_media
 
 
 def format_float(value: Any, digits: int = 6) -> str:
@@ -88,6 +89,7 @@ def format_prompt_messages(
     pretty: bool = True,
 ) -> str:
     """Format chat messages for history/context rendering."""
+    messages = redact_inline_media(messages)
     if pretty:
         lines: list[str] = []
         for msg in messages:

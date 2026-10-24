@@ -42,7 +42,10 @@ from ...utils.logging import debug_log
 from ...constants import normalize_eval_threads
 from ...utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
 from ...utils.scoring import improves_over
-from ...utils.multimodal import preserve_multimodal_message_structure
+from ...utils.multimodal import (
+    preserve_multimodal_message_structure,
+    redact_inline_media,
+)
 from . import types
 from . import prompts as few_shot_prompts
 from .ops.columnarsearch_ops import ColumnarSearchSpace, build_columnar_search_space
@@ -352,7 +355,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     placeholder=example_placeholder,
                 ),
             },
-            {"role": "user", "content": json.dumps(user_message)},
+            {"role": "user", "content": json.dumps(redact_inline_media(user_message))},
         ]
 
         sanitized_names, original_to_sanitized = self._sanitize_prompt_field_names(

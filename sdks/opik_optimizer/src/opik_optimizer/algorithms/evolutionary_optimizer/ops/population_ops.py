@@ -14,6 +14,7 @@ from ....core import runtime
 from ....core import llm_calls as _llm_calls
 from ....utils.helpers import json_to_dict
 from ....utils.prompt_library import PromptLibrary
+from ....utils.multimodal import redact_inline_media
 from ....utils.logging import compact_debug_text, debug_log
 from ....utils.text import normalize_llm_text
 from . import tool_ops
@@ -276,7 +277,7 @@ def _generate_variation_prompts(
     init_pop_report.start_variations(num_variations_on_initial)
     user_prompt_for_variation = prompts.get(
         "variation_user_prompt_template",
-        initial_prompt_messages=prompt.get_messages(),
+        initial_prompt_messages=redact_inline_media(prompt.get_messages()),
         task_description=task_desc_for_llm,
         style=output_style_guidance,
         num_variations=num_variations_on_initial,

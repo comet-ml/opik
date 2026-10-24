@@ -70,3 +70,42 @@ def test_gepa_reflective_inputs_are_bounded_and_exclude_labels(
     for record in records:
         assert set(record["Inputs"]) == {"question", "context"}
         assert len(json.dumps(record["Inputs"])) < 1_000
+
+
+INLINE_IMAGE = "data:image/png;base64," + "QUJD" * 500
+
+
+@pytest.mark.parametrize(
+    "optimizer_name", [n for n in harness.OPTIMIZERS if n != "ParameterOptimizer"]
+)
+@pytest.mark.parametrize("roles", ["system", "all"])
+def test_reasoning_requests_carry_no_inline_media(
+    optimizer_name: str,
+    roles: str,
+    install_fakes: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scenario = harness.build_scenario("S3_multimodal")
+    assert isinstance(scenario.prompt, harness.ChatPrompt)
+    messages = scenario.prompt.get_messages()
+    messages[0]["content"] = [
+        {"type": "text", "text": "You read images and answer."},
+        {"type": "image_url", "image_url": {"url": INLINE_IMAGE}},
+    ]
+    scenario.prompt.set_messages(messages)
+    install_fakes(scenario)
+    calls = _capture_reasoning_calls(monkeypatch)
+
+    result = harness.make_optimizer(optimizer_name).optimize_prompt(
+        prompt=scenario.prompt,
+        dataset=harness.make_dataset(scenario),
+        metric=harness.answer_match,
+        max_trials=harness.MAX_TRIALS[optimizer_name],
+        optimize_prompts=roles,
+    )
+
+    assert calls
+    assert [call for call in calls if "base64," in call] == []
+    final = json.dumps(result.prompt.get_messages())
+    assert INLINE_IMAGE in final
+    assert '"url": "{image}"' in final

@@ -20,6 +20,7 @@ from .. import helpers
 from opik_optimizer.utils.display import display_error, display_success
 from ....utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
 from ....utils.prompt_library import PromptLibrary
+from ....utils.multimodal import redact_inline_media
 from . import tool_ops
 from ..types import MutationResponse
 
@@ -357,7 +358,7 @@ def _semantic_mutation(
         }
         user_prompt_for_semantic_mutation = prompts.get(
             "semantic_mutation_user_prompt_template",
-            prompt_messages=prompt.get_messages(),
+            prompt_messages=redact_inline_media(prompt.get_messages()),
             task_description=helpers.get_task_description_for_llm(
                 initial_prompt,
                 optimize_tools=optimize_tools,
@@ -435,7 +436,7 @@ def _radical_innovation_mutation(
         "radical_innovation_user_prompt_template",
         task_description=task_desc_for_llm,
         style=current_output_style_guidance,
-        existing_prompt_messages=prompt.get_messages(),
+        existing_prompt_messages=redact_inline_media(prompt.get_messages()),
     )
     try:
         new_prompt_str = _llm_calls.call_model(
