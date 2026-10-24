@@ -1,0 +1,115 @@
+{
+  "details_keys": [
+    "baseline_parameters",
+    "global_trials",
+    "initial_score",
+    "local_trials",
+    "model",
+    "n_trials",
+    "optimized_model",
+    "optimized_model_kwargs",
+    "optimized_parameters",
+    "parameter_importance",
+    "parameter_precision",
+    "parameter_space",
+    "reused_baseline",
+    "scoring_health",
+    "search_ranges",
+    "search_stages",
+    "selection_meta",
+    "stop_reason",
+    "stopped_early",
+    "trials",
+    "trials_completed",
+    "trials_requested"
+  ],
+  "final_prompt_rescore": 0.5,
+  "finish_reason": null,
+  "history": [
+    {
+      "best_score": 0.333333,
+      "round_index": 0,
+      "stop_reason": "completed",
+      "trial_scores": [
+        0.333333
+      ]
+    },
+    {
+      "best_score": null,
+      "round_index": 1,
+      "stop_reason": "completed",
+      "trial_scores": [
+        0.333333
+      ]
+    },
+    {
+      "best_score": null,
+      "round_index": 2,
+      "stop_reason": "completed",
+      "trial_scores": [
+        0.333333
+      ]
+    },
+    {
+      "best_score": null,
+      "round_index": 3,
+      "stop_reason": "completed",
+      "trial_scores": [
+        0.333333
+      ]
+    },
+    {
+      "best_score": null,
+      "round_index": 4,
+      "stop_reason": "completed",
+      "trial_scores": [
+        0.333333
+      ]
+    },
+    {
+      "best_score": null,
+      "round_index": 5,
+      "stop_reason": "completed",
+      "trial_scores": [
+        0.5
+      ]
+    },
+    {
+      "best_score": null,
+      "round_index": 6,
+      "stop_reason": "completed",
+      "trial_scores": [
+        0.5
+      ]
+    }
+  ],
+  "history_rounds": 7,
+  "history_trials": 7,
+  "initial_score": 0.333333,
+  "known_issue": "details have no finish_reason",
+  "llm_call_kinds": [],
+  "metric_name": "answer_match",
+  "optimizer": "ParameterOptimizer",
+  "outcome": "ok",
+  "prompt": {
+    "messages": [
+      {
+        "content": "You are a helpful assistant.",
+        "role": "system"
+      },
+      {
+        "content": "Question: {question}",
+        "role": "user"
+      }
+    ],
+    "model": "openai/gpt-4o-mini",
+    "model_kwargs": {
+      "temperature": 0.156019
+    },
+    "name": "chat-prompt",
+    "tools": null
+  },
+  "score": 0.5,
+  "stopped_early": false,
+  "trials_completed": 6
+}

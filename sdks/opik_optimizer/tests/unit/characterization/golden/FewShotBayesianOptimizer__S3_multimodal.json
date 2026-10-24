@@ -1,0 +1,98 @@
+{
+  "details_keys": [
+    "example_indices",
+    "finish_reason",
+    "initial_score",
+    "model",
+    "model_parameters",
+    "prompt_parameter",
+    "reused_baseline",
+    "rounds",
+    "scoring_health",
+    "stop_reason",
+    "stop_reason_details",
+    "stopped_early",
+    "temperature",
+    "total_rounds",
+    "total_trials",
+    "trial_number",
+    "trials_completed",
+    "verbose"
+  ],
+  "final_prompt_rescore": 0.666667,
+  "finish_reason": "max_trials",
+  "history": [
+    {
+      "best_score": null,
+      "round_index": 0,
+      "stop_reason": "completed",
+      "trial_scores": [
+        0.666667
+      ]
+    },
+    {
+      "best_score": null,
+      "round_index": 1,
+      "stop_reason": "completed",
+      "trial_scores": [
+        0.5
+      ]
+    },
+    {
+      "best_score": null,
+      "round_index": 2,
+      "stop_reason": "completed",
+      "trial_scores": [
+        0.666667
+      ]
+    },
+    {
+      "best_score": null,
+      "round_index": 3,
+      "stop_reason": "max_trials",
+      "trial_scores": [
+        0.666667
+      ]
+    }
+  ],
+  "history_rounds": 4,
+  "history_trials": 4,
+  "initial_score": 0.5,
+  "known_issue": null,
+  "llm_call_kinds": [
+    "FewShotPromptMessages"
+  ],
+  "metric_name": "answer_match",
+  "optimizer": "FewShotBayesianOptimizer",
+  "outcome": "ok",
+  "prompt": {
+    "messages": [
+      {
+        "content": "You read images and answer.\n\nExamples:\nQ: What is the code for item 0?\nA: A0\n\nQ: What is the code for item 4?\nA: A4",
+        "role": "system"
+      },
+      {
+        "content": [
+          {
+            "text": "Question: {question}",
+            "type": "text"
+          },
+          {
+            "image_url": {
+              "url": "{image}"
+            },
+            "type": "image_url"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "openai/gpt-4o-mini",
+    "model_kwargs": {},
+    "name": "vision-prompt",
+    "tools": null
+  },
+  "score": 0.666667,
+  "stopped_early": true,
+  "trials_completed": 4
+}

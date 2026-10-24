@@ -1,0 +1,85 @@
+{
+  "details_keys": [
+    "convergence_threshold",
+    "finish_reason",
+    "initial_score",
+    "iterations_completed",
+    "max_parallel_batches",
+    "max_retries",
+    "model",
+    "model_parameters",
+    "n_threads",
+    "reused_baseline",
+    "scoring_health",
+    "stop_reason",
+    "stop_reason_details",
+    "stopped_early",
+    "temperature",
+    "trials_completed",
+    "verbose"
+  ],
+  "final_prompt_rescore": 0.333333,
+  "finish_reason": "no_improvement",
+  "history": [
+    {
+      "best_score": 0.333333,
+      "round_index": 0,
+      "stop_reason": "perfect_score",
+      "trial_scores": [
+        1.0,
+        0.333333
+      ]
+    }
+  ],
+  "history_rounds": 1,
+  "history_trials": 2,
+  "initial_score": 0.333333,
+  "known_issue": "reported score is the perfect-score trial's, but the returned prompt is the pre-perfect best (final_prompt_rescore < score); finish_reason is 'no_improvement' although a perfect score was reached; returned prompt and tool description are unchanged",
+  "llm_call_kinds": [
+    "HierarchicalRootCauseAnalysis",
+    "ImprovedPromptsResponse",
+    "RootCauseAnalysis"
+  ],
+  "metric_name": "answer_match",
+  "optimizer": "HierarchicalReflectiveOptimizer",
+  "outcome": "ok",
+  "prompt": {
+    "messages": [
+      {
+        "content": "You can use tools to answer.",
+        "role": "system"
+      },
+      {
+        "content": "Question: {question}",
+        "role": "user"
+      }
+    ],
+    "model": "openai/gpt-4o-mini",
+    "model_kwargs": {},
+    "name": "tool-prompt",
+    "tools": [
+      {
+        "function": {
+          "description": "Look up the code for an item.",
+          "name": "lookup_code",
+          "parameters": {
+            "properties": {
+              "query": {
+                "description": "The question to look up.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "function"
+      }
+    ]
+  },
+  "score": 1.0,
+  "stopped_early": true,
+  "trials_completed": 1
+}

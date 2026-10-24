@@ -1,0 +1,79 @@
+{
+  "details_keys": [
+    "finish_reason",
+    "hall_of_fame_size",
+    "initial_score",
+    "model",
+    "model_parameters",
+    "prompts_per_round",
+    "reused_baseline",
+    "scoring_health",
+    "stop_reason",
+    "stop_reason_details",
+    "stopped_early",
+    "temperature",
+    "trials_completed",
+    "verbose"
+  ],
+  "final_prompt_rescore": 1.0,
+  "finish_reason": "perfect_score",
+  "history": [
+    {
+      "best_score": 0.666667,
+      "round_index": 0,
+      "stop_reason": "completed",
+      "trial_scores": [
+        0.666667,
+        0.666667
+      ]
+    },
+    {
+      "best_score": 1.0,
+      "round_index": 1,
+      "stop_reason": "perfect_score",
+      "trial_scores": [
+        1.0
+      ]
+    }
+  ],
+  "history_rounds": 2,
+  "history_trials": 3,
+  "initial_score": 0.5,
+  "known_issue": null,
+  "llm_call_kinds": [
+    "PromptCandidatesResponse"
+  ],
+  "metric_name": "answer_match",
+  "optimizer": "MetaPromptOptimizer",
+  "outcome": "ok",
+  "prompt": {
+    "messages": [
+      {
+        "content": "You read images and answer. Answer with the exact value. Be concise. Think step by step.",
+        "role": "system"
+      },
+      {
+        "content": [
+          {
+            "text": "Question: {question}",
+            "type": "text"
+          },
+          {
+            "image_url": {
+              "url": "{image}"
+            },
+            "type": "image_url"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "openai/gpt-4o-mini",
+    "model_kwargs": {},
+    "name": "vision-prompt",
+    "tools": null
+  },
+  "score": 1.0,
+  "stopped_early": true,
+  "trials_completed": 3
+}
