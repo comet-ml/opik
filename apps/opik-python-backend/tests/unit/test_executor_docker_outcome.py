@@ -259,6 +259,67 @@ def test_studio_caller_opts_out_of_the_rejection_policy(executor):
     span.set_status.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param({}, id="missing-scores"),
+        pytest.param({"scores": None}, id="null-scores"),
+        pytest.param({"scores": [{"name": "m"}]}, id="missing-value"),
+        pytest.param(
+            {"scores": [{"name": "m", "value": 0.0, "scoring_failed": True}]},
+            id="scoring-failed",
+        ),
+    ],
+)
+def test_studio_caller_tolerates_a_missing_or_unusable_score_list(executor, body):
+    # Studio turns these into a 0.0 result instead of failing the item, so they
+    # stay out of the rejection counter and the span stays OK.
+    span = recording_span(executor)
+
+    response, outcomes = run_with_result(
+        executor, 0, json.dumps(body).encode("utf-8"), apply_rejection_policy=False
+    )
+
+    assert response == body
+    assert outcomes == ["success"]
+    span.set_status.assert_not_called()
+
+
+def test_studio_caller_still_counts_an_error_payload(executor):
+    # A metric that catches its own exception prints {"error": ...} and exits 0.
+    # Studio turns that into a 0.0 result, which used to make a broken metric look
+    # like a real zero; the rejection must still be counted and pinned on the span.
+    span = recording_span(executor)
+    body = {"code": 400, "error": "boom"}
+
+    response, outcomes = run_with_result(
+        executor, 0, json.dumps(body).encode("utf-8"), apply_rejection_policy=False
+    )
+
+    assert response == body
+    assert outcomes == ["invalid_code"]
+    attributes = {call.args[0]: call.args[1] for call in span.set_attribute.call_args_list}
+    status = span.set_status.call_args.args[0]
+    assert status.status_code == StatusCode.ERROR
+    assert attributes["error.reason"] == "error_payload"
+
+
+def test_studio_caller_still_counts_non_list_scores(executor):
+    # Studio indexes the list, so a string or object is not tolerated; only a
+    # missing, null, empty or all-unusable list is.
+    span = recording_span(executor)
+    body = {"scores": "not a list"}
+
+    response, outcomes = run_with_result(
+        executor, 0, json.dumps(body).encode("utf-8"), apply_rejection_policy=False
+    )
+
+    assert response == body
+    assert outcomes == ["invalid_code"]
+    attributes = {call.args[0]: call.args[1] for call in span.set_attribute.call_args_list}
+    assert attributes["error.reason"] == "no_scores"
+
+
 def test_studio_caller_still_counts_a_crash(executor):
     # Opting out of the rejection policy must not hide a non-zero exit: crashes are
     # recorded exactly as they are for the evaluator endpoint.

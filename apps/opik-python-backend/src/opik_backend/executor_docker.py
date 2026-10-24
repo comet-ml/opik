@@ -496,16 +496,22 @@ class DockerExecutor(CodeExecutorBase):
                 # a metric can exit 0 and still fail to produce a usable result line, which
                 # parse_execution_result reports as a 4xx. A non-zero exit comes first so a
                 # crashing metric is not reported as if it had printed its own error payload.
-                # The optimization studio accepts an empty or `scoring_failed` score list as
-                # a normal result, so it opts out of the rejection policy only; the outcome is
-                # still recorded, keeping studio successes and crashes in the counter.
-                reason = (
-                    "nonzero_exit"
-                    if exec_result.exit_code != 0
-                    else rejection_reason(parsed_result)
-                    if apply_rejection_policy
-                    else None
-                )
+                # The optimization studio accepts an empty or unusable score list as a
+                # normal result, so it opts out of the rejection policy only. The policy
+                # still runs, and only the reasons studio tolerates are dropped: malformed
+                # payloads, error payloads and non-zero exits stay `invalid_code`. Keeping
+                # the predicate means studio's counter cannot silently mark a broken metric
+                # as a real zero while a crash stays visible.
+                if exec_result.exit_code != 0:
+                    reason = "nonzero_exit"
+                else:
+                    reason = rejection_reason(parsed_result)
+                    if not apply_rejection_policy and reason in ("no_scores", "no_usable_score"):
+                        scores = parsed_result.get("scores")
+                        # Studio treats a missing, null, empty or all-unusable list as
+                        # "no score" and returns 0.0; a non-list value is not tolerated.
+                        if scores is None or isinstance(scores, list):
+                            reason = None
                 result_code = parsed_result.get("code") if isinstance(parsed_result, dict) else None
                 # `code` is response-controlled: keep the value bounded. Numbers pass
                 # through, strings are truncated, anything else is shown by type.
