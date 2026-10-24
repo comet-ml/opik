@@ -306,6 +306,73 @@ def test_litellm_chat_model_keeps_temperature_for_bedrock_gpt_oss(monkeypatch):
     assert kwargs.get("temperature") == 0.0
 
 
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "claude-opus-4-7",
+        "anthropic/claude-opus-4-7",
+        "bedrock/us.anthropic.claude-opus-4-7",
+        "bedrock/global.anthropic.claude-opus-5",
+        "bedrock/global.anthropic.claude-sonnet-5",
+        "anthropic/claude-sonnet-5",
+        "bedrock/us.anthropic.claude-opus-4-8",
+        "bedrock/global.anthropic.claude-haiku-5-5",
+        "bedrock/global.anthropic.claude-fable-5",
+        "bedrock/global.anthropic.claude-fable-5-1",
+    ],
+)
+def test_litellm_chat_model_drops_non_default_temperature_for_claude_opus_4_7_onward(
+    monkeypatch, model_name
+):
+    # These models reject any temperature other than the default. The agentic
+    # judge loop passes temperature=0 per call, so the filter has to catch it
+    # on the per-call path, not only on constructor kwargs.
+    stub = _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name=model_name)
+    model.generate_chat_completion(
+        messages=[{"role": "user", "content": "hello"}], temperature=0
+    )
+
+    assert stub._calls, "Expected completion to be invoked"
+    _, _, kwargs = stub._calls[-1]
+    assert "temperature" not in kwargs
+
+
+def test_litellm_chat_model_keeps_default_temperature_for_claude_opus_4_7(
+    monkeypatch,
+):
+    stub = _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="bedrock/us.anthropic.claude-opus-4-7"
+    )
+    model.generate_chat_completion(
+        messages=[{"role": "user", "content": "hello"}], temperature=1
+    )
+
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs.get("temperature") == 1
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    ["claude-opus-4-6", "anthropic/claude-sonnet-4-6", "claude-haiku-4-5"],
+)
+def test_litellm_chat_model_keeps_temperature_for_earlier_claude(
+    monkeypatch, model_name
+):
+    stub = _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name=model_name)
+    model.generate_chat_completion(
+        messages=[{"role": "user", "content": "hello"}], temperature=0
+    )
+
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs.get("temperature") == 0
+
+
 def test_litellm_chat_model_drops_seed_when_provider_does_not_support(
     monkeypatch, caplog
 ):
