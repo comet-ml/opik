@@ -7,6 +7,7 @@ from ...core.state import AlgorithmResult, OptimizationContext
 from ...utils.prompt_library import PromptOverrides
 from ... import constants
 from ...api_objects.types import MetricFunction
+from ...api_objects import chat_prompt
 from ...utils import throttle as _throttle
 from ...utils.logging import debug_log
 from ...utils.scoring import improves_over
@@ -298,10 +299,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                     )
                     from ...utils.display import display_tool_description
 
-                    if not is_single_prompt_optimization:
-                        raise ValueError(
-                            "Tool description optimization only supports single prompts."
-                        )
                     reporter = None
                     if self.verbose >= 1:
                         import json as _json
@@ -337,26 +334,40 @@ class MetaPromptOptimizer(BaseOptimizer):
                             )
 
                         reporter = _reporter
-                    single_candidates = (
-                        toolcalling_utils.generate_tool_description_candidates(
-                            optimizer=self,
-                            current_prompt=list(best_prompts.values())[0],
-                            best_score=best_score,
-                            round_num=round_num,
-                            previous_rounds=self.get_history_rounds(),
-                            metric=metric,
-                            optimization_id=optimization_id,
-                            project_name=self.project_name,
-                            build_history_context_fn=self._build_history_context,
-                            tool_names=tool_names,
-                            tool_description_reporter=reporter,
-                        )
+                    bundles_by_index: list[dict[str, chat_prompt.ChatPrompt]] = []
+                    selected_by_prompt = context.extra_params.get(
+                        "tool_names_by_prompt"
                     )
-                    prompt_key = next(iter(best_prompts.keys()))
-                    candidate_prompts = [
-                        {prompt_key: prompt}
-                        for prompt in single_candidates[:prompts_this_round]
-                    ]
+                    for prompt_key, current_prompt in best_prompts.items():
+                        if (
+                            selected_by_prompt is not None
+                            and prompt_key not in selected_by_prompt
+                        ):
+                            continue
+                        single_candidates = (
+                            toolcalling_utils.generate_tool_description_candidates(
+                                optimizer=self,
+                                current_prompt=current_prompt,
+                                best_score=best_score,
+                                round_num=round_num,
+                                previous_rounds=self.get_history_rounds(),
+                                metric=metric,
+                                optimization_id=optimization_id,
+                                project_name=self.project_name,
+                                build_history_context_fn=self._build_history_context,
+                                tool_names=selected_by_prompt[prompt_key]
+                                if selected_by_prompt is not None
+                                else tool_names,
+                                tool_description_reporter=reporter,
+                            )
+                        )
+                        for index, prompt in enumerate(
+                            single_candidates[:prompts_this_round]
+                        ):
+                            if index == len(bundles_by_index):
+                                bundles_by_index.append(dict(best_prompts))
+                            bundles_by_index[index][prompt_key] = prompt
+                    candidate_prompts = bundles_by_index
                 else:
                     candidate_prompts = candidate_ops.generate_round_candidates(
                         optimizer=self,

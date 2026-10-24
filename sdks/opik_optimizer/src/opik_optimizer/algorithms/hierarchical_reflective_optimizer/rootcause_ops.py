@@ -18,7 +18,6 @@ from ...utils.feedback import _truncate, _format_agent_trace
 logger = logging.getLogger(__name__)
 
 
-
 class HierarchicalRootCauseAnalyzer:
     """
     Performs hierarchical root cause analysis on evaluation results.

@@ -208,7 +208,7 @@ def build_seed_candidate(
     *,
     optimizable_prompts: dict[str, Any],
     allowed_roles: set[str] | None = None,
-    tool_names: list[str] | None = None,
+    tool_names: list[str] | dict[str, list[str]] | None = None,
     enable_tools: bool = False,
 ) -> dict[str, str]:
     seed_candidate: dict[str, str] = {}
@@ -228,13 +228,17 @@ def build_seed_candidate(
                 ]
                 content = " ".join(text_parts)
             seed_candidate[component_key] = str(content)
-        if enable_tools:
+        if enable_tools and (
+            not isinstance(tool_names, dict) or prompt_name in tool_names
+        ):
             # Include tool description components when tool optimization is enabled.
             seed_candidate.update(
                 segment_updates.build_tool_component_seed(
                     prompt_name=prompt_name,
                     prompt=prompt_obj,
-                    tool_names=tool_names,
+                    tool_names=tool_names[prompt_name]
+                    if isinstance(tool_names, dict)
+                    else tool_names,
                 )
             )
     return seed_candidate

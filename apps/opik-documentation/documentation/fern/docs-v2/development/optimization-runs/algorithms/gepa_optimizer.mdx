@@ -83,7 +83,7 @@ result.display()
 - GEPA emits its own baseline evaluation inside the optimization loop. You’ll see one baseline score from Opik’s wrapper and another from GEPA before the first trial; this is expected and does not double-charge the metric budget.
 - Reflection only triggers after GEPA accepts at least `reflection_minibatch_size` unique prompts. If the minibatch is larger than the trial budget, the optimizer logs a warning and skips reflection.
 - Reflection calls use `GepaOptimizer.model`, are traced as Opik spans, and count toward the run's reported LLM cost. They are **not** metric calls, so `max_trials` does not bound them — a run typically makes many more reflection calls than trials, because an iteration whose candidate loses on the mini-batch costs only `2 * reflection_minibatch_size` metric calls. The run reports the total as `reflection_call_count` in the result details; set `max_reflection_calls` to cap it.
-- GEPA supports **tool use during evaluation** (`allow_tool_use=True`) but does **not** support `optimize_tools=True` yet. Tool-description optimization requests are currently degraded/blocked until the adapter supports it.
+- GEPA supports tool use during evaluation (`allow_tool_use=True`) and tool-description optimization (`optimize_tools=True`). For prompt bundles, use qualified selectors such as `optimize_tools={"planner.lookup": True}` to select a particular prompt’s tool.
 
 ### GEPA scores vs. Opik scores
 

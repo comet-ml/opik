@@ -436,7 +436,7 @@ def _resolve_gepa_finish_reason(
 class GepaOptimizer(BaseOptimizer):
     # FIXME(opik_optimizer/#gepa-tool-optimization): Re-enable when GEPA adapter
     # can mutate and score tool descriptions end-to-end.
-    supports_tool_optimization: bool = False
+    supports_tool_optimization: bool = True
     supports_prompt_optimization: bool = True
     supports_multimodal: bool = True
     """
@@ -760,7 +760,8 @@ class GepaOptimizer(BaseOptimizer):
         seed_candidate = candidate_ops.build_seed_candidate(
             optimizable_prompts=optimizable_prompts,
             allowed_roles=optimizable_roles,
-            tool_names=context.extra_params.get("tool_names"),
+            tool_names=context.extra_params.get("tool_names_by_prompt")
+            or context.extra_params.get("tool_names"),
             enable_tools=bool(context.extra_params.get("optimize_tools")),
         )
 

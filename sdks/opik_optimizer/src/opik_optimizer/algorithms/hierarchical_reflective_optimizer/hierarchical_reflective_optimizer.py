@@ -436,6 +436,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     candidate_prompt=candidate_prompt,
                     improved_prompt=improved_prompt,
                     context=context,
+                    prompt_name=prompt_name,
                 )
                 improved_chat_prompts[prompt_name] = candidate_prompt
             improved_chat_prompts_candidates.append(improved_chat_prompts)
@@ -447,6 +448,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         candidate_prompt: chat_prompt.ChatPrompt,
         improved_prompt: ImprovedPrompt,
         context: OptimizationContext,
+        prompt_name: str | None = None,
     ) -> chat_prompt.ChatPrompt:
         """Apply tool/parameter description updates from an ImprovedPrompt."""
         if not context.extra_params.get("optimize_tools"):
@@ -455,7 +457,14 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             improved_prompt.tool_descriptions or improved_prompt.parameter_descriptions
         ):
             return candidate_prompt
-        allowed_tools = set(context.extra_params.get("tool_names") or [])
+        selected_by_prompt = context.extra_params.get("tool_names_by_prompt")
+        if selected_by_prompt is not None:
+            selected = selected_by_prompt.get(prompt_name or candidate_prompt.name, [])
+            if not selected:
+                return candidate_prompt
+        else:
+            selected = context.extra_params.get("tool_names") or []
+        allowed_tools = set(selected)
         return segment_updates.apply_tool_updates_from_descriptions(
             prompt=candidate_prompt,
             tool_descriptions=improved_prompt.tool_descriptions,

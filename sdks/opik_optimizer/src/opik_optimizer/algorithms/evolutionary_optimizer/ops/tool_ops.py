@@ -21,6 +21,9 @@ def apply_tool_updates_to_metadata(
     """Apply tool description updates to prompts metadata."""
     updated_metadata = copy.deepcopy(metadata)
     for prompt_name, messages in child_data.items():
+        selected_by_prompt = getattr(optimizer, "_tool_names_by_prompt", None)
+        if selected_by_prompt is not None and prompt_name not in selected_by_prompt:
+            continue
         prompt_meta = updated_metadata.get(prompt_name, {})
         tools = prompt_meta.get("tools")
         if not tools:
@@ -38,7 +41,9 @@ def apply_tool_updates_to_metadata(
         prompt = apply_tool_description_update(
             optimizer=optimizer,
             prompt=prompt,
-            tool_names=tool_names,
+            tool_names=selected_by_prompt[prompt_name]
+            if selected_by_prompt is not None
+            else tool_names,
             round_num=0,
             metric=metric,
         )
@@ -68,6 +73,11 @@ def apply_tool_description_update(
     additional selection/evaluation loop, so we force a deterministic, single
     update to keep the evolutionary pipeline stable.
     """
+    selected_by_prompt = getattr(optimizer, "_tool_names_by_prompt", None)
+    if selected_by_prompt is not None:
+        tool_names = selected_by_prompt.get(prompt.name, [])
+        if not tool_names:
+            return prompt
     if not prompt.tools:
         return prompt
     if metric is None:

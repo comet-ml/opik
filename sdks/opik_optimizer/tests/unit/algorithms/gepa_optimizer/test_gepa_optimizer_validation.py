@@ -103,7 +103,7 @@ class TestGepaOptimizerValidation:
         assert optimizer.model_parameters.get("max_tokens") == 100
         assert optimizer.n_threads == 8
 
-    def test_tool_optimization_not_supported_yet(self) -> None:
-        """GEPA can use tools during evaluation but does not optimize tool descriptions."""
+    def test_tool_optimization_is_supported(self) -> None:
+        """GEPA can optimize tool descriptions through candidate components."""
         optimizer = GepaOptimizer(model="openai/gpt-4")
-        assert optimizer.supports_tool_optimization is False
+        assert optimizer.supports_tool_optimization is True

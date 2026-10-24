@@ -160,3 +160,31 @@ def test_toolcalling__build_tool_blocks_redacts_sensitive_metadata() -> None:
     assert "***REDACTED***" in blocks
     assert "https://example.com" not in blocks
     assert "secret" not in blocks
+
+
+def test_bundle_selector_scopes_duplicate_tool_names_to_one_prompt():
+    from copy import deepcopy
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "lookup",
+                "description": "Look up",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        }
+    ]
+    bundle = {
+        name: ChatPrompt(name=name, system="Help", tools=deepcopy(tools))
+        for name in ["planner", "answerer"]
+    }
+    resolved, names = toolcalling.resolve_prompt_tools(
+        bundle, optimize_tools={"planner.lookup": True}
+    )
+    assert names == {"planner": ["lookup"]}
+    assert resolved["answerer"].tools == bundle["answerer"].tools
+    with pytest.raises(ValueError, match="not found"):
+        toolcalling.resolve_prompt_tools(
+            bundle, optimize_tools={"missing.lookup": True}
+        )

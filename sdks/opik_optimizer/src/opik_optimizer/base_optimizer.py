@@ -457,14 +457,10 @@ class BaseOptimizer(ABC):
         if not is_single_prompt_optimization and not optimize_tools:
             optimize_tools = None
         optimize_tools_provided = optimize_tools is not None
-        if optimize_tools_provided and not is_single_prompt_optimization:
-            raise ValueError(
-                "Tool description optimization only supports single prompts."
-            )
         if optimize_tools_provided:
             extra_params["optimize_tools"] = optimize_tools
 
-        tool_names: list[str] | None = None
+        tool_names: list[str] | dict[str, list[str]] | None = None
         if optimize_tools_provided and is_single_prompt_optimization:
             single_prompt = next(iter(optimizable_prompts.values()))
             resolved_prompt, tool_names = self._resolve_toolcalling(
@@ -474,12 +470,17 @@ class BaseOptimizer(ABC):
             optimizable_prompts = {resolved_prompt.name: resolved_prompt}
         else:
             resolved_prompts, tool_names = self._resolve_toolcalling(
-                optimizable_prompts
+                optimizable_prompts, optimize_tools=optimize_tools
             )
             optimizable_prompts = cast(
                 dict[str, chat_prompt.ChatPrompt], resolved_prompts
             )
-        if tool_names is not None:
+        if isinstance(tool_names, dict):
+            extra_params["tool_names_by_prompt"] = tool_names
+            extra_params["tool_names"] = sorted(
+                {tool for names in tool_names.values() for tool in names}
+            )
+        elif tool_names is not None:
             extra_params["tool_names"] = tool_names
 
         # Validate optimization inputs
@@ -609,7 +610,8 @@ class BaseOptimizer(ABC):
         *,
         optimize_tools: bool | dict[str, bool] | None = None,
     ) -> tuple[
-        chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt], list[str] | None
+        chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        list[str] | dict[str, list[str]] | None,
     ]:
         """Normalize MCP tool entries into function-calling tools."""
         from .utils.toolcalling.ops.toolcalling import resolve_prompt_tools

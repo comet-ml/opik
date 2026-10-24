@@ -86,16 +86,14 @@ def test_dict_prompt_with_optimize_tools_false_runs(
         if getattr(harness, name).supports_tool_optimization
     ],
 )
-def test_dict_prompt_with_optimize_tools_true_raises(
+def test_dict_prompt_without_tools_rejects_tool_optimization(
     optimizer_name: str, install_fakes
 ) -> None:
-    # current behaviour: tool description optimization is single-prompt only.
+    # Tool optimization needs at least one selected tool.
     scenario = harness.build_scenario("S2_multi")
     install_fakes(scenario)
     optimizer = harness.make_optimizer(optimizer_name)
-    with pytest.raises(
-        ValueError, match="Tool description optimization only supports single prompts"
-    ):
+    with pytest.raises(ValueError, match="must include selected tools"):
         optimizer.optimize_prompt(
             prompt=scenario.prompt,
             dataset=harness.make_dataset(scenario),
@@ -104,3 +102,36 @@ def test_dict_prompt_with_optimize_tools_true_raises(
             max_trials=1,
             optimize_tools=True,
         )
+
+
+@pytest.mark.parametrize(
+    "optimizer_name",
+    [
+        "MetaPromptOptimizer",
+        "EvolutionaryOptimizer",
+        "HierarchicalReflectiveOptimizer",
+        "GepaOptimizer",
+    ],
+)
+def test_bundle_tools_can_select_one_prompt(optimizer_name, install_fakes):
+    import copy
+
+    scenario = harness.build_scenario("S2_multi")
+    tool_prompt = harness.build_scenario("S4_tools").prompt
+    for prompt in scenario.prompt.values():
+        prompt.tools = copy.deepcopy(tool_prompt.tools)
+        prompt.function_map = tool_prompt.function_map
+    scenario.tools = True
+    install_fakes(scenario)
+    optimizer = harness.make_optimizer(optimizer_name)
+    result = optimizer.optimize_prompt(
+        prompt=scenario.prompt,
+        dataset=harness.make_dataset(scenario),
+        metric=harness.answer_match,
+        agent=scenario.agent,
+        max_trials=3,
+        optimize_tools={f"planner.{harness.TOOL_NAME}": True},
+    )
+    assert set(result.prompt) == {"planner", "answerer"}
+    assert result.prompt["answerer"].tools == scenario.prompt["answerer"].tools
+    assert result.prompt["planner"].function_map == tool_prompt.function_map

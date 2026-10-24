@@ -267,6 +267,7 @@ class ParameterOptimizer(BaseOptimizer):
         prompts, single = self._normalize_prompt_input(prompt)
         if not isinstance(parameter_space, ParameterSearchSpace):
             parameter_space = ParameterSearchSpace.model_validate(parameter_space)
+        assert isinstance(parameter_space, ParameterSearchSpace)
         base_kwargs = helpers.build_base_model_kwargs(self.model_parameters)
         prompts = helpers.build_base_prompts(prompts, self.model, base_kwargs)
         return super().optimize_prompt(

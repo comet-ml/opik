@@ -59,7 +59,7 @@
   "prompt": {
     "messages": [
       {
-        "content": "You can use tools to answer. Answer with the exact value. Be concise. Think step by step.",
+        "content": "You can use tools to answer. Answer with the exact value. Be concise.",
         "role": "system"
       },
       {
@@ -73,7 +73,7 @@
     "tools": [
       {
         "function": {
-          "description": "Look up the code for an item.",
+          "description": "Look up the code for an item. Answer with the exact value.",
           "name": "lookup_code",
           "parameters": {
             "properties": {
