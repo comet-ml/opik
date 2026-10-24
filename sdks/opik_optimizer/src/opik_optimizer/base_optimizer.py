@@ -444,12 +444,13 @@ class BaseOptimizer(ABC):
 
         from .utils.toolcalling.ops import toolcalling as toolcalling_utils
 
-        optimize_tools = toolcalling_utils.validate_optimization_flags(
-            optimize_prompts=bool(optimizable_roles),
-            optimize_tools=optimize_tools,
-            supports_tool_optimization=self.supports_tool_optimization,
-            warn_unsupported=True,
-        )
+        if self.supports_prompt_optimization:
+            optimize_tools = toolcalling_utils.validate_optimization_flags(
+                optimize_prompts=bool(optimizable_roles),
+                optimize_tools=optimize_tools,
+                supports_tool_optimization=self.supports_tool_optimization,
+                warn_unsupported=True,
+            )
         # A falsy value only declines tool optimization, which dict prompts honour.
         if not is_single_prompt_optimization and not optimize_tools:
             optimize_tools = None

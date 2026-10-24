@@ -15,13 +15,9 @@ from ...core import runtime
 from ...core.state import OptimizationContext, AlgorithmResult
 from ...core.results import OptimizationResult
 from ...agents import OptimizableAgent
-from ...agents import LiteLLMAgent
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
-from ...utils import display as display_utils
 from ...utils.optuna_runtime import configure_optuna_logging
-from ...utils.logging import debug_log
-from ...utils.scoring import improves_over
 from .types import ParameterType
 from .ops.optuna_ops import (
     build_optuna_objective,
@@ -33,7 +29,6 @@ from .ops.optuna_ops import (
 from .ops.search_ops import ParameterSearchSpace
 from . import prompts as param_prompts
 from ... import constants
-from . import reporting
 from . import helpers
 
 logger = logging.getLogger(__name__)
@@ -130,12 +125,6 @@ class ParameterOptimizer(BaseOptimizer):
             "where parameter_space is a ParameterSearchSpace or dict defining the parameters to optimize."
         )
 
-    def run_optimization(self, context: OptimizationContext) -> AlgorithmResult:
-        raise NotImplementedError(
-            "ParameterOptimizer does not use the standard run_optimization flow. "
-            "Use optimize_parameter() instead."
-        )
-
     def get_optimizer_metadata(self) -> dict[str, Any]:
         return {}
 
@@ -146,168 +135,6 @@ class ParameterOptimizer(BaseOptimizer):
             "n_trials": self.default_n_trials,
             "n_samples": context.n_samples,
         }
-
-    def _prepare_parameter_context(
-        self,
-        *,
-        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
-        dataset: Dataset,
-        metric: MetricFunction,
-        parameter_space: ParameterSearchSpace | Mapping[str, Any],
-        validation_dataset: Dataset | None,
-        experiment_config: dict | None,
-        n_samples: int | float | str | None,
-        n_samples_minibatch: int | None,
-        n_samples_strategy: str | None,
-        agent: OptimizableAgent | None,
-        project_name: str,
-        optimization_id: str | None,
-        max_trials: int,
-    ) -> tuple[
-        OptimizationContext,
-        dict[str, chat_prompt.ChatPrompt],
-        dict[str, Any],
-        ParameterSearchSpace,
-        bool,
-        Dataset,
-        dict | None,
-    ]:
-        self.project_name = project_name
-        self._reset_counters()
-        self.set_default_dataset_split("validation" if validation_dataset else "train")
-
-        if agent is None:
-            agent = LiteLLMAgent(project_name=project_name)
-
-        prompts, is_single_prompt_optimization = self._normalize_prompt_input(prompt)
-
-        if not isinstance(parameter_space, ParameterSearchSpace):
-            parameter_space = ParameterSearchSpace.model_validate(parameter_space)
-
-        self._validate_optimization_inputs(
-            prompts, dataset, metric, support_content_parts=True
-        )
-
-        if validation_dataset is not None:
-            logger.warning(
-                f"Due to the internal implementation of {self.__class__.__name__}, it currently "
-                "fully ignores the `dataset` if `validation_dataset` is provided. We recommend not "
-                "using the `validation_dataset` parameter."
-            )
-            experiment_config = experiment_config or {}
-            experiment_config["validation_dataset"] = validation_dataset.name
-            experiment_config["validation_dataset_id"] = validation_dataset.id
-
-        evaluation_dataset = self._select_evaluation_dataset(
-            dataset, validation_dataset
-        )
-
-        assert isinstance(parameter_space, ParameterSearchSpace)
-        prompt_names = list(prompts.keys())
-        expanded_parameter_space = parameter_space.expand_for_prompts(prompt_names)
-
-        base_model_kwargs = helpers.build_base_model_kwargs(self.model_parameters)
-        base_prompts = helpers.build_base_prompts(
-            prompts, self.model, base_model_kwargs
-        )
-
-        optimization = self._create_optimization_run(dataset, metric, optimization_id)
-
-        display_utils.display_header(
-            algorithm=self.__class__.__name__,
-            optimization_id=self.current_optimization_id,
-            dataset_id=dataset.id,
-            verbose=self.verbose,
-        )
-
-        display_prompt = (
-            list(base_prompts.values())[0]
-            if is_single_prompt_optimization
-            else base_prompts
-        )
-        display_utils.display_configuration(
-            messages=display_prompt,
-            optimizer_config={
-                "optimizer": self.__class__.__name__,
-                "n_trials": max_trials,
-                "n_samples": n_samples,
-                "n_threads": self.n_threads,
-                "local_search_ratio": self.local_search_ratio,
-                "local_search_scale": self.local_search_scale,
-            },
-            verbose=self.verbose,
-        )
-
-        context = OptimizationContext(
-            prompts=base_prompts,
-            initial_prompts=copy.deepcopy(base_prompts),
-            is_single_prompt_optimization=is_single_prompt_optimization,
-            dataset=dataset,
-            evaluation_dataset=evaluation_dataset,
-            validation_dataset=validation_dataset,
-            metric=metric,
-            agent=agent,
-            optimization=optimization,
-            optimization_id=self.current_optimization_id,
-            experiment_config=experiment_config,
-            n_samples=n_samples,
-            n_samples_minibatch=n_samples_minibatch,
-            n_samples_strategy=n_samples_strategy
-            or constants.DEFAULT_N_SAMPLES_STRATEGY,
-            max_trials=max_trials or self.default_n_trials,
-            project_name=project_name,
-            allow_tool_use=True,
-            baseline_score=None,
-            extra_params={},
-        )
-        return (
-            context,
-            base_prompts,
-            base_model_kwargs,
-            expanded_parameter_space,
-            is_single_prompt_optimization,
-            evaluation_dataset,
-            experiment_config,
-        )
-
-    def _evaluate_baseline_score(
-        self,
-        *,
-        context: OptimizationContext,
-        base_prompts: dict[str, chat_prompt.ChatPrompt],
-        agent: OptimizableAgent | None,
-        evaluation_dataset: Dataset,
-        metric: MetricFunction,
-        experiment_config: dict | None,
-        n_samples: int | float | str | None,
-        n_samples_strategy: str | None = None,
-    ) -> float:
-        with reporting.display_evaluation(
-            verbose=self.verbose,
-            selection_summary=display_utils.summarize_selection_policy(base_prompts),
-        ) as baseline_reporter:
-            self.pre_trial(context, base_prompts)
-            # return_evaluation_result=True so the baseline's scoring health is
-            # captured into context.scoring_health — ParameterOptimizer scores both
-            # baseline and candidates via evaluate_prompt directly (never evaluate()),
-            # so this is the only place the OPIK-7029 empty-run guard gets armed for it.
-            baseline_eval = self.evaluate_prompt(
-                prompt=base_prompts,
-                agent=agent,
-                dataset=evaluation_dataset,
-                metric=metric,
-                n_threads=self.n_threads,
-                verbose=self.verbose,
-                experiment_config=experiment_config,
-                n_samples=n_samples,
-                n_samples_strategy=n_samples_strategy or context.n_samples_strategy,
-                return_evaluation_result=True,
-            )
-            baseline_score = self._resolve_baseline_score_and_health(
-                context, baseline_eval
-            )
-            baseline_reporter.set_score(baseline_score)
-        return baseline_score
 
     def _record_baseline_round(
         self,
@@ -358,76 +185,6 @@ class ParameterOptimizer(BaseOptimizer):
                 "type": "baseline",
                 "stage": "baseline",
             },
-        )
-
-    def _build_early_baseline_result(
-        self,
-        *,
-        context: OptimizationContext,
-        base_prompts: dict[str, chat_prompt.ChatPrompt],
-        base_model_kwargs: dict[str, Any],
-        baseline_score: float,
-        metric: MetricFunction,
-        expanded_parameter_space: ParameterSearchSpace,
-        is_single_prompt_optimization: bool,
-    ) -> OptimizationResult:
-        display_prompt = (
-            list(base_prompts.values())[0]
-            if is_single_prompt_optimization
-            else base_prompts
-        )
-        display_utils.display_result(
-            initial_score=baseline_score,
-            best_score=baseline_score,
-            prompt=display_prompt,
-            verbose=self.verbose,
-        )
-        early_result_prompt, early_initial_prompt = self._select_result_prompts(
-            best_prompts=base_prompts,
-            initial_prompts=base_prompts,
-            is_single_prompt_optimization=is_single_prompt_optimization,
-        )
-        return self._build_early_result(
-            optimizer_name=self.__class__.__name__,
-            prompt=early_result_prompt,
-            initial_prompt=early_initial_prompt,
-            score=baseline_score,
-            metric_name=metric.__name__,
-            details={
-                "initial_score": baseline_score,
-                # ParameterOptimizer builds its result directly (bypasses
-                # runtime.build_final_result), so surface the baseline's scoring health
-                # here too — otherwise the failed/total counts seeded on the context in
-                # _evaluate_baseline_score never reach OptimizationResult.details for
-                # worker/UI consumers (review: baz-reviewer).
-                "scoring_health": context.scoring_health
-                or {"failed_count": 0, "total_count": 0},
-                "optimized_parameters": {},
-                "optimized_model_kwargs": base_model_kwargs,
-                "optimized_model": list(base_prompts.values())[0].model,
-                "trials": [],
-                "parameter_space": expanded_parameter_space.model_dump(by_alias=True),
-                "n_trials": 0,
-                "model": list(base_prompts.values())[0].model,
-                "rounds": [],
-                "baseline_parameters": base_model_kwargs,
-                "local_trials": 0,
-                "global_trials": 0,
-                "search_stages": [],
-                "search_ranges": {},
-                "parameter_importance": {},
-                "parameter_precision": 6,
-                "stopped_early": True,
-                "finish_reason": "perfect_score",
-                "stop_reason": "baseline_score_met_threshold",
-                "perfect_score": self.perfect_score,
-                "skip_perfect_score": self.skip_perfect_score,
-            },
-            history=self.get_history_entries(),
-            llm_calls=self.llm_call_counter,
-            llm_calls_tools=self.llm_call_tools_counter,
-            optimization_id=self.current_optimization_id,
-            dataset_id=context.dataset.id,
         )
 
     def optimize_parameter(
@@ -507,77 +264,73 @@ class ParameterOptimizer(BaseOptimizer):
         Returns:
             AlgorithmResult with best prompts, score, history, and metadata.
         """
-        (
-            context,
-            base_prompts,
-            base_model_kwargs,
-            expanded_parameter_space,
-            is_single_prompt_optimization,
-            evaluation_dataset,
-            experiment_config,
-        ) = self._prepare_parameter_context(
-            prompt=prompt,
+        prompts, single = self._normalize_prompt_input(prompt)
+        if not isinstance(parameter_space, ParameterSearchSpace):
+            parameter_space = ParameterSearchSpace.model_validate(parameter_space)
+        base_kwargs = helpers.build_base_model_kwargs(self.model_parameters)
+        prompts = helpers.build_base_prompts(prompts, self.model, base_kwargs)
+        return super().optimize_prompt(
+            prompt=next(iter(prompts.values())) if single else prompts,
             dataset=dataset,
             metric=metric,
-            parameter_space=parameter_space,
-            validation_dataset=validation_dataset,
+            agent=agent,
             experiment_config=experiment_config,
+            validation_dataset=validation_dataset,
+            max_trials=self.default_n_trials
+            if max_trials is None
+            else max(0, max_trials),
             n_samples=n_samples,
             n_samples_minibatch=n_samples_minibatch,
             n_samples_strategy=n_samples_strategy,
-            agent=agent,
             project_name=project_name,
             optimization_id=optimization_id,
-            max_trials=max_trials or self.default_n_trials,
-        )
-        optimization = context.optimization
-        local_trials_override = local_trials
-        local_search_scale_override = local_search_scale
-
-        baseline_score = self._evaluate_baseline_score(
-            context=context,
-            base_prompts=base_prompts,
-            agent=context.agent,
-            evaluation_dataset=evaluation_dataset,
-            metric=metric,
-            experiment_config=experiment_config,
-            n_samples=n_samples,
-            n_samples_strategy=n_samples_strategy,
+            optimize_prompts=False,
+            parameter_space=parameter_space.expand_for_prompts(list(prompts)),
+            sampler=sampler,
+            callbacks=callbacks,
+            timeout=timeout,
+            local_trials=local_trials,
+            local_search_scale=local_search_scale,
         )
 
-        if self._should_skip_optimization(baseline_score):
-            logger.info(
-                "Baseline score %.4f >= %.4f; skipping parameter optimization.",
-                baseline_score,
-                self.perfect_score,
-            )
-            self._history_builder.clear()
-            self._record_baseline_round(
-                context=context,
-                base_prompts=base_prompts,
-                base_model_kwargs=base_model_kwargs,
-                baseline_score=baseline_score,
-                is_single_prompt_optimization=is_single_prompt_optimization,
-            )
-            return self._build_early_baseline_result(
-                context=context,
-                base_prompts=base_prompts,
-                base_model_kwargs=base_model_kwargs,
-                baseline_score=baseline_score,
-                metric=metric,
-                expanded_parameter_space=expanded_parameter_space,
-                is_single_prompt_optimization=is_single_prompt_optimization,
-            )
+    def post_optimize(
+        self, context: OptimizationContext, result: OptimizationResult
+    ) -> OptimizationResult:
+        # Keep parameter-specific fields on baseline-only results too.
+        result.details.setdefault("n_trials", 0)
+        result.details.setdefault("optimized_parameters", {})
+        result.details.setdefault(
+            "parameter_space",
+            context.extra_params["parameter_space"].model_dump(by_alias=True),
+        )
+        return result
 
-        self._history_builder.clear()
+    def run_optimization(self, context: OptimizationContext) -> AlgorithmResult:
+        params = context.extra_params
+        base_prompts = context.prompts
+        base_model_kwargs = helpers.build_base_model_kwargs(self.model_parameters)
+        expanded_parameter_space = params["parameter_space"]
+        baseline_score = context.baseline_score
+        assert baseline_score is not None
+        metric = context.metric
+        agent = context.agent
+        evaluation_dataset = context.evaluation_dataset
+        experiment_config = context.experiment_config
+        n_samples = context.n_samples
+        n_samples_strategy = context.n_samples_strategy
+        max_trials = context.max_trials
+        sampler = params.get("sampler")
+        callbacks = params.get("callbacks")
+        timeout = params.get("timeout")
+        local_trials_override = params.get("local_trials")
+        local_search_scale_override = params.get("local_search_scale")
         self._record_baseline_round(
             context=context,
             base_prompts=base_prompts,
             base_model_kwargs=base_model_kwargs,
             baseline_score=baseline_score,
-            is_single_prompt_optimization=is_single_prompt_optimization,
+            is_single_prompt_optimization=context.is_single_prompt_optimization,
         )
-
         configure_optuna_logging(logger=logger)
 
         sampler = sampler or optuna.samplers.TPESampler(seed=self.seed)
@@ -666,7 +419,8 @@ class ParameterOptimizer(BaseOptimizer):
 
         local_space: ParameterSearchSpace | None = None
         if (
-            local_trials > 0
+            not context.should_stop
+            and local_trials > 0
             and completed_trials
             and any(
                 spec.distribution in {ParameterType.FLOAT, ParameterType.INT}
@@ -733,27 +487,7 @@ class ParameterOptimizer(BaseOptimizer):
             expanded_parameter_space=expanded_parameter_space,
         )
 
-        display_prompt = (
-            list(best_state["prompts"].values())[0]
-            if is_single_prompt_optimization
-            else best_state["prompts"]
-        )
-        display_utils.display_result(
-            initial_score=baseline_score,
-            best_score=best_score,
-            prompt=display_prompt,
-            verbose=self.verbose,
-        )
-
-        if optimization is not None:
-            self._update_optimization(optimization, status="completed")
-            logger.info(
-                "Optimization %s status updated to completed.",
-                self.current_optimization_id,
-            )
-
         history_entries = self.get_history_entries()
-
         details = {
             "initial_score": baseline_score,
             "optimized_parameters": best_parameters,
@@ -772,49 +506,15 @@ class ParameterOptimizer(BaseOptimizer):
             "parameter_precision": 6,
             "trials_requested": total_trials,
             "trials_completed": len(completed_trials),
-            "stopped_early": len(completed_trials) < total_trials,
-            "stop_reason": None,
-            # OPIK-7038: this optimizer builds its result directly (it bypasses
-            # runtime.build_final_result), so set the flag here too for parity.
-            "reused_baseline": baseline_score is not None
-            and not improves_over(best_score, baseline_score),
-            # Same bypass reason (OPIK-7029): carry the baseline scoring health seeded on
-            # the context into details so failed/total counts reach worker/UI consumers.
-            "scoring_health": context.scoring_health
-            or {"failed_count": 0, "total_count": 0},
             "selection_meta": {
                 "sampler": sampler.__class__.__name__ if sampler else None,
                 "pruner": type(study.pruner).__name__ if study.pruner else None,
             },
         }
 
-        # Prepare result prompt based on single vs multi-prompt optimization
-        result_prompt, initial_prompt_result = self._select_result_prompts(
+        return AlgorithmResult(
             best_prompts=best_state["prompts"],
-            initial_prompts=base_prompts,
-            is_single_prompt_optimization=is_single_prompt_optimization,
-        )
-
-        result = OptimizationResult(
-            optimizer=self.__class__.__name__,
-            prompt=result_prompt,
-            initial_prompt=initial_prompt_result,
-            initial_score=baseline_score,
-            score=best_score,
-            metric_name=metric.__name__,
-            details=details,
-            history=self.get_history_entries(),
-            llm_calls=self.llm_call_counter,
-            llm_calls_tools=self.llm_call_tools_counter,
-            optimization_id=self.current_optimization_id,
-            dataset_id=dataset.id,
-        )
-        debug_log(
-            "optimize_end",
-            optimizer=self.__class__.__name__,
             best_score=best_score,
-            trials_completed=len(completed_trials),
-            stop_reason=None,
+            history=history_entries,
+            metadata=details,
         )
-        runtime.log_final_state(optimizer=self, result=result)
-        return result

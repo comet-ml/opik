@@ -54,7 +54,7 @@ def build_base_prompts(
     base_prompts: dict[str, chat_prompt.ChatPrompt] = {}
     for name, p in prompts.items():
         base_p = p.copy()
-        base_p.model = model
+        base_p.model = p.model or model
         merged_kwargs = {
             **base_model_kwargs,
             **copy.deepcopy(p.model_kwargs or {}),

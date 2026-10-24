@@ -49,12 +49,6 @@ KNOWN_ISSUES: dict[tuple[str, str], str] = {
     ("HierarchicalReflectiveOptimizer", "S3b_multimodal_multitext"): (
         "system content parts collapsed into a single string"
     ),
-    # current behaviour: optimize_parameter results carry no finish_reason.
-    ("ParameterOptimizer", "S1_single"): "details have no finish_reason",
-    ("ParameterOptimizer", "S2_multi"): "details have no finish_reason",
-    ("ParameterOptimizer", "S3_multimodal"): "details have no finish_reason",
-    ("ParameterOptimizer", "S3b_multimodal_multitext"): "details have no finish_reason",
-    ("ParameterOptimizer", "S4_tools"): "details have no finish_reason",
 }
 
 

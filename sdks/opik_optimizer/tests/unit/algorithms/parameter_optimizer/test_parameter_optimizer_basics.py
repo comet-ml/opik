@@ -116,3 +116,57 @@ class TestNormalizePromptInput:
 
         assert prompts is prompt_dict
         assert is_single is False
+
+
+class TestSharedLifecycle:
+    def test_stops_on_winning_trial_and_keeps_prompt_models(
+        self, mock_opik_client, monkeypatch
+    ):
+        mock_opik_client()
+        optimizer = ParameterOptimizer(model="optimizer-model", verbose=0)
+        prompts = {
+            "a": ChatPrompt(name="a", system="A", model="agent-a"),
+            "b": ChatPrompt(name="b", system="B", model="agent-b"),
+        }
+        scores = iter([0.2, 1.0])
+        seen = []
+
+        def evaluate(**kwargs):
+            seen.append(kwargs["prompt"])
+            return next(scores)
+
+        monkeypatch.setattr(optimizer, "evaluate_prompt", evaluate)
+        finalized = MagicMock(wraps=optimizer._finalize_optimization)
+        monkeypatch.setattr(optimizer, "_finalize_optimization", finalized)
+        result = optimizer.optimize_parameter(
+            prompt=prompts,
+            dataset=make_mock_dataset(),
+            metric=make_simple_metric(),
+            parameter_space=space(float_param("temperature")),
+            max_trials=5,
+        )
+        assert len(seen) == 2
+        assert result.score == 1.0
+        assert result.details["trials_completed"] == 1
+        assert result.details["finish_reason"] == "perfect_score"
+        assert {key: value.model for key, value in result.prompt.items()} == {
+            "a": "agent-a",
+            "b": "agent-b",
+        }
+        assert finalized.call_args.kwargs["status"] == "completed"
+
+    def test_baseline_skip_finalizes(self, mock_opik_client, monkeypatch):
+        mock_opik_client()
+        optimizer = ParameterOptimizer(verbose=0)
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 1.0)
+        finalized = MagicMock(wraps=optimizer._finalize_optimization)
+        monkeypatch.setattr(optimizer, "_finalize_optimization", finalized)
+        result = optimizer.optimize_parameter(
+            prompt=ChatPrompt(system="A"),
+            dataset=make_mock_dataset(),
+            metric=make_simple_metric(),
+            parameter_space=space(float_param("temperature")),
+            max_trials=5,
+        )
+        assert result.details["finish_reason"] == "perfect_score"
+        assert finalized.call_args.kwargs["status"] == "completed"

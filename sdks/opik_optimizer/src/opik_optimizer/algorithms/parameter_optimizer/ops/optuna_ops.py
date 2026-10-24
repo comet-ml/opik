@@ -120,7 +120,6 @@ def build_optuna_objective(
                 local_trials=stage_ref.get("local_trials"),
                 global_trials=stage_ref.get("global_trials"),
             )
-            optimizer.pre_trial(context, tuned_prompts, round_handle=round_handle)
             sampling_tag = optimizer._build_sampling_tag(
                 scope="parameter_trial",
                 candidate_id=str(trial.number),
@@ -138,16 +137,10 @@ def build_optuna_objective(
             trial_experiment_config["optimizer_metadata"]["model_parameters"] = (
                 trial_model_kwargs
             )
-            score = optimizer.evaluate_prompt(
-                prompt=tuned_prompts,
-                agent=agent,
-                dataset=evaluation_dataset,
-                metric=metric,
-                n_threads=optimizer.n_threads,
-                verbose=optimizer.verbose,
+            score = optimizer.evaluate(
+                context,
+                tuned_prompts,
                 experiment_config=trial_experiment_config,
-                n_samples=n_samples,
-                n_samples_strategy=n_samples_strategy or context.n_samples_strategy,
                 sampling_tag=sampling_tag,
             )
 
@@ -217,6 +210,8 @@ def build_optuna_objective(
             context=context,
             stop_reason=context.finish_reason,
         )
+        if context.should_stop:
+            trial.study.stop()
         return float(score)
 
     return objective

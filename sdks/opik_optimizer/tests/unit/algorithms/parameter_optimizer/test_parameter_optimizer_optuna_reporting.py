@@ -56,6 +56,7 @@ class TestReporterLifecycle:
 
         class FakeTrial:
             def __init__(self, number: int) -> None:
+                self.study = MagicMock()
                 self.number = number
                 self.value: float | None = None
                 self.user_attrs: dict[str, Any] = {}
@@ -160,38 +161,30 @@ class TestOptunaHistoryRedaction:
         prompt = ChatPrompt(name="p", system="Test")
         optimizer = ParameterOptimizer(model="gpt-4o", verbose=0)
 
-        (
-            context,
-            base_prompts,
-            base_model_kwargs,
-            expanded_parameter_space,
-            _,
-            evaluation_dataset,
-            experiment_config,
-        ) = optimizer._prepare_parameter_context(
+        parameter_space = ParameterSearchSpace(
+            parameters=[
+                ParameterSpec(
+                    name="api_key",
+                    distribution=ParameterType.FLOAT,
+                    low=0.0,
+                    high=1.0,
+                )
+            ]
+        )
+        context = optimizer._setup_optimization(
             prompt=prompt,
             dataset=dataset,
             metric=lambda item, output: 0.5,
-            parameter_space=ParameterSearchSpace(
-                parameters=[
-                    ParameterSpec(
-                        name="api_key",
-                        distribution=ParameterType.FLOAT,
-                        low=0.0,
-                        high=1.0,
-                    )
-                ]
-            ),
-            validation_dataset=None,
-            experiment_config=None,
-            n_samples=None,
-            n_samples_minibatch=None,
-            n_samples_strategy=None,
-            agent=None,
             project_name="Optimization",
-            optimization_id=None,
             max_trials=1,
         )
+        base_prompts = context.prompts
+        base_model_kwargs = {}
+        expanded_parameter_space = parameter_space.expand_for_prompts(
+            list(base_prompts)
+        )
+        evaluation_dataset = context.evaluation_dataset
+        experiment_config = context.experiment_config
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
 
@@ -242,6 +235,7 @@ class TestOptunaHistoryRedaction:
 
         class FakeTrial:
             def __init__(self) -> None:
+                self.study = MagicMock()
                 self.number = 0
                 self.user_attrs: dict[str, Any] = {}
 

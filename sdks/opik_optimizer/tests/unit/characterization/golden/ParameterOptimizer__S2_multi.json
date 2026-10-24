@@ -1,10 +1,12 @@
 {
   "details_keys": [
     "baseline_parameters",
+    "finish_reason",
     "global_trials",
     "initial_score",
     "local_trials",
     "model",
+    "model_parameters",
     "n_trials",
     "optimized_model",
     "optimized_model_kwargs",
@@ -18,13 +20,16 @@
     "search_stages",
     "selection_meta",
     "stop_reason",
+    "stop_reason_details",
     "stopped_early",
+    "temperature",
     "trials",
     "trials_completed",
-    "trials_requested"
+    "trials_requested",
+    "verbose"
   ],
   "final_prompt_rescore": 0.333333,
-  "finish_reason": null,
+  "finish_reason": "completed",
   "history": [
     {
       "best_score": 0.333333,
@@ -78,7 +83,7 @@
   "history_rounds": 6,
   "history_trials": 6,
   "initial_score": 0.333333,
-  "known_issue": "details have no finish_reason",
+  "known_issue": null,
   "llm_call_kinds": [],
   "metric_name": "answer_match",
   "optimizer": "ParameterOptimizer",
@@ -132,6 +137,6 @@
     }
   },
   "score": 0.333333,
-  "stopped_early": true,
+  "stopped_early": false,
   "trials_completed": 5
 }
