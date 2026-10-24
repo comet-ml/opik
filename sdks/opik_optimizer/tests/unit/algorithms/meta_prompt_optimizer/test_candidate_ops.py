@@ -421,3 +421,28 @@ def test_history_builder_assigns_trial_indices() -> None:
     trials = history[0].get("trials") or []
     assert trials
     assert trials[0].get("trial_index") is not None
+
+
+@pytest.mark.parametrize(
+    "metric_name,content",
+    [
+        ("exact", "Respond with the exact color name."),
+        ("accuracy", "Prioritize accuracy and use only the supplied evidence."),
+        ("", "Return a short answer."),
+    ],
+)
+def test_ordinary_metric_words_do_not_reject_valid_candidates(metric_name, content):
+    result = _sanitize_system_prompts([content], metric_name=metric_name)
+    assert len(result["prompts"]) == 1
+
+
+@pytest.mark.parametrize(
+    "content",
+    ["Optimize for exact.", "Maximize the exact metric.", "Call exact(output)."],
+)
+def test_explicit_references_to_a_common_word_metric_are_rejected(content):
+    result = _sanitize_system_prompts(
+        [content, "Return a short answer."], metric_name="exact"
+    )
+    assert len(result["prompts"]) == 1
+    assert result["prompts"][0]["prompt"][0]["content"] == "Return a short answer."

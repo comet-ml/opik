@@ -63,8 +63,17 @@ def sanitize_generated_prompts(
     Returns:
         Sanitized prompt_json with rejected prompts removed
     """
+    metric = metric_name.strip().lower()
+    metric_patterns = (
+        [f"{metric} metric", f"{metric} score", f"optimize for {metric}", f"{metric}("]
+        if metric
+        else []
+    )
+    # Function-style names are distinctive; ordinary words such as "exact" are not.
+    if "_" in metric or "-" in metric:
+        metric_patterns.append(metric)
     FORBIDDEN_PATTERNS = [
-        metric_name.lower(),
+        *metric_patterns,
         "f1 score",
         "f1-score",
         "token-level",
