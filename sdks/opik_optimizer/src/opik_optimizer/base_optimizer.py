@@ -535,9 +535,17 @@ class BaseOptimizer(ABC):
         # Reset counters
         self._reset_counters()
 
-        # Get existing optimization if provided
+        # Reuse the given optimization if it exists, otherwise create it with that ID.
+        opik_optimization = None
         if optimization_id:
-            opik_optimization = self.opik_client.get_optimization_by_id(optimization_id)
+            try:
+                opik_optimization = self.opik_client.get_optimization_by_id(
+                    optimization_id
+                )
+            except ApiError as e:
+                if e.status_code != 404:
+                    raise
+        if opik_optimization is not None:
             self.current_optimization_id = opik_optimization.id
             logger.debug(f"Using existing optimization with ID: {opik_optimization.id}")
         else:
@@ -1682,7 +1690,8 @@ class BaseOptimizer(ABC):
                TODO: keep internal until the strategy set is stabilized.
            auto_continue: Whether to continue optimization automatically
            project_name: Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")
-           optimization_id: Optional ID to use when creating the Opik optimization run
+           optimization_id: Optional ID of the Opik optimization run to log to. An existing
+               run is reused; otherwise one is created with this ID (must be a valid UUIDv7).
            validation_dataset: Optional validation dataset for ranking candidates
            max_trials: Maximum number of optimization trials
            allow_tool_use: Whether tools may be executed during evaluation (default True)

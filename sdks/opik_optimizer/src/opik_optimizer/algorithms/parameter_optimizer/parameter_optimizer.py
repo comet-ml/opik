@@ -257,8 +257,8 @@ class ParameterOptimizer(BaseOptimizer):
             timeout: Maximum time in seconds for optimization
             local_trials: Number of trials for local search (overrides local_search_ratio)
             local_search_scale: Scale factor for local search narrowing (0.0-1.0)
-            optimization_id: Optional ID to use when creating the Opik optimization run;
-                when provided it must be a valid UUIDv7 string.
+            optimization_id: Optional ID of the Opik optimization run to log to. An existing
+                run is reused; otherwise one is created with this ID (must be a valid UUIDv7).
 
         Returns:
             AlgorithmResult with best prompts, score, history, and metadata.

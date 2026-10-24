@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from opik.rest_api.core import ApiError
 
 from opik_optimizer.api_objects.types import MetricFunction
 from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer
@@ -138,3 +139,49 @@ class TestSetupOptimizationParamsAndTracking:
         assert optimizer.current_optimization_id == "opt-999"
         assert context.optimization_id == "opt-999"
         assert context.optimization is existing
+        mock_client.create_optimization.assert_not_called()
+
+    def test_missing_optimization_id_creates_run_with_that_id(
+        self,
+        optimizer: ConcreteOptimizer,
+        simple_chat_prompt,
+        mock_opik_client,
+        mock_metric: MetricFunction,
+    ) -> None:
+        """An optimization_id the backend doesn't know is created with that ID."""
+        mock_client = mock_opik_client(optimization_id="opt-new")
+        mock_client.get_optimization_by_id.side_effect = ApiError(
+            status_code=404, body="not found"
+        )
+
+        context = optimizer._setup_optimization(
+            prompt=simple_chat_prompt,
+            dataset=make_mock_dataset([{"id": "1", "input": "test"}]),
+            metric=mock_metric,
+            optimization_id="opt-new",
+        )
+
+        create_kwargs = mock_client.create_optimization.call_args.kwargs
+        assert create_kwargs["optimization_id"] == "opt-new"
+        assert context.optimization_id == "opt-new"
+        assert context.optimization is mock_client.create_optimization.return_value
+
+    def test_optimization_lookup_errors_other_than_not_found_propagate(
+        self,
+        optimizer: ConcreteOptimizer,
+        simple_chat_prompt,
+        mock_opik_client,
+        mock_metric: MetricFunction,
+    ) -> None:
+        mock_client = mock_opik_client()
+        mock_client.get_optimization_by_id.side_effect = ApiError(
+            status_code=500, body="boom"
+        )
+        with pytest.raises(ApiError):
+            optimizer._setup_optimization(
+                prompt=simple_chat_prompt,
+                dataset=make_mock_dataset([{"id": "1", "input": "test"}]),
+                metric=mock_metric,
+                optimization_id="opt-x",
+            )
+        mock_client.create_optimization.assert_not_called()

@@ -441,7 +441,7 @@ optimize_prompt(
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy name (default "random_sorted")</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
 <ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
@@ -1051,7 +1051,7 @@ optimize_prompt(
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy name (default "random_sorted")</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
 <ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
@@ -1671,7 +1671,7 @@ optimize_prompt(
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy name (default "random_sorted")</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
 <ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
@@ -2305,7 +2305,7 @@ optimize_prompt(
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy name (default "random_sorted")</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
 <ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
@@ -2925,7 +2925,7 @@ optimize_prompt(
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy name (default "random_sorted")</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
 <ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
@@ -3546,7 +3546,7 @@ optimize_parameter(
 <ParamField path="timeout" type="float | None" optional={true}>Maximum time in seconds for optimization</ParamField>
 <ParamField path="local_trials" type="int | None" optional={true}>Number of trials for local search (overrides local_search_ratio)</ParamField>
 <ParamField path="local_search_scale" type="float | None" optional={true}>Scale factor for local search narrowing (0.0-1.0)</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
 
 #### post_baseline
 ```python wordWrap
@@ -4194,7 +4194,7 @@ optimize_prompt(
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy name (default "random_sorted")</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
 <ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
