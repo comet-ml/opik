@@ -450,6 +450,9 @@ class BaseOptimizer(ABC):
             supports_tool_optimization=self.supports_tool_optimization,
             warn_unsupported=True,
         )
+        # A falsy value only declines tool optimization, which dict prompts honour.
+        if not is_single_prompt_optimization and not optimize_tools:
+            optimize_tools = None
         optimize_tools_provided = optimize_tools is not None
         if optimize_tools_provided and not is_single_prompt_optimization:
             raise ValueError(

@@ -95,12 +95,37 @@ def test_parameter_optimizer_optimize_prompt_raises(install_fakes) -> None:
     "optimizer_name",
     [name for name in harness.OPTIMIZERS if name != "ParameterOptimizer"],
 )
-def test_dict_prompt_with_optimize_tools_false_raises(
+def test_dict_prompt_with_optimize_tools_false_runs(
     optimizer_name: str, install_fakes
 ) -> None:
-    # current behaviour: passing optimize_tools=False (explicitly *disabling*
-    # tool optimization) together with a dict of prompts raises, because setup
-    # treats any non-None optimize_tools as "provided".
+    # optimize_tools=False explicitly *disables* tool optimization, which dict
+    # prompts support; it must not trip the single-prompt-only guard.
+    scenario = harness.build_scenario("S2_multi")
+    install_fakes(scenario)
+    optimizer = harness.make_optimizer(optimizer_name)
+    result = optimizer.optimize_prompt(
+        prompt=scenario.prompt,
+        dataset=harness.make_dataset(scenario),
+        metric=harness.answer_match,
+        agent=scenario.agent,
+        max_trials=1,
+        optimize_tools=False,
+    )
+    assert isinstance(result.prompt, dict)
+
+
+@pytest.mark.parametrize(
+    "optimizer_name",
+    [
+        name
+        for name in harness.OPTIMIZERS
+        if getattr(harness, name).supports_tool_optimization
+    ],
+)
+def test_dict_prompt_with_optimize_tools_true_raises(
+    optimizer_name: str, install_fakes
+) -> None:
+    # current behaviour: tool description optimization is single-prompt only.
     scenario = harness.build_scenario("S2_multi")
     install_fakes(scenario)
     optimizer = harness.make_optimizer(optimizer_name)
@@ -113,5 +138,5 @@ def test_dict_prompt_with_optimize_tools_false_raises(
             metric=harness.answer_match,
             agent=scenario.agent,
             max_trials=1,
-            optimize_tools=False,
+            optimize_tools=True,
         )
