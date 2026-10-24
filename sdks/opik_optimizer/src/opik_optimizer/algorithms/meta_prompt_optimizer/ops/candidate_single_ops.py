@@ -23,31 +23,12 @@ from ....utils.prompt_roles import (
     derive_prompt,
 )
 from ....utils.text import normalize_llm_text
+from ....utils.multimodal import text_only_messages
 from .. import prompts as meta_prompts
 from .. import reporting
 from ..types import PromptCandidatesResponse
 
 logger = logging.getLogger(__name__)
-STRICT_JSON_INSTRUCTION = (
-    "\n\nReturn ONLY valid JSON. Do not include commentary or markdown."
-)
-
-
-def _with_strict_json_instruction(
-    messages: list[dict[str, str]],
-) -> list[dict[str, str]]:
-    updated: list[dict[str, str]] = []
-    for msg in messages:
-        if msg.get("role") == "user":
-            updated.append(
-                {
-                    **msg,
-                    "content": f"{msg.get('content', '')}{STRICT_JSON_INSTRUCTION}",
-                }
-            )
-        else:
-            updated.append(msg)
-    return updated
 
 
 def sanitize_generated_prompts(
@@ -200,7 +181,7 @@ def _build_generation_messages(
     reasoning_template = optimizer.get_prompt("reasoning_system")
     user_prompt = meta_prompts.build_candidate_generation_user_prompt(
         template=candidate_gen_template,
-        current_prompt_messages=str(current_prompt.get_messages()),
+        current_prompt_messages=str(text_only_messages(current_prompt.get_messages())),
         best_score=best_score,
         history_context=history_context,
         task_context_str=task_context_str,
@@ -220,7 +201,11 @@ def _build_generation_messages(
                 mode="single",
             ),
         },
-        {"role": "user", "content": user_prompt},
+        {
+            "role": "user",
+            "content": user_prompt
+            + "\nReturn rewritten message content as text strings. Original media parts are preserved automatically; do not reproduce them.",
+        },
     ]
 
 
@@ -453,33 +438,18 @@ def generate_candidate_prompts(
                 optimizer, "optimization_algorithm"
             )
 
-            try:
-                content = _llm_calls.call_model(
-                    messages=messages,
-                    model=optimizer.model,
-                    model_parameters=optimizer.model_parameters,
-                    response_model=PromptCandidatesResponse,
-                    return_all=_llm_calls.requested_multiple_candidates(
-                        optimizer.model_parameters
-                    ),
-                    metadata=metadata_for_call,
-                    optimization_id=optimization_id,
-                    project_name=project_name,
-                )
-            except (BadRequestError, StructuredOutputParsingError):
-                retry_messages = _with_strict_json_instruction(messages)
-                content = _llm_calls.call_model(
-                    messages=retry_messages,
-                    model=optimizer.model,
-                    model_parameters=optimizer.model_parameters,
-                    response_model=PromptCandidatesResponse,
-                    return_all=_llm_calls.requested_multiple_candidates(
-                        optimizer.model_parameters
-                    ),
-                    metadata=metadata_for_call,
-                    optimization_id=optimization_id,
-                    project_name=project_name,
-                )
+            content = _llm_calls.call_model(
+                messages=messages,
+                model=optimizer.model,
+                model_parameters=optimizer.model_parameters,
+                response_model=PromptCandidatesResponse,
+                return_all=_llm_calls.requested_multiple_candidates(
+                    optimizer.model_parameters
+                ),
+                metadata=metadata_for_call,
+                optimization_id=optimization_id,
+                project_name=project_name,
+            )
             contents: list[Any] = content if isinstance(content, list) else [content]
             contents = [
                 normalize_llm_text(item) if isinstance(item, str) else item

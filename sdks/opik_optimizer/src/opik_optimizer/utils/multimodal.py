@@ -295,3 +295,14 @@ def preserve_multimodal_message_structure(
 
         preserved.append(generated)
     return preserved
+
+
+def text_only_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Expose editable text to a rewrite model; media is restored from the original."""
+    return [
+        {
+            **message,
+            "content": api_types.extract_text_from_content(message.get("content", "")),
+        }
+        for message in messages
+    ]

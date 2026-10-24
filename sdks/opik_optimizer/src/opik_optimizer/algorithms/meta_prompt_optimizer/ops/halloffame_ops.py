@@ -18,8 +18,6 @@ from ..types import HallOfFameEntry, PatternExtractionResponse
 from ....utils.prompt_library import PromptLibrary
 from ....utils.display import format as display_format
 from ....utils.logging import debug_log
-from ....core.llm_calls import StructuredOutputParsingError
-from litellm.exceptions import BadRequestError
 
 logger = logging.getLogger(__name__)
 
@@ -129,35 +127,14 @@ class PromptHallOfFame:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt_analysis},
             ]
-            try:
-                response = _llm_calls.call_model(
-                    messages=messages,
-                    model=model,
-                    model_parameters=model_parameters,
-                    is_reasoning=True,
-                    response_model=PatternExtractionResponse,
-                    return_all=_llm_calls.requested_multiple_candidates(
-                        model_parameters
-                    ),
-                )
-            except (BadRequestError, StructuredOutputParsingError):
-                retry_messages = [
-                    messages[0],
-                    {
-                        "role": "user",
-                        "content": f"{prompt_analysis}\n\nReturn ONLY valid JSON. Do not include commentary or markdown.",
-                    },
-                ]
-                response = _llm_calls.call_model(
-                    messages=retry_messages,
-                    model=model,
-                    model_parameters=model_parameters,
-                    is_reasoning=True,
-                    response_model=PatternExtractionResponse,
-                    return_all=_llm_calls.requested_multiple_candidates(
-                        model_parameters
-                    ),
-                )
+            response = _llm_calls.call_model(
+                messages=messages,
+                model=model,
+                model_parameters=model_parameters,
+                is_reasoning=True,
+                response_model=PatternExtractionResponse,
+                return_all=_llm_calls.requested_multiple_candidates(model_parameters),
+            )
 
             responses = response if isinstance(response, list) else [response]
             patterns: list[str] = []

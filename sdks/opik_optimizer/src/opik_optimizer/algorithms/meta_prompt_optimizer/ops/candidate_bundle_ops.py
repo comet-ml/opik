@@ -10,6 +10,7 @@ from collections.abc import Callable, Sequence
 from litellm.exceptions import BadRequestError
 
 from ....api_objects import chat_prompt
+from ....utils.multimodal import text_only_messages
 from ....api_objects.types import MetricFunction
 from ....core import llm_calls as _llm_calls
 from ....core.llm_calls import StructuredOutputParsingError
@@ -35,7 +36,7 @@ def _format_agent_prompts_for_prompt(
     """
     blocks: list[str] = []
     for agent_name, prompt in agent_prompts.items():
-        messages = prompt.get_messages()
+        messages = text_only_messages(prompt.get_messages())
         blocks.append(
             f"Agent name: {agent_name}\nMessages:\n{json.dumps(messages, indent=2)}"
         )

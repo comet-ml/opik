@@ -201,8 +201,8 @@ class TestPromptHallOfFameExtractPatterns:
 
         assert result == []
 
-    def test_retries_with_strict_json_on_parse_error(self, mock_llm_call: Any) -> None:
-        """Should retry with strict JSON instruction on parse errors."""
+    def test_does_not_restart_exhausted_common_retry(self, mock_llm_call: Any) -> None:
+        """An exhausted common retry leaves pattern extraction empty."""
         hof = PromptHallOfFame()
         hof.add(
             make_hof_entry(
@@ -238,6 +238,5 @@ class TestPromptHallOfFameExtractPatterns:
 
         result = hof.extract_patterns("gpt-4", {}, "accuracy")
 
-        assert "Pattern A" in result
-        assert len(calls) == 2
-        assert "Return ONLY valid JSON" in calls[1]["messages"][1]["content"]
+        assert result == []
+        assert len(calls) == 1

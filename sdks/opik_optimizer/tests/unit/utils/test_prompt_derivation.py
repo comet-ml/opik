@@ -69,3 +69,25 @@ def test_multitext_rewrite_is_inserted_once_and_extraction_keeps_all_text():
         "",
     ]
     assert content[-1]["text"] == "Second"
+
+
+def test_text_only_rewrite_input_keeps_all_text_and_excludes_media():
+    from opik_optimizer.utils.multimodal import text_only_messages
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "First"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/png;base64,example"},
+                },
+                {"type": "text", "text": "Second"},
+            ],
+        }
+    ]
+    assert text_only_messages(messages) == [
+        {"role": "user", "content": "First\nSecond"}
+    ]
+    assert len(messages[0]["content"]) == 3

@@ -50,7 +50,9 @@ def _build_prompt_candidate() -> PromptCandidatesResponse:
     )
 
 
-def test_candidate_single_retries_with_strict_json(mock_llm_call: Any) -> None:
+def test_candidate_single_does_not_repeat_exhausted_common_retry(
+    mock_llm_call: Any,
+) -> None:
     optimizer = _make_optimizer()
     current_prompt = _make_prompt()
 
@@ -64,20 +66,19 @@ def test_candidate_single_retries_with_strict_json(mock_llm_call: Any) -> None:
 
     mock_llm_call(side_effect=side_effect)
 
-    results = candidate_single_ops.generate_candidate_prompts(
-        optimizer=optimizer,
-        current_prompt=current_prompt,
-        best_score=0.5,
-        round_num=0,
-        previous_rounds=[],
-        metric=lambda item, output: 0.5,
-        build_history_context_fn=lambda _: "",
-        get_task_context_fn=lambda **_: ("", "", ""),
-    )
+    with pytest.raises(StructuredOutputParsingError):
+        candidate_single_ops.generate_candidate_prompts(
+            optimizer=optimizer,
+            current_prompt=current_prompt,
+            best_score=0.5,
+            round_num=0,
+            previous_rounds=[],
+            metric=lambda item, output: 0.5,
+            build_history_context_fn=lambda _: "",
+            get_task_context_fn=lambda **_: ("", "", ""),
+        )
 
-    assert results
-    assert len(calls) == 2
-    assert "Return ONLY valid JSON" in calls[1]["messages"][1]["content"]
+    assert len(calls) == 1
 
 
 def test_candidate_single_raises_when_all_rejected(
@@ -111,7 +112,9 @@ def test_candidate_single_raises_when_all_rejected(
         )
 
 
-def test_candidate_synthesis_retries_with_strict_json(mock_llm_call: Any) -> None:
+def test_candidate_synthesis_does_not_repeat_exhausted_common_retry(
+    mock_llm_call: Any,
+) -> None:
     optimizer = _make_optimizer()
     current_prompt = _make_prompt()
     assert optimizer.hall_of_fame is not None
@@ -135,16 +138,17 @@ def test_candidate_synthesis_retries_with_strict_json(mock_llm_call: Any) -> Non
 
     mock_llm_call(side_effect=side_effect)
 
-    results = candidate_synthesis_ops.generate_synthesis_prompts(
-        optimizer=optimizer,
-        current_prompt=current_prompt,
-        best_score=0.5,
-        previous_rounds=[OptimizationRound(round_index=0, trials=[], best_score=0.5)],
-        metric=lambda item, output: 0.5,
-        get_task_context_fn=lambda **_: ("", ""),
-        round_num=0,
-    )
+    with pytest.raises(StructuredOutputParsingError):
+        candidate_synthesis_ops.generate_synthesis_prompts(
+            optimizer=optimizer,
+            current_prompt=current_prompt,
+            best_score=0.5,
+            previous_rounds=[
+                OptimizationRound(round_index=0, trials=[], best_score=0.5)
+            ],
+            metric=lambda item, output: 0.5,
+            get_task_context_fn=lambda **_: ("", ""),
+            round_num=0,
+        )
 
-    assert results
-    assert len(calls) == 2
-    assert "Return ONLY valid JSON" in calls[1]["messages"][1]["content"]
+    assert len(calls) == 1
