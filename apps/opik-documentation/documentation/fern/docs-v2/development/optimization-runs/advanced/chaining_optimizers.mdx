@@ -22,11 +22,22 @@ Some projects benefit from running two or more optimizers back-to-back. For exam
 ## Example pipeline
 
 ```python wordWrap
-from opik_optimizer import MetaPromptOptimizer, ParameterOptimizer, ChatPrompt
-from opik_optimizer.parameter_optimizer import ParameterSearchSpace
+from opik_optimizer import (
+    ChatPrompt,
+    MetaPromptOptimizer,
+    ParameterOptimizer,
+    ParameterSearchSpace,
+)
 
-meta = MetaPromptOptimizer(model="openai/gpt-4o")
-parameter = ParameterOptimizer(model="openai/gpt-4o")
+# The evaluated model and its settings live on the prompt.
+prompt = ChatPrompt(
+    system="Answer the question concisely.",
+    user="{question}",
+    model="openai/gpt-4o-mini",
+)
+
+meta = MetaPromptOptimizer(model="openai/gpt-4o")  # Model that rewrites the prompt
+parameter = ParameterOptimizer()  # Tunes the prompt's own model settings
 
 meta_result = meta.optimize_prompt(
     prompt=prompt,
@@ -35,8 +46,8 @@ meta_result = meta.optimize_prompt(
     max_trials=4,
 )
 
-# Reuse the optimized prompt from the first stage
-optimized_prompt = prompt.with_messages(meta_result.prompt)
+# Reuse the optimized prompt from the first stage (it keeps the prompt's model)
+optimized_prompt = meta_result.prompt
 
 search_space = ParameterSearchSpace(parameters=[
     {"name": "temperature", "distribution": "float", "low": 0.1, "high": 0.9},

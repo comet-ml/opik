@@ -24,14 +24,15 @@ The user will provide a question string like "Who is Barack Obama?".
 3. Respond clearly to the user, stating the answer found by the tool.
 """
 
+# The evaluated model is set on the prompt; ParameterOptimizer tunes its settings.
 prompt = ChatPrompt(
     system=system_prompt,
     user="{question}",
+    model="openai/gpt-4o-mini",
 )
 
 # Optimize it:
 optimizer = ParameterOptimizer(
-    model="openai/gpt-4o-mini",
     default_n_trials=20,
     n_threads=1,
     seed=42,

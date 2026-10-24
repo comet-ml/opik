@@ -697,15 +697,14 @@ def execute_task(
             constructor_kwargs = dict(optimizer_config.params)
             if optimizer_params_override:
                 constructor_kwargs.update(optimizer_params_override)
+            optimizer_cls = getattr(opik_optimizer, optimizer_config.class_name)
             # Ensure we only supply model/model_parameters once. If provided in the config/overrides,
-            # respect those; otherwise inject the runner-specified values.
-            constructor_kwargs.setdefault("model", model_name)
-            constructor_kwargs.setdefault("model_parameters", model_parameters)
-            optimizer: BaseOptimizer = getattr(
-                opik_optimizer, optimizer_config.class_name
-            )(
-                **constructor_kwargs,
-            )
+            # respect those; otherwise inject the runner-specified values. ParameterOptimizer
+            # takes its model settings from the prompt only.
+            if optimizer_cls is not opik_optimizer.ParameterOptimizer:
+                constructor_kwargs.setdefault("model", model_name)
+                constructor_kwargs.setdefault("model_parameters", model_parameters)
+            optimizer: BaseOptimizer = optimizer_cls(**constructor_kwargs)
 
             # Check if this dataset is handled by a package-specific agent/prompt wiring.
             agent = None
@@ -731,10 +730,9 @@ def execute_task(
                 # use the requested model instead of ChatPrompt defaults.
                 initial_prompt = ChatPrompt(
                     messages=messages,  # type: ignore[arg-type]
-                    model=getattr(optimizer, "model", model_name),
-                    model_parameters=getattr(
-                        optimizer, "model_parameters", model_parameters
-                    ),
+                    model=getattr(optimizer, "model", None) or model_name,
+                    model_parameters=getattr(optimizer, "model_parameters", None)
+                    or model_parameters,
                 )
             if initial_prompt is None:
                 raise RuntimeError(

@@ -175,3 +175,72 @@ def test_task_result_prefers_optimizer_native_history(
     assert len(rounds) == 1
     assert rounds[0]["round_index"] == 0
     assert result.llm_calls_total_optimization == 3
+
+
+def test_parameter_optimizer_prompt_gets_runner_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ParameterOptimizer has no model of its own; the prompt carries the runner's."""
+    import types
+
+    constructed: list[dict[str, Any]] = []
+
+    class PromptModelOptimizer(DummyOptimizer):
+        def __init__(self, **kwargs: Any) -> None:
+            constructed.append(kwargs)
+            self.model = None  # type: ignore[assignment]
+            self.model_parameters = {}
+            self.llm_calls = 0
+
+    monkeypatch.setattr(
+        benchmark_config,
+        "DATASET_CONFIG",
+        {
+            "dummy": benchmark_config.BenchmarkDatasetConfig(
+                name="dummy", display_name="Dummy", metrics=[lambda *_: 0.0]
+            )
+        },
+    )
+    monkeypatch.setattr(
+        benchmark_config,
+        "OPTIMIZER_CONFIGS",
+        {
+            "parameter": benchmark_config.BenchmarkOptimizerConfig(
+                class_name="ParameterOptimizer", params={"seed": 1}
+            )
+        },
+    )
+    bundle = task_runner.DatasetBundle(
+        train_name="dummy",
+        train=[{"id": 1}],
+        validation_name=None,
+        validation=None,
+        test_name=None,
+        test=None,
+        evaluation_name="dummy",
+        evaluation_role="train",
+        evaluation=[{"id": 1}],
+        requested_split=None,
+    )
+    monkeypatch.setattr(task_runner, "resolve_dataset_bundle", lambda **_: bundle)
+    fake_module = types.SimpleNamespace(**task_runner.opik_optimizer.__dict__)
+    setattr(fake_module, "ParameterOptimizer", PromptModelOptimizer)
+    monkeypatch.setattr(task_runner, "opik_optimizer", fake_module)
+
+    result = task_runner.execute_task(
+        task_id="t1",
+        dataset_name="dummy",
+        optimizer_name="parameter",
+        model_name="custom-model",
+        model_parameters={"temperature": 0.7},
+        test_mode=False,
+        optimizer_params_override=None,
+        optimizer_prompt_params_override=None,
+        datasets=None,
+        metrics=["builtins.abs"],
+        prompt_messages=[user_message("{text}")],
+    )
+
+    assert constructed == [{"seed": 1}]
+    assert result.initial_prompt.model == "custom-model"
+    assert result.initial_prompt.model_kwargs == {"temperature": 0.7}

@@ -17,16 +17,17 @@ system_prompt = (
 )
 
 
+# The evaluated model is set on the prompt; ParameterOptimizer tunes its settings.
 prompt = ChatPrompt(
     system=system_prompt,
     user="{question}",
+    model="openai/gpt-4o-mini",
 )
 
 # Define the metric to optimize
 optimization_metric = answer_correctness_score
 
 optimizer = ParameterOptimizer(
-    model="openai/gpt-4o-mini",
     default_n_trials=20,
     n_threads=4,
     seed=42,

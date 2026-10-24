@@ -3189,7 +3189,7 @@ with_dataset_split(
 
 ```python wordWrap
 ParameterOptimizer(
-    model: str = 'openai/gpt-5-nano',
+    model: str | None = None,
     model_parameters: dict[str, typing.Any] | None = None,
     default_n_trials: int = 20,
     local_search_ratio: float = 0.3,
@@ -3206,8 +3206,8 @@ ParameterOptimizer(
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano" />
-<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="model" type="str | None" optional={true}>Deprecated and ignored (emits a `DeprecationWarning`). The evaluated model comes from each `ChatPrompt`; set `model` there.</ParamField>
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Deprecated and ignored (emits a `DeprecationWarning`). Set `model_parameters` on the `ChatPrompt`; the search starts from them.</ParamField>
 <ParamField path="default_n_trials" type="int" optional={true} default="20" />
 <ParamField path="local_search_ratio" type="float" optional={true} default="0.3" />
 <ParamField path="local_search_scale" type="float" optional={true} default="0.2" />
