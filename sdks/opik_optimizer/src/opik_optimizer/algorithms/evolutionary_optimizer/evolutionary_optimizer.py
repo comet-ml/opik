@@ -7,17 +7,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-# DEAP imports
-try:
-    from deap import base, tools
-    from deap import creator as _creator
-
-    _DEAP_IMPORT_ERROR: Exception | None = None
-except Exception as exc:  # pragma: no cover - exercised when DEAP is missing
-    base = None
-    tools = None
-    _creator = None
-    _DEAP_IMPORT_ERROR = exc
+from deap import base, creator, tools
 
 from opik_optimizer.base_optimizer import BaseOptimizer
 from opik_optimizer.core.state import AlgorithmResult, OptimizationContext
@@ -29,7 +19,6 @@ from . import prompts as evo_prompts
 from .ops import generation_ops, mutation_ops, result_ops
 
 logger = logging.getLogger(__name__)
-creator = cast(Any, _creator)  # type: ignore[assignment]
 
 
 class EvolutionaryOptimizer(BaseOptimizer):
@@ -168,13 +157,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
             else:
                 context.finish_reason = "completed"
 
-    def _ensure_deap_available(self) -> None:
-        if base is None or tools is None or _creator is None:
-            raise RuntimeError(
-                "DEAP is required for EvolutionaryOptimizer. "
-                "Install the optimizer extras that include DEAP."
-            ) from _DEAP_IMPORT_ERROR
-
     def _seed_rngs(self) -> None:
         """
         Seed random number generators used by this optimizer.
@@ -213,8 +195,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
         perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
     ) -> None:
-        self._ensure_deap_available()
-
         super().__init__(
             model=model,
             verbose=verbose,
@@ -408,7 +388,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         Returns:
             AlgorithmResult with best prompts, score, history, and metadata.
         """
-        self._ensure_deap_available()
         # Ensure deterministic behavior per optimization run (important when
         # reusing the same optimizer instance across multiple runs).
         self._seed_rngs()

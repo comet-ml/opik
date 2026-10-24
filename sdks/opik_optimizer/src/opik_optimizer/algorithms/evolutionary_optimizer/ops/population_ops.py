@@ -5,15 +5,7 @@ import math
 import json
 import logging
 
-try:
-    from deap import tools
-    from deap import creator as _creator
-
-    _DEAP_IMPORT_ERROR: Exception | None = None
-except Exception as exc:  # pragma: no cover - exercised when DEAP is missing
-    tools = None
-    _creator = None
-    _DEAP_IMPORT_ERROR = exc
+from deap import tools
 
 from .. import reporting, helpers, evolutionary_optimizer  # noqa: F401
 from ....api_objects import chat_prompt
@@ -27,15 +19,6 @@ from . import tool_ops
 
 
 logger = logging.getLogger(__name__)
-creator = _creator
-
-
-def _require_deap() -> None:
-    if tools is None or creator is None:
-        raise RuntimeError(
-            "DEAP is required for EvolutionaryOptimizer. "
-            "Install the optimizer extras that include DEAP."
-        ) from _DEAP_IMPORT_ERROR
 
 
 def restart_population(
@@ -44,7 +27,6 @@ def restart_population(
     population: list[Any],
     best_prompts_so_far: dict[str, chat_prompt.ChatPrompt],
 ) -> list[Any]:
-    _require_deap()
     """Return a fresh, evaluated population seeded by elites.
 
     Args:

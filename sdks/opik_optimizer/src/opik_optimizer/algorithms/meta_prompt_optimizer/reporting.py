@@ -11,7 +11,6 @@ from ...utils.reporting import (
 )
 from ...utils.display import (
     display_messages,
-    display_prefixed_block,
     display_text_block,
     display_tools_panel,
 )
@@ -19,125 +18,6 @@ from ...utils.display import format as display_format
 from ...utils.logging import compact_debug_text, debug_log
 
 logger = logging.getLogger(__name__)
-
-
-@contextmanager
-def display_round_progress(max_rounds: int, verbose: int = 1) -> Any:
-    """Context manager to display messages during an evaluation phase."""
-
-    # Create a simple object with a method to set the score
-    class Reporter:
-        def failed_to_generate(self, num_prompts: int, error: str) -> None:
-            if verbose >= 1:
-                display_prefixed_block(
-                    [
-                        f"Failed to generate {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}: {error}",
-                        "",
-                    ],
-                    prefix="│    ",
-                    style="red",
-                )
-
-        def round_start(self, round_number: int) -> None:
-            if verbose >= 1:
-                display_text_block(
-                    f"│ - Starting round {round_number + 1} of {max_rounds}"
-                )
-
-        def round_end(self, round_number: int, score: float, best_score: float) -> None:
-            if verbose >= 1:
-                display_text_block(
-                    f"│    Completed round {round_number + 1} of {max_rounds}"
-                )
-                if best_score == 0 and score == 0:
-                    display_text_block(
-                        "│    No improvement in this optimization round - score is 0",
-                        style="yellow",
-                    )
-                elif best_score == 0:
-                    display_text_block(
-                        f"│    Found a new best performing prompt: {score:.4f}",
-                        style="green",
-                    )
-                elif score > best_score:
-                    perc_change = (score - best_score) / best_score
-                    display_text_block(
-                        f"│    Found a new best performing prompt: {score:.4f} ({perc_change:.2%})",
-                        style="green",
-                    )
-                elif score <= best_score:
-                    display_text_block(
-                        "│    No improvement in this optimization round",
-                        style="red",
-                    )
-
-                display_text_block("│")
-
-    # Use our log suppression context manager and yield the reporter
-    with suppress_opik_logs():
-        with convert_tqdm_to_rich(verbose=verbose):
-            try:
-                yield Reporter()
-            finally:
-                pass
-
-
-@contextmanager
-def display_evaluation(
-    message: str = "First we will establish the baseline performance:",
-    verbose: int = 1,
-    dataset_name: str | None = None,
-    is_validation: bool = False,
-) -> Any:
-    """Context manager to display messages during an evaluation phase."""
-    # Entry point
-    if verbose >= 1:
-        display_text_block(f"> {message}")
-        if dataset_name:
-            dataset_type = "validation" if is_validation else "training"
-            display_text_block(
-                f"  Using {dataset_type} dataset: {dataset_name}",
-                style="dim",
-            )
-
-    # Create a simple object with a method to set the score
-    class Reporter:
-        def set_score(self, s: float) -> None:
-            if verbose >= 1:
-                display_text_block(f"\r  Baseline score was: {s:.4f}.\n", style="green")
-
-    # Use our log suppression context manager and yield the reporter
-    with suppress_opik_logs():
-        with convert_tqdm_to_rich("  Evaluation", verbose=verbose):
-            try:
-                yield Reporter()
-            finally:
-                pass
-
-
-def display_optimization_start_message(
-    verbose: int = 1,
-    dataset_training_name: str | None = None,
-    validation_dataset_name: str | None = None,
-    is_using_validation: bool = False,
-) -> None:
-    if verbose >= 1:
-        display_text_block("> Starting the optimization run")
-        if dataset_training_name and validation_dataset_name and is_using_validation:
-            display_text_block(
-                f"│  Training dataset (feedback): {dataset_training_name}",
-                style="dim",
-            )
-            display_text_block(
-                f"│  Validation dataset (ranking): {validation_dataset_name}",
-                style="dim",
-            )
-        elif dataset_training_name:
-            display_text_block(
-                f"│  Using training dataset: {dataset_training_name} (for both feedback and ranking)",
-                style="dim",
-            )
-        display_text_block("│")
 
 
 class CandidateGenerationReporter:

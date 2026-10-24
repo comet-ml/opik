@@ -76,7 +76,7 @@ class TestLLMDeapCrossover:
 
         monkeypatch.setattr("opik_optimizer.core.llm_calls.call_model", fake_call_model)
         monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops.reporting.display_message",
+            "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops.display_message",
             lambda *_a, **_k: None,
         )
 
@@ -115,7 +115,7 @@ class TestLLMDeapCrossover:
             "opik_optimizer.core.llm_calls.call_model", lambda **_kw: mock_response
         )
         monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops.reporting.display_message",
+            "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops.display_message",
             lambda *_a, **_k: None,
         )
 
@@ -207,7 +207,7 @@ class TestLLMDeapCrossover:
             "opik_optimizer.core.llm_calls.call_model", lambda **_kw: mock_response
         )
         monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops.reporting.display_message",
+            "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops.display_message",
             lambda *_a, **_k: None,
         )
 

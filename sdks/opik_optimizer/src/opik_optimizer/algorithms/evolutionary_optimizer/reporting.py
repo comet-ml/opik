@@ -5,7 +5,6 @@ from ...api_objects import chat_prompt
 from ...utils.reporting import convert_tqdm_to_rich, suppress_opik_logs
 from ...utils.logging import debug_log
 from ...utils.display import display_text_block, display_tool_description
-from ...utils.display.format import format_score_progress
 from ...utils.scoring import improves_over
 
 
@@ -112,55 +111,6 @@ def initializing_population(verbose: int = 1) -> Any:
 
 
 @contextmanager
-def baseline_performance(verbose: int = 1) -> Any:
-    """Context manager to display messages during an evaluation phase."""
-    # Entry point
-    if verbose >= 1:
-        display_text_block("> First we will establish the baseline performance.")
-
-    # Create a simple object with a method to set the score
-    class Reporter:
-        def set_score(self, s: float) -> None:
-            if verbose >= 1:
-                display_text_block(f"\r  Baseline score was: {s:.4f}.\n", style="green")
-
-    # Use our log suppression context manager and yield the reporter
-    with suppress_opik_logs():
-        with convert_tqdm_to_rich("  Evaluation", verbose=verbose):
-            try:
-                yield Reporter()
-            finally:
-                pass
-
-
-@contextmanager
-def evaluate_initial_population(verbose: int = 1) -> Any:
-    """Context manager to display messages during an evaluation phase."""
-    # Entry point
-    if verbose >= 1:
-        display_text_block("> Let's now evaluate the initial population")
-
-    # Create a simple object with a method to set the score
-    class Reporter:
-        def set_score(self, index: int, score: float, baseline_score: float) -> None:
-            if verbose >= 1:
-                score_text, style = format_score_progress(score, baseline_score)
-                display_text_block(
-                    f"\r  Prompt {index + 1} score was: {score_text}.",
-                    style=style,
-                )
-
-    # Use our log suppression context manager and yield the reporter
-    with suppress_opik_logs():
-        with convert_tqdm_to_rich("│   Evaluation", verbose=verbose):
-            try:
-                yield Reporter()
-            finally:
-                if verbose >= 1:
-                    display_text_block("")
-
-
-@contextmanager
 def start_evolutionary_algo(verbose: int = 1) -> Any:
     """Context manager to display messages during an evolutionary algorithm phase."""
     # Entry point
@@ -195,14 +145,6 @@ def start_evolutionary_algo(verbose: int = 1) -> Any:
             if verbose >= 1:
                 display_text_block(
                     f"│      Performing evaluation - Assessing {num_prompts} prompts' performance."
-                )
-
-        def performed_evaluation(self, prompt_idx: int, score: float) -> None:
-            if verbose >= 1:
-                score_text, style = format_score_progress(score, None)
-                display_text_block(
-                    f"│      Performed evaluation for prompt {prompt_idx} - Score: {score_text}.",
-                    style=style,
                 )
 
     # Use our log suppression context manager and yield the reporter

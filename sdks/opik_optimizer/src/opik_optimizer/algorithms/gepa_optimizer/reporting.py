@@ -3,16 +3,11 @@ from numbers import Number
 from contextlib import contextmanager
 from typing import Any
 
-from rich.table import Table
-from rich.text import Text
-from rich.panel import Panel
 from ...utils.reporting import convert_tqdm_to_rich, suppress_opik_logs
 from ...utils.display import (
     display_text_block,
     format_prompt_snippet,
-    display_renderable,
 )
-from ...api_objects import chat_prompt
 
 
 # FIXME: Move to a pareto util/extension
@@ -294,21 +289,6 @@ class RichGEPAOptimizerLogger:
 
 
 @contextmanager
-def baseline_evaluation(verbose: int = 1) -> Any:
-    if verbose >= 1:
-        display_text_block("> Establishing baseline performance (seed prompt)")
-
-    class Reporter:
-        def set_score(self, s: float) -> None:
-            if verbose >= 1:
-                display_text_block(f"  Baseline score: {s:.4f}")
-
-    with suppress_opik_logs():
-        with convert_tqdm_to_rich("  Evaluation", verbose=verbose):
-            yield Reporter()
-
-
-@contextmanager
 def start_gepa_optimization(verbose: int = 1, max_trials: int = 10) -> Any:
     if verbose >= 1:
         display_text_block("> Starting GEPA optimization")
@@ -354,103 +334,3 @@ def start_gepa_optimization(verbose: int = 1, max_trials: int = 10) -> Any:
                     Reporter.progress.update_to(max_trials)
                     Reporter.progress.close()
                 display_text_block("")
-
-
-def display_candidate_scores(
-    rows: list[dict[str, Any]],
-    *,
-    verbose: int = 1,
-    title: str = "GEPA Candidate Scores",
-) -> None:
-    """Render a summary table comparing GEPA's scores with Opik rescoring."""
-    if verbose < 1 or not rows:
-        return
-
-    table = Table(title=title, show_lines=False, expand=True)
-    table.add_column("#", justify="right", style="cyan")
-    table.add_column("Source", style="dim")
-    table.add_column("System Prompt", overflow="fold", ratio=2)
-    table.add_column("GEPA Score", justify="right")
-    table.add_column("Opik Score", justify="right", style="green")
-
-    for row in rows:
-        snippet = str(row.get("system_prompt", "")).replace("\n", " ")
-        snippet = snippet[:200] + ("…" if len(snippet) > 200 else "")
-        table.add_row(
-            str(row.get("iteration", "")),
-            str(row.get("source", "")),
-            snippet or "[dim]<empty>[/dim]",
-            _format_score(row.get("gepa_score")),
-            _format_score(row.get("opik_score")),
-        )
-
-    display_renderable(table)
-
-
-def display_selected_candidate(
-    system_prompt: str,
-    score: float,
-    *,
-    verbose: int = 1,
-    title: str = "Selected Candidate",
-    trial_info: dict[str, Any] | None = None,
-) -> None:
-    """Display the final selected candidate with its Opik score."""
-    if verbose < 1:
-        return
-
-    snippet = system_prompt.strip() or "<empty>"
-    text = Text(snippet)
-    subtitle: Text | None = None
-    if trial_info:
-        trial_parts: list[str] = []
-        trial_name = trial_info.get("experiment_name")
-        trial_ids = trial_info.get("trial_ids") or []
-        if trial_name:
-            trial_parts.append(f"Trial {trial_name}")
-        elif trial_ids:
-            trial_parts.append(f"Trial {trial_ids[0]}")
-
-        compare_url = trial_info.get("compare_url")
-        experiment_url = trial_info.get("experiment_url")
-        if compare_url:
-            trial_parts.append(f"[link={compare_url}]Compare run[/link]")
-        elif experiment_url:
-            trial_parts.append(f"[link={experiment_url}]View experiment[/link]")
-
-        if trial_parts:
-            subtitle = Text.from_markup(" • ".join(trial_parts))
-
-    panel = Panel(
-        text,
-        title=f"{title} — Opik score {score:.4f}",
-        border_style="green",
-        expand=True,
-        subtitle=subtitle,
-        subtitle_align="left",
-    )
-    display_renderable(panel)
-
-
-def _format_score(value: Any) -> str:
-    if value is None:
-        return "[dim]—[/dim]"
-    try:
-        return f"{float(value):.4f}"
-    except Exception:
-        return str(value)
-
-
-def candidate_summary_text(
-    candidate: dict[str, str],
-    base_prompts: dict[str, chat_prompt.ChatPrompt],
-) -> str:
-    """Get a summary text representation of a candidate for display."""
-    for prompt_name in base_prompts:
-        system_key = f"{prompt_name}_system_0"
-        if system_key in candidate:
-            return candidate[system_key][:200]
-    for key, value in candidate.items():
-        if not key.startswith("_") and key not in ("source", "id"):
-            return str(value)[:200]
-    return "<no content>"

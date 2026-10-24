@@ -3,10 +3,8 @@ from typing import Any, Protocol
 import copy
 import logging
 import random
-import sys
-import types
 
-from deap import creator as _creator
+from deap import creator
 
 from opik_optimizer.utils.display import display_message
 from ..types import CrossoverResponse
@@ -22,12 +20,6 @@ from . import tool_ops
 
 
 logger = logging.getLogger(__name__)
-creator = _creator  # backward compt.
-
-_reporting_module: Any = types.ModuleType(__name__ + ".reporting")
-_reporting_module.display_message = display_message
-sys.modules[_reporting_module.__name__] = _reporting_module
-reporting = _reporting_module
 
 
 class RandomLike(Protocol):
@@ -127,7 +119,7 @@ def deap_crossover(
     Applies crossover to ALL prompts in the dict.
     Handles both string content and content parts (preserving images/video).
     """
-    reporting.display_message(
+    display_message(
         "      Recombining prompts by mixing and matching words and sentences.",
         verbose=verbose,
     )
@@ -296,9 +288,7 @@ def llm_deap_crossover(
     Applies LLM crossover to ALL prompts in the dict.
     Falls back to deap_crossover on failure.
     """
-    reporting.display_message(
-        "      Recombining prompts using an LLM.", verbose=verbose
-    )
+    display_message("      Recombining prompts using an LLM.", verbose=verbose)
 
     # Individuals are dicts mapping prompt_name -> messages
     child1_data: dict[str, list[dict[str, Any]]] = {}

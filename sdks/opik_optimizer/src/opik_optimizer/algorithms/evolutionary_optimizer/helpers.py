@@ -1,6 +1,5 @@
 from ...api_objects import chat_prompt
 from typing import Any
-import copy
 import rapidfuzz
 from ...utils.helpers import json_to_dict
 from ...utils.toolcalling.ops import toolcalling as toolcalling_utils
@@ -53,17 +52,6 @@ def calculate_population_diversity(population: list[Any] | None) -> float:
                 count += 1
 
     return total_distance / count if count > 0 else 0.0
-
-
-def update_individual_with_prompt(
-    individual: Any, prompt_candidate: chat_prompt.ChatPrompt
-) -> Any:
-    individual[:] = prompt_candidate.get_messages()
-    setattr(individual, "tools", copy.deepcopy(prompt_candidate.tools))
-    setattr(individual, "function_map", prompt_candidate.function_map)
-    setattr(individual, "model", prompt_candidate.model)
-    setattr(individual, "model_kwargs", copy.deepcopy(prompt_candidate.model_kwargs))
-    return individual
 
 
 def parse_llm_messages(response_item: Any) -> list[Any]:

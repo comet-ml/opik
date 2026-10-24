@@ -37,7 +37,7 @@ class TestDeapMutation:
         )
 
         monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.reporting.display_success",
+            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.display_success",
             lambda *_a, **_k: None,
         )
         monkeypatch.setattr(

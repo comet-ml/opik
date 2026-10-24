@@ -330,21 +330,6 @@ build_tool_description_user_prompt = (
 )
 
 
-def build_pattern_extraction_system_prompt(
-    *,
-    template: str | None = None,
-) -> str:
-    """Build the system prompt for Hall of Fame pattern extraction.
-
-    Args:
-        template: The base template to use. If None, uses PATTERN_EXTRACTION_SYSTEM_PROMPT_TEMPLATE.
-
-    Returns:
-        System prompt string for pattern extraction
-    """
-    return template or PATTERN_EXTRACTION_SYSTEM_PROMPT_TEMPLATE
-
-
 def build_pattern_extraction_user_prompt(
     top_prompts_scorecard: str,
     metric_name: str,
@@ -477,19 +462,6 @@ SYNTHESIS_PROMPT_TEMPLATE = textwrap.dedent(
 ).strip()
 
 
-def build_agent_bundle_reasoning_system_prompt(
-    allow_user_prompt_optimization: bool = True,
-    *,
-    template: str | None = None,
-) -> str:
-    """System prompt for optimizing multiple named chat prompts at once."""
-    return build_reasoning_system_prompt(
-        allow_user_prompt_optimization=allow_user_prompt_optimization,
-        mode="bundle",
-        template=template,
-    )
-
-
 def build_synthesis_prompt(
     top_prompts_with_scores: list[tuple[list[dict[str, str]], float, str]],
     task_context_str: str,
@@ -549,65 +521,3 @@ def build_synthesis_prompt(
         task_context_section=task_context_section,
         num_prompts=num_prompts,
     )
-
-
-def build_agent_bundle_user_prompt(
-    agent_blocks: str,
-    best_score: float,
-    history_context: str,
-    task_context_str: str,
-    analysis_instruction: str,
-    metric_focus_instruction: str,
-    prompts_per_round: int,
-    pattern_guidance: str = "",
-    *,
-    template: str | None = None,
-) -> str:
-    """User prompt for generating improved prompts across multiple named agents.
-
-    Args:
-        agent_blocks: Formatted agent prompt blocks
-        best_score: Current best score
-        history_context: History of previous rounds
-        task_context_str: Task context
-        analysis_instruction: Analysis instruction
-        metric_focus_instruction: Metric focus instruction
-        prompts_per_round: Number of prompts per round
-        pattern_guidance: Optional pattern guidance
-        template: The base template to use. If None, uses AGENT_BUNDLE_USER_PROMPT_TEMPLATE.
-
-    Returns:
-        Formatted user prompt string
-    """
-    if template is None:
-        template = AGENT_BUNDLE_USER_PROMPT_TEMPLATE
-
-    # Build conditional sections
-    history_section = (
-        META_PROMPT_SECTIONS["history"].format(history=history_context)
-        if history_context
-        else ""
-    )
-    examples_section = (
-        META_PROMPT_SECTIONS["examples"].format(examples=task_context_str)
-        if task_context_str
-        else ""
-    )
-    patterns_section = (
-        META_PROMPT_SECTIONS["patterns"].format(patterns=pattern_guidance)
-        if pattern_guidance
-        else ""
-    )
-
-    result = template.format(
-        agent_blocks=agent_blocks,
-        best_score=best_score,
-        history_section=history_section,
-        examples_section=examples_section,
-        patterns_section=patterns_section,
-        analysis_instruction=analysis_instruction,
-        prompts_per_round=prompts_per_round,
-        metric_focus_instruction=metric_focus_instruction,
-    )
-
-    return result.replace("{start}", START_DELIM).replace("{end}", END_DELIM)

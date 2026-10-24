@@ -5,10 +5,8 @@ import copy
 import json
 import logging
 import random
-import sys
-import types
 
-from deap import creator as _creator
+from deap import creator
 
 from ....api_objects import chat_prompt
 from ....api_objects.types import (
@@ -26,7 +24,6 @@ from ..types import MutationResponse
 
 
 logger = logging.getLogger(__name__)
-creator = _creator
 
 
 class RandomLike(Protocol):
@@ -39,13 +36,6 @@ class RandomLike(Protocol):
     def choice(self, seq: Sequence[Any]) -> Any: ...
 
     def shuffle(self, seq: list[Any]) -> None: ...
-
-
-_reporting_module: Any = types.ModuleType(__name__ + ".reporting")
-_reporting_module.display_error = display_error
-_reporting_module.display_success = display_success
-sys.modules[_reporting_module.__name__] = _reporting_module
-reporting = _reporting_module
 
 
 def compute_adaptive_mutation_rate(
@@ -431,7 +421,7 @@ def _semantic_mutation(
             model_parameters=prompt.model_kwargs,
         )
     except Exception as e:
-        reporting.display_error(
+        display_error(
             f"      Error in semantic mutation, this is usually a parsing error: {e}",
             verbose=verbose,
         )
@@ -611,7 +601,7 @@ def deap_mutation(
                     rng=rng,
                     allowed_roles=allowed_roles,
                 )
-                reporting.display_success(
+                display_success(
                     f"      Mutation successful for '{prompt_name}', prompt has been edited by randomizing words (word-level mutation).",
                     verbose=verbose,
                 )
@@ -624,7 +614,7 @@ def deap_mutation(
                     rng=rng,
                     allowed_roles=allowed_roles,
                 )
-                reporting.display_success(
+                display_success(
                     f"      Mutation successful for '{prompt_name}', prompt has been edited by reordering, combining, or splitting sentences (structural mutation).",
                     verbose=verbose,
                 )
@@ -641,7 +631,7 @@ def deap_mutation(
                     optimize_tools=optimize_tools,
                     allowed_roles=allowed_roles,
                 )
-                reporting.display_success(
+                display_success(
                     f"      Mutation successful for '{prompt_name}', prompt has been edited using an LLM (semantic mutation).",
                     verbose=verbose,
                 )

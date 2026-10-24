@@ -7,13 +7,7 @@ import hashlib
 import json
 import logging
 
-try:
-    from deap import tools
-
-    _DEAP_IMPORT_ERROR: Exception | None = None
-except Exception as exc:  # pragma: no cover - exercised when DEAP is missing
-    tools = None
-    _DEAP_IMPORT_ERROR = exc
+from deap import tools
 
 from ....core.state import OptimizationContext
 from ....utils import display as display_utils
@@ -26,14 +20,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from ...evolutionary_optimizer import EvolutionaryOptimizer
 
 logger = logging.getLogger(__name__)
-
-
-def _require_deap() -> None:
-    if tools is None:
-        raise RuntimeError(
-            "DEAP is required for EvolutionaryOptimizer. "
-            "Install the optimizer extras that include DEAP."
-        ) from _DEAP_IMPORT_ERROR
 
 
 def build_deap_evaluator(
@@ -161,7 +147,6 @@ def evaluate_initial_population(
     best_primary_score_overall: float,
     best_prompts_overall: dict[str, Any],
 ) -> tuple[float, dict[str, Any]]:
-    _require_deap()
     optimizer._current_generation_idx = 0
     logger.debug("Evaluating initial population")
     fitnesses: list[Any] = list(
@@ -209,7 +194,6 @@ def post_population_round(
     best_prompts_overall: dict[str, Any],
     use_valid_index: bool,
 ) -> None:
-    _require_deap()
     population_ops.post_population_candidates(
         optimizer=optimizer,
         context=context,
@@ -257,7 +241,6 @@ def run_generation(
     hof: tools.HallOfFame,
     best_primary_score_overall: float,
 ) -> tuple[list[Any], int]:
-    _require_deap()
     optimizer._current_generation_idx = generation_idx
     best_gen_score = 0.0
     gen_rng = optimizer._derive_rng("generation", generation_idx)
@@ -365,7 +348,6 @@ def run_generations(
     initial_primary_score: float,
     max_trials: int,
 ) -> tuple[list[Any], float, dict[str, Any], int]:
-    _require_deap()
     generation_idx = 0
     with reporting.start_evolutionary_algo(verbose=optimizer.verbose) as evo_reporter:
         optimizer._set_reporter(evo_reporter)

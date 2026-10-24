@@ -149,7 +149,7 @@ class TestSemanticMutation:
             captured["called"] = True
 
         monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.reporting.display_error",
+            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.display_error",
             fake_display_error,
         )
 
@@ -208,7 +208,7 @@ def test_semantic_mutation_invalid_json_response(
         captured["verbose"] = verbose
 
     monkeypatch.setattr(
-        "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.reporting.display_error",
+        "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.display_error",
         fake_display_error,
     )
 
