@@ -32,6 +32,8 @@ import useTreeDetailsStore, {
 } from "@/v2/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
 import AddToDropdown from "@/v2/pages-shared/traces/AddToDropdown/AddToDropdown";
 import CopyEntityActions from "@/v2/pages-shared/traces/CopyEntityActions/CopyEntityActions";
+import OpenSpanInPlaygroundButton from "@/v2/pages-shared/traces/TraceDetailsPanel/OpenSpanInPlaygroundButton";
+import { canOpenSpanInPlayground } from "@/v2/pages-shared/playground/spanPlaygroundMessages";
 import {
   DetailsActionSection,
   DetailsActionSectionToggle,
@@ -273,7 +275,7 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
   hideAnnotateActions,
 }) => {
   const {
-    permissions: { canAnnotateTraceSpanThread },
+    permissions: { canAnnotateTraceSpanThread, canUsePlayground },
   } = usePermissions();
 
   useHotkeys(
@@ -287,6 +289,14 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
   );
 
   const rows = useMemo(() => (dataToView ? [dataToView] : []), [dataToView]);
+
+  const playgroundSpan = useMemo(
+    () =>
+      canUsePlayground && dataToView && canOpenSpanInPlayground(dataToView)
+        ? dataToView
+        : undefined,
+    [canUsePlayground, dataToView],
+  );
 
   const isSpan = dataToView ? isObjectSpan(dataToView) : false;
   const dataType = isSpan ? "spans" : "traces";
@@ -318,6 +328,9 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
 
       <div className="flex-auto" />
 
+      {playgroundSpan && !isLoading && (
+        <OpenSpanInPlaygroundButton span={playgroundSpan} />
+      )}
       {!hideAnnotateActions && (
         <AddToDropdown
           getDataForExport={async () => rows}
