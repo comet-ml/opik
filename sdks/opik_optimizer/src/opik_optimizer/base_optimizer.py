@@ -511,6 +511,7 @@ class BaseOptimizer(ABC):
         self.project_name = project_name
 
         # Create agent if not provided
+        custom_agent = agent is not None
         if agent is None:
             agent = LiteLLMAgent(project_name=project_name)
         self._attach_agent_owner(agent)
@@ -562,10 +563,13 @@ class BaseOptimizer(ABC):
 
         # Return optimization context
         allow_tool_use_flag = bool(extra_params.get("allow_tool_use", True))
-        allow_tool_use_flag = (
-            allow_tool_use_flag
-            and toolcalling_utils.should_allow_tool_use(optimizable_prompts)
-        )
+        # A custom agent can own tools no ChatPrompt declares; don't veto it then.
+        declares_tools = any(p.tools for p in optimizable_prompts.values())
+        if declares_tools or not custom_agent:
+            allow_tool_use_flag = (
+                allow_tool_use_flag
+                and toolcalling_utils.should_allow_tool_use(optimizable_prompts)
+            )
         extra_params["allow_tool_use"] = allow_tool_use_flag
 
         context = OptimizationContext(
