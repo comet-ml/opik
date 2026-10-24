@@ -27,26 +27,26 @@ classDiagram
         +model: str
         +seed: int
         +prompts: PromptLibrary
-        +optimize_prompt()* OptimizationResult
-        +evaluate_prompt() float
+        +optimize_prompt() OptimizationResult
+        +run_optimization(context)* AlgorithmResult
+        +evaluate(context, prompts) float
         +get_prompt() str
         +list_prompts() list
-        +get_history() list
     }
 
     class MetaPromptOptimizer {
         +DEFAULT_PROMPTS
-        +optimize_prompt()
+        +run_optimization()
     }
 
     class EvolutionaryOptimizer {
         +DEFAULT_PROMPTS
-        +optimize_prompt()
+        +run_optimization()
     }
 
     class YourCustomOptimizer {
         +DEFAULT_PROMPTS
-        +optimize_prompt()
+        +run_optimization()
     }
 
     BaseOptimizer <|-- MetaPromptOptimizer
@@ -54,27 +54,35 @@ classDiagram
     BaseOptimizer <|-- YourCustomOptimizer
 ```
 
+The public entrypoint, `optimize_prompt()`, is implemented once in `BaseOptimizer`. It validates the
+inputs, creates the Opik optimization run, scores the baseline prompt, skips optimization when the
+baseline already reaches `perfect_score`, calls your `run_optimization(context)`, and turns its
+`AlgorithmResult` into an `OptimizationResult`. Your optimizer only implements the search loop.
+
 ## Core Concepts for a Custom Optimizer
 
 To design a new optimization algorithm within Opik's ecosystem, your optimizer needs to interact with several key components:
 
-1. **Prompt (`ChatPrompt`)**: Your optimizer takes a `ChatPrompt` object as input. The chat prompt
-   is a list of messages, where each message has a role, content, and optional additional
-   fields. This includes variables that need to be replaced with actual values.
+1. **Prompt (`ChatPrompt`)**: Your optimizer receives the prompts to optimize as
+   `context.prompts`, a dict of prompt name to `ChatPrompt` (a single prompt is a dict with one
+   entry). A chat prompt is a list of messages, where each message has a role, content, and optional
+   additional fields. This includes variables that need to be replaced with actual values.
 
 2. **Evaluation Mechanism (Metric & Dataset)**: Your optimizer needs a way to score candidate
-   prompts. This is achieved by creating a `metric` (function that takes `dataset_item` and
-   `llm_output` as arguments and returns a float) and an evaluation `dataset`.
+   prompts. Users pass a `metric` (function that takes `dataset_item` and `llm_output` as arguments
+   and returns a float) and a `dataset`; `self.evaluate(context, prompts)` scores a candidate with
+   them.
 
 3. **Optimization Loop**: This is the heart of your custom optimizer. It involves:
    - **Candidate Generation**: Logic for creating new prompt variations. This could be rule-based, LLM-driven, or based on any other heuristic.
-   - **Candidate Evaluation**: Using the `metric` and `dataset` to get a score for each candidate.
+   - **Candidate Evaluation**: Calling `self.evaluate(context, prompts)` to get a score for each candidate.
    - **Selection/Progression**: Logic to decide which candidates to keep, refine further, or how to adjust the generation strategy based on scores.
-   - **Termination Condition**: Criteria for when to stop the optimization (e.g., number of rounds, score threshold, no improvement).
+   - **Termination Condition**: Criteria for when to stop the optimization (e.g., number of rounds, no improvement, or `context.should_stop`, which the framework sets when the trial budget or `perfect_score` is reached).
 
-4. **Returning Results (`OptimizationResult`)**: Upon completion, your optimizer returns an
-   `OptimizationResult` object that standardizes how results are reported, including the best prompt
-   found, its score, history of the optimization process, and cost/usage metrics.
+4. **Returning Results (`AlgorithmResult`)**: `run_optimization` returns an `AlgorithmResult` with
+   the best prompts, their score, the recorded history, and algorithm-specific metadata.
+   `BaseOptimizer` adds the framework fields (initial score, model, optimization ID, cost and usage
+   counters) and returns an `OptimizationResult` to the user.
 
 ## Creating a Custom Optimizer
 
@@ -83,11 +91,16 @@ To design a new optimization algorithm within Opik's ecosystem, your optimizer n
 Extend `BaseOptimizer` and define your `DEFAULT_PROMPTS` - the internal prompts your algorithm uses:
 
 ```python wordWrap
-from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
-from opik_optimizer.optimization_result import OptimizationResult
-from opik_optimizer.api_objects.chat_prompt import ChatPrompt
-from opik import Dataset
-from typing import Any, Callable
+from typing import Any
+
+from opik_optimizer import (
+    AlgorithmResult,
+    BaseOptimizer,
+    ChatPrompt,
+    OptimizationContext,
+    llm_calls,
+)
+
 
 class MyCustomOptimizer(BaseOptimizer):
     """
@@ -97,16 +110,6 @@ class MyCustomOptimizer(BaseOptimizer):
     # Define internal prompts used by your algorithm.
     # Users can customize these via the prompt_overrides parameter.
     DEFAULT_PROMPTS = {
-        "analysis_prompt": """Analyze the following prompt and identify improvement opportunities:
-
-Current prompt:
-{current_prompt}
-
-Failure cases from evaluation:
-{failures}
-
-Identify specific issues and suggest concrete improvements.""",
-
         "generation_prompt": """Generate an improved version of this prompt:
 
 Original prompt:
@@ -115,7 +118,7 @@ Original prompt:
 Focus areas for improvement:
 {improvement_focus}
 
-Return only the improved prompt text.""",
+Return only the improved system prompt text.""",
     }
 
     def __init__(
@@ -148,7 +151,7 @@ Return only the improved prompt text.""",
     def get_optimizer_metadata(self) -> dict[str, Any]:
         """
         Expose optimizer-specific parameters for logging and tracking.
-        This metadata appears in Opik experiment configurations.
+        This metadata is stored on the Opik optimization run.
         """
         return {
             "max_iterations": self.max_iterations,
@@ -157,214 +160,124 @@ Return only the improved prompt text.""",
         }
 ```
 
-### Step 2: Implement the optimize_prompt() Method
+### Step 2: Implement the run_optimization() Method
 
-This is the core method implementing your optimization logic:
+This is the core method implementing your optimization logic. It receives an `OptimizationContext`
+holding the prompts, dataset, metric, agent and the baseline score, and returns an `AlgorithmResult`:
 
 ```python wordWrap
-def optimize_prompt(
-    self,
-    prompt: ChatPrompt,
-    dataset: Dataset,
-    metric: Callable,
-    agent: Any = None,
-    experiment_config: dict | None = None,
-    n_samples: int | None = None,
-    auto_continue: bool = False,
-    project_name: str = "Optimization",
-    optimization_id: str | None = None,
-    validation_dataset: Dataset | None = None,
-    max_trials: int = 10,
-    **kwargs: Any,
-) -> OptimizationResult:
-    """
-    Optimize a prompt using the custom algorithm.
-
-    Args:
-        prompt: The ChatPrompt to optimize
-        dataset: Training dataset for feedback and context
-        metric: Scoring function(dataset_item, llm_output) -> float
-        agent: Optional custom agent for evaluation
-        experiment_config: Optional experiment metadata
-        n_samples: Limit dataset samples per evaluation (None = all)
-        project_name: Opik project name for tracing
-        validation_dataset: Optional separate dataset for candidate ranking
-        max_trials: Maximum evaluation trials
-        **kwargs: Algorithm-specific parameters
-
-    Returns:
-        OptimizationResult with best prompt, scores, and history
-    """
-    # 1. Initialize: Reset counters and set project context
-    self._reset_counters()
-    self.project_name = project_name
-
-    # 2. Evaluate baseline prompt to establish starting point
-    baseline_score = self.evaluate_prompt(
-        prompt=prompt,
-        dataset=dataset,
-        metric=metric,
-        n_samples=n_samples,
-        verbose=self.verbose,
-    )
-
-    # 3. Check if baseline is already good enough (skip optimization)
-    if self._should_skip_optimization(baseline_score):
-        return self._build_early_result(
-            optimizer_name=self.__class__.__name__,
-            prompt=prompt,
-            score=baseline_score,
-            metric_name=metric.__name__,
-            initial_prompt=prompt,
-            details={"reason": "baseline_score_sufficient"},
-        )
-
-    # 4. Main optimization loop
-    best_prompt = prompt
-    best_score = baseline_score
-    previous_best_score = baseline_score
+def run_optimization(self, context: OptimizationContext) -> AlgorithmResult:
+    """Search for better prompts, scoring every candidate through self.evaluate()."""
+    best_prompts = context.prompts
+    best_score = context.baseline_score
 
     for iteration in range(self.max_iterations):
-        # 4a. Generate candidate prompts based on current_best_prompt
-        candidates = self._generate_candidates(
-            current_prompt=best_prompt,
-            dataset=dataset,
-            metric=metric,
-        )
+        previous_best_score = best_score
+        round_handle = self.pre_round(context, iteration=iteration)
 
-        # 4b. Evaluate each candidate
-        round_best_prompt = best_prompt
-        round_best_score = best_score
+        for candidate in self._generate_candidates(best_prompts):
+            # evaluate() counts the trial, tracks the best score, shows progress
+            # and sets context.should_stop when the budget or perfect_score is hit.
+            score = self.evaluate(context, candidate)
+            self.post_trial(context, candidate, score=score, round_handle=round_handle)
+            if score > best_score:
+                best_score = score
+                best_prompts = candidate
+            if context.should_stop:
+                break
 
-        for candidate in candidates:
-            # Use validation_dataset if provided, otherwise use training dataset
-            eval_dataset = validation_dataset or dataset
-            score = self.evaluate_prompt(
-                prompt=candidate,
-                dataset=eval_dataset,
-                metric=metric,
-                n_samples=n_samples,
-                verbose=0,  # Reduce noise during candidate evaluation
-            )
-
-            # 4c. Select the best candidate from this round
-            if score > round_best_score:
-                round_best_score = score
-                round_best_prompt = candidate
-
-        # Update global best if this round improved
-        if round_best_score > best_score:
-            best_score = round_best_score
-            best_prompt = round_best_prompt
-
-        # 4d. Record optimization history
-        self._add_to_history(OptimizationRound(
-            round_number=iteration,
-            current_prompt=best_prompt,
-            current_score=best_score,
-            generated_prompts=candidates,
-            best_prompt=best_prompt,
+        self.post_round(
+            round_handle,
+            context=context,
             best_score=best_score,
-            improvement=best_score - baseline_score,
-        ))
-
-        # 4e. Check termination conditions
-        improvement = best_score - previous_best_score
-        if improvement < self.improvement_threshold:
-            if self.verbose:
-                print(f"Converged at iteration {iteration}")
+            best_prompt=best_prompts,
+        )
+        if context.should_stop or best_score - previous_best_score < self.improvement_threshold:
             break
 
-        previous_best_score = best_score
-
-    # 5. Prepare and return OptimizationResult
-    return OptimizationResult(
-        optimizer=self.__class__.__name__,
-        prompt=best_prompt,
-        score=best_score,
-        metric_name=metric.__name__,
-        initial_prompt=prompt,
-        initial_score=baseline_score,
-        details={
-            "iterations_completed": iteration + 1,
-            "total_candidates_evaluated": (iteration + 1) * self.candidates_per_round,
-        },
-        history=self.get_history(),
-        llm_calls=self.llm_call_counter,
-        llm_calls_tools=self.llm_calls_tools_counter,
-        llm_cost_total=self.llm_cost_total,
-        llm_token_usage_total=self.llm_token_usage_total,
+    return AlgorithmResult(
+        best_prompts=best_prompts,
+        best_score=best_score,
+        history=self.get_history_entries(),
+        metadata={"iterations_completed": iteration + 1},
     )
 ```
 
+Use `self.evaluate_with_result(context, prompts)` instead when the algorithm also needs the
+individual test results (for example to analyse failures); it returns `(score, evaluation_result)`
+and shares the same accounting and stop checks.
+
 ### Step 3: Implement Candidate Generation
 
-Your custom logic to create new prompt variations. Use `get_prompt()` to access internal prompts (which respects user's `prompt_overrides`):
+Your custom logic to create new prompt variations. Use `get_prompt()` to access internal prompts
+(which respects the user's `prompt_overrides`) and `llm_calls.call_model()` for LLM calls:
 
 ```python wordWrap
-from opik_optimizer._llm_calls import call_model
-
 def _generate_candidates(
-    self,
-    current_prompt: ChatPrompt,
-    dataset: Dataset,
-    metric: Callable,
-) -> list[ChatPrompt]:
-    """
-    Generate candidate prompts using LLM-based improvement.
-
-    Args:
-        current_prompt: The prompt to improve
-        dataset: Dataset for context (can analyze failures)
-        metric: Metric for understanding what "good" means
-
-    Returns:
-        List of candidate ChatPrompt objects
-    """
+    self, current_prompts: dict[str, ChatPrompt]
+) -> list[dict[str, ChatPrompt]]:
+    """Generate candidate prompt bundles using LLM-based improvement."""
     candidates = []
-
     for i in range(self.candidates_per_round):
-        # Get the generation prompt template (respects prompt_overrides)
-        generation_request = self.get_prompt(
-            "generation_prompt",
-            current_prompt=current_prompt.get_messages(),
-            improvement_focus=f"variation {i+1}: explore different approaches",
-        )
-
-        # Call LLM to generate an improved prompt
-        response = call_model(
-            messages=[{"role": "user", "content": generation_request}],
-            model=self.model,
-            seed=self.seed + i,  # Vary seed for diversity
-            model_parameters=self.model_parameters,
-            project_name=self.project_name,
-        )
-
-        # Parse the response and create a new ChatPrompt
-        new_prompt = self._parse_prompt_from_response(response, current_prompt)
-        if new_prompt is not None:
-            candidates.append(new_prompt)
-
+        candidate = {}
+        for name, prompt in current_prompts.items():
+            # Get the generation prompt template (respects prompt_overrides)
+            generation_request = self.get_prompt(
+                "generation_prompt",
+                current_prompt=prompt.get_messages(),
+                improvement_focus=f"variation {i + 1}: explore different approaches",
+            )
+            # Calls are attributed to this run: counters, cost, project and tags.
+            response = llm_calls.call_model(
+                messages=[{"role": "user", "content": generation_request}],
+                model=self.model,
+                seed=self.seed + i,  # Vary seed for diversity
+                model_parameters=self.model_parameters,
+            )
+            candidate[name] = self._with_system_prompt(prompt, response)
+        candidates.append(candidate)
     return candidates
 
-def _parse_prompt_from_response(
-    self,
-    response: str,
-    template_prompt: ChatPrompt,
-) -> ChatPrompt | None:
-    """
-    Parse LLM response into a new ChatPrompt.
-    """
-    try:
-        new_prompt = template_prompt.model_copy(deep=True)
-        # Update the system message with the improved prompt
-        for msg in new_prompt.messages:
-            if msg.get("role") == "system":
-                msg["content"] = response.strip()
-                break
-        return new_prompt
-    except Exception:
-        return None
+
+def _with_system_prompt(self, prompt: ChatPrompt, text: str) -> ChatPrompt:
+    """Copy the prompt (keeping its model, tools and settings) with a new system message."""
+    messages = [
+        {**message, "content": text.strip()} if message["role"] == "system" else message
+        for message in prompt.get_messages()
+    ]
+    new_prompt = prompt.copy()
+    new_prompt.set_messages(messages)
+    return new_prompt
+```
+
+### Step 4: Run Your Optimizer
+
+Your optimizer is used exactly like the built-in ones:
+
+```python wordWrap
+import opik
+from opik.evaluation.metrics import LevenshteinRatio
+
+dataset = opik.Opik().get_or_create_dataset(name="my-dataset")
+
+
+def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> float:
+    return LevenshteinRatio().score(reference=dataset_item["answer"], output=llm_output).value
+
+
+prompt = ChatPrompt(
+    system="You are a helpful assistant.",
+    user="{question}",
+    model="openai/gpt-4o-mini",
+)
+optimizer = MyCustomOptimizer(model="openai/gpt-4o-mini", max_iterations=3)
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=dataset,
+    metric=levenshtein_ratio,
+    max_trials=10,
+)
+result.display()
 ```
 
 ## What BaseOptimizer Provides
@@ -376,36 +289,64 @@ def _parse_prompt_from_response(
 
 | Component | Description |
 |-----------|-------------|
-| `evaluate_prompt()` | Evaluates a prompt against dataset using metric. Handles threading, sampling, and result aggregation. |
+| `optimize_prompt()` | Public entrypoint: setup, baseline, perfect-baseline skip, Opik optimization run, result building. Calls your `run_optimization()`. |
+| `evaluate(context, prompts)` | Scores a candidate bundle. Counts the trial, tracks the best score, updates scoring health and sets `context.should_stop`. |
+| `evaluate_with_result(context, prompts)` | Same as `evaluate()`, also returning the `EvaluationResult` with per-item scores. |
+| `pre_round()` / `post_round()` | Open and close a history round. |
+| `pre_trial()` / `on_trial()` / `post_trial()` | Trial lifecycle hooks; `post_trial()` records a candidate in the current round. |
+| `get_history_entries()` | Returns the recorded history to pass to `AlgorithmResult`. |
 | `get_prompt(key, **fmt)` | Gets internal prompt template with optional formatting. Respects `prompt_overrides`. |
 | `list_prompts()` | Lists all available prompt keys for this optimizer. |
-| `_reset_counters()` | Resets LLM call/cost counters. Call at start of `optimize_prompt()`. |
-| `_add_to_history()` | Tracks optimization rounds for result reporting. |
-| `_should_skip_optimization()` | Checks if baseline score exceeds `perfect_score` threshold. |
-| `_build_early_result()` | Creates `OptimizationResult` when skipping optimization. |
-| `llm_call_counter` | Tracks number of LLM calls made. |
+| `llm_call_counter` | Tracks number of LLM calls made during the run. |
 | `llm_cost_total` | Tracks total API cost (when available from provider). |
 | `llm_token_usage_total` | Tracks token usage across all calls. |
+
+The older `begin_round`, `finish_round`, `start_candidate`, and `finish_candidate` hook aliases emit
+`DeprecationWarning` and remain available for compatibility.
+
+## LLM Call Accounting
+
+`optimize_prompt()` binds LLM call accounting to the active optimizer run, so calls made through
+`llm_calls.call_model()` update the run's counters, cost and token usage and are tagged with its
+project and optimization ID. If your subclass overrides `optimize_prompt()` (or defines
+`optimize_parameter()`), the override is bound the same way automatically. Entrypoints with other
+names can bind the scope explicitly:
+
+```python wordWrap
+from opik_optimizer import llm_calls
+
+with llm_calls.optimizer_scope(optimizer):
+    # Internal reasoning calls are attributed to this optimizer's run.
+    response = llm_calls.call_model(
+        messages=[{"role": "user", "content": "Summarize the failures."}],
+        model=optimizer.model,
+    )
+```
+
+The scope restores the enclosing run on exit, including when a call raises. Custom agents should
+continue to use the optimizer ownership attached by the base setup when reporting LLM usage from
+evaluation worker threads.
 
 ## Using Structured Outputs
 
 For complex generation, use Pydantic models for structured LLM responses:
 
 ```python wordWrap
-from opik_optimizer._llm_calls import call_model
+from opik_optimizer import llm_calls
 from pydantic import BaseModel
+
 
 class PromptAnalysis(BaseModel):
     issues: list[str]
     suggestions: list[str]
     priority: str
 
-# Returns a parsed Pydantic object, not raw text
-analysis = call_model(
+
+# Inside an optimizer method: returns a parsed Pydantic object, not raw text
+analysis = llm_calls.call_model(
     messages=[{"role": "user", "content": "Analyze this prompt: ..."}],
     model=self.model,
     response_model=PromptAnalysis,
-    project_name=self.project_name,
 )
 
 print(analysis.issues)      # ['Issue 1', 'Issue 2']
@@ -430,9 +371,9 @@ Opik is continuously evolving, and community contributions are valuable!
 
 - Extend `BaseOptimizer` to create custom optimization algorithms with full access to Opik's infrastructure
 - Define `DEFAULT_PROMPTS` for your algorithm's internal prompts - users can customize these via `prompt_overrides`
-- Implement `optimize_prompt()` with your optimization logic, using the inherited `evaluate_prompt()` to score candidates
-- Return standardized `OptimizationResult` objects for consistent reporting and dashboard integration
-- Use `_llm_calls.call_model()` for LLM interactions with automatic cost/usage tracking
+- Implement `run_optimization(context)` with your search loop, scoring candidates with the inherited `evaluate()` and checking `context.should_stop`
+- Return an `AlgorithmResult`; the inherited `optimize_prompt()` turns it into a standard `OptimizationResult`
+- Use `llm_calls.call_model()` for LLM interactions with automatic cost/usage tracking
 
 We encourage you to explore the existing [optimizer algorithms](/development/optimization-runs/algorithms/overview) to see different approaches to these challenges.
 
@@ -441,22 +382,3 @@ We encourage you to explore the existing [optimizer algorithms](/development/opt
 - [Custom optimizer prompts](/development/optimization-runs/advanced/prompt_customization) - Customize internal prompts
 - [Custom metrics](/development/optimization-runs/advanced/custom_metrics) - Build evaluation metrics
 - [API Reference](/development/optimization-runs/advanced/api_reference) - Full parameter documentation
-
-
-## Evaluation and accounting hooks
-
-Implement `run_optimization(context)` and score candidates with `self.evaluate(context, prompts)`. Use `evaluate_with_result` when the algorithm also needs individual test results. Both methods share candidate accounting, scoring health, and stop checks. Check `context.should_stop` after each candidate.
-
-Use `pre_round` / `post_round` and `pre_trial` / `on_trial` / `post_trial` for lifecycle hooks. The older `begin_round`, `finish_round`, `start_candidate`, and `finish_candidate` aliases emit `DeprecationWarning` and remain available for compatibility.
-
-The inherited `optimize_prompt` entrypoint binds LLM call accounting to the active optimizer run. Custom entrypoints that bypass it can bind the same scope explicitly:
-
-```python
-from opik_optimizer.core import llm_calls
-
-with llm_calls.optimizer_scope(optimizer):
-    # Internal reasoning calls are attributed to this optimizer's run.
-    response = llm_calls.call_model(messages=messages, model=optimizer.model)
-```
-
-The scope restores the enclosing run on exit, including when a call raises. Custom agents should continue to use the optimizer ownership attached by the base setup when reporting LLM usage from evaluation worker threads.
