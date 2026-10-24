@@ -61,7 +61,7 @@ class TestResolveOptimizationId:
         HierarchicalReflective LLM call among them — so their traces carried no
         optimization tag and the run's cost aggregation never counted them."""
         optimizer = _Optimizer()
-        optimizer.current_optimization_id = "opt-from-stack"
+        optimizer.current_optimization_id = "opt-from-scope"
 
         def ops_style_call() -> str | None:  # a module-level ops helper
             return llm_calls._resolve_optimization_id(None)
@@ -70,7 +70,9 @@ class TestResolveOptimizationId:
             return ops_style_call()
 
         _Optimizer.probe = method  # type: ignore[attr-defined]
-        assert optimizer.probe() == "opt-from-stack"  # type: ignore[attr-defined]
+        with llm_calls.optimizer_scope(optimizer):
+            assert optimizer.probe() == "opt-from-scope"  # type: ignore[attr-defined]
+        assert llm_calls._resolve_optimization_id(None) is None
 
     def test_none_when_no_optimizer_is_running(self) -> None:
         assert llm_calls._resolve_optimization_id(None) is None
@@ -267,3 +269,36 @@ async def test_async_path_tags_the_trace_it_opens(monkeypatch) -> None:
     )
 
     assert tagged == [["opt-async", "Prompt Optimization"]]
+
+
+def test_optimizer_scope_restores_parent_after_failure():
+    outer, inner = _Optimizer(), _Optimizer()
+    outer.current_optimization_id = "outer"
+    inner.current_optimization_id = "inner"
+    with llm_calls.optimizer_scope(outer):
+        try:
+            with llm_calls.optimizer_scope(inner):
+                assert llm_calls._resolve_optimization_id(None) == "inner"
+                raise RuntimeError("test")
+        except RuntimeError:
+            pass
+        assert llm_calls._resolve_optimization_id(None) == "outer"
+    assert llm_calls._resolve_optimization_id(None) is None
+
+
+def test_optimizer_scopes_do_not_leak_between_threads():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    barrier = Barrier(2)
+
+    def run(optimization_id):
+        optimizer = _Optimizer()
+        optimizer.current_optimization_id = optimization_id
+        with llm_calls.optimizer_scope(optimizer):
+            barrier.wait(timeout=5)
+            return llm_calls._resolve_optimization_id(None)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert list(pool.map(run, ["first", "second"])) == ["first", "second"]
+    assert llm_calls._resolve_optimization_id(None) is None

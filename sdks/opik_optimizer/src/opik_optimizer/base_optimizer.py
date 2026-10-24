@@ -22,6 +22,7 @@ from opik.evaluation.evaluation_result import (
 )
 
 from .core import evaluation as task_evaluator
+from .core import llm_calls
 from .core import runtime
 from .core.evaluation import compute_scoring_health
 from .utils.display.run import OptimizationRunDisplay, RunDisplay
@@ -1603,6 +1604,7 @@ class BaseOptimizer(ABC):
     # Public API
     # ------------------------------------------------------------------
 
+    @llm_calls.bind_optimizer
     def optimize_prompt(
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],

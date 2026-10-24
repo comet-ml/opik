@@ -1,8 +1,10 @@
 import copy
 import json
 import logging
-import sys
-from types import FrameType
+from contextlib import contextmanager
+from contextvars import ContextVar
+from functools import wraps
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 from pydantic import BaseModel, ValidationError as PydanticValidationError
@@ -300,47 +302,53 @@ _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 _T = TypeVar("_T", bound=BaseModel)
 
 
-def _find_optimizer_in_stack() -> Any | None:
-    """Return the nearest BaseOptimizer bound as `self` on the call stack."""
-    try:
-        from ..base_optimizer import BaseOptimizer
-    except Exception:
-        return None
+_active_optimizer: ContextVar[Any | None] = ContextVar(
+    "opik_active_optimizer", default=None
+)
 
-    try:
-        frame: FrameType | None = sys._getframe()
-    except ValueError:
-        return None
 
-    while frame is not None:
-        optimizer_candidate = frame.f_locals.get("self")
-        if isinstance(optimizer_candidate, BaseOptimizer):
-            return optimizer_candidate
-        frame = frame.f_back
-    return None
+@contextmanager
+def optimizer_scope(optimizer: Any) -> Iterator[None]:
+    """Bind accounting to this run, restoring any enclosing run on every exit."""
+    token = _active_optimizer.set(optimizer)
+    try:
+        yield
+    finally:
+        _active_optimizer.reset(token)
+
+
+def bind_optimizer(method: Callable[..., Any]) -> Callable[..., Any]:
+    """Bind a public optimizer entrypoint without inspecting Python frames."""
+
+    @wraps(method)
+    def wrapped(self: Any, *args: Any, **kwargs: Any) -> Any:
+        with optimizer_scope(self):
+            return method(self, *args, **kwargs)
+
+    return wrapped
 
 
 def _increment_llm_counter_if_in_optimizer() -> None:
     """
-    Walk up the call stack and increment the first optimizer's counter if found.
+    Increment the active run's counter when called during optimization.
     """
-    optimizer = _find_optimizer_in_stack()
+    optimizer = _active_optimizer.get()
     if optimizer is not None:
         optimizer._increment_llm_counter()
 
 
 def _increment_llm_call_tools_counter_if_in_optimizer() -> None:
     """
-    Walk up the call stack and increment the first optimizer's counter if found.
+    Increment the active run's counter when called during optimization.
     """
-    optimizer = _find_optimizer_in_stack()
+    optimizer = _active_optimizer.get()
     if optimizer is not None:
         optimizer._increment_llm_call_tools_counter()
 
 
 def _get_project_name_from_optimizer() -> str | None:
-    """Return project_name from the nearest optimizer on the call stack."""
-    optimizer = _find_optimizer_in_stack()
+    """Return project_name from the active optimizer."""
+    optimizer = _active_optimizer.get()
     if optimizer is not None:
         return getattr(optimizer, "project_name", None)
     return None
@@ -585,23 +593,10 @@ Here is the output schema (shown in a code block for readability only — do not
 
 
 def _resolve_optimization_id(optimization_id: str | None) -> str | None:
-    """Fall back to the running optimizer's id when the caller passed none.
-
-    Most optimizer-internal call sites never pass one — 13 of 20 on main, which
-    is every LLM call Evolutionary and HierarchicalReflective make — so their
-    traces carried no optimization tag and the run's cost aggregation, which
-    attributes optimizer-internal spend by exactly that tag, never counted them
-    (OPIK-7521).
-
-    Resolved from the optimizer on the call stack rather than threaded through
-    every ops signature. These calls run on the optimizer's own thread (the
-    worker pool is used for agent evaluation, not for these), and the failure
-    mode is losing a tag exactly as today — never attributing spend to the wrong
-    run, since an explicit argument always wins.
-    """
+    """Resolve the explicit ID or the optimizer bound to the active run."""
     if optimization_id is not None:
         return optimization_id
-    optimizer = _find_optimizer_in_stack()
+    optimizer = _active_optimizer.get()
     resolved = getattr(optimizer, "current_optimization_id", None)
     return str(resolved) if resolved else None
 

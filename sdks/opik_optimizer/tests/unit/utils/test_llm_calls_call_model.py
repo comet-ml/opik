@@ -353,7 +353,7 @@ class TestStripProjectName:
 
 
 class TestCounterIncrement:
-    def test_increment_llm_counter_walks_stack(self) -> None:
+    def test_increment_llm_counter_uses_active_run(self) -> None:
         class MockOptimizer(BaseOptimizer):
             DEFAULT_PROMPTS: dict[str, str] = {}
 
@@ -375,11 +375,12 @@ class TestCounterIncrement:
         def inner_call(self: Any) -> None:
             _llm_calls._increment_llm_counter_if_in_optimizer()
 
-        inner_call(optimizer)
+        with _llm_calls.optimizer_scope(optimizer):
+            inner_call(optimizer)
 
         assert optimizer.llm_call_counter == initial_count + 1
 
-    def test_increment_llm_call_tools_counter_walks_stack(self) -> None:
+    def test_increment_llm_call_tools_counter_uses_active_run(self) -> None:
         class MockOptimizer(BaseOptimizer):
             DEFAULT_PROMPTS: dict[str, str] = {}
 
@@ -401,6 +402,7 @@ class TestCounterIncrement:
         def inner_call(self: Any) -> None:
             _llm_calls._increment_llm_call_tools_counter_if_in_optimizer()
 
-        inner_call(optimizer)
+        with _llm_calls.optimizer_scope(optimizer):
+            inner_call(optimizer)
 
         assert optimizer.llm_call_tools_counter == initial_count + 1
