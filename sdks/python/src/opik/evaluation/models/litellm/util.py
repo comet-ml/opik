@@ -112,8 +112,11 @@ def _is_bedrock_openai_gpt_model(model_name: str) -> bool:
 
 _CLAUDE_DEFAULT_TEMPERATURE_ONLY_PREFIXES = (
     "claude-opus-4-7",
+    "claude-opus-4-8",
     "claude-opus-5",
     "claude-sonnet-5",
+    "claude-haiku-5",
+    "claude-fable-5",
 )
 
 

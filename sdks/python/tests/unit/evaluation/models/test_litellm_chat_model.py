@@ -315,6 +315,10 @@ def test_litellm_chat_model_keeps_temperature_for_bedrock_gpt_oss(monkeypatch):
         "bedrock/global.anthropic.claude-opus-5",
         "bedrock/global.anthropic.claude-sonnet-5",
         "anthropic/claude-sonnet-5",
+        "bedrock/us.anthropic.claude-opus-4-8",
+        "bedrock/global.anthropic.claude-haiku-5-5",
+        "bedrock/global.anthropic.claude-fable-5",
+        "bedrock/global.anthropic.claude-fable-5-1",
     ],
 )
 def test_litellm_chat_model_drops_non_default_temperature_for_claude_opus_4_7_onward(
