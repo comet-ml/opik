@@ -60,7 +60,7 @@ result = optimizer.optimize_prompt(
 )
 ```
 
-This selects the planner's `lookup` tool and preserves the answerer's tools. An unqualified selector such as `"lookup"` selects that name in every prompt that declares it. Prompts without tools can still participate in the agent.
+This selects the planner's `lookup` tool and preserves the answerer's tools. Selectors are qualified with the dictionary key, not the prompt's `ChatPrompt.name`. An unqualified selector such as `"lookup"` selects that name in every prompt that declares it, and qualified selectors override unqualified ones regardless of order: `{"lookup": True, "planner.lookup": False}` selects `lookup` in every prompt except the planner. Selectors may use the `tool:` prefix, a selector that enables no tool means tool optimization is not requested, and an unknown selector raises an error listing the available `prompt.tool` names. Prompts without tools can still participate in the agent.
 
 ## Supported Tool Types
 
