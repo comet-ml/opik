@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import warnings
 from collections.abc import Callable
 from typing import Any
@@ -290,3 +291,48 @@ class TestSharedLifecycle:
         )
         assert result.details["finish_reason"] == "perfect_score"
         assert finalized.call_args.kwargs["status"] == "completed"
+
+
+class TestFinishReasonAndWarnings:
+    def test_timeout_before_trial_budget_reports_timeout(
+        self, mock_opik_client, monkeypatch
+    ) -> None:
+        mock_opik_client()
+        optimizer = ParameterOptimizer(verbose=0)
+        scores = iter([0.1] + [0.2] * 100)
+
+        def evaluate(**kwargs):
+            time.sleep(0.01)
+            return next(scores)
+
+        monkeypatch.setattr(optimizer, "evaluate_prompt", evaluate)
+        result = optimizer.optimize_parameter(
+            prompt=ChatPrompt(name="p", system="A", model="agent-model"),
+            dataset=make_mock_dataset(),
+            metric=make_simple_metric(),
+            parameter_space=space(float_param("temperature")),
+            max_trials=50,
+            timeout=0.001,
+        )
+        assert result.details["trials_completed"] < 50
+        assert result.details["finish_reason"] == "timeout"
+        assert result.details["stopped_early"] is True
+
+    def test_deliberate_no_prompt_roles_does_not_warn(
+        self, mock_opik_client, monkeypatch
+    ) -> None:
+        from opik_optimizer import base_optimizer
+
+        mock_opik_client()
+        optimizer = ParameterOptimizer(verbose=0)
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 1.0)
+        warning = MagicMock()
+        monkeypatch.setattr(base_optimizer.logger, "warning", warning)
+        optimizer.optimize_parameter(
+            prompt=ChatPrompt(name="p", system="A", model="agent-model"),
+            dataset=make_mock_dataset(),
+            metric=make_simple_metric(),
+            parameter_space=space(float_param("temperature")),
+        )
+        messages = [str(call.args[0]) for call in warning.call_args_list]
+        assert not [m for m in messages if "resolved to no roles" in m]

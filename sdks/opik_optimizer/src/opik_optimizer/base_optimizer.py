@@ -587,7 +587,7 @@ class BaseOptimizer(ABC):
 
         extra_params["optimizable_roles"] = optimizable_roles
         self._optimizable_roles = optimizable_roles
-        if not optimizable_roles:
+        if not optimizable_roles and optimize_prompts is not False:
             logger.warning(
                 "optimize_prompts resolved to no roles; prompt content will not be mutated."
             )

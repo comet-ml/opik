@@ -266,7 +266,8 @@ class ParameterOptimizer(BaseOptimizer):
             project_name: Opik project name for logging traces (default: "Optimization")
             sampler: Optuna sampler to use (default: TPESampler with seed)
             callbacks: List of callback functions for Optuna study
-            timeout: Maximum time in seconds for optimization
+            timeout: Maximum time in seconds for each search phase (global, then local).
+                A run cut short by it reports ``finish_reason="timeout"``.
             local_trials: Number of trials for local search (overrides local_search_ratio)
             local_search_scale: Scale factor for local search narrowing (0.0-1.0)
             optimization_id: Optional ID of the Opik optimization run to log to. An existing
@@ -518,6 +519,13 @@ class ParameterOptimizer(BaseOptimizer):
 
         else:
             local_trials = 0
+
+        if (
+            timeout is not None
+            and not context.should_stop
+            and len(completed_trials) < total_trials
+        ):
+            context.finish_reason = "timeout"
 
         importance = compute_parameter_importance(
             study=study,
