@@ -290,3 +290,30 @@ class TestDefaultOptimizePrompt:
         assert isinstance(captured.get("experiment_config"), dict)
         experiment_config = cast(dict[str, Any], captured["experiment_config"])
         assert experiment_config["test_key"] == "test_value"
+
+    def test_subclass_without_get_config_runs_with_display(
+        self,
+        simple_chat_prompt,
+        mock_opik_client,
+        mock_metric,
+        monkeypatch,
+    ) -> None:
+        """A minimal subclass (no get_config override) must not break the console display."""
+        mock_opik_client()
+
+        class MinimalOptimizer(BaseOptimizer):
+            def run_optimization(self, context: OptimizationContext):
+                return AlgorithmResult(
+                    best_prompts=context.prompts, best_score=context.baseline_score
+                )
+
+        optimizer = MinimalOptimizer(model="gpt-4", verbose=1)
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
+
+        result = optimizer.optimize_prompt(
+            prompt=simple_chat_prompt,
+            dataset=make_mock_dataset([{"id": "1", "input": "test"}]),
+            metric=mock_metric,
+        )
+
+        assert result.score == 0.5

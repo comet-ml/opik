@@ -404,6 +404,8 @@ def show_configuration(
     prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
 ) -> None:
     optimizer_config = dict(optimizer.get_config(context))
+    # The base get_config returns {}; user subclasses need not name themselves.
+    optimizer_config.setdefault("optimizer", optimizer.__class__.__name__)
     if "n_samples" not in optimizer_config and context.n_samples is not None:
         optimizer_config["n_samples"] = context.n_samples
     if (
