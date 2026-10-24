@@ -300,6 +300,24 @@ class ParameterOptimizer(BaseOptimizer):
         # Keep parameter-specific fields on baseline-only results too.
         result.details.setdefault("n_trials", 0)
         result.details.setdefault("optimized_parameters", {})
+        defaults = {
+            "optimized_model_kwargs": helpers.build_base_model_kwargs(
+                self.model_parameters
+            ),
+            "optimized_model": next(iter(context.prompts.values())).model,
+            "trials": [],
+            "baseline_parameters": helpers.build_base_model_kwargs(
+                self.model_parameters
+            ),
+            "local_trials": 0,
+            "global_trials": 0,
+            "search_stages": [],
+            "search_ranges": {},
+            "parameter_importance": {},
+            "parameter_precision": 6,
+        }
+        for key, value in defaults.items():
+            result.details.setdefault(key, value)
         result.details.setdefault(
             "parameter_space",
             context.extra_params["parameter_space"].model_dump(by_alias=True),
