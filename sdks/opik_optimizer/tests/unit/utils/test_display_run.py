@@ -61,3 +61,33 @@ def test_evaluation_progress_handles_non_finite_scores(
 
     assert captured["style"] == "yellow"
     assert captured["score_text"] == "non-finite score"
+
+
+def test_evaluation_progress_shows_dataset_info_alongside_caller_extras(
+    monkeypatch: Any,
+) -> None:
+    from opik_optimizer import ChatPrompt
+    from tests.unit.test_helpers import make_mock_dataset, make_optimization_context
+
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        "opik_optimizer.utils.display.terminal.display_evaluation_progress",
+        lambda **kwargs: captured.update(kwargs),
+    )
+    prompt = ChatPrompt(system="s", user="{question}")
+    context = make_optimization_context(
+        prompt, dataset=make_mock_dataset(name="train-ds"), max_trials=5
+    )
+    context.dataset_split = "train"
+
+    OptimizationRunDisplay(verbose=1).evaluation_progress(
+        context=context,
+        prompts=context.prompts,
+        score=0.5,
+        display_info={"prev_best_score": 0.4},  # what runtime always passes
+    )
+
+    assert captured["dataset_name"] == "train-ds"
+    assert captured["dataset_type"] == "training"
+    assert captured["evaluation_settings"]
+    assert context.dataset_split == "train"  # display must not mutate state
