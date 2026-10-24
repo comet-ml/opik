@@ -740,63 +740,10 @@ class BaseOptimizer(ABC):
                 if context.should_stop:
                     break
         """
-        prompt_tracing.record_candidate_prompts(prompts)
-        self.pre_trial(context, prompts)
-        try:
-            suppress_progress = bool(
-                (context.extra_params or {}).get("suppress_evaluation_progress", False)
-            )
-            progress_ctx = (
-                nullcontext()
-                if suppress_progress
-                else convert_tqdm_to_rich("  Evaluation", verbose=self.verbose)
-            )
-            with progress_ctx:
-                raw_result = self.evaluate_prompt(
-                    prompt=prompts,
-                    dataset=context.evaluation_dataset,
-                    metric=context.metric,
-                    agent=context.agent,
-                    experiment_config=experiment_config,
-                    n_samples=context.n_samples,
-                    n_samples_strategy=context.n_samples_strategy,
-                    n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
-                    verbose=self.verbose,
-                    allow_tool_use=context.allow_tool_use,
-                    sampling_tag=sampling_tag,
-                    return_evaluation_result=True,
-                )
-        except Exception:
-            context.finish_reason = "error"
-            context.should_stop = True
-            logger.exception("Evaluation failed; stopping optimization.")
-            raise
-        # raw_result is EvaluationResult (normal path) or float (mocked/legacy path).
-        if isinstance(raw_result, (EvaluationResult, EvaluationResultOnDictItems)):
-            score = self._score_from_evaluation_result(
-                raw_result, metric_name=context.metric.__name__
-            )
-            eval_result_for_health: (
-                EvaluationResult | EvaluationResultOnDictItems | None
-            ) = raw_result
-        else:
-            score = raw_result
-            eval_result_for_health = None
-        coerced_score = self._coerce_score(score)
-        prev_best_score = context.current_best_score
-        self.on_trial(context, prompts, coerced_score, prev_best_score)
-
-        # Update scoring health whenever a new best is recorded.
-        if (
-            prev_best_score is None or coerced_score > prev_best_score
-        ) and eval_result_for_health is not None:
-            context.scoring_health = _compute_scoring_health_from_result(
-                eval_result_for_health, metric_name=context.metric.__name__
-            )
-
-        # Check early stop conditions - SET FLAG, don't raise
-        self._should_stop_context(context)
-        return coerced_score
+        score, _ = self._evaluate_candidate(
+            context, prompts, experiment_config, sampling_tag=sampling_tag
+        )
+        return score
 
     def _score_from_evaluation_result(
         self,
@@ -828,6 +775,32 @@ class BaseOptimizer(ABC):
         sampling_tag: str | None = None,
     ) -> tuple[float, EvaluationResult | EvaluationResultOnDictItems]:
         """Evaluate prompts and return both the score and EvaluationResult."""
+        score, result = self._evaluate_candidate(
+            context,
+            prompts,
+            experiment_config,
+            empty_score=empty_score,
+            n_samples=n_samples,
+            n_samples_strategy=n_samples_strategy,
+            sampling_tag=sampling_tag,
+            require_result=True,
+        )
+        assert isinstance(result, (EvaluationResult, EvaluationResultOnDictItems))
+        return score, result
+
+    def _evaluate_candidate(
+        self,
+        context: OptimizationContext,
+        prompts: dict[str, chat_prompt.ChatPrompt],
+        experiment_config: dict[str, Any] | None = None,
+        *,
+        empty_score: float | None = None,
+        n_samples: int | float | str | None = None,
+        n_samples_strategy: str | None = None,
+        sampling_tag: str | None = None,
+        require_result: bool = False,
+    ) -> tuple[float, EvaluationResult | EvaluationResultOnDictItems | None]:
+        """Score and account for a candidate once, with optional result access."""
         prompt_tracing.record_candidate_prompts(prompts)
         self.pre_trial(context, prompts)
         try:
@@ -840,7 +813,7 @@ class BaseOptimizer(ABC):
                 else convert_tqdm_to_rich("  Evaluation", verbose=self.verbose)
             )
             with progress_ctx:
-                evaluation_result = self.evaluate_prompt(
+                raw_result = self.evaluate_prompt(
                     prompt=prompts,
                     dataset=context.evaluation_dataset,
                     metric=context.metric,
@@ -859,27 +832,34 @@ class BaseOptimizer(ABC):
             context.should_stop = True
             logger.exception("Evaluation failed; stopping optimization.")
             raise
-        if not isinstance(
-            evaluation_result, (EvaluationResult, EvaluationResultOnDictItems)
-        ):
-            raise TypeError("Expected EvaluationResult from evaluate_prompt.")
-        score = self._score_from_evaluation_result(
-            evaluation_result,
-            metric_name=context.metric.__name__,
-            empty_score=empty_score,
-        )
+        # raw_result is EvaluationResult (normal path) or float (mocked/legacy path).
+        if isinstance(raw_result, (EvaluationResult, EvaluationResultOnDictItems)):
+            score = self._score_from_evaluation_result(
+                raw_result, metric_name=context.metric.__name__, empty_score=empty_score
+            )
+            eval_result_for_health: (
+                EvaluationResult | EvaluationResultOnDictItems | None
+            ) = raw_result
+        else:
+            if require_result:
+                raise TypeError("Expected EvaluationResult from evaluate_prompt.")
+            score = raw_result
+            eval_result_for_health = None
         coerced_score = self._coerce_score(score)
         prev_best_score = context.current_best_score
         self.on_trial(context, prompts, coerced_score, prev_best_score)
 
         # Update scoring health whenever a new best is recorded.
-        if prev_best_score is None or coerced_score > prev_best_score:
+        if (
+            prev_best_score is None or coerced_score > prev_best_score
+        ) and eval_result_for_health is not None:
             context.scoring_health = _compute_scoring_health_from_result(
-                evaluation_result, metric_name=context.metric.__name__
+                eval_result_for_health, metric_name=context.metric.__name__
             )
 
+        # Check early stop conditions - SET FLAG, don't raise
         self._should_stop_context(context)
-        return coerced_score, evaluation_result
+        return coerced_score, eval_result_for_health
 
     # ------------------------------------------------------------------
     # Reporting/display
