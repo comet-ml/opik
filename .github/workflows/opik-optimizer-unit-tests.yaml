@@ -75,7 +75,7 @@ jobs:
               litellm-cache-
 
         - name: Install opik_optimizer
-          run: uv pip install --system .
+          run: uv pip install --system ".[mcp]"
         
         - name: Install test requirements
           run: |

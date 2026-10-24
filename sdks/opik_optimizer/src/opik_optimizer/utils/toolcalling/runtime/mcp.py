@@ -364,6 +364,9 @@ class ToolCallingDependencyError(RuntimeError):
     """Raised when the Model Context Protocol SDK is unavailable."""
 
 
+MCP_INSTALL_HINT = 'Install it with: pip install "opik-optimizer[mcp]"'
+
+
 def _load_sdk() -> tuple[Any, Any, Any, Any]:
     """Import MCP SDK components and return the required classes."""
     candidates = (
@@ -395,7 +398,7 @@ def _load_sdk() -> tuple[Any, Any, Any, Any]:
             return session_cls, stdio_client_fn, stdio_params_cls, types_mod
 
     raise ToolCallingDependencyError(
-        "modelcontextprotocol Python SDK not found. Install it with 'pip install mcp'."
+        f"MCP tools require the optional `mcp` Python SDK. {MCP_INSTALL_HINT}"
     )
 
 

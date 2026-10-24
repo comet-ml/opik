@@ -400,8 +400,8 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 The optimizer includes utilities for MCP tool integration:
 
 ```bash
-# Install MCP Python SDK
-pip install mcp
+# Install the optional MCP extra
+pip install "opik-optimizer[mcp]"
 
 # Run MCP examples
 python scripts/litellm_metaprompt_context7_mcp_example.py

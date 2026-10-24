@@ -111,7 +111,7 @@ result = optimizer.optimize_prompt(prompt=prompt, dataset=dataset, metric=metric
 
 ### 2. MCP (Model Context Protocol) Tools
 
-**True tool optimization** is available for MCP tools and function-calling tools across supported optimizers. MCP tools provide standardized interfaces for external integrations:
+**True tool optimization** is available for MCP tools and function-calling tools across supported optimizers. MCP tools provide standardized interfaces for external integrations. They need the optional MCP SDK: `pip install "opik-optimizer[mcp]"`.
 
 ```python wordWrap
 # MCP tool optimization example
