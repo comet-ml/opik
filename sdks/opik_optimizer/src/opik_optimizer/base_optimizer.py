@@ -459,7 +459,9 @@ class BaseOptimizer(ABC):
         # Declining tool optimization is valid for every prompt shape.
         if not toolcalling_utils.tool_optimization_requested(optimize_tools):
             optimize_tools = None
-        if self.supports_prompt_optimization:
+        # optimize_prompts=False with no tools is a deliberate no-op on content
+        # (ParameterOptimizer); every other combination must be validated.
+        if optimize_prompts is not False or optimize_tools is not None:
             optimize_tools = toolcalling_utils.validate_optimization_flags(
                 optimize_prompts=bool(optimizable_roles),
                 optimize_tools=optimize_tools,

@@ -7,6 +7,8 @@ from typing import Any
 
 import pytest
 
+from opik_optimizer.base_optimizer import BaseOptimizer
+from opik_optimizer.core.state import AlgorithmResult
 from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer
 from tests.unit.test_helpers import make_mock_dataset
 
@@ -227,3 +229,52 @@ class TestMetricRequiredFields:
                 compute_baseline=False,
                 validation_dataset=validation_ds,
             )
+
+
+class TestOptimizationFlagsForUserSubclass:
+    """A user subclass (capability flags left at their defaults) is still validated."""
+
+    class _UserOptimizer(BaseOptimizer):
+        def run_optimization(self, context):
+            return AlgorithmResult(best_prompts=context.prompts, best_score=0.0)
+
+    @staticmethod
+    def _metric(dataset_item, llm_output):
+        return 1.0
+
+    def test_rejects_no_prompt_roles_and_no_tools(
+        self, simple_chat_prompt, mock_opik_client
+    ) -> None:
+        mock_opik_client()
+        with pytest.raises(ValueError, match="both disabled"):
+            self._UserOptimizer(model="gpt-4")._setup_optimization(
+                prompt=simple_chat_prompt,
+                dataset=make_mock_dataset(),
+                metric=self._metric,
+                optimize_prompts=[],
+            )
+
+    def test_warns_and_ignores_unsupported_tool_optimization(
+        self, chat_prompt_with_tools, mock_opik_client
+    ) -> None:
+        mock_opik_client()
+        with pytest.warns(UserWarning, match="optimize_tools is not supported"):
+            context = self._UserOptimizer(model="gpt-4")._setup_optimization(
+                prompt=chat_prompt_with_tools,
+                dataset=make_mock_dataset(),
+                metric=self._metric,
+                optimize_tools=True,
+            )
+        assert "optimize_tools" not in context.extra_params
+
+    def test_explicit_false_without_tools_is_accepted(
+        self, simple_chat_prompt, mock_opik_client
+    ) -> None:
+        mock_opik_client()
+        context = self._UserOptimizer(model="gpt-4")._setup_optimization(
+            prompt=simple_chat_prompt,
+            dataset=make_mock_dataset(),
+            metric=self._metric,
+            optimize_prompts=False,
+        )
+        assert context.extra_params["optimizable_roles"] == set()
