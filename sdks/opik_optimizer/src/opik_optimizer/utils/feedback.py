@@ -99,19 +99,3 @@ def format_evaluation_feedback(
         if steps:
             text += f"\nAgent trace:\n{steps}"
     return text
-
-
-def format_evaluation_result(result: Any, limit: int = 5) -> str:
-    """Bound the examples supplied to the next optimization step."""
-    cases = []
-    for item in result.test_results[:limit]:
-        scores = [
-            {"name": score.name, "value": score.value, "reason": score.reason}
-            for score in item.score_results
-        ]
-        cases.append(
-            format_evaluation_feedback(
-                item.test_case.dataset_item_content, item.test_case.task_output, scores
-            )
-        )
-    return "\n\n".join(cases)
