@@ -141,7 +141,6 @@ class ParameterOptimizer(BaseOptimizer):
         *,
         context: OptimizationContext,
         base_prompts: dict[str, chat_prompt.ChatPrompt],
-        base_model_kwargs: dict[str, Any],
         baseline_score: float,
         is_single_prompt_optimization: bool,
     ) -> None:
@@ -268,8 +267,7 @@ class ParameterOptimizer(BaseOptimizer):
         if not isinstance(parameter_space, ParameterSearchSpace):
             parameter_space = ParameterSearchSpace.model_validate(parameter_space)
         assert isinstance(parameter_space, ParameterSearchSpace)
-        base_kwargs = helpers.build_base_model_kwargs(self.model_parameters)
-        prompts = helpers.build_base_prompts(prompts, self.model, base_kwargs)
+        prompts = helpers.build_base_prompts(prompts)
         return super().optimize_prompt(
             prompt=next(iter(prompts.values())) if single else prompts,
             dataset=dataset,
@@ -301,14 +299,16 @@ class ParameterOptimizer(BaseOptimizer):
         result.details.setdefault("n_trials", 0)
         result.details.setdefault("optimized_parameters", {})
         defaults = {
-            "optimized_model_kwargs": helpers.build_base_model_kwargs(
-                self.model_parameters
-            ),
+            "optimized_model_kwargs": {
+                name: copy.deepcopy(prompt.model_kwargs)
+                for name, prompt in context.prompts.items()
+            },
             "optimized_model": next(iter(context.prompts.values())).model,
             "trials": [],
-            "baseline_parameters": helpers.build_base_model_kwargs(
-                self.model_parameters
-            ),
+            "baseline_parameters": {
+                name: copy.deepcopy(prompt.model_kwargs)
+                for name, prompt in context.initial_prompts.items()
+            },
             "local_trials": 0,
             "global_trials": 0,
             "search_stages": [],
@@ -327,7 +327,10 @@ class ParameterOptimizer(BaseOptimizer):
     def run_optimization(self, context: OptimizationContext) -> AlgorithmResult:
         params = context.extra_params
         base_prompts = context.prompts
-        base_model_kwargs = helpers.build_base_model_kwargs(self.model_parameters)
+        baseline_parameters = {
+            name: copy.deepcopy(prompt.model_kwargs)
+            for name, prompt in base_prompts.items()
+        }
         expanded_parameter_space = params["parameter_space"]
         baseline_score = context.baseline_score
         assert baseline_score is not None
@@ -346,7 +349,6 @@ class ParameterOptimizer(BaseOptimizer):
         self._record_baseline_round(
             context=context,
             base_prompts=base_prompts,
-            base_model_kwargs=base_model_kwargs,
             baseline_score=baseline_score,
             is_single_prompt_optimization=context.is_single_prompt_optimization,
         )
@@ -385,7 +387,6 @@ class ParameterOptimizer(BaseOptimizer):
             stage_counts=stage_counts,
             best_state=cast(dict[str, Any], best_state),
             base_prompts=base_prompts,
-            base_model_kwargs=base_model_kwargs,
             evaluation_dataset=evaluation_dataset,
             metric=metric,
             agent=agent,
@@ -516,7 +517,7 @@ class ParameterOptimizer(BaseOptimizer):
             "parameter_space": expanded_parameter_space.model_dump(by_alias=True),
             "n_trials": total_trials,
             "model": best_model,
-            "baseline_parameters": base_model_kwargs,
+            "baseline_parameters": baseline_parameters,
             "local_trials": local_trials,
             "global_trials": global_trials,
             "search_stages": stage_records,

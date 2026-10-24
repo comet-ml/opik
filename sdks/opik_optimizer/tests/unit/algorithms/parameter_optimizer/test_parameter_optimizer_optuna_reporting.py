@@ -179,7 +179,6 @@ class TestOptunaHistoryRedaction:
             max_trials=1,
         )
         base_prompts = context.prompts
-        base_model_kwargs = {}
         expanded_parameter_space = parameter_space.expand_for_prompts(
             list(base_prompts)
         )
@@ -223,7 +222,6 @@ class TestOptunaHistoryRedaction:
             stage_counts=stage_counts,
             best_state=best_state,
             base_prompts=base_prompts,
-            base_model_kwargs=base_model_kwargs,
             evaluation_dataset=evaluation_dataset,
             metric=lambda item, output: 0.5,
             agent=context.agent,

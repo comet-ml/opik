@@ -751,12 +751,6 @@ class GepaOptimizer(BaseOptimizer):
                 "GEPA will drop candidate edits for disallowed roles due to optimize_prompt constraints."
             )
 
-        for p in optimizable_prompts.values():
-            if p.model is None:
-                p.model = self.model
-            if not p.model_kwargs:
-                p.model_kwargs = dict(self.model_parameters)
-
         seed_candidate = candidate_ops.build_seed_candidate(
             optimizable_prompts=optimizable_prompts,
             allowed_roles=optimizable_roles,

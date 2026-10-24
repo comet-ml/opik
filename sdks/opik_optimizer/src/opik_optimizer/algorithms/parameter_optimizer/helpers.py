@@ -16,16 +16,16 @@ def build_base_model_kwargs(
     model_parameters: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """
-    Build base model kwargs from optimizer's model parameters.
+    Copy agent model settings for parameter search.
 
     Removes 'n' parameter since parameter optimization evaluates
     a single candidate per trial.
 
     Args:
-        model_parameters: Optional dict of model parameters from optimizer
+        model_parameters: Optional dict of parameters from an agent prompt
 
     Returns:
-        Base model kwargs dict with 'n' removed
+        Agent model kwargs with 'n' removed
     """
     base_kwargs = copy.deepcopy(model_parameters or {})
     base_kwargs.pop("n", None)
@@ -34,35 +34,13 @@ def build_base_model_kwargs(
 
 def build_base_prompts(
     prompts: dict[str, chat_prompt.ChatPrompt],
-    model: str,
-    base_model_kwargs: dict[str, Any],
 ) -> dict[str, chat_prompt.ChatPrompt]:
-    """
-    Build base prompts dict with model defaults applied.
-
-    Merges optimizer's model parameters with each prompt's existing
-    model_kwargs, ensuring the model is set and 'n' is removed.
-
-    Args:
-        prompts: Dictionary of prompt names to ChatPrompt instances
-        model: Model name to set on all prompts
-        base_model_kwargs: Base model kwargs (from build_base_model_kwargs)
-
-    Returns:
-        Dictionary of prompts with model and model_kwargs configured
-    """
-    base_prompts: dict[str, chat_prompt.ChatPrompt] = {}
-    for name, p in prompts.items():
-        base_p = p.copy()
-        base_p.model = p.model or model
-        merged_kwargs = {
-            **base_model_kwargs,
-            **copy.deepcopy(p.model_kwargs or {}),
-        }
-        # Keep per-trial evaluation single-choice until multi-candidate selection is added.
-        merged_kwargs.pop("n", None)
-        base_p.model_kwargs = merged_kwargs
-        base_prompts[name] = base_p
+    """Copy each agent's settings, keeping evaluation single-choice during search."""
+    base_prompts = {}
+    for name, prompt in prompts.items():
+        copied = prompt.copy()
+        copied.model_kwargs = build_base_model_kwargs(prompt.model_kwargs)
+        base_prompts[name] = copied
     return base_prompts
 
 

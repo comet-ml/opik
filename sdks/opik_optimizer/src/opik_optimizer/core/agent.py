@@ -61,7 +61,7 @@ def build_agent_config(
 ) -> dict[str, Any]:
     agent_config: dict[str, Any] = dict(prompt.to_dict())
     agent_config["project_name"] = getattr(prompt, "project_name", None)
-    agent_config["model"] = getattr(prompt, "model", None) or optimizer.model
+    agent_config["model"] = getattr(prompt, "model", None)
     agent_config["tools"] = serialize_tools(prompt)
     agent_config["optimizer"] = optimizer.__class__.__name__
     return helpers.drop_none(agent_config)

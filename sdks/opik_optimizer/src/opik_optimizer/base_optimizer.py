@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, cast, overload, Literal
 from collections.abc import Iterator
 import logging
+import copy
 import traceback
 import warnings
 import time
@@ -134,10 +135,14 @@ class BaseOptimizer(ABC):
            display: Optional display handler for run output (used for testing or alternate renderers).
         """
         self.model = model
-        self.model_parameters = model_parameters or {}
+        self.model_parameters = (
+            copy.deepcopy(model_parameters) if model_parameters is not None else {}
+        )
         self.reasoning_model = reasoning_model or model
-        self.reasoning_model_parameters = (
-            reasoning_model_parameters or self.model_parameters
+        self.reasoning_model_parameters = copy.deepcopy(
+            self.model_parameters
+            if reasoning_model_parameters is None
+            else reasoning_model_parameters
         )
         self.verbose = verbose
         self.seed = seed

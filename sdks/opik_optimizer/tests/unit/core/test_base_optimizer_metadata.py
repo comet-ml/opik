@@ -158,3 +158,41 @@ class TestBuildOptimizationMetadata:
         )
 
         assert metadata["agent_class"] == "CustomAgent"
+
+
+@pytest.mark.parametrize(
+    "reasoning_parameters",
+    [None, {}, {"temperature": 0.2, "metadata": {"owner": "reasoning"}}],
+)
+def test_reasoning_settings_respect_empty_overrides_and_copy_inputs(
+    reasoning_parameters,
+):
+    import copy
+
+    optimizer_parameters = {"temperature": 0.9, "metadata": {"owner": "optimizer"}}
+    expected_optimizer = copy.deepcopy(optimizer_parameters)
+    expected_reasoning = copy.deepcopy(
+        optimizer_parameters if reasoning_parameters is None else reasoning_parameters
+    )
+    optimizer = ConcreteOptimizer(
+        model="optimizer-model",
+        model_parameters=optimizer_parameters,
+        reasoning_model="reasoning-model",
+        reasoning_model_parameters=reasoning_parameters,
+    )
+    optimizer_parameters["metadata"]["owner"] = "changed"
+    if reasoning_parameters:
+        reasoning_parameters["metadata"]["owner"] = "changed"
+    assert optimizer.model_parameters == expected_optimizer
+    assert optimizer.reasoning_model_parameters == expected_reasoning
+    optimizer.model_parameters["metadata"]["owner"] = "changed again"
+    assert optimizer.reasoning_model_parameters == expected_reasoning
+
+
+def test_agent_config_does_not_substitute_the_optimizer_model(simple_chat_prompt):
+    optimizer = ConcreteOptimizer(model="optimizer-only-model")
+    simple_chat_prompt.model = None
+    config = agent_utils.build_agent_config(
+        optimizer=optimizer, prompt=simple_chat_prompt
+    )
+    assert "model" not in config

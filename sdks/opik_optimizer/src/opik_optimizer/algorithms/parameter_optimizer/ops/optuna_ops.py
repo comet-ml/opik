@@ -45,7 +45,6 @@ def build_optuna_objective(
     stage_counts: dict[str, int],
     best_state: dict[str, Any],
     base_prompts: dict[str, chat_prompt.ChatPrompt],
-    base_model_kwargs: dict[str, Any],
     evaluation_dataset: Dataset,
     metric: MetricFunction,
     agent: OptimizableAgent | None,
@@ -70,7 +69,6 @@ def build_optuna_objective(
         stage_counts: Dictionary tracking trial counts per stage (mutated during execution).
         best_state: Dictionary tracking the best score and prompts found (mutated during execution).
         base_prompts: Base prompts to apply parameter variations to.
-        base_model_kwargs: Base model keyword arguments to use.
         evaluation_dataset: Dataset to evaluate prompts against.
         metric: Metric function to score prompt performance.
         agent: Optional agent to use for evaluation.
@@ -91,7 +89,6 @@ def build_optuna_objective(
         tuned_prompts = current_space_ref["space"].apply_to_prompts(
             base_prompts,
             sampled_values,
-            base_model_kwargs=base_model_kwargs,
         )
 
         with reporting.display_trial_evaluation(
