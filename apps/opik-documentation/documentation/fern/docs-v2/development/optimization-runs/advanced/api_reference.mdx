@@ -94,7 +94,7 @@ FewShotBayesianOptimizer(
     enable_columnar_selection: bool = True,
     enable_diversity: bool = True,
     enable_multivariate_tpe: bool = True,
-    enable_optuna_pruning: bool = True,
+    enable_optuna_pruning: bool | None = None,
     prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
     skip_perfect_score: bool = True,
     perfect_score: float = 0.95
@@ -115,7 +115,7 @@ FewShotBayesianOptimizer(
 <ParamField path="enable_columnar_selection" type="bool" optional={true} default="True" />
 <ParamField path="enable_diversity" type="bool" optional={true} default="True" />
 <ParamField path="enable_multivariate_tpe" type="bool" optional={true} default="True" />
-<ParamField path="enable_optuna_pruning" type="bool" optional={true} default="True" />
+<ParamField path="enable_optuna_pruning" type="bool | None" optional={true}>Deprecated; has no effect.</ParamField>
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />

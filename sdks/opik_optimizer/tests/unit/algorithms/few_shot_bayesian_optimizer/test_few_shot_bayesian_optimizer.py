@@ -546,3 +546,53 @@ class TestFewShotBayesianOptimizerEvaluate:
             return params["allow_tool_use"].default
 
         assert default(FewShotBayesianOptimizer) == default(BaseOptimizer)
+
+
+class TestFewShotBayesianOptimizerOptuna:
+    def test_stop_ends_the_study_without_pruned_trials(
+        self, mock_optimization_context, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import optuna
+
+        mock_optimization_context()
+        optimizer = FewShotBayesianOptimizer(
+            model="gpt-4o-mini", verbose=0, seed=42, min_examples=1, max_examples=2
+        )
+        scores = iter([0.5])  # baseline; every trial after that is perfect
+        monkeypatch.setattr(
+            optimizer, "evaluate_prompt", lambda **kwargs: next(scores, 1.0)
+        )
+        monkeypatch.setattr(
+            optimizer,
+            "_create_few_shot_prompt_template",
+            lambda **kwargs: (
+                {name: p.copy() for name, p in kwargs["prompts"].items()},
+                "Examples:\n{examples}",
+            ),
+        )
+        studies: list[optuna.Study] = []
+        real_create_study = optuna.create_study
+
+        def capture_study(**kwargs: Any) -> optuna.Study:
+            studies.append(real_create_study(**kwargs))
+            return studies[-1]
+
+        monkeypatch.setattr(optuna, "create_study", capture_study)
+
+        result = optimizer.optimize_prompt(
+            prompt=ChatPrompt(system="Test", user="{question}"),
+            dataset=make_mock_dataset(
+                STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+            ),
+            metric=make_simple_metric(),
+            max_trials=5,
+        )
+
+        assert result.details["finish_reason"] == "perfect_score"
+        assert [trial.state for trial in studies[0].trials] == [
+            optuna.trial.TrialState.COMPLETE
+        ]
+
+    def test_enable_optuna_pruning_is_deprecated(self) -> None:
+        with pytest.warns(DeprecationWarning, match="enable_optuna_pruning"):
+            FewShotBayesianOptimizer(model="gpt-4o-mini", enable_optuna_pruning=True)

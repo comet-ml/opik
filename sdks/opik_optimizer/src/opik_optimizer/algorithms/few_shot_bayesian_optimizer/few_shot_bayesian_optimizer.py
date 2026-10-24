@@ -81,7 +81,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         seed: Random seed for reproducibility
         enable_columnar_selection: Toggle column-aware example grouping (categorical Optuna params)
         enable_multivariate_tpe: Enable Optuna's multivariate TPE sampler (default: True)
-        enable_optuna_pruning: Enable Optuna pruner for early stopping (default: True)
+        enable_optuna_pruning: Deprecated, has no effect (trials report no
+            intermediate values, so a pruner could never act).
         prompt_overrides: Optional dict or callable to override/customize prompt templates.
             If a dict, keys should match DEFAULT_PROMPTS keys.
             If a callable, receives the PromptLibrary instance for in-place modification.
@@ -109,7 +110,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         enable_columnar_selection: bool = constants.FEW_SHOT_DEFAULT_ENABLE_COLUMNAR_SELECTION,
         enable_diversity: bool = constants.FEW_SHOT_DEFAULT_ENABLE_DIVERSITY,
         enable_multivariate_tpe: bool = constants.FEW_SHOT_DEFAULT_ENABLE_MULTIVARIATE_TPE,
-        enable_optuna_pruning: bool = constants.FEW_SHOT_DEFAULT_ENABLE_OPTUNA_PRUNING,
+        enable_optuna_pruning: bool | None = None,
         prompt_overrides: PromptOverrides = None,
         skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
         perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
@@ -131,7 +132,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self.enable_columnar_selection = enable_columnar_selection
         self.enable_diversity = enable_diversity
         self.enable_multivariate_tpe = enable_multivariate_tpe
-        self.enable_optuna_pruning = enable_optuna_pruning
+        if enable_optuna_pruning is not None:
+            warnings.warn(
+                "enable_optuna_pruning is deprecated and has no effect.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         if self.verbose == 0:
             logger.setLevel(logging.WARNING)
         elif self.verbose == 1:
@@ -154,7 +160,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "enable_columnar_selection": self.enable_columnar_selection,
             "enable_diversity": self.enable_diversity,
             "enable_multivariate_tpe": self.enable_multivariate_tpe,
-            "enable_optuna_pruning": self.enable_optuna_pruning,
         }
 
     def evaluate_prompt(  # type: ignore[override]
@@ -604,8 +609,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             return datetime.now().isoformat()
 
         def optimization_objective(trial: optuna.Trial) -> float:
-            # Check should_stop flag at start of each trial
             if context.should_stop:
+                trial.study.stop()
                 raise optuna.exceptions.TrialPruned()
 
             n_examples = trial.suggest_int(
@@ -751,6 +756,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 round_meta=_build_round_meta(trial),
                 candidate_id=f"trial{trial.number}",
             )
+            # Without this Optuna keeps running every remaining trial as a pruned no-op.
+            if context.should_stop:
+                trial.study.stop()
 
             return score
 
@@ -768,13 +776,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             sampler = optuna.samplers.TPESampler(
                 seed=self.seed, multivariate=self.enable_multivariate_tpe
             )
-        pruner = (
-            optuna.pruners.MedianPruner(n_startup_trials=3)
-            if self.enable_optuna_pruning
-            else optuna.pruners.NopPruner()
-        )
         study = optuna.create_study(
-            direction="maximize", sampler=sampler, pruner=pruner
+            direction="maximize", sampler=sampler, pruner=optuna.pruners.NopPruner()
         )
 
         study.optimize(
