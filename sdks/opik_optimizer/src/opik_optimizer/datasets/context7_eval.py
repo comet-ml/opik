@@ -56,13 +56,15 @@ def load_context7_dataset(test_mode: bool = False) -> DatasetResult:
     """Return the context7 synthetic dataset as an Opik dataset when available."""
 
     examples = _load_examples()
+    if test_mode:
+        examples = examples[:2]
     dataset_name = _dataset_name(test_mode)
 
     try:
         client = opik.Opik()
         dataset: OpikDataset = client.get_or_create_dataset(dataset_name)
         items = dataset.get_items()
-        expected_len = len(examples) if not test_mode else min(len(examples), 2)
+        expected_len = len(examples)
 
         if len(items) == expected_len:
             return dataset
@@ -71,10 +73,7 @@ def load_context7_dataset(test_mode: bool = False) -> DatasetResult:
                 f"Dataset {dataset_name} already exists with {len(items)} items. Delete it to regenerate."
             )
 
-        if test_mode:
-            dataset.insert(attach_uuids(examples[:expected_len]))
-        else:
-            dataset.insert(attach_uuids(examples))
+        dataset.insert(attach_uuids(examples))
         return dataset
     except Exception:
         # If Opik client fails (e.g., no API key configured), fall back to local dataset
