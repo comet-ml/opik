@@ -618,6 +618,7 @@ def deap_mutation(
                 mutated_prompt = tool_ops.apply_tool_description_update(
                     optimizer=optimizer,
                     prompt=mutated_prompt,
+                    prompt_key=prompt_name,
                     tool_names=tool_names,
                     round_num=0,
                     metric=metric,

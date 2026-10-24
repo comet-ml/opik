@@ -53,6 +53,7 @@ def test_apply_tool_description_update_degrades_on_generation_error(
     result = tool_ops.apply_tool_description_update(
         optimizer=optimizer,
         prompt=prompt,
+        prompt_key=prompt.name,
         tool_names=None,
         round_num=0,
         metric=lambda *_: 1.0,
@@ -88,6 +89,7 @@ def test_apply_tool_description_update_cleans_temporary_prompts_per_round(
     _ = tool_ops.apply_tool_description_update(
         optimizer=optimizer,
         prompt=prompt,
+        prompt_key=prompt.name,
         tool_names=None,
         round_num=0,
         metric=lambda *_: 1.0,

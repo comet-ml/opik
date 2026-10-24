@@ -41,6 +41,7 @@ def apply_tool_updates_to_metadata(
         prompt = apply_tool_description_update(
             optimizer=optimizer,
             prompt=prompt,
+            prompt_key=prompt_name,
             tool_names=selected_by_prompt[prompt_name]
             if selected_by_prompt is not None
             else tool_names,
@@ -61,6 +62,7 @@ def apply_tool_description_update(
     *,
     optimizer: Any,
     prompt: chat_prompt.ChatPrompt,
+    prompt_key: str,
     tool_names: list[str] | None,
     round_num: int,
     metric: Any,
@@ -72,10 +74,13 @@ def apply_tool_description_update(
     Generating multiple tool candidates inside these steps would require an
     additional selection/evaluation loop, so we force a deterministic, single
     update to keep the evolutionary pipeline stable.
+
+    ``prompt_key`` is the prompt's key in the optimized bundle; per-prompt tool
+    selections are keyed by it, not by ``prompt.name``.
     """
     selected_by_prompt = getattr(optimizer, "_tool_names_by_prompt", None)
     if selected_by_prompt is not None:
-        tool_names = selected_by_prompt.get(prompt.name, [])
+        tool_names = selected_by_prompt.get(prompt_key, [])
         if not tool_names:
             return prompt
     if not prompt.tools:

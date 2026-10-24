@@ -64,6 +64,7 @@ def restart_population(
             verbose=optimizer.verbose,
             prompts=optimizer._prompts,
             optimizer=optimizer,
+            prompt_key=prompt_name,
         )
         prompt_variations[prompt_name] = variations
 
@@ -98,10 +99,12 @@ def initialize_population(
     population_size: int,
     verbose: int,
     optimizer: Any | None = None,
+    prompt_key: str | None = None,
 ) -> list[chat_prompt.ChatPrompt]:
     """Initialize the population with diverse variations of the initial prompt,
     including some 'fresh start' prompts based purely on task description.
     All generated prompts should aim to elicit answers matching self.output_style_guidance.
+    ``prompt_key`` is the prompt's key in the bundle (defaults to ``prompt.name``).
     """
     with reporting.initializing_population(verbose=verbose) as init_pop_report:
         init_pop_report.start(population_size)
@@ -132,6 +135,7 @@ def initialize_population(
                 model_parameters=model_parameters,
                 num_fresh_starts=num_fresh_starts,
                 optimizer=optimizer,
+                prompt_key=prompt_key or prompt.name,
             )
         )
 
@@ -146,6 +150,7 @@ def initialize_population(
                 model_parameters=model_parameters,
                 num_variations_on_initial=num_variations_on_initial,
                 optimizer=optimizer,
+                prompt_key=prompt_key or prompt.name,
             )
         )
 
@@ -165,6 +170,7 @@ def _generate_fresh_start_prompts(
     model: str,
     model_parameters: dict[str, Any],
     num_fresh_starts: int,
+    prompt_key: str,
     optimizer: Any | None = None,
 ) -> list[chat_prompt.ChatPrompt]:
     if num_fresh_starts <= 0:
@@ -227,6 +233,7 @@ def _generate_fresh_start_prompts(
         return _messages_to_chat_prompts(
             prompts_to_use,
             prompt,
+            prompt_key=prompt_key,
             optimize_tools=optimize_tools,
             tool_names=tool_names,
             metric=metric,
@@ -256,6 +263,7 @@ def _generate_variation_prompts(
     model: str,
     model_parameters: dict[str, Any],
     num_variations_on_initial: int,
+    prompt_key: str,
     optimizer: Any | None = None,
 ) -> list[chat_prompt.ChatPrompt]:
     if num_variations_on_initial <= 0:
@@ -317,6 +325,7 @@ def _generate_variation_prompts(
         return _messages_to_chat_prompts(
             generated_prompts_variations,
             prompt,
+            prompt_key=prompt_key,
             optimize_tools=optimize_tools,
             tool_names=tool_names,
             metric=metric,
@@ -333,6 +342,7 @@ def _generate_variation_prompts(
 def _messages_to_chat_prompts(
     messages_list: list[list[dict[str, Any]]],
     base_prompt: chat_prompt.ChatPrompt,
+    prompt_key: str,
     optimize_tools: bool,
     tool_names: list[str] | None,
     metric: Any,
@@ -355,6 +365,7 @@ def _messages_to_chat_prompts(
                 tool_ops.apply_tool_description_update(
                     optimizer=optimizer,
                     prompt=prompt,
+                    prompt_key=prompt_key,
                     tool_names=tool_names,
                     round_num=0,
                     metric=metric,

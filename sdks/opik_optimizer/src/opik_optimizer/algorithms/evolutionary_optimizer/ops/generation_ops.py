@@ -123,6 +123,7 @@ def initialize_population(
             verbose=optimizer.verbose,
             prompts=optimizer._prompts,
             optimizer=optimizer,
+            prompt_key=prompt_name,
         )
         prompt_variations[prompt_name] = variations
 
