@@ -12,6 +12,8 @@ Regenerate snapshots after an intentional behaviour change with::
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from tests.unit.characterization import harness
@@ -59,12 +61,14 @@ def test_parameter_optimizer_optimize_prompt_raises(install_fakes) -> None:
     "optimizer_name",
     [name for name in harness.OPTIMIZERS if name != "ParameterOptimizer"],
 )
-def test_dict_prompt_with_optimize_tools_false_runs(
-    optimizer_name: str, install_fakes
+@pytest.mark.parametrize("scenario_name", ["S1_single", "S2_multi"])
+@pytest.mark.parametrize("optimize_tools", [False, {}])
+def test_prompt_without_tools_with_falsy_optimize_tools_runs(
+    optimizer_name: str, scenario_name: str, optimize_tools: Any, install_fakes
 ) -> None:
-    # optimize_tools=False explicitly *disables* tool optimization, which dict
-    # prompts support; it must not trip the single-prompt-only guard.
-    scenario = harness.build_scenario("S2_multi")
+    # A falsy optimize_tools means "not requested" for every prompt shape; it must
+    # not demand tools or trip the single-prompt-only guard.
+    scenario = harness.build_scenario(scenario_name)
     install_fakes(scenario)
     optimizer = harness.make_optimizer(optimizer_name)
     result = optimizer.optimize_prompt(
@@ -73,9 +77,9 @@ def test_dict_prompt_with_optimize_tools_false_runs(
         metric=harness.answer_match,
         agent=scenario.agent,
         max_trials=1,
-        optimize_tools=False,
+        optimize_tools=optimize_tools,
     )
-    assert isinstance(result.prompt, dict)
+    assert isinstance(result.prompt, type(scenario.prompt))
 
 
 @pytest.mark.parametrize(

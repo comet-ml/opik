@@ -102,7 +102,7 @@ def resolve_prompt_tools(
         }
         return resolved, None
 
-    if optimize_tools is not None:
+    if optimize_tools:
         return _prepare_tool_optimization(prompt_or_prompts, optimize_tools)
 
     resolved_prompt = ToolCallingFactory().resolve_prompt(prompt_or_prompts)
