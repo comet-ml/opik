@@ -1,6 +1,8 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ParamResolver;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
@@ -11,19 +13,20 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Map;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 /**
- * The evaluator/judge path builds its model straight from {@link LlmAsJudgeModelParameters} and never
- * passes through ChatCompletionService, so the capability gate has to hold here independently. This
- * generator serves CUSTOM_LLM and BEDROCK — the routes by which a Claude model that takes no sampling
- * params arrives without the Anthropic provider's own gate (OPIK-8386).
+ * This generator serves CUSTOM_LLM and BEDROCK, the routes by which a Claude model that takes no sampling params
+ * arrives without the Anthropic provider (OPIK-8386). The judge parameters go through {@link ParamResolver} first,
+ * as {@code ChatCompletionService.scoreTrace} does, so this checks the temperature the judge ends up sending.
  */
 @DisplayName("Custom LLM judge path — temperature gating")
 class CustomLlmClientGeneratorTemperatureTest {
 
     private static final String PROVIDER_NAME = "gw";
+    private static final ParamResolver RESOLVER = new ParamResolver(mock(LlmProviderFactory.class), bundledRegistry());
 
     private ChatRequestParameters judgeParametersFor(String modelName, Double temperature) {
         var generator = new CustomLlmClientGenerator(new LlmProviderClientConfig(), mock(AuthTokenProvider.class));
@@ -37,7 +40,7 @@ class CustomLlmClientGeneratorTemperatureTest {
                 .temperature(temperature)
                 .build();
 
-        return generator.generateChat(config, parameters).defaultRequestParameters();
+        return generator.generateChat(config, RESOLVER.resolve(parameters).request()).defaultRequestParameters();
     }
 
     @ParameterizedTest

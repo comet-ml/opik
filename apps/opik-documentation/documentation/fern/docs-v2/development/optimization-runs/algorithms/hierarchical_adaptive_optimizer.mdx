@@ -48,7 +48,7 @@ The optimizer is open-source, you can check out the root cause analysis code and
 
 You can use `HRPO` to optimize a prompt:
 
-```python maxLines=1000
+```python maxLines=1000 wordWrap
 from opik_optimizer import HRPO, ChatPrompt, datasets
 from opik.evaluation.metrics.score_result import ScoreResult
 
@@ -77,7 +77,6 @@ def answer_quality_metric(dataset_item, llm_output):
 
 # 3. Define your initial prompt
 initial_prompt = ChatPrompt(
-    project_name="reflective_optimization",
     messages=[
         {
             "role": "system",
@@ -106,7 +105,7 @@ optimization_result = optimizer.optimize_prompt(
     metric=answer_quality_metric,
     n_samples=100,
     max_trials=5,
-    max_retries=2
+    project_name="reflective_optimization",
 )
 
 # 6. View the results
@@ -137,15 +136,19 @@ The `optimize_prompt` method has the following parameters:
 <ParamField path="prompt" type="ChatPrompt" />
 <ParamField path="dataset" type="Dataset">Opik dataset name, or Opik dataset</ParamField>
 <ParamField path="metric" type="Callable">A metric function, this function should have two arguments:</ParamField>
+<ParamField path="agent" type="OptimizableAgent | None" optional={true}>Agent instance used to run the prompts. Pass an instance, not a class. If None, the default LiteLLM-based agent is used.</ParamField>
 <ParamField path="experiment_config" type="dict | None" optional={true} />
 <ParamField path="n_samples" type="int | float | str | None" optional={true}>Number of dataset items to use per evaluation. Use counts (e.g., `50`), fractions (e.g., `0.1`), percentages (e.g., "10%"), or "all"/"full"/None for the full dataset.</ParamField>
 <ParamField path="n_samples_minibatch" type="int | None" optional={true}>Optional number of samples for inner-loop minibatches (defaults to n_samples).</ParamField>
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy for subsampling (default: "random_sorted").</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} defaultValue="False" />
-<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true} />
-<ParamField path="project_name" type="str" optional={true} defaultValue="Optimization" />
-<ParamField path="max_trials" type="int" optional={true} defaultValue="5" />
-<ParamField path="max_retries" type="int" optional={true} defaultValue="2" />
+<ParamField path="project_name" type="str | None" optional={true}>Opik project for the optimization run. Falls back to the `OPIK_PROJECT_NAME` environment variable, then "Optimization". Trial traces are logged to the dataset's project.</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run.</ParamField>
+<ParamField path="validation_dataset" type="Dataset | None" optional={true}>Optional validation dataset used to rank candidates.</ParamField>
+<ParamField path="max_trials" type="int" optional={true} defaultValue="10" />
+<ParamField path="allow_tool_use" type="bool" optional={true} defaultValue="True">Whether tools may be executed during evaluation.</ParamField>
+<ParamField path="optimize_prompts" type="bool | str | list[str] | None" optional={true} defaultValue="system">Which prompt roles the optimizer may change, for example `"system"`, `"user"`, or a list of roles.</ParamField>
+<ParamField path="optimize_tools" type="bool | dict[str, bool] | None" optional={true}>Optimize the tool descriptions defined in `ChatPrompt.tools`. See [Optimize tools (MCP)](/development/optimization-runs/optimization/optimize_tools).</ParamField>
 <ParamField path="kwargs" type="Any" />
 
 ### Model Support
@@ -158,7 +161,7 @@ The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o
 `"anthropic/claude-opus-4-7"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
 using the `model_parameters` parameter:
 
-```python
+```python wordWrap
 optimizer = HRPO(
     model="anthropic/claude-sonnet-4-6",
     model_parameters={

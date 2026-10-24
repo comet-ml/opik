@@ -64,7 +64,7 @@
             <dependency>
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j-bom</artifactId>
-                <version>1.21.0</version>
+                <version>1.22.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -135,6 +135,10 @@
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>s3</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>eventbridge</artifactId>
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
@@ -299,7 +303,7 @@
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
-            <version>5.6.1</version>
+            <version>5.6.3</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -459,7 +463,7 @@
         <dependency>
             <groupId>com.redis</groupId>
             <artifactId>testcontainers-redis</artifactId>
-            <version>2.2.4</version>
+            <version>3.0.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>

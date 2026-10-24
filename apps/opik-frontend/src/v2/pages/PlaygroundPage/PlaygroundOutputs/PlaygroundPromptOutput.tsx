@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import PlaygroundOutputLoader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import PlaygroundOutputError from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputError";
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
-import { useOutputByPromptDatasetItemId } from "@/store/PlaygroundStore";
+import { useOutputByPromptId } from "@/store/PlaygroundStore";
 import { getAlphabetLetter } from "@/lib/utils";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import usePromptModelDisplay from "@/v2/pages/PlaygroundPage/usePromptModelDisplay";
@@ -18,6 +18,7 @@ interface PlaygroundPromptOutputProps {
   promptIndex: number;
   onRun?: () => void;
   onStop?: () => void;
+  onCheckAgain?: () => void;
 }
 
 const PlaygroundPromptOutput = ({
@@ -25,13 +26,15 @@ const PlaygroundPromptOutput = ({
   promptIndex,
   onRun,
   onStop,
+  onCheckAgain,
 }: PlaygroundPromptOutputProps) => {
   // One subscription, not four. This already read the whole output object for
   // `usage`, while three sibling hooks re-ran the same selector for fields that
   // are right there on it. Defaults below are the ones those hooks applied.
-  const output = useOutputByPromptDatasetItemId(promptId);
+  const output = useOutputByPromptId(promptId);
   const value = output?.value ?? null;
   const error = output?.error;
+  const errorHint = output?.errorHint;
   const isLoading = output?.isLoading ?? false;
   const stale = output?.stale ?? false;
   const usage = output?.usage;
@@ -49,15 +52,13 @@ const PlaygroundPromptOutput = ({
     }
 
     if (error) {
-      return <PlaygroundOutputError message={error} stale={stale} />;
+      return (
+        <PlaygroundOutputError message={error} hint={errorHint} stale={stale} />
+      );
     }
 
     return (
-      <MarkdownPreview
-        className={cn({
-          "text-muted-gray dark:text-foreground": stale,
-        })}
-      >
+      <MarkdownPreview className={cn(stale && "opacity-50")}>
         {value}
       </MarkdownPreview>
     );
@@ -74,6 +75,7 @@ const PlaygroundPromptOutput = ({
           promptId={promptId}
           onRun={onRun}
           onStop={onStop}
+          onCheckAgain={onCheckAgain}
         />
       )}
       {hasOutput ? (

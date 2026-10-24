@@ -19,6 +19,7 @@ interface PlaygroundPromptsProps {
   hasLoadedProviderKeys: boolean;
   runSingle?: (promptId: string) => void;
   stopSingle?: (promptId: string) => void;
+  checkAgain?: () => void;
 }
 
 const PlaygroundPrompts = ({
@@ -28,6 +29,7 @@ const PlaygroundPrompts = ({
   hasLoadedProviderKeys,
   runSingle,
   stopSingle,
+  checkAgain,
 }: PlaygroundPromptsProps) => {
   const promptCount = usePromptCount();
   const promptIds = usePromptIds();
@@ -37,8 +39,12 @@ const PlaygroundPrompts = ({
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
-  const { calculateModelProvider, calculateDefaultModel, hasRegistryModels } =
-    useLLMProviderModelsData();
+  const {
+    calculateModelProvider,
+    calculateDefaultModel,
+    isDropdownModel,
+    hasRegistryModels,
+  } = useLLMProviderModelsData();
 
   useEffect(() => {
     if (promptCount === 0 && !isPendingProviderKeys) {
@@ -47,6 +53,7 @@ const PlaygroundPrompts = ({
         lastPickedModel,
         providerResolver: calculateModelProvider,
         modelResolver: calculateDefaultModel,
+        isDropdownModel,
       });
       setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
     }
@@ -57,6 +64,7 @@ const PlaygroundPrompts = ({
     lastPickedModel,
     calculateModelProvider,
     calculateDefaultModel,
+    isDropdownModel,
     setPromptMap,
   ]);
 
@@ -83,6 +91,7 @@ const PlaygroundPrompts = ({
               ? () => stopSingle(promptId)
               : undefined
           }
+          onCheckAgain={checkAgain}
         />
       ))}
     </div>

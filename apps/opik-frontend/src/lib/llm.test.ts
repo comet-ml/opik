@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   generateDefaultLLMPromptMessage,
+  getMediaUrlsFromListVariable,
   getNextMessageType,
   resolveTraceEvaluatorVariableDefault,
+  toContentForRole,
 } from "./llm";
 import {
   RESERVED_SPAN_EVALUATOR_VARIABLES,
@@ -12,7 +14,7 @@ import {
   RESERVED_TRACE_LLM_JUDGE_VARIABLES,
 } from "@/constants/llm";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
-import { LLM_MESSAGE_ROLE } from "@/types/llm";
+import { LLM_MESSAGE_ROLE, MessageContent } from "@/types/llm";
 
 /**
  * Covers the sentinel auto-fill that decides whether a reserved variable name
@@ -102,11 +104,8 @@ describe("resolveTraceEvaluatorVariableDefault", () => {
   });
 
   it("does not auto-fill spans on span scope, where the form schema rejects the sentinel", () => {
-    // A span-scoped `def score(input, spans)` must leave `spans` unmapped. Auto-filling the
-    // trace sentinel would fail PythonCodeDetailsSpanFormSchema (asserted in
-    // AddEditRuleDialog/helpers.test.ts) while
-    // LLMPromptMessagesVariables hid the offending row, leaving the dialog unsubmittable
-    // with nothing to correct.
+    // A span-scoped `def score(input, spans)` must leave `spans` unmapped: auto-filling the
+    // trace sentinel would fail PythonCodeDetailsSpanFormSchema.
     expect(
       resolveTraceEvaluatorVariableDefault(
         "spans",
@@ -123,7 +122,7 @@ describe("resolveTraceEvaluatorVariableDefault", () => {
     //
     // Note this state is reachable only via the API: the rule dialog's own schema
     // rejects an empty mapping value (`.min(1)` plus the JSONPath/sentinel regex in
-    // AddEditRuleDialog/schema.ts), so the editor will not produce or re-submit one.
+    // RuleEditorPanel/schema.ts), so the editor will not produce or re-submit one.
     // The resolver still must not rewrite it — preserving a value it cannot author is
     // what keeps an API-created rule's prompt re-parse non-destructive.
     expect(
@@ -173,5 +172,106 @@ describe("getNextMessageType", () => {
       LLM_MESSAGE_ROLE.user,
       LLM_MESSAGE_ROLE.assistant,
     ]);
+  });
+});
+
+describe("toContentForRole", () => {
+  const mediaContent: MessageContent = [
+    { type: "text", text: "Describe {{topic}}" },
+    { type: "image_url", image_url: { url: "https://example.com/a.png" } },
+    { type: "video_url", video_url: { url: "https://example.com/a.mp4" } },
+    { type: "audio_url", audio_url: { url: "https://example.com/a.mp3" } },
+  ];
+
+  it("keeps media in a user message", () => {
+    const expected = structuredClone(mediaContent);
+
+    expect(toContentForRole(mediaContent, LLM_MESSAGE_ROLE.user)).toEqual({
+      content: expected,
+      mediaDropped: false,
+    });
+  });
+
+  it.each([LLM_MESSAGE_ROLE.system, LLM_MESSAGE_ROLE.assistant])(
+    "keeps only the text in a %s message",
+    (role) => {
+      expect(toContentForRole(mediaContent, role)).toEqual({
+        content: "Describe {{topic}}",
+        mediaDropped: true,
+      });
+    },
+  );
+
+  it("drops media that has no text alongside it", () => {
+    expect(
+      toContentForRole(
+        [
+          {
+            type: "image_url",
+            image_url: { url: "https://example.com/a.png" },
+          },
+        ],
+        LLM_MESSAGE_ROLE.system,
+      ),
+    ).toEqual({ content: "", mediaDropped: true });
+  });
+
+  it("leaves text-only content untouched in a system message", () => {
+    expect(toContentForRole("Be concise", LLM_MESSAGE_ROLE.system)).toEqual({
+      content: "Be concise",
+      mediaDropped: false,
+    });
+  });
+});
+
+describe("getMediaUrlsFromListVariable", () => {
+  const images = ["https://a.png", "data:image/png;base64,AAAA"];
+
+  it.each([
+    ["{{images}}", { images }],
+    ["{{ images }}", { images }],
+    ["{{{images}}}", { images }],
+    ["{{& images}}", { images }],
+    [" {{images}}\n", { images }],
+    ["{{input.images}}", { input: { images } }],
+  ])("expands %j when the value is a list", (template, data) => {
+    expect(getMediaUrlsFromListVariable(template, data)).toEqual(images);
+  });
+
+  it("expands a list stored as JSON text, as CSV uploads store it", () => {
+    expect(
+      getMediaUrlsFromListVariable("{{images}}", {
+        images: ' ["https://a.png", "https://b.png"] ',
+      }),
+    ).toEqual(["https://a.png", "https://b.png"]);
+  });
+
+  it("turns non-string items into JSON", () => {
+    expect(
+      getMediaUrlsFromListVariable("{{images}}", {
+        images: [{ url: "https://a.png" }, 7],
+      }),
+    ).toEqual(['{"url":"https://a.png"}', "7"]);
+  });
+
+  it("returns an empty list for an empty list", () => {
+    expect(getMediaUrlsFromListVariable("{{images}}", { images: [] })).toEqual(
+      [],
+    );
+  });
+
+  it.each([
+    ["a single URL", "{{image}}", { image: "https://a.png" }],
+    ["a missing variable", "{{images}}", {}],
+    ["an object", "{{images}}", { images: { url: "https://a.png" } }],
+    ["text that only looks like a list", "{{images}}", { images: "[oops" }],
+    ["JSON text that is not a list", "{{images}}", { images: '{"a":1}' }],
+    ["a URL around the variable", "https://cdn/{{images}}", { images }],
+    ["two variables", "{{images}}{{more}}", { images, more: images }],
+    ["a section", "{{#images}}{{.}}{{/images}}", { images }],
+    ["a broken template", "{{images", { images }],
+    ["a plain URL", "https://a.png", {}],
+  ])("returns null for %s", (_, template, data) => {
+    expect(getMediaUrlsFromListVariable(template, data)).toBeNull();
   });
 });

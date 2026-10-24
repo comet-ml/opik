@@ -8,8 +8,10 @@ import {
   useSetPromptMap,
   useSetDatasetType,
   useSetExperimentName,
+  useLastActiveProjectId,
+  useSetLastActiveProjectId,
 } from "@/store/PlaygroundStore";
-import { generateDefaultPrompt, isEmptyMessage } from "@/lib/playground";
+import { generateDefaultPrompt, isPlaygroundEmpty } from "@/lib/playground";
 import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 import { DATASET_TYPE } from "@/types/datasets";
 import {
@@ -28,6 +30,7 @@ import { MessageContent } from "@/types/llm";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { formatDatasetVersionKey } from "@/utils/datasetVersionStorage";
+import useResetPlaygroundSession from "@/v2/pages-shared/playground/useResetPlaygroundSession";
 
 interface NamedPromptContent {
   name: string;
@@ -58,6 +61,9 @@ function useLoadPlayground() {
   const setPromptMap = useSetPromptMap();
   const setDatasetType = useSetDatasetType();
   const setExperimentName = useSetExperimentName();
+  const lastActiveProjectId = useLastActiveProjectId();
+  const setLastActiveProjectId = useSetLastActiveProjectId();
+  const resetPlaygroundSession = useResetPlaygroundSession();
 
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
@@ -65,6 +71,7 @@ function useLoadPlayground() {
   const {
     calculateModelProvider,
     calculateDefaultModel,
+    isDropdownModel,
     isPending: isPendingModels,
   } = useLLMProviderModelsData();
 
@@ -79,14 +86,6 @@ function useLoadPlayground() {
       defaultValue: null,
     },
   );
-
-  const isPlaygroundEmpty = useMemo(() => {
-    const keys = Object.keys(promptMap);
-
-    return (
-      keys.length === 1 && !!promptMap[keys[0]]?.messages?.every(isEmptyMessage)
-    );
-  }, [promptMap]);
 
   const providerKeys = useMemo(() => {
     return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
@@ -136,6 +135,7 @@ function useLoadPlayground() {
           calculateModelProvider(model, preferredModelProvider),
         modelResolver: (model, setupProviders) =>
           calculateDefaultModel(model, setupProviders, preferredModelProvider),
+        isDropdownModel,
       });
 
       if (templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
@@ -193,6 +193,7 @@ function useLoadPlayground() {
     [
       calculateDefaultModel,
       calculateModelProvider,
+      isDropdownModel,
       lastPickedModel,
       providerKeys,
     ],
@@ -237,6 +238,13 @@ function useLoadPlayground() {
         promptMap = { [newPrompt.id]: newPrompt };
       }
 
+      // The Playground resets on a project switch, which would also drop the prompts loaded here,
+      // so do the switch's reset now (before the dataset below is applied) and mark it done.
+      if (lastActiveProjectId != activeProjectId) {
+        resetPlaygroundSession();
+        setLastActiveProjectId(activeProjectId);
+      }
+
       setPromptMap(promptIds, promptMap);
 
       if (datasetId && datasetVersionId) {
@@ -266,6 +274,9 @@ function useLoadPlayground() {
       setDatasetVersionKey,
       setDatasetType,
       setExperimentName,
+      lastActiveProjectId,
+      setLastActiveProjectId,
+      resetPlaygroundSession,
       workspaceName,
       activeProjectId,
     ],
@@ -273,7 +284,7 @@ function useLoadPlayground() {
 
   return {
     loadPlayground,
-    isPlaygroundEmpty,
+    isPlaygroundEmpty: isPlaygroundEmpty(promptMap),
     isPendingProviderKeys,
     isPendingModels,
   };

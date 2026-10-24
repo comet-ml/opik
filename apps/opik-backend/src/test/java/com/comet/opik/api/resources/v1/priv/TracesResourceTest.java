@@ -81,6 +81,7 @@ import com.comet.opik.utils.AttachmentPayloadUtilsTest;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -3430,9 +3431,10 @@ class TracesResourceTest {
                 assertThat(retrieved.id()).isEqualTo(trace.id());
             }
 
-            // The trace BATCH_INSERT and the side-effect trace_threads INSERT must both stop
-            // tripping the FORMAT Values fast-path. These counters are silent in production (the
-            // inserts succeed) but pollute system.errors and pod stderr. See OPIK-5694.
+            // The trace batch path writes JSONEachRow and cannot reach the Values fast-path; the
+            // side-effect trace_threads INSERT still goes through it, so that is the live arm here.
+            // These counters are silent in production (the inserts succeed) but pollute
+            // system.errors and pod stderr. See OPIK-5694.
             assertThat(readClickHouseErrorCount(templateAsync, 70) - convertTypeBefore)
                     .as("CANNOT_CONVERT_TYPE (70): NULL bound to non-nullable last_updated_at")
                     .isZero();
@@ -8863,6 +8865,129 @@ class TracesResourceTest {
 
             TraceAssertions.assertTraces(page.content(), List.of(traces.get(1)),
                     List.of(traces.get(0), traces.get(2)), USER);
+        }
+    }
+
+    @Nested
+    @DisplayName("Large Payload Tests")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class LargePayloadTests {
+
+        // The single-row writes below (create, update, update-before-create, batch update) used to inline input and
+        // output as SQL literals, so the whole statement had to fit in max_query_size: 100,000,000 bytes, set in
+        // config-test.yml as in production. A payload a batch create accepts then failed with code 62 ("Max query
+        // size exceeded"). Two halves of ~57.7 MB clear that limit together while each stays under the 100 MiB
+        // maxStringLength cap on a single JSON string.
+        // Each test pins the expected lastUpdatedAt to the instant before its write: left null, TraceAssertions
+        // checks it against Instant.now() within 2 s, which reading back ~115 MB outlasts.
+        private TextNode oversizedHalf() {
+            return TextNode.valueOf(RandomStringUtils.secure().nextAlphanumeric(1024).repeat(55 * 1024));
+        }
+
+        private Trace newTrace() {
+            return Trace.builder()
+                    .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                    .id(generator.generate())
+                    .startTime(Instant.now().minusSeconds(10))
+                    .createdAt(Instant.now())
+                    .visibilityMode(VisibilityMode.DEFAULT)
+                    .environment("")
+                    .build();
+        }
+
+        @Test
+        @DisplayName("a single trace create whose payload exceeds max_query_size is written")
+        void oversizedSingleTraceCreateIsWritten() {
+            var trace = newTrace().toBuilder()
+                    .input(oversizedHalf())
+                    .output(oversizedHalf())
+                    .build();
+
+            var writeStart = Instant.now().truncatedTo(ChronoUnit.MICROS);
+            traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var expectedTrace = trace.toBuilder().lastUpdatedAt(writeStart).build();
+
+            getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("a trace update whose payload exceeds max_query_size is written")
+        void oversizedTraceUpdateIsWritten() {
+            var trace = newTrace();
+            traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var traceUpdate = TraceUpdate.builder()
+                    .projectName(trace.projectName())
+                    .input(oversizedHalf())
+                    .output(oversizedHalf())
+                    .build();
+            var writeStart = Instant.now().truncatedTo(ChronoUnit.MICROS);
+            traceResourceClient.updateTrace(trace.id(), traceUpdate, API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(trace.toBuilder()
+                    .input(traceUpdate.input())
+                    .output(traceUpdate.output())
+                    .lastUpdatedAt(writeStart)
+                    .build(), null, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("a trace update arriving before its create, whose payload exceeds max_query_size, is written")
+        void oversizedTraceUpdateBeforeCreateIsWritten() {
+            var id = generator.generate();
+            var traceUpdate = factory.manufacturePojo(TraceUpdate.class).toBuilder()
+                    .projectId(null)
+                    .name(null)
+                    .input(oversizedHalf())
+                    .output(oversizedHalf())
+                    .build();
+            var expectedTrace = Trace.builder()
+                    .id(id)
+                    .name(null)
+                    .startTime(Instant.EPOCH)
+                    .endTime(traceUpdate.endTime())
+                    .input(traceUpdate.input())
+                    .output(traceUpdate.output())
+                    .metadata(traceUpdate.metadata())
+                    .tags(traceUpdate.tags())
+                    .createdAt(Instant.now())
+                    .errorInfo(traceUpdate.errorInfo())
+                    .threadId(traceUpdate.threadId())
+                    .ttft(traceUpdate.ttft())
+                    .source(traceUpdate.source())
+                    .environment(traceUpdate.environment())
+                    .build();
+
+            var writeStart = Instant.now().truncatedTo(ChronoUnit.MICROS);
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
+
+            var projectId = projectResourceClient.getByName(traceUpdate.projectName(), API_KEY, TEST_WORKSPACE).id();
+            getAndAssert(expectedTrace.toBuilder().lastUpdatedAt(writeStart).build(), projectId, API_KEY,
+                    TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("a trace batch update whose payload exceeds max_query_size is written")
+        void oversizedTraceBatchUpdateIsWritten() {
+            var trace = newTrace();
+            traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var traceUpdate = TraceUpdate.builder()
+                    .projectName(trace.projectName())
+                    .input(oversizedHalf())
+                    .output(oversizedHalf())
+                    .build();
+            var writeStart = Instant.now().truncatedTo(ChronoUnit.MICROS);
+            traceResourceClient.batchUpdateTraces(
+                    TraceBatchUpdate.builder().ids(Set.of(trace.id())).update(traceUpdate).build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(trace.toBuilder()
+                    .input(traceUpdate.input())
+                    .output(traceUpdate.output())
+                    .lastUpdatedAt(writeStart)
+                    .build(), null, API_KEY, TEST_WORKSPACE);
         }
     }
 

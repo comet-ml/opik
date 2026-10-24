@@ -28,6 +28,12 @@ vi.mock("@/store/PlaygroundStore", () => ({
   useSetPromptMap: () => setPromptMap,
   useSetDatasetType: () => vi.fn(),
   useSetExperimentName: () => vi.fn(),
+  useLastActiveProjectId: () => "project-1",
+  useSetLastActiveProjectId: () => vi.fn(),
+}));
+
+vi.mock("@/v2/pages-shared/playground/useResetPlaygroundSession", () => ({
+  default: () => vi.fn(),
 }));
 
 vi.mock("@/hooks/useLastPickedModel", () => ({

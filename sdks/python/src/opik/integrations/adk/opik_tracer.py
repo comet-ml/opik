@@ -26,7 +26,7 @@ from .patchers import (
     llm_response_wrapper,
 )
 from .patchers.adk_otel_tracer import llm_span_helpers
-from .graph import mermaid_graph_builder
+from .graph import mermaid_graph_builder, nodes as graph_nodes
 from ... import analytics
 
 LOGGER = logging.getLogger(__name__)
@@ -159,6 +159,11 @@ class OpikTracer:
             agent_metadata.update(session_metadata)
 
             _try_add_agent_graph_to_metadata(agent_metadata, callback_context)
+            agent_metadata["_opik"] = {
+                "graph_node_id": graph_nodes.get_agent_graph_node_id(
+                    callback_context.agent_name
+                )
+            }
 
             if callback_context.user_content is not None:
                 user_input = adk_helpers.convert_adk_base_model_to_dict(
@@ -538,6 +543,7 @@ class OpikTracer:
             tool_metadata = {
                 "function_call_id": tool_context.function_call_id,
                 **self.metadata,
+                "_opik": {"graph_node_id": graph_nodes.get_tool_graph_node_id(tool)},
             }
 
             # Update existing span with tool information

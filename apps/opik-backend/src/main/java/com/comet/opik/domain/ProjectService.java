@@ -40,6 +40,8 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -95,6 +97,9 @@ public interface ProjectService {
     Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids);
 
     Mono<Map<UUID, String>> findNamesByIdsAcrossWorkspaces(Set<UUID> ids);
+
+    /** UTC date the install was created, from its earliest project; empty when there are no projects. */
+    Mono<Optional<LocalDate>> findInstallationDate();
 
     Mono<Set<UUID>> getDemoProjectIdsInWorkspaces(Set<String> workspaceIds);
 
@@ -433,6 +438,14 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    public Mono<Optional<LocalDate>> findInstallationDate() {
+        return Mono.fromCallable(() -> Optional.ofNullable(template.inTransaction(READ_ONLY,
+                handle -> handle.attach(ProjectDAO.class).findInstallationTime()))
+                .map(time -> time.atZone(ZoneOffset.UTC).toLocalDate()))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
     public Mono<Map<UUID, String>> findNamesByIdsAcrossWorkspaces(Set<UUID> ids) {
         if (CollectionUtils.isEmpty(ids)) {
             return Mono.just(Map.of());
@@ -571,7 +584,16 @@ class ProjectServiceImpl implements ProjectService {
 
                     UUID projectId = idGenerator.generateId();
 
-                    project = createProject(project, projectId, userName, workspaceId);
+                    try {
+                        project = createProject(project, projectId, userName, workspaceId);
+                    } catch (EntityAlreadyExistsException conflict) {
+                        log.info("Project '{}' was created concurrently on workspaceId '{}', reading it back",
+                                projectName, workspaceId);
+                        return findByNames(workspaceId, List.of(projectName))
+                                .stream()
+                                .findFirst()
+                                .orElseThrow(() -> conflict);
+                    }
 
                     log.info("Created project with id '{}', name '{}' on workspaceId '{}'", projectId, projectName,
                             workspaceId);

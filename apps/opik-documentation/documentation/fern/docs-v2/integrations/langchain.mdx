@@ -36,7 +36,7 @@ Opik provides seamless integration with LangChain, allowing you to easily log an
 
 To use the `OpikTracer` with LangChain, you'll need to have both the `opik` and `langchain` packages installed. You can install them using pip:
 
-```bash
+```bash wordWrap
 pip install opik langchain langchain_openai
 ```
 
@@ -53,7 +53,7 @@ Configure the Opik Python SDK for your deployment type. See the [Python SDK Conf
 
 Here's a basic example of how to use the `OpikTracer` callback with a LangChain chain:
 
-```python
+```python wordWrap
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from opik.integrations.langchain import OpikTracer
@@ -78,6 +78,35 @@ The `OpikTracer` will automatically log the run and its details to Opik, includi
 
 For detailed parameter information, see the [OpikTracer SDK reference](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html).
 
+## Tracing agents
+
+Agents built with `create_agent` (LangChain v1 and later) are traced the same way. Pass the `OpikTracer` in the `callbacks` config when you invoke the agent:
+
+```python wordWrap
+from langchain.agents import create_agent
+from opik.integrations.langchain import OpikTracer
+
+opik_tracer = OpikTracer(project_name="langchain-examples")
+
+def get_weather(city: str) -> str:
+    """Get weather for a given city."""
+    return f"It's always sunny in {city}!"
+
+agent = create_agent(
+    model="openai:gpt-4o",
+    tools=[get_weather],
+    system_prompt="You are a helpful assistant",
+)
+
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "What is the weather in San Francisco?"}]},
+    config={"callbacks": [opik_tracer]},
+)
+print(result["messages"][-1].content)
+```
+
+Opik logs the agent run as a single trace, with nested spans for each model call and tool call.
+
 ## Practical Example: Text-to-SQL with Evaluation
 
 Let's walk through a real-world example of using LangChain with Opik for a text-to-SQL query generation task. This example demonstrates how to create synthetic datasets, build LangChain chains, and evaluate your application.
@@ -86,7 +115,7 @@ Let's walk through a real-world example of using LangChain with Opik for a text-
 
 First, let's set up our environment with the necessary dependencies:
 
-```python
+```python wordWrap
 import os
 import getpass
 import opik
@@ -106,7 +135,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 We'll create a synthetic dataset of questions for our text-to-SQL task:
 
-```python
+```python wordWrap
 import json
 from langchain_community.utilities import SQLDatabase
 
@@ -155,7 +184,7 @@ dataset.insert([{"question": question} for question in synthetic_questions])
 
 Now let's create a LangChain chain for SQL query generation:
 
-```python
+```python wordWrap
 from langchain.chains import create_sql_query_chain
 from langchain_openai import ChatOpenAI
 from opik.integrations.langchain import OpikTracer
@@ -175,7 +204,7 @@ print(response)
 
 Let's create a custom evaluation metric and test our application:
 
-```python
+```python wordWrap
 import opik
 from opik import track
 from opik.evaluation import evaluate
@@ -244,7 +273,7 @@ Cost information is automatically captured and displayed in the Opik UI, includi
 
 For streaming with cost tracking, ensure `stream_usage=True` is set:
 
-```python
+```python wordWrap
 from langchain_openai import ChatOpenAI
 from opik.integrations.langchain import OpikTracer
 
@@ -270,7 +299,7 @@ When LangChain's `ChatOpenAI` points at an OpenAI-compatible proxy (such as a Li
 
 **Overriding the provider.** Pass `provider` to `OpikTracer` so the backend can price the call. It accepts a string or an `opik.LLMProvider`:
 
-```python
+```python wordWrap
 from opik.integrations.langchain import OpikTracer
 
 # Record "bedrock" as the provider on every LLM span
@@ -279,7 +308,7 @@ opik_tracer = OpikTracer(provider="bedrock")
 
 If a single chain or graph mixes providers, pass a callable that returns the provider for each run. It receives a context with the model name parsed from that run, so routing is usually a one-liner. Return `None` to fall back to the auto-detected provider:
 
-```python
+```python wordWrap
 def resolve_provider(context):
     if "anthropic" in (context.model or ""):
         return "bedrock"
@@ -294,7 +323,7 @@ opik_tracer = OpikTracer(provider=resolve_provider)
 
 For LangChain to expose those response headers to Opik, create the chat model with `include_response_headers=True`:
 
-```python
+```python wordWrap
 from langchain_openai import ChatOpenAI
 from opik.integrations.langchain import OpikTracer
 
@@ -313,7 +342,7 @@ llm.invoke("Hello", config={"callbacks": [opik_tracer]})
 
 You can customize the `OpikTracer` callback to include additional metadata, logging options, and conversation threading:
 
-```python
+```python wordWrap
 from opik.integrations.langchain import OpikTracer
 
 opik_tracer = OpikTracer(
@@ -328,7 +357,7 @@ opik_tracer = OpikTracer(
 
 You can use the [`created_traces`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html) method to access the traces collected by the `OpikTracer` callback:
 
-```python
+```python wordWrap
 from opik.integrations.langchain import OpikTracer
 
 opik_tracer = OpikTracer()
@@ -344,7 +373,7 @@ The traces returned by the `created_traces` method are instances of the [`Trace`
 
 In order to access the content of logged traces you will need to use the [`Opik.get_trace_content`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_trace_content) method:
 
-```python
+```python wordWrap
 import opik
 from opik.integrations.langchain import OpikTracer
 opik_client = opik.Opik()
@@ -365,7 +394,7 @@ for trace in traces:
 
 You can update the metadata, feedback scores and tags for traces after they are created. For this you can use the `created_traces` method to access the traces and then update them using the [`update`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/Trace.html#opik.api_objects.trace.Trace.update) method and the [`log_feedback_score`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/Trace.html#opik.api_objects.trace.Trace.log_feedback_score) method:
 
-```python
+```python wordWrap
 from opik.integrations.langchain import OpikTracer
 
 opik_tracer = OpikTracer(project_name="langchain-examples")
@@ -383,7 +412,7 @@ for trace in traces:
 
 The `OpikTracer` is fully compatible with the `@track` decorator, allowing you to create hybrid tracing approaches:
 
-```python
+```python wordWrap
 import opik
 from langchain_openai import ChatOpenAI
 from opik.integrations.langchain import OpikTracer
@@ -404,7 +433,7 @@ result = my_langchain_workflow("What is machine learning?")
 
 Use the `thread_id` parameter to group related conversations or interactions:
 
-```python
+```python wordWrap
 from opik.integrations.langchain import OpikTracer
 
 # All traces with the same thread_id will be grouped together
@@ -415,7 +444,7 @@ opik_tracer = OpikTracer(thread_id="user-session-123")
 
 For multi-service/thread/process applications, you can use distributed tracing headers to connect traces across services:
 
-```python
+```python wordWrap
 from opik import opik_context
 from opik.integrations.langchain import OpikTracer
 from opik.types import DistributedTraceHeadersDict
@@ -439,7 +468,7 @@ chain.invoke(input_data, config={"callbacks": [opik_tracer]})
 
 For LangGraph applications, Opik provides specialized support. The `OpikTracer` works seamlessly with LangGraph, and you can also visualize graph definitions:
 
-```python
+```python wordWrap
 from langgraph.graph import StateGraph
 from opik.integrations.langchain import OpikTracer
 
@@ -460,7 +489,7 @@ result = compiled_graph.invoke(
 
 The `OpikTracer` object has a `flush` method that can be used to make sure that all traces are logged to the Opik platform before you exit a script. This method will return once all traces have been logged or if the timeout is reach, whichever comes first.
 
-```python
+```python wordWrap
 from opik.integrations.langchain import OpikTracer
 
 opik_tracer = OpikTracer()

@@ -25,16 +25,14 @@ import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSele
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import PromptImprovementDialog from "@/v2/pages-shared/llm/PromptImprovementDialog/PromptImprovementDialog";
-import {
-  LLMPromptConfigsType,
-  COMPOSED_PROVIDER_TYPE,
-} from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { useToast } from "@/ui/use-toast";
 import {
   getTextFromMessageContent,
   convertMessageToMessagesJson,
   parsePromptVersionContent,
   parseChatTemplateToLLMMessages,
+  toContentForRole,
 } from "@/lib/llm";
 import {
   PROMPT_SAVE_TO_LIBRARY_TOOLTIP,
@@ -47,7 +45,6 @@ type ConfirmType = "load" | "save";
 export interface ImprovePromptConfig {
   model: string;
   provider: COMPOSED_PROVIDER_TYPE | "";
-  configs: LLMPromptConfigsType;
   workspaceName: string;
   onAccept: (messageId: string, improvedContent: MessageContent) => void;
 }
@@ -99,7 +96,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     },
   );
 
-  const { promptId, promptVersionId, content } = message;
+  const { promptId, promptVersionId, content, role } = message;
   const { data: promptData, error: promptError } = usePromptById(
     { promptId: promptId! },
     {
@@ -237,7 +234,11 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     !saveDisabled &&
       promptId &&
       promptData?.id === promptId &&
-      !isEqual(message.content, parsePromptVersionContent(baselineVersion)),
+      !isEqual(
+        message.content,
+        toContentForRole(parsePromptVersionContent(baselineVersion), role)
+          .content,
+      ),
   );
   const saveTooltip = saveWarning
     ? !datasetId
@@ -314,15 +315,29 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       if (onClearOtherPromptLinks) {
         onClearOtherPromptLinks();
       }
+      const { content: loadedContent, mediaDropped } = toContentForRole(
+        parsePromptVersionContent(sourceVersion),
+        role,
+      );
       onChangeMessage({
-        content: parsePromptVersionContent(sourceVersion),
+        content: loadedContent,
         promptVersionId: versionId,
         promptId: promptData.id,
       });
       setIsLoading(false);
+
+      if (mediaDropped) {
+        toast({
+          title: "Media not loaded",
+          description:
+            "Only user messages support images, video and audio, so only the prompt's text was loaded.",
+        });
+      }
     }
   }, [
     onChangeMessage,
+    role,
+    toast,
     promptData,
     promptId,
     loadedVersionData,
@@ -439,7 +454,6 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           originalPrompt={content}
           model={improvePromptConfig.model}
           provider={improvePromptConfig.provider}
-          configs={improvePromptConfig.configs}
           workspaceName={improvePromptConfig.workspaceName}
           onAccept={improvePromptConfig.onAccept}
         />
