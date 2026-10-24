@@ -58,6 +58,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
     synthesizing findings to identify unified failure modes. It's best suited when you have a
     complex prompt that you want to systematically refine based on understanding why it fails.
 
+    The root-cause evaluation records its traces locally (``opik.record_traces_locally``) so
+    the analysis sees each agent's steps. Opik refuses nested recordings, so a custom agent or
+    metric that itself calls ``record_traces_locally`` during evaluation is not supported.
+    Recording is skipped automatically (final outputs only) when the metric needs
+    ``task_span`` or another recording is already active around ``optimize_prompt``.
+
     Args:
         model: LiteLLM model name for the optimization algorithm (reasoning and analysis)
         model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.

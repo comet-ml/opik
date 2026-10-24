@@ -39,6 +39,13 @@ synthesize the findings across all batches to identify the core issues with the 
   <img src="/img/agent_optimization/hierarchical_reflective_optimizer.png" alt="HRPO (Hierarchical Reflective Prompt Optimizer)" />
 </Frame>
 
+The analysis sees each test case's agent trace (its LLM and tool steps), not only the final output.
+To capture it, HRPO records the root-cause evaluation's traces locally with
+`opik.record_traces_locally()`. Opik doesn't allow nested local recordings, so a custom agent or
+metric that itself calls `record_traces_locally()` during evaluation is not supported. HRPO skips its
+own recording, and analyzes final outputs only, when the metric needs `task_span` or when another
+recording is already active around `optimize_prompt`.
+
 <Tip>
 The optimizer is open-source, you can check out the root cause analysis code and prompts in the
 [Opik repository](https://github.com/comet-ml/opik/tree/main/sdks/opik_optimizer/src/opik_optimizer/algorithms/hierarchical_reflective_optimizer).
