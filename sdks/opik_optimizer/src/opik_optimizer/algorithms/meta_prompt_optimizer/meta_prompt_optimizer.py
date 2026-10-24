@@ -475,11 +475,15 @@ class MetaPromptOptimizer(BaseOptimizer):
         top_prompts_to_show = max(
             self.prompts_per_round, self.synthesis_prompts_per_round
         )
-        return history_ops.build_history_context(
+        history = history_ops.build_history_context(
             list(previous_rounds),
             hall_of_fame=self.hall_of_fame if hasattr(self, "hall_of_fame") else None,
             pretty_mode=bool(self.verbose),
             top_prompts_per_round=top_prompts_to_show,
+        )
+        feedback = getattr(self, "_latest_feedback", "")
+        return history + (
+            f"\nRecent evaluation feedback:\n{feedback}" if feedback else ""
         )
 
 

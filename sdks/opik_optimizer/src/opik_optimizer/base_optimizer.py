@@ -242,6 +242,7 @@ class BaseOptimizer(ABC):
 
     def _reset_counters(self) -> None:
         """Reset all call counters for a new optimization run."""
+        self._latest_feedback = ""
         runtime.reset_usage(self)
 
     def _increment_llm_counter(self) -> None:
@@ -689,6 +690,12 @@ class BaseOptimizer(ABC):
             # it here catches the empty-run case universally. Optimizers that DO
             # improve via evaluate() overwrite this with the winning candidate's
             # health. Tolerate a plain float (mocked/legacy evaluate_prompt).
+            if isinstance(
+                baseline_eval, (EvaluationResult, EvaluationResultOnDictItems)
+            ):
+                from .utils.feedback import format_evaluation_result
+
+                self._latest_feedback = format_evaluation_result(baseline_eval)
             baseline_score = self._resolve_baseline_score_and_health(
                 context, baseline_eval
             )
@@ -836,6 +843,9 @@ class BaseOptimizer(ABC):
             raise
         # raw_result is EvaluationResult (normal path) or float (mocked/legacy path).
         if isinstance(raw_result, (EvaluationResult, EvaluationResultOnDictItems)):
+            from .utils.feedback import format_evaluation_result
+
+            self._latest_feedback = format_evaluation_result(raw_result)
             score = self._score_from_evaluation_result(
                 raw_result, metric_name=context.metric.__name__, empty_score=empty_score
             )

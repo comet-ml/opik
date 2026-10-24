@@ -19,6 +19,7 @@ from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.candidate_selection import select_candidate
+from ...utils.feedback import sanitize_feedback, format_evaluation_feedback
 from .ops import candidate_ops
 from .types import OpikDataInst
 
@@ -308,7 +309,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             is_single_prompt_optimization=isinstance(
                 prompt_variants, chat_prompt.ChatPrompt
             ),
-            agent=None,
+            agent=self._agent,
             build_optimizer_version=_OPTIMIZER_VERSION,
         )
         project_name = experiment_config.get("project_name") or getattr(
@@ -497,6 +498,16 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                         "input": dataset_item,
                         "output": output_text,
                         "score": score_value,
+                        "reasons": [
+                            {
+                                "name": item.name,
+                                "value": item.value,
+                                "reason": item.reason,
+                            }
+                            for item in test_result.score_results
+                        ]
+                        if test_result is not None
+                        else [],
                     }
                 )
 
@@ -543,15 +554,13 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 dataset_item = traj.get("input", {})
                 output_text = traj.get("output", "")
                 score = traj.get("score", 0.0)
-                feedback = f"Observed score={score:.4f}. Expected answer: {dataset_item.get('answer', '')}"
+                feedback = format_evaluation_feedback(
+                    dataset_item, output_text, traj.get("reasons") or {"score": score}
+                )
                 if tool_metadata:
                     feedback += f" Tool metadata: {tool_metadata}"
                 yield {
-                    "Inputs": {
-                        "text": dataset_item.get("input")
-                        or dataset_item.get("question")
-                        or "",
-                    },
+                    "Inputs": sanitize_feedback(dataset_item),
                     "Generated Outputs": output_text,
                     "Feedback": feedback,
                 }
