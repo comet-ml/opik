@@ -48,7 +48,7 @@
   "history_rounds": 1,
   "history_trials": 2,
   "initial_score": 0.5,
-  "known_issue": "duplicates the rewritten text across both system text parts",
+  "known_issue": null,
   "llm_call_kinds": [
     "gepa_reflection"
   ],
@@ -64,7 +64,7 @@
             "type": "text"
           },
           {
-            "text": "You read images and answer. Reply with the code only. Answer with the exact value.",
+            "text": "",
             "type": "text"
           }
         ],

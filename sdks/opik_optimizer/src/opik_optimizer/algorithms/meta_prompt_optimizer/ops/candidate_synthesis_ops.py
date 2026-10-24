@@ -17,7 +17,11 @@ from ....core import llm_calls as _llm_calls
 from ....core.llm_calls import StructuredOutputParsingError
 from ....core.results import OptimizationRound, round_payload
 from ....utils import display as display_utils
-from ....utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
+from ....utils.prompt_roles import (
+    derive_prompt,
+    apply_role_constraints,
+    count_disallowed_role_updates,
+)
 from ....utils.text import normalize_llm_text
 from .. import prompts as meta_prompts
 from .. import reporting
@@ -193,14 +197,13 @@ def _build_synthesis_prompts(
                 raise Exception("User content not found in chat-prompt!")
 
             valid_prompts.append(
-                chat_prompt.ChatPrompt(
-                    name=current_prompt.name,
-                    system=item["prompt"][0]["content"],
-                    user=user_text,
-                    tools=current_prompt.tools,
-                    function_map=current_prompt.function_map,
-                    model=current_prompt.model,
-                    model_parameters=current_prompt.model_kwargs,
+                derive_prompt(
+                    current_prompt,
+                    [
+                        {"role": "system", "content": item["prompt"][0]["content"]},
+                        {"role": "user", "content": user_text},
+                    ],
+                    getattr(optimizer, "_optimizable_roles", None),
                 )
             )
             allowed_roles = getattr(optimizer, "_optimizable_roles", None)

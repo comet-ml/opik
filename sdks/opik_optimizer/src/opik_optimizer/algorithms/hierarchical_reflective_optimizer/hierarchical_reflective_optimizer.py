@@ -14,7 +14,11 @@ from ...api_objects.types import Content
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.prompt_library import PromptOverrides
-from ...utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
+from ...utils.prompt_roles import (
+    derive_prompt,
+    apply_role_constraints,
+    count_disallowed_role_updates,
+)
 from ...utils.toolcalling.ops import toolcalling as toolcalling_utils
 from ...utils.toolcalling.core import segment_updates
 from ...utils.scoring import improves_over
@@ -425,13 +429,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 messages_as_dicts = apply_role_constraints(
                     original.get_messages(), messages_as_dicts, allowed_roles
                 )
-                candidate_prompt = chat_prompt.ChatPrompt(
-                    name=original.name,
-                    messages=messages_as_dicts,
-                    tools=best_prompts[prompt_name].tools,
-                    function_map=best_prompts[prompt_name].function_map,
-                    model=original.model,
-                    model_parameters=original.model_kwargs,
+                candidate_prompt = derive_prompt(
+                    best_prompts[prompt_name], messages_as_dicts, allowed_roles
                 )
                 candidate_prompt = self._apply_tool_updates_from_improvement(
                     candidate_prompt=candidate_prompt,

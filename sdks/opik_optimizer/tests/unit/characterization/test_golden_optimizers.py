@@ -19,37 +19,7 @@ from tests.unit.characterization import harness
 # Pairs whose golden snapshot pins a known bug or degraded output. The note is
 # copied into the snapshot ("known_issue") so a fix shows up as a deliberate
 # golden diff. Remove the entry together with the fix.
-KNOWN_ISSUES: dict[tuple[str, str], str] = {
-    # current behaviour: the returned prompt's user message lost its image_url
-    # part (content collapsed to the LLM's plain string), so the rescore drops.
-    ("EvolutionaryOptimizer", "S3_multimodal"): (
-        "drops the user image part: returned user content is a plain string"
-    ),
-    # current behaviour: no candidate beats the baseline and the original prompt
-    # is returned (candidates lose the user image part, as in S3).
-    ("EvolutionaryOptimizer", "S3b_multimodal_multitext"): (
-        "no candidate beats the baseline; original prompt returned"
-    ),
-    # current behaviour: the rewritten system text is written into every text
-    # part of the system message (duplicated text, second part's text lost).
-    ("GepaOptimizer", "S3b_multimodal_multitext"): (
-        "duplicates the rewritten text across both system text parts"
-    ),
-    # current behaviour: the few-shot templated text replaces both system text
-    # parts (duplicated example block, "Reply with the code only." lost).
-    ("FewShotBayesianOptimizer", "S3b_multimodal_multitext"): (
-        "duplicates the templated system text across both text parts"
-    ),
-    # current behaviour: the two system text parts collapse into one string
-    # taken from the LLM's plain-string answer.
-    ("MetaPromptOptimizer", "S3b_multimodal_multitext"): (
-        "system content parts collapsed into a single string"
-    ),
-    # current behaviour: the two system text parts collapse into one string.
-    ("HierarchicalReflectiveOptimizer", "S3b_multimodal_multitext"): (
-        "system content parts collapsed into a single string"
-    ),
-}
+KNOWN_ISSUES: dict[tuple[str, str], str] = {}
 
 
 @pytest.mark.parametrize("scenario_name", harness.SCENARIOS)

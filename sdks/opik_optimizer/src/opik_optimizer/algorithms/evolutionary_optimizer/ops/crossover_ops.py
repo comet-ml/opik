@@ -1,3 +1,5 @@
+from ....utils.prompt_roles import apply_role_constraints
+from ....utils.multimodal import preserve_multimodal_message_structure
 from typing import Any, Protocol
 
 import copy
@@ -343,8 +345,19 @@ def llm_deap_crossover(
                             model_parameters,
                             prompts=prompts,
                         )
-                    child1_data[prompt_name] = child1_messages
-                    child2_data[prompt_name] = child2_messages
+                    allowed_roles = getattr(optimizer, "_optimizable_roles", None)
+                    child1_data[prompt_name] = preserve_multimodal_message_structure(
+                        original_messages=messages_1,
+                        generated_messages=apply_role_constraints(
+                            messages_1, child1_messages, allowed_roles
+                        ),
+                    )
+                    child2_data[prompt_name] = preserve_multimodal_message_structure(
+                        original_messages=messages_2,
+                        generated_messages=apply_role_constraints(
+                            messages_2, child2_messages, allowed_roles
+                        ),
+                    )
                 except (StructuredOutputParsingError, Exception) as e:
                     logger.warning(
                         f"LLM crossover failed for prompt '{prompt_name}': {e}. Using DEAP crossover."
@@ -352,8 +365,19 @@ def llm_deap_crossover(
                     child1_messages, child2_messages = _crossover_messages(
                         messages_1, messages_2, rng
                     )
-                    child1_data[prompt_name] = child1_messages
-                    child2_data[prompt_name] = child2_messages
+                    allowed_roles = getattr(optimizer, "_optimizable_roles", None)
+                    child1_data[prompt_name] = preserve_multimodal_message_structure(
+                        original_messages=messages_1,
+                        generated_messages=apply_role_constraints(
+                            messages_1, child1_messages, allowed_roles
+                        ),
+                    )
+                    child2_data[prompt_name] = preserve_multimodal_message_structure(
+                        original_messages=messages_2,
+                        generated_messages=apply_role_constraints(
+                            messages_2, child2_messages, allowed_roles
+                        ),
+                    )
             else:
                 # Prompt only in ind1 - keep as is in both children
                 child1_data[prompt_name] = copy.deepcopy(ind1[prompt_name])

@@ -15,7 +15,11 @@ from ....core import llm_calls as _llm_calls
 from ....core.llm_calls import StructuredOutputParsingError
 from ....core.results import OptimizationRound
 from ....utils import display as display_utils
-from ....utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
+from ....utils.prompt_roles import (
+    apply_role_constraints,
+    count_disallowed_role_updates,
+    derive_prompt,
+)
 from .. import prompts as meta_prompts
 from .. import reporting
 from ..types import AgentBundleCandidate, AgentBundleCandidatesResponse, AgentMetadata
@@ -171,13 +175,10 @@ def generate_agent_bundle_candidates(
                             messages_dict = [
                                 msg.model_dump() for msg in agent_update.messages
                             ]
-                            updated_prompt = chat_prompt.ChatPrompt(
-                                name=current_prompts[name].name or name,
-                                messages=messages_dict,
-                                tools=current_prompts[name].tools,
-                                function_map=current_prompts[name].function_map,
-                                model=current_prompts[name].model,
-                                model_parameters=current_prompts[name].model_kwargs,
+                            updated_prompt = derive_prompt(
+                                current_prompts[name],
+                                messages_dict,
+                                getattr(optimizer, "_optimizable_roles", None),
                             )
                             allowed_roles = getattr(
                                 optimizer, "_optimizable_roles", None

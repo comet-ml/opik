@@ -1,3 +1,4 @@
+from ....utils.prompt_roles import derive_prompt
 from typing import Any
 from collections.abc import Callable
 import math
@@ -338,12 +339,8 @@ def _messages_to_chat_prompts(
     optimizer: Any | None = None,
 ) -> list[chat_prompt.ChatPrompt]:
     prompts: list[chat_prompt.ChatPrompt] = [
-        chat_prompt.ChatPrompt(
-            messages=messages,
-            tools=base_prompt.tools,
-            function_map=base_prompt.function_map,
-            model=base_prompt.model,
-            model_parameters=base_prompt.model_kwargs,
+        derive_prompt(
+            base_prompt, messages, getattr(optimizer, "_optimizable_roles", None)
         )
         for messages in messages_list
     ]

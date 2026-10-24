@@ -73,7 +73,7 @@
     ],
     "model": "openai/gpt-4o-mini",
     "model_kwargs": {},
-    "name": "chat-prompt",
+    "name": "tool-prompt",
     "tools": [
       {
         "function": {

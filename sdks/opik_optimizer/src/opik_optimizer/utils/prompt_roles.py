@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from collections.abc import Iterable
 import copy
+
+if TYPE_CHECKING:
+    from ..api_objects.chat_prompt import ChatPrompt
 
 ALLOWED_PROMPT_ROLES = {"system", "user", "assistant"}
 
@@ -89,3 +92,20 @@ def count_disallowed_role_updates(
         if idx < len(new_messages) and new_messages[idx] != original:
             count += 1
     return count
+
+
+def derive_prompt(
+    base: "ChatPrompt",
+    new_messages: list[dict[str, Any]],
+    allowed_roles: set[str] | None = None,
+) -> "ChatPrompt":
+    """Apply a text rewrite while retaining the prompt's media and configuration."""
+    from .multimodal import preserve_multimodal_message_structure
+
+    messages = apply_role_constraints(base.get_messages(), new_messages, allowed_roles)
+    messages = preserve_multimodal_message_structure(
+        original_messages=base.get_messages(), generated_messages=messages
+    )
+    result = base.copy()
+    result.set_messages(messages)
+    return result

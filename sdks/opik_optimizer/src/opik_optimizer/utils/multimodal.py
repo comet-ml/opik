@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+import copy
 
 import rich.text
 from ..api_objects import types as api_types
@@ -254,6 +255,21 @@ def preserve_multimodal_message_structure(
             original_messages[index].get("content"), list
         ):
             original_content = original_messages[index]["content"]
+            if isinstance(generated_content, list) and len(generated_content) == len(
+                original_content
+            ):
+                content = copy.deepcopy(original_content)
+                for part_index, part in enumerate(content):
+                    generated_part = generated_content[part_index]
+                    if (
+                        isinstance(part, dict)
+                        and part.get("type") == "text"
+                        and isinstance(generated_part, dict)
+                        and generated_part.get("type") == "text"
+                    ):
+                        part["text"] = generated_part.get("text", "")
+                preserved.append({**original_messages[index], "content": content})
+                continue
             original_text = api_types.extract_text_from_content(original_content)
             generated_content_raw = generated.get("content", "")
             if isinstance(generated_content_raw, str) or isinstance(

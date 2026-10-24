@@ -100,7 +100,7 @@
       ],
       "model": "openai/gpt-4o-mini",
       "model_kwargs": {},
-      "name": "chat-prompt",
+      "name": "answerer",
       "tools": null
     },
     "planner": {
@@ -116,7 +116,7 @@
       ],
       "model": "openai/gpt-4o-mini",
       "model_kwargs": {},
-      "name": "chat-prompt",
+      "name": "planner",
       "tools": null
     }
   },

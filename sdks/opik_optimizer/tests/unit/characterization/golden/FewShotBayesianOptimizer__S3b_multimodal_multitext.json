@@ -58,7 +58,7 @@
   "history_rounds": 4,
   "history_trials": 4,
   "initial_score": 0.5,
-  "known_issue": "duplicates the templated system text across both text parts",
+  "known_issue": null,
   "llm_call_kinds": [
     "FewShotPromptMessages"
   ],
@@ -74,7 +74,7 @@
             "type": "text"
           },
           {
-            "text": "You read images and answer.\n\nExamples:\nQ: What is the code for item 0?\nA: A0\n\nQ: What is the code for item 4?\nA: A4",
+            "text": "Reply with the code only.",
             "type": "text"
           }
         ],

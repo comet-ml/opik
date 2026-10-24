@@ -52,7 +52,7 @@
   "history_rounds": 3,
   "history_trials": 6,
   "initial_score": 0.5,
-  "known_issue": "system content parts collapsed into a single string",
+  "known_issue": null,
   "llm_call_kinds": [
     "HierarchicalRootCauseAnalysis",
     "ImprovedPromptsResponse",
@@ -64,7 +64,16 @@
   "prompt": {
     "messages": [
       {
-        "content": "You read images and answer. Answer with the exact value. Reply with the code only. Be concise. Think step by step.",
+        "content": [
+          {
+            "text": "You read images and answer. Answer with the exact value. Reply with the code only. Be concise. Think step by step.",
+            "type": "text"
+          },
+          {
+            "text": "",
+            "type": "text"
+          }
+        ],
         "role": "system"
       },
       {

@@ -1,3 +1,4 @@
+from ....utils.prompt_roles import derive_prompt
 from typing import Any, Protocol
 from collections.abc import Sequence
 
@@ -231,13 +232,7 @@ def _word_level_mutation_prompt(
                 "content": mutated_content,
             }
         )
-    return chat_prompt.ChatPrompt(
-        messages=mutated_messages,
-        tools=prompt.tools,
-        function_map=prompt.function_map,
-        model=prompt.model,
-        model_parameters=prompt.model_kwargs,
-    )
+    return derive_prompt(prompt, mutated_messages, allowed_roles)
 
 
 def _structural_mutation(
@@ -304,13 +299,7 @@ def _structural_mutation(
             mutated_content = original_content
         mutated_messages.append({"role": role, "content": mutated_content})
 
-    return chat_prompt.ChatPrompt(
-        messages=mutated_messages,
-        tools=prompt.tools,
-        function_map=prompt.function_map,
-        model=prompt.model,
-        model_parameters=prompt.model_kwargs,
-    )
+    return derive_prompt(prompt, mutated_messages, allowed_roles)
 
 
 def _semantic_mutation(
@@ -413,13 +402,7 @@ def _semantic_mutation(
                 "Evolutionary semantic mutation dropped %s update(s) due to optimize_prompt constraints.",
                 dropped,
             )
-        return chat_prompt.ChatPrompt(
-            messages=constrained_messages,
-            tools=prompt.tools,
-            function_map=prompt.function_map,
-            model=prompt.model,
-            model_parameters=prompt.model_kwargs,
-        )
+        return derive_prompt(prompt, constrained_messages, allowed_roles)
     except Exception as e:
         display_error(
             f"      Error in semantic mutation, this is usually a parsing error: {e}",
@@ -497,13 +480,7 @@ def _radical_innovation_mutation(
                 "Evolutionary radical mutation dropped %s update(s) due to optimize_prompt constraints.",
                 dropped,
             )
-        return chat_prompt.ChatPrompt(
-            messages=constrained_messages,
-            tools=prompt.tools,
-            function_map=prompt.function_map,
-            model=prompt.model,
-            model_parameters=prompt.model_kwargs,
-        )
+        return derive_prompt(prompt, constrained_messages, allowed_roles)
     except Exception as e:
         logger.warning(
             f"Radical innovation mutation failed for prompt '{json.dumps(prompt.get_messages())[:50]}...': {e}. Returning original."
