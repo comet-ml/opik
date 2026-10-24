@@ -54,10 +54,6 @@
           {
             "text": "You read images and answer. Answer with the exact value. Reply with the code only. Be concise.",
             "type": "text"
-          },
-          {
-            "text": "",
-            "type": "text"
           }
         ],
         "role": "system"

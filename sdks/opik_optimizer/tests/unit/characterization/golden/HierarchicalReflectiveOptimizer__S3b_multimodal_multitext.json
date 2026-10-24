@@ -68,10 +68,6 @@
           {
             "text": "You read images and answer. Answer with the exact value. Reply with the code only. Be concise. Think step by step.",
             "type": "text"
-          },
-          {
-            "text": "",
-            "type": "text"
           }
         ],
         "role": "system"

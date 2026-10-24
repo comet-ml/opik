@@ -113,9 +113,10 @@ def extract_text_from_content(content: Content) -> str:
 
 
 def rebuild_content_with_new_text(original_content: Content, new_text: str) -> Content:
-    """Replace text part with new_text, preserving non-text parts (images/video).
+    """Replace the text of content with new_text, preserving non-text parts (images/video).
 
-    Multiple text parts are treated as one logical text.
+    Multiple text parts are treated as one logical text: new_text goes in the first
+    text part, the other text parts are dropped and non-text parts keep their order.
 
     Args:
         original_content: The original content (string or list of parts).
@@ -128,14 +129,20 @@ def rebuild_content_with_new_text(original_content: Content, new_text: str) -> C
 
     if isinstance(original_content, str):
         return new_text
+    # Unchanged text keeps its parts, so re-deriving a message is a no-op.
+    if new_text == extract_text_from_content(original_content):
+        return copy.deepcopy(original_content)
     result: list[dict[str, Any]] = []
     replaced = False
     for part in original_content:
         if isinstance(part, dict) and part.get("type") == "text":
-            result.append({**part, "text": "" if replaced else new_text})
-            replaced = True
+            if not replaced:
+                result.append({**part, "text": new_text})
+                replaced = True
         else:
             result.append(copy.deepcopy(part))  # type: ignore[arg-type]
+    if not replaced and new_text:
+        result.append({"type": "text", "text": new_text})
     return result  # type: ignore[return-value]
 
 

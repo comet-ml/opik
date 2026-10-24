@@ -58,17 +58,43 @@ def test_rewrite_keeps_media_and_prompt_configuration(media):
 
 def test_multitext_rewrite_is_inserted_once_and_extraction_keeps_all_text():
     content = [
+        {"type": "image_url", "image_url": {"url": "{a}"}},
         {"type": "text", "text": "First"},
-        {"type": "image_url", "image_url": {"url": "{image}"}},
+        {"type": "image_url", "image_url": {"url": "{b}"}},
         {"type": "text", "text": "Second"},
     ]
     assert extract_text_from_content(content) == "First\nSecond"
     rewritten = rebuild_content_with_new_text(content, "Whole rewrite")
-    assert [part.get("text") for part in rewritten if part["type"] == "text"] == [
-        "Whole rewrite",
-        "",
+    assert rewritten == [
+        {"type": "image_url", "image_url": {"url": "{a}"}},
+        {"type": "text", "text": "Whole rewrite"},
+        {"type": "image_url", "image_url": {"url": "{b}"}},
     ]
     assert content[-1]["text"] == "Second"
+    assert rebuild_content_with_new_text(content, "First\nSecond") == content
+
+
+def test_rederiving_an_unchanged_multitext_message_is_a_noop():
+    from opik_optimizer.utils.multimodal import text_only_messages
+
+    base = ChatPrompt(
+        messages=[
+            {
+                "role": "system",
+                "content": [
+                    {"type": "text", "text": "Be X."},
+                    {"type": "text", "text": "Rules: {rules}"},
+                ],
+            },
+            {"role": "user", "content": "{question}"},
+        ]
+    )
+    derived = base
+    for _ in range(2):
+        derived = derive_prompt(
+            derived, text_only_messages(derived.get_messages()), {"system"}
+        )
+    assert derived.get_messages() == base.get_messages()
 
 
 def test_text_only_rewrite_input_keeps_all_text_and_excludes_media():

@@ -62,10 +62,6 @@
           {
             "text": "You read images and answer. Reply with the code only. Answer with the exact value.",
             "type": "text"
-          },
-          {
-            "text": "",
-            "type": "text"
           }
         ],
         "role": "system"
