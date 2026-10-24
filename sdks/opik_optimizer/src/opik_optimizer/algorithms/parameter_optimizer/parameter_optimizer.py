@@ -5,6 +5,7 @@ from typing import Any, NoReturn, TypedDict, cast
 
 import copy
 import logging
+import warnings
 
 import optuna
 
@@ -50,11 +51,13 @@ class ParameterOptimizer(BaseOptimizer):
     This optimizer is ideal when you have a good prompt but want to fine-tune the
     model's behavior through parameter adjustments rather than prompt modifications.
 
+    The evaluated model and its settings come from each ``ChatPrompt`` (``model`` and
+    ``model_parameters``); the optimizer makes no LLM calls of its own.
+
     Args:
-        model: LiteLLM model name (used for metadata, not for optimization calls)
-        model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
-            Common params: temperature, max_tokens, max_completion_tokens, top_p.
-            See: https://docs.litellm.ai/docs/completion/input
+        model: Deprecated and ignored. Set ``model`` on the ChatPrompt instead.
+        model_parameters: Deprecated and ignored. Set ``model_parameters`` on the
+            ChatPrompt instead.
         default_n_trials: Default number of optimization trials to run
         local_search_ratio: Ratio of trials to dedicate to local search refinement (0.0-1.0)
         local_search_scale: Scale factor for narrowing search space during local search
@@ -67,7 +70,7 @@ class ParameterOptimizer(BaseOptimizer):
 
     def __init__(
         self,
-        model: str = constants.DEFAULT_MODEL,
+        model: str | None = None,
         *,
         model_parameters: dict[str, Any] | None = None,
         default_n_trials: int = constants.PARAMETER_DEFAULT_N_TRIALS,
@@ -80,11 +83,20 @@ class ParameterOptimizer(BaseOptimizer):
         skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
         perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
     ) -> None:
+        if model is not None or model_parameters is not None:
+            warnings.warn(
+                "ParameterOptimizer ignores `model` and `model_parameters`: the evaluated "
+                "model and its settings come from each ChatPrompt. Set `model` / "
+                "`model_parameters` on the ChatPrompt instead; these arguments will be "
+                "removed in a future release.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         super().__init__(
-            model=model,
+            # No optimizer-side model: every LLM call uses the prompt's own model.
+            model=cast(str, None),
             verbose=verbose,
             seed=seed,
-            model_parameters=model_parameters,
             name=name,
             skip_perfect_score=skip_perfect_score,
             perfect_score=perfect_score,
@@ -268,6 +280,8 @@ class ParameterOptimizer(BaseOptimizer):
             parameter_space = ParameterSearchSpace.model_validate(parameter_space)
         assert isinstance(parameter_space, ParameterSearchSpace)
         prompts = helpers.build_base_prompts(prompts)
+        expanded_space = parameter_space.expand_for_prompts(list(prompts))
+        helpers.warn_unsupported_parameters(prompts, expanded_space)
         return super().optimize_prompt(
             prompt=next(iter(prompts.values())) if single else prompts,
             dataset=dataset,
@@ -284,7 +298,7 @@ class ParameterOptimizer(BaseOptimizer):
             project_name=project_name,
             optimization_id=optimization_id,
             optimize_prompts=False,
-            parameter_space=parameter_space.expand_for_prompts(list(prompts)),
+            parameter_space=expanded_space,
             sampler=sampler,
             callbacks=callbacks,
             timeout=timeout,
@@ -318,6 +332,10 @@ class ParameterOptimizer(BaseOptimizer):
         }
         for key, value in defaults.items():
             result.details.setdefault(key, value)
+        if result.details.get("model") is None:
+            result.details["model"] = {
+                name: prompt.model for name, prompt in context.prompts.items()
+            }
         result.details.setdefault(
             "parameter_space",
             context.extra_params["parameter_space"].model_dump(by_alias=True),

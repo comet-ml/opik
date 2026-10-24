@@ -48,7 +48,7 @@ def test_parameter_optimizer_optimize_prompt_raises(install_fakes) -> None:
     # optimize_prompt raises NotImplementedError.
     scenario = harness.build_scenario("S1_single")
     install_fakes(scenario)
-    optimizer = harness.ParameterOptimizer(model=harness.MODEL, verbose=0)
+    optimizer = harness.ParameterOptimizer(verbose=0)
     with pytest.raises(NotImplementedError, match="optimize_parameter"):
         optimizer.optimize_prompt(
             prompt=scenario.prompt,

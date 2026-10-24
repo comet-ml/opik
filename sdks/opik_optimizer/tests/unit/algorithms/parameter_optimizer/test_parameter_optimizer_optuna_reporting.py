@@ -35,7 +35,7 @@ class TestReporterLifecycle:
         )
         prompt = ChatPrompt(name="p", system="Test")
 
-        optimizer = ParameterOptimizer(model="gpt-4o", verbose=0)
+        optimizer = ParameterOptimizer(verbose=0)
         events: list[str] = []
 
         orig_set = optimizer._set_reporter
@@ -159,7 +159,7 @@ class TestOptunaHistoryRedaction:
             dataset_id="ds-1",
         )
         prompt = ChatPrompt(name="p", system="Test")
-        optimizer = ParameterOptimizer(model="gpt-4o", verbose=0)
+        optimizer = ParameterOptimizer(verbose=0)
 
         parameter_space = ParameterSearchSpace(
             parameters=[

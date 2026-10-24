@@ -307,7 +307,7 @@ FACTORIES: dict[str, Callable[[], Any]] = {
         model=MODEL, min_examples=1, max_examples=3, n_threads=1, seed=SEED, verbose=0
     ),
     "ParameterOptimizer": lambda: ParameterOptimizer(
-        model=MODEL, default_n_trials=6, n_threads=1, seed=SEED, verbose=0
+        default_n_trials=6, n_threads=1, seed=SEED, verbose=0
     ),
 }
 

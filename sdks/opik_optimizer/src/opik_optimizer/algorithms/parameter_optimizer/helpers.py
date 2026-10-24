@@ -6,10 +6,18 @@ and other parameter optimization helpers.
 
 from __future__ import annotations
 
+import contextlib
 import copy
-from typing import Any
+import io
+import warnings
+from typing import Any, TYPE_CHECKING
+
+import litellm
 
 from ...api_objects import chat_prompt
+
+if TYPE_CHECKING:
+    from .ops.search_ops import ParameterSearchSpace
 
 
 def build_base_model_kwargs(
@@ -77,3 +85,56 @@ def calculate_trial_counts(
         local_trials = max(0, total_trials - global_trials)
 
     return total_trials, local_trials, global_trials
+
+
+def _supported_params(model: str) -> list[str] | None:
+    """LiteLLM's supported OpenAI params for a model, or None when it can't tell."""
+    try:
+        # LiteLLM prints a provider banner to stdout for unknown models.
+        with contextlib.redirect_stdout(io.StringIO()):
+            return litellm.get_supported_openai_params(model=model)
+    except Exception:
+        return None
+
+
+def warn_unsupported_parameters(
+    prompts: dict[str, chat_prompt.ChatPrompt],
+    parameter_space: ParameterSearchSpace,
+) -> None:
+    """Warn about searched parameters the evaluated model doesn't support.
+
+    BaseOptimizer sets litellm.drop_params, so such a parameter is silently dropped
+    and every trial evaluates the same settings.
+    """
+    searched: list[tuple[str, str]] = []
+    model_choices: dict[str, list[str]] = {}
+    for spec in parameter_space.parameters:
+        prompt_name = next((n for n in prompts if spec.name.startswith(f"{n}.")), None)
+        if prompt_name is None:
+            continue
+        resolved = spec.target_path
+        if spec.target is not None and resolved.root == "model":
+            model_choices[prompt_name] = [str(c) for c in spec.choices or []]
+        elif spec.target is None:
+            searched.append((prompt_name, spec.name[len(prompt_name) + 1 :]))
+        elif resolved.path:
+            searched.append((prompt_name, resolved.path[0]))
+
+    warned: set[tuple[str, str]] = set()
+    for prompt_name, param in searched:
+        models = model_choices.get(prompt_name) or [prompts[prompt_name].model]
+        for model in models:
+            if not model or (param, model) in warned:
+                continue
+            supported = _supported_params(model)
+            if supported is None or param in supported:
+                continue
+            warned.add((param, model))
+            warnings.warn(
+                f"Parameter '{param}' is not supported by model '{model}' and will be "
+                "dropped from every LiteLLM call, so trials varying it are identical. "
+                "Remove it from the parameter space or use a model that supports it.",
+                UserWarning,
+                # Point at the caller of optimize_parameter (past its scope wrapper).
+                stacklevel=4,
+            )
