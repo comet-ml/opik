@@ -6,6 +6,7 @@ from ...utils.reporting import convert_tqdm_to_rich, suppress_opik_logs
 from ...utils.logging import debug_log
 from ...utils.display import display_text_block, display_tool_description
 from ...utils.display.format import format_score_progress
+from ...utils.scoring import improves_over
 
 
 # FIXME: Move to new reporting utils module.
@@ -221,7 +222,7 @@ def end_gen(
     verbose: int = 1,
 ) -> None:
     if verbose >= 1:
-        if best_gen_score >= initial_primary_score:
+        if improves_over(best_gen_score, initial_primary_score):
             display_text_block(
                 f"│   Generation {generation_idx} completed. Found a new prompt with a score of {best_gen_score:.4f}.",
                 style="green",
