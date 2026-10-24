@@ -46,37 +46,55 @@ def resolve_prompt_tools(
         Tuple of (normalized prompt(s), tool_names for optimization or None).
     """
     if isinstance(prompt_or_prompts, dict):
-        if optimize_tools:
+        if tool_optimization_requested(optimize_tools):
             factory = ToolCallingFactory()
             resolved = {
                 name: factory.resolve_prompt(prompt)
                 for name, prompt in prompt_or_prompts.items()
             }
+            available_by_prompt = {
+                name: {
+                    segment.segment_id.removeprefix(
+                        prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL
+                    )
+                    for segment in prompt_segments.extract_prompt_segments(prompt)
+                    if segment.is_tool()
+                }
+                for name, prompt in resolved.items()
+                if prompt.tools
+            }
+            available_names = sorted(
+                f"{name}.{tool}"
+                for name, tools in available_by_prompt.items()
+                for tool in tools
+            )
             selected: dict[str, list[str]] = {}
             matched: set[str] = set()
-            for name, prompt in resolved.items():
-                if not prompt.tools:
-                    continue
+            for name, available in available_by_prompt.items():
                 selector: bool | dict[str, bool] = True
                 if isinstance(optimize_tools, dict):
-                    available = {
-                        segment.segment_id.removeprefix(
+                    # Qualified (prompt.tool) entries override unqualified ones.
+                    unqualified: dict[str, bool] = {}
+                    qualified: dict[str, bool] = {}
+                    for key, enabled in optimize_tools.items():
+                        tool = key.removeprefix(
                             prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL
                         )
-                        for segment in prompt_segments.extract_prompt_segments(prompt)
-                        if segment.is_tool()
-                    }
-                    selector = {}
-                    for key, enabled in optimize_tools.items():
-                        tool = (
-                            key[len(name) + 1 :] if key.startswith(name + ".") else key
-                        )
+                        target = unqualified
+                        if tool.startswith(name + "."):
+                            tool = tool[len(name) + 1 :].removeprefix(
+                                prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL
+                            )
+                            target = qualified
                         if tool in available:
-                            selector[tool] = enabled
+                            target[tool] = enabled
                             matched.add(key)
+                    selector = {**unqualified, **qualified}
                     if not any(selector.values()):
                         continue
-                resolved[name], names = _prepare_tool_optimization(prompt, selector)
+                resolved[name], names = _prepare_tool_optimization(
+                    resolved[name], selector
+                )
                 selected[name] = names or []
             if isinstance(optimize_tools, dict):
                 unknown = {
@@ -84,11 +102,13 @@ def resolve_prompt_tools(
                 } - matched
                 if unknown:
                     raise ValueError(
-                        f"Tools not found for optimize_tools entries: {sorted(unknown)}"
+                        f"Tools not found for optimize_tools entries: {sorted(unknown)}. "
+                        f"Available tools: {available_names}"
                     )
             if not selected:
                 raise ValueError(
-                    "Prompt bundle must include selected tools for tool description optimization."
+                    "Prompt bundle must include selected tools for tool description "
+                    f"optimization. Available tools: {available_names}"
                 )
             return resolved, selected
         if not any(
@@ -102,11 +122,20 @@ def resolve_prompt_tools(
         }
         return resolved, None
 
-    if optimize_tools:
+    if tool_optimization_requested(optimize_tools):
         return _prepare_tool_optimization(prompt_or_prompts, optimize_tools)
 
     resolved_prompt = ToolCallingFactory().resolve_prompt(prompt_or_prompts)
     return resolved_prompt, None
+
+
+def tool_optimization_requested(
+    optimize_tools: bool | dict[str, bool] | None,
+) -> bool:
+    """False, None, {} and selectors that enable no tool all mean "not requested"."""
+    if isinstance(optimize_tools, dict):
+        return any(optimize_tools.values())
+    return bool(optimize_tools)
 
 
 def should_allow_tool_use(

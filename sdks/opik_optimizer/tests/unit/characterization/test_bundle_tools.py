@@ -65,3 +65,32 @@ def test_selected_bundle_tool_is_rewritten_by_key(
 
     assert seen["planner"] - {harness.TOOL_DESCRIPTION}
     assert seen["answerer"] == {harness.TOOL_DESCRIPTION}
+
+
+@pytest.mark.parametrize("optimizer_name", TOOL_OPTIMIZERS)
+def test_bundle_selector_that_enables_nothing_leaves_tools_alone(
+    optimizer_name: str, install_fakes: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scenario = _default_named_tool_bundle()
+    install_fakes(scenario)
+    descriptions: set[str] = set()
+    original_invoke = harness.TwoStepAgent.invoke_agent
+
+    def invoke(self: Any, prompts: Any, dataset_item: Any, *args: Any, **kwargs: Any):
+        descriptions.update(
+            p.tools[0]["function"]["description"] for p in prompts.values()
+        )
+        return original_invoke(self, prompts, dataset_item, *args, **kwargs)
+
+    monkeypatch.setattr(harness.TwoStepAgent, "invoke_agent", invoke)
+
+    harness.make_optimizer(optimizer_name).optimize_prompt(
+        prompt=scenario.prompt,
+        dataset=harness.make_dataset(scenario),
+        metric=harness.answer_match,
+        agent=scenario.agent,
+        max_trials=harness.MAX_TRIALS[optimizer_name],
+        optimize_tools={f"planner.{harness.TOOL_NAME}": False},
+    )
+
+    assert descriptions == {harness.TOOL_DESCRIPTION}

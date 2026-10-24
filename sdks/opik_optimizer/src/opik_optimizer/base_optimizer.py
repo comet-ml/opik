@@ -450,6 +450,9 @@ class BaseOptimizer(ABC):
 
         from .utils.toolcalling.ops import toolcalling as toolcalling_utils
 
+        # Declining tool optimization is valid for every prompt shape.
+        if not toolcalling_utils.tool_optimization_requested(optimize_tools):
+            optimize_tools = None
         if self.supports_prompt_optimization:
             optimize_tools = toolcalling_utils.validate_optimization_flags(
                 optimize_prompts=bool(optimizable_roles),
@@ -457,9 +460,6 @@ class BaseOptimizer(ABC):
                 supports_tool_optimization=self.supports_tool_optimization,
                 warn_unsupported=True,
             )
-        # A falsy value only declines tool optimization, for every prompt shape.
-        if not optimize_tools:
-            optimize_tools = None
         optimize_tools_provided = optimize_tools is not None
         if optimize_tools_provided:
             extra_params["optimize_tools"] = optimize_tools
