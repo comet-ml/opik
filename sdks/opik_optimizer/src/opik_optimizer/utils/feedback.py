@@ -18,6 +18,31 @@ def sanitize_feedback(value: Any) -> Any:
     return value
 
 
+# Dataset keys that hold the expected answer or bookkeeping rather than task input.
+LABEL_FIELDS = frozenset(
+    {
+        "id",
+        "answer",
+        "label",
+        "output",
+        "expected_output",
+        "ground_truth",
+        "target",
+        "metadata",
+        "response",
+        "supporting_facts",
+    }
+)
+_LABEL_FIELD_PATTERN = re.compile(
+    r"(^|[_-])(answer|gold|correct|target|label|output|ground|reference)([_-]|$)"
+)
+
+
+def is_label_field(key: str) -> bool:
+    """Whether a dataset key looks like a label (answer, target, …) or bookkeeping."""
+    return key in LABEL_FIELDS or bool(_LABEL_FIELD_PATTERN.search(key.lower()))
+
+
 # Per-field and per-test-case caps keep a batch of 25 cases inside the reasoning model's context.
 _FIELD_CHARS = 400
 _TRACE_CHARS = 3000
@@ -99,3 +124,14 @@ def format_evaluation_feedback(
         if steps:
             text += f"\nAgent trace:\n{steps}"
     return text
+
+
+def input_fields(item: Any) -> dict[str, str]:
+    """A dataset item's input fields, each capped, with label-like keys dropped."""
+    if not isinstance(item, dict):
+        return {"input": _truncate(item)}
+    return {
+        key: _truncate(value)
+        for key, value in item.items()
+        if not is_label_field(str(key))
+    }

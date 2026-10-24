@@ -43,3 +43,30 @@ def test_meta_prompt_generation_requests_carry_no_dataset_labels(
 
     assert calls
     assert not [call for call in calls if "SECRET_" in call]
+
+
+def test_gepa_reflective_inputs_are_bounded_and_exclude_labels(
+    install_fakes: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opik_optimizer.algorithms.gepa_optimizer.adapter import OpikGEPAAdapter
+
+    scenario = harness.build_scenario("S1_single")
+    for item in scenario.items:
+        item["context"] = "X" * 20_000
+    install_fakes(scenario)
+    records: list[dict[str, Any]] = []
+    original = OpikGEPAAdapter.make_reflective_dataset
+
+    def capture(self: Any, *args: Any, **kwargs: Any) -> Any:
+        dataset = original(self, *args, **kwargs)
+        records.extend(r for rows in dataset.values() for r in rows)
+        return dataset
+
+    monkeypatch.setattr(OpikGEPAAdapter, "make_reflective_dataset", capture)
+
+    harness.run_optimizer("GepaOptimizer", scenario)
+
+    assert records
+    for record in records:
+        assert set(record["Inputs"]) == {"question", "context"}
+        assert len(json.dumps(record["Inputs"])) < 1_000

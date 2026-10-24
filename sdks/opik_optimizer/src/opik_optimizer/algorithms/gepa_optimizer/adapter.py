@@ -19,7 +19,7 @@ from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.candidate_selection import select_candidate
-from ...utils.feedback import sanitize_feedback, format_evaluation_feedback
+from ...utils.feedback import format_evaluation_feedback, input_fields
 from .ops import candidate_ops
 from .types import OpikDataInst
 
@@ -560,7 +560,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 if tool_metadata:
                     feedback += f" Tool metadata: {tool_metadata}"
                 yield {
-                    "Inputs": sanitize_feedback(dataset_item),
+                    "Inputs": input_fields(dataset_item),
                     "Generated Outputs": output_text,
                     "Feedback": feedback,
                 }

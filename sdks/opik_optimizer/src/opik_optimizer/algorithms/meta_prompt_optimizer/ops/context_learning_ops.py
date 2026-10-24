@@ -12,6 +12,7 @@ import opik
 
 from ....api_objects.types import MetricFunction
 from ....utils import token as token_utils
+from ....utils.feedback import is_label_field
 from ....utils.logging import compact_debug_text, debug_log
 from ....utils import rng as rng_utils
 from .... import constants
@@ -70,29 +71,9 @@ def _resolve_input_fields(
     sample: dict[str, object],
     columns: list[str] | None,
 ) -> list[str]:
-    excluded_keys = {
-        "id",
-        "answer",
-        "label",
-        "output",
-        "expected_output",
-        "ground_truth",
-        "target",
-        "metadata",
-        "response",
-        "supporting_facts",
-    }
     inferred_label = _infer_label_field(dataset)
-    if inferred_label:
-        excluded_keys.add(inferred_label)
-    sensitive_pattern = re.compile(
-        r"(^|[_-])("
-        r"answer|gold|correct|target|label|output|ground|reference"
-        r")([_-]|$)"
-    )
-    all_input_fields = [k for k in sample.keys() if k not in excluded_keys]
     all_input_fields = [
-        k for k in all_input_fields if not sensitive_pattern.search(k.lower())
+        k for k in sample.keys() if k != inferred_label and not is_label_field(k)
     ]
     if columns is None:
         return all_input_fields
