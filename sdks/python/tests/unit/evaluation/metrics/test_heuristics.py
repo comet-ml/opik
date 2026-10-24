@@ -317,11 +317,22 @@ def test_bleu__invalid_smoothing_method__raises_value_error(
     metric_cls, smoothing_method
 ):
     # An unknown smoothing method used to fall through to `method0` silently,
-    # producing a plausible-looking but wrong BLEU score. It must raise instead.
-    with pytest.raises(
-        ValueError, match=rf"Invalid smoothing_method {smoothing_method!r}"
-    ):
+    # producing a plausible-looking but wrong BLEU score. The error must name
+    # the rejected value and list NLTK's available methods.
+    nltk_bleu_score = pytest.importorskip("nltk").translate.bleu_score
+    valid_methods = ", ".join(
+        sorted(
+            method
+            for method in dir(nltk_bleu_score.SmoothingFunction())
+            if method.startswith("method") and method[6:].isdigit()
+        )
+    )
+    with pytest.raises(ValueError) as exc_info:
         metric_cls(smoothing_method=smoothing_method, track=False)
+    assert str(exc_info.value) == (
+        f"Invalid smoothing_method {smoothing_method!r}. "
+        f"Must be one of NLTK's SmoothingFunction methods: {valid_methods}."
+    )
 
 
 @pytest.mark.parametrize(
