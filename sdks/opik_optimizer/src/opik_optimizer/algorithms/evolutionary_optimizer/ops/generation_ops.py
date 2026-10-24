@@ -425,16 +425,10 @@ def run_generations(
                 else:
                     optimizer._generations_without_overall_improvement += 1
 
-                if (
+                stagnated = (
                     optimizer._generations_without_overall_improvement
                     >= optimizer.DEFAULT_EARLY_STOPPING_GENERATIONS
-                ):
-                    logger.info(
-                        "No overall improvement for %d generations – early stopping at gen %d.",
-                        optimizer.DEFAULT_EARLY_STOPPING_GENERATIONS,
-                        generation_idx,
-                    )
-                    break
+                )
 
                 reporting.end_gen(
                     generation_idx,
@@ -481,6 +475,14 @@ def run_generations(
                         ),
                     },
                 )
+                # Checked after recording so the stagnant generation's round is kept.
+                if stagnated:
+                    logger.info(
+                        "No overall improvement for %d generations – early stopping at gen %d.",
+                        optimizer.DEFAULT_EARLY_STOPPING_GENERATIONS,
+                        generation_idx,
+                    )
+                    break
         finally:
             if context.finish_reason == "max_trials":
                 display_utils.display_message(
