@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, cast, overload, Literal
 from collections.abc import Iterator
+import inspect
 import logging
 import traceback
 import warnings
@@ -102,6 +103,15 @@ class BaseOptimizer(ABC):
     supports_tool_optimization: bool = False
     supports_prompt_optimization: bool = False
     supports_multimodal: bool = False
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        # Overridden entrypoints must keep the run's call scope (counters, project, tags).
+        for name in ("optimize_prompt", "optimize_parameter"):
+            method = cls.__dict__.get(name)
+            if inspect.isfunction(method):
+                setattr(cls, name, llm_calls.bind_optimizer(method))
+
     # ------------------------------------------------------------------
     # Input validation & setup
     # ------------------------------------------------------------------

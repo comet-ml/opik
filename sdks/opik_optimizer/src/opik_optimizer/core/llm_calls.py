@@ -319,12 +319,15 @@ def optimizer_scope(optimizer: Any) -> Iterator[None]:
 
 def bind_optimizer(method: Callable[..., Any]) -> Callable[..., Any]:
     """Bind a public optimizer entrypoint without inspecting Python frames."""
+    if getattr(method, "_opik_optimizer_bound", False):
+        return method
 
     @wraps(method)
     def wrapped(self: Any, *args: Any, **kwargs: Any) -> Any:
         with optimizer_scope(self):
             return method(self, *args, **kwargs)
 
+    setattr(wrapped, "_opik_optimizer_bound", True)
     return wrapped
 
 
